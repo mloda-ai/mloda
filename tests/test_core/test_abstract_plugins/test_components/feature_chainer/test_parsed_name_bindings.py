@@ -12,11 +12,16 @@ from __future__ import annotations
 import dataclasses
 import logging
 import re
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    FeatureChainParser,
+    PropertyValueRejection,
+)
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_chainer import parsed_feature_name
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
@@ -631,6 +636,15 @@ class TestBuildEffectiveOptions:
         assert effective.get(SIZE_KEY) == "2"
 
 
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    """Open a per-test recording window and always close it again."""
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    yield reasons
+    MATCH_REJECTION_REASONS.reset(token)
+
+
 class TestBoundValuesAreVisible:
     """A name-bound value is a real value: required_when, match_guard and strict validation all see it."""
 
@@ -685,6 +699,58 @@ class TestBoundValuesAreVisible:
         assert reason is not None
         assert ALGORITHM_KEY in reason
         assert "bogus" in reason
+
+    def test_invalid_named_value_is_rejected_even_with_a_valid_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """R2: the option no longer hides the name's own out-of-range value."""
+        options = Options(context={ALGORITHM_KEY: "pca"})
+        result = StrictNamedGroup.match_feature_group_criteria("f0__bogus_strict_pnb770", options)
+
+        assert result is False
+        recorded = [r.reason for r in rejection_window.values()]
+        assert len(recorded) == 1
+        assert "bogus" in recorded[0]
+        assert ALGORITHM_KEY in recorded[0]
+
+    def test_diagnostic_reports_the_invalid_named_value_despite_a_valid_option(self) -> None:
+        options = Options(context={ALGORITHM_KEY: "pca"})
+
+        reason = StrictNamedGroup._strict_validation_rejection_reason("f0__bogus_strict_pnb770", options)
+
+        assert reason is not None
+        assert "bogus" in reason
+        assert ALGORITHM_KEY in reason
+
+    def test_valid_named_value_with_the_same_valid_option_still_matches(self) -> None:
+        options = Options(context={ALGORITHM_KEY: "pca"})
+
+        assert StrictNamedGroup.match_feature_group_criteria("f0__pca_strict_pnb770", options) is True
+        assert StrictNamedGroup._strict_validation_rejection_reason("f0__pca_strict_pnb770", options) is None
+
+
+class TestValidateNameBindings:
+    """FeatureChainParser.validate_name_bindings raises on the first invalid binding."""
+
+    def test_valid_bindings_return_none(self) -> None:
+        bindings = {ALGORITHM_KEY: "pca", SIZE_KEY: "3"}
+
+        result = FeatureChainParser.validate_name_bindings(bindings, NamedCaptureGroup.PROPERTY_MAPPING)
+
+        assert result is None
+
+    def test_empty_bindings_return_none(self) -> None:
+        assert FeatureChainParser.validate_name_bindings({}, NamedCaptureGroup.PROPERTY_MAPPING) is None
+
+    def test_out_of_range_binding_raises_value_rejection(self) -> None:
+        with pytest.raises(PropertyValueRejection, match="bogus"):
+            FeatureChainParser.validate_name_bindings({ALGORITHM_KEY: "bogus"}, NamedCaptureGroup.PROPERTY_MAPPING)
+
+    def test_element_validator_rejection_raises_value_rejection(self) -> None:
+        with pytest.raises(PropertyValueRejection, match="abc"):
+            FeatureChainParser.validate_name_bindings(
+                {ALGORITHM_KEY: "pca", SIZE_KEY: "abc"}, NamedCaptureGroup.PROPERTY_MAPPING
+            )
 
 
 class TestForwardedMismatchOverBindings:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -349,6 +350,13 @@ class FeatureChainParser:
             cls._collect_option_value(options, property_name, property_mapping)
 
     @classmethod
+    def validate_name_bindings(cls, bindings: Mapping[str, str], property_mapping: dict[str, PropertySpec]) -> None:
+        """Validate each name-bound value like an option value; raises PropertyValueRejection on the first invalid."""
+        for key, value in bindings.items():
+            spec = property_mapping[key]
+            cls._process_found_property_value(value, cls.extract_property_values(spec), key, spec)
+
+    @classmethod
     def _validate_options_against_property_mapping(
         cls, options: Options, property_mapping: dict[str, PropertySpec]
     ) -> bool:
@@ -485,6 +493,7 @@ class FeatureChainParser:
             resolution = cls.resolve_name(feature_name, prefix_patterns, property_mapping, pattern=pattern)
             if resolution.owned:
                 if property_mapping is not None:
+                    cls.validate_name_bindings(resolution.bindings, property_mapping)
                     effective_options = cls._merge_bindings(options, dict(resolution.bindings), property_mapping)
                     cls._validate_present_option_values(effective_options, property_mapping)
                     if not cls._check_name_path_required_presence(

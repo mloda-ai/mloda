@@ -2,14 +2,26 @@
 Tests for the TimeWindowFeatureGroup class.
 """
 
+from collections.abc import Iterator
+
 import pytest
 
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda.provider import FeatureChainParser
+
+
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    """Open a per-test recording window and always close it again."""
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    yield reasons
+    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestTimeWindowFeatureGroup:
@@ -98,6 +110,24 @@ class TestTimeWindowFeatureGroup:
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("avg_day_window_temperature", options)
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("avg_3_invalid_window_temperature", options)
+
+    def test_invalid_named_value_is_rejected_despite_valid_explicit_options(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """R2: valid window options no longer hide a bogus window function carried by the name."""
+        options = Options(
+            context={
+                TimeWindowFeatureGroup.WINDOW_FUNCTION: "avg",
+                TimeWindowFeatureGroup.WINDOW_SIZE: 7,
+                TimeWindowFeatureGroup.TIME_UNIT: "day",
+            }
+        )
+        result = TimeWindowFeatureGroup.match_feature_group_criteria("x__bogus_7_day_window", options)
+
+        assert result is False
+        recorded = [r.reason for r in rejection_window.values()]
+        assert len(recorded) == 1
+        assert "bogus" in recorded[0]
 
     def test_input_features(self) -> None:
         """Test input_features method."""

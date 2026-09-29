@@ -410,6 +410,7 @@ class FeatureChainParserMixin:
 
         try:
             if name_matched:
+                FeatureChainParser.validate_name_bindings(resolution.bindings, property_mapping)
                 # The name relates the feature group to the feature, so the values of the present
                 # options (name-derived bindings included) are judged here; the name-path presence
                 # reason follows below. Judging the effective options keeps the diagnostic in step with the match.

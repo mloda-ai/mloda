@@ -56,8 +56,17 @@ class TestGeoDistanceFeatureGroup:
         assert Feature("point1") in input_features
         assert Feature("point2") in input_features
 
+    def test_input_features_name_path_wrong_count_uses_standard_message(self) -> None:
+        name = "a&b&c__haversine_distance"
+
+        with pytest.raises(ValueError) as exc_info:
+            PandasGeoDistanceFeatureGroup().input_features(Options(), FeatureName(name))
+
+        assert str(exc_info.value) == GeoDistanceFeatureGroup.in_feature_count_reason(name, 3)
+
+    @pytest.mark.parametrize("name", ["x", "a__b", "my&name__custom"], ids=["plain", "dunder", "amp_dunder"])
     @pytest.mark.parametrize("operands", [["a", "b"], ["b", "a"]], ids=["a_b", "b_a"])
-    def test_extract_geo_distance_parameters_keeps_declared_order(self, operands: list[str]) -> None:
+    def test_extract_geo_distance_parameters_keeps_declared_order(self, operands: list[str], name: str) -> None:
         options = Options(
             context={
                 GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
@@ -65,9 +74,52 @@ class TestGeoDistanceFeatureGroup:
             }
         )
 
-        result = GeoDistanceFeatureGroup._extract_geo_distance_parameters(Feature("x", options=options))
+        result = GeoDistanceFeatureGroup._extract_geo_distance_parameters(Feature(name, options=options))
 
         assert result == ("euclidean", operands[0], operands[1])
+
+    @pytest.mark.parametrize(
+        "feature,count",
+        [
+            (Feature("a&b&c__haversine_distance"), 3),
+            (
+                Feature(
+                    "x",
+                    options=Options(
+                        context={
+                            GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
+                            DefaultOptionKeys.in_features: ["a"],
+                        }
+                    ),
+                ),
+                1,
+            ),
+            (
+                Feature(
+                    "x",
+                    options=Options(
+                        context={
+                            GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
+                            DefaultOptionKeys.in_features: ["a", "b", "c"],
+                        }
+                    ),
+                ),
+                3,
+            ),
+        ],
+        ids=["name_3", "config_1", "config_3"],
+    )
+    def test_extract_geo_distance_parameters_wrong_count_uses_standard_message(
+        self, feature: Feature, count: int
+    ) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature)
+
+        assert str(exc_info.value) == GeoDistanceFeatureGroup.in_feature_count_reason(feature.name, count)
+
+    def test_extract_geo_distance_parameters_rejects_unsupported_name_path_distance(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported distance type"):
+            GeoDistanceFeatureGroup._extract_geo_distance_parameters(Feature("a&b__foo_distance"))
 
 
 class TestPandasGeoDistanceFeatureGroup:

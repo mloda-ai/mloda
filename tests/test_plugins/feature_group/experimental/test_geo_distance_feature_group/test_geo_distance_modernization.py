@@ -148,7 +148,8 @@ class TestGeoDistanceModernization:
         haversine_distances = result_df["geo_distance_haversine"]
         assert all(distance > 500 and distance < 650 for distance in haversine_distances)
 
-    def test_both_approaches_produce_equivalent_results(self) -> None:
+    @pytest.mark.parametrize("config_name", ["config_euclidean", "my&name__custom"], ids=["plain", "amp_dunder"])
+    def test_both_approaches_produce_equivalent_results(self, config_name: str) -> None:
         """Test that both string-based and configuration-based approaches produce equivalent functionality."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -160,7 +161,7 @@ class TestGeoDistanceModernization:
 
         # Create configuration-based feature with same parameters
         config_feature = Feature(
-            name="config_euclidean",
+            name=config_name,
             options=Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
@@ -178,14 +179,14 @@ class TestGeoDistanceModernization:
 
         # Both should produce results with their respective feature names
         assert "point_a&point_b__euclidean_distance" in results1[0].columns
-        assert "config_euclidean" in results2[0].columns
+        assert config_name in results2[0].columns
 
         # Results should have the same structure and values (same calculation)
         assert len(results1[0]) == len(results2[0])
 
         # The calculated distances should be identical
         string_distances = results1[0]["point_a&point_b__euclidean_distance"].values
-        config_distances = results2[0]["config_euclidean"].values
+        config_distances = results2[0][config_name].values
 
         # Allow for small floating point differences
         assert all(abs(s - c) < 1e-10 for s, c in zip(string_distances, config_distances))

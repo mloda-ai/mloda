@@ -608,10 +608,9 @@ PROPERTY_MAPPING = {
 When the predicate returns `True` and the option is absent, the match fails and the non-match records
 a rejection reason naming the owning class and the missing key, so the resolution-failure report
 carries a near-miss line for it; entries with `required_when` are otherwise optional. For a context
-key, the reason also names the remedy: pass it in `Options(context=...)`, and for an input feature
-(such as the child of a chained name), list it in the consumer's `propagate_context_keys`. The
-predicate must be pure and must not raise. It is callable by construction, and a non-bool truthy
-return counts as `True`.
+key the reason also names the remedy (`Options(context=...)`, and for an input feature the consumer's
+`propagate_context_keys`). The predicate must be pure and must not raise. It is callable by
+construction, and a non-bool truthy return counts as `True`.
 
 The enforcement is installed on the class, not on one matcher, so overriding
 `match_feature_group_criteria` does not lose it: the predicates still run after the override
@@ -706,7 +705,8 @@ if it really is a whole-value check.
 | Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |
 | `required_when` survives an overridden matcher, runs exactly once, and demands a classmethod | `tests/.../feature_chainer/test_required_when_enforced_on_override.py` |
-| A `required_when` non-match records its reason, so the failure report names the key and its owner (and, for a context key, the `Options(context=...)` / `propagate_context_keys` remedy) | `tests/test_core/test_prepare/test_required_when_rejection_recording.py` |
+| A `required_when` non-match records its reason, so the failure report names the key and its owner | `tests/test_core/test_prepare/test_required_when_rejection_recording.py` |
+| `required_when` end to end, including the context-key remedy in the failure report | `tests/.../feature_chainer/test_property_mapping_required_when.py` |
 | Plugin specs behave identically across containers | `tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py` |
 | `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
 | Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |

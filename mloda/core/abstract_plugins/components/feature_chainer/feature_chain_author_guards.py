@@ -380,9 +380,6 @@ def check_required_when(
                 key,
                 predicate_name,
             )
-            # Same diagnostic seam as the sibling presence rules, so the resolution-failure report can
-            # explain this non-match. The engine re-keys the harvest by candidate, so the reason itself
-            # names the class that declared the requirement.
             # Group keys forward to input features by default, so only context keys get a remedy hint.
             remedy = (
                 "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
@@ -390,6 +387,9 @@ def check_required_when(
                 if spec.context
                 else ""
             )
+            # Same diagnostic seam as the sibling presence rules, so the resolution-failure report can
+            # explain this non-match. The engine re-keys the harvest by candidate, so the reason itself
+            # names the class that declared the requirement.
             record_match_rejection(
                 owner_name,
                 f"required option '{key}' is absent, but {owner_name} declares it required "

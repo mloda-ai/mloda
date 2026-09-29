@@ -83,6 +83,7 @@ class DuckdbRelation(SqlBaseRelation):
 
     def select(self, *columns: str) -> "DuckdbRelation":
         """Project named columns, quoting each identifier."""
+        self._require_columns(*columns)
         projection = ", ".join(quote_ident(c) for c in columns)
         new_rel = self._relation.project(projection)
         return DuckdbRelation(self._connection, new_rel)
@@ -181,7 +182,7 @@ class DuckdbRelation(SqlBaseRelation):
         return DuckdbRelation(self._connection, new_rel)
 
     def order(self, *columns: str) -> "DuckdbRelation":
-        """Return a new relation sorted by the given columns."""
+        """Return a new relation sorted by a raw SQL order fragment (the arguments are joined verbatim)."""
         return DuckdbRelation(self._connection, self._relation.order(", ".join(columns)))
 
     def drop(self) -> None:

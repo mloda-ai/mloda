@@ -298,6 +298,22 @@ class RelationTestMixin:
         with pytest.raises(ValueError, match="rename"):
             left.join(right, "l.ID = r.id", how="inner")
 
+    @pytest.mark.parametrize("bad", ["missing", "VAL"])
+    def test_select_missing_or_case_mismatched_name_raises(
+        self, connection: Any, relation_class: Any, bad: str
+    ) -> None:
+        rel = relation_class.from_dict(connection, {"id": [1, 2], "val": [10, 20]})
+        with pytest.raises(ValueError, match=bad):
+            rel.select("id", bad)
+
+    def test_join_non_ascii_case_variants_are_distinct(self, connection: Any, relation_class: Any) -> None:
+        left = relation_class.from_dict(connection, {"id": [1, 2], "é": [10, 20]}).set_alias("l")
+        right = relation_class.from_dict(connection, {"id": [1, 2], "É": [30, 40]}).set_alias("r")
+        result = left.join(right, "l.id = r.id", how="inner")
+        arrow = result.to_arrow_table()
+        assert arrow.column("é").to_pylist() == [10, 20]
+        assert arrow.column("É").to_pylist() == [30, 40]
+
     def test_from_arrow_case_only_collision_raises(self, connection: Any, relation_class: Any) -> None:
         table = pa.Table.from_arrays([pa.array([1, 2]), pa.array([3, 4])], names=["a", "A"])
         with pytest.raises(ValueError, match="rename"):

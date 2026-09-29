@@ -80,10 +80,20 @@ def ensure_distinct_identifiers(columns: Iterable[str], operation: str) -> None:
         folded = fold_identifier(column)
         if folded in seen:
             raise ValueError(
-                f"{operation}: columns {seen[folded]!r} and {column!r} resolve to the same SQL column "
-                "(names are compared ignoring ASCII case); rename one side"
+                f"{operation}: columns {seen[folded]!r} and {column!r} collide "
+                "(SQL compares names ignoring ASCII case); rename one side"
             )
         seen[folded] = column
+
+
+def require_exact_columns(
+    columns: Iterable[str], names: Iterable[str], pseudo_columns: frozenset[str] = frozenset()
+) -> None:
+    """Raise ``ValueError`` for the first name that is not an exact column and not a pseudo-column."""
+    existing = set(columns)
+    for name in names:
+        if name not in existing and fold_identifier(name) not in pseudo_columns:
+            raise ValueError(f"Column {name!r} is not a column of the relation; column names are case-sensitive")
 
 
 def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:

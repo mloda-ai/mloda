@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import TypeVar
+from typing import ClassVar, TypeVar
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     fold_identifier,
     pick_helper_column_name,
     quote_ident,
+    require_exact_columns,
 )
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
     OrderBy,
@@ -37,6 +38,8 @@ class SqlBaseRelation(ABC):
     Subclasses MAY override the version-guard hooks (no-ops by default).
     """
 
+    _PSEUDO_COLUMNS: ClassVar[frozenset[str]] = frozenset()
+
     @property
     @abstractmethod
     def columns(self) -> list[str]: ...
@@ -50,12 +53,9 @@ class SqlBaseRelation(ABC):
         if fold_identifier(name) in {fold_identifier(c) for c in self.columns}:
             raise ValueError(f"Column {name!r} already exists in the relation")
 
-    def _ensure_columns_exact(self, partition_by: Sequence[str], order_by: Sequence[str | OrderBy]) -> None:
-        """Raise ``ValueError`` unless every partition/order column is an exact entry of ``columns``."""
-        existing = set(self.columns)
-        for item in (*partition_by, *(o if isinstance(o, str) else o.column for o in order_by)):
-            if item not in existing:
-                raise ValueError(f"Column {item!r} is not a column of the relation; column names are case-sensitive")
+    def _require_columns(self, *names: str) -> None:
+        """Raise ``ValueError`` unless every name is an exact column (or a backend pseudo-column)."""
+        require_exact_columns(self.columns, names, self._PSEUDO_COLUMNS)
 
     def _pick_helper_column(self, *also_taken: str) -> str:
         """Return a helper-column name free of every current column and ``also_taken`` (ASCII case-insensitive)."""
@@ -83,7 +83,7 @@ class SqlBaseRelation(ABC):
         order is implementation-defined; pass order_by for a deterministic numbering.
         """
         self._ensure_column_absent(alias)
-        self._ensure_columns_exact(partition_by, order_by)
+        self._require_columns(*partition_by, *(o if isinstance(o, str) else o.column for o in order_by))
         self._assert_window_supported()
         self._assert_nulls_supported(order_by)
         over_sql = render_over_clause(partition_by, order_by, None)
@@ -106,7 +106,7 @@ class SqlBaseRelation(ABC):
         (ASCII case-insensitive), or if a partition/order column is not an exact column name.
         """
         self._ensure_column_absent(alias)
-        self._ensure_columns_exact(partition_by, order_by)
+        self._require_columns(*partition_by, *(o if isinstance(o, str) else o.column for o in order_by))
         self._assert_window_supported()
         self._assert_nulls_supported(order_by)
         validate_window(order_by, frame)

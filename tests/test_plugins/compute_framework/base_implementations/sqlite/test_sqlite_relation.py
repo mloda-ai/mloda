@@ -8,6 +8,7 @@ import pytest
 
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
     SqliteRelation,
@@ -292,6 +293,49 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         assert len(result) == 2
         assert "val" in result.columns
         assert "score" in result.columns
+
+    # --- Pseudo-columns and exact-case name lookup ---
+
+    @pytest.mark.parametrize("pseudo", ["rowid", "ROWID", "oid", "OID", "_rowid_", "_RowId_"])
+    @pytest.mark.parametrize("as_order_by", [False, True], ids=["str", "orderby"])
+    def test_with_row_number_accepts_pseudo_column_order_by(
+        self, connection: sqlite3.Connection, pseudo: str, as_order_by: bool
+    ) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": ["a", "b", "c"]})
+        item: Any = OrderBy(pseudo) if as_order_by else pseudo
+        result = rel.with_row_number("rn", order_by=[item])
+        arrow = result.to_arrow_table()
+        assert "rn" in result.columns
+        assert arrow.column("v").to_pylist() == ["a", "b", "c"]
+        assert arrow.column("rn").to_pylist() == [1, 2, 3]
+
+    @pytest.mark.parametrize("pseudo", ["rowid", "OID", "_ROWID_"])
+    def test_with_row_number_accepts_pseudo_column_partition_by(
+        self, connection: sqlite3.Connection, pseudo: str
+    ) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": ["a", "b", "c"]})
+        result = rel.with_row_number("rn", partition_by=[pseudo])
+        assert "rn" in result.columns
+        assert result.to_arrow_table().column("rn").to_pylist() == [1, 1, 1]
+
+    @pytest.mark.parametrize("pseudo", ["rowid", "ROWID", "oid", "_rowid_"])
+    def test_window_accepts_pseudo_column(self, connection: sqlite3.Connection, pseudo: str) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": ["a", "b", "c"]})
+        result = rel.window("ROW_NUMBER()", "rn", order_by=[OrderBy(pseudo)])
+        assert "rn" in result.columns
+        assert result.to_arrow_table().column("rn").to_pylist() == [1, 2, 3]
+
+    @pytest.mark.parametrize("bad", ["missing", "V"])
+    def test_select_missing_or_case_mismatched_name_raises(self, connection: sqlite3.Connection, bad: str) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": [1, 2]})
+        with pytest.raises(ValueError, match=bad):
+            rel.select(bad)
+
+    @pytest.mark.parametrize("bad", ["missing", "V"])
+    def test_order_missing_or_case_mismatched_name_raises(self, connection: sqlite3.Connection, bad: str) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": [1, 2]})
+        with pytest.raises(ValueError, match=bad):
+            rel.order(bad)
 
 
 class TestSqliteRelationTableNameQuoting:

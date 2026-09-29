@@ -128,3 +128,34 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineTestBase):
         cfg = AsOfJoinConfig(left_time_column="ts", right_time_column="ts", direction="backward")
         with pytest.raises(ValueError, match="rename"):
             engine.merge_asof(left, right, Index(("id",)), Index(("id",)), cfg)
+
+    @pytest.mark.parametrize("bad_side", ["left", "right"])
+    @pytest.mark.parametrize("key_kind", ["by", "time"])
+    def test_case_mismatched_key_raises(self, key_kind: str, bad_side: str) -> None:
+        left = self.convert_dict_to_framework([{"id": 1, "ts": 10, "val": 100}])
+        right = self.convert_dict_to_framework([{"id": 1, "ts": 8, "rv": 7}])
+        engine = SqliteMergeEngine(self.get_connection())
+        left_by, right_by, left_t, right_t = "id", "id", "ts", "ts"
+        if key_kind == "by":
+            left_by, right_by = ("ID", "id") if bad_side == "left" else ("id", "ID")
+            bad = "ID"
+        else:
+            left_t, right_t = ("TS", "ts") if bad_side == "left" else ("ts", "TS")
+            bad = "TS"
+        cfg = AsOfJoinConfig(left_time_column=left_t, right_time_column=right_t, direction="backward")
+        with pytest.raises(ValueError, match=bad):
+            engine.merge_asof(left, right, Index((left_by,)), Index((right_by,)), cfg)
+
+    @pytest.mark.parametrize("helper", ["_mloda_lid", "_MLODA_RN", "_mloda_rn", "_MLODA_LID"])
+    def test_left_column_named_like_helper_is_safe(self, helper: str) -> None:
+        hv = [1, 1, 1] if "lid" in helper.lower() else [111, 222, 333]
+        left = self.convert_dict_to_framework(
+            [{"id": 1, "ts": 10, helper: hv[0]}, {"id": 1, "ts": 20, helper: hv[1]}, {"id": 2, "ts": 5, helper: hv[2]}]
+        )
+        right = self.convert_dict_to_framework([{"id": 1, "ts": 8, "rv": 100}, {"id": 1, "ts": 15, "rv": 200}])
+        engine = SqliteMergeEngine(self.get_connection())
+        cfg = AsOfJoinConfig(left_time_column="ts", right_time_column="ts", direction="backward")
+        result = self.convert_framework_to_dict(engine.merge_asof(left, right, Index(("id",)), Index(("id",)), cfg))
+        rows = sorted(result, key=lambda r: (r["id"], r["ts"]))
+        assert [r[helper] for r in rows] == hv
+        assert [self._normalize_value(r["rv"]) for r in rows] == [100, 200, None]

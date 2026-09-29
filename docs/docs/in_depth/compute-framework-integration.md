@@ -190,10 +190,10 @@ loudly.
 
 ### Column name case sensitivity
 
-Column and feature names match exactly (case-sensitive) in every lookup, match and presence check, on every compute framework.
+mloda matches column and feature names exactly (case-sensitive) in every lookup, match and presence check; engines that resolve names differently add the rules below.
 
--   DuckDB and SQLite compare identifiers ignoring ASCII case only (`val` and `VAL` are one column; `é` and `É` are two), and mloda's checks for new and helper column names fold case the same way. A join, as-of merge, union, append, `from_arrow` or `from_dict` whose output names differ only in case raises `ValueError`; rename one side upstream.
--   On those engines, mask primitives and the `partition_by` / `order_by` columns of `with_row_number` / `window` must be exact column names. Raw SQL fragments (`filter` conditions, `select` / `project` expressions, the `window` function) bind through the engine and stay case-insensitive; on SQLite an unresolvable quoted name there is read as a string literal, not an error.
+-   DuckDB and SQLite compare identifiers ignoring ASCII case only (`val` and `VAL` are one column; `é` and `É` are two), and mloda's checks for new and helper column names fold case the same way. A join, as-of merge, union, append, `from_arrow` or `from_dict` whose output names differ only in case, or repeat a name exactly, raises `ValueError`; rename one side upstream.
+-   On those engines, mask primitives, the `partition_by` / `order_by` columns of `with_row_number` / `window`, merge keys, as-of `by` and time columns, `select` names and SQLite `order` names must be exact column names. SQLite also accepts its `rowid` / `oid` / `_rowid_` pseudo-columns in `select`, `order`, `with_row_number` and `window`. Raw SQL fragments (`filter` conditions, `project` expressions, the `window` function, DuckDB `order`) bind through the engine and stay case-insensitive; on SQLite an unresolvable quoted name there is read as a string literal, not an error.
 -   Spark follows `spark.sql.caseSensitive` (default `false`). mloda's Spark checks are exact, so a case-only duplicate surfaces as Spark's ambiguous-reference error; set it to `true` for exact-case behavior.
 
 ### Row count for observability

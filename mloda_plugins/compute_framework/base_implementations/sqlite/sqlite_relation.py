@@ -171,6 +171,8 @@ class SqliteRelation(SqlBaseRelation):
       user-controlled input.
     """
 
+    _PSEUDO_COLUMNS = frozenset({"rowid", "oid", "_rowid_"})
+
     def __init__(
         self,
         connection: sqlite3.Connection,
@@ -312,6 +314,8 @@ class SqliteRelation(SqlBaseRelation):
 
     def select(self, *columns: str, _raw_sql: str | None = None) -> "SqliteRelation":
         """Project columns. _raw_sql bypasses quoting: never pass user-controlled input."""
+        if _raw_sql is None:
+            self._require_columns(*columns)
         new_name = _next_table_name()
         if _raw_sql is not None:
             projection = _raw_sql
@@ -351,6 +355,7 @@ class SqliteRelation(SqlBaseRelation):
 
     def order(self, *columns: str) -> "SqliteRelation":
         """Return a new relation sorted by the given columns."""
+        self._require_columns(*columns)
         new_name = _next_table_name()
         order_clause = ", ".join(quote_ident(c) for c in columns)
         sql = (

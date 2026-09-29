@@ -137,7 +137,7 @@ class TestPickHelperColumnName:
         assert result == "__mloda_rn1__"
 
     def test_pick_helper_column_name_lowercases_uppercase_prefix(self) -> None:
-        """An uppercase prefix must be casefolded before building the candidate name."""
+        """An uppercase prefix must be ASCII-lowercased before building the candidate name."""
         result = pick_helper_column_name(taken=set(), prefix="__MLODA_RN")
         assert result == "__mloda_rn0__"
 

@@ -8,6 +8,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     null_or_nan_condition,
     quote_ident,
     quote_value,
+    require_exact_columns,
 )
 
 
@@ -39,8 +40,8 @@ class SqlBaseMaskEngine(BaseMaskEngine):
     @classmethod
     def _require_column(cls, data: Any, column: str) -> None:
         """Raise ``ValueError`` unless ``column`` is an exact entry of ``data.columns`` (None passes)."""
-        if data is not None and column not in data.columns:
-            raise ValueError(f"Column {column!r} is not a column of the relation; column names are case-sensitive")
+        if data is not None:
+            require_exact_columns(data.columns, [column])
 
     @classmethod
     def _null_or_nan_condition(cls, data: Any, column: str) -> str:

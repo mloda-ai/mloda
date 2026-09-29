@@ -49,10 +49,9 @@ def nan_condition(data: Any, column: str) -> str | None:
 
     The column is looked up by exact name; a missing or differently-cased name raises ``ValueError``.
     """
-    from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+    from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident, require_exact_columns
 
-    if column not in data.columns:
-        raise ValueError(f"Column {column!r} is not a column of the relation; column names are case-sensitive")
+    require_exact_columns(data.columns, [column])
     type_str = str(data.types[data.columns.index(column)])
     if type_str in ("FLOAT", "DOUBLE"):
         return f"isnan({quote_ident(column)})"

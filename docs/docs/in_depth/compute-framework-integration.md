@@ -166,6 +166,8 @@ this off schema metadata, so it works on a zero-row frame and costs nothing extr
 implement a new compute framework, as long as `extract_column_names` returns the
 columns for a zero-row frame. Feature groups can call
 `<Framework>.extract_column_names(data)` without an instance to resolve available columns.
+A framework that overrides only `_extract_column_names` keeps working internally, but its
+public `extract_column_names` raises until it implements the classmethod.
 
 There is one representational caveat. The schema-bearing frameworks (PyArrow,
 Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata

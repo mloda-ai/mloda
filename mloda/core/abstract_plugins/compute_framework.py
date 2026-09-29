@@ -60,6 +60,12 @@ class EmptyResultError(ValueError):
     zero rows with a schema is valid."""
 
 
+def _private_only_extract_column_names(cls: type, data: Any) -> set[str]:
+    raise NotImplementedError(
+        f"{cls.__name__} overrides _extract_column_names; it must implement the extract_column_names classmethod"
+    )
+
+
 class ComputeFramework(ABC):
     """
     Documentation ComputeFramework:
@@ -532,6 +538,12 @@ class ComputeFramework(ABC):
         if dtype_str in ComputeFramework._NUMERIC_TYPES:
             return True
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """A private-only _extract_column_names override must not inherit a parent's public classmethod."""
+        super().__init_subclass__(**kwargs)
+        if "_extract_column_names" in cls.__dict__ and "extract_column_names" not in cls.__dict__:
+            setattr(cls, "extract_column_names", classmethod(_private_only_extract_column_names))
 
     @classmethod
     def extract_column_names(cls, data: Any) -> set[str]:

@@ -1795,7 +1795,10 @@ class TestRenderResolutionFailureMessages:
         assert "Use resolve_feature(name, options=..., feature_group=...) to debug feature resolution." in message
         assert message.endswith(TROUBLESHOOTING_LINE)
 
-    @pytest.mark.parametrize("build", [multiple_scenario, abstract_bare_scenario, ordinary_none_scenario])
+    @pytest.mark.parametrize(
+        "build",
+        [multiple_scenario, abstract_bare_scenario, abstract_with_frameworks_scenario, ordinary_none_scenario],
+    )
     def test_nested_input_headline_names_the_resolving_path(self, build: Callable[[], Scenario]) -> None:
         """A non-empty resolving_path puts '(needed by a -> b)' right after the quoted name in the headline."""
         scenario = build()
@@ -1807,7 +1810,7 @@ class TestRenderResolutionFailureMessages:
         assert f"'{feature.name}' (needed by outer_791 -> inner_791)" in message.split("\n")[0]
 
     def test_input_data_decline_drops_the_hint_only_for_a_nested_input(self) -> None:
-        """A top-level typo keeps 'Did you mean' beside an input_data decline; a nested input loses it."""
+        """Only an input_data decline on a nested input loses 'Did you mean'; top-level and other stages keep it."""
         result = EvaluationResult(
             identified={},
             eliminations={RendererSuccessFG791: Elimination(stage="input_data", reason=STAGE_LABEL_REASON_791)},
@@ -1824,6 +1827,15 @@ class TestRenderResolutionFailureMessages:
         assert nested_message is not None
         assert _suggestions(top_level_message) == [KNOWN_FEATURE_791]
         assert _suggestions(nested_message) is None
+
+        rejected = EvaluationResult(
+            identified={},
+            eliminations={RendererSuccessFG791: Elimination(stage="value_rejection", reason=STAGE_LABEL_REASON_791)},
+            facts=RenderFacts(known_names=(KNOWN_FEATURE_791,)),
+        )
+        rejected_message = render_resolution_failure(rejected, nested)
+        assert rejected_message is not None
+        assert _suggestions(rejected_message) == [KNOWN_FEATURE_791]
 
     def test_ordinary_none_renders_rejections_suggestion_and_pointers(self) -> None:
         """The near-miss block, then 'Did you mean', then the resolve_feature and troubleshooting lines."""

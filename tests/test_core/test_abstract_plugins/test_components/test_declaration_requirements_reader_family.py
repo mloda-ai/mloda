@@ -19,7 +19,16 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.provider import ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.user import DataAccessCollection, Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
+from mloda.user import (
+    DataAccessCollection,
+    Feature,
+    FeatureName,
+    Options,
+    ParallelizationMode,
+    PluginCollector,
+    mloda,
+    resolve_feature,
+)
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
@@ -518,6 +527,18 @@ class TestDeclarationRequirementsEndToEnd:
         assert DeclSharedInstanceSecondConsumer1648.get_class_name() not in message
         assert "needed by" not in message
         assert LOAD_LOG == []
+
+        resolved = resolve_feature(
+            shared,
+            plugin_collector=ENABLED,
+            data_access_collection=LONELY_DAC,
+            compute_frameworks={PythonDictFramework},
+        )
+
+        assert resolved.error is not None
+        assert f"request for '{LONELY_DEPTH}'" in resolved.error
+        assert "needed by" not in resolved.error
+        assert DeclSharedInstanceRequiringConsumer1648.get_class_name() not in resolved.error
 
 
 class TestTopLevelRequestRequirement:

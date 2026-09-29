@@ -16,12 +16,16 @@ across all test files, preventing JVM conflicts and resource issues.
 """
 
 import os
+import sys
 import pytest
 from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Spark workers must run the driver's interpreter, else PYTHON_VERSION_MISMATCH outside tox.
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
 
 # Check PySpark availability and Java environment
 try:

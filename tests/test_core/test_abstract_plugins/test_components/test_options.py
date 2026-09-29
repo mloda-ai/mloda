@@ -17,6 +17,14 @@ class _RaisesOnDeepcopy:
         raise KeyError("int")
 
 
+class _HoldsUncopyable:
+    """Deep-copies via __reduce_ex__, so copy memoizes an empty instance before copying state fails."""
+
+    def __init__(self, nested: "_HoldsUncopyable | None" = None) -> None:
+        self.nested = nested
+        self.handle = _RaisesOnDeepcopy()
+
+
 class TestOptions:
     """Test suite for the new Options class with group/context separation."""
 
@@ -269,6 +277,26 @@ class TestPropagateContextKeys:
         # Sibling values in the same dict are still independently deep-copied (per-value fallback).
         assert copied.group["d"] is not opts.group["d"]
         assert copied.group["d"] == {"n": 1}
+
+    def test_value_whose_deepcopy_fails_partway_stays_the_original_across_features(self) -> None:
+        """A failed deepcopy (e.g. a SparkSession) must not leave a half-built copy in the shared memo
+        for a later reference to it, or to an object nested in it, to pick up."""
+        inner = _HoldsUncopyable()
+        outer = _HoldsUncopyable(nested=inner)
+        sibling = {"n": 1}
+        features = [
+            Feature("a", options={"k": outer, "s": sibling}),
+            Feature("b", options={"k": outer}),
+            Feature("c", options={"k": inner}),
+        ]
+
+        copied = deepcopy(features)
+
+        assert copied[0].options.get("k") is outer
+        assert copied[1].options.get("k") is outer
+        assert copied[2].options.get("k") is inner
+        assert copied[0].options.get("s") is not sibling
+        assert copied[0].options.get("s") == sibling
 
 
 class TestContextPropagationIntegration:

@@ -27,11 +27,15 @@ def is_non_forwarded_key(key: Any) -> bool:
 def _safe_deepcopy(value: Any, memo: dict[int, Any]) -> Any:
     """Deep-copy a single value, falling back to sharing the value by reference when it cannot be
     deep-copied for ANY reason (e.g. unpicklable objects, or values whose deepcopy raises under some
-    Python versions such as uuid.UUID on 3.14)."""
+    Python versions such as uuid.UUID on 3.14). A failed attempt's half-built memo entries are
+    dropped, so a later reference to the same object in this deepcopy also gets the original."""
+    memo_size = len(memo)
     try:
         return deepcopy(value, memo)
     except Exception:
-        # If the value cannot be deep-copied for any reason, share it by reference.
+        for key in list(memo)[memo_size:]:
+            del memo[key]
+        memo[id(value)] = value
         return value
 
 

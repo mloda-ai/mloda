@@ -139,10 +139,11 @@ class SparkMergeEngine(BaseMergeEngine):
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
         """Coerce an ISO-8601 string time column to timestamp, failing hard on null introduction.
 
-        to_timestamp silently yields NULL for unparseable values, so an eager count guards first.
+        try_to_timestamp yields NULL for unparseable values (to_timestamp raises under ANSI mode), so an
+        eager count guards first.
         """
         helper = pick_helper_column_name(taken=set(data.columns), prefix="_mloda_coerced")
-        coerced = data.withColumn(helper, F.to_timestamp(F.col(column)))
+        coerced = data.withColumn(helper, F.try_to_timestamp(F.col(column)))
         bad_count = coerced.filter(F.col(column).isNotNull() & F.col(helper).isNull()).count()
         if bad_count > 0:
             raise ValueError(

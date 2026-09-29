@@ -43,7 +43,7 @@ A null or NaN row never matches (a mask holds `False` there) unless the call tar
 NULL, which is treated as no match. The engines do not tell NaN from null, so use the framework's
 native API directly when that distinction matters. `data` is the frame or relation being masked,
 never `None`; the Polars lazy and DuckDB engines raise `TypeError` on `None` in the calls that
-read its column types.
+read its column types. SQL mask engines raise `ValueError` when `column` is not an exact entry of `data.columns`.
 
 ### Convenience methods
 

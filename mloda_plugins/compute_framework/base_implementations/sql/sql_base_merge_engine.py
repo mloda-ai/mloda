@@ -4,7 +4,7 @@ from typing import Any
 from mloda.user import Index, JoinType
 from mloda.provider import BaseMergeEngine
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import ensure_distinct_identifiers, quote_ident
 
 
 class SqlBaseMergeEngine(BaseMergeEngine):
@@ -54,6 +54,7 @@ class SqlBaseMergeEngine(BaseMergeEngine):
         left_cols = set(self.get_column_names(left_data))
         right_cols = set(self.get_column_names(right_data))
         all_cols = sorted(left_cols.union(right_cols))
+        ensure_distinct_identifiers(all_cols, "union")
 
         def build(cols_present: set[str]) -> str:
             return ", ".join(

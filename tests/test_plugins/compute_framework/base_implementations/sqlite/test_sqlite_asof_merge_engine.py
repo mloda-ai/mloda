@@ -120,3 +120,11 @@ class TestSqliteAsofMergeEngine(AsofMergeEngineTestBase):
         result_dicts = self.convert_framework_to_dict(result)
         assert len(result_dicts) == 1, f"expected 1 row, got {len(result_dicts)}: {result_dicts}"
         assert self._normalize_value(result_dicts[0]["rv"]) == 100
+
+    def test_case_only_output_collision_raises(self) -> None:
+        left = self.convert_dict_to_framework([{"id": 1, "ts": 10, "val": 100}])
+        right = self.convert_dict_to_framework([{"id": 1, "ts": 8, "Val": 7}])
+        engine = SqliteMergeEngine(self.get_connection())
+        cfg = AsOfJoinConfig(left_time_column="ts", right_time_column="ts", direction="backward")
+        with pytest.raises(ValueError, match="rename"):
+            engine.merge_asof(left, right, Index(("id",)), Index(("id",)), cfg)

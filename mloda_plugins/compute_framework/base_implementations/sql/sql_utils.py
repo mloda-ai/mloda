@@ -12,12 +12,16 @@ SQL injection prevention follows two layers:
 """
 
 import math
+import string
+from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import pyarrow as pa
+
+_ASCII_FOLD = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
 
 def is_ordered_arrow_type(t: "pa.DataType") -> bool:
@@ -64,15 +68,32 @@ def quote_value(value: Any) -> str:
     raise TypeError(f"Unsupported type for SQL literal: {type(value).__name__}")
 
 
-def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:
-    """Return the lowest ``{prefix}{n}__`` name not present in ``taken`` (case-insensitive).
+def fold_identifier(name: str) -> str:
+    """Lowercase ASCII letters only, matching how DuckDB and SQLite compare identifiers."""
+    return name.translate(_ASCII_FOLD)
 
-    The returned name is always lowercase (the ``prefix`` is casefolded), so a
-    mixed-case ``prefix`` cannot return a name that collides case-insensitively
-    with an entry in ``taken``.
+
+def ensure_distinct_identifiers(columns: Iterable[str], operation: str) -> None:
+    """Raise ``ValueError`` on the first pair of columns equal under ``fold_identifier``."""
+    seen: dict[str, str] = {}
+    for column in columns:
+        folded = fold_identifier(column)
+        if folded in seen:
+            raise ValueError(
+                f"{operation}: columns {seen[folded]!r} and {column!r} resolve to the same SQL column "
+                "(names are compared ignoring ASCII case); rename one side"
+            )
+        seen[folded] = column
+
+
+def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:
+    """Return the lowest ``{prefix}{n}__`` name not present in ``taken`` (ASCII case-insensitive).
+
+    The ``prefix`` is ASCII-lowercased, so a mixed-case ``prefix`` cannot return a name
+    that collides with an entry in ``taken``.
     """
-    prefix_cf = prefix.casefold()
-    taken_cf = {t.casefold() for t in taken}
+    prefix_cf = fold_identifier(prefix)
+    taken_cf = {fold_identifier(t) for t in taken}
     n = 0
     while f"{prefix_cf}{n}__" in taken_cf:
         n += 1

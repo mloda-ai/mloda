@@ -6,7 +6,7 @@ The mloda framework uses a sophisticated matching system to determine which feat
 
 ## Matching Process
 
-When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the `match_feature_group_criteria` method in each feature group, which now typically uses the unified parser approach.
+When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the `match_feature_group_criteria` method in each feature group, which now typically uses the unified parser approach. Feature and column names match case-sensitively; see [Column name case sensitivity](compute-framework-integration.md#column-name-case-sensitivity).
 
 ## Modern Unified Matching
 

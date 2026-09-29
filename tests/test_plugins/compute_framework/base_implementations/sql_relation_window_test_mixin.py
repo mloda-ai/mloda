@@ -314,6 +314,28 @@ class SqlRelationWindowTestMixin:
         ordered = result.order("rn")
         assert ordered.to_arrow_table().column("odd col").to_pylist() == [1, 2, 3]
 
+    # --- Exact-case column references ---
+
+    @pytest.mark.parametrize("bad", ["missing", "CATEGORY"])
+    def test_with_row_number_inexact_partition_by_raises(self, sample_relation: Any, bad: str) -> None:
+        with pytest.raises(ValueError, match=bad):
+            sample_relation.with_row_number("rn", partition_by=(bad,))
+
+    @pytest.mark.parametrize("bad", ["missing", "CATEGORY"])
+    def test_window_inexact_partition_by_raises(self, sample_relation: Any, bad: str) -> None:
+        with pytest.raises(ValueError, match=bad):
+            sample_relation.window("COUNT(*)", "n", partition_by=(bad,))
+
+    @pytest.mark.parametrize("bad", ["AGE", OrderBy("AGE")], ids=["str", "orderby"])
+    def test_with_row_number_case_mismatched_order_by_raises(self, sample_relation: Any, bad: Any) -> None:
+        with pytest.raises(ValueError, match="AGE"):
+            sample_relation.with_row_number("rn", order_by=(bad,))
+
+    @pytest.mark.parametrize("bad", ["AGE", OrderBy("AGE")], ids=["str", "orderby"])
+    def test_window_case_mismatched_order_by_raises(self, sample_relation: Any, bad: Any) -> None:
+        with pytest.raises(ValueError, match="AGE"):
+            sample_relation.window("COUNT(*)", "n", order_by=(bad,))
+
     # --- RANGE frame validation: offset bounds require exactly one ORDER BY column ---
 
     def test_window_range_offset_with_multi_column_order_by_raises(self, sample_relation: Any) -> None:

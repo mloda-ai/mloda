@@ -304,6 +304,15 @@ class TestDuckDBMergeEngine:
         assert engine.column_exists_in_result(data, "col2") is True
         assert engine.column_exists_in_result(data, "nonexistent") is False
 
+    @pytest.mark.parametrize("method", ["merge_union", "merge_append"])
+    def test_set_operation_case_only_collision_raises(self, connection: Any, method: str) -> None:
+        left = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"id": [1], "Val": [10]}))
+        right = DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"id": [2], "val": [20]}))
+        index_obj = Index(("id",))
+        engine = DuckDBMergeEngine(connection)
+        with pytest.raises(ValueError, match="rename"):
+            getattr(engine, method)(left, right, index_obj, index_obj)
+
 
 @pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
 class TestDuckDBMergeEngineViewLeak:

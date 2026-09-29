@@ -4,7 +4,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import TypeVar
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name, quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    fold_identifier,
+    pick_helper_column_name,
+    quote_ident,
+)
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
     OrderBy,
     WindowFrame,
@@ -42,12 +46,19 @@ class SqlBaseRelation(ABC):
         """Materialize ``SELECT {projection} FROM <self>`` as a new relation."""
 
     def _ensure_column_absent(self, name: str) -> None:
-        """Raise ``ValueError`` if ``name`` collides with an existing column (case-insensitive)."""
-        if name.casefold() in {c.casefold() for c in self.columns}:
+        """Raise ``ValueError`` if ``name`` collides with an existing column (ASCII case-insensitive)."""
+        if fold_identifier(name) in {fold_identifier(c) for c in self.columns}:
             raise ValueError(f"Column {name!r} already exists in the relation")
 
+    def _ensure_columns_exact(self, partition_by: Sequence[str], order_by: Sequence[str | OrderBy]) -> None:
+        """Raise ``ValueError`` unless every partition/order column is an exact entry of ``columns``."""
+        existing = set(self.columns)
+        for item in (*partition_by, *(o if isinstance(o, str) else o.column for o in order_by)):
+            if item not in existing:
+                raise ValueError(f"Column {item!r} is not a column of the relation; column names are case-sensitive")
+
     def _pick_helper_column(self, *also_taken: str) -> str:
-        """Return a helper-column name free of every current column and ``also_taken`` (case-insensitive)."""
+        """Return a helper-column name free of every current column and ``also_taken`` (ASCII case-insensitive)."""
         return pick_helper_column_name(taken=set(self.columns) | set(also_taken))
 
     def _assert_window_supported(self) -> None:
@@ -67,10 +78,12 @@ class SqlBaseRelation(ABC):
 
         All identifiers in ``partition_by`` / ``order_by`` and the ``alias`` are quoted
         via ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing
-        column (case-insensitive). With no partition_by/order_by, row-number assignment
+        column (ASCII case-insensitive), or if a partition/order column is not an exact
+        column name. With no partition_by/order_by, row-number assignment
         order is implementation-defined; pass order_by for a deterministic numbering.
         """
         self._ensure_column_absent(alias)
+        self._ensure_columns_exact(partition_by, order_by)
         self._assert_window_supported()
         self._assert_nulls_supported(order_by)
         over_sql = render_over_clause(partition_by, order_by, None)
@@ -90,9 +103,10 @@ class SqlBaseRelation(ABC):
         ``func`` is a raw SQL fragment inlined verbatim; never pass user-controlled input.
         The ``alias`` and every identifier in ``partition_by`` / ``order_by`` are quoted via
         ``quote_ident``. Raises ``ValueError`` if ``alias`` collides with an existing column
-        (case-insensitive).
+        (ASCII case-insensitive), or if a partition/order column is not an exact column name.
         """
         self._ensure_column_absent(alias)
+        self._ensure_columns_exact(partition_by, order_by)
         self._assert_window_supported()
         self._assert_nulls_supported(order_by)
         validate_window(order_by, frame)

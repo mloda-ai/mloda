@@ -293,6 +293,15 @@ class TestSqliteMergeEngine:
         assert len(result_df) == 3, f"Expected 3 rows but got {len(result_df)}"
         assert set(result_df["idx"].tolist()) == {2, 3, 4}
 
+    @pytest.mark.parametrize("method", ["merge_union", "merge_append"])
+    def test_set_operation_case_only_collision_raises(self, connection: sqlite3.Connection, method: str) -> None:
+        left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [1], "Val": [10]}))
+        right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [2], "val": [20]}))
+        index_obj = Index(("id",))
+        engine = SqliteMergeEngine(connection)
+        with pytest.raises(ValueError, match="rename"):
+            getattr(engine, method)(left, right, index_obj, index_obj)
+
 
 class TestSqliteMergeEngineViewLeak:
     """Regression tests for issue #475: SQL merge engines must not leak per-merge temp views.

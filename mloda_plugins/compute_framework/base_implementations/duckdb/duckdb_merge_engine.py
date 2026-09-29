@@ -7,7 +7,7 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda_plugins.compute_framework.base_implementations.duckdb import duckdb_type_semantics
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import ensure_distinct_identifiers, quote_ident
 
 try:
     import duckdb
@@ -58,6 +58,7 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         left_cols = self.get_column_names(left_data)
         right_cols = self.get_column_names(right_data)
         right_extra = [c for c in right_cols if c not in left_cols]
+        ensure_distinct_identifiers([*left_cols, *right_extra], "as-of merge")
 
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
 

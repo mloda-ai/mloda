@@ -112,3 +112,11 @@ class TestDuckDBAsofMergeEngine(AsofMergeEngineTestBase):
         )
         with pytest.raises(ValueError, match="timedelta"):
             engine.merge_asof(left, right, Index(("k",)), Index(("k",)), cfg)
+
+    def test_case_only_output_collision_raises(self) -> None:
+        left = self.convert_dict_to_framework([{"id": 1, "ts": 10, "val": 100}])
+        right = self.convert_dict_to_framework([{"id": 1, "ts": 8, "Val": 7}])
+        engine = DuckDBMergeEngine(self.get_connection())
+        cfg = AsOfJoinConfig(left_time_column="ts", right_time_column="ts", direction="backward")
+        with pytest.raises(ValueError, match="rename"):
+            engine.merge_asof(left, right, Index(("id",)), Index(("id",)), cfg)

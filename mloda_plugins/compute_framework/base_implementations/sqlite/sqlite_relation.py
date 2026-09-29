@@ -9,7 +9,10 @@ from collections.abc import Sequence
 from typing import Any
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
+    quote_ident,
+)
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 
@@ -382,6 +385,7 @@ class SqliteRelation(SqlBaseRelation):
         self_cols = self.columns
         other_cols = other.columns
         shared = set(self_cols) & set(other_cols)
+        ensure_distinct_identifiers([*self_cols, *(c for c in other_cols if c not in shared)], "join")
 
         if how == "outer":
             return self._full_outer_join(other, condition, new_table, self_alias, other_alias, shared)
@@ -587,8 +591,9 @@ class SqliteRelation(SqlBaseRelation):
 
     @classmethod
     def from_arrow(cls, connection: sqlite3.Connection, arrow_table: pa.Table) -> "SqliteRelation":
-        table_name = _next_table_name()
         cols = arrow_table.column_names
+        ensure_distinct_identifiers(cols, "from_arrow")
+        table_name = _next_table_name()
 
         col_defs = ", ".join(
             f"{quote_ident(c)} {_arrow_type_to_sqlite(arrow_table.schema.field(c).type)}" for c in cols
@@ -615,6 +620,7 @@ class SqliteRelation(SqlBaseRelation):
 
         if not cols:
             raise ValueError("Cannot create relation from empty dictionary")
+        ensure_distinct_identifiers(cols, "from_dict")
 
         sqlite_types = {column: _infer_sqlite_type_from_values(data[column]) for column in cols}
         col_defs = ", ".join(f"{quote_ident(c)} {sqlite_types[c]}" for c in cols)

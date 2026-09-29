@@ -3,6 +3,8 @@ from decimal import Decimal
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
+    fold_identifier,
     inline_params,
     pick_helper_column_name,
     quote_ident,
@@ -143,3 +145,36 @@ class TestPickHelperColumnName:
         """A mixed-case prefix must not collide case-insensitively with taken."""
         result = pick_helper_column_name(taken={"__mloda_rn0__"}, prefix="__MLODA_RN")
         assert result == "__mloda_rn1__"
+
+    def test_pick_helper_column_name_folds_ascii_only(self) -> None:
+        result = pick_helper_column_name(taken={"straße0__"}, prefix="STRASSE")
+        assert result == "strasse0__"
+
+
+class TestFoldIdentifier:
+    def test_lowercases_ascii(self) -> None:
+        assert fold_identifier("Val_ABC") == "val_abc"
+
+    def test_leaves_non_ascii_unchanged(self) -> None:
+        assert fold_identifier("É") == "É"
+        assert fold_identifier("straße") == "straße"
+
+
+class TestEnsureDistinctIdentifiers:
+    def test_distinct_passes(self) -> None:
+        ensure_distinct_identifiers(["a", "b", "c"], "join")
+
+    def test_case_only_collision_raises_naming_both_and_operation(self) -> None:
+        with pytest.raises(ValueError, match="rename") as exc:
+            ensure_distinct_identifiers(["id", "Val", "val"], "join")
+        message = str(exc.value)
+        assert "join" in message
+        assert repr("Val") in message
+        assert repr("val") in message
+
+    def test_exact_duplicate_raises(self) -> None:
+        with pytest.raises(ValueError, match="rename"):
+            ensure_distinct_identifiers(["a", "a"], "from_dict")
+
+    def test_non_ascii_case_variants_pass(self) -> None:
+        ensure_distinct_identifiers(["é", "É"], "join")

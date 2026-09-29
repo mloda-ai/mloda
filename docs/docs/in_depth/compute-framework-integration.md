@@ -188,6 +188,14 @@ elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.
 
+### Column name case sensitivity
+
+Column and feature names match exactly (case-sensitive) in every lookup, match and presence check, on every compute framework.
+
+-   DuckDB and SQLite resolve quoted identifiers ignoring ASCII case only (`val` and `VAL` are one column; `é` and `É` are two). Their collision checks for new and helper columns fold ASCII case the same way. A join, as-of merge, union, append, `from_arrow` or `from_dict` whose output names would differ only in case raises `ValueError` instead of renaming a column; rename one side upstream.
+-   On those engines, SQL mask primitives and the `partition_by` / `order_by` columns of `with_row_number` / `window` must be exact column names. Raw SQL fragments (`filter` conditions, `select` / `project` expressions, the `window` function) bind through the engine: case-insensitive, and on SQLite an unresolvable quoted name is read as a string literal instead of raising.
+-   Spark resolves names per `spark.sql.caseSensitive` (default `false`: case-insensitive, Unicode-aware). mloda's Spark checks are exact, so a case-only duplicate surfaces later as Spark's ambiguous-reference error; set `spark.sql.caseSensitive=true` for exact-case behavior.
+
 ### Row count for observability
 
 `ComputeFramework._row_count(self, data) -> int | None` supplies the row counts extenders read
@@ -313,7 +321,7 @@ relation.types     # backend-specific dtype objects, same order as columns
 
 ### Window functions
 
-`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column.
+`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column (the comparison ignores ASCII case) or if a `partition_by` / `order_by` column is not an exact column name.
 
 ```py
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (

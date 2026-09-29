@@ -12,7 +12,11 @@ from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda_plugins.compute_framework.base_implementations.sql import sql_type_semantics
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import is_ordered_arrow_type, quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
+    is_ordered_arrow_type,
+    quote_ident,
+)
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation, _next_table_name
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sample import sample_string_values
 
@@ -80,6 +84,7 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         left_cols = self.get_column_names(left_data)
         right_cols = self.get_column_names(right_data)
         right_extra = [c for c in right_cols if c not in left_cols]
+        ensure_distinct_identifiers([*left_cols, *right_extra], "as-of merge")
 
         lid = quote_ident("_mloda_lid")
         rn = quote_ident("_mloda_rn")

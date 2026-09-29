@@ -14,7 +14,7 @@ except ImportError:
     pd = None
     np = None  # type: ignore
 
-from mloda.provider import CHAIN_SEPARATOR, ComputeFramework
+from mloda.provider import ComputeFramework, FeatureChainParser
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
 
@@ -59,20 +59,17 @@ class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
         # Create a mapping from node to centrality score
         node_to_score = result.to_dict()
 
-        # Check if the feature name follows the expected format with a double underscore
-        if CHAIN_SEPARATOR in feature_name:
-            # Extract the node feature name from the feature name (L→R format: source__operation)
-            # Get everything BEFORE the last "__"
-            node_feature = feature_name[: feature_name.rfind(CHAIN_SEPARATOR)]
+        # Map through the node column only when the name matches PREFIX_PATTERN
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if parsed.matched:
+            node_feature = parsed.source_feature
 
-            # If the node feature is in the DataFrame, use it to map nodes to scores
             if node_feature in data.columns:
                 # Map each row's node value to its centrality score
                 data[feature_name] = data[node_feature].map(node_to_score)
                 return data
 
-        # If the feature name doesn't have a double underscore or the node feature is not in the DataFrame,
-        # add the result as a new column using source and target columns
+        # Otherwise fall back to the source and target columns
         source_col = "source"
         target_col = "target"
 

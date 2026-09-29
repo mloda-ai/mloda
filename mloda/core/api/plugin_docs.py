@@ -389,6 +389,9 @@ def resolve_feature(
                 "resolve_feature(Feature(...)) is the single source of truth for name, options and scope; "
                 "set them on the Feature, do not also pass 'options' or 'feature_group'"
             )
+        # A standalone resolution is a request, so it drops what an earlier engine run stamped.
+        feature.resolving_consumer = None
+        feature.resolving_path = ()
         feature_obj: Feature | None = feature
         feature_name = str(feature.name)
         scope = feature.feature_group_scope

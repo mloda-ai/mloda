@@ -172,6 +172,10 @@ class Feature:
         # excluded from equality and hash.
         self.resolving_consumer: str | None = None
 
+        # Feature names from the request down to this input's consumer, overwritten by the engine
+        # (empty for a request); excluded from equality and hash.
+        self.resolving_path: tuple[str, ...] = ()
+
         # Group keys forwarded onto this input feature, set by Features.merge_options; excluded
         # from equality and hash like link/index.
         self.forwarded_group_keys: frozenset[str] = frozenset()

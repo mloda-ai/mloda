@@ -198,7 +198,12 @@ class Engine:
         return execution_planner
 
     def setup_features_recursion(
-        self, features: Features, requested: bool = True, depth: int = 0, consumer: str | None = None
+        self,
+        features: Features,
+        requested: bool = True,
+        depth: int = 0,
+        consumer: str | None = None,
+        path: tuple[str, ...] = (),
     ) -> None:
         # Register every sibling's own link before processing any, so index injection and feature-group
         # resolution see the whole batch regardless of order. Does not cover a link nested in a
@@ -211,6 +216,7 @@ class Engine:
         for feature in features:
             # Stamped right before resolution: a reused instance must name this consumer, not an earlier one.
             feature.resolving_consumer = consumer
+            feature.resolving_path = path
             self._process_feature(feature, features, requested, depth)
 
     def _process_feature(self, feature: Feature, features: Features, requested: bool, depth: int = 0) -> None:
@@ -240,6 +246,7 @@ class Engine:
                 feature.name,
                 parent_domain=parent_domain,
                 depth=depth,
+                path=feature.resolving_path,
             )
 
         if self.global_filter:
@@ -577,6 +584,7 @@ class Engine:
         feature_name: FeatureName,
         parent_domain: str | None = None,
         depth: int = 0,
+        path: tuple[str, ...] = (),
     ) -> frozenset[str] | None:
         """Handles recursion for input features of a feature group."""
         feature_group = feature_group_class()
@@ -600,7 +608,9 @@ class Engine:
         if features.child_uuid is None:
             raise ValueError(f"Features {features} has no parent uuid although it should have one.")
         self.feature_link_parents[features.child_uuid] = features.parent_uuids
-        self.setup_features_recursion(features, requested=False, depth=depth + 1, consumer=consumer_name)
+        self.setup_features_recursion(
+            features, requested=False, depth=depth + 1, consumer=consumer_name, path=(*path, str(feature_name))
+        )
         return frozenset(str(f.name) for f in features.collection)
 
     def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:

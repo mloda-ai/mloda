@@ -69,7 +69,7 @@ Use resolve_feature(name, options=...) to debug feature resolution.
 For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 ```
 
-No enabled feature group both declared the requested name and survived every matching gate. It is raised as `FeatureResolutionError` during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it, or follow the message's closing pointer and rerun the request through `resolve_feature`. Pass the same `Feature` and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome.
+No enabled feature group both declared the requested name and survived every matching gate. It is raised as `FeatureResolutionError` during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it, or follow the message's closing pointer and rerun the request through `resolve_feature`. Pass the same `Feature` and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome. When the failing feature is an input of the one you requested, the headline names the chain that needed it, e.g. `No feature groups found for feature name: 'invoice_date' (needed by net_spend_30d -> line_value).`
 
 ### The eliminated candidates block
 
@@ -92,7 +92,7 @@ A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_fea
 
 ### The Did you mean hint
 
-Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). A missing hint therefore means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.
+Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). The hint is also dropped for an input feature whose reader declined at the input-data gate, because the reason line, not a name, is the fix. Otherwise a missing hint means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.
 
 ### Only abstract feature group bases matched
 

@@ -29,10 +29,10 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     record_match_rejection,
 )
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
-from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
-from mloda.user import DataAccessCollection, Feature, FeatureName, Options
+from mloda.provider import BaseInputData, ComputeFramework, FeatureGroup, FeatureSet
+from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -127,6 +127,36 @@ class Rej727BogusStageFG(FeatureGroup):
             return False
         record_match_rejection(cls.get_class_name(), BOGUS_STAGE_REASON_REJ727, stage="rej727_bogus_stage")
         return False
+
+
+class Rej727NetSpend(FeatureGroup):
+    """Requested consumer of rej727_line_value; inert for every other name."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("rej727_line_value")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"rej727_net_spend"}
+
+
+class Rej727LineValue(FeatureGroup):
+    """Middle consumer whose input is the unresolvable rej727_column; inert for every other name."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(FEATURE_NAME_REJ727)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"rej727_line_value"}
 
 
 @pytest.fixture()
@@ -277,6 +307,28 @@ class TestEngineHarvestsReaderRejection:
         message = render_resolution_failure(result, feature)
         assert message is not None
         assert f"  - {Rej727FileFG.__name__} (input data): {elimination.reason}" in message
+
+    def test_nested_input_names_its_chain_and_drops_the_did_you_mean_hint(self, tmp_path: Path) -> None:
+        """An unresolvable input two levels down names the chain and skips the hint beside an input_data decline."""
+        file_path = _write_csv(tmp_path / f"nested{FILE_SUFFIX_REJ727}", "other_a,other_b")
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            mloda.prepare(
+                ["rej727_net_spend"],
+                compute_frameworks={PandasDataFrame},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {Rej727FileFG, Rej727NetSpend, Rej727LineValue}
+                ),
+                data_access_collection=DataAccessCollection(files={file_path}),
+            )
+
+        lines = str(excinfo.value).split("\n")
+        assert lines[0] == (
+            f"No feature groups found for feature name: '{FEATURE_NAME_REJ727}' "
+            "(needed by rej727_net_spend -> rej727_line_value)."
+        )
+        assert any(line.startswith(f"  - {Rej727FileFG.__name__} (input data):") for line in lines)
+        assert not any(line.startswith("Did you mean") for line in lines)
 
     def test_matching_header_identifies_and_pins_the_reader_pair(self, tmp_path: Path) -> None:
         """A content-passing file identifies the group and stores the (reader class, path) pair, unchanged."""

@@ -516,6 +516,7 @@ class TestDeclarationRequirementsEndToEnd:
         assert f"request for '{LONELY_DEPTH}'" in message
         assert DeclSharedInstanceRequiringConsumer1648.get_class_name() not in message
         assert DeclSharedInstanceSecondConsumer1648.get_class_name() not in message
+        assert "needed by" not in message
         assert LOAD_LOG == []
 
 

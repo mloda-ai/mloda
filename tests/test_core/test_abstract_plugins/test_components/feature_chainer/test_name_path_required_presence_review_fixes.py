@@ -200,6 +200,41 @@ class TestNamePathPresenceRejectionReasonUnit:
         assert reason is not None, "missing keys must produce a reason unconditionally"
         assert "missing_r769rfu" in reason, "the reason must name the missing key"
         assert ENV_VAR not in reason, "the reason must not reference the retired env var"
+        assert reason == (
+            "required option(s) missing_r769rfu are absent after declared defaults and name bindings"
+            "; pass it in Options(context=...), and for an input feature, such as the child of a chained name,"
+            " list it in the consumer's propagate_context_keys"
+        )
+
+    def test_context_false_missing_key_gets_no_remedy_clause(self) -> None:
+        """Control: a missing context=False key gets no clause even if a context=True key is supplied."""
+        mapping = {
+            "group_only_r769rfu3": PropertySpec("required, group-scoped, absent", context=False),
+            "supplied_ctx_r769rfu3": PropertySpec("required, context, supplied", context=True),
+        }
+
+        reason = FeatureChainParser.name_path_presence_rejection_reason(
+            Options(context={"supplied_ctx_r769rfu3": "v_r769rf"}), mapping
+        )
+
+        assert reason == "required option(s) group_only_r769rfu3 are absent after declared defaults and name bindings"
+
+    def test_mixed_missing_keys_name_only_the_context_keys(self) -> None:
+        """Several missing keys: the clause names only the missing context=True keys and says them."""
+        mapping = {
+            "ctx_b_r769rfu4": PropertySpec("required, context, absent", context=True),
+            "ctx_a_r769rfu4": PropertySpec("required, context, absent", context=True),
+            "grp_c_r769rfu4": PropertySpec("required, group-scoped, absent", context=False),
+        }
+
+        reason = FeatureChainParser.name_path_presence_rejection_reason(Options(), mapping)
+
+        assert reason == (
+            "required option(s) ctx_a_r769rfu4, ctx_b_r769rfu4, grp_c_r769rfu4"
+            " are absent after declared defaults and name bindings"
+            "; pass ctx_a_r769rfu4, ctx_b_r769rfu4 in Options(context=...), and for an input feature,"
+            " such as the child of a chained name, list them in the consumer's propagate_context_keys"
+        )
 
     def test_none_when_nothing_missing(self) -> None:
         """Nothing missing means no reason."""

@@ -25,7 +25,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParser,
     option_key_is_present,
 )
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import context_forwarding_remedy, record_match_rejection
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import (
@@ -380,13 +380,7 @@ def check_required_when(
                 key,
                 predicate_name,
             )
-            # Gated on the declared placement: a key declared context=False forwards to input features by default.
-            remedy = (
-                "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
-                "list it in the consumer's propagate_context_keys"
-                if spec.context
-                else ""
-            )
+            remedy = context_forwarding_remedy(spec.context)
             # Same diagnostic seam as the sibling presence rules, so the resolution-failure report can
             # explain this non-match. The engine re-keys the harvest by candidate, so the reason itself
             # names the class that declared the requirement.

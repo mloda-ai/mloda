@@ -68,3 +68,17 @@ def has_match_rejection(stage: str) -> bool:
     if reasons is None:
         return False
     return any(rejection.stage == stage for rejection in reasons.values())
+
+
+def context_forwarding_remedy(context: bool, keys: list[str] | None = None) -> str:
+    """Remedy clause for an absent-option reason; empty for context=False keys. `keys` names them instead of "it"."""
+    if not context:
+        return ""
+    subject, pronoun = "it", "it"
+    if keys:
+        subject = ", ".join(keys)
+        pronoun = "them" if len(keys) > 1 else "it"
+    return (
+        f"; pass {subject} in Options(context=...), and for an input feature, such as the child of a chained name, "
+        f"list {pronoun} in the consumer's propagate_context_keys"
+    )

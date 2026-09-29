@@ -47,7 +47,11 @@ GUARD_FEATURE_OS005R = "guard_recording_feature_os005r"
 FACADE_FEATURE_OS005R = "facade_probe_feature_os005r"
 
 STRICT_REJECTION_REASON_OS005R = "Property value int 14 failed validation for 'window_size_os005r'"
-MISSING_OPTION_REASON_OS005R = "required option(s) some_key_os005r are absent after declared defaults and name bindings"
+MISSING_OPTION_REASON_OS005R = (
+    "required option(s) some_key_os005r are absent after declared defaults and name bindings"
+    "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+    "list it in the consumer's propagate_context_keys"
+)
 GUARD_REJECTION_REASON_OS005R = "Property value str 'ok_os005r' rejected by match_guard for 'guarded_key_os005r'"
 FACADE_SENTINEL_REASON_OS005R = "facade sentinel reason os005r"
 

@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.match_rejection import context_forwarding_remedy, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.declaration_surface import DeclarationSurface, validate_property_spec
 from mloda.core.abstract_plugins.components.utils import (
@@ -482,11 +482,10 @@ class FeatureChainParser:
         # own parse containment; a raise out of build_effective_options in the author guards'
         # check_required_when now surfaces as a framework defect (see TestBuildEffectiveOptionsRaiseSurfaces).
         if prefix_patterns is not None:
-            parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
-            if cls._name_identifies_group(parsed, property_mapping):
+            resolution = cls.resolve_name(feature_name, prefix_patterns, property_mapping, pattern=pattern)
+            if resolution.owned:
                 if property_mapping is not None:
-                    bindings = cls.bind_name_captures(parsed, property_mapping)
-                    effective_options = cls._merge_bindings(options, bindings, property_mapping)
+                    effective_options = cls._merge_bindings(options, dict(resolution.bindings), property_mapping)
                     cls._validate_present_option_values(effective_options, property_mapping)
                     if not cls._check_name_path_required_presence(
                         owner_name, feature_name, effective_options, property_mapping
@@ -581,6 +580,27 @@ class FeatureChainParser:
         return cls._legacy_operation_config(parsed) is not None
 
     @classmethod
+    def resolve_name(
+        cls,
+        feature_name: FeatureName | str,
+        prefix_patterns: list[Any],
+        property_mapping: dict[str, Any] | None,
+        in_feature_separator: str = INPUT_SEPARATOR,
+        pattern: str = CHAIN_SEPARATOR,
+    ) -> NameResolution:
+        """Resolve a name once: ownership, bindings and raw sources; raises like ``parse_name`` on no source."""
+        parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
+        if not parsed.matched:
+            return NameResolution.miss()
+        sources = tuple(parsed.source_feature.split(in_feature_separator)) if parsed.source_feature else ()
+        return NameResolution(
+            parsed=parsed,
+            owned=cls._name_identifies_group(parsed, property_mapping),
+            bindings=cls.bind_name_captures(parsed, property_mapping or {}),
+            sources=sources,
+        )
+
+    @classmethod
     def _merge_bindings(
         cls, options: Options, bindings: dict[str, str], property_mapping: dict[str, Any] | None
     ) -> Options:
@@ -628,15 +648,14 @@ class FeatureChainParser:
         that is no name-parsed value to merge, never an exception out of a matcher. If nothing matches or
         nothing binds, the original options come back by identity.
         """
-        parsed = safe_field(
-            lambda: cls.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR),
-            ParsedFeatureName.no_match(),
+        resolution = safe_field(
+            lambda: cls.resolve_name(feature_name, prefix_patterns, property_mapping),
+            NameResolution.miss(),
             catching=(ValueError,),
         )
-        if not parsed.matched:
+        if not resolution.parsed.matched:
             return options
-        bindings = cls.bind_name_captures(parsed, property_mapping)
-        return cls._merge_bindings(options, bindings, property_mapping)
+        return cls._merge_bindings(options, dict(resolution.bindings), property_mapping)
 
     @classmethod
     def extract_in_feature(cls, feature_name: str, suffix_pattern: str) -> str:

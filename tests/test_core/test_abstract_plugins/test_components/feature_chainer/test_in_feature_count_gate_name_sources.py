@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 )
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, NAME_STAGE, MatchRejection
 from mloda.provider import DefaultOptionKeys, PropertySpec
-from mloda.user import Feature, Options
+from mloda.user import Feature, FeatureName, Options
 
 # A dict is uncountable for get_in_features: it raises TypeError instead of yielding features.
 JUNK_IN_FEATURES: dict[str, int] = {"a": 1}
@@ -207,6 +207,79 @@ class TestNameSourceCountRejectionIsRecorded:
         assert (
             _NameSourceGuardGate944._strict_validation_rejection_reason("f1__op1_guardgate944", options) == count_reason
         )
+
+
+EMPTY_OPERAND_NAMES_1716 = ["&f2__op1_gate944", "f1&__op1_gate944", "f1&&f2__op1_gate944"]
+
+
+class TestEmptyOperandIsRejected:
+    """An empty operand in the name is a recorded non-match; an empty config operand is a silent one (#1716)."""
+
+    @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
+    def test_name_with_an_empty_operand_is_a_recorded_non_match(
+        self, name: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        result = _NameSourceGate944.match_feature_group_criteria(name, _options())
+
+        assert result is False
+        recorded = rejection_window[OWNER_944]
+        assert recorded.stage == NAME_STAGE
+        assert "empty in_feature" in recorded.reason
+
+    @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
+    def test_strict_validation_reason_reports_the_same_reason(
+        self, name: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        _NameSourceGate944.match_feature_group_criteria(name, _options())
+
+        reason = _NameSourceGate944._strict_validation_rejection_reason(name, _options())
+
+        assert reason == rejection_window[OWNER_944].reason
+
+    @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
+    def test_input_features_raises_the_reason(self, name: str, rejection_window: dict[str, MatchRejection]) -> None:
+        _NameSourceGate944.match_feature_group_criteria(name, _options())
+        expected = rejection_window[OWNER_944].reason
+
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944().input_features(_options(), FeatureName(name))
+
+        assert str(exc_info.value) == expected
+
+    def test_empty_operand_in_features_option_is_a_silent_non_match(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        result = _NameSourceGate944.match_feature_group_criteria("any_name", _options(["", "f2"]))
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_empty_operand_in_features_option_makes_input_features_raise(self) -> None:
+        with pytest.raises(ValueError):
+            _NameSourceGate944().input_features(_options(["", "f2"]), FeatureName("any_name"))
+
+
+class TestSourceFeaturesReason:
+    """source_features_reason checks empty operands first, then the count."""
+
+    def test_empty_operand_reason_names_the_feature_and_says_empty(self) -> None:
+        reason = _NameSourceGate944.source_features_reason("&f2__op1_gate944", ("", "f2"))
+
+        assert reason is not None
+        assert "empty" in reason
+        assert "&f2__op1_gate944" in reason
+
+    def test_empty_operand_wins_over_a_count_violation(self) -> None:
+        reason = _NameSourceGate944.source_features_reason("&__op1_gate944", ("",))
+
+        assert reason is not None
+        assert "empty" in reason
+
+    def test_count_violation_returns_the_count_reason(self) -> None:
+        assert _NameSourceGate944.source_features_reason(BELOW_MIN_NAME_944, ("f1",)) == BELOW_MIN_REASON_944
+
+    def test_valid_sources_have_no_reason(self) -> None:
+        assert _NameSourceGate944.source_features_reason("f1&f2__op1_gate944", ("f1", "f2")) is None
 
 
 class _OptionsOnlyGroupM951(FeatureChainParserMixin):

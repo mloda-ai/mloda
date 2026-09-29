@@ -56,7 +56,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -72,11 +72,11 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
-    CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
     PropertyValueRejection,
     option_key_is_present,
 )
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution
 from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -200,22 +200,40 @@ class FeatureChainParserMixin:
         Raises:
             ValueError: If in_feature constraints are violated
         """
-        prefix_patterns = self._get_prefix_patterns()
-        property_mapping = self._get_property_mapping()
-        parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
+        resolution = self.resolve_feature_name(feature_name)
 
         # The name is authoritative only when it identifies this group (a captureless recognition match
         # or a participating capture). An optional-first positional group that did not participate does
         # not identify the group, so its source comes from options, not the name (#772 / #769).
-        if FeatureChainParser._name_identifies_group(parsed, property_mapping) and parsed.source_feature:
-            name_sources = parsed.source_feature.split(self.IN_FEATURE_SEPARATOR)
-            self.validate_in_feature_count(feature_name, len(name_sources))
-            return {Feature(f) for f in name_sources}
+        if resolution.owned and resolution.sources:
+            self._raise_source_features_reason(feature_name, resolution.sources)
+            return {Feature(f) for f in resolution.sources}
 
         # Configuration-based fallback using get_in_features()
         in_features = options.get_in_features()
-        self.validate_in_feature_count(feature_name, len(in_features))
+        self._raise_source_features_reason(feature_name, tuple(str(f.name) for f in in_features))
         return set(in_features)
+
+    @classmethod
+    def resolve_feature_name(cls, name: str | FeatureName) -> NameResolution:
+        """Resolve ``name`` against this class's patterns, mapping and in_feature separator."""
+        return FeatureChainParser.resolve_name(
+            name, cls._get_prefix_patterns(), cls._get_property_mapping(), cls.IN_FEATURE_SEPARATOR
+        )
+
+    @classmethod
+    def source_features_reason(cls, feature_name: str | FeatureName, sources: Sequence[str]) -> str | None:
+        """The reason these sources cannot serve the feature: an empty operand first, then the MIN/MAX count."""
+        if any(source == "" for source in sources):
+            return f"Feature '{feature_name}' has an empty in_feature operand"
+        return cls.in_feature_count_reason(feature_name, len(sources))
+
+    @classmethod
+    def _raise_source_features_reason(cls, feature_name: str | FeatureName, sources: Sequence[str]) -> None:
+        reason = cls.source_features_reason(feature_name, sources)
+        if reason is not None:
+            # Contained: sources this group cannot serve mean it cannot serve the feature.
+            raise ValueError(reason)
 
     @classmethod
     def in_feature_count_reason(cls, feature_name: str | FeatureName, count: int) -> str | None:
@@ -281,7 +299,6 @@ class FeatureChainParserMixin:
         Returns:
             True if feature matches criteria, False otherwise
         """
-        prefix_patterns = cls._get_prefix_patterns()
         property_mapping = cls._get_property_mapping()
 
         result = cls.match_parser_criteria(feature_name, options)
@@ -293,13 +310,14 @@ class FeatureChainParserMixin:
         # The sources input_features would read off the name, so the in_feature gate counts the same ones.
         name_sources: list[str] | None = None
         if result:
-            parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
-            if FeatureChainParser._name_identifies_group(parsed, property_mapping):
-                if parsed.source_feature:
-                    name_sources = parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
+            resolution = cls.resolve_feature_name(feature_name)
+            parsed = resolution.parsed
+            if resolution.owned:
+                if resolution.sources:
+                    name_sources = list(resolution.sources)
                 # Bound once and reused: the merge and the guards must see the name-derived value even
                 # when the legacy operation value is absent (a named-optional-first pattern).
-                bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping or {})
+                bindings = dict(resolution.bindings)
                 operation_config = FeatureChainParser._legacy_operation_config(parsed)
                 # _validate_string_match needs a str operation, so it stays behind its own gate; the
                 # merge and forwarded-mismatch protection do not.
@@ -379,15 +397,16 @@ class FeatureChainParserMixin:
         prefix_patterns = cls._get_prefix_patterns()
         if prefix_patterns:
             try:
-                parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
+                resolution = cls.resolve_feature_name(feature_name)
             except ValueError:
                 return None
-            name_matched = FeatureChainParser._name_identifies_group(parsed, property_mapping)
+            name_matched = resolution.owned
             if name_matched:
-                if parsed.source_feature:
-                    name_sources = parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
-                bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping)
-                effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
+                if resolution.sources:
+                    name_sources = list(resolution.sources)
+                effective_options = FeatureChainParser._merge_bindings(
+                    options, dict(resolution.bindings), property_mapping
+                )
 
         try:
             if name_matched:
@@ -413,7 +432,7 @@ class FeatureChainParserMixin:
 
         # Mirrors the matcher's gate order: a name-carried count is reported, the options-path gate is a silent non-match.
         if name_sources is not None:
-            reason = cls.in_feature_count_reason(feature_name, len(name_sources))
+            reason = cls.source_features_reason(feature_name, name_sources)
             if reason is not None:
                 return reason
         elif not cls._validate_in_features(True, options, None, feature_name):
@@ -562,7 +581,7 @@ class FeatureChainParserMixin:
         if name_sources is not None:
             # The name relates this group to the feature, so a count it cannot serve is an actionable
             # near-miss rather than a silent non-match; the option path keeps its "not mine" meaning.
-            reason = cls.in_feature_count_reason(feature_name, len(name_sources))
+            reason = cls.source_features_reason(feature_name, name_sources)
             if reason is None:
                 return True
             record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)
@@ -586,7 +605,8 @@ class FeatureChainParserMixin:
             # skipping MIN/MAX would let the group win a resolution its own cap says it must lose.
             # The catch is narrow on purpose; another exception class is a defect to surface, not a value.
             try:
-                count = len(options.get_in_features())
+                in_features = options.get_in_features()
+                count = len(in_features)
             except (TypeError, ValueError) as exc:
                 if is_match_abort(exc):
                     raise
@@ -597,6 +617,8 @@ class FeatureChainParserMixin:
                     in_features_raw,
                     contained_raise_reason(exc),
                 )
+                return False
+            if any(str(f.name) == "" for f in in_features):
                 return False
 
         return cls.in_feature_count_reason(feature_name, count) is None
@@ -630,15 +652,12 @@ class FeatureChainParserMixin:
         Returns:
             List of source feature names
         """
-        prefix_patterns = cls._get_prefix_patterns()
-        property_mapping = cls._get_property_mapping()
-
-        parsed = FeatureChainParser.parse_name(feature.name, prefix_patterns, CHAIN_SEPARATOR)
+        resolution = cls.resolve_feature_name(feature.name)
 
         # Same identification gate as input_features: the name owns the source only when it identifies
         # the group (#772 / #769).
-        if FeatureChainParser._name_identifies_group(parsed, property_mapping) and parsed.source_feature:
-            return parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
+        if resolution.owned and resolution.sources:
+            return list(resolution.sources)
 
         # Configuration-based fallback using get_in_features()
         return [str(f.name) for f in feature.options.get_in_features()]
@@ -728,10 +747,11 @@ class FeatureChainParserMixin:
             _options = options_or_key
             _key = config_key if config_key is not None else ""
 
-        prefix_patterns = cls._get_prefix_patterns()
-        operation_config, _ = FeatureChainParser.parse_feature_name(_name, prefix_patterns, CHAIN_SEPARATOR)
-        if operation_config is not None:
-            return operation_config
+        resolution = cls.resolve_feature_name(_name)
+        if resolution.owned:
+            operation_config = resolution.value_for(_key)
+            if operation_config is not None:
+                return operation_config
         value = _options.get(_key)
         if value is not None:
             return str(value)

@@ -18,7 +18,9 @@ import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.feature_chainer import parsed_feature_name
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec
@@ -358,6 +360,129 @@ class TestBindNameCaptures:
         parsed = FeatureChainParser.parse_name("unrelated_pnb770", [NamedCaptureGroup.PREFIX_PATTERN])
 
         assert FeatureChainParser.bind_name_captures(parsed, NamedCaptureGroup.PROPERTY_MAPPING) == {}
+
+
+CAPTURELESS_PATTERN = r".*__cleaned_text$"
+
+
+def _resolve(name: str, group: type[FeatureChainParserMixin]) -> "parsed_feature_name.NameResolution":
+    return FeatureChainParser.resolve_name(name, group._get_prefix_patterns(), group._get_property_mapping())
+
+
+class TestNameResolution:
+    """resolve_name folds ownership, bindings and raw sources into one record."""
+
+    @pytest.mark.parametrize(
+        "name,group",
+        [
+            ("f0__pca_2d_pnb770", NamedCaptureGroup),
+            ("f0__pca_optional_pnb770", OptionalCaptureGroup),
+            ("f0__pca_legacy_pnb770", LegacyPositionalGroup),
+            ("f0__pca_unmapped_pnb770", UnmappedNamedCaptureGroup),
+            ("unrelated_pnb770", NamedCaptureGroup),
+        ],
+    )
+    def test_record_equals_the_separate_computations(self, name: str, group: type[FeatureChainParserMixin]) -> None:
+        parsed = FeatureChainParser.parse_name(name, group._get_prefix_patterns())
+
+        resolution = _resolve(name, group)
+
+        assert resolution.parsed == parsed
+        assert resolution.owned == FeatureChainParser._name_identifies_group(parsed, group._get_property_mapping())
+        assert dict(resolution.bindings) == FeatureChainParser.bind_name_captures(
+            parsed, group._get_property_mapping() or {}
+        )
+
+    def test_sources_are_the_raw_split_of_the_source_part(self) -> None:
+        assert _resolve("f1&f2&f3__pca_2d_pnb770", NamedCaptureGroup).sources == ("f1", "f2", "f3")
+
+    @pytest.mark.parametrize(
+        "name,expected",
+        [
+            ("&f2__pca_2d_pnb770", ("", "f2")),
+            ("f1&__pca_2d_pnb770", ("f1", "")),
+            ("f1&&f2__pca_2d_pnb770", ("f1", "", "f2")),
+        ],
+    )
+    def test_sources_keep_empty_operands(self, name: str, expected: tuple[str, ...]) -> None:
+        assert _resolve(name, NamedCaptureGroup).sources == expected
+
+    def test_custom_in_feature_separator_splits_the_sources(self) -> None:
+        resolution = FeatureChainParser.resolve_name(
+            "f1,f2__pca_2d_pnb770",
+            [NamedCaptureGroup.PREFIX_PATTERN],
+            NamedCaptureGroup.PROPERTY_MAPPING,
+            in_feature_separator=",",
+        )
+
+        assert resolution.sources == ("f1", "f2")
+
+    def test_named_bindings_and_value_for(self) -> None:
+        resolution = _resolve("f0__tsne_7d_pnb770", NamedCaptureGroup)
+
+        assert resolution.owned is True
+        assert dict(resolution.bindings) == {ALGORITHM_KEY: "tsne", SIZE_KEY: "7"}
+        assert resolution.value_for(ALGORITHM_KEY) == "tsne"
+        assert resolution.value_for(SIZE_KEY) == "7"
+        assert resolution.value_for("no_such_key_pnb770") is None
+
+    def test_value_for_a_non_participating_named_capture_is_none(self) -> None:
+        resolution = _resolve("f0__pca_optional_pnb770", OptionalCaptureGroup)
+
+        assert resolution.value_for(ALGORITHM_KEY) == "pca"
+        assert resolution.value_for(SIZE_KEY) is None
+
+    def test_unmapped_named_capture_is_not_owned_and_binds_nothing(self) -> None:
+        resolution = _resolve("f0__pca_unmapped_pnb770", UnmappedNamedCaptureGroup)
+
+        assert dict(resolution.bindings) == {}
+        assert resolution.value_for("unmapped_pnb770") == "pca"
+
+    def test_positional_value_for_is_the_first_capture_for_any_key(self) -> None:
+        resolution = _resolve("f0__pca_legacy_pnb770", LegacyPositionalGroup)
+
+        assert resolution.owned is True
+        assert resolution.value_for(ALGORITHM_KEY) == "pca"
+        assert resolution.value_for(NOTES_KEY) == "pca"
+        assert resolution.value_for("anything_pnb770") == "pca"
+
+    def test_captureless_match_has_sources_and_no_value(self) -> None:
+        resolution = FeatureChainParser.resolve_name(
+            "x__cleaned_text", [CAPTURELESS_PATTERN], TextCleaningFeatureGroup.PROPERTY_MAPPING
+        )
+
+        assert resolution.parsed.matched is True
+        assert resolution.sources == ("x",)
+        assert dict(resolution.bindings) == {}
+        assert resolution.value_for(ALGORITHM_KEY) is None
+
+    def test_miss_is_not_owned_and_empty(self) -> None:
+        resolution = _resolve("unrelated_pnb770", NamedCaptureGroup)
+
+        assert resolution == parsed_feature_name.NameResolution.miss()
+        assert resolution.owned is False
+        assert resolution.parsed.matched is False
+        assert dict(resolution.bindings) == {}
+        assert resolution.sources == ()
+        assert resolution.value_for(ALGORITHM_KEY) is None
+
+    def test_matched_name_without_source_raises_like_parse_name(self) -> None:
+        with pytest.raises(ValueError, match="but has no source feature: orphan_pnb770_thing"):
+            FeatureChainParser.resolve_name("orphan_pnb770_thing", [r"^orphan_pnb770_(\w+)$"], {})
+
+    def test_record_is_frozen(self) -> None:
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(parsed_feature_name.NameResolution.miss(), "owned", True)
+
+    def test_mixin_facade_uses_the_class_patterns_mapping_and_separator(self) -> None:
+        resolution = NamedCaptureGroup.resolve_feature_name("f1&f2__tsne_7d_pnb770")
+
+        assert resolution == _resolve("f1&f2__tsne_7d_pnb770", NamedCaptureGroup)
+        assert resolution.sources == ("f1", "f2")
+        assert NamedCaptureGroup.resolve_feature_name(FeatureName("f1__pca_2d_pnb770")).sources == ("f1",)
+
+    def test_mixin_facade_miss(self) -> None:
+        assert NamedCaptureGroup.resolve_feature_name("unrelated_pnb770") == parsed_feature_name.NameResolution.miss()
 
 
 class TestDefinitionTimeAmbiguity:

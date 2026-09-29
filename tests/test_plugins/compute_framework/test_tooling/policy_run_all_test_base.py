@@ -65,6 +65,9 @@ def records_from_frame(data: Any) -> list[dict[str, Any]]:
         records = data.to_dicts()
     elif hasattr(data, "to_dict"):
         records = data.to_dict("records")
+    elif hasattr(data, "toPandas"):
+        # Spark DataFrame
+        records = [row.asDict() for row in data.collect()]
     else:
         records = data.df().to_dict("records")
     return records

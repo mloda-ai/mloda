@@ -6,7 +6,7 @@ merge engine.
 
 Requirements:
 - PySpark must be installed (pip install pyspark)
-- Java 8+ must be installed and JAVA_HOME environment variable must be set
+- Java 17+ must be installed and JAVA_HOME environment variable must be set
 
 The data shapes mirror the shared ASOF scenarios in
 tests/test_plugins/compute_framework/test_tooling/asof/asof_scenarios.py so the

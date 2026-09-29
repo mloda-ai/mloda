@@ -6,7 +6,7 @@ JVM conflicts and ensure proper resource management across test sessions.
 
 Requirements:
 - PySpark must be installed (pip install pyspark)
-- Java 8+ must be installed and JAVA_HOME environment variable must be set
+- Java 17+ must be installed and JAVA_HOME environment variable must be set
 
 Environment Setup:
 - JAVA_HOME: Must point to a valid Java installation
@@ -16,12 +16,16 @@ across all test files, preventing JVM conflicts and resource issues.
 """
 
 import os
+import sys
 import pytest
 from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Spark workers must run the driver's interpreter, else PYTHON_VERSION_MISMATCH outside tox.
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
 
 # Check PySpark availability and Java environment
 try:

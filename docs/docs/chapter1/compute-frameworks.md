@@ -132,7 +132,7 @@ In this case, the feature group ExampleB will only run on the PyArrowTable frame
 | **DuckDBFramework** | DuckDB Relations | SQL interface, fast analytics, OLAP queries | Analytical workloads, SQL-based transformations, data warehousing | duckdb, pyarrow |
 | **SqliteFramework** | SQLite relations | SQL interface, embedded, no server | Local databases, small SQL workloads | sqlite3 (stdlib), pyarrow |
 | **IcebergFramework** | Apache Iceberg Tables | Schema evolution, time travel, data lake management | Data lake scenarios, versioned datasets, large-scale analytics | pyiceberg, pyarrow |
-| **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 8+ |
+| **SparkFramework** | Apache Spark DataFrames | Distributed processing, scalability, fault tolerance | Big data, distributed computing, production clusters | pyspark, Java 17+ |
 | **PythonDictFramework** | dict[str, list[Any]] (columnar) | Zero dependencies, simple, lightweight | Minimal environments, education, prototyping | None (Python stdlib only) |
 
 ##### Importing a Compute Framework
@@ -294,7 +294,7 @@ result = mloda.run_all(
 result[0]  # Returns pyspark.sql.DataFrame
 ```
 
-**Note**: Spark framework requires PySpark installation and Java 8+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).
+**Note**: Spark framework requires PySpark installation and Java 17+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).
 
 #### 6. Summary
 

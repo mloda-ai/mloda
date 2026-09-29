@@ -89,3 +89,23 @@ jobs:
         PYTEST_WORKERS: 2
       run: tox -e notebooks
       timeout-minutes: 10
+
+  spark:
+    # PYTEST_WORKERS stays at the env's default of 1: each xdist worker would start its own JVM.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install tox
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install uv
+        # Same tox pin as release.yaml; see the note there before bumping.
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+    - name: Run spark
+      # The runner image ships Java 17.
+      run: JAVA_HOME="$JAVA_HOME_17_X64" tox -e spark
+      timeout-minutes: 10

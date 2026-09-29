@@ -1581,7 +1581,7 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'sqlite'" },
     { name = "pyarrow", marker = "extra == 'test'" },
     { name = "pyiceberg", marker = "extra == 'iceberg'" },
-    { name = "pyspark", marker = "extra == 'spark'" },
+    { name = "pyspark", marker = "extra == 'spark'", specifier = ">=3.5" },
     { name = "pytest", marker = "extra == 'nopyarrow-test'", specifier = ">=9.0.3" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=9.0.3" },
     { name = "pytest-order", marker = "extra == 'nopyarrow-test'" },

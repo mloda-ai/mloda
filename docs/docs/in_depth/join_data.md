@@ -75,8 +75,7 @@ join `Index`) drive the equi match; the time columns drive the inequality match.
 join: every left row survives, with null right columns when no match is found.
 
 **Backend support.** Implemented for `pandas`, `polars` (eager and lazy), `duckdb`, `python_dict`,
-`pyarrow`, and `sqlite`. A `spark` implementation exists but is **experimental and not exercised in
-CI** (requires `JAVA_HOME`); validate it yourself before relying on it. `iceberg` has no merge
+`pyarrow`, `sqlite`, and `spark` (requires Java 17+ on `JAVA_HOME`). `iceberg` has no merge
 engine and does not support joins.
 
 Cross-backend caveats to be aware of:

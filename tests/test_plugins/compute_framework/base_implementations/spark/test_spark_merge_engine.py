@@ -5,7 +5,7 @@ This module contains comprehensive tests for the Spark merge engine implementati
 
 Requirements:
 - PySpark must be installed (pip install pyspark)
-- Java 8+ must be installed and JAVA_HOME environment variable must be set
+- Java 17+ must be installed and JAVA_HOME environment variable must be set
 
 Environment Setup:
 - JAVA_HOME: Must point to a valid Java installation

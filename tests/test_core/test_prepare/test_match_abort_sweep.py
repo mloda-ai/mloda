@@ -118,6 +118,10 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "real edge, collided verdict: it raises nothing itself; warn_once_for's own try/except degrades any "
         "failure to 'not seen', and the WeakSet/set add() name collides with an unrelated raising add() elsewhere"
     ),
+    ("mloda/core/abstract_plugins/components/declared_attributes.py", "unmet_reason"): (
+        "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
+        "a rejection with a reason"
+    ),
     ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (
@@ -153,6 +157,10 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "load_group"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
+    ("mloda/core/abstract_plugins/components/declared_attributes.py", "unmet_reason"): (
+        "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
+        "a rejection with a reason"
+    ),
     ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (

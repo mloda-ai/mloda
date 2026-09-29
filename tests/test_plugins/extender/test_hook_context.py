@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 
@@ -57,6 +58,41 @@ class TestHookContextConstruction:
         assert context.tenant_id is None
         assert context.project_id is None
         assert context.principal is None
+
+
+class TestHookContextDeclaredAttributesAndReaderClassFields:
+    """HookContext carries the owner's declared attributes and, for INPUT_DATA_LOAD, the reader class."""
+
+    def test_both_default_to_none(self) -> None:
+        context = _make_context()
+
+        assert context.declared_attributes is None
+        assert context.reader_class is None
+
+    def test_both_can_be_set_via_constructor(self) -> None:
+        context = _make_context(declared_attributes={"unit": "m", "scale": 2}, reader_class=BaseInputData)
+
+        assert context.declared_attributes == {"unit": "m", "scale": 2}
+        assert context.reader_class is BaseInputData
+
+    def test_declared_attributes_is_copied_and_mutation_does_not_leak_into_original(self) -> None:
+        declared = {"unit": "m"}
+
+        context = _make_context(declared_attributes=declared)
+
+        assert context.declared_attributes == declared
+        assert context.declared_attributes is not declared
+        assert context.declared_attributes is not None
+        context.declared_attributes["mutated"] = "yes"
+        assert "mutated" not in declared
+
+    def test_declared_attributes_copy_is_taken_at_construction(self) -> None:
+        declared = {"unit": "m"}
+
+        context = _make_context(declared_attributes=declared)
+        declared["late"] = "yes"
+
+        assert context.declared_attributes == {"unit": "m"}
 
 
 class TestHookContextCarrierField:

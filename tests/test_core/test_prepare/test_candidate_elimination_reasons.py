@@ -15,11 +15,13 @@ groups become global ``FeatureGroup`` subclasses and must not collide with other
 """
 
 from abc import abstractmethod
-from typing import ClassVar
+from collections.abc import Mapping
+from typing import Any, ClassVar
 
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
@@ -36,7 +38,7 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination
-from mloda.provider import NAME_STAGE, record_match_rejection
+from mloda.provider import NAME_STAGE, FeatureSet, record_match_rejection
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
 
@@ -395,6 +397,140 @@ class ElimNameRejectFG011(_ElimBaseFG):
         return False
 
 
+DECL_CONSUMER = "DepthToMetres1648"
+DECL_MISSING_FEATURE = "decl_missing_feat_1648"
+DECL_MISMATCH_FEATURE = "decl_mismatch_feat_1648"
+DECL_SATISFIED_FEATURE = "decl_satisfied_feat_1648"
+DECL_BOOL_FEATURE = "decl_bool_feat_1648"
+DECL_INT_FEATURE = "decl_int_feat_1648"
+DECL_FALSY_FEATURE = "decl_falsy_feat_1648"
+DECL_SIBLING_FEATURE = "decl_sibling_feat_1648"
+DECL_RAISING_FEATURE = "decl_raising_feat_1648"
+DECL_RECORDING_FEATURE = "decl_recording_feat_1648"
+
+DECL_RECORDED_ARGS: list[FeatureSet | None] = []
+
+
+class _DeclBaseFG1648(_ElimBaseFG):
+    """Name-guarded double whose declared_attributes is a class variable."""
+
+    FRAMEWORK_RULE = {ElimFwOne011}
+    DECLARED: ClassVar[Mapping[str, str | int | float | bool]] = {}
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        return cls.DECLARED
+
+
+class DeclMissingFG1648(_DeclBaseFG1648):
+    """Declares nothing."""
+
+    MATCHES = frozenset({DECL_MISSING_FEATURE})
+
+
+class DeclMismatchFG1648(_DeclBaseFG1648):
+    """Declares unit 'mm'."""
+
+    MATCHES = frozenset({DECL_MISMATCH_FEATURE})
+    DECLARED = {"unit": "mm"}
+
+
+class DeclSatisfiedFG1648(_DeclBaseFG1648):
+    """Declares scale and unit."""
+
+    MATCHES = frozenset({DECL_SATISFIED_FEATURE})
+    DECLARED = {"scale": 0.001, "unit": "m"}
+
+
+class DeclBoolFG1648(_DeclBaseFG1648):
+    """Declares level True."""
+
+    MATCHES = frozenset({DECL_BOOL_FEATURE})
+    DECLARED = {"level": True}
+
+
+class DeclIntFG1648(_DeclBaseFG1648):
+    """Declares level 1."""
+
+    MATCHES = frozenset({DECL_INT_FEATURE})
+    DECLARED = {"level": 1}
+
+
+class DeclFalsyFG1648(_DeclBaseFG1648):
+    """Declares a falsy value."""
+
+    MATCHES = frozenset({DECL_FALSY_FEATURE})
+    DECLARED = {"flag": False}
+
+
+class DeclSiblingPlainFG1648(_DeclBaseFG1648):
+    """Sibling declaring nothing."""
+
+    MATCHES = frozenset({DECL_SIBLING_FEATURE})
+
+
+class DeclSiblingScaledFG1648(_DeclBaseFG1648):
+    """Sibling declaring scale."""
+
+    MATCHES = frozenset({DECL_SIBLING_FEATURE})
+    DECLARED = {"scale": 0.001}
+
+
+class DeclRaisingFG1648(_DeclBaseFG1648):
+    """declared_attributes raises."""
+
+    MATCHES = frozenset({DECL_RAISING_FEATURE})
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        raise RuntimeError("decl_boom_1648")
+
+
+class DeclRecordingFG1648(_DeclBaseFG1648):
+    """Records the argument declared_attributes receives."""
+
+    MATCHES = frozenset({DECL_RECORDING_FEATURE})
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        DECL_RECORDED_ARGS.append(features)
+        return {"scale": 1}
+
+
+DECL_LEAKY_FEATURE = "decl_leaky_feat_1648"
+DECL_SUBCLASS_FEATURE = "decl_subclass_feat_1648"
+DECL_SECRET_URL = "postgresql://user:hunter2@host/db"  # nosec B105
+
+
+class _Unit1648(str):
+    """A str subclass a plugin might declare."""
+
+
+class _Scale1648(float):
+    """A float subclass a plugin might declare."""
+
+
+class _Level1648(int):
+    """An int subclass a plugin might declare."""
+
+
+class DeclSecretFG1648(_DeclBaseFG1648):
+    """declared_attributes raises with a credential in the message."""
+
+    MATCHES = frozenset({DECL_LEAKY_FEATURE})
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        raise ValueError(DECL_SECRET_URL)
+
+
+class DeclSubclassFG1648(_DeclBaseFG1648):
+    """Declares scalar subclasses and a bool."""
+
+    MATCHES = frozenset({DECL_SUBCLASS_FEATURE})
+    DECLARED = {"unit": _Unit1648("m"), "scale": _Scale1648(5000.0), "level": _Level1648(3), "flag": True}
+
+
 # A link whose indexes ElimLinksFG011 does not support, driving the links gate to reject.
 ELIM_LINK = Link.inner(
     JoinSpec(ElimLinksFG011, "elim_left_index_011"),
@@ -695,6 +831,170 @@ class TestScopedAbstractOnlyCallout:
         callout_line = next(line for line in message.split("\n") if "Scoped to feature group:" in line)
         assert not callout_line.startswith("  - ")
         assert callout_line.startswith(f"No feature groups found for feature name: '{ABSTRACT_FEATURE}'.")
+
+
+def _requiring(feature: Feature, required: Mapping[str, Any]) -> Feature:
+    """Build the requiring feature, attributed to DECL_CONSUMER as the engine would."""
+    requiring = Feature(feature.name, required_declarations=dict(required))
+    requiring.resolving_consumer = DECL_CONSUMER
+    return requiring
+
+
+class TestDeclarationRequirements:
+    """A Feature's required_declarations are checked against each candidate's declarations."""
+
+    def test_unattributed_feature_is_labelled_as_a_request(self) -> None:
+        feature = Feature(DECL_MISSING_FEATURE, required_declarations={"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclMissingFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclMissingFG1648]
+        assert elimination.stage == "declarations"
+        assert f"request for '{DECL_MISSING_FEATURE}'" in elimination.reason
+        assert DECL_CONSUMER not in elimination.reason
+        assert "'scale'" in elimination.reason
+
+    def test_missing_key_eliminates_the_candidate(self) -> None:
+        feature = _requiring(Feature(DECL_MISSING_FEATURE), {"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclMissingFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclMissingFG1648]
+        assert elimination.stage == "declarations"
+        assert DECL_CONSUMER in elimination.reason
+        assert "'scale'" in elimination.reason
+        assert "DeclMissingFG1648" in elimination.reason
+        assert f"  - DeclMissingFG1648 (declarations): {elimination.reason}" in str(err)
+
+    def test_mismatching_value_names_the_near_miss(self) -> None:
+        feature = _requiring(Feature(DECL_MISMATCH_FEATURE), {"unit": "m"})
+        plugins: FeatureGroupEnvironmentMapping = {DeclMismatchFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclMismatchFG1648]
+        assert elimination.stage == "declarations"
+        assert DECL_CONSUMER in elimination.reason
+        assert "'unit'" in elimination.reason
+        assert "'m'" in elimination.reason
+        assert "'mm'" in elimination.reason
+
+    def test_satisfied_requirement_resolves_without_elimination(self) -> None:
+        feature = _requiring(Feature(DECL_SATISFIED_FEATURE), {"scale": None, "unit": "m"})
+        plugins: FeatureGroupEnvironmentMapping = {DeclSatisfiedFG1648: {ElimFwOne011}}
+
+        winner, _ = identify_winner(feature, plugins)
+
+        assert winner is DeclSatisfiedFG1648
+        assert IdentifyFeatureGroupClass.evaluate(feature, plugins, None).eliminations == {}
+
+    def test_true_does_not_satisfy_one(self) -> None:
+        feature = _requiring(Feature(DECL_BOOL_FEATURE), {"level": 1})
+        plugins: FeatureGroupEnvironmentMapping = {DeclBoolFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        assert err.result.eliminations[DeclBoolFG1648].stage == "declarations"
+
+    def test_equal_value_of_the_same_type_satisfies(self) -> None:
+        feature = _requiring(Feature(DECL_INT_FEATURE), {"level": 1})
+        plugins: FeatureGroupEnvironmentMapping = {DeclIntFG1648: {ElimFwOne011}}
+
+        winner, _ = identify_winner(feature, plugins)
+
+        assert winner is DeclIntFG1648
+
+    def test_none_requirement_accepts_a_falsy_declared_value(self) -> None:
+        feature = _requiring(Feature(DECL_FALSY_FEATURE), {"flag": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclFalsyFG1648: {ElimFwOne011}}
+
+        winner, _ = identify_winner(feature, plugins)
+
+        assert winner is DeclFalsyFG1648
+
+    def test_sibling_feature_group_that_satisfies_wins(self) -> None:
+        feature = _requiring(Feature(DECL_SIBLING_FEATURE), {"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {
+            DeclSiblingPlainFG1648: {ElimFwOne011},
+            DeclSiblingScaledFG1648: {ElimFwOne011},
+        }
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
+
+        assert set(result.identified) == {DeclSiblingScaledFG1648}
+        assert result.eliminations[DeclSiblingPlainFG1648].stage == "declarations"
+
+    def test_sibling_without_requirement_is_ambiguous_as_before(self) -> None:
+        feature = Feature(DECL_SIBLING_FEATURE)
+        plugins: FeatureGroupEnvironmentMapping = {
+            DeclSiblingPlainFG1648: {ElimFwOne011},
+            DeclSiblingScaledFG1648: {ElimFwOne011},
+        }
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
+
+        assert result.failure_kind == "multiple"
+
+    def test_raising_declared_attributes_is_an_elimination_not_an_abort(self) -> None:
+        feature = _requiring(Feature(DECL_RAISING_FEATURE), {"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclRaisingFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclRaisingFG1648]
+        assert elimination.stage == "declarations"
+        assert DECL_CONSUMER in elimination.reason
+        assert "decl_boom_1648" in elimination.reason
+
+    def test_empty_required_declarations_set_after_construction_is_not_checked(self) -> None:
+        feature = Feature(DECL_RAISING_FEATURE)
+        feature.required_declarations = {}
+        plugins: FeatureGroupEnvironmentMapping = {DeclRaisingFG1648: {ElimFwOne011}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
+
+        assert set(result.identified) == {DeclRaisingFG1648}
+        assert result.eliminations == {}
+
+    def test_plan_time_check_reads_declarations_with_none(self) -> None:
+        DECL_RECORDED_ARGS.clear()
+        feature = _requiring(Feature(DECL_RECORDING_FEATURE), {"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclRecordingFG1648: {ElimFwOne011}}
+
+        identify_winner(feature, plugins)
+
+        assert DECL_RECORDED_ARGS
+        assert all(arg is None for arg in DECL_RECORDED_ARGS)
+
+    def test_raising_declared_attributes_reason_is_scrubbed_of_credentials(self) -> None:
+        feature = _requiring(Feature(DECL_LEAKY_FEATURE), {"scale": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclSecretFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclSecretFG1648]
+        assert elimination.stage == "declarations"
+        assert "hunter2" not in elimination.reason
+        assert "hunter2" not in str(err)
+
+    def test_scalar_subclasses_satisfy_requirements(self) -> None:
+        feature = _requiring(Feature(DECL_SUBCLASS_FEATURE), {"unit": "m", "scale": 5000.0, "level": 3, "flag": True})
+        plugins: FeatureGroupEnvironmentMapping = {DeclSubclassFG1648: {ElimFwOne011}}
+
+        winner, _ = identify_winner(feature, plugins)
+
+        assert winner is DeclSubclassFG1648
+
+    def test_read_declared_attributes_returns_exact_builtin_types(self) -> None:
+        declared = read_declared_attributes(DeclSubclassFG1648, None)
+
+        assert type(declared["unit"]) is str
+        assert type(declared["scale"]) is float
+        assert type(declared["level"]) is int
+        assert type(declared["flag"]) is bool
+        assert declared == {"unit": "m", "scale": 5000.0, "level": 3, "flag": True}
 
 
 def test_render_resolution_failure_is_importable() -> None:

@@ -986,6 +986,84 @@ class TestInputDataLoadHookCarriesInputFeatureEdges:
         assert extender.captured.input_feature_edges is None
 
 
+class _DeclaringReader(_DirectLoadReader):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
+        return {"unit": "mm", "scale": 3, "skipped": [1]}  # type: ignore[dict-item]
+
+
+class _RaisingDeclarationReader(_DirectLoadReader):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
+        raise RuntimeError("reader declaration boom")
+
+
+def _direct_load_context(reader_cls: type[BaseInputData]) -> HookContext:
+    extender = _InputDataLoadCapturingExtender()
+    cfw = ComputeFramework(function_extender={extender})
+    with cfw.activate(), _build_calc_context().activate():
+        BaseInputData._load_data_via_hook(reader_cls(), "access", FeatureSet())
+    assert extender.captured is not None
+    return extender.captured
+
+
+class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
+    """INPUT_DATA_LOAD carries the concrete reader class and the READER's declared attributes."""
+
+    def test_reader_default_declared_attributes_is_empty_mapping(self) -> None:
+        assert BaseInputData.declared_attributes(None) == {}
+
+    def test_direct_load_carries_reader_class_and_scalar_declarations(self) -> None:
+        context = _direct_load_context(_DeclaringReader)
+
+        assert context.reader_class is _DeclaringReader
+        assert context.declared_attributes == {"unit": "mm", "scale": 3}
+
+    def test_reader_without_declarations_surfaces_empty_mapping(self) -> None:
+        context = _direct_load_context(_DirectLoadReader)
+
+        assert context.reader_class is _DirectLoadReader
+        assert context.declared_attributes == {}
+
+    def test_raising_reader_declaration_degrades_to_none_and_load_succeeds(self) -> None:
+        context = _direct_load_context(_RaisingDeclarationReader)
+
+        assert context.reader_class is _RaisingDeclarationReader
+        assert context.declared_attributes is None
+
+    def test_end_to_end_load_uses_reader_declarations_and_calculate_uses_group_declarations(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        column = f"{_MARKER}_col_decl"
+        path = tmp_path / "data.csv"
+        _write_csv(path, column, [1, 2])
+        monkeypatch.setattr(
+            CsvReader, "declared_attributes", classmethod(lambda cls, features: {"origin": "reader"}), raising=False
+        )
+        monkeypatch.setattr(
+            ReadFileFeature,
+            "declared_attributes",
+            classmethod(lambda cls, features: {"origin": "group"}),
+            raising=False,
+        )
+        calc_extender = _CalcContextCapturingExtender()
+        fetch_extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            [column],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            function_extender={calc_extender, fetch_extender},
+        )
+
+        assert fetch_extender.captured is not None
+        assert fetch_extender.captured.reader_class is CsvReader
+        assert fetch_extender.captured.declared_attributes == {"origin": "reader"}
+        assert calc_extender.captured is not None
+        assert calc_extender.captured.reader_class is None
+        assert calc_extender.captured.declared_attributes == {"origin": "group"}
+
+
 _ROW_COUNT_SENTINEL = 424242
 
 

@@ -25,6 +25,11 @@ from mloda.core.prepare.resolution_failure_renderer import (
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.declared_attributes import (
+    DeclarationRequirement,
+    declaration_requirement_scope,
+)
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
@@ -120,6 +125,7 @@ class IdentifyFeatureGroupClass:
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
     _supported_names: dict[type[FeatureGroup], frozenset[str]]
     _prefixes: dict[type[FeatureGroup], str]
+    _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -135,6 +141,7 @@ class IdentifyFeatureGroupClass:
         self._declared_frameworks = {}
         self._supported_names = {}
         self._prefixes = {}
+        self._declarations = {}
         self._data_access_collection = data_access_collection
 
     @classmethod
@@ -447,12 +454,17 @@ class IdentifyFeatureGroupClass:
             context_before = dict(feature.options.context)
             non_forwarded_before = feature.options.non_forwarded_group_keys
 
+            requirement = self._declaration_requirement(feature_group, feature)
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
             # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
             # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
-            if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
+            with declaration_requirement_scope(requirement):
+                criteria_matched = self._filter_feature_group_by_criteria(
+                    feature_group, feature, data_access_collection
+                )
+            if not criteria_matched:
                 # A contained matcher raise is always a near-miss: the raise says nothing about name ownership.
                 # Deliberate precedence: a contained crash outranks a recorded decline for the same candidate.
                 matcher_error = self._matcher_errors.get(feature_group)
@@ -533,10 +545,36 @@ class IdentifyFeatureGroupClass:
                 self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
+            if requirement is not None:
+                reader = self._written_reader(feature, group_before)
+                unmet = requirement.unmet_reason((reader or feature_group).__name__, reader)
+                if unmet is not None:
+                    self._record_elimination(feature_group, "declarations", unmet)
+                    self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                    continue
+
             _identified_feature_groups[feature_group] = supported_frameworks
 
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         return _identified_feature_groups
+
+    def _declaration_requirement(
+        self, feature_group: type[FeatureGroup], feature: Feature
+    ) -> DeclarationRequirement | None:
+        """The consumer's requirement with this candidate's own declarations; None when the request carries none."""
+        required = feature.required_declarations
+        if not required:
+            return None
+        consumer = feature.resolving_consumer or f"request for '{feature.name}'"
+        return DeclarationRequirement(consumer, required, feature_group, self._declarations)
+
+    @staticmethod
+    def _written_reader(feature: Feature, group_before: dict[str, Any]) -> type | None:
+        """The reader of the (ReaderClass, data_access) pair this candidate's criteria match wrote, if it wrote one."""
+        matched = feature.options.group.get(RESERVED_READER_OPTION_KEY)
+        if matched is group_before.get(RESERVED_READER_OPTION_KEY):
+            return None
+        return matched[0] if isinstance(matched, tuple) and matched else None
 
     def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""

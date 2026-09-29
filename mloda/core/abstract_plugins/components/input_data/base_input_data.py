@@ -38,7 +38,12 @@ from mloda.core.abstract_plugins.components.utils import (
     escalate_match_abort,
     get_all_subclasses,
     is_match_abort,
+    safe_field,
     safe_value_text,
+)
+from mloda.core.abstract_plugins.components.declared_attributes import (
+    current_declaration_requirement,
+    read_declared_attributes,
 )
 
 if TYPE_CHECKING:
@@ -158,6 +163,14 @@ class BaseInputData(ABC):
                 if not cls._present_reader_option_admits(key, spec, value, owned=record_absence):
                     return False
         return True
+
+    @classmethod
+    def _unmet_current_declaration(cls) -> str | None:
+        """Reason this reader's declarations miss the consumer requirement in scope, else None."""
+        requirement = current_declaration_requirement()
+        if requirement is None:
+            return None
+        return requirement.unmet_reason(cls.get_class_name(), cls)
 
     @classmethod
     def _absent_reader_option_admits(
@@ -329,6 +342,10 @@ class BaseInputData(ABC):
                     known_owners = match_rejection_owners()
                     matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
                     if matched_data_access:
+                        unmet = subclass._unmet_current_declaration()
+                        if unmet is not None:
+                            record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
+                            break
                         cls.add_base_input_data_to_options(subclass, matched_data_access, options)
                         return True
                     # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
@@ -392,6 +409,10 @@ class BaseInputData(ABC):
                 data_access_collection, feature_names, options=options
             )
             if matched_data_access:
+                unmet = subclass._unmet_current_declaration()
+                if unmet is not None:
+                    record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
+                    continue
                 return (subclass, matched_data_access)
 
         cls._record_unowned_pin(data_access_collection, feature_names)
@@ -554,11 +575,23 @@ class BaseInputData(ABC):
             data_access_identity=reader.data_access_identity(data_access),
             data_access_format=reader.data_access_name(),
             data_access_dataset_version=None,
+            declared_attributes=safe_field(
+                lambda: read_declared_attributes(reader, features),
+                None,
+                field=f"{type(reader).__qualname__}.declared_attributes",
+                warn_once_for=type(reader),
+            ),
+            reader_class=type(reader),
         )
         with context.activate():
             return _invoke_extender(
                 extender, instrument(context, reader.load_data, row_count=cfw._row_count), data_access, features
             )
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        """Scalar attributes this reader declares on its extender hooks; empty by default."""
+        return {}
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

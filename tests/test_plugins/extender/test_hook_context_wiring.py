@@ -196,8 +196,154 @@ class TestDeclaredInputFeaturesBestEffort:
         assert extender.captured.input_features is None
 
 
+class _DeclaringFeatureGroup(FeatureGroup):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
+        return {"unit": "m", "scale": 2, "ratio": 0.5, "flag": True}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return [{"value": 1}]
+
+
+class _RecordingFeatureGroup(FeatureGroup):
+    seen: list[Any] = []
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
+        cls.seen.append(features)
+        return {}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return [{"value": 1}]
+
+
+class _MixedFeatureGroup(FeatureGroup):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, Any]:
+        return {"unit": "m", "tags": ["a"], "nested": {"k": 1}, "nothing": None, "raw": b"x", "n": 3}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return [{"value": 1}]
+
+
+_SHARED_DECLARATION: dict[str, str | int | float | bool] = {"unit": "m"}
+
+
+class _SharedMappingFeatureGroup(FeatureGroup):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
+        return _SHARED_DECLARATION
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return [{"value": 1}]
+
+
+class _RaisingDeclarationFeatureGroup(FeatureGroup):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
+        raise RuntimeError("declaration boom")
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return [{"value": 1}]
+
+
+class _ListDeclarationFeatureGroup(FeatureGroup):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Any:
+        return [("unit", "m")]
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return [{"value": 1}]
+
+
+class _IntKeyDeclarationFeatureGroup(FeatureGroup):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Any:
+        return {1: "m", "unit": "m"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return [{"value": 1}]
+
+
+def _captured_declared_attributes(feature_group: type[FeatureGroup]) -> tuple[Any, HookContext | None]:
+    extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+    result = _build_framework({extender}).run_calculate_feature(feature_group, _build_feature_set())
+    return result, extender.captured
+
+
+class TestDeclaredAttributesWiring:
+    """Feature-group hooks carry the group's declared_attributes(features), scalars only."""
+
+    def test_default_declared_attributes_is_empty_mapping(self) -> None:
+        assert FeatureGroup.declared_attributes(None) == {}
+
+    def test_calculate_hook_carries_the_declared_attributes(self) -> None:
+        _, captured = _captured_declared_attributes(_DeclaringFeatureGroup)
+
+        assert captured is not None
+        assert captured.declared_attributes == {"unit": "m", "scale": 2, "ratio": 0.5, "flag": True}
+        assert captured.reader_class is None
+
+    def test_declared_attributes_receives_the_feature_set(self) -> None:
+        feature_set = _build_feature_set()
+        _RecordingFeatureGroup.seen.clear()
+
+        _build_framework(
+            {_ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)}
+        ).run_calculate_feature(_RecordingFeatureGroup, feature_set)
+
+        assert any(seen is feature_set for seen in _RecordingFeatureGroup.seen)
+
+    def test_default_group_surfaces_empty_declared_attributes(self) -> None:
+        _, captured = _captured_declared_attributes(_CalcFeatureGroup)
+
+        assert captured is not None
+        assert captured.declared_attributes == {}
+
+    def test_non_scalar_entries_are_dropped(self) -> None:
+        _, captured = _captured_declared_attributes(_MixedFeatureGroup)
+
+        assert captured is not None
+        assert captured.declared_attributes == {"unit": "m", "n": 3}
+
+    def test_returned_mapping_is_copied_into_the_context(self) -> None:
+        _, captured = _captured_declared_attributes(_SharedMappingFeatureGroup)
+
+        assert captured is not None
+        assert captured.declared_attributes == {"unit": "m"}
+        assert captured.declared_attributes is not _SHARED_DECLARATION
+
+
 class TestObservabilityFailureDoesNotBreakCalculation:
     """An observability read failing must never fail run_calculate_feature itself."""
+
+    def test_declared_attributes_raising_degrades_to_none(self) -> None:
+        result, captured = _captured_declared_attributes(_RaisingDeclarationFeatureGroup)
+
+        assert result == [{"value": 1}]
+        assert captured is not None
+        assert captured.declared_attributes is None
+
+    def test_declared_attributes_non_mapping_degrades_to_none(self) -> None:
+        result, captured = _captured_declared_attributes(_ListDeclarationFeatureGroup)
+
+        assert result == [{"value": 1}]
+        assert captured is not None
+        assert captured.declared_attributes is None
+
+    def test_declared_attributes_non_str_key_degrades_to_none(self) -> None:
+        result, captured = _captured_declared_attributes(_IntKeyDeclarationFeatureGroup)
+
+        assert result == [{"value": 1}]
+        assert captured is not None
+        assert captured.declared_attributes is None
 
     def test_ctor_requiring_arg_degrades_input_features_to_none(self) -> None:
         class _CtorRequiresArgFeatureGroup(FeatureGroup):

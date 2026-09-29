@@ -99,11 +99,6 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
-    - name: Set up Java 17
-      uses: actions/setup-java@v4
-      with:
-        distribution: temurin
-        java-version: "17"
     - name: Install tox
       run: |
         python -m pip install --upgrade pip
@@ -111,5 +106,6 @@ jobs:
         # Same tox pin as release.yaml; see the note there before bumping.
         uv tool install tox==4.64.1 --with tox-uv==1.36.0
     - name: Run spark
-      run: tox -e spark
+      # The runner image ships Java 17.
+      run: JAVA_HOME="$JAVA_HOME_17_X64" tox -e spark
       timeout-minutes: 10

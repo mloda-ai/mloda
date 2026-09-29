@@ -653,7 +653,7 @@ class FeatureChainParserMixin:
 
         # Configuration-based fallback using get_in_features()
         in_features_set = feature.options.get_in_features()
-        return [f.name for f in in_features_set]
+        return [str(f.name) for f in in_features_set]
 
     @classmethod
     def _extract_single_source_feature(cls, feature: Feature) -> str:

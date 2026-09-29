@@ -998,13 +998,81 @@ class _RaisingDeclarationReader(_DirectLoadReader):
         raise RuntimeError("reader declaration boom")
 
 
-def _direct_load_context(reader_cls: type[BaseInputData]) -> HookContext:
+def _direct_load_context(reader_cls: type[BaseInputData], data_access: Any = "access") -> HookContext:
     extender = _InputDataLoadCapturingExtender()
     cfw = ComputeFramework(function_extender={extender})
     with cfw.activate(), _build_calc_context().activate():
-        BaseInputData._load_data_via_hook(reader_cls(), "access", FeatureSet())
+        BaseInputData._load_data_via_hook(reader_cls(), data_access, FeatureSet())
     assert extender.captured is not None
     return extender.captured
+
+
+_BASE_INPUT_DATA_LOGGER = "mloda.core.abstract_plugins.components.input_data.base_input_data"
+
+
+class _NamedIdentityReader(_DirectLoadReader):
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        return "db://orders"
+
+
+class TestFallbackDataAccessIdentityIsFlagged:
+    """A fallback identity names no source: flagged on the hook context and warned once per reader class."""
+
+    @pytest.mark.parametrize("kind", ["missing-path", "object", "dict", "jdbc-uri"])
+    def test_fallback_identity_is_flagged(self, kind: str, tmp_path: Path) -> None:
+        data_access: Any = {
+            "missing-path": str(tmp_path / "missing.csv"),
+            "object": object(),
+            "dict": {"sqlite": "/data/a.db"},
+            "jdbc-uri": "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
+        }[kind]
+
+        context = _direct_load_context(_DirectLoadReader, data_access)
+
+        assert context.data_access_identity_is_fallback is True
+
+    @pytest.mark.parametrize("kind", ["existing-path", "uri", "override"])
+    def test_published_identity_is_not_flagged(self, kind: str, tmp_path: Path) -> None:
+        existing = tmp_path / "a.csv"
+        existing.write_text("x\n1\n")
+        data_access: Any = {"existing-path": str(existing), "uri": "s3://bucket/a.csv", "override": "nowhere"}[kind]
+        reader_cls = _NamedIdentityReader if kind == "override" else _DirectLoadReader
+
+        context = _direct_load_context(reader_cls, data_access)
+
+        assert context.data_access_identity_is_fallback is False
+
+    def test_warns_once_per_reader_class(self, caplog: pytest.LogCaptureFixture) -> None:
+        class _FreshA(_DirectLoadReader):
+            pass
+
+        class _FreshB(_DirectLoadReader):
+            pass
+
+        with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
+            _direct_load_context(_FreshA, "missing-a")
+            _direct_load_context(_FreshA, "missing-a")
+            records = [r for r in caplog.records if r.name == _BASE_INPUT_DATA_LOGGER]
+            assert len(records) == 1
+            assert _FreshA.__qualname__ in records[0].getMessage()
+            assert "data_access_identity" in records[0].getMessage()
+
+            _direct_load_context(_FreshB, "missing-b")
+            records = [r for r in caplog.records if r.name == _BASE_INPUT_DATA_LOGGER]
+            assert len(records) == 2
+            assert _FreshB.__qualname__ in records[1].getMessage()
+
+    def test_no_warning_without_input_data_load_extender(self, caplog: pytest.LogCaptureFixture) -> None:
+        class _FreshNoExtender(_DirectLoadReader):
+            pass
+
+        cfw = ComputeFramework(function_extender=set())
+        with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
+            with cfw.activate(), _build_calc_context().activate():
+                BaseInputData._load_data_via_hook(_FreshNoExtender(), "missing", FeatureSet())
+
+        assert not [r for r in caplog.records if "data_access_identity" in r.getMessage()]
 
 
 class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:

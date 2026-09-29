@@ -257,15 +257,11 @@ working, but logs a definition-time warning until it either adds a named capture
 Override this hook when you need custom validation for string-based feature names:
 
 ```py
-class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _validate_string_match(cls, feature_name: str, operation_config: str, in_feature: str) -> bool:
         """Called only for a name that owns the feature; reject values the group cannot serve."""
-        try:
-            cls.parse_clustering_prefix(feature_name)
-        except ValueError:
-            return False
-        return True
+        return operation_config.isidentifier()
 ```
 
 #### 2. Custom `input_features()` Method
@@ -353,7 +349,7 @@ from mloda.user import FeatureName
 from mloda.provider import DefaultOptionKeys, PropertySpec
 
 class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    PREFIX_PATTERN = r"__([a-zA-Z_]+)_operation$"
+    PREFIX_PATTERN = r"__(?P<operation_type>[a-zA-Z_]+)_operation$"
     MAX_IN_FEATURES = 1
 
     PROPERTY_MAPPING = {

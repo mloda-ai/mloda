@@ -212,14 +212,12 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         k_value = cls.parse_clustering_prefix(feature_name)[1]
         return k_value if k_value == "auto" else int(k_value)
 
-    # Custom validation done via _validate_string_match() hook
-
     @classmethod
     def _extract_clustering_params(cls, feature: Feature) -> tuple[str | None, int | str | None]:
         """
         Extract algorithm and k_value from a feature.
 
-        Tries string-based approach first, falls back to configuration-based.
+        Each value comes from the feature name when it owns the match, otherwise from options.
 
         Args:
             feature: The feature to extract parameters from

@@ -62,7 +62,7 @@ class FeatureGroup(ABC):
         from mloda.provider import FeatureChainParserMixin, FeatureGroup, PropertySpec
 
         class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__([\\w]+)_my_op$"
+            PREFIX_PATTERN = r".*__(?P<operation_type>[\\w]+)_my_op$"
             PROPERTY_MAPPING = {
                 "operation_type": PropertySpec(
                     "Operation to apply.",

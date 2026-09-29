@@ -485,7 +485,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """
         Extract forecast-specific parameters (algorithm, horizon, time_unit) from a feature.
 
-        Tries string-based parsing first using parse_forecast_suffix, falls back to configuration-based approach.
+        Each value comes from the feature name when it owns the match, otherwise from options.
 
         Args:
             feature: The feature to extract parameters from

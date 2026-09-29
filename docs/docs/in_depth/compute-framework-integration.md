@@ -92,7 +92,7 @@ class RankFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         parametric_families={"ntile": "N-tile bucketing"},
         supported={"PythonDictFramework": {"dense", "ordinal"}},
     )
-    PREFIX_PATTERN = r".*__([\w]+)_rank$"
+    PREFIX_PATTERN = r".*__(?P<rank_type>[\w]+)_rank$"
     PROPERTY_MAPPING = {
         "rank_type": property_spec(
             "Rank subtype.",

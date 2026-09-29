@@ -800,9 +800,10 @@ class FeatureChainParserMixin:
         2. ``cls._resolve_operation(feature_name, options, config_key)``
            Uses the provided name (str or FeatureName) and Options separately.
 
-        The string-based path always takes precedence. If the feature name matches
-        PREFIX_PATTERN, the captured group is returned. Otherwise, falls back to
-        ``options.get(config_key)`` and converts to string.
+        The string-based path takes precedence. If the feature name owns the match:
+        with named captures, the capture for ``config_key`` is returned; with a
+        positional pattern, the first capture. Otherwise, falls back to
+        ``options.get(config_key)`` as a string (a singleton collection is unpacked).
 
         Args:
             feature_or_name: A Feature object (convention 1) or a feature name

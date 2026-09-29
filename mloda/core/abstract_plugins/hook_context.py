@@ -42,6 +42,7 @@ class HookContext:
     status: str | None = None
     run_id: str | None = None
     data_access_identity: str | None = None
+    data_access_identity_is_fallback: bool | None = None
     tenant_id: str | None = None
     project_id: str | None = None
     principal: str | None = None

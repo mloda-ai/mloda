@@ -1,5 +1,6 @@
 import logging
 import os
+import weakref
 from abc import ABC
 from collections.abc import Iterable, Mapping
 from pathlib import PurePath
@@ -57,6 +58,16 @@ RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 def _format_keys(keys: Iterable[str]) -> str:
     return "{" + ", ".join(sorted(set(keys))) + "}"
+
+
+_fallback_identity_warned: "weakref.WeakSet[type]" = weakref.WeakSet()
+
+
+def _is_fallback_identity(data_access: Any, identity: str) -> bool:
+    """True when identity is the access's type name or its bare mapping key names."""
+    if identity == type(data_access).__name__:
+        return True
+    return isinstance(data_access, Mapping) and identity == _format_keys(str(key) for key in data_access)
 
 
 class BaseInputData(ABC):
@@ -560,6 +571,18 @@ class BaseInputData(ABC):
         if calc_context is None:
             return reader.load_data(data_access, features)
 
+        identity = reader.data_access_identity(data_access)
+        is_fallback = _is_fallback_identity(data_access, identity)
+        if is_fallback and type(reader) not in _fallback_identity_warned:
+            _fallback_identity_warned.add(type(reader))
+            logger.warning(
+                "%s.data_access_identity fell back to %r, which names no source, so INPUT_DATA_LOAD extenders "
+                "cannot tell its sources apart; override data_access_identity on %s.",
+                type(reader).__qualname__,
+                identity,
+                type(reader).__qualname__,
+            )
+
         context = HookContext(
             hook=ExtenderHook.INPUT_DATA_LOAD,
             feature_group_class=calc_context.feature_group_class,
@@ -575,7 +598,8 @@ class BaseInputData(ABC):
             project_id=cfw.run_context.project_id,
             principal=cfw.run_context.principal,
             worker_index=cfw.worker_index,
-            data_access_identity=reader.data_access_identity(data_access),
+            data_access_identity=identity,
+            data_access_identity_is_fallback=is_fallback,
             data_access_format=reader.data_access_name(),
             data_access_dataset_version=None,
             declared_attributes=safe_field(

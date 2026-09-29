@@ -76,12 +76,13 @@ class SparkMergeEngine(BaseMergeEngine):
         # Rename every right column to a collision-free internal name BEFORE the join so the
         # join predicate, window and final projection never rely on Spark alias ("l."/"r.")
         # resolution surviving a withColumn/filter, which is brittle across Spark versions.
-        prefix = "_mloda_r_"
+        prefix = pick_helper_column_name(taken=set(left_cols) | set(right_cols), prefix="_mloda_r_")
         right_renamed = right_data
         for c in right_cols:
             right_renamed = right_renamed.withColumnRenamed(c, f"{prefix}{c}")
 
-        left_ids = left_data.withColumn("_mloda_lid", F.monotonically_increasing_id())
+        lid = pick_helper_column_name(taken=set(left_cols) | set(right_cols), prefix="_mloda_lid")
+        left_ids = left_data.withColumn(lid, F.monotonically_increasing_id())
 
         conditions = [F.col(lk) == F.col(f"{prefix}{rk}") for lk, rk in zip(by_left, by_right)]
         if asof_config.direction == "backward":
@@ -112,8 +113,9 @@ class SparkMergeEngine(BaseMergeEngine):
             order_by = [time_col.asc_nulls_last()]
         order_by += [F.col(f"{prefix}{c}").asc_nulls_last() for c in right_keep]
 
-        window = Window.partitionBy("_mloda_lid").orderBy(*order_by)
-        ranked = joined.withColumn("_mloda_rn", F.row_number().over(window)).filter(F.col("_mloda_rn") == 1)
+        rn = pick_helper_column_name(taken=set(left_cols) | set(right_cols), prefix="_mloda_rn")
+        window = Window.partitionBy(lid).orderBy(*order_by)
+        ranked = joined.withColumn(rn, F.row_number().over(window)).filter(F.col(rn) == 1)
 
         select_list = [F.col(c) for c in left_cols]
         select_list += [F.col(f"{prefix}{c}").alias(c) for c in right_keep]

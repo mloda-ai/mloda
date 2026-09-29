@@ -33,6 +33,7 @@ from mloda.user import Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
 FEATURE_CHAIN_PARSER_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser"
@@ -423,6 +424,8 @@ class TestShippedPluginsClean:
             (TimeWindowFeatureGroup, "time_unit"),
             (DimensionalityReductionFeatureGroup, "dimension"),
             (ClusteringFeatureGroup, "k_value"),
+            (ForecastingFeatureGroup, "horizon"),
+            (ForecastingFeatureGroup, "time_unit"),
         ],
         ids=lambda v: v if isinstance(v, str) else v.__name__,
     )

@@ -11,7 +11,7 @@ from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser, FeatureChainParserMixin, FeatureSet
+from mloda.provider import CHAIN_SEPARATOR, FeatureChainParserMixin, FeatureSet
 from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -145,7 +145,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = rf".*__([\w]+)_forecast_(\d+)([\w]+)(?:~{_SELECTOR_TAIL})?$"
+    PREFIX_PATTERN = rf".*__(?P<algorithm>[\w]+)_forecast_(?P<horizon>\d+)(?P<time_unit>[\w]+)(?:~{_SELECTOR_TAIL})?$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -167,14 +167,12 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             context=True,
             strict_validation=True,
             element_validator=is_positive_int,
-            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         TIME_UNIT: PropertySpec(
             "Time unit of the forecast horizon",
             allowed_values=TimeReferenceMixin.TIME_UNITS,
             context=True,
             strict_validation=True,
-            deferred_binding=True,
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source feature to generate forecasts for",
@@ -206,23 +204,9 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         return ForecastingArtifact
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract source feature and time filter feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            time_filter_feature = Feature(self.get_reference_time_column(options))
-            return {Feature(source_feature), time_filter_feature}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        self.validate_in_feature_count(feature_name, len(source_features))
-
-        source_feature_obj = next(iter(source_features))
-        time_filter_feature = Feature(self.get_reference_time_column(options))
-        return {source_feature_obj, time_filter_feature}
+        """Source features from the shared resolution plus the reference-time feature."""
+        source_features = super().input_features(options, feature_name) or set()
+        return source_features | {Feature(self.get_reference_time_column(options))}
 
     @classmethod
     def parse_forecast_suffix(cls, feature_name: str) -> tuple[str, int, str]:
@@ -285,26 +269,6 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         horizon = int(horizon_str)
 
         return algorithm, horizon, time_unit
-
-    @classmethod
-    def _validate_string_match(cls, feature_name: str, _operation_config: str, _source_feature: str) -> bool:
-        """
-        Validate that a string-based feature name has valid forecasting components.
-
-        Validates algorithm, horizon, and time_unit using parse_forecast_suffix().
-
-        Args:
-            feature_name: The full feature name to validate
-            _operation_config: The operation config extracted by the regex (unused)
-            _source_feature: The source feature extracted by the regex (unused)
-
-        Returns:
-            True if valid, False otherwise
-        """
-        if FeatureChainParser.is_chained_feature(feature_name):
-            if not cls._has_valid_forecast_suffix(feature_name):
-                return False
-        return True
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -529,16 +493,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         Returns:
             Tuple of (algorithm, horizon, time_unit), where any value may be None if not found
         """
-        # Try string-based first using parse_forecast_suffix
-        feature_name_str = feature.name
-        if cls._has_valid_forecast_suffix(feature_name_str):
-            algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
-            return algorithm, horizon, time_unit
-        # Fall back to config
-        algorithm = feature.options.get(cls.ALGORITHM)
-        horizon = feature.options.get(cls.HORIZON)
-        time_unit = feature.options.get(cls.TIME_UNIT)
-        if horizon is not None and isinstance(horizon, str):
+        algorithm = cls._resolve_operation(feature, cls.ALGORITHM)
+        horizon: Any = cls._resolve_operation(feature, cls.HORIZON)
+        time_unit = cls._resolve_operation(feature, cls.TIME_UNIT)
+        if horizon is not None:
             horizon = int(horizon)
         return algorithm, horizon, time_unit
 

@@ -5,16 +5,28 @@ Tests for the ForecastingFeatureGroup.
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from collections.abc import Iterator
 from typing import Any
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.user import Feature
+from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
+
+
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    """Open a per-test recording window and always close it again."""
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    yield reasons
+    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestForecastingFeatureGroup:
@@ -78,6 +90,56 @@ class TestForecastingFeatureGroup:
         assert len(input_features) == 2  # type: ignore
         assert any(f.name == "sales" for f in input_features)  # type: ignore
         assert any(f.name == "time_filter" for f in input_features)  # type: ignore
+
+    def test_zero_horizon_is_a_recorded_non_match_naming_the_horizon(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("x__linear_forecast_0day", Options())
+        assert "horizon" in rejection_window["ForecastingFeatureGroup"].reason
+
+    def test_unknown_name_algorithm_is_a_recorded_non_match_even_with_a_valid_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={ForecastingFeatureGroup.ALGORITHM: "linear"})
+        assert not ForecastingFeatureGroup.match_feature_group_criteria("x__bogus_forecast_7day", options)
+        assert "bogus" in rejection_window["ForecastingFeatureGroup"].reason
+
+    def test_trailing_suffix_after_time_unit_is_a_recorded_non_match(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """time_unit would bind `day__mean_imputed`, so forecasting does not claim a missing_value name."""
+        name = "s__linear_forecast_7day__mean_imputed"
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
+        assert "time_unit" in rejection_window["ForecastingFeatureGroup"].reason
+
+    def test_chained_source_name_matches_and_extracts_the_chained_source(self) -> None:
+        name = "s__mean_imputed__linear_forecast_7day"
+        assert ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
+        assert ForecastingFeatureGroup._extract_source_features(Feature(name)) == ["s__mean_imputed"]
+
+    def test_selector_name_matches_and_extracts_parameters_and_source(self) -> None:
+        name = "sales__linear_forecast_7day~10"
+        assert ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
+        assert ForecastingFeatureGroup._extract_forecast_params(Feature(name)) == ("linear", 7, "day")
+        assert ForecastingFeatureGroup._extract_source_features(Feature(name)) == ["sales"]
+
+    def test_valid_name_records_no_rejection(self, rejection_window: dict[str, MatchRejection]) -> None:
+        assert ForecastingFeatureGroup.match_feature_group_criteria("x__linear_forecast_7day", Options())
+        assert rejection_window == {}
+
+    def test_name_path_source_count_above_max_is_a_recorded_non_match(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The name path validates the source count via the mixin (MAX_IN_FEATURES = 1)."""
+        name = "a&b__linear_forecast_7day"
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
+        reason = rejection_window["ForecastingFeatureGroup"].reason
+        assert "at most 1" in reason
+        assert "found 2" in reason
+
+        with pytest.raises(ValueError) as exc_info:
+            PandasForecastingFeatureGroup().input_features(self.options, FeatureName(name))
+        assert str(exc_info.value) == reason
 
     def test_pandas_forecasting(self) -> None:
         """Test forecasting with the Pandas implementation."""

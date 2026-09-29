@@ -89,7 +89,7 @@ class TestPropertyMappingConsistency:
         )
 
 
-# Plugins migrated to named captures (issue #1716); text_cleaning is captureless, forecasting is pending.
+# Plugins migrated to named captures (issue #1716); text_cleaning is captureless.
 NAMED_CAPTURE_PLUGINS: list[type[Any]] = [
     GeoDistanceFeatureGroup,
     MissingValueFeatureGroup,
@@ -101,6 +101,7 @@ NAMED_CAPTURE_PLUGINS: list[type[Any]] = [
     DimensionalityReductionFeatureGroup,
     ClusteringFeatureGroup,
     TimeWindowFeatureGroup,
+    ForecastingFeatureGroup,
 ]
 
 

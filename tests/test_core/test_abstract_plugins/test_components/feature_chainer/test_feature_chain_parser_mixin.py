@@ -814,6 +814,7 @@ class TestFeatureChainParserMixinExtractSourceFeatures:
         assert len(result) == 2
         assert "feature_a" in result
         assert "feature_b" in result
+        assert all(type(name) is str for name in result), [type(name) for name in result]
 
     def test_extract_source_features_custom_separator(self) -> None:
         """Test extraction with custom separator (comma instead of ampersand)."""
@@ -851,6 +852,8 @@ class TestFeatureChainParserMixinExtractSingleSourceFeature:
         result = MockFeatureGroupSingleInFeature._extract_single_source_feature(feature)
 
         assert result == "feature_a"
+        assert type(result) is str, type(result)
+        assert repr(result) == "'feature_a'"
 
     def test_extract_single_source_feature_raises_generic_message_for_zero_sources(self) -> None:
         """Zero resolved sources raise the generic MIN_IN_FEATURES-based message."""

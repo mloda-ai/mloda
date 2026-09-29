@@ -502,7 +502,9 @@ resolved. Exempt from the check: a declared default, a `required_when` key, a
 supplies and whose count `MIN/MAX_IN_FEATURES` enforces (an absent `in_features` counts as zero on the configuration path).
 
 A flagged missing key makes the match a **non-match**: a warning names the group, the feature,
-and the missing key(s), and the resolution-failure report names the missing key(s) too.
+and the missing key(s), and the resolution-failure report names the missing key(s) too. For missing
+keys declared `context=True` the reason also names the remedy (`Options(context=...)`, and for an input
+feature the consumer's `propagate_context_keys`), naming those keys when several are missing.
 
 Two migrations remove the warning for a flagged key. Give the pattern a named capture
 `(?P<key>...)` so the framework binds the key from the name; or, for a key bound outside

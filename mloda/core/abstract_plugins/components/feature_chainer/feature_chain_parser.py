@@ -398,7 +398,8 @@ class FeatureChainParser:
     @staticmethod
     def _presence_rejection_reason(missing: list[str], property_mapping: dict[str, PropertySpec]) -> str:
         """The one formatting of the missing-required-keys reason, shared by the matcher and the diagnostic."""
-        remedy = context_forwarding_remedy(any(property_mapping[key].context for key in missing))
+        context_keys = sorted(key for key in missing if property_mapping[key].context)
+        remedy = context_forwarding_remedy(bool(context_keys), context_keys if len(missing) > 1 else None)
         return (
             f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
             f"{remedy}"

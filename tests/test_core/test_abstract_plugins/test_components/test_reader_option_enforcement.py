@@ -32,6 +32,10 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 
 
 ROE_FEATURE_NAME = "roe_enforced_column"
+ROE_CONTEXT_REMEDY = (
+    "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+    "list it in the consumer's propagate_context_keys"
+)
 
 ROE_STRICT_ACCESS = "roe_strict_access"
 ROE_STRICT_HANDLE = "roe_strict_handle"
@@ -680,6 +684,10 @@ class TestRequiredness:
         assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert owner in stored.reason
         assert ROE_COND_KEY in stored.reason
+        assert stored.reason == (
+            f"required reader option '{ROE_COND_KEY}' is absent, but {owner} declares it required "
+            f"(required_when predicate {_roe_trigger_required.__name__} is satisfied)" + ROE_CONTEXT_REMEDY
+        )
 
     def test_conditionally_required_key_absent_without_trigger_stays_optional(
         self, rejection_window: dict[str, MatchRejection]
@@ -734,6 +742,10 @@ class TestRequiredness:
         assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert owner in stored.reason
         assert ROE_REQUIRED_KEY in stored.reason
+        assert stored.reason == (
+            f"required reader option '{ROE_REQUIRED_KEY}' is absent, but {owner} declares it required "
+            "(no default declared)" + ROE_CONTEXT_REMEDY
+        )
 
     def test_unconditionally_required_key_present_matches(
         self, rejection_window: dict[str, MatchRejection], collect_after: None

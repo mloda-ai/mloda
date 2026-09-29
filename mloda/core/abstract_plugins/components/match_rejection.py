@@ -68,3 +68,13 @@ def has_match_rejection(stage: str) -> bool:
     if reasons is None:
         return False
     return any(rejection.stage == stage for rejection in reasons.values())
+
+
+def context_forwarding_remedy(context: bool) -> str:
+    """Remedy clause for an absent-option reason; empty for context=False keys, which forward by default."""
+    if not context:
+        return ""
+    return (
+        "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+        "list it in the consumer's propagate_context_keys"
+    )

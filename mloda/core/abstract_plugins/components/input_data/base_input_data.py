@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
+    context_forwarding_remedy,
     match_rejection_owners,
     record_match_rejection,
     restamp_match_rejections_since,
@@ -200,7 +201,8 @@ class BaseInputData(ABC):
                     record_match_rejection(
                         owner,
                         f"required reader option '{key}' is absent, but {owner} declares it required "
-                        f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)",
+                        f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)"
+                        f"{context_forwarding_remedy(spec.context)}",
                         stage=INPUT_DATA_OWNED_STAGE,
                     )
                 return False
@@ -209,7 +211,8 @@ class BaseInputData(ABC):
             if record_absence:
                 record_match_rejection(
                     owner,
-                    f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)",
+                    f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)"
+                    f"{context_forwarding_remedy(spec.context)}",
                     stage=INPUT_DATA_OWNED_STAGE,
                 )
             return False

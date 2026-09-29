@@ -10,7 +10,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import context_forwarding_remedy, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
@@ -396,9 +396,13 @@ class FeatureChainParser:
         return missing
 
     @staticmethod
-    def _presence_rejection_reason(missing: list[str]) -> str:
+    def _presence_rejection_reason(missing: list[str], property_mapping: dict[str, PropertySpec]) -> str:
         """The one formatting of the missing-required-keys reason, shared by the matcher and the diagnostic."""
-        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+        remedy = context_forwarding_remedy(any(property_mapping[key].context for key in missing))
+        return (
+            f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+            f"{remedy}"
+        )
 
     @classmethod
     def _check_name_path_required_presence(
@@ -414,7 +418,7 @@ class FeatureChainParser:
             return True
 
         if owner_name is not None:
-            record_match_rejection(owner_name, cls._presence_rejection_reason(missing))
+            record_match_rejection(owner_name, cls._presence_rejection_reason(missing, property_mapping))
 
         owner = owner_name or "A feature group"
         keys = ", ".join(sorted(missing))
@@ -441,7 +445,7 @@ class FeatureChainParser:
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return None
-        return cls._presence_rejection_reason(missing)
+        return cls._presence_rejection_reason(missing, property_mapping)
 
     @classmethod
     def match_configuration_feature_chain_parser(

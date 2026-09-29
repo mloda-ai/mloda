@@ -485,7 +485,11 @@ class RendererMissingOptionFG791(FeatureChainParserMixin, FeatureGroup):
         return None
 
 
-MISSING_OPTION_REASON_791 = "required option(s) some_key_791m are absent after declared defaults and name bindings"
+MISSING_OPTION_REASON_791 = (
+    "required option(s) some_key_791m are absent after declared defaults and name bindings"
+    "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+    "list it in the consumer's propagate_context_keys"
+)
 
 
 # Declares two available frameworks; the run enables only the one this candidate rejects.

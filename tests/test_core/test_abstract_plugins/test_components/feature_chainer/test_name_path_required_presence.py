@@ -186,6 +186,21 @@ class TestMandatoryEnforcement:
         assert result is True, "a name-bound required key is satisfied by the name"
 
 
+class TestPresenceRejectionReason:
+    """The presence reason names the context remedy only for a missing key declared context=True."""
+
+    def test_context_false_missing_key_gets_no_remedy_clause(self) -> None:
+        """Control: a missing key declared context=False keeps the bare reason."""
+        mapping = {
+            DefaultOptionKeys.in_features: PropertySpec("source", context=True, strict_validation=False),
+            "group_only_r769rem": PropertySpec("required, group-scoped, absent", context=False),
+        }
+
+        reason = FeatureChainParser.name_path_presence_rejection_reason(Options(), mapping)
+
+        assert reason == "required option(s) group_only_r769rem are absent after declared defaults and name bindings"
+
+
 class TestEnvVarIgnored:
     """MLODA_NAME_PATH_REQUIRED_PRESENCE is retired: no value changes the mandatory non-match."""
 

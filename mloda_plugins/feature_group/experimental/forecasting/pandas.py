@@ -169,7 +169,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         # For multi-column features, we need to handle each column separately or aggregate them
         # For now, we'll use the first column for single-column behavior
         # In the future, this could be extended to forecast multiple columns or aggregated columns
-        source_feature_name = in_features[0] if len(in_features) == 1 else in_features[0]
+        source_feature_name = in_features[0]
 
         # Create or load the model
         if model_artifact is None:
@@ -552,7 +552,7 @@ class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
 
         # For multi-column features, use the first column
-        source_feature_name = in_features[0] if len(in_features) == 1 else in_features[0]
+        source_feature_name = in_features[0]
 
         # Create or load the model
         if model_artifact is None:

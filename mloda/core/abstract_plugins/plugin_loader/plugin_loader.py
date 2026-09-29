@@ -193,9 +193,20 @@ class PluginLoader:
                 except ImportError as e:
                     root = e.name.split(".")[0] if e.name else None
                     own_root = entry_point.module.split(".")[0]
-                    if root == own_root:
-                        raise
                     dist_name = entry_point.dist.name if entry_point.dist is not None else None
+                    if root == own_root:
+                        if isinstance(e, ModuleNotFoundError) and (
+                            e.name == entry_point.module or entry_point.module.startswith(f"{e.name}.")
+                        ):
+                            dist_label = f"'{dist_name}'" if dist_name else "the distribution that provides it"
+                            raise ModuleNotFoundError(
+                                f"Entry point '{entry_point.name}' ({entry_point.value}) of distribution "
+                                f"{dist_label} cannot import its own module '{e.name}': the distribution is "
+                                f"installed but its files are missing. Reinstall it: "
+                                f"pip install --force-reinstall {dist_name or '<distribution>'}",
+                                name=e.name,
+                            ) from e
+                        raise
                     optional_roots = declared_optional.get((dist_name, entry_point.name), OPTIONAL_PLUGIN_DEPENDENCIES)
                     # Exclude any root the entry point's own module is at or under, so a namespace
                     # collision can't misattribute the plugin's own bug to that root's traceback frame.

@@ -27,6 +27,7 @@ package name, so importlib.metadata discovery is exercised for real and tests st
 
 import importlib
 import logging
+import shutil
 import sys
 import textwrap
 from pathlib import Path
@@ -674,6 +675,35 @@ class TestLoadEntryPointsMissingDependencies:
         with pytest.raises(ModuleNotFoundError):
             PluginLoader().load_entry_points()
 
+    def test_deleted_own_package_raises_actionable_reinstall_message(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pkg = "eptest_deleted_own_pkg"
+        dist = pkg.replace("_", "-")
+        _build_distribution(
+            tmp_path,
+            pkg,
+            _FG_MANIFEST,
+            f"""
+            [mloda.feature_groups]
+            gone = {pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        shutil.rmtree(tmp_path / pkg)
+        importlib.invalidate_caches()
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        with pytest.raises(ModuleNotFoundError) as exc_info:
+            PluginLoader().load_entry_points()
+
+        assert exc_info.value.name == pkg
+        assert isinstance(exc_info.value.__cause__, ModuleNotFoundError)
+        message = str(exc_info.value)
+        assert "gone" in message
+        assert dist in message
+        assert pkg in message
+        assert f"pip install --force-reinstall {dist}" in message
+
 
 class TestLoadEntryPointsOptionalDependenciesDeclaration:
     """The new `mloda.optional_dependencies` group: per-entry-point optional-root declarations,
@@ -883,8 +913,11 @@ class TestLoadEntryPointsOptionalDependenciesDeclaration:
         _write_module(tmp_path, pkg, "optional_deps", f'OPTIONAL_DEPENDENCIES = frozenset({{"{pkg}"}})\n')
         monkeypatch.syspath_prepend(str(tmp_path))
 
-        with pytest.raises(ModuleNotFoundError):
+        with pytest.raises(ModuleNotFoundError) as exc_info:
             PluginLoader().load_entry_points()
+
+        assert "--force-reinstall" not in str(exc_info.value)
+        assert exc_info.value.__cause__ is None
 
     def test_undeclared_root_in_global_set_still_falls_back_and_skips(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

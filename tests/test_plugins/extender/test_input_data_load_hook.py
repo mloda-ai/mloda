@@ -1032,16 +1032,28 @@ class TestFallbackDataAccessIdentityIsFlagged:
 
         assert context.data_access_identity_is_fallback is True
 
-    @pytest.mark.parametrize("kind", ["existing-path", "uri", "override"])
-    def test_published_identity_is_not_flagged(self, kind: str, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("kind", ["existing-path", "uri", "override", "override-dict"])
+    def test_published_identity_is_not_flagged(
+        self, kind: str, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         existing = tmp_path / "a.csv"
         existing.write_text("x\n1\n")
-        data_access: Any = {"existing-path": str(existing), "uri": "s3://bucket/a.csv", "override": "nowhere"}[kind]
-        reader_cls = _NamedIdentityReader if kind == "override" else _DirectLoadReader
+        data_access: Any = {
+            "existing-path": str(existing),
+            "uri": "s3://bucket/a.csv",
+            "override": "nowhere",
+            "override-dict": {"sqlite": "/data/a.db"},
+        }[kind]
+        base_cls = _NamedIdentityReader if kind.startswith("override") else _DirectLoadReader
+        reader_cls = type("_FreshPublished", (base_cls,), {})
 
-        context = _direct_load_context(reader_cls, data_access)
+        with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
+            context = _direct_load_context(reader_cls, data_access)
 
         assert context.data_access_identity_is_fallback is False
+        assert not [
+            r for r in caplog.records if r.name == _BASE_INPUT_DATA_LOGGER and "data_access_identity" in r.getMessage()
+        ]
 
     def test_warns_once_per_reader_class(self, caplog: pytest.LogCaptureFixture) -> None:
         class _FreshA(_DirectLoadReader):

@@ -162,22 +162,13 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def get_point_features(cls, feature_name: str) -> tuple[str, str]:
         """Extract the two point features from the feature name."""
-        # For L->R: "point1&point2__distance_type_distance"
-        # Split from right to remove the distance suffix
-        parts = feature_name.rsplit(CHAIN_SEPARATOR, 1)
-        if len(parts) != 2:
-            raise ValueError(
-                f"Invalid geo distance feature name format: {feature_name}. Missing double underscore separator."
-            )
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns(), CHAIN_SEPARATOR)
+        if not parsed.matched or not parsed.source_feature:
+            raise ValueError(f"Invalid geo distance feature name format: {feature_name}")
 
-        # Now split the remaining part to get the two points using & separator
-        point_parts = parts[0].split("&", 1)
-        if len(point_parts) != 2:
-            raise ValueError(
-                f"Invalid geo distance feature name format: {feature_name}. Expected two point features separated by ampersand (&)."
-            )
-
-        return point_parts[0], point_parts[1]
+        points = parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
+        cls.validate_in_feature_count(feature_name, len(points))
+        return points[0], points[1]
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

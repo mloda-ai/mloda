@@ -33,6 +33,15 @@ class TestGeoDistanceFeatureGroup:
         with pytest.raises(ValueError):
             GeoDistanceFeatureGroup.get_point_features("point1__haversine_distance")
 
+    def test_get_point_features_rejects_extra_ampersand_and_non_matching_name(self) -> None:
+        name = "a&b&c__haversine_distance"
+        with pytest.raises(ValueError) as exc_info:
+            GeoDistanceFeatureGroup.get_point_features(name)
+        assert str(exc_info.value) == GeoDistanceFeatureGroup.in_feature_count_reason(name, 3)
+
+        with pytest.raises(ValueError):
+            GeoDistanceFeatureGroup.get_point_features("a&b__custom")
+
     def test_match_feature_group_criteria(self) -> None:
         """Test matching of feature names to feature group criteria."""
         # Test valid feature names

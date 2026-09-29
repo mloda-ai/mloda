@@ -321,7 +321,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """
         feature_name_str = feature.name
 
-        if FeatureChainParser.is_chained_feature(feature_name_str):
+        if FeatureChainParser.parse_name(feature_name_str, cls._get_prefix_patterns()).matched:
             encoder_type = cls.get_encoder_type(feature_name_str)
             return encoder_type
 

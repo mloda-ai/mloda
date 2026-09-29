@@ -4,6 +4,7 @@ from typing import Any
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
+from mloda.provider import DefaultOptionKeys
 
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda.provider import FeatureChainParser
@@ -38,6 +39,18 @@ class ConcreteMissingValueFeatureGroup(MissingValueFeatureGroup):
 
 class TestMissingValueFeatureGroup:
     """Tests for the MissingValueFeatureGroup class."""
+
+    def test_extract_config_feature_with_double_underscore_name(self) -> None:
+        options = Options(
+            context={
+                MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
+                DefaultOptionKeys.in_features: frozenset([Feature("income")]),
+            }
+        )
+        result = MissingValueFeatureGroup._extract_imputation_method_and_source_feature(
+            Feature("a__b", options=options)
+        )
+        assert result == ("mean", "income")
 
     def test_feature_chain_parser_integration(self) -> None:
         """Test integration with FeatureChainParser."""

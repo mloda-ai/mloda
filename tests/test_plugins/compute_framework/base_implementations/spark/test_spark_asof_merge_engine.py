@@ -21,7 +21,10 @@ import pytest
 
 from mloda.user import Index
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
-from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
+from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import (
+    SparkMergeEngine,
+    spark_name_fold,
+)
 
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
     PYSPARK_AVAILABLE,
@@ -251,7 +254,17 @@ class TestSparkAsofMergeEngine:
 
     @pytest.mark.parametrize(
         "extra",
-        ["_mloda_lid", "_MLODA_LID", "__mloda_rn0__", "__MLODA_RN1__", "_mloda_r_rv", "_mloda_r0_rv"],
+        [
+            "_mloda_lid",
+            "_MLODA_LID",
+            "_mloda_lid0__",
+            "_MLODA_LID0__",
+            "_mloda_rn0__",
+            "_MLODA_RN0__",
+            "_mloda_lıd0__",
+            "_mloda_r_rv",
+            "_mloda_r0_rv",
+        ],
     )
     def test_left_column_named_like_internal_helper_is_kept(self, spark_session: Any, extra: str) -> None:
         left_data = spark_session.createDataFrame(
@@ -290,9 +303,27 @@ class TestSparkAsofMergeEngine:
         assert rows[0]["rv"] == 7
         assert rows[0][extra] == 8
 
-    def test_case_only_output_collision_raises(self, spark_session: Any) -> None:
-        left_data = spark_session.createDataFrame([{"k": 1, "t": 10, "val": 1}])
-        right_data = spark_session.createDataFrame([{"k": 1, "t": 5, "Val": 2}])
+    def test_right_column_case_folds_into_rename_prefix_keeps_values(self, spark_session: Any) -> None:
+        left_data = spark_session.createDataFrame([(1, 10, 100, "left")], ["k", "t", "lv", "_mloda_r0_é"])
+        right_data = spark_session.createDataFrame([(1, 5, "right")], ["k", "t", "É"])
+
+        result = SparkMergeEngine(spark_session).merge_asof(
+            left_data,
+            right_data,
+            Index(("k",)),
+            Index(("k",)),
+            AsOfJoinConfig(left_time_column="t", right_time_column="t", direction="backward"),
+        )
+
+        rows = result.collect()
+        assert len(rows) == 1
+        assert rows[0]["_mloda_r0_é"] == "left"
+        assert rows[0]["É"] == "right"
+
+    @pytest.mark.parametrize("left_name,right_name", [("val", "Val"), ("é", "É")])
+    def test_case_only_output_collision_raises(self, spark_session: Any, left_name: str, right_name: str) -> None:
+        left_data = spark_session.createDataFrame([{"k": 1, "t": 10, left_name: 1}])
+        right_data = spark_session.createDataFrame([{"k": 1, "t": 5, right_name: 2}])
 
         with pytest.raises(ValueError, match="rename"):
             SparkMergeEngine(spark_session).merge_asof(
@@ -354,12 +385,8 @@ class TestSparkNameFold:
         return SimpleNamespace(sparkSession=SimpleNamespace(conf=conf))
 
     def test_case_insensitive_folds_to_lower(self) -> None:
-        from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import spark_name_fold
-
         assert spark_name_fold(self._stub("false"))("ValÉ") == "valé"
 
     @pytest.mark.parametrize("value", ["true", "TRUE", " true "])
     def test_case_sensitive_is_identity(self, value: str) -> None:
-        from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import spark_name_fold
-
         assert spark_name_fold(self._stub(value))("ValÉ") == "ValÉ"

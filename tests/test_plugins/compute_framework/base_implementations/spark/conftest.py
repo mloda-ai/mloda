@@ -115,4 +115,4 @@ def spark_case_sensitive(spark_session: Any) -> Any:
 
 
 # Export availability flags for use in test files
-__all__ = ["spark_session", "PYSPARK_AVAILABLE", "SKIP_REASON"]
+__all__ = ["spark_session", "spark_case_sensitive", "PYSPARK_AVAILABLE", "SKIP_REASON"]

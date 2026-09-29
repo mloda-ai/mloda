@@ -97,7 +97,8 @@ class SparkMergeEngine(BaseMergeEngine):
         prefix = pick_rename_prefix("_mloda_r", right_cols, [*left_cols, lid, rn], fold)
         right_renamed = right_data.toDF(*(f"{prefix}{c}" for c in right_cols))
 
-        left_ids = left_data.withColumn(lid, F.monotonically_increasing_id())
+        # withColumn would replace a user column that matches loosely (Java equalsIgnoreCase).
+        left_ids = left_data.select("*", F.monotonically_increasing_id().alias(lid))
 
         conditions = [F.col(lk) == F.col(f"{prefix}{rk}") for lk, rk in zip(by_left, by_right)]
         if asof_config.direction == "backward":
@@ -129,7 +130,7 @@ class SparkMergeEngine(BaseMergeEngine):
         order_by += [F.col(f"{prefix}{c}").asc_nulls_last() for c in right_keep]
 
         window = Window.partitionBy(lid).orderBy(*order_by)
-        ranked = joined.withColumn(rn, F.row_number().over(window)).filter(F.col(rn) == 1)
+        ranked = joined.select("*", F.row_number().over(window).alias(rn)).filter(F.col(rn) == 1)
 
         select_list = [F.col(c) for c in left_cols]
         select_list += [F.col(f"{prefix}{c}").alias(c) for c in right_keep]

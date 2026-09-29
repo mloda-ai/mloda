@@ -383,10 +383,17 @@ def check_required_when(
             # Same diagnostic seam as the sibling presence rules, so the resolution-failure report can
             # explain this non-match. The engine re-keys the harvest by candidate, so the reason itself
             # names the class that declared the requirement.
+            # Group keys forward to input features by default, so only context keys get a remedy hint.
+            remedy = (
+                "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+                "list it in the consumer's propagate_context_keys"
+                if spec.context
+                else ""
+            )
             record_match_rejection(
                 owner_name,
                 f"required option '{key}' is absent, but {owner_name} declares it required "
-                f"(required_when predicate {predicate_name} is satisfied)",
+                f"(required_when predicate {predicate_name} is satisfied){remedy}",
             )
             return False
     return True

@@ -95,6 +95,9 @@ class TestRequiredWhenRejectionRecording:
         assert elimination.stage == "value_rejection"
         assert RWREC_REQUIRED_KEY in elimination.reason, elimination.reason
         assert RwrecRequiredWhenFG.__name__ in elimination.reason, elimination.reason
+        assert "propagate_context_keys" not in elimination.reason, (
+            "group keys forward by default, so they get no propagate hint"
+        )
 
     def test_the_reason_is_recorded_under_the_owning_class_name(self) -> None:
         """With the recorder active, the non-match records exactly one reason keyed by the owning class."""

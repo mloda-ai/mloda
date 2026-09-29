@@ -325,9 +325,15 @@ class TestRequiredWhenRunAll:
             "result_feature",
             Options(context={"aggregation_type": "first"}),
         )
-        with pytest.raises(ValueError, match="No feature groups found"):
+        with pytest.raises(ValueError, match="No feature groups found") as exc_info:
             mloda.run_all(
                 features=[feature],
                 compute_frameworks={PandasDataFrame},
                 plugin_collector=plugin_collector,
             )
+        assert (
+            "required option 'order_by' is absent, but ConditionalRequiredFeatureGroup declares it required "
+            "(required_when predicate _run_all_needs_order_by is satisfied); pass it in Options(context=...), "
+            "and for an input feature, such as the child of a chained name, "
+            "list it in the consumer's propagate_context_keys"
+        ) in str(exc_info.value)

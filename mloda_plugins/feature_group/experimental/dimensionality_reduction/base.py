@@ -317,8 +317,8 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         """
         feature_name_str = feature.name
 
-        # Try string-based parsing first
-        if FeatureChainParser.is_chained_feature(feature_name_str):
+        # Name path only when the name matches PREFIX_PATTERN, else options
+        if FeatureChainParser.parse_name(feature_name_str, cls._get_prefix_patterns()).matched:
             algorithm, dimension = cls.parse_reduction_suffix(feature_name_str)
             return algorithm, dimension, feature.options
 

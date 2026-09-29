@@ -17,6 +17,23 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas im
 class TestDimensionalityReductionFeatureGroup:
     """Tests for the DimensionalityReductionFeatureGroup class."""
 
+    def test_extract_config_feature_with_double_underscore_name(self) -> None:
+        options = Options(
+            context={
+                DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
+                DimensionalityReductionFeatureGroup.DIMENSION: 2,
+                DefaultOptionKeys.in_features: frozenset([Feature("x1"), Feature("x2")]),
+            }
+        )
+        algorithm, dimension, source_features, _ = (
+            DimensionalityReductionFeatureGroup._extract_algorithm_dimension_and_source_features(
+                Feature("a__b", options=options)
+            )
+        )
+        assert algorithm == "pca"
+        assert dimension == 2
+        assert sorted(source_features) == ["x1", "x2"]
+
     def test_match_feature_group_criteria(self) -> None:
         """Test the match_feature_group_criteria method."""
         # Valid feature names

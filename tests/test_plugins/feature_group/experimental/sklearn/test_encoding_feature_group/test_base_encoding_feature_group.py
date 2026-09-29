@@ -6,7 +6,9 @@ from typing import Any
 import pytest
 from unittest.mock import Mock, patch
 
+from mloda.user import Feature
 from mloda.user import FeatureName
+from mloda.provider import DefaultOptionKeys
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
@@ -14,6 +16,16 @@ from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import Pan
 
 class TestEncodingFeatureGroup:
     """Test cases for the base EncodingFeatureGroup class."""
+
+    def test_extract_config_feature_with_double_underscore_name(self) -> None:
+        options = Options(
+            context={
+                EncodingFeatureGroup.ENCODER_TYPE: "label",
+                DefaultOptionKeys.in_features: frozenset([Feature("category")]),
+            }
+        )
+        result = EncodingFeatureGroup._extract_encoder_type_and_source_feature(Feature("a__b", options=options))
+        assert result == ("label", "category")
 
     @pytest.mark.parametrize(
         "valid_names",

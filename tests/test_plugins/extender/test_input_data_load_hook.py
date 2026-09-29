@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, _is_fallback_identity
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -327,9 +327,7 @@ def _identity_of(data_access: Any) -> str:
 
 
 class TestDataAccessIdentityHidesDictCredentialValues:
-    """Fix: a dict-shaped data_access (real ReadDB credentials) must expose only key
-    names in data_access_identity, never values, since DB credentials pass through
-    this exact dict at this exact point (mloda_plugins/feature_group/input_data/read_db.py)."""
+    """Dict credentials publish only the sqlite path in data_access_identity, never other values."""
 
     def test_dict_credential_values_are_not_leaked_into_identity(self, tmp_path: Path) -> None:
         db_path = tmp_path / "creds.db"
@@ -357,8 +355,48 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identity is not None
         assert "hunter2" not in identity
         assert "alice" not in identity
-        assert "user" in identity
-        assert "password" in identity
+        assert identity == str(db_path)
+        assert fetch_context.data_access_identity_is_fallback is False
+
+
+class TestSQLiteReaderDataAccessIdentity:
+    """SQLITEReader publishes only an existing sqlite file path, else the key-name fallback."""
+
+    def test_existing_files_give_distinct_path_identities(self, tmp_path: Path) -> None:
+        identities = []
+        for name in ("a.db", "b.db"):
+            path = tmp_path / name
+            path.write_bytes(b"")
+            access = {SQLITEReader.db_path(): str(path)}
+            identity = SQLITEReader.data_access_identity(access)
+            assert identity == str(path)
+            assert _is_fallback_identity(access, identity) is False
+            identities.append(identity)
+        assert identities[0] != identities[1]
+
+    @pytest.mark.parametrize(
+        "access",
+        [
+            {"sqlite": "/nonexistent/dir/missing.db"},
+            {"sqlite": 123},
+            {"user": "alice"},
+            {"sqlite": "u:hunter2@fileserver/x.db", "password": "hunter2"},  # nosec B105
+        ],
+        ids=["missing_file", "non_str_value", "missing_key", "credential_shaped_path"],
+    )
+    def test_unusable_sqlite_value_falls_back_to_key_names(self, access: dict[str, Any]) -> None:
+        identity = SQLITEReader.data_access_identity(access)
+        assert _is_fallback_identity(access, identity) is True
+        assert "hunter2" not in identity
+
+    def test_table_name_does_not_change_identity(self, tmp_path: Path) -> None:
+        path = tmp_path / "t.db"
+        path.write_bytes(b"")
+        access = {SQLITEReader.db_path(): str(path)}
+        before = SQLITEReader.data_access_identity(access)
+        SQLITEReader.set_table_name(access, "t")
+        assert "table_name" in access
+        assert SQLITEReader.data_access_identity(access) == before == str(path)
 
 
 class TestDataAccessIdentityOfUriStrings:

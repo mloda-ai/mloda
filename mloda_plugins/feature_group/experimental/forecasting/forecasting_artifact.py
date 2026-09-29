@@ -36,6 +36,11 @@ class ForecastingArtifact(BaseArtifact):
         Returns:
             A JSON string representation of the artifact
         """
+        if "columns" in artifact:
+            return json.dumps(
+                {"columns": {k: json.loads(cls._serialize_artifact(v)) for k, v in artifact["columns"].items()}}
+            )
+
         # Create a copy of the artifact
         serializable_artifact = {}
 
@@ -71,6 +76,13 @@ class ForecastingArtifact(BaseArtifact):
         """
         # Parse the JSON string
         serializable_artifact = json.loads(serialized_artifact)
+
+        if "columns" in serializable_artifact:
+            return {
+                "columns": {
+                    k: cls._deserialize_artifact(json.dumps(v)) for k, v in serializable_artifact["columns"].items()
+                }
+            }
 
         # Create a new artifact
         artifact = {}

@@ -5,6 +5,7 @@ Tests for the ForecastingFeatureGroup.
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from typing import Any
 import pytest
 
 from mloda.user import Feature
@@ -43,6 +44,9 @@ class TestForecastingFeatureGroup:
         assert horizon == 7
         assert time_unit == "day"
 
+        chained = "category__onehot_encoded__linear_forecast_7day"
+        assert ForecastingFeatureGroup.parse_forecast_suffix(chained) == ("linear", 7, "day")
+
     def test_match_feature_group_criteria(self) -> None:
         """Test matching of feature names to the feature group criteria."""
         # Valid feature names
@@ -71,7 +75,7 @@ class TestForecastingFeatureGroup:
         """Test forecasting with the Pandas implementation."""
         # Perform forecasting
         result, artifact = PandasForecastingFeatureGroup._perform_forecasting(
-            self.df, "linear", 7, "day", ["sales"], "time_filter", None
+            self.df, "linear", 7, "day", "sales", "time_filter", None
         )
 
         # Check that the result is a pandas Series
@@ -88,7 +92,7 @@ class TestForecastingFeatureGroup:
 
         # Test with a pre-trained model
         result2, artifact2 = PandasForecastingFeatureGroup._perform_forecasting(
-            self.df, "linear", 7, "day", ["sales"], "time_filter", artifact
+            self.df, "linear", 7, "day", "sales", "time_filter", artifact
         )
 
         # Check that the result is a pandas Series
@@ -111,7 +115,7 @@ class TestForecastingFeatureGroup:
                 algorithm,
                 3,  # Use a smaller horizon for faster tests
                 "day",
-                ["sales"],
+                "sales",
                 "time_filter",
                 None,
             )
@@ -265,6 +269,8 @@ class TestForecastingFeatureGroup:
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("price__ridge_forecast_30week") is True
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("demand__randomforest_forecast_3month") is True
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("temp__gbr_forecast_12hour") is True
+        chained = "category__onehot_encoded__linear_forecast_7day"
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix(chained) is True
 
     def test_has_valid_forecast_suffix_invalid(self) -> None:
         """Test that _has_valid_forecast_suffix returns False for invalid feature names."""
@@ -293,3 +299,112 @@ class TestForecastingFeatureGroup:
         assert algorithm == "ridge"
         assert horizon == 14
         assert time_unit == "day"
+
+    FEATURE_NAME = "sales__linear_forecast_7day"
+
+    def _expanded_df(self, suffixes: list[str]) -> pd.DataFrame:
+        """Build a frame whose source column is expanded into `sales~<suffix>` columns."""
+        df = self.df[["time_filter"]].copy()
+        for i, suffix in enumerate(suffixes):
+            df[f"sales~{suffix}"] = self.df["sales"] * (i + 1) + i * 3
+        return df
+
+    def _calculate(self, df: pd.DataFrame, feature_set: FeatureSet | None = None) -> pd.DataFrame:
+        if feature_set is None:
+            feature_set = FeatureSet()
+            feature_set.add(Feature(self.FEATURE_NAME, self.options))
+        result: pd.DataFrame = PandasForecastingFeatureGroup.calculate_feature(df.copy(), feature_set)
+        return result
+
+    def _save_artifact(self, df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+        feature_set = FeatureSet()
+        feature_set.add(Feature(self.FEATURE_NAME, self.options))
+        feature_set.artifact_to_save = self.FEATURE_NAME
+        result = self._calculate(df, feature_set)
+        from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
+
+        assert feature_set.save_artifact is not None
+        return result, ForecastingArtifact._serialize_artifact(feature_set.save_artifact)
+
+    def _load_feature_set(self, serialized: str) -> FeatureSet:
+        options = Options(group=self.options.group.copy(), context=self.options.context.copy())
+        options.add_to_group(self.FEATURE_NAME, serialized)
+        feature_set = FeatureSet()
+        feature_set.add(Feature(self.FEATURE_NAME, options))
+        feature_set.artifact_to_load = self.FEATURE_NAME
+        return feature_set
+
+    def test_expanded_source_forecasts_each_column(self) -> None:
+        """Each `sales~<s>` column gets its own `name~<s>` forecast equal to a plain single-source forecast."""
+        df = self._expanded_df(["2", "10"])
+        result = self._calculate(df)
+
+        assert self.FEATURE_NAME not in result.columns
+        for suffix in ("2", "10"):
+            plain = self._calculate(pd.DataFrame({"time_filter": df["time_filter"], "sales": df[f"sales~{suffix}"]}))
+            assert np.allclose(result[f"{self.FEATURE_NAME}~{suffix}"].to_numpy(), plain[self.FEATURE_NAME].to_numpy())
+
+    def test_single_expanded_column_is_suffixed(self) -> None:
+        """A lone `sales~0` column still yields `name~0`, not `name`."""
+        result = self._calculate(self._expanded_df(["0"]))
+
+        assert f"{self.FEATURE_NAME}~0" in result.columns
+        assert self.FEATURE_NAME not in result.columns
+
+    def test_expanded_source_confidence_intervals(self) -> None:
+        """Confidence bounds on an expanded source are named `name~<s>~lower/~upper`."""
+        options = Options(group=self.options.group.copy(), context=self.options.context.copy())
+        options.add_to_group(ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, True)
+        feature_set = FeatureSet()
+        feature_set.add(Feature(self.FEATURE_NAME, options))
+
+        result = self._calculate(self._expanded_df(["2", "10"]), feature_set)
+
+        for suffix in ("2", "10"):
+            base = f"{self.FEATURE_NAME}~{suffix}"
+            assert base in result.columns
+            assert f"{base}~lower" in result.columns
+            assert f"{base}~upper" in result.columns
+
+    def test_expanded_source_artifact_round_trip(self) -> None:
+        """A nested multi-column artifact serializes, loads and reproduces the forecasts."""
+        df = self._expanded_df(["2", "10"])
+        trained, serialized = self._save_artifact(df)
+
+        loaded = self._calculate(df, self._load_feature_set(serialized))
+
+        for suffix in ("2", "10"):
+            column = f"{self.FEATURE_NAME}~{suffix}"
+            assert np.allclose(trained[column].to_numpy(), loaded[column].to_numpy())
+
+    def test_flat_artifact_with_expanded_source_raises(self) -> None:
+        """Loading a flat artifact against an expanded source raises ValueError."""
+        _, serialized = self._save_artifact(self.df)
+
+        with pytest.raises(ValueError, match="artifact"):
+            self._calculate(self._expanded_df(["2", "10"]), self._load_feature_set(serialized))
+
+    def test_nested_artifact_with_literal_source_raises(self) -> None:
+        """Loading a nested artifact against a literal source raises ValueError."""
+        _, serialized = self._save_artifact(self._expanded_df(["2", "10"]))
+
+        with pytest.raises(ValueError, match="artifact"):
+            self._calculate(self.df, self._load_feature_set(serialized))
+
+    def test_nested_artifact_with_different_suffix_set_raises(self) -> None:
+        """Loading a nested artifact whose suffix set differs from the resolved columns raises ValueError."""
+        _, serialized = self._save_artifact(self._expanded_df(["2", "10"]))
+
+        with pytest.raises(ValueError, match="artifact"):
+            self._calculate(self._expanded_df(["2", "3"]), self._load_feature_set(serialized))
+
+    @pytest.mark.parametrize("extra", [np.arange(30, dtype=float) * 3.0, ["x"] * 30])
+    def test_unrelated_columns_are_not_regressors(self, extra: Any) -> None:
+        """Unrelated numeric or string columns in the frame do not affect single-column forecasting."""
+        df = self.df.copy()
+        df["other"] = extra
+
+        result = self._calculate(df)
+        expected = self._calculate(self.df)
+
+        assert np.allclose(result[self.FEATURE_NAME].to_numpy(), expected[self.FEATURE_NAME].to_numpy())

@@ -13,6 +13,7 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda.provider import DefaultOptionKeys
 
@@ -37,7 +38,35 @@ class ForecastingArtifactTestDataCreator(ATestDataCreator):
         }
 
 
+class ForecastingCategoryTestDataCreator(ATestDataCreator):
+    """Test data creator with a time column and a string category."""
+
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        """Return the raw data as a dictionary."""
+        return {
+            "time_filter": [datetime(2025, 1, 1) + timedelta(days=i) for i in range(30)],
+            "category": [["a", "b", "c"][i % 3] for i in range(30)],
+        }
+
+
 class TestForecastingArtifactIntegration:
+    def test_forecast_chained_onehot_source_per_category(self) -> None:
+        """A chained one-hot source yields one forecast column per category."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {ForecastingCategoryTestDataCreator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
+        )
+        feature_name = "category__onehot_encoded__linear_forecast_7day"
+        feature = Feature(feature_name, Options({DefaultOptionKeys.reference_time: "time_filter"}))
+
+        results = mloda.run_all([feature], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+
+        columns = [c for r in results for c in r.columns]
+        for suffix in ("0", "1", "2"):
+            assert f"{feature_name}~{suffix}" in columns
+
     def test_artifact_save_and_load(self) -> None:
         """Test saving and loading forecasting artifacts."""
         # Enable the necessary feature groups

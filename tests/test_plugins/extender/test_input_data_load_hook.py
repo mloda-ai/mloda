@@ -327,9 +327,7 @@ def _identity_of(data_access: Any) -> str:
 
 
 class TestDataAccessIdentityHidesDictCredentialValues:
-    """Fix: a dict-shaped data_access (real ReadDB credentials) must expose only key
-    names in data_access_identity, never values, since DB credentials pass through
-    this exact dict at this exact point (mloda_plugins/feature_group/input_data/read_db.py)."""
+    """Dict credentials publish only the sqlite path in data_access_identity, never other values."""
 
     def test_dict_credential_values_are_not_leaked_into_identity(self, tmp_path: Path) -> None:
         db_path = tmp_path / "creds.db"
@@ -357,8 +355,25 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identity is not None
         assert "hunter2" not in identity
         assert "alice" not in identity
-        assert "user" in identity
-        assert "password" in identity
+        assert identity == str(db_path)
+        assert fetch_context.data_access_identity_is_fallback is False
+
+
+class TestSQLiteReaderDataAccessIdentity:
+    """SQLITEReader falls back to key names unless the sqlite value is a str naming an existing file."""
+
+    @pytest.mark.parametrize("kind", ["missing_file", "directory", "path_object", "missing_key"])
+    def test_falls_back_to_key_names(self, tmp_path: Path, kind: str) -> None:
+        existing = tmp_path / "x.db"
+        existing.write_bytes(b"")
+        cases: dict[str, dict[str, Any]] = {
+            "missing_file": {"sqlite": str(tmp_path / "missing.db")},
+            "directory": {"sqlite": str(tmp_path)},
+            "path_object": {"sqlite": existing},
+            "missing_key": {"user": "alice"},
+        }
+        access = cases[kind]
+        assert SQLITEReader.data_access_identity(access) == ("{user}" if kind == "missing_key" else "{sqlite}")
 
 
 class TestDataAccessIdentityOfUriStrings:

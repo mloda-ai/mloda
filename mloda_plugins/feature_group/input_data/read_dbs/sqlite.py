@@ -1,4 +1,5 @@
 import os
+from collections.abc import Mapping
 from typing import Any
 
 import pyarrow as pa
@@ -158,6 +159,15 @@ class SQLITEReader(ReadDB):
     @classmethod
     def db_path(cls) -> str:
         return "sqlite"
+
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        """The db_path() value when it names an existing file, never other values; else the base fallback."""
+        if isinstance(data_access, Mapping):
+            path = data_access.get(cls.db_path())
+            if isinstance(path, str) and os.path.isfile(path):
+                return path
+        return super().data_access_identity(data_access)
 
     @classmethod
     def connect(cls, credentials: Any) -> Any:

@@ -406,6 +406,9 @@ For an engine-driven request intake has already run, so the compute-boundary cal
 no-op. It carries the work only for direct `FeatureSet` use that bypasses the engine, and there the
 collapsing twins raise instead of merging.
 
+A materialized default is never a declared option, so it never conflicts with a name-bound value:
+the name-agreement check reads the caller's own keys only.
+
 Both sites run *after* resolution, so materialization never changes **resolution matching** (filter
 matching runs after intake and does observe materialized values, see below). It does change
 how features **group**: intake materialization deliberately canonicalizes default-equivalent twins,
@@ -483,14 +486,20 @@ overrides the spec's classification.
 
 ## How a name-parsed value binds to a key
 
-A value captured from the feature name binds to a PROPERTY_MAPPING key by name: a named capture
-group `(?P<key>...)` binds to the key of the same name, so a secondary capture and an
-`element_validator`-only spec (one with no `allowed_values`) both receive their value. When a
-pattern declares any named group, binding is exclusively by name. A pattern with only positional
-groups falls back to the legacy rule of binding the first capture to the single key whose
-`allowed_values` already contain it. That fallback is transitional (retired by #772); a positional
-pattern whose keys share a reachable value is rejected at class-definition time, so migrate such a
-pattern to named capture groups.
+A name owns the feature for a group when its `PREFIX_PATTERN` identifies the group, and an owned
+name is authoritative for every value it encodes. Every named capture group `(?P<key>...)` of an
+owned name that is a PROPERTY_MAPPING key binds to that key and is validated like an option, even
+when the option is also present; an unsupported value is a recorded match-time rejection. This
+covers a secondary capture and an `element_validator`-only spec (one with no `allowed_values`).
+
+A pattern with only positional groups falls back to the legacy rule: the first capture binds only
+to the single key whose `allowed_values` already contain it. A positional pattern whose keys share
+a reachable value is rejected at class-definition time, so migrate it to named capture groups.
+
+A declared option for a key the name binds, and a non-empty `in_features`, must agree with the
+name; a contradiction aborts the match (`MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` downgrades it to a
+warning). Only the caller's own keys are compared, so a materialized default never conflicts. See
+[Name Ownership and Agreement](feature-chain-parser.md#name-ownership-and-agreement).
 
 ## Required presence on the string-named path
 
@@ -507,17 +516,17 @@ keys declared `context=True` the reason also names the remedy (`Options(context=
 feature the consumer's `propagate_context_keys`), naming those keys when several are missing.
 
 Two migrations remove the warning for a flagged key. Give the pattern a named capture
-`(?P<key>...)` so the framework binds the key from the name; or, for a key bound outside
-match-time name capture (parsed by the plugin from the name, or supplied downstream), set
-`deferred_binding=True`, which exempts it from this check only and leaves it required on the
-config path. `ClusteringFeatureGroup` marks its name-parsed `k_value` key this way:
+`(?P<key>...)` so the framework binds the key from the name (as `ClusteringFeatureGroup` does for
+`algorithm` and `k_value`); or, for a key bound outside match-time name capture (parsed by the
+plugin from the name, or supplied downstream), set `deferred_binding=True`, which exempts it from
+this check only and leaves it required on the config path:
 
 ```python
 from mloda.provider import PropertySpec
 
 PROPERTY_MAPPING = {
-    "k_value": PropertySpec(
-        "Cluster count parsed from the feature name by the plugin",
+    "tenant": PropertySpec(
+        "Tenant supplied downstream, not captured from the name",
         deferred_binding=True,  # exempt from the string-named presence check only
     ),
 }
@@ -707,6 +716,8 @@ if it really is a whole-value check.
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
 | Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |
+| A declared option or `in_features` that contradicts an owned name aborts the match, and the env var downgrades it | `tests/test_core/test_abstract_plugins/test_components/test_forwarded_name_mismatch.py` |
+| Empty operands and the source count on the name path | `tests/.../feature_chainer/test_in_feature_count_gate_name_sources.py` |
 | `required_when` survives an overridden matcher, runs exactly once, and demands a classmethod | `tests/.../feature_chainer/test_required_when_enforced_on_override.py` |
 | A `required_when` non-match records its reason, so the failure report names the key and its owner | `tests/test_core/test_prepare/test_required_when_rejection_recording.py` |
 | `required_when` end to end, including the context-key remedy in the failure report | `tests/.../feature_chainer/test_property_mapping_required_when.py` |

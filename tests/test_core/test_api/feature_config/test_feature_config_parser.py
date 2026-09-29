@@ -398,8 +398,8 @@ def test_parse_json_rejects_whitespace_only_name() -> None:
 def test_parse_json_rejects_in_features_as_string() -> None:
     """Test that a top-level in_features string is rejected instead of char-splitting.
 
-    The loader converts in_features to a frozenset, so the string "age" silently
-    becomes frozenset({'a', 'g', 'e'}). At the top level in_features must be an
+    The loader iterates in_features, so the string "age" silently
+    becomes ('a', 'g', 'e'). At the top level in_features must be an
     array of source feature names.
     """
     config_str = '[{"name": "scale__age", "in_features": "age"}]'
@@ -421,7 +421,7 @@ def test_parse_json_rejects_in_features_as_dict() -> None:
 
 
 # A top-level in_features array holds source feature NAMES: the loader feeds it straight into
-# frozenset(), so an int element becomes a bogus source and a dict element dies with an internal
+# tuple(), so an int element becomes a bogus source and a dict element dies with an internal
 # "unhashable type: 'dict'" TypeError. Every element must be a non-empty string.
 BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
     pytest.param([1, 2], 1, id="ints"),

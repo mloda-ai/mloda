@@ -141,8 +141,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                 group = process_nested_features(item.group_options or {})
                 context = process_nested_features(item.context_options or {})
                 if item.in_features:
-                    # Always convert to frozenset for consistency
-                    context[DefaultOptionKeys.in_features] = frozenset(item.in_features)
+                    context[DefaultOptionKeys.in_features] = tuple(item.in_features)
                 options = Options(
                     group=group,
                     context=context,
@@ -156,8 +155,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
             elif item.in_features:
                 # Process nested features in options before creating Feature
                 processed_options = process_nested_features(item.options)
-                # Always convert to frozenset for consistency (even single items)
-                source_value = frozenset(item.in_features)
+                source_value = tuple(item.in_features)
                 options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
                 feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
                 features.append(feature)

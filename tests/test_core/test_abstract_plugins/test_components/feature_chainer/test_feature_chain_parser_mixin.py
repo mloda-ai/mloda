@@ -127,7 +127,7 @@ class MockFeatureGroupWithValidationHook(FeatureChainParserMixin):
 
 
 class MockFeatureGroupSingleInFeatureCustomReason(FeatureChainParserMixin):
-    """Mock single-source Feature group overriding _in_feature_count_reason with custom wording."""
+    """Mock single-source Feature group overriding in_feature_count_reason with custom wording."""
 
     PREFIX_PATTERN = r".*__([\w]+)_test$"
     MIN_IN_FEATURES = 1
@@ -142,7 +142,7 @@ class MockFeatureGroupSingleInFeatureCustomReason(FeatureChainParserMixin):
     }
 
     @classmethod
-    def _in_feature_count_reason(cls, feature_name: str | FeatureName, count: int) -> str | None:
+    def in_feature_count_reason(cls, feature_name: str | FeatureName, count: int) -> str | None:
         """Custom arity wording that must win over the mixin's generic MIN/MAX message."""
         if count != 1:
             return f"{cls.__name__} needs exactly one input column; got {count}."
@@ -477,7 +477,7 @@ class _MarkedAbortOptions(Options):
 
     marker: BaseException
 
-    def get_in_features(self) -> "frozenset[Feature]":
+    def get_in_features(self) -> tuple[Feature, ...]:
         raise self.marker
 
 
@@ -714,6 +714,52 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
         assert exc_info.value is marker, f"the marked exception itself must escape, got: {exc_info.value!r}"
 
 
+class TestFeatureChainParserMixinInFeatureCountParity:
+    """Match gate, _extract_source_features and input_features count duplicates the same way."""
+
+    def test_duplicate_over_max_is_rejected_everywhere(self) -> None:
+        options = Options(context={"operation": "op1", "in_features": ["a", "b", "b", "b"]})
+        feature = Feature(name="simple_name", options=options)
+
+        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("simple_name", options) is False
+        assert MockFeatureGroupWithMinMax._extract_source_features(feature) == ["a", "b", "b", "b"]
+        with pytest.raises(ValueError, match="allows at most 3 in_feature"):
+            MockFeatureGroupWithMinMax().input_features(options, FeatureName("simple_name"))
+
+    def test_duplicate_within_max_matches(self) -> None:
+        options = Options(context={"operation": "op1", "in_features": ["a", "a"]})
+        feature = Feature(name="simple_name", options=options)
+
+        assert MockFeatureGroupWithMinMax.match_feature_group_criteria("simple_name", options) is True
+        assert MockFeatureGroupWithMinMax._extract_source_features(feature) == ["a", "a"]
+
+
+class TestFeatureChainParserMixinInFeatureCountPublicApi:
+    """in_feature_count_reason and validate_in_feature_count are public classmethods."""
+
+    def test_reason_is_generic_out_of_range(self) -> None:
+        assert "at least 2 in_feature" in str(MockFeatureGroupWithMinMax.in_feature_count_reason("f", 1))
+        assert "at most 3 in_feature" in str(MockFeatureGroupWithMinMax.in_feature_count_reason("f", 4))
+
+    def test_reason_is_none_in_range(self) -> None:
+        assert MockFeatureGroupWithMinMax.in_feature_count_reason("f", 2) is None
+        assert MockFeatureGroupWithMinMax.in_feature_count_reason("f", 3) is None
+
+    def test_validate_raises_the_reason_out_of_range(self) -> None:
+        for count in (1, 4):
+            reason = MockFeatureGroupWithMinMax.in_feature_count_reason("f", count)
+            with pytest.raises(ValueError) as exc_info:
+                MockFeatureGroupWithMinMax.validate_in_feature_count("f", count)
+            assert str(exc_info.value) == reason
+
+    def test_validate_returns_none_in_range(self) -> None:
+        assert MockFeatureGroupWithMinMax.validate_in_feature_count("f", 2) is None
+
+    def test_private_names_are_removed(self) -> None:
+        assert not hasattr(FeatureChainParserMixin, "_in_feature_count_reason")
+        assert not hasattr(FeatureChainParserMixin, "_validate_in_feature_count")
+
+
 class TestFeatureChainParserMixinListValuedOptions:
     """Tests for list-valued options in PROPERTY_MAPPING (issue #228)."""
 
@@ -796,13 +842,14 @@ class TestFeatureChainParserMixinExtractSourceFeatures:
 
         assert result == ["feat1", "feat2", "feat3"]
 
-    def test_extract_source_features_config_based_fallback(self) -> None:
+    @pytest.mark.parametrize("in_features", [["feature_a", "feature_b"], ["feature_b", "feature_a"]])
+    def test_extract_source_features_config_based_fallback(self, in_features: list[str]) -> None:
         """Test that when string parsing fails, it falls back to feature.options.get_in_features()."""
         feature = Feature(
             name="simple_name",
             options=Options(
                 context={
-                    DefaultOptionKeys.in_features: ["feature_a", "feature_b"],
+                    DefaultOptionKeys.in_features: in_features,
                     "operation": "op1",
                 }
             ),
@@ -810,10 +857,7 @@ class TestFeatureChainParserMixinExtractSourceFeatures:
 
         result = MockFeatureGroup._extract_source_features(feature)
 
-        # Should return list of feature names from get_in_features()
-        assert len(result) == 2
-        assert "feature_a" in result
-        assert "feature_b" in result
+        assert result == in_features
         assert all(type(name) is str for name in result), [type(name) for name in result]
 
     def test_extract_source_features_custom_separator(self) -> None:
@@ -877,7 +921,7 @@ class TestFeatureChainParserMixinExtractSingleSourceFeature:
         assert "at most 1 in_feature" in str(exc_info.value)
 
     def test_extract_single_source_feature_raises_custom_message_when_overridden(self) -> None:
-        """A subclass override of _in_feature_count_reason wins over the generic wording."""
+        """A subclass override of in_feature_count_reason wins over the generic wording."""
         feature = Feature(
             name="simple_name",
             options=Options(context={DefaultOptionKeys.in_features: ["feature_a", "feature_b"], "operation": "op1"}),

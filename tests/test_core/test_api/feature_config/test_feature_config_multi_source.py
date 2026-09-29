@@ -57,23 +57,23 @@ def test_parse_feature_with_multiple_sources() -> None:
     assert result[1].options == {"unit": "square_meters"}
 
 
-def test_load_multiple_sources_as_frozenset() -> None:
-    """Test that loader converts in_features array to frozenset in options.
+def test_load_multiple_sources_as_tuple() -> None:
+    """Test that loader converts in_features array to an ordered tuple in options.
 
     When a feature config includes in_features array (e.g., ["latitude", "longitude"]),
     the loader should:
-    1. Convert the array to a frozenset for immutability and performance
-    2. Store the frozenset in options.context[DefaultOptionKeys.in_features]
+    1. Convert the array to an ordered tuple (order and duplicates kept)
+    2. Store the tuple in options.context[DefaultOptionKeys.in_features]
     3. Preserve any other options in the appropriate location
 
-    The use of frozenset ensures:
+    The tuple ensures:
     - Immutability (cannot be modified after creation)
     - Hashability (can be used as dict keys or in sets)
-    - Efficient membership testing
+    - Declared order is preserved
 
     Example:
         Input: {"name": "distance", "in_features": ["lat", "lon"]}
-        Output: Feature.options.context[in_features] = frozenset({"lat", "lon"})
+        Output: Feature.options.context[in_features] = ("lat", "lon")
     """
     config_str = """[
         {
@@ -97,11 +97,11 @@ def test_load_multiple_sources_as_frozenset() -> None:
     assert isinstance(result[0], Feature)
     assert result[0].name == "distance_from_center"
 
-    # in_features should be converted to frozenset and stored in context
+    # in_features should be converted to tuple and stored in context
     # Note: Using DefaultOptionKeys.in_features (singular)
     in_features = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features, frozenset)
-    assert in_features == frozenset({"latitude", "longitude"})
+    assert isinstance(in_features, tuple)
+    assert in_features == ("latitude", "longitude")
 
     # Regular options should be in group
     assert result[0].options.group.get("method") == "haversine"
@@ -110,10 +110,10 @@ def test_load_multiple_sources_as_frozenset() -> None:
     assert isinstance(result[1], Feature)
     assert result[1].name == "area_calculation"
 
-    # in_features should be converted to frozenset and stored in context
+    # in_features should be converted to tuple and stored in context
     in_features_2 = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_2, frozenset)
-    assert in_features_2 == frozenset({"width", "height"})
+    assert isinstance(in_features_2, tuple)
+    assert in_features_2 == ("width", "height")
 
     # Group options should be in group
     assert result[1].options.group.get("unit") == "square_meters"

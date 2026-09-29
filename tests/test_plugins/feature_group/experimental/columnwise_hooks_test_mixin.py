@@ -145,5 +145,6 @@ class ColumnDiscoveryHooksTestMixin(ColumnwiseHooksTestMixin):
 
     def test_get_available_columns_matches_framework_listing(self, plugin_class: Any, sample_data: Any) -> None:
         """The discovery hook agrees with each supported framework's own column listing."""
+        available = plugin_class._get_available_columns(sample_data)
         for framework in plugin_class.compute_framework_rule():
-            assert plugin_class._get_available_columns(sample_data) == framework.extract_column_names(sample_data)
+            assert available == framework.extract_column_names(sample_data)

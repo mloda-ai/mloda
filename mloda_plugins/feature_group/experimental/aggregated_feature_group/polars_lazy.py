@@ -51,7 +51,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
         missing_features = [name for name in feature_names if name not in available_columns]
         if len(missing_features) == len(feature_names):
             raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(available_columns)}"
+                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
             )
 
     @classmethod

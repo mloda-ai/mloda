@@ -156,3 +156,5 @@ class ColumnDiscoveryHooksTestMixin(ColumnwiseHooksTestMixin):
         available = set(self.column_names(sample_data)) | {"injected"}
         monkeypatch.setattr(plugin_class, DISCOVERY_HOOK, classmethod(lambda cls, data: available))
         plugin_class._check_source_features_exist(sample_data, ["injected"])
+        with pytest.raises(ValueError, match="injected"):
+            plugin_class._check_source_features_exist(sample_data, ["nonexistent"])

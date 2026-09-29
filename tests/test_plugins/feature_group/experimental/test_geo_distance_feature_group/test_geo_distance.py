@@ -121,6 +121,14 @@ class TestGeoDistanceFeatureGroup:
         with pytest.raises(ValueError, match="Unsupported distance type"):
             GeoDistanceFeatureGroup._extract_geo_distance_parameters(Feature("a&b__foo_distance"))
 
+    def test_extract_geo_distance_parameters_strips_distance_suffix_on_prefix_name_with_context(self) -> None:
+        feature = Feature(
+            "a&b__haversine_distance_distance",
+            options=Options(context={GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine"}),
+        )
+        assert GeoDistanceFeatureGroup.match_feature_group_criteria(feature.name, feature.options) is True
+        assert GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature) == ("haversine", "a", "b")
+
 
 class TestPandasGeoDistanceFeatureGroup:
     """Test cases for the PandasGeoDistanceFeatureGroup."""

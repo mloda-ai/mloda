@@ -213,7 +213,10 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _extract_distance_unit(cls, feature: Feature) -> str | None:
         """Extract the distance type from the prefix-gated name or the options, or None."""
-        distance_type = cls._resolve_operation(feature, cls.DISTANCE_TYPE)
+        if FeatureChainParser.parse_name(feature.name, cls._get_prefix_patterns()).matched:
+            distance_type = cls.get_distance_type(feature.name)
+        else:
+            distance_type = feature.options.get(cls.DISTANCE_TYPE)
         if distance_type is None:
             return None
 

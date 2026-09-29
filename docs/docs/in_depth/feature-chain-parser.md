@@ -146,6 +146,8 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 | `RECOGNITION_ONLY_PATTERN` | `bool` | `False` | Declares a captureless pattern as recognition-only (binds no key from the name) |
 | `REQUIRED_COLUMNWISE_HOOKS` | `frozenset[str]` | `frozenset()` | Column-wise data hooks the family requires |
 
+`Options.get_in_features()` returns sources in declared order (sets are sorted by name; duplicates are kept). Order-sensitive groups can reject sets with an `in_features` `match_guard=lambda v: not isinstance(v, (set, frozenset))` plus an `expected` text (for example "an ordered list, tuple or single source") so the rejection is reported.
+
 ### Column-Wise Data Hooks
 
 Beyond parsing, the mixin declares three column-wise data hooks: `_get_available_columns`,
@@ -345,12 +347,13 @@ The full model, which invariant fires at which moment, the precedence between th
 The modern approach uses `PROPERTY_MAPPING` to define parameter validation and classification:
 
 ```py
-from mloda.provider import FeatureGroup
+from mloda.provider import FeatureChainParserMixin, FeatureGroup
 from mloda.user import FeatureName
 from mloda.provider import DefaultOptionKeys, PropertySpec
 
-class MyFeatureGroup(FeatureGroup):
+class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PREFIX_PATTERN = r"__([a-zA-Z_]+)_operation$"
+    MAX_IN_FEATURES = 1
 
     PROPERTY_MAPPING = {
         # Feature-specific parameter
@@ -401,12 +404,11 @@ def input_features(self, options: Options, feature_name: FeatureName) -> set[Fea
 
     # Fall back to configuration-based approach
     in_features = options.get_in_features()
-    if len(in_features) != 1:
-        raise ValueError(
-            f"Expected exactly one in_feature, but found {len(in_features)}: {in_features}"
-        )
+    self.validate_in_feature_count(feature_name, len(in_features))
     return set(in_features)
 ```
+
+Custom code checks source counts with `validate_in_feature_count` (raises) or `in_feature_count_reason` (returns the message or None).
 
 ### 4. Update calculate_feature Method
 

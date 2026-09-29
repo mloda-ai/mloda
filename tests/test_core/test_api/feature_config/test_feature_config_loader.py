@@ -114,10 +114,10 @@ def test_load_features_with_mloda_source() -> None:
     assert isinstance(result[0], Feature)
     assert result[0].name == "scale__age"
 
-    # in_features should be in options.context as a frozenset
+    # in_features should be in options.context as an ordered tuple
     in_features_value = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert isinstance(in_features_value, tuple)
+    assert in_features_value == ("age",)
 
     # Regular options should be in options.group
     assert result[0].options.group.get("method") == "standard"
@@ -168,8 +168,8 @@ def test_load_features_mixed_chained_and_simple() -> None:
     assert isinstance(result[2], Feature)
     assert result[2].name == "standard_scaled__mean_imputed__age"
     in_features_value = result[2].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert isinstance(in_features_value, tuple)
+    assert in_features_value == ("age",)
     assert result[2].options.group.get("method") == "robust"
 
     # Fourth feature: simple string
@@ -389,8 +389,8 @@ def test_load_appends_tilde_syntax_to_name() -> None:
     assert isinstance(result[1], Feature)
     assert result[1].name == "scale__mean_imputed__age~1"
     in_features_value = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert isinstance(in_features_value, tuple)
+    assert in_features_value == ("age",)
     assert result[1].options.group.get("scaler") == "robust"
 
     # Third: with group_options and context_options
@@ -407,7 +407,7 @@ def test_load_appends_tilde_syntax_to_name() -> None:
 def test_load_features_rejects_in_features_as_string() -> None:
     """Test that a top-level in_features string is rejected instead of char-splitting (issue #680).
 
-    frozenset("age") is frozenset({'a', 'g', 'e'}), so a string in_features silently
+    Iterating the string "age" yields ('a', 'g', 'e'), so a string in_features silently
     becomes three one-character source features. The loader must reject it: in_features
     is an array of source feature names.
     """
@@ -437,7 +437,7 @@ def test_load_features_rejects_empty_name() -> None:
         load_features_from_config(config_str, format="json")
 
 
-# The elements go straight into frozenset(): an int element becomes a bogus source feature and a
+# The elements go straight into tuple(): an int element becomes a bogus source feature and a
 # dict element dies with an internal "unhashable type: 'dict'" TypeError. Every element must be a
 # non-empty source feature name, rejected with a ValueError that names in_features and the element.
 BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
@@ -494,7 +494,7 @@ def test_load_features_accepts_in_features_array_of_names() -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].options.context.get(DefaultOptionKeys.in_features) == frozenset({"age", "weight"})
+    assert result[0].options.context.get(DefaultOptionKeys.in_features) == ("age", "weight")
 
 
 def test_load_features_with_multiple_in_features() -> None:
@@ -503,8 +503,8 @@ def test_load_features_with_multiple_in_features() -> None:
     When a feature configuration includes an in_features field (plural) with an array of
     source feature names, the loader should:
     1. Parse the in_features array from the JSON configuration
-    2. Convert the list to a frozenset for immutability and set-like behavior
-    3. Store the frozenset in options.context[DefaultOptionKeys.in_features] (singular key)
+    2. Convert the list to an ordered tuple (order and duplicates kept)
+    3. Store the tuple in options.context[DefaultOptionKeys.in_features] (singular key)
     4. Preserve any regular options in options.group
 
     This is useful for features that require multiple source features, such as:
@@ -514,7 +514,7 @@ def test_load_features_with_multiple_in_features() -> None:
 
     Example:
         Input: {"name": "distance", "in_features": ["latitude", "longitude"]}
-        Output: Feature with context[in_features] = frozenset({"latitude", "longitude"})
+        Output: Feature with context[in_features] = ("latitude", "longitude")
     """
 
     config_str = """[
@@ -531,28 +531,17 @@ def test_load_features_with_multiple_in_features() -> None:
     assert isinstance(result[0], Feature)
     assert result[0].name == "distance_feature"
 
-    # in_features should be converted to frozenset in options.context with singular key name
+    # in_features should be converted to a tuple in options.context with singular key name
     in_features_value = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset), "in_features should be converted to frozenset"
-    assert in_features_value == frozenset({"latitude", "longitude"})
+    assert isinstance(in_features_value, tuple), "in_features should be converted to tuple"
+    assert in_features_value == ("latitude", "longitude")
 
     # Regular options should still be in options.group
     assert result[0].options.group.get("distance_type") == "euclidean"
 
 
-def test_load_creates_frozenset_for_in_features() -> None:
-    """Test that the loader creates a frozenset when in_features array is provided.
-
-    The loader should convert in_features arrays to frozenset for:
-    1. Immutability - prevent accidental modification of source feature sets
-    2. Set semantics - eliminate duplicates, support set operations
-    3. Hashability - allow features with source sets to be used as dict keys
-
-    This test verifies frozenset creation in various scenarios:
-    - Multiple sources (3+ features)
-    - Duplicate sources in the array (should be deduplicated)
-    - Empty in_features array (edge case)
-    """
+def test_load_creates_tuple_for_in_features() -> None:
+    """The loader stores an in_features array as a tuple, keeping order and duplicates."""
 
     config_str = """[
         {
@@ -564,37 +553,45 @@ def test_load_creates_frozenset_for_in_features() -> None:
             "name": "duplicate_sources",
             "in_features": ["feature1", "feature2", "feature1"],
             "options": {"method": "combine"}
+        },
+        {
+            "name": "reversed_sources",
+            "in_features": ["longitude", "latitude"],
+            "options": {"method": "combine"}
         }
     ]"""
 
     result = load_features_from_config(config_str)
 
-    assert len(result) == 2
+    assert len(result) == 3
 
     # First feature: multiple sources
     assert isinstance(result[0], Feature)
     assert result[0].name == "multi_source_aggregation"
     in_features_1 = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_1, frozenset), "Should be frozenset"
-    assert in_features_1 == frozenset({"sales", "revenue", "profit"})
+    assert isinstance(in_features_1, tuple), "Should be tuple"
+    assert in_features_1 == ("sales", "revenue", "profit")
     assert result[0].options.group.get("aggregation") == "sum"
 
-    # Second feature: duplicates should be deduplicated by frozenset
+    # Second feature: duplicates kept in declared order
     assert isinstance(result[1], Feature)
     assert result[1].name == "duplicate_sources"
     in_features_2 = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_2, frozenset), "Should be frozenset"
-    # frozenset automatically handles duplicates - should contain 2 items, not 3
-    assert in_features_2 == frozenset({"feature1", "feature2"})
-    assert len(in_features_2) == 2
+    assert isinstance(in_features_2, tuple), "Should be tuple"
+    assert in_features_2 == ("feature1", "feature2", "feature1")
     assert result[1].options.group.get("method") == "combine"
+
+    # Third feature: reversed order is kept
+    assert isinstance(result[2], Feature)
+    assert result[2].name == "reversed_sources"
+    assert result[2].options.context.get(DefaultOptionKeys.in_features) == ("longitude", "latitude")
 
 
 def test_load_adds_in_features_to_in_features_option() -> None:
     """Test that in_features are stored in the correct context option key.
 
     The loader uses DefaultOptionKeys.in_features (singular) for:
-    - in_features (plural): Always stored as a frozenset
+    - in_features (plural): Always stored as an ordered tuple
 
     This unified approach allows Options.get_in_features() to handle both
     single-source and multi-source transformations consistently.
@@ -617,23 +614,23 @@ def test_load_adds_in_features_to_in_features_option() -> None:
 
     assert len(result) == 2
 
-    # First feature: single source - stored as frozenset in in_features
+    # First feature: single source - stored as tuple in in_features
     assert isinstance(result[0], Feature)
     assert result[0].name == "single_source_feature"
     # Should have in_features (singular) in context
     assert DefaultOptionKeys.in_features in result[0].options.context
     in_features_value_0 = result[0].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value_0, frozenset)
-    assert in_features_value_0 == frozenset({"age"})
+    assert isinstance(in_features_value_0, tuple)
+    assert in_features_value_0 == ("age",)
 
-    # Second feature: multiple sources - stored as frozenset in in_features
+    # Second feature: multiple sources - stored as tuple in in_features
     assert isinstance(result[1], Feature)
     assert result[1].name == "multi_source_feature"
     # Should have in_features (singular) in context (unified key for both single and multiple)
     assert DefaultOptionKeys.in_features in result[1].options.context
     in_features_value = result[1].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"latitude", "longitude"})
+    assert isinstance(in_features_value, tuple)
+    assert in_features_value == ("latitude", "longitude")
 
 
 def test_nested_feature_branch_follows_the_enum_value(monkeypatch: pytest.MonkeyPatch) -> None:

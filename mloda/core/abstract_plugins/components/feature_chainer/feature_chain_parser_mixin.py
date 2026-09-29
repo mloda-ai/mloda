@@ -208,39 +208,28 @@ class FeatureChainParserMixin:
         # or a participating capture). An optional-first positional group that did not participate does
         # not identify the group, so its source comes from options, not the name (#772 / #769).
         if FeatureChainParser._name_identifies_group(parsed, property_mapping) and parsed.source_feature:
-            in_features = parsed.source_feature.split(self.IN_FEATURE_SEPARATOR)
-            self._validate_in_feature_count(in_features, feature_name)
-            return {Feature(f) for f in in_features}
+            name_sources = parsed.source_feature.split(self.IN_FEATURE_SEPARATOR)
+            self.validate_in_feature_count(feature_name, len(name_sources))
+            return {Feature(f) for f in name_sources}
 
         # Configuration-based fallback using get_in_features()
-        in_features_set = options.get_in_features()
-        self._validate_in_feature_count(list(in_features_set), feature_name)
-        return set(in_features_set)
+        in_features = options.get_in_features()
+        self.validate_in_feature_count(feature_name, len(in_features))
+        return set(in_features)
 
     @classmethod
-    def _in_feature_count_reason(cls, feature_name: str | FeatureName, count: int) -> str | None:
-        """The one home for the MIN/MAX in_feature wording; None when the count is inside the declared range.
-
-        Shared by the raising build-time path and the match-time recording site, so the two cannot drift.
-        """
+    def in_feature_count_reason(cls, feature_name: str | FeatureName, count: int) -> str | None:
+        """The MIN/MAX in_feature error message, or None when the count is in range."""
         if count < cls.MIN_IN_FEATURES:
             return f"Feature '{feature_name}' requires at least {cls.MIN_IN_FEATURES} in_feature(s), but found {count}"
         if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
             return f"Feature '{feature_name}' allows at most {cls.MAX_IN_FEATURES} in_feature(s), but found {count}"
         return None
 
-    def _validate_in_feature_count(self, in_features: list[Any], feature_name: str) -> None:
-        """
-        Validate that in_feature count meets min/max constraints.
-
-        Args:
-            in_features: List of in_features (strings or Feature objects)
-            feature_name: Original feature name for error messages
-
-        Raises:
-            ValueError: If constraints are violated
-        """
-        reason = self._in_feature_count_reason(feature_name, len(in_features))
+    @classmethod
+    def validate_in_feature_count(cls, feature_name: str | FeatureName, count: int) -> None:
+        """Raise ValueError with in_feature_count_reason's message, if any."""
+        reason = cls.in_feature_count_reason(feature_name, count)
         if reason is not None:
             # Contained: an in_feature count outside the declared MIN/MAX means this group cannot serve the feature.
             raise ValueError(reason)
@@ -424,7 +413,7 @@ class FeatureChainParserMixin:
 
         # Mirrors the matcher's gate order: a name-carried count is reported, the options-path gate is a silent non-match.
         if name_sources is not None:
-            reason = cls._in_feature_count_reason(feature_name, len(name_sources))
+            reason = cls.in_feature_count_reason(feature_name, len(name_sources))
             if reason is not None:
                 return reason
         elif not cls._validate_in_features(True, options, None, feature_name):
@@ -573,7 +562,7 @@ class FeatureChainParserMixin:
         if name_sources is not None:
             # The name relates this group to the feature, so a count it cannot serve is an actionable
             # near-miss rather than a silent non-match; the option path keeps its "not mine" meaning.
-            reason = cls._in_feature_count_reason(feature_name, len(name_sources))
+            reason = cls.in_feature_count_reason(feature_name, len(name_sources))
             if reason is None:
                 return True
             record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)
@@ -610,7 +599,7 @@ class FeatureChainParserMixin:
                 )
                 return False
 
-        return cls._in_feature_count_reason(feature_name, count) is None
+        return cls.in_feature_count_reason(feature_name, count) is None
 
     @classmethod
     def _get_prefix_patterns(cls) -> list[Any]:
@@ -652,8 +641,7 @@ class FeatureChainParserMixin:
             return parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
 
         # Configuration-based fallback using get_in_features()
-        in_features_set = feature.options.get_in_features()
-        return [str(f.name) for f in in_features_set]
+        return [str(f.name) for f in feature.options.get_in_features()]
 
     @classmethod
     def _extract_single_source_feature(cls, feature: Feature) -> str:
@@ -663,9 +651,7 @@ class FeatureChainParserMixin:
             ValueError: if the resolved source count is not exactly one
         """
         source_features = cls._extract_source_features(feature)
-        reason = cls._in_feature_count_reason(feature.name, len(source_features))
-        if reason is not None:
-            raise ValueError(reason)
+        cls.validate_in_feature_count(feature.name, len(source_features))
         if len(source_features) != 1:
             raise ValueError(
                 f"Feature '{feature.name}' resolved {len(source_features)} source feature(s), expected exactly 1"

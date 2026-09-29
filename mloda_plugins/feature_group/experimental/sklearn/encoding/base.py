@@ -214,10 +214,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
         # Fall back to configuration-based approach
         source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
+        self.validate_in_feature_count(feature_name, len(source_features))
         return set(source_features)
 
     @classmethod

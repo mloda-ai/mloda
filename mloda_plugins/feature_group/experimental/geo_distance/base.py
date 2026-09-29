@@ -140,10 +140,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
         # Fall back to configuration-based approach
         source_features = options.get_in_features()
-        if len(source_features) != 2:
-            raise ValueError(
-                f"Expected exactly 2 source features for geo distance, got {len(source_features)}: {source_features}"
-            )
+        self.validate_in_feature_count(feature_name, len(source_features))
         return set(source_features)
 
     @classmethod

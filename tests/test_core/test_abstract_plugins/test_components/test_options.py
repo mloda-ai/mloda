@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.user import Credential, Options
+from mloda.user import Credential, Feature, Options
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
@@ -507,6 +507,42 @@ class TestOptionsGetInFeaturesUnresolvableTruthyValue:
         """The unsupported-type message keeps naming the type alongside the value."""
         message = self._message(value)
         assert type(value).__name__ in message, message
+
+
+class TestOptionsGetInFeaturesOrdered:
+    """get_in_features returns an ordered tuple: declared order for sequences, name order for sets."""
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            (["a", "b", "c"], ("a", "b", "c")),
+            (["c", "b", "a"], ("c", "b", "a")),
+            (("b", "a"), ("b", "a")),
+            (["a", "a"], ("a", "a")),
+            ("a", ("a",)),
+            ("b, a", ("b", "a")),
+            (Feature("a"), ("a",)),
+            ([Feature("b"), Feature("a")], ("b", "a")),
+            ({"b", "c", "a"}, ("a", "b", "c")),
+            (frozenset({"b", "c", "a"}), ("a", "b", "c")),
+        ],
+        ids=[
+            "list",
+            "reversed_list",
+            "tuple",
+            "duplicates",
+            "single_str",
+            "comma_str",
+            "feature",
+            "feature_list",
+            "set",
+            "frozenset",
+        ],
+    )
+    def test_returns_ordered_tuple_of_features(self, value: Any, expected: tuple[str, ...]) -> None:
+        result = Options(context={IN_FEATURES: value}).get_in_features()
+        assert type(result) is tuple
+        assert tuple(f.name for f in result) == expected
 
 
 class TestOptionsWithCredentialValues:

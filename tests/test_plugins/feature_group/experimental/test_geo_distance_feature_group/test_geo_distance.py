@@ -7,7 +7,7 @@ import pytest
 
 from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda.provider import FeatureSet
+from mloda.provider import DefaultOptionKeys, FeatureSet
 from mloda.user import Options
 
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
@@ -55,6 +55,19 @@ class TestGeoDistanceFeatureGroup:
         assert len(input_features) == 2
         assert Feature("point1") in input_features
         assert Feature("point2") in input_features
+
+    @pytest.mark.parametrize("operands", [["a", "b"], ["b", "a"]], ids=["a_b", "b_a"])
+    def test_extract_geo_distance_parameters_keeps_declared_order(self, operands: list[str]) -> None:
+        options = Options(
+            context={
+                GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
+                DefaultOptionKeys.in_features: operands,
+            }
+        )
+
+        result = GeoDistanceFeatureGroup._extract_geo_distance_parameters(Feature("x", options=options))
+
+        assert result == ("euclidean", operands[0], operands[1])
 
 
 class TestPandasGeoDistanceFeatureGroup:

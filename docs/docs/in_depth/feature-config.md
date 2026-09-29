@@ -204,6 +204,8 @@ Multiple source features:
 ]
 ```
 
+The `in_features` order is kept, and duplicates are kept and count toward `MAX_IN_FEATURES`.
+
 ### Nested in_features feature dict
 
 Inside `options`, `group_options` or `context_options`, an `in_features` key can hold a feature dict instead of a name, which defines the source feature inline:

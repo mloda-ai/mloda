@@ -75,7 +75,7 @@ class TestNameSourcesDriveTheGate:
     ) -> None:
         """The name carries two sources, inside MIN=2 / MAX=3; the gate reads the name, not the option.
 
-        The env var downgrades the R3 contradiction so only the count gate is under test.
+        The env var downgrades the contradiction error so only the count gate is under test.
         """
         monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
 
@@ -84,7 +84,7 @@ class TestNameSourcesDriveTheGate:
         assert result is True
 
     def test_junk_in_features_option_aborts_a_name_match(self) -> None:
-        """An in_features value the matcher cannot resolve contradicts the name (#1716 R3)."""
+        """An in_features value the matcher cannot resolve contradicts the name."""
         with pytest.raises(ValueError) as exc_info:
             _NameSourceGate944.match_feature_group_criteria("f1&f2__op1_gate944", _options(JUNK_IN_FEATURES))
 
@@ -116,7 +116,7 @@ class TestNameSourcesDriveTheGate:
 
 
 class TestDeclaredInFeaturesAgreeWithName:
-    """#1716 R3: a declared in_features must list exactly the name's direct sources."""
+    """A declared in_features must list exactly the name's direct sources."""
 
     NAME = "f1&f2__op1_gate944"
 
@@ -265,7 +265,7 @@ EMPTY_OPERAND_NAMES_1716 = ["&f2__op1_gate944", "f1&__op1_gate944", "f1&&f2__op1
 
 
 class TestEmptyOperandIsRejected:
-    """An empty operand in the name is a recorded non-match; an empty config operand is a silent one (#1716)."""
+    """An empty operand in the name is a recorded non-match; an empty config operand is a silent one."""
 
     @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
     def test_name_with_an_empty_operand_is_a_recorded_non_match(

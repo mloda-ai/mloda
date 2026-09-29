@@ -118,7 +118,7 @@ class TestNamePathElementValidatorAndPresence:
 
 
 class TestDeclaredSecondaryCaptureAgreesWithName:
-    """#1716 R3 on the secondary capture: a declared dimension must equal the name's."""
+    """On the secondary capture, a declared dimension must equal the name's."""
 
     def test_declared_dimension_contradicting_the_name_aborts(self) -> None:
         options = Options(context={DimensionalityReductionFeatureGroup.DIMENSION: 3})

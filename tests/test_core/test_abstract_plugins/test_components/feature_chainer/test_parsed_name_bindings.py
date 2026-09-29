@@ -703,7 +703,7 @@ class TestBoundValuesAreVisible:
     def test_invalid_named_value_is_rejected_even_with_a_valid_option(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """R2: the option no longer hides the name's own out-of-range value."""
+        """The option no longer hides the name's own out-of-range value."""
         options = Options(context={ALGORITHM_KEY: "pca"})
         result = StrictNamedGroup.match_feature_group_criteria("f0__bogus_strict_pnb770", options)
 
@@ -796,7 +796,7 @@ class TestForwardedMismatchOverBindings:
         assert ForwardedSecondaryGroup.match_feature_group_criteria(FORWARDED_FEATURE_NAME, child_options) is True
 
     def test_author_set_secondary_value_contradicting_the_name_raises(self) -> None:
-        """A declared secondary value contradicting the name's capture aborts the match (#1716 R3)."""
+        """A declared secondary value contradicting the name's capture aborts the match."""
         child_options = Options(group={SOLVER_KEY: "arpack"})
         assert child_options.inherited_group_keys == frozenset()  # precondition
 

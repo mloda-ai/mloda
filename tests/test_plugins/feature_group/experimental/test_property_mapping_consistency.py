@@ -89,7 +89,7 @@ class TestPropertyMappingConsistency:
         )
 
 
-# Plugins migrated to named captures (issue #1716); text_cleaning is captureless.
+# Plugins migrated to named captures; text_cleaning is captureless.
 NAMED_CAPTURE_PLUGINS: list[type[Any]] = [
     GeoDistanceFeatureGroup,
     MissingValueFeatureGroup,

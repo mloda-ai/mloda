@@ -515,7 +515,7 @@ class FeatureChainParserMixin:
         name_sources: list[str] | None,
         options: Options,
     ) -> None:
-        """Abort when a declared option or in_features contradicts what the name binds (#1716 R3)."""
+        """Abort when a declared option or in_features contradicts what the name binds."""
         inherited_keys = options.inherited_group_keys | options.inherited_context_keys
         env_hint = "Set MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this error to a warning."
         for key, name_value in bindings.items():
@@ -531,7 +531,7 @@ class FeatureChainParserMixin:
             )
             if cls._name_mismatch_downgraded(message):
                 continue
-            # Marked: a declared value contradicting the name is user misconfiguration (#1716).
+            # Marked: a declared value contradicting the name is user misconfiguration.
             raise escalate_match_abort(ValueError(message))
 
         in_features_key = DefaultOptionKeys.in_features.value
@@ -555,7 +555,7 @@ class FeatureChainParserMixin:
                 f"{env_hint}"
             )
             if not cls._name_mismatch_downgraded(message):
-                # Marked: a declared in_features contradicting the name is user misconfiguration (#1716).
+                # Marked: a declared in_features contradicting the name is user misconfiguration.
                 raise escalate_match_abort(ValueError(message))
 
     @classmethod

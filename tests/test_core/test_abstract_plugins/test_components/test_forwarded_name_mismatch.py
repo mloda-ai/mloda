@@ -14,7 +14,7 @@ instead of raising and matching proceeds normally.
 
 No behavior change when: values are equal, the feature is config-based (no
 string parse), or K is absent from the options. An author-declared K that
-contradicts the name aborts too (#1716 R3, TestDeclaredNameMismatch).
+contradicts the name aborts too (TestDeclaredNameMismatch).
 
 Also covers the context path: inherited_context_keys must be checked like
 inherited_group_keys, with remedy text naming
@@ -143,7 +143,7 @@ class TestForwardedNameMismatch:
         assert result is True
 
     def test_author_set_differing_value_raises(self) -> None:
-        """An author-set option value (not inherited) contradicting the name aborts the match (#1716 R3)."""
+        """An author-set option value (not inherited) contradicting the name aborts the match."""
         child_options = Options(group={OPERATION_KEY: "max"})
         assert child_options.inherited_group_keys == frozenset()  # precondition: nothing inherited
 
@@ -338,7 +338,7 @@ class TestForwardedContextNameMismatch:
         assert "max" in message
 
     def test_author_set_context_value_raises(self) -> None:
-        """An author-set context value (not inherited) contradicting the name aborts the match (#1716 R3)."""
+        """An author-set context value (not inherited) contradicting the name aborts the match."""
         child_options = Options(context={CONTEXT_KEY: "max"})
         assert child_options.inherited_context_keys == frozenset()  # precondition: nothing inherited
 
@@ -352,7 +352,7 @@ class TestForwardedContextNameMismatch:
 
 
 class TestDeclaredNameMismatch:
-    """#1716 R3: a declared (own, non-inherited) option must agree with the value the name binds."""
+    """A declared (own, non-inherited) option must agree with the value the name binds."""
 
     def test_equal_value_matches(self) -> None:
         options = Options(group={OPERATION_KEY: "sum"})

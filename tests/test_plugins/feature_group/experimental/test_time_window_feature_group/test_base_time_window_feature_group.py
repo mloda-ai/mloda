@@ -115,7 +115,7 @@ class TestTimeWindowFeatureGroup:
     def test_invalid_named_value_is_rejected_despite_valid_explicit_options(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """R2: valid window options no longer hide a bogus window function carried by the name."""
+        """Valid window options no longer hide a bogus window function carried by the name."""
         options = Options(
             context={
                 TimeWindowFeatureGroup.WINDOW_FUNCTION: "avg",
@@ -131,7 +131,7 @@ class TestTimeWindowFeatureGroup:
         assert "bogus" in recorded[0]
 
     def test_declared_window_function_contradicting_the_name_aborts(self) -> None:
-        """R3 on a secondary-free named capture: the name says sum, the option says max."""
+        """On a secondary-free named capture, the name says sum, the option says max."""
         options = Options(context={TimeWindowFeatureGroup.WINDOW_FUNCTION: "max"})
 
         with pytest.raises(ValueError) as exc_info:

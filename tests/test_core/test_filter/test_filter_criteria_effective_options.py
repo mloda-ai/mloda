@@ -164,7 +164,7 @@ class _PfcNameBoundGroup1716(FeatureChainParserMixin, FeatureGroup):
 
 
 def test_host_imported_option_differing_from_the_filter_name_does_not_abort() -> None:
-    """A key imported from the host after lock_own_keys is not the filter feature's own declaration (#1716 R3)."""
+    """A key imported from the host after lock_own_keys is not the filter feature's own declaration."""
     global_filter = GlobalFilter()
     global_filter.add_filter(PFC_NAME_FILTER, FilterType.EQUAL, {"value": 1})
     host = Feature("pfc_host_1716", Options(context={PFC_NAME_KEY: "max"}))

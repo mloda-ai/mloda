@@ -8,8 +8,8 @@ from mloda_plugins.compute_framework.base_implementations.duckdb import duckdb_t
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
-    fold_identifier,
     pick_helper_column_name,
+    pick_rename_prefix,
     quote_ident,
 )
 
@@ -65,15 +65,12 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         taken = {*left_cols, *right_cols}
         lid_name = pick_helper_column_name(taken)
         rn_name = pick_helper_column_name({*taken, lid_name})
-        reserved = {fold_identifier(c) for c in (*left_cols, lid_name, rn_name)}
-        n = 0
-        while any(fold_identifier(f"_mloda_r{n}_{c}") in reserved for c in right_cols):
-            n += 1
+        prefix = pick_rename_prefix("_mloda_r", right_cols, [*left_cols, lid_name, rn_name])
         lid, rn = quote_ident(lid_name), quote_ident(rn_name)
 
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
 
-        rmap = {c: f"_mloda_r{n}_{c}" for c in right_cols}
+        rmap = {c: f"{prefix}{c}" for c in right_cols}
         left_rel = left_data._relation.project(f"*, ROW_NUMBER() OVER () AS {lid}").set_alias("L")
         right_proj = ", ".join(f"{quote_ident(c)} AS {quote_ident(rmap[c])}" for c in right_cols)
         right_rel = right_data._relation.project(right_proj).set_alias("R")

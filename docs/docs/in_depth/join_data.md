@@ -345,7 +345,7 @@ In the following section, we will see how this can look like.
 The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.
 
-On DuckDB and SQLite, a merge whose output column names differ only in case raises `ValueError`; see [Column name case sensitivity](compute-framework-integration.md#column-name-case-sensitivity).
+On DuckDB and SQLite (and the Spark as-of merge under the default `spark.sql.caseSensitive=false`), a merge whose output column names differ only in case raises `ValueError`; see [Column name case sensitivity](compute-framework-integration.md#column-name-case-sensitivity).
 
 ```py
 class PandasDataFrame(ComputeFramework):

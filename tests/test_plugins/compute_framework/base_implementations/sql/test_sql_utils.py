@@ -7,6 +7,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     fold_identifier,
     inline_params,
     pick_helper_column_name,
+    pick_rename_prefix,
     quote_ident,
     quote_value,
 )
@@ -178,3 +179,26 @@ class TestEnsureDistinctIdentifiers:
 
     def test_non_ascii_case_variants_pass(self) -> None:
         ensure_distinct_identifiers(["é", "É"], "join")
+
+    def test_custom_fold_makes_non_ascii_case_variants_collide(self) -> None:
+        with pytest.raises(ValueError, match="rename") as exc:
+            ensure_distinct_identifiers(["é", "É"], "join", fold=str.lower)
+        message = str(exc.value)
+        assert "join" in message
+        assert repr("é") in message
+        assert repr("É") in message
+
+
+class TestPickRenamePrefix:
+    def test_free_case_returns_first_prefix(self) -> None:
+        assert pick_rename_prefix("_mloda_r", ["x"], reserved=["a"]) == "_mloda_r0_"
+
+    def test_skips_prefix_whose_renamed_name_is_reserved(self) -> None:
+        assert pick_rename_prefix("_mloda_r", ["x"], reserved=["_MLODA_R0_x"]) == "_mloda_r1_"
+
+    def test_custom_fold_blocks_non_ascii_case_variant(self) -> None:
+        result = pick_rename_prefix("_mloda_r", ["é"], reserved=["_MLODA_R0_É"], fold=str.lower)
+        assert result == "_mloda_r1_"
+
+    def test_default_ascii_fold_ignores_non_ascii_case_variant(self) -> None:
+        assert pick_rename_prefix("_mloda_r", ["é"], reserved=["_MLODA_R0_É"]) == "_mloda_r0_"

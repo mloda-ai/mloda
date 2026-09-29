@@ -105,5 +105,14 @@ def spark_session() -> Any:
         logger.warning(f"Error during SparkSession cleanup: {e}")
 
 
+@pytest.fixture
+def spark_case_sensitive(spark_session: Any) -> Any:
+    """Run the test with spark.sql.caseSensitive=true and restore the previous value afterwards."""
+    previous = spark_session.conf.get("spark.sql.caseSensitive")
+    spark_session.conf.set("spark.sql.caseSensitive", "true")
+    yield spark_session
+    spark_session.conf.set("spark.sql.caseSensitive", previous)
+
+
 # Export availability flags for use in test files
 __all__ = ["spark_session", "PYSPARK_AVAILABLE", "SKIP_REASON"]

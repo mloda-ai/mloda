@@ -13,7 +13,7 @@ SQL injection prevention follows two layers:
 
 import math
 import string
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -73,17 +73,30 @@ def fold_identifier(name: str) -> str:
     return name.translate(_ASCII_FOLD)
 
 
-def ensure_distinct_identifiers(columns: Iterable[str], operation: str) -> None:
-    """Raise ``ValueError`` on the first pair of columns equal under ``fold_identifier``."""
+def ensure_distinct_identifiers(
+    columns: Iterable[str], operation: str, fold: Callable[[str], str] = fold_identifier
+) -> None:
+    """Raise ``ValueError`` on the first pair of columns equal under ``fold``."""
     seen: dict[str, str] = {}
     for column in columns:
-        folded = fold_identifier(column)
+        folded = fold(column)
         if folded in seen:
             raise ValueError(
-                f"{operation}: columns {seen[folded]!r} and {column!r} collide "
-                "(SQL compares names ignoring ASCII case); rename one side"
+                f"{operation}: columns {seen[folded]!r} and {column!r} resolve to the same column; rename one side"
             )
         seen[folded] = column
+
+
+def pick_rename_prefix(
+    stem: str, names: Iterable[str], reserved: Iterable[str], fold: Callable[[str], str] = fold_identifier
+) -> str:
+    """Return the lowest ``{stem}{n}_`` prefix whose prefixed names avoid every reserved name under ``fold``."""
+    names = list(names)
+    reserved_folded = {fold(r) for r in reserved}
+    n = 0
+    while any(fold(f"{stem}{n}_{name}") in reserved_folded for name in names):
+        n += 1
+    return f"{stem}{n}_"
 
 
 def require_exact_columns(

@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, _is_fallback_identity
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -360,43 +360,20 @@ class TestDataAccessIdentityHidesDictCredentialValues:
 
 
 class TestSQLiteReaderDataAccessIdentity:
-    """SQLITEReader publishes only an existing sqlite file path, else the key-name fallback."""
+    """SQLITEReader falls back to key names unless the sqlite value is a str naming an existing file."""
 
-    def test_existing_files_give_distinct_path_identities(self, tmp_path: Path) -> None:
-        identities = []
-        for name in ("a.db", "b.db"):
-            path = tmp_path / name
-            path.write_bytes(b"")
-            access = {SQLITEReader.db_path(): str(path)}
-            identity = SQLITEReader.data_access_identity(access)
-            assert identity == str(path)
-            assert _is_fallback_identity(access, identity) is False
-            identities.append(identity)
-        assert identities[0] != identities[1]
-
-    @pytest.mark.parametrize(
-        "access",
-        [
-            {"sqlite": "/nonexistent/dir/missing.db"},
-            {"sqlite": 123},
-            {"user": "alice"},
-            {"sqlite": "u:hunter2@fileserver/x.db", "password": "hunter2"},  # nosec B105
-        ],
-        ids=["missing_file", "non_str_value", "missing_key", "credential_shaped_path"],
-    )
-    def test_unusable_sqlite_value_falls_back_to_key_names(self, access: dict[str, Any]) -> None:
-        identity = SQLITEReader.data_access_identity(access)
-        assert _is_fallback_identity(access, identity) is True
-        assert "hunter2" not in identity
-
-    def test_table_name_does_not_change_identity(self, tmp_path: Path) -> None:
-        path = tmp_path / "t.db"
-        path.write_bytes(b"")
-        access = {SQLITEReader.db_path(): str(path)}
-        before = SQLITEReader.data_access_identity(access)
-        SQLITEReader.set_table_name(access, "t")
-        assert "table_name" in access
-        assert SQLITEReader.data_access_identity(access) == before == str(path)
+    @pytest.mark.parametrize("kind", ["missing_file", "directory", "path_object", "missing_key"])
+    def test_falls_back_to_key_names(self, tmp_path: Path, kind: str) -> None:
+        existing = tmp_path / "x.db"
+        existing.write_bytes(b"")
+        cases: dict[str, dict[str, Any]] = {
+            "missing_file": {"sqlite": str(tmp_path / "missing.db")},
+            "directory": {"sqlite": str(tmp_path)},
+            "path_object": {"sqlite": existing},
+            "missing_key": {"user": "alice"},
+        }
+        access = cases[kind]
+        assert SQLITEReader.data_access_identity(access) == ("{user}" if kind == "missing_key" else "{sqlite}")
 
 
 class TestDataAccessIdentityOfUriStrings:

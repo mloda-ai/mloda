@@ -2,8 +2,12 @@
 Tests for the GeoDistanceFeatureGroup.
 """
 
+from collections.abc import Iterator
+
 import pandas as pd
 import pytest
+
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -12,6 +16,14 @@ from mloda.user import Options
 
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+
+
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    yield reasons
+    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestGeoDistanceFeatureGroup:
@@ -143,13 +155,32 @@ class TestGeoDistanceFeatureGroup:
         with pytest.raises(ValueError, match="Unsupported distance type"):
             GeoDistanceFeatureGroup._extract_geo_distance_parameters(Feature("a&b__foo_distance"))
 
-    def test_extract_geo_distance_parameters_strips_distance_suffix_on_prefix_name_with_context(self) -> None:
+    def test_doubled_distance_suffix_is_a_recorded_non_match(self, rejection_window: dict[str, MatchRejection]) -> None:
         feature = Feature(
             "a&b__haversine_distance_distance",
             options=Options(context={GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine"}),
         )
-        assert GeoDistanceFeatureGroup.match_feature_group_criteria(feature.name, feature.options) is True
-        assert GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature) == ("haversine", "a", "b")
+        assert GeoDistanceFeatureGroup.match_feature_group_criteria(feature.name, feature.options) is False
+        assert [r.reason for r in rejection_window.values()] != []
+        assert all("haversine_distance" in r.reason for r in rejection_window.values())
+        with pytest.raises(ValueError, match="Unsupported distance type"):
+            GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature)
+
+    def test_name_bound_distance_type_is_validated_despite_a_valid_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(
+            context={
+                GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
+                DefaultOptionKeys.in_features: ["p1", "p2"],
+            }
+        )
+        assert GeoDistanceFeatureGroup.match_feature_group_criteria("my&name__custom_distance", options) is False
+        assert len(rejection_window) == 1
+        assert "custom" in next(iter(rejection_window.values())).reason
+
+    def test_valid_name_still_resolves_the_distance_type(self) -> None:
+        assert GeoDistanceFeatureGroup.get_distance_type("p1&p2__haversine_distance") == "haversine"
 
 
 class TestPandasGeoDistanceFeatureGroup:

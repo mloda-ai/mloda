@@ -1,7 +1,10 @@
+from collections.abc import Iterator
 from typing import Any
 
 import pandas as pd
 import pytest
+
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 
 from mloda.user import mloda
 from mloda.user import Feature
@@ -21,6 +24,14 @@ from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_
     validate_aggregated_features,
 )
 from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
+
+
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    yield reasons
+    MATCH_REJECTION_REASONS.reset(token)
 
 
 class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
@@ -138,6 +149,14 @@ class TestAggregatedFeatureGroup:
         assert not AggregatedFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
         assert not AggregatedFeatureGroup.match_feature_group_criteria("sum_invalid_sales", options)
         assert not AggregatedFeatureGroup.match_feature_group_criteria("sales__invalid", options)
+
+    def test_bogus_name_aggregation_is_rejected_despite_a_valid_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={AggregatedFeatureGroup.AGGREGATION_TYPE: "sum"})
+        assert AggregatedFeatureGroup.match_feature_group_criteria("x__bogus_aggr", options) is False
+        assert len(rejection_window) == 1
+        assert "bogus" in next(iter(rejection_window.values())).reason
 
     def test_input_features(self) -> None:
         """Test input_features method."""

@@ -125,8 +125,14 @@ class TestEncodingFeatureGroup:
 
     def test_prefix_pattern(self) -> None:
         """Test that prefix pattern is properly defined."""
-        expected_pattern = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
+        expected_pattern = r".*__(?P<encoder_type>onehot|label|ordinal)_encoded(?:~\d+)?$"
         assert EncodingFeatureGroup.PREFIX_PATTERN == expected_pattern
+
+    @pytest.mark.parametrize("name", ["x__onehot_encoded~1", "x__onehot_encoded"])
+    def test_input_features_read_the_source_through_the_column_base(self, name: str) -> None:
+        input_features = PandasEncodingFeatureGroup().input_features(Options({}), FeatureName(name))
+        assert input_features is not None
+        assert {f.name for f in input_features} == {"x"}
 
     def test_input_features(self) -> None:
         """Test input_features method extracts correct source features."""

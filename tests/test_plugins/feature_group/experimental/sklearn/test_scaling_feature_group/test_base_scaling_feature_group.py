@@ -49,6 +49,12 @@ class TestScalingFeatureGroup:
         with pytest.raises(ValueError):
             ScalingFeatureGroup.get_scaler_type("income_standard_scaled")
 
+    def test_resolve_operation_reads_the_name_capture(self) -> None:
+        assert (
+            ScalingFeatureGroup._resolve_operation(Feature("x__minmax_scaled"), ScalingFeatureGroup.SCALER_TYPE)
+            == "minmax"
+        )
+
     def test_input_features(self) -> None:
         """Test the input_features method."""
         feature_group = PandasScalingFeatureGroup()

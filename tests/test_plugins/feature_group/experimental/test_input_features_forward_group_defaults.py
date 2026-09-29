@@ -13,6 +13,7 @@ Spec under test:
   sentinel (``forward_group is None``); the engine default does the forwarding
 * explicit user directives on config-declared children (an allowlist frozenset
   or the False opt-out) are preserved, never overwritten
+* an out-of-range config-path in_features count raises the mixin's standard message
 
 Covered plugins:
 
@@ -29,7 +30,9 @@ abstract; ``input_features`` itself is defined on the bases under test.
 
 from __future__ import annotations
 
-from mloda.provider import DefaultOptionKeys
+import pytest
+
+from mloda.provider import DefaultOptionKeys, FeatureChainParserMixin
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -283,3 +286,26 @@ class TestSourceInputFeatureCompositeDefaults:
 
         assert set(by_name) == {"upstream_source"}
         assert by_name["upstream_source"].forward_group is None
+
+
+class TestConfigPathCountErrorWording:
+    """Config-path count errors use the mixin's standard message."""
+
+    @pytest.mark.parametrize(
+        "group_cls, operands",
+        [
+            pytest.param(PandasGeoDistanceFeatureGroup, ["a"], id="geo_distance-below_min"),
+            pytest.param(PandasGeoDistanceFeatureGroup, ["a", "b", "c"], id="geo_distance-above_max"),
+            pytest.param(PandasTimeWindowFeatureGroup, ["a", "b"], id="time_window-above_max"),
+            pytest.param(PandasForecastingFeatureGroup, ["a", "b"], id="forecasting-above_max"),
+            pytest.param(PandasEncodingFeatureGroup, ["a", "b"], id="encoding-above_max"),
+        ],
+    )
+    def test_error_message_is_standard_reason(
+        self, group_cls: type[FeatureChainParserMixin], operands: list[str]
+    ) -> None:
+        options = Options(group={DefaultOptionKeys.in_features: operands})
+
+        with pytest.raises(ValueError) as exc_info:
+            group_cls().input_features(options, FeatureName("placeholder"))
+        assert str(exc_info.value) == group_cls.in_feature_count_reason("placeholder", len(operands))

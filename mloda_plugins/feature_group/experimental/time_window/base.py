@@ -146,10 +146,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
 
         # Fall back to configuration-based approach
         source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
+        self.validate_in_feature_count(feature_name, len(source_features))
 
         time_filter_feature = Feature(self.get_reference_time_column(options))
         return set(source_features) | {time_filter_feature}

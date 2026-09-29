@@ -3,11 +3,9 @@
 ``record_match_rejection`` is the seam the engine activates per candidate around its filter loop
 (``IdentifyFeatureGroupClass._filter_feature_group_by_criteria``): a reason recorded while a candidate
 matches becomes that candidate's ``value_rejection`` ``Elimination`` and reaches the resolution-failure
-report. Two presence rules already record there, the name-path required-presence rule
-(``FeatureChainParser._check_name_path_required_presence``) and the strict ``match_guard``
-(``FeatureChainParserMixin``). ``feature_chain_author_guards.check_required_when`` only logs at debug and records
-nothing, so a feature group that a declared ``required_when`` turned into a non-match is invisible in
-the failure report. See ``test_first_pass_rejection_recording.py`` for the seam's full contract.
+report. ``feature_chain_author_guards.check_required_when`` records there like the name-path required-presence
+rule (``FeatureChainParser._check_name_path_required_presence``) and the strict ``match_guard``
+(``FeatureChainParserMixin``). See ``test_first_pass_rejection_recording.py`` for the seam's full contract.
 
 Names carry an ``rwrec`` suffix: a test feature group becomes a global subclass and the suite runs in
 parallel, so a shared name would leak into another module's candidate universe. The group here is inert
@@ -96,6 +94,9 @@ class TestRequiredWhenRejectionRecording:
         assert RWREC_REQUIRED_KEY in elimination.reason, elimination.reason
         assert RwrecRequiredWhenFG.__name__ in elimination.reason, elimination.reason
         assert "propagate_context_keys" not in elimination.reason, (
+            "group keys forward by default, so they get no propagate hint"
+        )
+        assert "Options(context=" not in elimination.reason, (
             "group keys forward by default, so they get no propagate hint"
         )
 

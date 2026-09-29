@@ -607,10 +607,11 @@ PROPERTY_MAPPING = {
 
 When the predicate returns `True` and the option is absent, the match fails and the non-match records
 a rejection reason naming the owning class and the missing key, so the resolution-failure report
-carries a near-miss line for it; entries with `required_when` are otherwise optional. For a context
-key the reason also names the remedy (`Options(context=...)`, and for an input feature the consumer's
-`propagate_context_keys`). The predicate must be pure and must not raise. It is callable by
-construction, and a non-bool truthy return counts as `True`.
+carries a near-miss line for it; entries with `required_when` are otherwise optional. For a key
+declared with `context=True` (the default), the reason also names the remedy
+(`Options(context=...)`, and for an input feature the consumer's `propagate_context_keys`). The
+predicate must be pure and must not raise. It is callable by construction, and a non-bool truthy
+return counts as `True`.
 
 The enforcement is installed on the class, not on one matcher, so overriding
 `match_feature_group_criteria` does not lose it: the predicates still run after the override

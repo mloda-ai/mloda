@@ -380,7 +380,7 @@ def check_required_when(
                 key,
                 predicate_name,
             )
-            # Group keys forward to input features by default, so only context keys get a remedy hint.
+            # Gated on the declared placement: a key declared context=False forwards to input features by default.
             remedy = (
                 "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
                 "list it in the consumer's propagate_context_keys"

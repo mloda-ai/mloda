@@ -76,7 +76,8 @@ class SqliteFramework(ComputeFramework):
         selected_columns = list(_selected_feature_names)
         return data.select(*selected_columns)
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.columns)
 
     def _row_count(self, data: Any) -> int | None:

@@ -3,8 +3,8 @@ Shared test mixin pinning the schema-detection contract per compute framework.
 
 The ``allow_empty_result`` policy now keys on SCHEMA PRESENCE, not row count. A result is
 a valid (non-empty) result when it carries at least one column, even with zero rows. The
-framework half of that contract is ``ComputeFramework._extract_column_names(data)``: it
-returns the set of columns the framework sees on the native data.
+framework half of that contract is ``ComputeFramework.extract_column_names(data)`` (public
+classmethod, instance-free): it returns the set of columns the framework sees on the native data.
 
 This mixin pins the observable contract per framework:
 
@@ -13,7 +13,7 @@ This mixin pins the observable contract per framework:
 - A frame with at least one row yields a NON-EMPTY column set.
 
 The python_dict consumer sets ``empty_data_carries_schema = False`` because its native empty
-(``[]``) carries no schema, so ``_extract_column_names`` returns an empty set (state B).
+(``[]``) carries no schema, so ``extract_column_names`` returns an empty set (state B).
 
 It is intentionally named without a ``Test`` prefix so pytest does not collect it standalone;
 framework subclasses pick up the test methods by inheritance.
@@ -31,7 +31,7 @@ import pytest
 
 
 class EmptyResultFrameworkTestMixin:
-    """Shared schema-detection (``_extract_column_names``) tests for all compute frameworks."""
+    """Shared schema-detection (``extract_column_names``) tests for all compute frameworks."""
 
     # Whether a zero-row frame in this framework still carries its schema (columns).
     # Schema-bearing frameworks (PyArrow, Pandas, Polars, DuckDB, SQLite, Spark, Iceberg): True.
@@ -77,3 +77,20 @@ class EmptyResultFrameworkTestMixin:
     def test_extract_column_names_on_non_empty_data(self, framework_instance: Any, non_empty_data: Any) -> None:
         """A frame with at least one row always exposes its columns."""
         assert framework_instance._extract_column_names(non_empty_data)
+
+    def test_public_extract_column_names_is_instance_free(
+        self, framework_instance: Any, empty_data: Any, non_empty_data: Any
+    ) -> None:
+        """Public ``extract_column_names`` works on the class and through an instance."""
+        framework_cls = type(framework_instance)
+
+        columns = framework_cls.extract_column_names(non_empty_data)
+        assert columns
+
+        empty_columns = framework_cls.extract_column_names(empty_data)
+        if self.empty_data_carries_schema:
+            assert empty_columns
+        else:
+            assert empty_columns == set()
+
+        assert framework_instance.extract_column_names(non_empty_data) == columns

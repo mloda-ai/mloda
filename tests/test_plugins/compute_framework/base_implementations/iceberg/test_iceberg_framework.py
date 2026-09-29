@@ -422,7 +422,7 @@ def test_extract_column_data_type_pyarrow_table_returns_int64() -> None:
 class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
     """Test IcebergFramework schema detection via shared mixin, covering both branches.
 
-    ``IcebergFramework._extract_column_names`` has two branches and the fixtures exercise
+    ``IcebergFramework.extract_column_names`` has two branches and the fixtures exercise
     one each:
 
     - ``empty_data`` is a real zero-row PyArrow table. ``IcebergFramework.transform`` emits

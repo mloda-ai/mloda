@@ -192,9 +192,9 @@ loudly.
 
 Column and feature names match exactly (case-sensitive) in every lookup, match and presence check, on every compute framework.
 
--   DuckDB and SQLite resolve quoted identifiers ignoring ASCII case only (`val` and `VAL` are one column; `é` and `É` are two). Their collision checks for new and helper columns fold ASCII case the same way. A join, as-of merge, union, append, `from_arrow` or `from_dict` whose output names would differ only in case raises `ValueError` instead of renaming a column; rename one side upstream.
--   On those engines, SQL mask primitives and the `partition_by` / `order_by` columns of `with_row_number` / `window` must be exact column names. Raw SQL fragments (`filter` conditions, `select` / `project` expressions, the `window` function) bind through the engine: case-insensitive, and on SQLite an unresolvable quoted name is read as a string literal instead of raising.
--   Spark resolves names per `spark.sql.caseSensitive` (default `false`: case-insensitive, Unicode-aware). mloda's Spark checks are exact, so a case-only duplicate surfaces later as Spark's ambiguous-reference error; set `spark.sql.caseSensitive=true` for exact-case behavior.
+-   DuckDB and SQLite compare identifiers ignoring ASCII case only (`val` and `VAL` are one column; `é` and `É` are two), and mloda's checks for new and helper column names fold case the same way. A join, as-of merge, union, append, `from_arrow` or `from_dict` whose output names differ only in case raises `ValueError`; rename one side upstream.
+-   On those engines, mask primitives and the `partition_by` / `order_by` columns of `with_row_number` / `window` must be exact column names. Raw SQL fragments (`filter` conditions, `select` / `project` expressions, the `window` function) bind through the engine and stay case-insensitive; on SQLite an unresolvable quoted name there is read as a string literal, not an error.
+-   Spark follows `spark.sql.caseSensitive` (default `false`). mloda's Spark checks are exact, so a case-only duplicate surfaces as Spark's ambiguous-reference error; set it to `true` for exact-case behavior.
 
 ### Row count for observability
 

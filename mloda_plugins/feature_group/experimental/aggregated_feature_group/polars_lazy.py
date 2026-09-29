@@ -33,10 +33,7 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:
         """Get the set of available column names from the LazyFrame schema."""
-        if hasattr(data, "collect_schema"):
-            return set(data.collect_schema().names())
-        else:
-            raise ValueError("Data does not have a collect_schema method, cannot get available columns.")
+        return PolarsLazyDataFrame.extract_column_names(data)
 
     @classmethod
     def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:

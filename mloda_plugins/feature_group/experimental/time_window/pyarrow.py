@@ -43,7 +43,7 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
     def _get_available_columns(cls, data: pa.Table) -> set[str]:
         """Get the set of available column names from the Table schema."""
-        return set(data.schema.names)
+        return PyArrowTable.extract_column_names(data)
 
     @classmethod
     def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:

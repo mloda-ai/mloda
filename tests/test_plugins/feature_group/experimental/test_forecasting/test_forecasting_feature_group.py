@@ -331,21 +331,27 @@ class TestForecastingFeatureGroup:
             options.add_to_group(ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, True)
         return options
 
-    def _save_artifact(self, df: pd.DataFrame, confidence_intervals: bool = False) -> tuple[pd.DataFrame, str]:
+    def _save_artifact(
+        self, df: pd.DataFrame, confidence_intervals: bool = False, name: str | None = None
+    ) -> tuple[pd.DataFrame, str]:
+        name = name or self.FEATURE_NAME
         feature_set = FeatureSet()
-        feature_set.add(Feature(self.FEATURE_NAME, self._options(confidence_intervals)))
-        feature_set.artifact_to_save = self.FEATURE_NAME
+        feature_set.add(Feature(name, self._options(confidence_intervals)))
+        feature_set.artifact_to_save = name
         result = self._calculate(df, feature_set)
 
         assert feature_set.save_artifact is not None
         return result, ForecastingArtifact._serialize_artifact(feature_set.save_artifact)
 
-    def _load_feature_set(self, serialized: str, confidence_intervals: bool = False) -> FeatureSet:
+    def _load_feature_set(
+        self, serialized: str, confidence_intervals: bool = False, name: str | None = None
+    ) -> FeatureSet:
+        name = name or self.FEATURE_NAME
         options = self._options(confidence_intervals)
-        options.add_to_group(self.FEATURE_NAME, serialized)
+        options.add_to_group(name, serialized)
         feature_set = FeatureSet()
-        feature_set.add(Feature(self.FEATURE_NAME, options))
-        feature_set.artifact_to_load = self.FEATURE_NAME
+        feature_set.add(Feature(name, options))
+        feature_set.artifact_to_load = name
         return feature_set
 
     def test_expanded_source_forecasts_each_column(self) -> None:
@@ -446,22 +452,46 @@ class TestForecastingFeatureGroup:
     def test_selector_artifact_round_trip_is_flat(self) -> None:
         """A selected forecast saves a flat single-model artifact and reproduces the forecast."""
         df = self._expanded_df(["2", "10"])
-        feature_set = self._selected_feature_set()
-        feature_set.artifact_to_save = self.SELECTED_NAME
-        trained = self._calculate(df, feature_set)
+        trained, serialized = self._save_artifact(df, name=self.SELECTED_NAME)
 
-        assert feature_set.save_artifact is not None
-        assert "columns" not in feature_set.save_artifact
-        serialized = ForecastingArtifact._serialize_artifact(feature_set.save_artifact)
-
-        options = self._options()
-        options.add_to_group(self.SELECTED_NAME, serialized)
-        load_set = FeatureSet()
-        load_set.add(Feature(self.SELECTED_NAME, options))
-        load_set.artifact_to_load = self.SELECTED_NAME
-        loaded = self._calculate(df, load_set)
+        assert '"columns"' not in serialized
+        loaded = self._calculate(df, self._load_feature_set(serialized, name=self.SELECTED_NAME))
 
         assert np.allclose(trained[self.SELECTED_NAME].to_numpy(), loaded[self.SELECTED_NAME].to_numpy())
+
+    def test_selector_uses_nested_artifact_column(self) -> None:
+        """A nested artifact saved from `name` serves `name~10` with the `~10` model."""
+        df = self._expanded_df(["2", "10"])
+        trained, serialized = self._save_artifact(df)
+
+        loaded = self._calculate(df, self._load_feature_set(serialized, name=self.SELECTED_NAME))
+
+        expected = trained[f"{self.FEATURE_NAME}~10"].to_numpy()
+        assert np.allclose(loaded[self.SELECTED_NAME].to_numpy(), expected)
+
+    def test_selector_missing_from_nested_artifact_raises(self) -> None:
+        """A selector absent from a nested artifact raises ValueError mentioning the artifact."""
+        df = self._expanded_df(["2", "10"])
+        _, serialized = self._save_artifact(df)
+
+        with pytest.raises(ValueError, match="artifact"):
+            self._calculate(
+                self._expanded_df(["2", "3"]),
+                self._load_feature_set(serialized, name="sales__linear_forecast_7day~3"),
+            )
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "sales__linear_forecast_7day~lower",
+            "sales__linear_forecast_7day~upper",
+            "sales__linear_forecast_7day~0_x",
+        ],
+    )
+    def test_invalid_selector_tails_do_not_match(self, name: str) -> None:
+        """Bound names and selectors containing `_` are not forecasting features."""
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
 
     def test_unknown_selector_raises(self) -> None:
         """A selector matching no resolved column raises ValueError naming the selector."""
@@ -477,8 +507,9 @@ class TestForecastingFeatureGroup:
         feature_set = FeatureSet()
         feature_set.add(Feature("sales__linear_forecast_7day~0", self._options()))
 
-        with pytest.raises(ValueError, match=r"selector"):
+        with pytest.raises(ValueError, match=r"single column.*selector|selector.*single column") as excinfo:
             self._calculate(self.df, feature_set)
+        assert "~0" in str(excinfo.value)
 
     def test_chaining_skips_bound_columns(self) -> None:
         """Chaining on a multi-column forecast forecasts `~0`, `~1` but not the `~lower/~upper` bounds."""
@@ -490,6 +521,14 @@ class TestForecastingFeatureGroup:
 
         forecast_columns = [c for c in result.columns if c.startswith(self.FEATURE_NAME)]
         assert sorted(forecast_columns) == [f"{self.FEATURE_NAME}~0", f"{self.FEATURE_NAME}~1"]
+
+    def test_chaining_keeps_deeper_sub_columns(self) -> None:
+        """A deeper non-bound sub-column such as `sales~a~b` is still forecast."""
+        df = self._expanded_df(["a~b"])
+
+        result = self._calculate(df)
+
+        assert f"{self.FEATURE_NAME}~a~b" in result.columns
 
     @pytest.mark.parametrize("extra", [np.arange(30, dtype=float) * 3.0, ["x"] * 30])
     def test_unrelated_columns_are_not_regressors(self, extra: Any) -> None:

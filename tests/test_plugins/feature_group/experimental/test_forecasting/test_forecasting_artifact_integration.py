@@ -99,6 +99,30 @@ class TestForecastingArtifactIntegration:
         assert f"{base_name}~0" not in columns
         assert f"{base_name}~2" not in columns
 
+    def test_forecast_multi_and_selected_together_artifact_reload(self) -> None:
+        """Requesting `name` and `name~1` together saves the nested artifact under `name` and reloads."""
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {ForecastingCategoryTestDataCreator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
+        )
+        base_name = "category__onehot_encoded__linear_forecast_7day"
+        options = Options({DefaultOptionKeys.reference_time: "time_filter"})
+        features: list[Feature | str] = [Feature(base_name, options), Feature(f"{base_name}~1", options)]
+
+        api = mloda(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        api.run()
+        artifact = api.get_artifacts()[base_name]
+
+        options2 = Options({DefaultOptionKeys.reference_time: "time_filter"})
+        options2.add_to_group(base_name, artifact)
+        features2: list[Feature | str] = [Feature(base_name, options2), Feature(f"{base_name}~1", options2)]
+        api2 = mloda(features2, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        results2 = api2.run()
+
+        columns2 = [c for r in results2 for c in r.columns]
+        for suffix in ("0", "1", "2"):
+            assert f"{base_name}~{suffix}" in columns2
+        assert f"{base_name}~1" in columns2
+
     def test_artifact_save_and_load(self) -> None:
         """Test saving and loading forecasting artifacts."""
         # Enable the necessary feature groups

@@ -4,6 +4,7 @@ Base implementation for forecasting feature groups.
 
 from __future__ import annotations
 
+import re
 from abc import abstractmethod
 from typing import Any
 
@@ -23,6 +24,22 @@ from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeRe
 def _is_bool(value: Any) -> bool:
     """Accept only a real bool, so 1 or "true" is rejected rather than silently coerced."""
     return isinstance(value, bool)
+
+
+# A selector tail excludes the reserved bound names and `_`, so it cannot be mistaken for a suffix part.
+_SELECTOR_TAIL = r"(?!lower$|upper$)[^~_]+"
+_SELECTOR_TAIL_RE = re.compile(_SELECTOR_TAIL)
+
+
+def _split_forecast_suffix(feature_name: str) -> tuple[str, str | None] | None:
+    """Split the text after the last `__` into (base, selector); None if there is no `__` or the tail is invalid."""
+    suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
+    if suffix_start == -1:
+        return None
+    base, sep, tail = feature_name[suffix_start + 2 :].partition("~")
+    if not sep:
+        return base, None
+    return (base, tail) if _SELECTOR_TAIL_RE.fullmatch(tail) else None
 
 
 class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
@@ -128,7 +145,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)(?:~[^~]+)?$"
+    PREFIX_PATTERN = rf".*__([\w]+)_forecast_(\d+)([\w]+)(?:~{_SELECTOR_TAIL})?$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -221,14 +238,14 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the double underscore)
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
+        if CHAIN_SEPARATOR not in feature_name:
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. Missing double underscore separator."
             )
-
-        suffix = feature_name[suffix_start + 2 :].split("~", 1)[0]
+        split = _split_forecast_suffix(feature_name)
+        if split is None:
+            raise ValueError(f"Invalid forecast feature name format: {feature_name}. Invalid selector.")
+        suffix = split[0]
 
         # Parse the suffix components
         parts = suffix.split("_")
@@ -329,9 +346,11 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             # A "~" source such as "product__onehot_encoded" expands to ["...~0", "...~1", ...]
             available_columns = cls._get_available_columns(original_data)
             resolved_columns = cls.resolve_multi_column_feature(in_features, available_columns)
-            # Chaining forecasts direct sub-columns only, skipping bound columns such as "~0~lower"
+            # Chaining skips bound columns such as "~0~lower" or "~0~upper"
             resolved_columns = [
-                c for c in resolved_columns if c == in_features or "~" not in c.removeprefix(f"{in_features}~")
+                c
+                for c in resolved_columns
+                if c == in_features or not c.removeprefix(f"{in_features}~").endswith(("~lower", "~upper"))
             ]
 
             # Check that resolved columns exist
@@ -353,6 +372,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             ]
             selector = cls._extract_selector(feature.name)
             if selector is not None:
+                if all(suffix is None for suffix in suffixes):
+                    raise ValueError(f"Source '{in_features}' is a single column and takes no selector '~{selector}'.")
                 if selector not in suffixes:
                     available = sorted(str(s) for s in suffixes if s is not None)
                     raise ValueError(
@@ -361,7 +382,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                 resolved_columns = [f"{in_features}~{selector}"]
                 suffixes = [None]
             expanded = any(suffix is not None for suffix in suffixes)
-            column_artifacts = cls._column_artifacts(model_artifact, suffixes, expanded)
+            column_artifacts = cls._column_artifacts(model_artifact, suffixes, expanded, selector)
 
             new_artifacts: dict[str, Any] = {}
             for column, suffix in zip(resolved_columns, suffixes):
@@ -396,7 +417,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                 if updated_artifact:
                     new_artifacts["" if suffix is None else suffix] = updated_artifact
 
-            if features.artifact_to_save is not None and new_artifacts and features.artifact_to_load is None:
+            owns_artifact = features.artifact_to_save == feature.name
+            if owns_artifact and new_artifacts and features.artifact_to_load is None:
                 features.save_artifact = {"columns": new_artifacts} if expanded else new_artifacts[""]
 
         # Add all results to the data at once
@@ -410,17 +432,24 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """Return the trailing `~<selector>` of a string-based forecast name, else None."""
         if not cls._has_valid_forecast_suffix(feature_name):
             return None
-        _, _, suffix = feature_name.rpartition(CHAIN_SEPARATOR)
-        return suffix.split("~", 1)[1] if "~" in suffix else None
+        split = _split_forecast_suffix(feature_name)
+        return split[1] if split else None
 
     @classmethod
     def _column_artifacts(
-        cls, model_artifact: Any | None, suffixes: list[str | None], expanded: bool
+        cls, model_artifact: Any | None, suffixes: list[str | None], expanded: bool, selector: str | None = None
     ) -> dict[str | None, Any] | None:
         """Split a loaded artifact per column suffix, raising ValueError when its shape does not match the source."""
         if model_artifact is None:
             return None
         nested = "columns" in model_artifact
+        if selector is not None and nested:
+            if selector not in model_artifact["columns"]:
+                raise ValueError(
+                    f"The loaded artifact has no model for selector '~{selector}'. "
+                    f"Artifact columns: {sorted(model_artifact['columns'])}"
+                )
+            return {None: model_artifact["columns"][selector]}
         if not expanded:
             if nested:
                 raise ValueError("The loaded artifact holds per-column models but the source is a single column.")
@@ -459,10 +488,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     @classmethod
     def _has_valid_forecast_suffix(cls, feature_name: str) -> bool:
         """Check if feature_name has a suffix matching the forecast pattern."""
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
+        split = _split_forecast_suffix(feature_name)
+        if split is None:
             return False
-        suffix = feature_name[suffix_start + 2 :].split("~", 1)[0]
+        suffix = split[0]
         parts = suffix.split("_")
         if len(parts) < 3 or parts[1] != "forecast":
             return False

@@ -3,8 +3,11 @@ from decimal import Decimal
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
+    fold_identifier,
     inline_params,
     pick_helper_column_name,
+    pick_rename_prefix,
     quote_ident,
     quote_value,
 )
@@ -135,7 +138,7 @@ class TestPickHelperColumnName:
         assert result == "__mloda_rn1__"
 
     def test_pick_helper_column_name_lowercases_uppercase_prefix(self) -> None:
-        """An uppercase prefix must be casefolded before building the candidate name."""
+        """An uppercase prefix must be ASCII-lowercased before building the candidate name."""
         result = pick_helper_column_name(taken=set(), prefix="__MLODA_RN")
         assert result == "__mloda_rn0__"
 
@@ -143,3 +146,59 @@ class TestPickHelperColumnName:
         """A mixed-case prefix must not collide case-insensitively with taken."""
         result = pick_helper_column_name(taken={"__mloda_rn0__"}, prefix="__MLODA_RN")
         assert result == "__mloda_rn1__"
+
+    def test_pick_helper_column_name_folds_ascii_only(self) -> None:
+        result = pick_helper_column_name(taken={"straße0__"}, prefix="STRASSE")
+        assert result == "strasse0__"
+
+
+class TestFoldIdentifier:
+    def test_lowercases_ascii(self) -> None:
+        assert fold_identifier("Val_ABC") == "val_abc"
+
+    def test_leaves_non_ascii_unchanged(self) -> None:
+        assert fold_identifier("É") == "É"
+        assert fold_identifier("straße") == "straße"
+
+
+class TestEnsureDistinctIdentifiers:
+    def test_distinct_passes(self) -> None:
+        ensure_distinct_identifiers(["a", "b", "c"], "join")
+
+    def test_case_only_collision_raises_naming_both_and_operation(self) -> None:
+        with pytest.raises(ValueError, match="rename") as exc:
+            ensure_distinct_identifiers(["id", "Val", "val"], "join")
+        message = str(exc.value)
+        assert "join" in message
+        assert repr("Val") in message
+        assert repr("val") in message
+
+    def test_exact_duplicate_raises(self) -> None:
+        with pytest.raises(ValueError, match="rename"):
+            ensure_distinct_identifiers(["a", "a"], "from_dict")
+
+    def test_non_ascii_case_variants_pass(self) -> None:
+        ensure_distinct_identifiers(["é", "É"], "join")
+
+    def test_custom_fold_makes_non_ascii_case_variants_collide(self) -> None:
+        with pytest.raises(ValueError, match="rename") as exc:
+            ensure_distinct_identifiers(["é", "É"], "join", fold=str.lower)
+        message = str(exc.value)
+        assert "join" in message
+        assert repr("é") in message
+        assert repr("É") in message
+
+
+class TestPickRenamePrefix:
+    def test_free_case_returns_first_prefix(self) -> None:
+        assert pick_rename_prefix("_mloda_r", ["x"], reserved=["a"]) == "_mloda_r0_"
+
+    def test_skips_prefix_whose_renamed_name_is_reserved(self) -> None:
+        assert pick_rename_prefix("_mloda_r", ["x"], reserved=["_MLODA_R0_x"]) == "_mloda_r1_"
+
+    def test_custom_fold_blocks_non_ascii_case_variant(self) -> None:
+        result = pick_rename_prefix("_mloda_r", ["é"], reserved=["_MLODA_R0_É"], fold=str.lower)
+        assert result == "_mloda_r1_"
+
+    def test_default_ascii_fold_ignores_non_ascii_case_variant(self) -> None:
+        assert pick_rename_prefix("_mloda_r", ["é"], reserved=["_MLODA_R0_É"]) == "_mloda_r0_"

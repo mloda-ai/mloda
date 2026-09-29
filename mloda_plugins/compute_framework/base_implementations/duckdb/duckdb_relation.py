@@ -15,6 +15,7 @@ except ImportError:
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
     inline_params,
     quote_ident,
 )
@@ -82,6 +83,7 @@ class DuckdbRelation(SqlBaseRelation):
 
     def select(self, *columns: str) -> "DuckdbRelation":
         """Project named columns, quoting each identifier."""
+        self._require_columns(*columns)
         projection = ", ".join(quote_ident(c) for c in columns)
         new_rel = self._relation.project(projection)
         return DuckdbRelation(self._connection, new_rel)
@@ -140,6 +142,7 @@ class DuckdbRelation(SqlBaseRelation):
         self_cols = self.columns
         other_cols = other.columns
         shared = set(self_cols) & set(other_cols)
+        ensure_distinct_identifiers([*self_cols, *(c for c in other_cols if c not in shared)], "join")
 
         joined = self._relation.join(other._relation, condition, how=cast(DuckdbRelation._JoinType, how))
 
@@ -179,7 +182,7 @@ class DuckdbRelation(SqlBaseRelation):
         return DuckdbRelation(self._connection, new_rel)
 
     def order(self, *columns: str) -> "DuckdbRelation":
-        """Return a new relation sorted by the given columns."""
+        """Return a new relation sorted by a raw SQL order fragment (the arguments are joined verbatim)."""
         return DuckdbRelation(self._connection, self._relation.order(", ".join(columns)))
 
     def drop(self) -> None:
@@ -205,7 +208,7 @@ class DuckdbRelation(SqlBaseRelation):
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally.
 
-        Raises ``ValueError`` if ``name`` collides with an existing column (comparison is case-insensitive).
+        Raises ``ValueError`` if ``name`` collides with an existing column (comparison is ASCII case-insensitive).
         """
         self._ensure_column_absent(name)
         new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
@@ -223,6 +226,7 @@ class DuckdbRelation(SqlBaseRelation):
 
     @classmethod
     def from_arrow(cls, connection: duckdb.DuckDBPyConnection, arrow_table: pa.Table) -> "DuckdbRelation":
+        ensure_distinct_identifiers(arrow_table.column_names, "from_arrow")
         relation = connection.from_arrow(arrow_table)
         return cls(connection, relation)
 

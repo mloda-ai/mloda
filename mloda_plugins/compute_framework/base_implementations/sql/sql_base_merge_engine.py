@@ -1,10 +1,16 @@
 from abc import abstractmethod
+from collections.abc import Sequence
 from typing import Any
 
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index, JoinType
 from mloda.provider import BaseMergeEngine
 
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
+    quote_ident,
+    require_exact_columns,
+)
 
 
 class SqlBaseMergeEngine(BaseMergeEngine):
@@ -54,6 +60,7 @@ class SqlBaseMergeEngine(BaseMergeEngine):
         left_cols = set(self.get_column_names(left_data))
         right_cols = set(self.get_column_names(right_data))
         all_cols = sorted(left_cols.union(right_cols))
+        ensure_distinct_identifiers(all_cols, "union")
 
         def build(cols_present: set[str]) -> str:
             return ", ".join(
@@ -61,6 +68,23 @@ class SqlBaseMergeEngine(BaseMergeEngine):
             )
 
         return build(left_cols), build(right_cols)
+
+    def _check_asof_columns(
+        self,
+        left_data: Any,
+        right_data: Any,
+        left_by: Sequence[str],
+        right_by: Sequence[str],
+        asof_config: AsOfJoinConfig,
+    ) -> tuple[list[str], list[str], list[str]]:
+        """Require exact by/time columns and distinct output names; return (left_cols, right_cols, right_extra)."""
+        left_cols = self.get_column_names(left_data)
+        right_cols = self.get_column_names(right_data)
+        require_exact_columns(left_cols, [*left_by, asof_config.left_time_column])
+        require_exact_columns(right_cols, [*right_by, asof_config.right_time_column])
+        right_extra = [c for c in right_cols if c not in left_cols]
+        ensure_distinct_identifiers([*left_cols, *right_extra], "as-of merge")
+        return left_cols, right_cols, right_extra
 
     def get_column_names(self, data: Any) -> list[str]:
         if hasattr(data, "columns"):
@@ -114,6 +138,12 @@ class SqlBaseMergeEngine(BaseMergeEngine):
 
         left_idx = left_index.index if left_index.is_multi_index() else left_index.index[0]
         right_idx = right_index.index if right_index.is_multi_index() else right_index.index[0]
+
+        left_cols = self.get_column_names(left_data)
+        right_cols = self.get_column_names(right_data)
+        require_exact_columns(left_cols, (left_idx,) if isinstance(left_idx, str) else left_idx)
+        require_exact_columns(right_cols, (right_idx,) if isinstance(right_idx, str) else right_idx)
+        ensure_distinct_identifiers([*left_cols, *(c for c in right_cols if c not in left_cols)], "join")
 
         empty_result = self.handle_empty_data(left_data, right_data, left_idx, right_idx, join_type)
         if empty_result is not None:

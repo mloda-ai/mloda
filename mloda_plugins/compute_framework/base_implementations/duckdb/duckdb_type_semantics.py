@@ -47,12 +47,12 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
 def nan_condition(data: Any, column: str) -> str | None:
     """Return an isnan() condition for a FLOAT/DOUBLE column, else None (isnan fails to bind on VARCHAR).
 
-    Resolves the column through duckdb's own projection so a missing column or a
-    differently-cased name raises duckdb's own binding error rather than a Python KeyError.
+    The column is looked up by exact name; a missing or differently-cased name raises ``ValueError``.
     """
-    from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+    from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident, require_exact_columns
 
-    type_str = str(data.project(quote_ident(column)).types[0])
+    require_exact_columns(data.columns, [column])
+    type_str = str(data.types[data.columns.index(column)])
     if type_str in ("FLOAT", "DOUBLE"):
         return f"isnan({quote_ident(column)})"
     return None

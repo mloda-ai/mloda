@@ -100,6 +100,31 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         result = engine.is_in(sample_data, "value", [Decimal("12.34"), Decimal("5.50")])
         assert result == '"value" IN (12.34, 5.50)'
 
+    @pytest.mark.parametrize("bad_column", ["STATUS", "missing"], ids=["case_mismatch", "missing"])
+    @pytest.mark.parametrize(
+        "primitive, value",
+        [
+            ("equal", "active"),
+            ("greater_equal", 20),
+            ("less_equal", 30),
+            ("less_than", 30),
+            ("greater_than", 20),
+            ("is_in", ["active"]),
+            ("is_in", []),
+        ],
+        ids=["equal", "greater_equal", "less_equal", "less_than", "greater_than", "is_in", "is_in_empty"],
+    )
+    def test_primitive_inexact_column_raises(
+        self,
+        engine: type[SqlBaseMaskEngine],
+        sample_data: Any,
+        primitive: str,
+        value: Any,
+        bad_column: str,
+    ) -> None:
+        with pytest.raises(ValueError, match=bad_column):
+            getattr(engine, primitive)(sample_data, bad_column, value)
+
     def test_combine_and_joins_conditions(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         cond1 = engine.greater_equal(sample_data, "value", 20)
         cond2 = engine.less_equal(sample_data, "value", 30)

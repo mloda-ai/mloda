@@ -8,6 +8,7 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     null_or_nan_condition,
     quote_ident,
     quote_value,
+    require_exact_columns,
 )
 
 
@@ -37,6 +38,12 @@ class SqlBaseMaskEngine(BaseMaskEngine):
         return None
 
     @classmethod
+    def _require_column(cls, data: Any, column: str) -> None:
+        """Raise ``ValueError`` unless ``column`` is an exact entry of ``data.columns`` (None passes)."""
+        if data is not None:
+            require_exact_columns(data.columns, [column])
+
+    @classmethod
     def _null_or_nan_condition(cls, data: Any, column: str) -> str:
         return null_or_nan_condition(quote_ident(column), cls._nan_condition(data, column))
 
@@ -50,6 +57,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def equal(cls, data: Any, column: str, value: Any) -> str:
+        cls._require_column(data, column)
         if is_null_or_nan(value):
             cls._check_nan_data(data, "equal")
             return cls._null_or_nan_condition(data, column)
@@ -57,6 +65,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def greater_equal(cls, data: Any, column: str, value: Any) -> str:
+        cls._require_column(data, column)
         cond = f"{quote_ident(column)} >= {quote_value(value)}"
         cls._check_nan_data(data, "greater_equal")
         nan_cond = cls._nan_condition(data, column)
@@ -66,14 +75,17 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def less_equal(cls, data: Any, column: str, value: Any) -> str:
+        cls._require_column(data, column)
         return f"{quote_ident(column)} <= {quote_value(value)}"
 
     @classmethod
     def less_than(cls, data: Any, column: str, value: Any) -> str:
+        cls._require_column(data, column)
         return f"{quote_ident(column)} < {quote_value(value)}"
 
     @classmethod
     def greater_than(cls, data: Any, column: str, value: Any) -> str:
+        cls._require_column(data, column)
         cond = f"{quote_ident(column)} > {quote_value(value)}"
         cls._check_nan_data(data, "greater_than")
         nan_cond = cls._nan_condition(data, column)
@@ -83,6 +95,7 @@ class SqlBaseMaskEngine(BaseMaskEngine):
 
     @classmethod
     def is_in(cls, data: Any, column: str, values: Any) -> str:
+        cls._require_column(data, column)
         require_value_collection(values, "is_in values")
         if isinstance(values, (set, frozenset)):
             value_list = sorted(values, key=repr)

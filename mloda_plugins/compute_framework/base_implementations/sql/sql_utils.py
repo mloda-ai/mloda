@@ -12,12 +12,16 @@ SQL injection prevention follows two layers:
 """
 
 import math
+import string
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import pyarrow as pa
+
+_ASCII_FOLD = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
 
 def is_ordered_arrow_type(t: "pa.DataType") -> bool:
@@ -64,15 +68,55 @@ def quote_value(value: Any) -> str:
     raise TypeError(f"Unsupported type for SQL literal: {type(value).__name__}")
 
 
-def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:
-    """Return the lowest ``{prefix}{n}__`` name not present in ``taken`` (case-insensitive).
+def fold_identifier(name: str) -> str:
+    """Lowercase ASCII letters only, matching how DuckDB and SQLite compare identifiers."""
+    return name.translate(_ASCII_FOLD)
 
-    The returned name is always lowercase (the ``prefix`` is casefolded), so a
-    mixed-case ``prefix`` cannot return a name that collides case-insensitively
-    with an entry in ``taken``.
+
+def ensure_distinct_identifiers(
+    columns: Iterable[str], operation: str, fold: Callable[[str], str] = fold_identifier
+) -> None:
+    """Raise ``ValueError`` on the first pair of columns equal under ``fold``."""
+    seen: dict[str, str] = {}
+    for column in columns:
+        folded = fold(column)
+        if folded in seen:
+            raise ValueError(
+                f"{operation}: columns {seen[folded]!r} and {column!r} resolve to the same column; rename one side"
+            )
+        seen[folded] = column
+
+
+def pick_rename_prefix(
+    stem: str, names: Iterable[str], reserved: Iterable[str], fold: Callable[[str], str] = fold_identifier
+) -> str:
+    """Return the lowest ``{stem}{n}_`` prefix whose prefixed names avoid every reserved name under ``fold``."""
+    names = list(names)
+    reserved_folded = {fold(r) for r in reserved}
+    n = 0
+    while any(fold(f"{stem}{n}_{name}") in reserved_folded for name in names):
+        n += 1
+    return f"{stem}{n}_"
+
+
+def require_exact_columns(
+    columns: Iterable[str], names: Iterable[str], pseudo_columns: frozenset[str] = frozenset()
+) -> None:
+    """Raise ``ValueError`` for the first name that is not an exact column and not a pseudo-column."""
+    existing = set(columns)
+    for name in names:
+        if name not in existing and fold_identifier(name) not in pseudo_columns:
+            raise ValueError(f"Column {name!r} is not a column of the relation; column names are case-sensitive")
+
+
+def pick_helper_column_name(taken: set[str], prefix: str = "__mloda_rn") -> str:
+    """Return the lowest ``{prefix}{n}__`` name not present in ``taken`` (ASCII case-insensitive).
+
+    The ``prefix`` is ASCII-lowercased, so a mixed-case ``prefix`` cannot return a name
+    that collides with an entry in ``taken``.
     """
-    prefix_cf = prefix.casefold()
-    taken_cf = {t.casefold() for t in taken}
+    prefix_cf = fold_identifier(prefix)
+    taken_cf = {fold_identifier(t) for t in taken}
     n = 0
     while f"{prefix_cf}{n}__" in taken_cf:
         n += 1

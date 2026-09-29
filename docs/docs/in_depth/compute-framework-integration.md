@@ -188,6 +188,14 @@ elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.
 
+### Column name case sensitivity
+
+mloda matches column and feature names exactly (case-sensitive) in every lookup, match and presence check; engines that resolve names differently add the rules below.
+
+-   DuckDB and SQLite compare identifiers ignoring ASCII case only (`val` and `VAL` are one column; `é` and `É` are two), and mloda's checks for new and helper column names fold case the same way. A join, as-of merge, union, append, `from_arrow` or `from_dict` whose output names differ only in case, or repeat a name exactly, raises `ValueError`; rename one side upstream.
+-   On those engines, mask primitives, the `partition_by` / `order_by` columns of `with_row_number` / `window`, merge keys, as-of `by` and time columns, `select` names and SQLite `order` names must be exact column names. SQLite also accepts its `rowid` / `oid` / `_rowid_` pseudo-columns in `select`, `order`, `with_row_number` and `window`. Raw SQL fragments (`filter` conditions, `project` expressions, the `window` function, DuckDB `order`) bind through the engine and stay case-insensitive; on SQLite an unresolvable quoted name there is read as a string literal, not an error.
+-   Spark column resolution follows `spark.sql.caseSensitive` (default `false`, folding like Python's `str.lower`, Unicode included). The Spark as-of merge and adding a feature column in `transform` raise `ValueError` on names that collide under that setting; Spark joins, union and append are not checked. Spark as-of time columns must match exactly; other Spark lookups (keys, masks, filters) bind through Spark's resolver.
+
 ### Row count for observability
 
 `ComputeFramework._row_count(self, data) -> int | None` supplies the row counts extenders read
@@ -313,7 +321,7 @@ relation.types     # backend-specific dtype objects, same order as columns
 
 ### Window functions
 
-`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column.
+`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column (the comparison ignores ASCII case) or if a `partition_by` / `order_by` column is not an exact column name.
 
 ```py
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (

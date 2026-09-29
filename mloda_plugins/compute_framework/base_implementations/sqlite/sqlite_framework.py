@@ -133,8 +133,6 @@ class SqliteFramework(ComputeFramework):
         if hasattr(data, "__iter__") and not isinstance(data, (str, bytes)):
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
-                if hasattr(self.data, "columns") and feature_name in self.data.columns:
-                    raise ValueError(f"Feature {feature_name} already exists in the relation")
                 return self.data.append_column(feature_name, list(data))
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 

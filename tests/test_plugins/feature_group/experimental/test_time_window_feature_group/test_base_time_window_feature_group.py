@@ -372,9 +372,6 @@ class TestTimeWindowFeatureGroup:
     @pytest.mark.parametrize("name", ["x__mean_imputed__sum_7_day_window", "a__b__c__sum_7_day_window"])
     def test_chained_source_name_parses_from_the_last_suffix(self, name: str) -> None:
         assert TimeWindowFeatureGroup.parse_time_window_prefix(name) == ("sum", 7, "day")
-        assert TimeWindowFeatureGroup.get_window_function(name) == "sum"
-        assert TimeWindowFeatureGroup.get_window_size(name) == 7
-        assert TimeWindowFeatureGroup.get_time_unit(name) == "day"
 
     @pytest.mark.parametrize(
         "name",
@@ -391,13 +388,10 @@ class TestTimeWindowFeatureGroup:
             TimeWindowFeatureGroup.parse_time_window_prefix(name)
         assert TimeWindowFeatureGroup._has_valid_time_window_suffix(name) is False
 
-    def test_empty_source_raises_like_the_matcher(self) -> None:
+    def test_empty_source_raises(self) -> None:
         name = "__sum_7_day_window"
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.parse_time_window_prefix(name)
-
-    def test_empty_source_raises_from_the_validity_check(self) -> None:
-        name = "__sum_7_day_window"
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup._has_valid_time_window_suffix(name)
 

@@ -347,6 +347,8 @@ class TestForecastingFeatureGroup:
             "x__linear_forecast_0day",
             "a__lin_ear_forecast_7day",
             "x__mean_imputed__linear_forecast_0day",
+            "x__linear_forecast_7day_extra",
+            "x__mean_imputed__linear_forecast_7day_extra",
         ],
     )
     def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
@@ -369,25 +371,12 @@ class TestForecastingFeatureGroup:
     def test_extract_selector(self, name: str, expected: str | None) -> None:
         assert ForecastingFeatureGroup._extract_selector(name) == expected
 
-    def test_empty_source_raises_like_the_matcher(self) -> None:
+    def test_empty_source_raises(self) -> None:
         name = "__linear_forecast_7day"
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.parse_forecast_suffix(name)
-
-    def test_empty_source_raises_from_the_validity_check(self) -> None:
-        name = "__linear_forecast_7day"
         with pytest.raises(ValueError):
             ForecastingFeatureGroup._has_valid_forecast_suffix(name)
-
-    @pytest.mark.parametrize("name", ["x__linear_forecast_7day_extra", "x__mean_imputed__linear_forecast_7day_extra"])
-    def test_trailing_part_after_the_time_unit_is_rejected(self, name: str) -> None:
-        """The hand parser read only the third `_` part and ignored the rest; the pattern rejects it."""
-        with pytest.raises(ValueError):
-            ForecastingFeatureGroup.parse_forecast_suffix(name)
-
-    @pytest.mark.parametrize("name", ["x__linear_forecast_7day_extra", "x__mean_imputed__linear_forecast_7day_extra"])
-    def test_trailing_part_after_the_time_unit_fails_the_validity_check(self, name: str) -> None:
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
 
     @pytest.mark.parametrize(
         ("name", "expected"),

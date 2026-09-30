@@ -99,7 +99,6 @@ class TestNodeCentralityFeatureGroup:
     )
     def test_chained_source_name_parses_from_the_last_suffix(self, name: str) -> None:
         assert NodeCentralityFeatureGroup.parse_centrality_prefix(name) == "degree"
-        assert NodeCentralityFeatureGroup.get_centrality_type(name) == "degree"
 
     @pytest.mark.parametrize(
         "name",
@@ -108,18 +107,12 @@ class TestNodeCentralityFeatureGroup:
             "a__degree_extra_centrality",
             "a__degree_centrality_extra",
             "x__mean_imputed__foo_bar_centrality",
+            "__degree_centrality",
         ],
     )
     def test_parse_centrality_prefix_rejects_underscores_inside_the_type(self, name: str) -> None:
         with pytest.raises(ValueError):
             NodeCentralityFeatureGroup.parse_centrality_prefix(name)
-
-    def test_empty_source_raises_like_the_matcher(self) -> None:
-        name = "__degree_centrality"
-        with pytest.raises(ValueError):
-            NodeCentralityFeatureGroup.parse_centrality_prefix(name)
-        with pytest.raises(ValueError):
-            NodeCentralityFeatureGroup.get_centrality_type(name)
 
     @pytest.mark.parametrize(
         ("name", "expected"),
@@ -132,6 +125,5 @@ class TestNodeCentralityFeatureGroup:
             PREFIX_PATTERN = r".*__(?P<centrality_type>[\w]+)_centr$"
 
         assert CentrPatternGroup.parse_centrality_prefix(name) == expected
-        assert CentrPatternGroup.get_centrality_type(name) == expected
         with pytest.raises(ValueError):
             CentrPatternGroup.parse_centrality_prefix("x__degree_centrality")

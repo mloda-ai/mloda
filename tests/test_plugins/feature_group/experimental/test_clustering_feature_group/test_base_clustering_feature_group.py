@@ -118,16 +118,10 @@ class TestClusteringFeatureGroup:
             "x__cluster_kmeans_0",
             "x__cluster_kmeans_-1",
             "x__mean_imputed__cluster_kmeans_5_6",
+            "__cluster_kmeans_5",
         ],
     )
     def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
-        with pytest.raises(ValueError):
-            ClusteringFeatureGroup.parse_clustering_prefix(name)
-        with pytest.raises(ValueError):
-            ClusteringFeatureGroup.get_k_value(name)
-
-    def test_empty_source_raises_like_the_matcher(self) -> None:
-        name = "__cluster_kmeans_5"
         with pytest.raises(ValueError):
             ClusteringFeatureGroup.parse_clustering_prefix(name)
         with pytest.raises(ValueError):

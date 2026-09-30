@@ -110,21 +110,13 @@ class TestDimensionalityReductionFeatureGroup:
             "x__pca_0d",
             "x__mean_imputed__pca_2_3d",
             "x__mean_imputed__pca_0d",
+            "__pca_2d",
+            "x__pca_+2d",
         ],
     )
     def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
         with pytest.raises(ValueError):
             DimensionalityReductionFeatureGroup.parse_reduction_suffix(name)
-
-    def test_empty_source_raises_like_the_matcher(self) -> None:
-        name = "__pca_2d"
-        with pytest.raises(ValueError):
-            DimensionalityReductionFeatureGroup.parse_reduction_suffix(name)
-
-    def test_signed_dimension_is_rejected(self) -> None:
-        """`int("+2")` used to accept a dimension the pattern never matches."""
-        with pytest.raises(ValueError):
-            DimensionalityReductionFeatureGroup.parse_reduction_suffix("x__pca_+2d")
 
     @pytest.mark.parametrize(
         ("name", "expected"),

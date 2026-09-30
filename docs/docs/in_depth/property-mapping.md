@@ -202,6 +202,17 @@ it:
   `options_with_defaults` at its own read site. That call is what makes a declared default real at an
   `input_features` read site (see [Applying declared defaults](#applying-declared-defaults)).
 
+## Validating a plain dict
+
+`validate_property_values(values, mapping, *, closed_world)` (from `mloda.provider`) checks a plain dict, such as a
+credentials dict, against a `PropertySpec` mapping. It raises `PropertyValidationError` (a `ValueError` with `key`
+and `reason`) on the first failure.
+
+- It checks required presence, `required_when`, and strict values (element-wise, `scalar_only` rejects a collection).
+- `closed_world=True` rejects undeclared keys; `False` ignores them.
+- `required_when` receives an `Options` of the raw values with no defaults applied; defaults are never materialized.
+- Errors and logs never contain a value. A raising `element_validator` or `required_when` rejects the key.
+
 ## Choosing a mechanism
 
 | You want to say | Use |

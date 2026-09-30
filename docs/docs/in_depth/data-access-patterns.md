@@ -56,7 +56,14 @@ class ReadFileFeature(FeatureGroup):
 
 Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
 
-- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`.
+- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`. To check a credentials dict against a `PropertySpec` mapping, use `validate_property_values`; any raise other than a soft `NotImplementedError` aborts matching, so convert its error:
+
+    try:
+        validate_property_values(credentials, CREDENTIAL_SPECS, closed_world=True)
+    except PropertyValidationError:
+        return False
+    return True
+
 - **ReadDocument**: implement `produce_document` and `suffix`; optionally `document_file_type`.
 - **ReadFile**: override `load_data` wholesale to return the table. `CsvReader` resolves to a `FileSource` descriptor that the target compute framework materializes into its native type.
 

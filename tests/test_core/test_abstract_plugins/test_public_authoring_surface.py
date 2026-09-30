@@ -16,7 +16,17 @@ from mloda.provider import NO_DEFAULT, PropertySpec, is_no_default, property_spe
 
 
 class TestAuthoringSurfaceIsExported:
-    @pytest.mark.parametrize("name", ["PropertySpec", "property_spec", "NO_DEFAULT", "is_no_default"])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "PropertySpec",
+            "property_spec",
+            "NO_DEFAULT",
+            "is_no_default",
+            "validate_property_values",
+            "PropertyValidationError",
+        ],
+    )
     def test_name_is_public(self, name: str) -> None:
         assert hasattr(provider, name)
         assert name in provider.__all__, f"{name} should be listed in mloda.provider.__all__"

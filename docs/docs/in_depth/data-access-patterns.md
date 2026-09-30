@@ -56,7 +56,7 @@ class ReadFileFeature(FeatureGroup):
 
 Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
 
-- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`. To check a credentials dict against a `PropertySpec` mapping, use `validate_property_values`; any raise other than a soft `NotImplementedError` aborts matching, so convert its error:
+- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`. To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
 
     try:
         validate_property_values(credentials, CREDENTIAL_SPECS, closed_world=True)

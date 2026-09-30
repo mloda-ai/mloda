@@ -208,10 +208,10 @@ it:
 credentials dict, against a `PropertySpec` mapping. It raises `PropertyValidationError` (a `ValueError` with `key`
 and `reason`) on the first failure.
 
-- It checks required presence, `required_when`, and strict values (element-wise, `scalar_only` rejects a collection).
+- It checks required presence, `required_when`, and strict values.
 - `closed_world=True` rejects undeclared keys; `False` ignores them.
-- `required_when` receives an `Options` of the raw values with no defaults applied; defaults are never materialized.
-- Errors and logs never contain a value. A raising `element_validator` or `required_when` rejects the key.
+- Defaults are never applied: `required_when` receives an `Options` of the raw values, unlike on a feature group.
+- Errors and logs never contain a value.
 
 ## Choosing a mechanism
 

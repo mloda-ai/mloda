@@ -49,6 +49,12 @@ class TestAllowedValues:
             validate_property_values({"k": "c"}, mapping, closed_world=True)
         assert exc.value.key == "k"
 
+    @pytest.mark.parametrize("allowed", [("a",), {"a"}], ids=["tuple", "set"])
+    @pytest.mark.parametrize("value", [[["a"]], {"a": 1}], ids=["nested_list", "dict_scalar"])
+    def test_unhashable_element_rejected_not_type_error(self, allowed: Any, value: Any) -> None:
+        with pytest.raises(PropertyValidationError):
+            validate_property_values({"k": value}, _strict(allowed_values=allowed), closed_world=True)
+
 
 class TestElementValidator:
     def test_accepts(self) -> None:
@@ -194,13 +200,16 @@ class TestErrorShape:
     def test_is_value_error(self) -> None:
         assert issubclass(PropertyValidationError, ValueError)
 
-    def test_key_set_on_every_error(self) -> None:
-        cases: list[tuple[dict[str, Any], dict[str, PropertySpec], bool]] = [
-            ({"x": 1}, {}, True),
-            ({}, {"k": PropertySpec("k")}, True),
-            ({"k": "c"}, _strict(allowed_values=("a",)), True),
-        ]
-        for values, mapping, closed in cases:
-            with pytest.raises(PropertyValidationError) as exc:
-                validate_property_values(values, mapping, closed_world=closed)
-            assert isinstance(exc.value.key, str) and exc.value.key
+    @pytest.mark.parametrize(
+        ("values", "mapping"),
+        [
+            ({"x": 1}, {}),
+            ({}, {"k": PropertySpec("k")}),
+            ({"k": "c"}, _strict(allowed_values=("a",))),
+        ],
+        ids=["undeclared", "absent_required", "non_member"],
+    )
+    def test_key_set_on_every_error(self, values: dict[str, Any], mapping: dict[str, PropertySpec]) -> None:
+        with pytest.raises(PropertyValidationError) as exc:
+            validate_property_values(values, mapping, closed_world=True)
+        assert isinstance(exc.value.key, str) and exc.value.key

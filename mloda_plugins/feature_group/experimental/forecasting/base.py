@@ -27,7 +27,7 @@ def _is_bool(value: Any) -> bool:
 
 
 # A selector tail excludes the reserved bound names and `_`, so it cannot be mistaken for a suffix part.
-_SELECTOR_TAIL = r"(?!lower$|upper$)[^~_]+"
+_SELECTOR_TAIL = r"(?!(?:lower|upper)\Z)[^~_\n]+"
 _SELECTOR_TAIL_RE = re.compile(_SELECTOR_TAIL)
 
 

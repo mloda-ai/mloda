@@ -88,7 +88,7 @@ class FeatureChainParser:
         prefix_patterns: list[Any],
         pattern: str = CHAIN_SEPARATOR,
     ) -> ParsedFeatureName:
-        """Parse a feature name into structured facts, keeping today's matching semantics.
+        """Parse a feature name into structured facts.
 
         A prefix pattern is a ``str`` or compiled ``re.Pattern`` that must match the whole name (``re.fullmatch``).
         A matched pattern with nothing before the separator raises the historical ValueError;

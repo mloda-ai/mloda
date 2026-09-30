@@ -233,7 +233,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
             raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
 
         # Convert window size to integer
-        if not window_size_str.isdigit() or int(window_size_str) <= 0:
+        if int(window_size_str) <= 0:
             raise ValueError(f"Invalid window size: {window_size_str}. Must be a positive integer.")
         window_size = int(window_size_str)
 

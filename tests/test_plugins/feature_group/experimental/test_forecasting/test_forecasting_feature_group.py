@@ -347,11 +347,21 @@ class TestForecastingFeatureGroup:
             "x__linear_forecast_0day",
             "a__lin_ear_forecast_7day",
             "x__mean_imputed__linear_forecast_0day",
+        ],
+    )
+    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            ForecastingFeatureGroup.parse_forecast_suffix(name)
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
+
+    @pytest.mark.parametrize(
+        "name",
+        [
             "x__linear_forecast_7day_extra",
             "x__mean_imputed__linear_forecast_7day_extra",
         ],
     )
-    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+    def test_trailing_part_after_the_time_unit_is_rejected(self, name: str) -> None:
         with pytest.raises(ValueError):
             ForecastingFeatureGroup.parse_forecast_suffix(name)
         assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False

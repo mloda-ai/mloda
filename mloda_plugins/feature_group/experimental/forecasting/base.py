@@ -233,7 +233,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
 
         # Convert horizon to integer
-        if not horizon_str.isdigit() or int(horizon_str) <= 0:
+        if int(horizon_str) <= 0:
             raise ValueError(f"Invalid horizon: {horizon_str}. Must be a positive integer.")
         horizon = int(horizon_str)
 

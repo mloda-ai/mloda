@@ -734,6 +734,52 @@ def test_end2end_python_feature_abstract_family_base_scope_resolves_to_pandas_su
     assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 100
 
 
+class ScopePythonAggregationSourceB(FeatureGroup):
+    """Second source of the same feature name with different values."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"scope_python_sales"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"scope_python_sales": [1, 2, 3, 4]}
+
+
+@pytest.mark.parametrize("path", ["name_path", "config_path"])
+def test_end2end_one_declared_child_shared_by_two_consumers(path: str) -> None:
+    """A shared declared child keeps its scope and is not mutated by either consumer's group options."""
+    child = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
+    context = {"in_features": [child]}
+    if path == "name_path":
+        sum_name, max_name = "scope_python_sales__sum_aggr", "scope_python_sales__max_aggr"
+        sum_group: dict[str, Any] = {"g_shared": 1}
+        max_group: dict[str, Any] = {"g_shared": 2}
+    else:
+        sum_name, max_name = "scope_cfg_sum", "scope_cfg_max"
+        sum_group = {"g_shared": 1, "aggregation_type": "sum"}
+        max_group = {"g_shared": 2, "aggregation_type": "max"}
+
+    results = list(
+        mloda.run_all(
+            [
+                Feature(sum_name, Options(group=sum_group, context=context)),
+                Feature(max_name, Options(group=max_group, context=context)),
+            ],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
+            ),
+        )
+    )
+
+    summed = [df for df in results if sum_name in df.columns]
+    maxed = [df for df in results if max_name in df.columns]
+    assert summed[0][sum_name].iloc[0] == 10
+    assert maxed[0][max_name].iloc[0] == 4
+    assert child.options.get("g_shared") is None
+
+
 # ---------------------------------------------------------------------------
 # A name-owning candidate's marked match abort must not outrank the scope and domain gates
 # ---------------------------------------------------------------------------

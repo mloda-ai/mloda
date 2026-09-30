@@ -173,6 +173,15 @@ class TestAggregatedFeatureGroup:
         input_features = feature_group.input_features(options, FeatureName("discount__median_aggr"))
         assert input_features == {Feature("discount")}
 
+        child = Feature("sales", options=Options(context={"some_key": 1}), feature_group="SomeReader")
+        declared_options = Options(context={"in_features": [child]})
+        assert feature_group.match_feature_group_criteria("sales__sum_aggr", declared_options)
+        result = feature_group.input_features(declared_options, FeatureName("sales__sum_aggr"))
+        assert result is not None
+        [declared] = result
+        assert declared.options.get("some_key") == 1
+        assert declared.feature_group_scope == "SomeReader"
+
 
 class TestPandasAggregatedFeatureGroup:
     """Tests for the PandasAggregatedFeatureGroup class."""

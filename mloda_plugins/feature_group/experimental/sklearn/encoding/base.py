@@ -10,9 +10,7 @@ from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.user import Options
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -200,15 +198,6 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     def artifact() -> type[BaseArtifact] | None:
         """Return the artifact class for sklearn encoder persistence."""
         return SklearnArtifact
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        resolution = self.resolve_feature_name(feature_name)
-        if resolution.owned and len(resolution.sources) == 1:
-            # Remove ~suffix if present (for OneHot column patterns like category~1)
-            return {Feature(self.declared_source_names(list(resolution.sources))[0])}
-        return super().input_features(options, feature_name)
 
     @classmethod
     def declared_source_names(cls, name_sources: list[str]) -> list[str]:

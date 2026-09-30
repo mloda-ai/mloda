@@ -56,6 +56,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+from copy import copy
 from collections.abc import Callable, Sequence
 from typing import Any, cast
 
@@ -184,7 +185,8 @@ class FeatureChainParserMixin:
         """
         Parse input features from feature name or options.
 
-        First attempts to parse in_features from the feature name string.
+        First attempts to parse in_features from the feature name string; an agreeing declared in_features
+        supplies them instead, keeping its options and feature_group scope.
         Falls back to options.get_in_features() if string parsing fails.
 
         Chained children are left at the default forward_group, which forwards all
@@ -208,12 +210,15 @@ class FeatureChainParserMixin:
         # not identify the group, so its source comes from options, not the name (#772 / #769).
         if resolution.owned and resolution.sources:
             self._raise_source_features_reason(feature_name, resolution.sources)
-            return {Feature(f) for f in resolution.sources}
+            declared = self._agreeing_declared_in_features(options, list(resolution.sources))
+            if declared is not None:
+                return {copy(f) for f in declared}  # copies: the engine mutates returned features in place
+            return {Feature(n) for n in self.declared_source_names(list(resolution.sources))}
 
         # Configuration-based fallback using get_in_features()
         in_features = options.get_in_features()
         self._raise_source_features_reason(feature_name, tuple(str(f.name) for f in in_features))
-        return set(in_features)
+        return {copy(f) for f in in_features}
 
     @classmethod
     def resolve_feature_name(cls, name: str | FeatureName) -> NameResolution:
@@ -534,18 +539,11 @@ class FeatureChainParserMixin:
             # Marked: a declared value contradicting the name is user misconfiguration.
             raise escalate_match_abort(ValueError(message))
 
-        in_features_key = DefaultOptionKeys.in_features.value
-        declared_in_features = options.get(in_features_key)
-        if name_sources is None or not declared_in_features or in_features_key in inherited_keys:
+        view = cls._declared_in_features_view(options, name_sources)
+        if view is None:
             return
-        if not options.is_own(in_features_key):
-            return
-        declared_names = safe_field(
-            lambda: [str(f.name) for f in options.get_in_features()], None, catching=(TypeError, ValueError)
-        )
-        expected = cls.declared_source_names(name_sources)
-        if isinstance(declared_in_features, (set, frozenset)):
-            expected = sorted(expected)
+        declared_in_features, features, expected = view
+        declared_names = None if features is None else [str(f.name) for f in features]
         if declared_names != expected:
             shown = (
                 safe_value_text(declared_in_features)
@@ -555,7 +553,7 @@ class FeatureChainParserMixin:
             hints = ""
             if declared_names is not None and sorted(declared_names) == sorted(expected):
                 hints += " Order matters: list them in the name's order."
-            if any("__" in source for source in name_sources):
+            if any("__" in source for source in name_sources or []):
                 hints += (
                     " in_features must list the name's direct sources, not the root source: drop it or make it match."
                 )
@@ -566,6 +564,37 @@ class FeatureChainParserMixin:
             if not cls._name_mismatch_downgraded(message):
                 # Marked: a declared in_features contradicting the name is user misconfiguration.
                 raise escalate_match_abort(ValueError(message))
+
+    @classmethod
+    def _declared_in_features_view(
+        cls, options: Options, name_sources: list[str] | None
+    ) -> tuple[Any, list[Feature] | None, list[str]] | None:
+        """Return (declared value, declared Features or None, expected names) for an own in_features, else None."""
+        in_features_key = DefaultOptionKeys.in_features.value
+        declared = options.get(in_features_key)
+        inherited_keys = options.inherited_group_keys | options.inherited_context_keys
+        if name_sources is None or not declared or in_features_key in inherited_keys:
+            return None
+        if not options.is_own(in_features_key):
+            return None
+        features = safe_field(lambda: list(options.get_in_features()), None, catching=(TypeError, ValueError))
+        expected = cls.declared_source_names(name_sources)
+        if isinstance(declared, (set, frozenset)):
+            expected = sorted(expected)
+        return declared, features, expected
+
+    @classmethod
+    def _agreeing_declared_in_features(
+        cls, options: Options, name_sources: list[str] | None
+    ) -> tuple[Feature, ...] | None:
+        """Return the declared in_features when their names equal the name's declared sources, else None."""
+        view = cls._declared_in_features_view(options, name_sources)
+        if view is None:
+            return None
+        _, features, expected = view
+        if features is None:
+            return None
+        return tuple(features) if [str(f.name) for f in features] == expected else None
 
     @classmethod
     def declared_source_names(cls, name_sources: list[str]) -> list[str]:

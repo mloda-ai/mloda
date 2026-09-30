@@ -66,7 +66,7 @@ One resolution, `FeatureChainParserMixin.resolve_feature_name`, returns a `NameR
 
 - **Ownership:** a name owns the feature when its `PREFIX_PATTERN` identifies the group, and an owned name is authoritative for every value it encodes.
 - **Binding:** every named capture of an owned name that is a `PROPERTY_MAPPING` key is bound and validated like an option, even when the option is also set; an unsupported value is a recorded match-time rejection. A legacy positional capture binds only a value already in the key's `allowed_values`.
-- **Agreement:** a declared option for a key the name binds, and a non-empty `in_features`, must agree with the name (`in_features` must equal the name's direct sources). A contradiction aborts the match with an error; `MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` downgrades it to a warning. Only own keys are compared: forwarded keys and materialized defaults never conflict here. An override that calls only `match_parser_criteria` skips this check.
+- **Agreement:** a declared option for a key the name binds, and a non-empty `in_features`, must agree with the name (`in_features` must equal the name's direct sources). A contradiction aborts the match with an error; `MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` downgrades it to a warning. Only own keys are compared: forwarded keys and materialized defaults never conflict here. An agreeing `in_features` supplies the input features, so their options and `feature_group` scope are kept; a downgraded mismatch uses the name's bare sources instead. An override that calls only `match_parser_criteria` skips this check.
 - **Operands:** every name or config source must be non-empty and the count within `MIN_IN_FEATURES` / `MAX_IN_FEATURES` (name path: recorded rejection; config path: silent non-match).
 
 ### Options Architecture: Group vs Context Parameters
@@ -386,7 +386,7 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 
 ### 3. Modernize input_features Method
 
-The mixin's `input_features` already handles both forms: an owned name supplies its sources, otherwise `in_features` does. Override it only to add extras:
+The mixin's `input_features` already handles both forms: an owned name supplies its sources (an agreeing `in_features` keeps its options and scope), otherwise `in_features` does. Override it only to add extras:
 
 ```py
 def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:

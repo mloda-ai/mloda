@@ -10,7 +10,7 @@ from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -132,24 +132,10 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
     REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
-    # Custom input_features needed to add time_filter_feature
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            time_filter_feature = Feature(self.get_reference_time_column(options))
-            return {Feature(source_feature), time_filter_feature}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        self.validate_in_feature_count(feature_name, len(source_features))
-
-        time_filter_feature = Feature(self.get_reference_time_column(options))
-        return set(source_features) | {time_filter_feature}
+        """Source features from the shared resolution plus the reference-time feature."""
+        source_features = super().input_features(options, feature_name) or set()
+        return source_features | {Feature(self.get_reference_time_column(options))}
 
     @classmethod
     def _has_valid_time_window_suffix(cls, feature_name: str) -> bool:
@@ -174,7 +160,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         """
         Extract time window parameters (window_function, window_size, time_unit) from a feature.
 
-        Tries string-based parsing first using parse_time_window_prefix, falls back to configuration.
+        Resolves each parameter from the feature name first, then from options.
 
         Args:
             feature: The feature to extract parameters from
@@ -182,20 +168,11 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         Returns:
             Tuple of (window_function, window_size, time_unit), where any value may be None if not found
         """
-        feature_name = feature.name
+        window_function = cls._resolve_operation(feature, cls.WINDOW_FUNCTION)
+        window_size: Any = cls._resolve_operation(feature, cls.WINDOW_SIZE)
+        time_unit = cls._resolve_operation(feature, cls.TIME_UNIT)
 
-        # Try string-based parsing first
-        if cls._has_valid_time_window_suffix(feature_name):
-            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
-            return window_function, window_size, time_unit
-
-        # Fall back to configuration
-        window_function = feature.options.get(cls.WINDOW_FUNCTION)
-        window_size = feature.options.get(cls.WINDOW_SIZE)
-        time_unit = feature.options.get(cls.TIME_UNIT)
-
-        # Convert window_size to int if it's a string
-        if window_size is not None and isinstance(window_size, str):
+        if window_size is not None:
             window_size = int(window_size)
 
         return window_function, window_size, time_unit

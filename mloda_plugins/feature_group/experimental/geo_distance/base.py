@@ -10,7 +10,6 @@ from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -94,7 +93,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r".*__([\w]+)_distance$"
+    PREFIX_PATTERN = r".*__(?P<distance_type>[\w]+)_distance$"
 
     # In-feature configuration for FeatureChainParserMixin
     # Geo distance requires exactly 2 point features
@@ -125,12 +124,10 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def get_distance_type(cls, feature_name: str) -> str:
         """Extract the distance type from the feature name."""
-        distance_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
+        distance_type = cls.resolve_feature_name(feature_name).value_for(cls.DISTANCE_TYPE)
         if distance_type is None:
             raise ValueError(f"Invalid geo distance feature name format: {feature_name}")
 
-        # Remove the "_distance" suffix to get just the distance type
-        distance_type = distance_type.replace("_distance", "").strip("_")
         if distance_type not in cls.DISTANCE_TYPES:
             raise ValueError(
                 f"Unsupported distance type: {distance_type}. Supported types: {', '.join(cls.DISTANCE_TYPES.keys())}"
@@ -141,13 +138,14 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def get_point_features(cls, feature_name: str) -> tuple[str, str]:
         """Extract the two point features from the feature name."""
-        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns(), CHAIN_SEPARATOR)
-        if not parsed.matched or not parsed.source_feature:
+        resolution = cls.resolve_feature_name(feature_name)
+        if not resolution.parsed.matched or not resolution.sources:
             raise ValueError(f"Invalid geo distance feature name format: {feature_name}")
 
-        points = parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
-        cls.validate_in_feature_count(feature_name, len(points))
-        return points[0], points[1]
+        reason = cls.source_features_reason(feature_name, resolution.sources)
+        if reason is not None:
+            raise ValueError(reason)
+        return resolution.sources[0], resolution.sources[1]
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -204,10 +202,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _extract_distance_unit(cls, feature: Feature) -> str | None:
         """Extract the distance type from the prefix-gated name or the options, or None."""
-        if FeatureChainParser.parse_name(feature.name, cls._get_prefix_patterns()).matched:
-            distance_type = cls.get_distance_type(feature.name)
-        else:
-            distance_type = feature.options.get(cls.DISTANCE_TYPE)
+        distance_type = cls._resolve_operation(feature, cls.DISTANCE_TYPE)
         if distance_type is None:
             return None
 

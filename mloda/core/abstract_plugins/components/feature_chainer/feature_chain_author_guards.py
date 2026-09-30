@@ -5,7 +5,7 @@ Imports ``feature_chain_parser``; the parser never imports this module, which ke
 
 Depends on these parser-private names, so renaming one of them is a cross-module break:
 ``FeatureChainParser._can_skip_required_check``, ``._check_name_path_required_presence``, ``._merge_bindings``,
-``._name_identifies_group``, and ``._name_path_missing_required_keys``.
+and ``._name_path_missing_required_keys``.
 """
 
 from __future__ import annotations
@@ -21,12 +21,11 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
-    CHAIN_SEPARATOR,
     FeatureChainParser,
     option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.match_rejection import context_forwarding_remedy, record_match_rejection
-from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
@@ -577,15 +576,14 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
             # additionally caught here because a malformed pattern must degrade to a non-match
             # of the name path, never veto the inner verdict (#868).
             patterns = _flatten_patterns(FeatureChainParser.prefix_patterns_of(guarded_cls))
-            parsed = safe_field(
-                lambda: FeatureChainParser.parse_name(feature_name, patterns, CHAIN_SEPARATOR),
-                ParsedFeatureName.no_match(),
+            resolution = safe_field(
+                lambda: FeatureChainParser.resolve_name(feature_name, patterns, mapping),
+                NameResolution.miss(),
                 catching=(ValueError, re.error),
             )
-            if not FeatureChainParser._name_identifies_group(parsed, mapping):
+            if not resolution.owned:
                 return True
-            bindings = FeatureChainParser.bind_name_captures(parsed, mapping)
-            effective_options = FeatureChainParser._merge_bindings(options, bindings, mapping)
+            effective_options = FeatureChainParser._merge_bindings(options, dict(resolution.bindings), mapping)
             return FeatureChainParser._check_name_path_required_presence(
                 guarded_cls.__name__, feature_name, effective_options, mapping
             )

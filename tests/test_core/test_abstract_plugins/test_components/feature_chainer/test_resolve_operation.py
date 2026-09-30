@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
@@ -16,7 +18,12 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda.provider import DefaultOptionKeys, PropertySpec
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
+from tests.test_core.test_abstract_plugins.test_components.feature_chainer.test_parsed_name_bindings import (
+    SIZE_KEY,
+    OptionalCaptureGroup,
+)
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -45,6 +52,11 @@ class TestResolveOperationUnit:
         result = MockResolverFG._resolve_operation("source__sum_op", options, "aggregation_type")
         assert result == "sum"
 
+    def test_config_fallback_unpacks_a_singleton_option(self) -> None:
+        feature = Feature("config_feature", Options(context={"aggregation_type": ["sum"]}))
+
+        assert AggregatedFeatureGroup._resolve_operation(feature, "aggregation_type") == "sum"
+
     def test_returns_config_when_pattern_does_not_match(self) -> None:
         """When feature name does not match, falls back to options[config_key]."""
         options = Options(context={"aggregation_type": "avg"})
@@ -68,6 +80,46 @@ class TestResolveOperationUnit:
         options = Options(context={"aggregation_type": "sum"})
         result = MockResolverFG._resolve_operation(FeatureName("source__sum_op"), options, "aggregation_type")
         assert result == "sum"
+
+
+class TestResolveOperationKeyAware:
+    """A named pattern resolves each key from its own capture; a positional one keeps first-capture semantics."""
+
+    @pytest.mark.parametrize(
+        "key,expected",
+        [
+            (TimeWindowFeatureGroup.TIME_UNIT, "day"),
+            (TimeWindowFeatureGroup.WINDOW_SIZE, "7"),
+            (TimeWindowFeatureGroup.WINDOW_FUNCTION, "sum"),
+        ],
+    )
+    def test_named_pattern_resolves_each_key_from_its_own_capture(self, key: str, expected: str) -> None:
+        assert TimeWindowFeatureGroup._resolve_operation(Feature("x__sum_7_day_window"), key) == expected
+
+    def test_named_pattern_wins_over_a_present_option(self) -> None:
+        options = Options(context={TimeWindowFeatureGroup.TIME_UNIT: "hour"})
+        result = TimeWindowFeatureGroup._resolve_operation(
+            "x__sum_7_day_window", options, TimeWindowFeatureGroup.TIME_UNIT
+        )
+        assert result == "day"
+
+    def test_named_key_that_is_not_captured_falls_back_to_the_option(self) -> None:
+        options = Options(context={"not_a_capture": "fallback"})
+        result = TimeWindowFeatureGroup._resolve_operation("x__sum_7_day_window", options, "not_a_capture")
+        assert result == "fallback"
+
+    def test_named_key_that_did_not_participate_falls_back_to_the_option(self) -> None:
+        options = Options(context={SIZE_KEY: "9"})
+        result = OptionalCaptureGroup._resolve_operation("f0__pca_optional_pnb770", options, SIZE_KEY)
+        assert result == "9"
+
+    def test_named_key_that_did_not_participate_without_option_is_none(self) -> None:
+        result = OptionalCaptureGroup._resolve_operation("f0__pca_optional_pnb770", Options(), SIZE_KEY)
+        assert result is None
+
+    @pytest.mark.parametrize("key", ["aggregation_type", "any_other_key"])
+    def test_positional_pattern_returns_the_first_capture_for_any_key(self, key: str) -> None:
+        assert MockResolverFG._resolve_operation("source__sum_op", Options(), key) == "sum"
 
 
 class TestResolveOperationIntegration:

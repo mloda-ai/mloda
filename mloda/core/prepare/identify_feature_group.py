@@ -36,6 +36,7 @@ from mloda.core.abstract_plugins.components.match_hook import probe_match_criter
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
+    is_match_abort,
     contained_raise_reason,
     safe_exc_str,
     safe_field,
@@ -460,10 +461,22 @@ class IdentifyFeatureGroupClass:
             # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
             # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
-            with declaration_requirement_scope(requirement):
-                criteria_matched = self._filter_feature_group_by_criteria(
-                    feature_group, feature, data_access_collection
-                )
+            try:
+                with declaration_requirement_scope(requirement):
+                    criteria_matched = self._filter_feature_group_by_criteria(
+                        feature_group, feature, data_access_collection
+                    )
+            except Exception as exc:  # noqa: BLE001  (only a marked abort of a gated-out candidate is absorbed)
+                if not is_match_abort(exc):
+                    raise
+                if not self._filter_feature_group_by_domain(feature_group, feature):
+                    self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
+                elif not self._filter_feature_group_by_scope(feature_group, feature):
+                    self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
+                else:
+                    raise
+                self._restore_options(feature, group_before, context_before, non_forwarded_before)
+                continue
             if not criteria_matched:
                 # A contained matcher raise is always a near-miss: the raise says nothing about name ownership.
                 # Deliberate precedence: a contained crash outranks a recorded decline for the same candidate.

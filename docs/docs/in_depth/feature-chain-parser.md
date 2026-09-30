@@ -60,6 +60,15 @@ The modernized `FeatureChainParser` provides a unified approach through the `mat
 - **Configuration-based features**: Modern approach using Options and PROPERTY_MAPPING
 - **Dual validation**: Features can be validated using either or both approaches
 
+### Name Ownership and Agreement
+
+One resolution, `FeatureChainParserMixin.resolve_feature_name`, returns a `NameResolution` (`owned`, `bindings`, `sources`, `value_for(key)`). Matching, the rejection diagnostic, `input_features`, `_extract_source_features` and `_resolve_operation` all read it.
+
+- **Ownership:** a name owns the feature when its `PREFIX_PATTERN` identifies the group, and an owned name is authoritative for every value it encodes.
+- **Binding:** every named capture of an owned name that is a `PROPERTY_MAPPING` key is bound and validated like an option, even when the option is also set; an unsupported value is a recorded match-time rejection. A legacy positional capture binds only a value already in the key's `allowed_values`.
+- **Agreement:** a declared option for a key the name binds, and a non-empty `in_features`, must agree with the name (`in_features` must equal the name's direct sources). A contradiction aborts the match with an error; `MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` downgrades it to a warning. Only own keys are compared: forwarded keys and materialized defaults never conflict here. An agreeing `in_features` supplies the input features, so their options and `feature_group` scope are kept; a downgraded mismatch uses the name's bare sources instead. An override that calls only `match_parser_criteria` skips this check.
+- **Operands:** every name or config source must be non-empty and the count within `MIN_IN_FEATURES` / `MAX_IN_FEATURES` (name path: recorded rejection; config path: silent non-match).
+
 ### Options Architecture: Group vs Context Parameters
 
 The new `Options` class separates parameters into two categories:
@@ -248,16 +257,11 @@ working, but logs a definition-time warning until it either adds a named capture
 Override this hook when you need custom validation for string-based feature names:
 
 ```py
-class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def _validate_string_match(cls, feature_name: str, operation_config: str, in_feature: str) -> bool:
-        """Validate clustering-specific patterns."""
-        if FeatureChainParser.is_chained_feature(feature_name):
-            try:
-                cls.parse_clustering_prefix(feature_name)
-            except ValueError:
-                return False
-        return True
+        """Called only for a name that owns the feature; reject values the group cannot serve."""
+        return operation_config.isidentifier()
 ```
 
 #### 2. Custom `input_features()` Method
@@ -267,16 +271,9 @@ Override when you need to add additional input features (e.g., time filter):
 ```py
 class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        # Try string-based parsing first
-        _, in_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
-        if in_feature is not None:
-            time_filter_feature = Feature(self.get_reference_time_column(options))
-            return {Feature(in_feature), time_filter_feature}
-
-        # Fall back to configuration-based approach
-        in_features = options.get_in_features()
-        time_filter_feature = Feature(self.get_reference_time_column(options))
-        return set(in_features) | {time_filter_feature}
+        # The mixin resolves sources from the name or from in_features; add the extras.
+        sources = super().input_features(options, feature_name) or set()
+        return sources | {Feature(self.get_reference_time_column(options))}
 ```
 
 #### 3. Custom `match_feature_group_criteria()` Method
@@ -298,7 +295,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
 #### 4. Operation Resolution with `_resolve_operation()`
 
-Use this helper to extract the operation type from either the feature name pattern or a config key, without calling `FeatureChainParser` directly:
+Use this helper to extract the value of a key from either the feature name or the options, without calling `FeatureChainParser` directly. It is key-aware: an owned name with named captures returns that key's capture, a positional pattern returns its first capture for any key, and otherwise the option value is returned:
 
 ```py
 class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -352,7 +349,7 @@ from mloda.user import FeatureName
 from mloda.provider import DefaultOptionKeys, PropertySpec
 
 class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    PREFIX_PATTERN = r"__([a-zA-Z_]+)_operation$"
+    PREFIX_PATTERN = r"__(?P<operation_type>[a-zA-Z_]+)_operation$"
     MAX_IN_FEATURES = 1
 
     PROPERTY_MAPPING = {
@@ -389,49 +386,27 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 
 ### 3. Modernize input_features Method
 
-Handle both string-based and configuration-based features:
+The mixin's `input_features` already handles both forms: an owned name supplies its sources (an agreeing `in_features` keeps its options and scope), otherwise `in_features` does. Override it only to add extras:
 
 ```py
 def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-    """Extract source feature from either configuration-based options or string parsing."""
-
-    # Try string-based parsing first
-    _, in_feature = FeatureChainParser.parse_feature_name(
-        feature_name, [self.PREFIX_PATTERN]
-    )
-    if in_feature is not None:
-        return {Feature(in_feature)}
-
-    # Fall back to configuration-based approach
-    in_features = options.get_in_features()
-    self.validate_in_feature_count(feature_name, len(in_features))
-    return set(in_features)
+    sources = super().input_features(options, feature_name) or set()
+    return sources | {Feature("reference_time")}
 ```
 
 Custom code checks source counts with `validate_in_feature_count` (raises) or `in_feature_count_reason` (returns the message or None).
 
 ### 4. Update calculate_feature Method
 
-Support dual approach in feature processing:
+Read each value through the mixin helpers, so the name stays authoritative when it owns the feature:
 
 ```py
-def calculate_feature(self, features, options):
+@classmethod
+def calculate_feature(cls, data, features):
     for feature in features.features:
-        # Try configuration-based approach first
-        try:
-            in_features = feature.options.get_in_features()
-            in_feature = next(iter(in_features))
-            in_feature_name = in_feature.name
-            
-            # Extract parameters from options
-            operation_type = feature.options.get("operation_type")
-            
-        except (ValueError, StopIteration):
-            # Fall back to string-based approach for legacy features
-            operation_type, in_feature_name = FeatureChainParser.parse_feature_name(
-                feature.name, [cls.PREFIX_PATTERN]
-            )
-        
+        operation_type = cls._resolve_operation(feature, "operation_type")
+        in_feature_name = cls._extract_source_features(feature)[0]
+
         # Process using extracted values
         # ... implementation logic
 ```
@@ -527,9 +502,11 @@ Rules:
 - If the child already carries a forwarded key with a **different** value, a
   `ValueError` is raised.
 - For string-parsed chained features, a consumer-forwarded value that differs from the
-  value parsed from the feature name raises a `ValueError` (the name-parsed value would
-  win silently otherwise). Carve the key out with `forward_group_exclude` on the child,
-  or set `MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` to downgrade the error to a warning.
+  value parsed from the feature name raises a `ValueError`, and so does a declared option
+  or non-empty `in_features` that contradicts the name (see
+  [Name Ownership and Agreement](#name-ownership-and-agreement)). Carve a forwarded key out
+  with `forward_group_exclude` on the child, or set `MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1`
+  to downgrade any of these errors to a warning.
 
 ### Opting out on the child
 

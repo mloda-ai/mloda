@@ -70,6 +70,8 @@ PARSER_KEPT_METHODS = (
     "match_configuration_feature_chain_parser",
     "build_effective_options",
     "bind_name_captures",
+    "resolve_name",
+    "validate_name_bindings",
     "prefix_patterns_of",
     "has_required_when_predicates",
     "_name_identifies_group",

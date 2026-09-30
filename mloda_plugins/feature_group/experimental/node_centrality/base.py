@@ -9,7 +9,7 @@ from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -133,7 +133,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     # Define the suffix pattern for this feature group (L→R format: source__operation)
-    PREFIX_PATTERN = r".*__([\w]+)_centrality$"
+    PREFIX_PATTERN = r".*__(?P<centrality_type>[\w]+)_centrality$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -287,16 +287,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If centrality type cannot be extracted
         """
-        # Try string-based parsing first
-        suffix_part, source_feature_name = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
-        if source_feature_name is not None and suffix_part is not None:
-            # The suffix_part is already the centrality type (extracted by regex group)
-            if suffix_part in cls.CENTRALITY_TYPES:
-                return suffix_part
-
-        # Fall back to configuration-based approach
-        centrality_type = feature.options.get(cls.CENTRALITY_TYPE)
-        return str(centrality_type) if centrality_type is not None else None
+        return cls._resolve_operation(feature, cls.CENTRALITY_TYPE)
 
     @classmethod
     @abstractmethod

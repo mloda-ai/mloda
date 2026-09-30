@@ -10,10 +10,7 @@ from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.user import FeatureName
 from mloda.provider import FeatureSet
-from mloda.user import Options
-from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -172,7 +169,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "ordinal": "OrdinalEncoder",
     }
 
-    PREFIX_PATTERN = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
+    PREFIX_PATTERN = r".*__(?P<encoder_type>onehot|label|ordinal)_encoded(?:~\d+)?$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -202,30 +199,17 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """Return the artifact class for sklearn encoder persistence."""
         return SklearnArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            # Remove ~suffix if present (for OneHot column patterns like category~1)
-            base_feature = self.get_column_base_feature(source_feature)
-            return {Feature(base_feature)}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        self.validate_in_feature_count(feature_name, len(source_features))
-        return set(source_features)
+    @classmethod
+    def declared_source_names(cls, name_sources: list[str]) -> list[str]:
+        return [cls.get_column_base_feature(source) for source in name_sources]
 
     @classmethod
     def get_encoder_type(cls, feature_name: str) -> str:
         """Extract the encoder type from the feature name."""
-        encoder_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
+        encoder_type = cls.resolve_feature_name(feature_name).value_for(cls.ENCODER_TYPE)
         if encoder_type is None:
             raise ValueError(f"Invalid encoding feature name format: {feature_name}")
 
-        # Remove the "_encoded" suffix to get just the encoder type
-        encoder_type = encoder_type.replace("_encoded", "").strip("_")
         if encoder_type not in cls.SUPPORTED_ENCODERS:
             raise ValueError(
                 f"Unsupported encoder type: {encoder_type}. Supported types: {', '.join(cls.SUPPORTED_ENCODERS.keys())}"
@@ -319,13 +303,7 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If encoder type is unsupported
         """
-        feature_name_str = feature.name
-
-        if FeatureChainParser.parse_name(feature_name_str, cls._get_prefix_patterns()).matched:
-            encoder_type = cls.get_encoder_type(feature_name_str)
-            return encoder_type
-
-        encoder_type = feature.options.get(cls.ENCODER_TYPE)
+        encoder_type = cls._resolve_operation(feature, cls.ENCODER_TYPE)
 
         if encoder_type is not None and encoder_type not in cls.SUPPORTED_ENCODERS:
             raise ValueError(

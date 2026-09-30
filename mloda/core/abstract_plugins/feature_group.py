@@ -62,7 +62,7 @@ class FeatureGroup(ABC):
         from mloda.provider import FeatureChainParserMixin, FeatureGroup, PropertySpec
 
         class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-            PREFIX_PATTERN = r".*__([\\w]+)_my_op$"
+            PREFIX_PATTERN = r".*__(?P<operation_type>[\\w]+)_my_op$"
             PROPERTY_MAPPING = {
                 "operation_type": PropertySpec(
                     "Operation to apply.",
@@ -225,16 +225,19 @@ class FeatureGroup(ABC):
         if declaration.key is None:
             return None
 
+        key = declaration.key
         source, separator, _ = name.rpartition(CHAIN_SEPARATOR)
         if separator and source:
             patterns = FeatureChainParser.prefix_patterns_of(cls)
             if patterns:
                 # Malformed patterns degrade to the options fallback instead of raising.
-                parsed = safe_field(lambda: FeatureChainParser.parse_feature_name(name, patterns)[0], None)
+                parsed = safe_field(
+                    lambda: FeatureChainParser.resolve_name(name, patterns, cls.PROPERTY_MAPPING).value_for(key),
+                    None,
+                )
                 if parsed is not None:
                     return parsed
 
-        key = declaration.key
         spec = (cls.PROPERTY_MAPPING or {}).get(key)
         value = cls.options_with_defaults(options).get(key)
         if value is None:

@@ -14,6 +14,7 @@ Follows the construction conventions in test_identify_feature_group_error_messag
 """
 
 import inspect
+from collections.abc import Callable
 from abc import abstractmethod
 from typing import Any, ClassVar
 
@@ -731,3 +732,116 @@ def test_end2end_python_feature_abstract_family_base_scope_resolves_to_pandas_su
     aggregated = [df for df in results if "scope_python_sales__sum_aggr" in df.columns]
     assert len(aggregated) == 1
     assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 100
+
+
+class ScopePythonAggregationSourceB(FeatureGroup):
+    """Second source of the same feature name with different values."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"scope_python_sales"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"scope_python_sales": [1, 2, 3, 4]}
+
+
+@pytest.mark.parametrize("path", ["name_path", "config_path"])
+def test_end2end_one_declared_child_shared_by_two_consumers(path: str) -> None:
+    """A shared declared child keeps its scope and is not mutated by either consumer's group options."""
+    child = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
+    context = {"in_features": [child]}
+    if path == "name_path":
+        sum_name, max_name = "scope_python_sales__sum_aggr", "scope_python_sales__max_aggr"
+        sum_group: dict[str, Any] = {"g_shared": 1}
+        max_group: dict[str, Any] = {"g_shared": 2}
+    else:
+        sum_name, max_name = "scope_cfg_sum", "scope_cfg_max"
+        sum_group = {"g_shared": 1, "aggregation_type": "sum"}
+        max_group = {"g_shared": 2, "aggregation_type": "max"}
+
+    results = list(
+        mloda.run_all(
+            [
+                Feature(sum_name, Options(group=sum_group, context=context)),
+                Feature(max_name, Options(group=max_group, context=context)),
+            ],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
+            ),
+        )
+    )
+
+    summed = [df for df in results if sum_name in df.columns]
+    maxed = [df for df in results if max_name in df.columns]
+    assert summed[0][sum_name].iloc[0] == 10
+    assert maxed[0][max_name].iloc[0] == 4
+    assert child.options.get("g_shared") is None
+
+
+# ---------------------------------------------------------------------------
+# A name-owning candidate's marked match abort must not outrank the scope and domain gates
+# ---------------------------------------------------------------------------
+
+_ABORT_NAME = "sales__sum_aggr"
+
+
+class ScopeAbortRival(StubFeatureGroup):
+    """Rival that also matches the aggregated name, so a pin or domain can route the feature to it."""
+
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({_ABORT_NAME})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
+
+
+class DomainAbortRival(StubFeatureGroup):
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({_ABORT_NAME})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
+    DOMAIN_NAME: ClassVar[str | None] = "abort_rival_domain"
+
+
+def _abort_candidates() -> FeatureGroupEnvironmentMapping:
+    return {
+        PandasAggregatedFeatureGroup: {PandasDataFrame},
+        ScopeAbortRival: {MockComputeFramework},
+        DomainAbortRival: {MockComputeFramework},
+    }
+
+
+def _forwarded_max() -> Options:
+    options = Options()
+    options.inherit_from(Options(group={"aggregation_type": "max"}))
+    return options
+
+
+_CONTRADICTING_OPTIONS = [
+    pytest.param(lambda: Options(context={"in_features": ["raw"]}), id="in_features_contradicts_name"),
+    pytest.param(lambda: Options(context={"aggregation_type": "max"}), id="declared_option_contradicts_name"),
+    pytest.param(_forwarded_max, id="forwarded_option_contradicts_name"),
+]
+
+
+@pytest.mark.parametrize("make_options", _CONTRADICTING_OPTIONS)
+def test_pin_to_another_group_skips_the_owning_candidates_abort(make_options: Callable[[], Options]) -> None:
+    feature = Feature(_ABORT_NAME, make_options(), feature_group=ScopeAbortRival)
+
+    winner, _frameworks = next(iter(evaluate_or_raise(feature, _abort_candidates()).identified.items()))
+
+    assert winner is ScopeAbortRival
+
+
+@pytest.mark.parametrize("make_options", _CONTRADICTING_OPTIONS)
+def test_domain_gated_owning_candidate_does_not_abort(make_options: Callable[[], Options]) -> None:
+    feature = Feature(_ABORT_NAME, make_options(), domain="abort_rival_domain")
+
+    winner, _frameworks = next(iter(evaluate_or_raise(feature, _abort_candidates()).identified.items()))
+
+    assert winner is DomainAbortRival
+
+
+@pytest.mark.parametrize("make_options", _CONTRADICTING_OPTIONS)
+def test_unpinned_contradiction_still_aborts(make_options: Callable[[], Options]) -> None:
+    feature = Feature(_ABORT_NAME, make_options())
+
+    with pytest.raises(ValueError):
+        evaluate_or_raise(feature, _abort_candidates())

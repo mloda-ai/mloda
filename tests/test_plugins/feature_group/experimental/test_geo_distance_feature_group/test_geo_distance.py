@@ -5,6 +5,8 @@ Tests for the GeoDistanceFeatureGroup.
 import pandas as pd
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import DefaultOptionKeys, FeatureSet
@@ -50,6 +52,33 @@ class TestGeoDistanceFeatureGroup:
         assert GeoDistanceFeatureGroup.match_feature_group_criteria("point1&point2__manhattan_distance", Options())
 
         assert not GeoDistanceFeatureGroup.match_feature_group_criteria("point1&point2__haversine_invalid", Options())
+
+    @pytest.mark.parametrize("in_features", [["p1", "p2"], ["b", "a"]])
+    def test_declared_in_features_contradicting_the_name_aborts(self, in_features: list[str]) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: in_features})
+
+        with pytest.raises(ValueError) as exc_info:
+            GeoDistanceFeatureGroup.match_feature_group_criteria("a&b__haversine_distance", options)
+
+        assert "in_features" in str(exc_info.value)
+
+    def test_declared_in_features_agreeing_with_the_name_matches(self) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: ["a", "b"]})
+
+        assert GeoDistanceFeatureGroup.match_feature_group_criteria("a&b__haversine_distance", options) is True
+
+    @pytest.mark.parametrize("name", ["&b__haversine_distance", "a&__haversine_distance"])
+    def test_empty_operand_name_does_not_match(self, name: str) -> None:
+        assert not GeoDistanceFeatureGroup.match_feature_group_criteria(name, Options())
+
+    def test_empty_operand_in_features_config_does_not_match(self) -> None:
+        options = Options(
+            context={
+                GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine",
+                DefaultOptionKeys.in_features: ["", "b"],
+            }
+        )
+        assert not GeoDistanceFeatureGroup.match_feature_group_criteria("x", options)
 
     def test_input_features(self) -> None:
         """Test extraction of input features."""
@@ -130,13 +159,33 @@ class TestGeoDistanceFeatureGroup:
         with pytest.raises(ValueError, match="Unsupported distance type"):
             GeoDistanceFeatureGroup._extract_geo_distance_parameters(Feature("a&b__foo_distance"))
 
-    def test_extract_geo_distance_parameters_strips_distance_suffix_on_prefix_name_with_context(self) -> None:
+    def test_doubled_distance_suffix_is_a_recorded_non_match(self, rejection_window: dict[str, MatchRejection]) -> None:
         feature = Feature(
             "a&b__haversine_distance_distance",
             options=Options(context={GeoDistanceFeatureGroup.DISTANCE_TYPE: "haversine"}),
         )
-        assert GeoDistanceFeatureGroup.match_feature_group_criteria(feature.name, feature.options) is True
-        assert GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature) == ("haversine", "a", "b")
+        assert GeoDistanceFeatureGroup.match_feature_group_criteria(feature.name, feature.options) is False
+        reasons = [r.reason for r in rejection_window.values()]
+        assert len(reasons) == 1
+        assert "haversine_distance" in reasons[0]
+        with pytest.raises(ValueError, match="Unsupported distance type"):
+            GeoDistanceFeatureGroup._extract_geo_distance_parameters(feature)
+
+    def test_name_bound_distance_type_is_validated_despite_a_valid_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(
+            context={
+                GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
+                DefaultOptionKeys.in_features: ["p1", "p2"],
+            }
+        )
+        assert GeoDistanceFeatureGroup.match_feature_group_criteria("my&name__custom_distance", options) is False
+        assert len(rejection_window) == 1
+        assert "custom" in next(iter(rejection_window.values())).reason
+
+    def test_valid_name_still_resolves_the_distance_type(self) -> None:
+        assert GeoDistanceFeatureGroup.get_distance_type("p1&p2__haversine_distance") == "haversine"
 
 
 class TestPandasGeoDistanceFeatureGroup:

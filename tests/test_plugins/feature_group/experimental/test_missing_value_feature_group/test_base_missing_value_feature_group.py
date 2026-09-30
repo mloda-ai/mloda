@@ -1,5 +1,8 @@
-import pytest
 from typing import Any
+
+import pytest
+
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -96,6 +99,14 @@ class TestMissingValueFeatureGroup:
         assert not MissingValueFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
         assert not MissingValueFeatureGroup.match_feature_group_criteria("mean_filled_income", options)
         assert not MissingValueFeatureGroup.match_feature_group_criteria("unknown_imputed_income", options)
+
+    def test_bogus_name_method_is_rejected_despite_a_valid_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={MissingValueFeatureGroup.IMPUTATION_METHOD: "mean"})
+        assert MissingValueFeatureGroup.match_feature_group_criteria("x__bogus_imputed", options) is False
+        assert len(rejection_window) == 1
+        assert "bogus" in next(iter(rejection_window.values())).reason
 
     def test_input_features(self) -> None:
         """Test input_features method."""

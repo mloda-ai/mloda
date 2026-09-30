@@ -4,6 +4,7 @@ Tests for the base NodeCentralityFeatureGroup class.
 
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -38,6 +39,14 @@ class TestNodeCentralityFeatureGroup:
         )
 
         assert NodeCentralityFeatureGroup.match_feature_group_criteria("placeholder", options)
+
+    def test_graph_type_value_in_the_centrality_slot_is_rejected(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree"})
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("x__directed_centrality", options) is False
+        assert len(rejection_window) == 1
+        assert "directed" in next(iter(rejection_window.values())).reason
 
     def test_parse_centrality_prefix(self) -> None:
         """Test the parse_centrality_prefix method."""

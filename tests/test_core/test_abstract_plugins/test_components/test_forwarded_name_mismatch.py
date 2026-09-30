@@ -12,9 +12,9 @@ plus a mention of the env var MLODA_ALLOW_FORWARDED_NAME_MISMATCH. If that env
 var is set to "1" or "true", the check logs ONE logging WARNING (same content)
 instead of raising and matching proceeds normally.
 
-No behavior change when: values are equal, K was set by the author (not
-inherited), the feature is config-based (no string parse), or K is absent from
-the options.
+No behavior change when: values are equal, the feature is config-based (no
+string parse), or K is absent from the options. An author-declared K that
+contradicts the name aborts too (TestDeclaredNameMismatch).
 
 Also covers the context path: inherited_context_keys must be checked like
 inherited_group_keys, with remedy text naming
@@ -63,6 +63,14 @@ class _NameMismatchChainedGroup(FeatureChainParserMixin):
             strict_validation=True,
         )
     }
+
+
+class _OpenValueGroup(FeatureChainParserMixin):
+    """Named capture with no allowed_values, so a long declared value can reach the contradiction message."""
+
+    PREFIX_PATTERN = r".*__(?P<open_key_lv>\w+)_openlv$"
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {"open_key_lv": PropertySpec("Open-valued key", context=False)}
 
 
 def _inherited_child_options(consumer_group: dict[str, Any]) -> Options:
@@ -142,14 +150,30 @@ class TestForwardedNameMismatch:
 
         assert result is True
 
-    def test_author_set_differing_value_does_not_raise(self) -> None:
-        """An author-set option value (not inherited) keeps today's silent name precedence."""
+    def test_author_set_differing_value_raises(self) -> None:
+        """An author-set option value (not inherited) contradicting the name aborts the match."""
         child_options = Options(group={OPERATION_KEY: "max"})
         assert child_options.inherited_group_keys == frozenset()  # precondition: nothing inherited
 
-        result = _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
+        with pytest.raises(ValueError) as exc_info:
+            _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, child_options)
 
-        assert result is True
+        message = str(exc_info.value)
+        assert STRING_FEATURE_NAME in message
+        assert OPERATION_KEY in message
+        assert "sum" in message
+        assert "max" in message
+        assert "remove" in message
+
+    def test_message_does_not_carry_a_long_raw_option_value(self) -> None:
+        long_value = "m" * 200
+
+        with pytest.raises(ValueError) as exc_info:
+            _OpenValueGroup.match_feature_group_criteria(
+                "sales__short_openlv", Options(group={"open_key_lv": long_value})
+            )
+
+        assert long_value not in str(exc_info.value)
 
     def test_env_var_downgrades_to_warning(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -331,11 +355,65 @@ class TestForwardedContextNameMismatch:
         assert "sum" in message
         assert "max" in message
 
-    def test_author_set_context_value_does_not_raise(self) -> None:
-        """An author-set context value (not inherited) keeps today's silent name precedence."""
+    def test_author_set_context_value_raises(self) -> None:
+        """An author-set context value (not inherited) contradicting the name aborts the match."""
         child_options = Options(context={CONTEXT_KEY: "max"})
         assert child_options.inherited_context_keys == frozenset()  # precondition: nothing inherited
 
-        result = _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+        with pytest.raises(ValueError) as exc_info:
+            _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+        message = str(exc_info.value)
+        assert CONTEXT_KEY in message
+        assert "sum" in message
+        assert "max" in message
+
+
+class TestDeclaredNameMismatch:
+    """A declared (own, non-inherited) option must agree with the value the name binds."""
+
+    def test_equal_value_matches(self) -> None:
+        options = Options(group={OPERATION_KEY: "sum"})
+
+        assert _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, options) is True
+
+    def test_singleton_list_equal_value_matches(self) -> None:
+        options = Options(group={OPERATION_KEY: ["sum"]})
+
+        assert _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, options) is True
+
+    def test_singleton_list_differing_value_raises(self) -> None:
+        options = Options(group={OPERATION_KEY: ["max"]})
+
+        with pytest.raises(ValueError):
+            _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, options)
+
+    def test_rebuild_added_value_is_not_declared(self) -> None:
+        """A value added by Options.rebuild (a materialized default) is not own, so it cannot contradict."""
+        options = Options().rebuild(group={OPERATION_KEY: "max"}, context={})
+        assert not options.is_own(OPERATION_KEY)  # precondition
+
+        assert _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, options) is True
+
+    def test_key_added_after_lock_own_keys_is_not_declared(self) -> None:
+        options = Options()
+        options.lock_own_keys()
+        options.add_to_group(OPERATION_KEY, "max")
+        assert not options.is_own(OPERATION_KEY)  # precondition
+
+        assert _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, options) is True
+
+    def test_env_var_downgrades_declared_mismatch_to_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+        options = Options(group={OPERATION_KEY: "max"})
+
+        with caplog.at_level(logging.WARNING):
+            result = _NameMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME, options)
 
         assert result is True
+        records = [r for r in caplog.records if r.levelno == logging.WARNING and OPERATION_KEY in r.getMessage()]
+        assert len(records) == 1
+        assert "sum" in records[0].getMessage()
+        assert "max" in records[0].getMessage()

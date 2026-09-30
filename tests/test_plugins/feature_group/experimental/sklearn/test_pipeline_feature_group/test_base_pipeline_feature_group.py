@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
 from mloda.provider import DefaultOptionKeys
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 
@@ -94,6 +95,23 @@ class TestSklearnPipelineFeatureGroup:
         assert "income" in feature_names
         assert "age" in feature_names
         assert "salary" in feature_names
+
+    @pytest.mark.parametrize("name", ["a,b__sklearn_pipeline_scaling", "a, b__sklearn_pipeline_scaling"])
+    def test_input_features_agree_with_the_mixin_source_extraction(self, name: str) -> None:
+        result = PandasSklearnPipelineFeatureGroup().input_features(Options({}), FeatureName(name))
+
+        assert result is not None
+        assert sorted(f.name for f in result) == sorted(
+            SklearnPipelineFeatureGroup._extract_source_features(Feature(name))
+        )
+
+    def test_input_features_keep_the_space_after_a_comma(self) -> None:
+        name = "a, b__sklearn_pipeline_scaling"
+        result = PandasSklearnPipelineFeatureGroup().input_features(Options({}), FeatureName(name))
+
+        assert result is not None
+        assert {str(f.name) for f in result} == {"a", " b"}
+        assert set(SklearnPipelineFeatureGroup._extract_source_features(Feature(name))) == {"a", " b"}
 
     def test_create_default_pipeline_config_preprocessing(self) -> None:
         """Test default pipeline configuration for preprocessing."""
@@ -261,6 +279,15 @@ class TestSklearnPipelineRequiredWhen:
             }
         )
         assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x", options) is True
+
+    def test_rejects_undeclared_name_bound_pipeline_name_even_with_pipeline_steps(self) -> None:
+        options = Options(
+            {
+                SklearnPipelineFeatureGroup.PIPELINE_STEPS: PIPELINE_STEPS_VALUE,
+                DefaultOptionKeys.in_features: "income",
+            }
+        )
+        assert SklearnPipelineFeatureGroup.match_feature_group_criteria("x__sklearn_pipeline_custom", options) is False
 
     def test_rejects_config_with_both_pipeline_name_and_steps(self) -> None:
         """Mutual exclusivity is the one rule a spec cannot express; the override keeps it."""

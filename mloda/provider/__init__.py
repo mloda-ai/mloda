@@ -10,7 +10,7 @@
 #     from mloda.provider import FeatureChainParserMixin, FeatureGroup, DefaultOptionKeys
 #
 #     class MyPlugin(FeatureChainParserMixin, FeatureGroup):
-#         PREFIX_PATTERN = r".*__([\w]+)_my_op$"
+#         PREFIX_PATTERN = r".*__(?P<operation_type>[\w]+)_my_op$"
 #         PROPERTY_MAPPING = { ... }
 #         def calculate_feature(cls, data, features): ...
 #
@@ -83,7 +83,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     missing_columnwise_hooks,
     declared_columnwise_hooks,
 )
-from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
 
 # Property specs
 from mloda.core.abstract_plugins.components.property_spec import (
@@ -183,6 +183,7 @@ __all__ = [
     "missing_columnwise_hooks",
     "declared_columnwise_hooks",
     "ParsedFeatureName",
+    "NameResolution",
     # Property specs
     "PropertySpec",
     "is_no_default",

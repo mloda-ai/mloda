@@ -872,6 +872,22 @@ class TestFeatureChainParserMixinExtractSourceFeatures:
         assert result == ["feat1", "feat2", "feat3"]
 
 
+class TestFeatureChainParserMixinSourceAgreement:
+    """input_features, _extract_source_features and the resolution read the same sources."""
+
+    @pytest.mark.parametrize("name", ["feat1__op1_test", "feat1&feat2&feat3__op1_test"])
+    def test_all_three_source_readers_agree_for_an_owned_name(self, name: str) -> None:
+        options = Options(context={"operation": "op1"})
+        via_input = MockFeatureGroup().input_features(options, FeatureName(name))
+        assert via_input is not None
+
+        via_extract = MockFeatureGroup._extract_source_features(Feature(name, options=options))
+        via_resolution = MockFeatureGroup.resolve_feature_name(name).sources
+
+        assert {f.name for f in via_input} == set(via_extract) == set(via_resolution)
+        assert via_extract == list(via_resolution)
+
+
 class TestFeatureChainParserMixinExtractSingleSourceFeature:
     """Tests for _extract_single_source_feature() classmethod."""
 

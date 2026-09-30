@@ -204,6 +204,8 @@ Multiple source features:
 ]
 ```
 
+On a feature whose name carries its source, a declared `in_features` must list the name's direct sources (the part before the last `__`; for `age__mean_imputed__standard_scaled` that is `age__mean_imputed`), otherwise the run raises. Omit `in_features` to let the name decide.
+
 The `in_features` order is kept, and duplicates are kept and count toward `MAX_IN_FEATURES`.
 
 ### Nested in_features feature dict

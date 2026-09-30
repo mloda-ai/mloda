@@ -13,7 +13,6 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
-from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -123,7 +122,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         SklearnArtifact.ARTIFACT_STORAGE_PATH: SklearnArtifact.ARTIFACT_STORAGE_PATH_SPEC,
     }
 
-    PREFIX_PATTERN = r".*__sklearn_pipeline_([\w]+)$"
+    PREFIX_PATTERN = r".*__sklearn_pipeline_(?P<pipeline_name>[\w]+)$"
 
     # In-feature configuration for FeatureChainParserMixin
     # Pipelines support variable number of in_features
@@ -139,27 +138,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         """Return the artifact class for sklearn pipeline persistence."""
         return SklearnArtifact
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract source features from either configuration-based options or string parsing."""
-
-        # Try string-based parsing first
-        _, source_features_str = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_features_str is not None:
-            # Handle multiple source features separated by commas
-            if "," in source_features_str:
-                source_features = [f.strip() for f in source_features_str.split(",")]
-            else:
-                source_features = [source_features_str]
-            return {Feature(feature_name) for feature_name in source_features}
-
-        # Fall back to configuration-based approach
-        _source_features = options.get_in_features()
-        return set(_source_features)
-
     @classmethod
     def get_pipeline_name(cls, feature_name: str) -> str:
         """Extract the pipeline name from the feature name."""
-        prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
+        prefix_part = cls.resolve_feature_name(feature_name).value_for(cls.PIPELINE_NAME)
         if prefix_part is None:
             raise ValueError(f"Invalid sklearn pipeline feature name format: {feature_name}")
 
@@ -272,11 +254,9 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Pipeline name or None if extraction fails
         """
-        # Try string-based parsing first
-        feature_name_str = feature.name
-
-        if FeatureChainParser.is_chained_feature(feature_name_str):
-            prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name_str, [cls.PREFIX_PATTERN])
+        resolution = cls.resolve_feature_name(feature.name)
+        if resolution.owned:
+            prefix_part = resolution.value_for(cls.PIPELINE_NAME)
             if prefix_part is not None:
                 return prefix_part
 

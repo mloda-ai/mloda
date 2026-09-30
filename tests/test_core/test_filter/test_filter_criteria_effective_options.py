@@ -13,6 +13,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -142,3 +143,32 @@ def test_filter_does_not_match_when_explicit_option_differs_from_default() -> No
     payload = _run(Options(context={PFC_KEY: PFC_OTHER_VAL}))
     assert PFC_TARGET not in payload["names"], f"the filter must not attach on a non-default value: {payload!r}"
     assert payload["filter_count"] == 0, f"no filter may match: {payload!r}"
+
+
+PFC_NAME_KEY = "pfc_name_operation_1716"
+PFC_NAME_FILTER = "sales__sum_pfc1716"
+
+
+class _PfcNameBoundGroup1716(FeatureChainParserMixin, FeatureGroup):
+    """Name-bound group: the filter feature's name binds PFC_NAME_KEY to 'sum'."""
+
+    PREFIX_PATTERN = rf".*__(?P<{PFC_NAME_KEY}>sum|max)_pfc1716$"
+    PROPERTY_MAPPING = {
+        PFC_NAME_KEY: PropertySpec(
+            "Operation of the pfc1716 fixture",
+            allowed_values={"sum": "Sum", "max": "Max"},
+            context=True,
+            strict_validation=True,
+        )
+    }
+
+
+def test_host_imported_option_differing_from_the_filter_name_does_not_abort() -> None:
+    """A key imported from the host after lock_own_keys is not the filter feature's own declaration."""
+    global_filter = GlobalFilter()
+    global_filter.add_filter(PFC_NAME_FILTER, FilterType.EQUAL, {"value": 1})
+    host = Feature("pfc_host_1716", Options(context={PFC_NAME_KEY: "max"}))
+
+    matched = global_filter.identify_matched_filters(_PfcNameBoundGroup1716, host)
+
+    assert sorted(single.name for single in matched) == [PFC_NAME_FILTER]

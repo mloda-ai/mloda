@@ -9,7 +9,7 @@ from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
+from mloda.provider import CHAIN_SEPARATOR
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -113,7 +113,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r".*__([\w]+)_(\d+)d$"
+    PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_(?P<dimension>\d+)d$"
 
     # In-feature configuration for FeatureChainParserMixin
     IN_FEATURE_SEPARATOR = ","
@@ -135,7 +135,6 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             context=True,
             strict_validation=True,
             element_validator=is_positive_int,
-            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features to use for dimensionality reduction",
@@ -257,30 +256,6 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             raise ValueError(f"Invalid dimension: {dimension_str}. Must be a positive integer.")
 
     @classmethod
-    def _validate_string_match(cls, feature_name: str, _operation_config: str, _source_feature: str) -> bool:
-        """
-        Validate that a string-based feature name has valid dimensionality reduction components.
-
-        Validates algorithm and dimension using parse_reduction_suffix().
-
-        Args:
-            feature_name: The full feature name to validate
-            _operation_config: The operation config extracted by the regex (unused)
-            _source_feature: The source feature extracted by the regex (unused)
-
-        Returns:
-            True if valid, False otherwise
-        """
-        if FeatureChainParser.is_chained_feature(feature_name):
-            try:
-                # Use existing validation logic that validates algorithm and dimension
-                cls.parse_reduction_suffix(feature_name)
-            except ValueError:
-                # If validation fails, this feature doesn't match
-                return False
-        return True
-
-    @classmethod
     def _extract_algorithm_dimension_and_source_features(cls, feature: Feature) -> tuple[str, int, list[str], Options]:
         """
         Extract algorithm, dimension, source features, and algorithm-specific options from a feature.
@@ -315,18 +290,10 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         Returns:
             Tuple of (algorithm, dimension, algorithm_options)
         """
-        feature_name_str = feature.name
+        algorithm = cls._resolve_operation(feature, cls.ALGORITHM)
+        dimension_raw = cls._resolve_operation(feature, cls.DIMENSION)
 
-        # Name path only when the name matches PREFIX_PATTERN, else options
-        if FeatureChainParser.parse_name(feature_name_str, cls._get_prefix_patterns()).matched:
-            algorithm, dimension = cls.parse_reduction_suffix(feature_name_str)
-            return algorithm, dimension, feature.options
-
-        # Fall back to configuration-based approach
-        algorithm = feature.options.get(cls.ALGORITHM)
-        dimension = feature.options.get(cls.DIMENSION)
-
-        if algorithm is None or dimension is None:
+        if algorithm is None or dimension_raw is None:
             return None, None, feature.options
 
         # Validate algorithm
@@ -337,7 +304,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             )
 
         # Validate and convert dimension
-        dimension = int(dimension)
+        dimension = int(dimension_raw)
         if dimension <= 0:
             raise ValueError(f"Invalid dimension: {dimension}. Must be a positive integer.")
 

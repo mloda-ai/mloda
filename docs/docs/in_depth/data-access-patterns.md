@@ -59,11 +59,23 @@ Each reader family exposes a recommended hook seam. Overriding `load_data` whole
 - **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`. To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
 
     ```python
-    try:
-        validate_property_values(credentials, CREDENTIAL_SPECS, closed_world=True)
-    except PropertyValidationError:
-        return False
-    return True
+    from typing import Any
+
+    from mloda.provider import PropertySpec, PropertyValidationError, validate_property_values
+
+    CREDENTIAL_SPECS = {"host": PropertySpec("Database host")}
+
+
+    def is_valid_credentials(credentials: dict[str, Any]) -> bool:
+        try:
+            validate_property_values(credentials, CREDENTIAL_SPECS, closed_world=True)
+        except PropertyValidationError:
+            return False
+        return True
+
+
+    assert is_valid_credentials({"host": "db"})
+    assert not is_valid_credentials({"host": "db", "password": "secret"})
     ```
 
 - **ReadDocument**: implement `produce_document` and `suffix`; optionally `document_file_type`.

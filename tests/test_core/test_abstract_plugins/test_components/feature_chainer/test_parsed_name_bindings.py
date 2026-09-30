@@ -226,6 +226,19 @@ class TestParsedFeatureNameShape:
 class TestParseName:
     """parse_name keeps today's matching semantics and fabricates nothing."""
 
+    def test_trailing_newline_is_a_miss(self) -> None:
+        """A `$`-terminated pattern must not match a name with a trailing newline."""
+        pattern = r".*__(?P<algorithm>[\w]+)_(?P<dimension>\d+)d$"
+
+        assert FeatureChainParser.parse_name("x__pca_2d\n", [pattern]).matched is False
+
+    def test_extract_in_feature_rejects_a_trailing_newline(self) -> None:
+        """extract_in_feature raises for a name with a trailing newline."""
+        pattern = r".*__(?P<algorithm>[\w]+)_(?P<dimension>\d+)d$"
+
+        with pytest.raises(ValueError):
+            FeatureChainParser.extract_in_feature("x__pca_2d\n", pattern)
+
     def test_no_pattern_match_is_a_miss(self) -> None:
         """A name no pattern matches yields matched=False and no facts."""
         parsed = FeatureChainParser.parse_name("unrelated_pnb770", [NamedCaptureGroup.PREFIX_PATTERN])
@@ -837,6 +850,13 @@ class TestShippedPluginsUnchanged:
         parsed = FeatureChainParser.parse_feature_name("sales__sum_aggr", [AggregatedFeatureGroup.PREFIX_PATTERN])
 
         assert parsed == ("sum", "sales")
+
+    def test_aggregated_feature_group_rejects_a_trailing_newline(self) -> None:
+        """A name with a trailing newline is not a match, even though regex `$` would allow it."""
+        name = "sales__sum_aggr\n"
+
+        assert FeatureChainParser.parse_feature_name(name, [AggregatedFeatureGroup.PREFIX_PATTERN]) == (None, None)
+        assert AggregatedFeatureGroup.match_feature_group_criteria(name, Options()) is False
 
     def test_aggregated_feature_group_still_matches(self) -> None:
         """The shipped matcher keeps claiming its chained name with no options at all."""

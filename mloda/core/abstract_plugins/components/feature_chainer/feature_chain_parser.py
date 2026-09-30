@@ -90,7 +90,7 @@ class FeatureChainParser:
     ) -> ParsedFeatureName:
         """Parse a feature name into structured facts, keeping today's matching semantics.
 
-        A prefix pattern is anything ``re.match`` accepts: a ``str`` or a compiled ``re.Pattern``.
+        A prefix pattern is a ``str`` or compiled ``re.Pattern`` that must match the whole name (``re.fullmatch``).
         A matched pattern with nothing before the separator raises the historical ValueError;
         ``match_parser_criteria`` and the mixin's standalone rejection diagnostic depend on that raise.
         """
@@ -101,7 +101,7 @@ class FeatureChainParser:
         operation_part = parts[1] if len(parts) > 1 else parts[0]
 
         for suffix_pattern in prefix_patterns:
-            match = re.match(suffix_pattern, _feature_name)
+            match = re.fullmatch(suffix_pattern, _feature_name)
             if match is None:
                 continue
 
@@ -521,7 +521,7 @@ class FeatureChainParser:
     def prefix_patterns_of(cls, owner: type[Any]) -> list[Any]:
         """Collect the name patterns a class matches on. The single implementation the mixin uses too.
 
-        A pattern is whatever ``re.match`` accepts: a ``str`` or an already compiled ``re.Pattern``.
+        A pattern is a ``str`` or compiled ``re.Pattern`` that must match the whole name (``re.fullmatch``).
         Filtering by type would hide a compiled pattern from the guard while the matcher still matches
         on it, and the guard would then reject a feature the matcher accepted.
         """
@@ -681,7 +681,7 @@ class FeatureChainParser:
         Raises:
             ValueError: If the feature name doesn't match the expected pattern
         """
-        match = re.match(suffix_pattern, feature_name)
+        match = re.fullmatch(suffix_pattern, feature_name)
         if not match:
             raise ValueError(f"Invalid feature name format: {feature_name}")
 

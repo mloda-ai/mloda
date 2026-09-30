@@ -381,12 +381,7 @@ class FeatureChainParser:
     def _first_rejecting_guard(
         cls, options: Options, property_mapping: dict[str, PropertySpec] | None, log: logging.Logger = logger
     ) -> tuple[str, Any] | None:
-        """Return the (key, value) of the first match_guard that rejects its option value, or None.
-
-        A guard rejects by returning a falsy value or by raising. Shared by the match decision
-        (_validate_match_guards) and the diagnostic (_strict_validation_rejection_reason), so the
-        two can never disagree on what a guard rejected. ``log`` is the caller's logger, so its records stay under it.
-        """
+        """The (key, value) of the first match_guard that rejects (falsy or raises), or None; records go to ``log``."""
         if property_mapping is None:
             return None
 
@@ -416,10 +411,7 @@ class FeatureChainParser:
 
     @classmethod
     def _guard_rejection_reason(cls, key: str, value: Any, spec: PropertySpec) -> str | None:
-        """The reportable reason for a guard rejection of ``key``/``value``, or ``None`` if unreportable.
-
-        Shared by the match-time recorder and the diagnostic facade, so the two text sources cannot drift.
-        """
+        """The reportable reason for a guard rejection, or None if unreportable."""
         if spec.expected is not None:
             shown = safe_value_text(value)
             return f"option '{key}' must be {spec.expected}, got {shown}"

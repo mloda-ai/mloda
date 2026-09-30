@@ -141,7 +141,7 @@ class FeatureChainParserMixin:
     See docs/in_depth/property-mapping.md for full details and examples.
     """
 
-    # Read by the class-definition guards, which cannot import this module (cycle) to tell a mixin group from a plain one.
+    # Lets the class-definition guards tell a mixin group from a plain one without importing this module.
     IS_CHAIN_PARSER_MIXIN: ClassVar[bool] = True
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
     MIN_IN_FEATURES: int = 1

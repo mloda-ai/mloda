@@ -615,7 +615,7 @@ class TestFunctoolsWrapsOverrideKeepsItsOwnGuard:
 
 @pytest.fixture
 def presence_checks(monkeypatch: pytest.MonkeyPatch) -> list[Options]:
-    """The options views the missing-required-keys rule is asked about from here on. Clear it after defining classes."""
+    """Records the options each missing-required-keys check sees; clear it after defining classes."""
     seen: list[Options] = []
     original = FeatureChainParser._name_path_missing_required_keys
 
@@ -653,8 +653,6 @@ class TestPlainGroupEnforcement:
     """The presence guard reaches plain groups: default matcher, inherited matcher and override alike."""
 
     def test_plain_required_key_installs_the_presence_guard_only(self) -> None:
-        """A plain group with a required key carries the presence guard, and no required_when guard."""
-
         class PlainWithRequiredKey(FeatureGroup):
             PROPERTY_MAPPING = _plain_required_mapping()
 
@@ -663,8 +661,6 @@ class TestPlainGroupEnforcement:
         assert getattr(resolved, REQUIRED_WHEN_GUARD_FLAG, None) is not resolved
 
     def test_plain_group_without_a_flaggable_key_installs_no_guard(self) -> None:
-        """Only defaulted keys leave the presence guard nothing to do, so no wrapper is installed."""
-
         class PlainAllDefaulted(FeatureGroup):
             PROPERTY_MAPPING = {NEEDS_KEY: property_spec("optional", default=None)}
 
@@ -689,7 +685,7 @@ class TestPlainGroupEnforcement:
         )
 
     def test_plain_delegating_override_checks_presence_once(self, presence_checks: list[Options]) -> None:
-        """Guards nest: the delegating override and its guarded parent evaluate the rule once between them."""
+        """The delegating override and its guarded parent evaluate the rule once between them."""
 
         class PlainParent(FeatureGroup):
             PROPERTY_MAPPING = _plain_required_mapping()
@@ -715,8 +711,6 @@ class TestPlainGroupEnforcement:
         assert len(presence_checks) == 1
 
     def test_mixin_group_checks_presence_once_when_it_rejects(self, presence_checks: list[Options]) -> None:
-        """A mixin group keeps its single evaluation: the guard never repeats the inner path's verdict."""
-
         class PatternedMixinGroup(FeatureChainParserMixin, FeatureGroup):
             PREFIX_PATTERN = GUARDED_PATTERN
             PROPERTY_MAPPING = {
@@ -732,7 +726,7 @@ class TestPlainGroupEnforcement:
         assert len(presence_checks) == 1
 
     def test_mixin_group_evaluates_guard_and_validator_once(self) -> None:
-        """The mixin matcher already runs value validation and match_guard: the default matcher must not add a pass."""
+        """The default matcher must not add a second validation pass on top of the mixin matcher."""
         guard_calls: list[Any] = []
         validator_calls: list[Any] = []
 
@@ -760,8 +754,6 @@ class TestPlainGroupEnforcement:
         assert validator_calls == [3]
 
     def test_plain_staticmethod_matcher_is_enforced(self) -> None:
-        """A staticmethod matcher keeps its calling convention under the presence guard, and is still enforced."""
-
         class StaticPlainMatcher(FeatureGroup):
             PROPERTY_MAPPING = _plain_required_mapping()
 
@@ -777,8 +769,6 @@ class TestPlainGroupEnforcement:
         assert StaticPlainMatcher.match_feature_group_criteria("anything", Options(context={NEEDS_KEY: "v"})) is True
 
     def test_plain_descriptorless_matcher_is_skipped_with_a_warning(self, caplog: pytest.LogCaptureFixture) -> None:
-        """A plain group never fails at class definition: the guard is skipped and the author is told."""
-
         def bare_matcher(*args: Any, **kwargs: Any) -> bool:
             return True
 
@@ -797,8 +787,6 @@ class TestPlainGroupEnforcement:
         assert BareMatcherPlainGroup.match_feature_group_criteria("anything", Options()) is True
 
     def test_descriptorless_matcher_on_a_patterned_group_still_raises(self) -> None:
-        """Where the presence guard already refused a descriptorless matcher, it keeps refusing."""
-
         def bare_matcher(*args: Any, **kwargs: Any) -> bool:
             return True
 

@@ -634,8 +634,7 @@ class FeatureGroup(ABC):
         A veto recorded while the user explicitly addressed the reader family gates the name-based
         rules below; the MatchData rule still decides on its own.
 
-        A matched candidate must still pass the present-value validation and ``match_guard`` of its
-        PROPERTY_MAPPING; an override that delegates via ``super()`` keeps them.
+        A matched candidate must also pass the value validation and ``match_guard`` of its PROPERTY_MAPPING.
         """
         if not cls._matches_by_default_rules(feature_name, options, data_access_collection):
             return False
@@ -676,7 +675,7 @@ class FeatureGroup(ABC):
 
     @classmethod
     def _passes_option_declarations(cls, options: Options) -> bool:
-        """Judge the present option values and ``match_guard`` of PROPERTY_MAPPING, as the mixin matcher does."""
+        """Validate present option values and ``match_guard`` against PROPERTY_MAPPING."""
         property_mapping = cls.PROPERTY_MAPPING
         if not property_mapping:
             return True

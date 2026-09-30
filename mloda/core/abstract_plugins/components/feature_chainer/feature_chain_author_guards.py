@@ -5,7 +5,7 @@ Imports ``feature_chain_parser``; the parser never imports this module, which ke
 
 Depends on these parser-private names, so renaming one of them is a cross-module break:
 ``FeatureChainParser._can_skip_required_check``, ``._check_name_path_required_presence``, ``._merge_bindings``,
-and ``._name_path_missing_required_keys``, and ``._presence_rejection_reason``.
+``._name_path_missing_required_keys``, and ``._presence_rejection_reason``.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 # another function never reads as that function's own guard.
 NAME_PATH_PRESENCE_GUARD_FLAG = "_mloda_name_path_presence_guard"
 
-# ClassVar on FeatureChainParserMixin; this module cannot import the mixin (cycle), so it reads the marker.
+# ClassVar on FeatureChainParserMixin, read here because importing the mixin would be a cycle.
 CHAIN_PARSER_MIXIN_MARKER = "IS_CHAIN_PARSER_MIXIN"
 
 # Marks a class whose captureless diagnostic already ran, so the two __init_subclass__ hooks
@@ -441,7 +441,7 @@ def _reject_staticmethod_matcher(owner: type[Any]) -> None:
 
 
 def _descriptorless_matcher(owner: type[Any]) -> Any:
-    """The class's matcher when it has no classmethod/staticmethod descriptor (and is not a bound method), else None."""
+    """The matcher if it lacks a classmethod/staticmethod descriptor (and is not a bound method), else None."""
     attr = inspect.getattr_static(owner, "match_feature_group_criteria", None)
     if attr is None or isinstance(attr, (classmethod, staticmethod)) or inspect.ismethod(attr):
         return None
@@ -524,8 +524,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
 
 
 def _plain_presence_holds(owner_name: str, options: Options, mapping: dict[str, PropertySpec]) -> bool:
-    """The required-presence rule on the raw options of a plain group; a miss is recorded, and logged at debug
-    because a root group is probed by every candidate feature."""
+    """Required-presence rule on a plain group's raw options; debug-logged because a root group is probed by every feature."""
     missing = FeatureChainParser._name_path_missing_required_keys(options, mapping)
     if not missing:
         return True
@@ -543,8 +542,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     duplicated. Nesting order relative to the required_when guard is behaviorally irrelevant:
     each guard ANDs its own predicate onto the inner verdict and passes False through unchanged.
 
-    A plain group (no ``FeatureChainParserMixin``) matches by name, so the rule applies to it with or without
-    a pattern: a name no pattern owns is checked against the raw options.
+    A plain group (no ``FeatureChainParserMixin``) is checked on its raw options, with or without a pattern.
     """
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
     if not isinstance(property_mapping, dict):

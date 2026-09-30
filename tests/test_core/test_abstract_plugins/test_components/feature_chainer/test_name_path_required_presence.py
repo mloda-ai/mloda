@@ -14,7 +14,7 @@ key ``in_features`` (name-satisfied), ``deferred_binding=True``, a key bound by 
 a missing required key is a plain non-match there and ``deferred_binding`` does NOT exempt it.
 
 Every fixture carries an "r769" marker in its class name, keys, and values so it cannot collide with
-other feature groups in the global registry. The plain (mixin-free) group fixtures carry "Pgp" instead.
+other feature groups in the global registry. Plain (mixin-free) group fixtures carry "Pgp" instead.
 """
 
 from __future__ import annotations
@@ -553,7 +553,7 @@ PLAIN_ENTRY_RULES = [
 
 @pytest.fixture
 def recorded_rejections() -> Iterator[dict[str, MatchRejection]]:
-    """An active rejection window, as the engine opens one around a candidate's match call."""
+    """An active rejection window, as the engine opens around a candidate's match call."""
     reasons: dict[str, MatchRejection] = {}
     token = MATCH_REJECTION_REASONS.set(reasons)
     yield reasons
@@ -561,7 +561,7 @@ def recorded_rejections() -> Iterator[dict[str, MatchRejection]]:
 
 
 class TestPlainGroupPresence:
-    """A plain group (no FeatureChainParserMixin) that declares a required key needs it on every matching rule."""
+    """A plain group (no mixin) with a required key needs it on every matching rule."""
 
     @pytest.mark.parametrize(("group", "feature_name", "group_options"), PLAIN_ENTRY_RULES)
     def test_missing_required_key_is_non_match(
@@ -611,7 +611,7 @@ class TestPlainGroupPresence:
         assert reason == PGP_MISSING_PREFIX
 
     def test_non_match_stays_quiet_at_warning_level(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Root groups are probed for every feature, so an unowned plain non-match must not warn."""
+        """Root groups are probed for every feature, so a plain non-match must not warn."""
         with caplog.at_level(logging.WARNING):
             result = PlainRootPgp.match_feature_group_criteria(PGP_ROOT_FEATURE, Options())
 

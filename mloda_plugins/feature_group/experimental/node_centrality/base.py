@@ -5,12 +5,12 @@ Base implementation for node centrality feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR
 from mloda.provider import (
+    FeatureChainParser,
     FeatureChainParserMixin,
 )
 from mloda.provider import COLUMNWISE_HOOKS
@@ -185,24 +185,14 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the LAST double underscore for L→R format)
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
-            raise ValueError(
-                f"Invalid centrality feature name format: {feature_name}. Missing double underscore separator."
-            )
-
-        suffix = feature_name[suffix_start + 2 :]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) != 2 or parts[1] != "centrality":
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid centrality feature name format: {feature_name}. "
                 f"Expected format: {{source}}__{{centrality_type}}_centrality"
             )
 
-        centrality_type = parts[0]
+        centrality_type = cast(dict[str, str], parsed.named_captures)[cls.CENTRALITY_TYPE]
 
         # Validate centrality type
         if centrality_type not in cls.CENTRALITY_TYPES:

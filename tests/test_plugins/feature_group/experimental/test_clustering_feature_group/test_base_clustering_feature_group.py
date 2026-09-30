@@ -110,6 +110,45 @@ class TestClusteringFeatureGroup:
         assert ClusteringFeatureGroup.get_k_value(chained) == 5
         assert ClusteringFeatureGroup.parse_clustering_prefix(chained) == ("kmeans", "5")
 
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "x__cluster_kmeans_5_6",
+            "x__cluster_k_means_5",
+            "x__cluster_kmeans_0",
+            "x__cluster_kmeans_-1",
+            "x__mean_imputed__cluster_kmeans_5_6",
+        ],
+    )
+    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            ClusteringFeatureGroup.parse_clustering_prefix(name)
+        with pytest.raises(ValueError):
+            ClusteringFeatureGroup.get_k_value(name)
+
+    def test_empty_source_raises_like_the_matcher(self) -> None:
+        name = "__cluster_kmeans_5"
+        with pytest.raises(ValueError):
+            ClusteringFeatureGroup.parse_clustering_prefix(name)
+        with pytest.raises(ValueError):
+            ClusteringFeatureGroup.get_k_value(name)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("x__grp_kmeans_5", ("kmeans", "5")), ("x__mean_imputed__grp_dbscan_auto", ("dbscan", "auto"))],
+    )
+    def test_parse_clustering_prefix_follows_an_overridden_prefix_pattern(
+        self, name: str, expected: tuple[str, str]
+    ) -> None:
+        """The parts come from PREFIX_PATTERN, not from a hand-written copy of the grammar."""
+
+        class GrpPatternGroup(ClusteringFeatureGroup):
+            PREFIX_PATTERN = r".*__grp_(?P<algorithm>[\w]+)_(?P<k_value>[\w]+)$"
+
+        assert GrpPatternGroup.parse_clustering_prefix(name) == expected
+        with pytest.raises(ValueError):
+            GrpPatternGroup.parse_clustering_prefix("x__cluster_kmeans_5")
+
     def test_input_features(self) -> None:
         """Test the input_features method."""
         feature_group = PandasClusteringFeatureGroup()

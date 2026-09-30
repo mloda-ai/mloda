@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR
 from mloda.provider import (
+    FeatureChainParser,
     FeatureChainParserMixin,
 )
 from mloda.provider import COLUMN_DISCOVERY_HOOKS
@@ -140,20 +140,15 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     @classmethod
     def _has_valid_time_window_suffix(cls, feature_name: str) -> bool:
         """Check if feature_name has a suffix matching the time window pattern."""
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             return False
-        suffix = feature_name[suffix_start + 2 :]
-        parts = suffix.split("_")
-        if len(parts) != 4 or parts[3] != "window":
+        captures = cast(dict[str, str], parsed.named_captures)
+        if captures[cls.WINDOW_FUNCTION] not in cls.WINDOW_FUNCTIONS:
             return False
-        if parts[0] not in cls.WINDOW_FUNCTIONS:
+        if captures[cls.TIME_UNIT] not in cls.TIME_UNITS:
             return False
-        if parts[2] not in cls.TIME_UNITS:
-            return False
-        if not parts[1].isdigit() or int(parts[1]) <= 0:
-            return False
-        return True
+        return int(captures[cls.WINDOW_SIZE]) > 0
 
     @classmethod
     def _extract_time_window_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:
@@ -214,25 +209,17 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the last double underscore before the window pattern)
-        # Use rfind to support chained features in L->R format (e.g., price__mean_imputed__sum_7_day_window)
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
-            raise ValueError(
-                f"Invalid time window feature name format: {feature_name}. Missing double underscore separator."
-            )
-
-        suffix = feature_name[suffix_start + 2 :]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) != 4 or parts[3] != "window":
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
                 f"Expected format: {{in_features}}__{{window_function}}_{{window_size}}_{{time_unit}}_window"
             )
 
-        window_function, window_size_str, time_unit = parts[0], parts[1], parts[2]
+        captures = cast(dict[str, str], parsed.named_captures)
+        window_function = captures[cls.WINDOW_FUNCTION]
+        window_size_str = captures[cls.WINDOW_SIZE]
+        time_unit = captures[cls.TIME_UNIT]
 
         # Validate window function
         if window_function not in cls.WINDOW_FUNCTIONS:

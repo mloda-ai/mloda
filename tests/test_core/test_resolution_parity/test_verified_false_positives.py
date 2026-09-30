@@ -241,8 +241,8 @@ def test_engine_parent_child_prefers_child_when_it_can_run(
         data_access_collection=None,
     )
     assert set(result.identified) == {winner}
-    if winner is ChildProbe753:
-        assert result.identified[winner] == {CfwP753}
+    expected = {CfwP753} if winner is ChildProbe753 else enabled & {CfwP753, CfwQ753}
+    assert result.identified[winner] == expected
 
 
 @pytest.mark.parametrize("enabled, pin, winner", RUNS_753)

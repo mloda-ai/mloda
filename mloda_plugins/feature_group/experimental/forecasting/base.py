@@ -331,6 +331,15 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             # Check that resolved columns exist
             cls._check_source_features_exist(original_data, resolved_columns)
 
+            # Forecasting only supports a single source column. Reject multi-column
+            # sources explicitly instead of silently forecasting only the first column.
+            if len(resolved_columns) != 1:
+                raise ValueError(
+                    f"Forecasting supports exactly one source column, but source "
+                    f"'{in_features}' resolved to {len(resolved_columns)} columns: "
+                    f"{resolved_columns}. Multi-column forecasting is not supported."
+                )
+
             # Check if we have a trained model in the artifact
             model_artifact = None
             if features.artifact_to_load is not None:
@@ -510,9 +519,9 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """
         Method to perform the forecasting. Should be implemented by subclasses.
 
-        Supports both single-column and multi-column forecasting:
-        - Single column: [feature_name] - forecasts a single time series
-        - Multi-column: [feature~0, feature~1, ...] - forecasts multiple time series
+        Only single-column forecasting is supported: `in_features` must contain exactly
+        one resolved source column. Multi-column sources are rejected before this method
+        is called, so implementations may safely use `in_features[0]`.
 
         Args:
             data: The input data
@@ -544,6 +553,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         Method to perform forecasting and return point forecast plus confidence intervals.
 
         Should be implemented by subclasses to provide confidence intervals for forecasts.
+
+        Only single-column forecasting is supported: `in_features` must contain exactly
+        one resolved source column. Multi-column sources are rejected before this method
+        is called, so implementations may safely use `in_features[0]`.
 
         Args:
             data: The input data

@@ -808,6 +808,14 @@ class PlainMissingKeyFGPpr(FeatureGroup):
     def input_data(cls) -> DataCreator:
         return DataCreator({PLAIN_MISSING_FEATURE_PPR})
 
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({PLAIN_MISSING_FEATURE_PPR: [repr(features.get_options_key("needs_key_ppr"))]})
+
 
 class PlainExpectedGuardFGPpr(FeatureGroup):
     """Plain root group whose match_guard rejection is reportable through ``expected``."""
@@ -899,6 +907,25 @@ class TestPlainGroupRejectionRecording:
             )
 
         assert f"  - PlainExpectedGuardFGPpr (option value): {PLAIN_GUARD_REASON_PPR}" in str(exc_info.value)
+
+    def test_end_to_end_missing_required_key_reason(self) -> None:
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            mlodaAPI.run_all(
+                [Feature(PLAIN_MISSING_FEATURE_PPR)],
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups({PlainMissingKeyFGPpr}),
+            )
+
+        assert f"  - PlainMissingKeyFGPpr (option value): {PLAIN_MISSING_REASON_PPR}" in str(exc_info.value)
+
+    def test_end_to_end_present_required_key_reaches_calculate_feature(self) -> None:
+        results = mlodaAPI.run_all(
+            [Feature(PLAIN_MISSING_FEATURE_PPR, Options(context={"needs_key_ppr": "5"}))],
+            compute_frameworks={PyArrowTable},
+            plugin_collector=PluginCollector.enabled_feature_groups({PlainMissingKeyFGPpr}),
+        )
+
+        assert results[0].column(PLAIN_MISSING_FEATURE_PPR)[0].as_py() == "'5'"
 
     def test_a_declining_plain_group_leaves_the_shared_name_to_its_sibling(self) -> None:
         feature = Feature(PLAIN_SHARED_FEATURE_PPR)

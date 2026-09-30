@@ -20,7 +20,6 @@ other feature groups in the global registry. Plain (mixin-free) group fixtures c
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -30,7 +29,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator, PropertySpec, property_spec
 from mloda.user import FeatureName, Options
@@ -551,15 +550,6 @@ PLAIN_ENTRY_RULES = [
 ]
 
 
-@pytest.fixture
-def recorded_rejections() -> Iterator[dict[str, MatchRejection]]:
-    """An active rejection window, as the engine opens around a candidate's match call."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
-
-
 class TestPlainGroupPresence:
     """A plain group (no mixin) with a required key needs it on every matching rule."""
 
@@ -589,26 +579,16 @@ class TestPlainGroupPresence:
         assert PlainGroupKeyPgp.match_feature_group_criteria(PlainGroupKeyPgp.get_class_name(), options) is True
 
     def test_rejection_reason_is_recorded_with_the_context_remedy(
-        self, recorded_rejections: dict[str, MatchRejection]
+        self, rejection_window: dict[str, MatchRejection]
     ) -> None:
         assert PlainRootPgp.match_feature_group_criteria(PGP_ROOT_FEATURE, Options()) is False
 
-        assert list(recorded_rejections) == [PlainRootPgp.get_class_name()]
-        rejection = recorded_rejections[PlainRootPgp.get_class_name()]
+        assert list(rejection_window) == [PlainRootPgp.get_class_name()]
+        rejection = rejection_window[PlainRootPgp.get_class_name()]
         assert rejection.stage == "value_rejection"
-        assert rejection.reason.startswith(PGP_MISSING_PREFIX)
-        assert "Options(context=...)" in rejection.reason
         assert rejection.reason == FeatureChainParser.name_path_presence_rejection_reason(
             Options(), PlainRootPgp.PROPERTY_MAPPING or {}
         )
-
-    def test_group_key_rejection_reason_has_no_context_remedy(
-        self, recorded_rejections: dict[str, MatchRejection]
-    ) -> None:
-        assert PlainGroupKeyPgp.match_feature_group_criteria(PlainGroupKeyPgp.get_class_name(), Options()) is False
-
-        reason = recorded_rejections[PlainGroupKeyPgp.get_class_name()].reason
-        assert reason == PGP_MISSING_PREFIX
 
     def test_non_match_stays_quiet_at_warning_level(self, caplog: pytest.LogCaptureFixture) -> None:
         """Root groups are probed for every feature, so a plain non-match must not warn."""
@@ -625,12 +605,10 @@ class TestPlainGroupExemptions:
     def test_exempt_keys_do_not_block_the_match(self) -> None:
         assert PlainExemptPgp.match_feature_group_criteria(PlainExemptPgp.get_class_name(), Options()) is True
 
-    def test_exempt_keys_do_not_mask_a_missing_required_key(
-        self, recorded_rejections: dict[str, MatchRejection]
-    ) -> None:
+    def test_exempt_keys_do_not_mask_a_missing_required_key(self, rejection_window: dict[str, MatchRejection]) -> None:
         name = PlainExemptPlusRequiredPgp.get_class_name()
 
         assert PlainExemptPlusRequiredPgp.match_feature_group_criteria(name, Options()) is False
-        assert recorded_rejections[name].reason.startswith(PGP_MISSING_PREFIX)
-        assert "deferred_pgp" not in recorded_rejections[name].reason
-        assert "defaulted_none_pgp" not in recorded_rejections[name].reason
+        assert rejection_window[name].reason.startswith(PGP_MISSING_PREFIX)
+        assert "deferred_pgp" not in rejection_window[name].reason
+        assert "defaulted_none_pgp" not in rejection_window[name].reason

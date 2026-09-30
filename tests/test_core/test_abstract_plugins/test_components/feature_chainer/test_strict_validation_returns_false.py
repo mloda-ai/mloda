@@ -1,6 +1,5 @@
 """Tests that strict_validation ValueError is caught and returns False."""
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -11,7 +10,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec, property_spec
@@ -204,29 +203,10 @@ class PlainGuardedPgv(FeatureGroup):
     PROPERTY_MAPPING = {"limit_pgv": property_spec("positive count", match_guard=_is_positive_int_pgv, default=None)}
 
 
-class PlainExpectedGuardPgv(FeatureGroup):
-    """Plain group whose match_guard rejection is reportable through ``expected``."""
-
-    PROPERTY_MAPPING = {
-        "limit_pgv": property_spec(
-            "positive count", match_guard=_is_positive_int_pgv, expected="a whole number of 1 or more", default=None
-        )
-    }
-
-
 class PlainRaisingGuardPgv(FeatureGroup):
     """Plain group whose match_guard cannot judge the value."""
 
     PROPERTY_MAPPING = {"limit_pgv": property_spec("positive count", match_guard=_raising_guard_pgv, default=None)}
-
-
-@pytest.fixture
-def recorded_rejections() -> Iterator[dict[str, MatchRejection]]:
-    """An active rejection window, as the engine opens one around a candidate's match call."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestPlainGroupStrictValidation:
@@ -256,12 +236,12 @@ class TestPlainGroupStrictValidation:
         )
         assert PlainElementValidatorPgv.match_feature_group_criteria(name, Options(group={"mode": "valid_x"})) is True
 
-    def test_rejection_reason_is_recorded(self, recorded_rejections: dict[str, MatchRejection]) -> None:
+    def test_rejection_reason_is_recorded(self, rejection_window: dict[str, MatchRejection]) -> None:
         name = PlainStrictModePgv.get_class_name()
 
         assert PlainStrictModePgv.match_feature_group_criteria(name, Options(group={"mode": "mode_b"})) is False
 
-        rejection = recorded_rejections[name]
+        rejection = rejection_window[name]
         assert rejection.stage == "value_rejection"
         assert "mode_b" in rejection.reason
         assert "'mode'" in rejection.reason
@@ -302,22 +282,6 @@ class TestPlainGroupMatchGuard:
         name = PlainRaisingGuardPgv.get_class_name()
 
         assert PlainRaisingGuardPgv.match_feature_group_criteria(name, Options(context={"limit_pgv": 4})) is False
-
-    def test_guard_rejection_with_expected_is_recorded(self, recorded_rejections: dict[str, MatchRejection]) -> None:
-        name = PlainExpectedGuardPgv.get_class_name()
-
-        assert PlainExpectedGuardPgv.match_feature_group_criteria(name, Options(context={"limit_pgv": "4"})) is False
-
-        assert recorded_rejections[name].reason == "option 'limit_pgv' must be a whole number of 1 or more, got str '4'"
-
-    def test_guard_rejection_without_expected_stays_silent(
-        self, recorded_rejections: dict[str, MatchRejection]
-    ) -> None:
-        name = PlainGuardedPgv.get_class_name()
-
-        assert PlainGuardedPgv.match_feature_group_criteria(name, Options(context={"limit_pgv": 0})) is False
-
-        assert recorded_rejections == {}
 
     def test_guard_sees_the_value_once_through_a_delegating_override(self) -> None:
         calls: list[Any] = []

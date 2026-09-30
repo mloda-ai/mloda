@@ -184,9 +184,8 @@ class FeatureChainParserMixin:
         """
         Parse input features from feature name or options.
 
-        An agreeing declared in_features supplies the input features, keeping their options and feature_group scope.
-
-        First attempts to parse in_features from the feature name string.
+        First attempts to parse in_features from the feature name string; an agreeing declared in_features
+        supplies them instead, keeping its options and feature_group scope.
         Falls back to options.get_in_features() if string parsing fails.
 
         Chained children are left at the default forward_group, which forwards all

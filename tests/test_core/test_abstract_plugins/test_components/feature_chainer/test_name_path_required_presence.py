@@ -599,6 +599,64 @@ class TestPlainGroupPresence:
         assert not _required_presence_warnings(caplog, "PlainRootPgp")
 
 
+PGP_UNOWNED_PREFIX_FEATURE = "pgpunowned_abc"
+PGP_UNOWNED_SUFFIX_FEATURE = "abc_pgpunowned"
+
+
+class PlainPatternedPrefixPgp(FeatureGroup):
+    """Plain group whose PREFIX_PATTERN captures the required key, but the name carries no source."""
+
+    PREFIX_PATTERN = r"^pgpunowned_(?P<k_pgp>[a-z]+)$"
+    PROPERTY_MAPPING = {"k_pgp": property_spec("required, no default")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PGP_UNOWNED_PREFIX_FEATURE}
+
+
+class PlainPatternedSuffixPgp(FeatureGroup):
+    """Plain group whose SUFFIX_PATTERN captures the required key, but the name carries no source."""
+
+    SUFFIX_PATTERN = r"^(?P<k_pgp>[a-z]+)_pgpunowned$"
+    PROPERTY_MAPPING = {"k_pgp": property_spec("required, no default")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PGP_UNOWNED_SUFFIX_FEATURE}
+
+
+class TestPlainPatternedGroupUnownedName:
+    """A plain group with a name pattern keeps the default match for a name its pattern does not own."""
+
+    @pytest.mark.parametrize(
+        ("group", "feature_name"),
+        [
+            pytest.param(PlainPatternedPrefixPgp, PGP_UNOWNED_PREFIX_FEATURE, id="prefix_pattern"),
+            pytest.param(PlainPatternedSuffixPgp, PGP_UNOWNED_SUFFIX_FEATURE, id="suffix_pattern"),
+        ],
+    )
+    def test_unowned_name_keeps_the_default_match(self, group: type[FeatureGroup], feature_name: str) -> None:
+        # Precondition: the pattern does not own the name, because it carries no source feature.
+        with pytest.raises(ValueError, match="no source feature"):
+            FeatureChainParser.resolve_name(feature_name, FeatureChainParser.prefix_patterns_of(group), None)
+
+        assert group.match_feature_group_criteria(feature_name, Options()) is True
+
+    @pytest.mark.parametrize(
+        ("group", "feature_name"),
+        [
+            pytest.param(PlainPatternedPrefixPgp, PGP_UNOWNED_PREFIX_FEATURE, id="prefix_pattern"),
+            pytest.param(PlainPatternedSuffixPgp, PGP_UNOWNED_SUFFIX_FEATURE, id="suffix_pattern"),
+        ],
+    )
+    def test_unowned_name_records_no_rejection(
+        self, group: type[FeatureGroup], feature_name: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        group.match_feature_group_criteria(feature_name, Options())
+
+        assert rejection_window == {}
+
+
 class TestPlainGroupExemptions:
     """The name-path exemptions carry over: default, required_when, deferred_binding and in_features."""
 

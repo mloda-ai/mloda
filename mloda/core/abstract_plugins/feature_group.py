@@ -25,7 +25,6 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     COLUMN_SEPARATOR,
     FeatureChainParser,
-    PropertyValueRejection,
     option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
@@ -683,14 +682,10 @@ class FeatureGroup(ABC):
         # A marked abort crosses the containment; an unmarked rejection is this candidate's non-match.
         try:
             FeatureChainParser._validate_present_option_values(options, property_mapping)
-        except PropertyValueRejection as exc:
-            if is_match_abort(exc):
-                raise
-            record_match_rejection(cls.__name__, str(exc))
-            return False
         except ValueError as exc:
             if is_match_abort(exc):
                 raise
+            record_match_rejection(cls.__name__, str(exc))
             return False
 
         return FeatureChainParser._validate_match_guards(cls.__name__, options, property_mapping)

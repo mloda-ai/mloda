@@ -524,7 +524,7 @@ def install_required_when_guard(owner: type[Any]) -> None:
 
 
 def _plain_presence_holds(owner_name: str, options: Options, mapping: dict[str, PropertySpec]) -> bool:
-    """Required-presence rule on a plain group's raw options; debug-logged because a root group is probed by every feature."""
+    """Required-presence rule on a plain group's raw options; debug-logged to avoid a warning per candidate probe."""
     missing = FeatureChainParser._name_path_missing_required_keys(options, mapping)
     if not missing:
         return True
@@ -542,7 +542,8 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     duplicated. Nesting order relative to the required_when guard is behaviorally irrelevant:
     each guard ANDs its own predicate onto the inner verdict and passes False through unchanged.
 
-    A plain group (no ``FeatureChainParserMixin``) is checked on its raw options, with or without a pattern.
+    A plain group (no ``FeatureChainParserMixin``) without a pattern is checked on its raw options. A
+    patterned one keeps the name-path rule, so a name no pattern owns keeps the inner verdict.
     """
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
     if not isinstance(property_mapping, dict):
@@ -616,7 +617,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
                 catching=(ValueError, re.error),
             )
             if not resolution.owned:
-                return not plain or _plain_presence_holds(guarded_cls.__name__, options, mapping)
+                return bool(patterns) or not plain or _plain_presence_holds(guarded_cls.__name__, options, mapping)
             effective_options = FeatureChainParser._merge_bindings(options, dict(resolution.bindings), mapping)
             return FeatureChainParser._check_name_path_required_presence(
                 guarded_cls.__name__, feature_name, effective_options, mapping

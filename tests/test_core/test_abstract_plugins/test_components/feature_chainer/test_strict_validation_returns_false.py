@@ -255,6 +255,21 @@ class TestPlainGroupStrictValidation:
 
         assert PlainStrictModePgv.match_feature_group_criteria(name, Options(group={"mode": "mode_a"})) is False
 
+    def test_unmarked_value_error_records_its_message_as_the_reason(
+        self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        def reject(cls: type[FeatureChainParser], options: Options, property_mapping: dict[str, Any]) -> None:
+            raise ValueError("unmarked reason")
+
+        monkeypatch.setattr(FeatureChainParser, "_validate_present_option_values", classmethod(reject))
+        name = PlainStrictModePgv.get_class_name()
+
+        assert PlainStrictModePgv.match_feature_group_criteria(name, Options(group={"mode": "mode_a"})) is False
+
+        rejection = rejection_window[name]
+        assert rejection.stage == "value_rejection"
+        assert rejection.reason == "unmarked reason"
+
     def test_marked_abort_crosses_the_containment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def abort(cls: type[FeatureChainParser], options: Options, property_mapping: dict[str, Any]) -> None:
             raise escalate_match_abort(ValueError("marked"))

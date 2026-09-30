@@ -221,7 +221,7 @@ def test_base_class_scope_prefers_subclass_when_both_accessible() -> None:
     """With base AND subclass accessible, a base-class scope resolves to the subclass.
 
     issubclass matching keeps both candidates in the scope filter; the existing
-    filter_subclasses preference (same compute-framework set) then drops the
+    filter_subclasses preference then drops the
     base in favour of the subclass. Resolving to the base is wrong.
     """
     feature = Feature("subject_token", feature_group=ScopeSourceA)
@@ -369,7 +369,7 @@ def test_base_class_name_string_scope_prefers_subclass_when_both_accessible() ->
 
     Mirrors test_base_class_scope_prefers_subclass_when_both_accessible for the
     string form: ancestry matching keeps both candidates, then filter_subclasses
-    (same compute-framework set) drops the base in favour of the subclass.
+    drops the base in favour of the subclass.
     """
     feature = Feature("subject_token", feature_group=ScopeSourceA.get_class_name())
     accessible_plugins: FeatureGroupEnvironmentMapping = {
@@ -517,9 +517,8 @@ def test_base_name_string_scope_with_differing_framework_siblings_stays_ambiguou
 
     The realistic multi-framework shape: two concrete per-framework siblings of one
     family base (as PandasAggregatedFeatureGroup and PyArrowAggregatedFeatureGroup
-    are), both enabled. Their compute-framework sets differ, so filter_subclasses
-    takes its early-continue branch and cannot pick a winner, and neither is a
-    subclass of the other. Resolution must raise instead of silently choosing one.
+    are), both enabled. The siblings are unrelated by inheritance, so no subclass
+    preference applies. Resolution must raise instead of silently choosing one.
     """
     framework_sibling_one = type("ScopeFrameworkSiblingOne", (_DupNameBase,), {})
     framework_sibling_two = type("ScopeFrameworkSiblingTwo", (_DupNameBase,), {})

@@ -748,16 +748,11 @@ class IdentifyFeatureGroupClass:
     def filter_subclasses(
         self, _identified_feature_groups: FeatureGroupEnvironmentMapping
     ) -> FeatureGroupEnvironmentMapping:
-        """
-        This functionality ensures that only subclass feature groups are kept.
-        """
+        """Drop every candidate that another candidate subclasses, whatever their compute-framework sets."""
         fgs_to_pop: set[type[FeatureGroup]] = set()
 
-        for i_feature_group, i_compute_frameworks in _identified_feature_groups.items():
-            for o_feature_group, o_compute_frameworks in _identified_feature_groups.items():
-                if i_compute_frameworks != o_compute_frameworks:
-                    continue
-
+        for i_feature_group in _identified_feature_groups:
+            for o_feature_group in _identified_feature_groups:
                 if i_feature_group == o_feature_group:
                     continue
 

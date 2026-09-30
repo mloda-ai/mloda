@@ -49,7 +49,7 @@ class ParquetReader(ReadFile):
         name="customer_segment",
         options=Options(
             context={
-                "BaseInputData": (ParquetReader, "/path/to/data.parquet")
+                ParquetReader: "/path/to/data.parquet"
             }
         )
     )
@@ -68,7 +68,7 @@ class ParquetReader(ReadFile):
         name="revenue",
         options=Options(
             context={
-                "BaseInputData": (ParquetReader, "sales.parquet")
+                ParquetReader: "sales.parquet"
             }
         )
     )

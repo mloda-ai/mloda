@@ -56,10 +56,7 @@ class SQLITEReader(ReadDB):
         name="customer_name",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "/path/to/database.db"}
-                )
+                SQLITEReader: {"sqlite": "/path/to/database.db"}
             }
         )
     )
@@ -77,10 +74,7 @@ class SQLITEReader(ReadDB):
         name="user_email",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "users.db"}
-                )
+                SQLITEReader: {"sqlite": "users.db"}
             }
         )
     )
@@ -94,10 +88,7 @@ class SQLITEReader(ReadDB):
         name="customer_id",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "sales.db"}
-                )
+                SQLITEReader: {"sqlite": "sales.db"}
             }
         )
     )
@@ -106,10 +97,7 @@ class SQLITEReader(ReadDB):
         name="purchase_amount",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "sales.db"}
-                )
+                SQLITEReader: {"sqlite": "sales.db"}
             }
         )
     )

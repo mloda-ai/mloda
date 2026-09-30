@@ -766,6 +766,32 @@ def test_end2end_declared_in_features_scope_is_honored_on_the_name_path() -> Non
     assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 10
 
 
+def test_end2end_one_declared_child_shared_by_two_name_path_consumers() -> None:
+    """A child Feature shared by two consumers with different group options must not leak options between them."""
+    child = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
+    sum_feature = Feature(
+        "scope_python_sales__sum_aggr", Options(group={"g_shared": 1}, context={"in_features": [child]})
+    )
+    max_feature = Feature(
+        "scope_python_sales__max_aggr", Options(group={"g_shared": 2}, context={"in_features": [child]})
+    )
+
+    results = list(
+        mloda.run_all(
+            [sum_feature, max_feature],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
+            ),
+        )
+    )
+
+    summed = [df for df in results if "scope_python_sales__sum_aggr" in df.columns]
+    maxed = [df for df in results if "scope_python_sales__max_aggr" in df.columns]
+    assert summed[0]["scope_python_sales__sum_aggr"].iloc[0] == 10
+    assert maxed[0]["scope_python_sales__max_aggr"].iloc[0] == 4
+
+
 # ---------------------------------------------------------------------------
 # A name-owning candidate's marked match abort must not outrank the scope and domain gates
 # ---------------------------------------------------------------------------

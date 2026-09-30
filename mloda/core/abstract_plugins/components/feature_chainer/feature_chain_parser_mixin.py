@@ -56,6 +56,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+from copy import copy
 from collections.abc import Callable, Sequence
 from typing import Any, cast
 
@@ -211,7 +212,7 @@ class FeatureChainParserMixin:
             self._raise_source_features_reason(feature_name, resolution.sources)
             declared = self._agreeing_declared_in_features(options, list(resolution.sources))
             if declared is not None:
-                return set(declared)
+                return {copy(f) for f in declared}  # the engine mutates returned features in place
             return {Feature(n) for n in self.declared_source_names(list(resolution.sources))}
 
         # Configuration-based fallback using get_in_features()

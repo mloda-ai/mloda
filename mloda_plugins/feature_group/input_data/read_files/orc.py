@@ -49,7 +49,7 @@ class OrcReader(ReadFile):
         name="log_message",
         options=Options(
             context={
-                "BaseInputData": (OrcReader, "/path/to/data.orc")
+                OrcReader: "/path/to/data.orc"
             }
         )
     )
@@ -68,7 +68,7 @@ class OrcReader(ReadFile):
         name="page_views",
         options=Options(
             context={
-                "BaseInputData": (OrcReader, "analytics.orc")
+                OrcReader: "analytics.orc"
             }
         )
     )

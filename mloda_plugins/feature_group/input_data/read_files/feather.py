@@ -49,7 +49,7 @@ class FeatherReader(ReadFile):
         name="measurement",
         options=Options(
             context={
-                "BaseInputData": (FeatherReader, "/path/to/data.feather")
+                FeatherReader: "/path/to/data.feather"
             }
         )
     )
@@ -68,7 +68,7 @@ class FeatherReader(ReadFile):
         name="metric_value",
         options=Options(
             context={
-                "BaseInputData": (FeatherReader, "metrics.feather")
+                FeatherReader: "metrics.feather"
             }
         )
     )

@@ -52,7 +52,7 @@ class CsvReader(ReadFile):
         name="customer_name",
         options=Options(
             context={
-                "BaseInputData": (CsvReader, "/path/to/data.csv")
+                CsvReader: "/path/to/data.csv"
             }
         )
     )
@@ -71,7 +71,7 @@ class CsvReader(ReadFile):
         name="user_email",
         options=Options(
             context={
-                "BaseInputData": (CsvReader, "users.csv")
+                CsvReader: "users.csv"
             }
         )
     )
@@ -85,7 +85,7 @@ class CsvReader(ReadFile):
         name="customer_id",
         options=Options(
             context={
-                "BaseInputData": (CsvReader, "customers.csv")
+                CsvReader: "customers.csv"
             }
         )
     )
@@ -94,7 +94,7 @@ class CsvReader(ReadFile):
         name="customer_name",
         options=Options(
             context={
-                "BaseInputData": (CsvReader, "customers.csv")
+                CsvReader: "customers.csv"
             }
         )
     )
@@ -103,7 +103,7 @@ class CsvReader(ReadFile):
         name="registration_date",
         options=Options(
             context={
-                "BaseInputData": (CsvReader, "customers.csv")
+                CsvReader: "customers.csv"
             }
         )
     )

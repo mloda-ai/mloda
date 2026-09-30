@@ -184,15 +184,17 @@ attributable and collapsed the types back into one (#949). Migration edge: a bar
 ### A pattern-less feature group sits in between
 
 A `FeatureGroup` that declares no `PREFIX_PATTERN` or `SUFFIX_PATTERN` carries a real
-`PROPERTY_MAPPING`, but only part of the enforced surface reaches it:
+`PROPERTY_MAPPING` (the `DefaultMatcherFeatureGroup` probe in
+`tests/.../feature_chainer/test_required_when_enforced_on_override.py` is the in-repo example), but
+only part of the enforced surface reaches it:
 
 - `required_when` **is** enforced, for absence. Its guard is installed from
   `FeatureGroup.__init_subclass__` and wraps the class's resolved `match_feature_group_criteria`
   instead of living inside the chain-parser matcher, so an **absent** required key is a non-match at
   match time, not a late `ValueError` inside `input_features`. Requiredness reads presence
-  (`options.get(key) is not None`), so a present-but-falsy value (`paths=[]`,
-  `reader=""`) satisfies the requirement and matches; a group that needs a non-empty value checks it
-  itself in `input_features`.
+  (`options.get(key) is not None`), so a present-but-falsy value (a
+  required key passed as `[]` or `""`) satisfies the requirement and matches; a group that needs a
+  non-empty value checks it itself in `input_features`.
 - `strict_validation` is never reached: value validation lives inside the chain-parser matcher, and a
   pattern-less group keeps the default class-name matcher, which does not call the parser. The
   name-path presence rule is unavailable too, because it needs a parsed name and its guard installs
@@ -711,7 +713,7 @@ if it really is a whole-value check.
 | The reader surface: the single spec type and its surface guards, the reserved framework key, the MRO merge, the loud undeclared key, the presence rule of `reader_option()` | `tests/.../test_components/test_reader_option_declarations.py` |
 | Reader selection enforcement: strict values, requiredness, the `framework_set` exemption, the attributable `input_data` rejection | `tests/.../test_components/test_reader_option_enforcement.py` |
 | Per-reader declarations, the declared `default` that is load-bearing at selection, and the bare-path branch it does not reach | `tests/.../input_data/test_reader_option_declarations.py` |
-| A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/test_core/test_prepare/test_required_when_rejection_recording.py`, `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
+| A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/.../feature_chainer/test_required_when_enforced_on_override.py`, `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
 | Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |

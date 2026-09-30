@@ -91,11 +91,12 @@ def _make_grp_default_root_fg(feature_name: str) -> type[FeatureGroup]:
     return IdcGrpDefaultRootFeatureGroup
 
 
-def _make_dep_probe_parent_fg(feature_name: str) -> type[FeatureGroup]:
+def _make_dep_probe_parent_fg(feature_name: str, resolve_defaults: bool = False) -> type[FeatureGroup]:
     """A throwaway parent whose input_features branches on the presence of its own defaulted key.
 
     With pre-default (declared) semantics the key is absent for a plain request, so the parent
     must resolve IDC_CHILD_DECLARED; a premature default fill would flip it to IDC_CHILD_EFFECTIVE.
+    With resolve_defaults it first calls options_with_defaults, so it reaches the declared default.
     """
 
     class IdcDepProbeParentFeatureGroup(FeatureGroup):
@@ -108,6 +109,8 @@ def _make_dep_probe_parent_fg(feature_name: str) -> type[FeatureGroup]:
             return {feature_name}
 
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            if resolve_defaults:
+                options = self.options_with_defaults(options)
             if options.get(IDC_DEP_KEY) is None:
                 return {Feature(IDC_CHILD_DECLARED)}
             return {Feature(IDC_CHILD_EFFECTIVE)}
@@ -383,6 +386,19 @@ def test_input_features_observes_pre_default_options() -> None:
     payload = _run_parent_child(_make_dep_probe_parent_fg, _make_marker_child_fg, "idc_dep_parent_feature", Options())
     assert payload["resolved_children"] == [IDC_CHILD_DECLARED], (
         f"input_features must observe pre-default options and resolve the declared child: {payload!r}"
+    )
+
+
+def test_input_features_reaches_declared_default_through_options_with_defaults() -> None:
+    """input_features can reach the declared default by calling options_with_defaults itself."""
+    payload = _run_parent_child(
+        lambda name: _make_dep_probe_parent_fg(name, resolve_defaults=True),
+        _make_marker_child_fg,
+        "idc_dep_defaulting_parent_feature",
+        Options(),
+    )
+    assert payload["resolved_children"] == [IDC_CHILD_EFFECTIVE], (
+        f"options_with_defaults inside input_features must materialize the declared default: {payload!r}"
     )
 
 

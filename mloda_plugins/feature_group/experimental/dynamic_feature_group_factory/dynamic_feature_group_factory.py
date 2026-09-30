@@ -174,12 +174,6 @@ class DynamicFeatureGroupCreator:
     - Callable implementations matching expected method signatures
     - Unique class_name for each distinct feature group type
     - Base class must be FeatureGroup or its subclass
-
-    ## Real-World Example
-
-    See `ConcatenatedFileContent` in `read_context_files.py` for a production
-    example that uses DynamicFeatureGroupCreator to create file-reading feature
-    groups on-the-fly for joining multiple files.
     """
 
     _created_classes: dict[str, type[FeatureGroup]] = {}  # Store created classes

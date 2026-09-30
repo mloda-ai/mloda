@@ -212,13 +212,13 @@ class FeatureChainParserMixin:
             self._raise_source_features_reason(feature_name, resolution.sources)
             declared = self._agreeing_declared_in_features(options, list(resolution.sources))
             if declared is not None:
-                return {copy(f) for f in declared}  # the engine mutates returned features in place
+                return {copy(f) for f in declared}  # copies: the engine mutates returned features in place
             return {Feature(n) for n in self.declared_source_names(list(resolution.sources))}
 
         # Configuration-based fallback using get_in_features()
         in_features = options.get_in_features()
         self._raise_source_features_reason(feature_name, tuple(str(f.name) for f in in_features))
-        return set(in_features)
+        return {copy(f) for f in in_features}
 
     @classmethod
     def resolve_feature_name(cls, name: str | FeatureName) -> NameResolution:

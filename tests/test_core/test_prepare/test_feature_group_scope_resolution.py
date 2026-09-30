@@ -790,6 +790,34 @@ def test_end2end_one_declared_child_shared_by_two_name_path_consumers() -> None:
     maxed = [df for df in results if "scope_python_sales__max_aggr" in df.columns]
     assert summed[0]["scope_python_sales__sum_aggr"].iloc[0] == 10
     assert maxed[0]["scope_python_sales__max_aggr"].iloc[0] == 4
+    assert child.options.get("g_shared") is None
+
+
+def test_end2end_one_declared_child_shared_by_two_config_path_consumers() -> None:
+    """Config-path consumers sharing one declared child must not leak group options into each other."""
+    child = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
+    sum_feature = Feature(
+        "scope_cfg_sum", Options(group={"g_shared": 1, "aggregation_type": "sum"}, context={"in_features": [child]})
+    )
+    max_feature = Feature(
+        "scope_cfg_max", Options(group={"g_shared": 2, "aggregation_type": "max"}, context={"in_features": [child]})
+    )
+
+    results = list(
+        mloda.run_all(
+            [sum_feature, max_feature],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
+            ),
+        )
+    )
+
+    summed = [df for df in results if "scope_cfg_sum" in df.columns]
+    maxed = [df for df in results if "scope_cfg_max" in df.columns]
+    assert summed[0]["scope_cfg_sum"].iloc[0] == 10
+    assert maxed[0]["scope_cfg_max"].iloc[0] == 4
+    assert child.options.get("g_shared") is None
 
 
 # ---------------------------------------------------------------------------

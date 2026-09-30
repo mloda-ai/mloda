@@ -210,7 +210,7 @@ class TestDeclaredInFeaturesAgreeWithName:
         assert by_name["f1"].options.get("k1") == 1
         assert by_name["f2"].feature_group_scope == "ScopeTwo944"
 
-    def test_agreeing_features_are_copies_not_the_declared_objects(self) -> None:
+    def test_agreeing_features_are_value_equal_to_the_declared_ones(self) -> None:
         declared = self._declared()
         result = _NameSourceGate944().input_features(_options(declared), FeatureName(self.NAME))
 
@@ -219,10 +219,8 @@ class TestDeclaredInFeaturesAgreeWithName:
         for original in declared:
             returned = by_name[str(original.name)]
             assert returned == original
-            assert returned is not original
-
-        by_name["f1"].options.add_to_group("mutated", 1)
-        assert declared[0].options.get("mutated") is None
+            assert returned.options == original.options
+            assert returned.feature_group_scope == original.feature_group_scope
 
     def test_string_entries_yield_bare_named_features(self) -> None:
         result = _NameSourceGate944().input_features(_options(["f1", "f2"]), FeatureName(self.NAME))

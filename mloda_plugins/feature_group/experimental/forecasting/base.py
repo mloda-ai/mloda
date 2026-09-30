@@ -25,7 +25,7 @@ def _is_bool(value: Any) -> bool:
     return isinstance(value, bool)
 
 
-# A selector tail excludes the reserved bound names and `_`, so it cannot be mistaken for a suffix part.
+# Selector tail of PREFIX_PATTERN: excludes the reserved names lower/upper and `_`.
 _SELECTOR_TAIL = r"(?!(?:lower|upper)\Z)[^~_\n]+"
 
 

@@ -125,7 +125,7 @@ class TestDimensionalityReductionFeatureGroup:
     def test_parse_reduction_suffix_follows_an_overridden_prefix_pattern(
         self, name: str, expected: tuple[str, int]
     ) -> None:
-        """The parts come from PREFIX_PATTERN, not from a hand-written copy of the grammar."""
+        """Parts are read from PREFIX_PATTERN."""
 
         class DimPatternGroup(DimensionalityReductionFeatureGroup):
             PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_(?P<dimension>\d+)dim$"

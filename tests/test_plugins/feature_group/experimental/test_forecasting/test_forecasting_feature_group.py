@@ -385,7 +385,7 @@ class TestForecastingFeatureGroup:
     def test_parse_forecast_suffix_follows_an_overridden_prefix_pattern(
         self, name: str, expected: tuple[str, int, str]
     ) -> None:
-        """The parts come from PREFIX_PATTERN, not from a hand-written copy of the grammar."""
+        """Parts are read from PREFIX_PATTERN."""
 
         class FcstPatternGroup(ForecastingFeatureGroup):
             PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_fcst_(?P<horizon>\d+)(?P<time_unit>[\w]+)$"

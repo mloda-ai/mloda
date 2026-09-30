@@ -134,7 +134,7 @@ class TestClusteringFeatureGroup:
     def test_parse_clustering_prefix_follows_an_overridden_prefix_pattern(
         self, name: str, expected: tuple[str, str]
     ) -> None:
-        """The parts come from PREFIX_PATTERN, not from a hand-written copy of the grammar."""
+        """Parts are read from PREFIX_PATTERN."""
 
         class GrpPatternGroup(ClusteringFeatureGroup):
             PREFIX_PATTERN = r".*__grp_(?P<algorithm>[\w]+)_(?P<k_value>[\w]+)$"

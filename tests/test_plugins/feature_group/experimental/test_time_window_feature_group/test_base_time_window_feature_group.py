@@ -402,7 +402,7 @@ class TestTimeWindowFeatureGroup:
     def test_parse_time_window_prefix_follows_an_overridden_prefix_pattern(
         self, name: str, expected: tuple[str, int, str]
     ) -> None:
-        """The parts come from PREFIX_PATTERN, not from a hand-written copy of the grammar."""
+        """Parts are read from PREFIX_PATTERN."""
 
         class WinPatternGroup(TimeWindowFeatureGroup):
             PREFIX_PATTERN = r".*__(?P<window_function>[\w]+)_(?P<window_size>\d+)_(?P<time_unit>[\w]+)_win$"

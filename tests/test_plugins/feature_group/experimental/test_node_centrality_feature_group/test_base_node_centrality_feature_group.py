@@ -119,7 +119,7 @@ class TestNodeCentralityFeatureGroup:
         [("x__degree_centr", "degree"), ("x__mean_imputed__pagerank_centr", "pagerank")],
     )
     def test_parse_centrality_prefix_follows_an_overridden_prefix_pattern(self, name: str, expected: str) -> None:
-        """The parts come from PREFIX_PATTERN, not from a hand-written copy of the grammar."""
+        """Parts are read from PREFIX_PATTERN."""
 
         class CentrPatternGroup(NodeCentralityFeatureGroup):
             PREFIX_PATTERN = r".*__(?P<centrality_type>[\w]+)_centr$"

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import types
 from typing import Any
 
 import pytest
 
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level
 from mloda.provider import NO_DEFAULT, PropertySpec, PropertyValidationError, validate_property_values
 from tests.test_core.test_abstract_plugins.test_components.feature_chainer.test_property_mapping_sequence_unpacking import (
     CONTAINERS,
@@ -16,6 +18,17 @@ from tests.test_core.test_abstract_plugins.test_components.feature_chainer.test_
 )
 
 SECRET = "s3cr3t-token"  # nosec B105
+VALIDATOR_LOGGER = "mloda.core.abstract_plugins.components.property_values_validation"
+
+
+class _RaisingEq:
+    """An element whose equality check raises a non-TypeError carrying the secret."""
+
+    def __eq__(self, other: object) -> bool:
+        raise ValueError(f"leak {SECRET}")
+
+    def __hash__(self) -> int:
+        return 1
 
 
 def _strict(**kwargs: Any) -> dict[str, PropertySpec]:
@@ -67,6 +80,27 @@ class TestElementValidator:
     def test_raising_validator_is_rejected_not_escaped(self) -> None:
         with pytest.raises(PropertyValidationError):
             validate_property_values({"k": 1}, _strict(element_validator=_raise_with_value), closed_world=True)
+
+
+class TestValidatorLogLevel:
+    def test_value_error_validator_logs_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.DEBUG, logger=VALIDATOR_LOGGER):
+            with pytest.raises(PropertyValidationError):
+                validate_property_values({"k": 1}, _strict(element_validator=_raise_with_value), closed_world=True)
+        records = [r for r in caplog.records if r.name == VALIDATOR_LOGGER]
+        assert not [r for r in records if r.levelno >= logging.WARNING]
+
+    def test_runtime_error_validator_logs_at_contained_raise_level(self, caplog: pytest.LogCaptureFixture) -> None:
+        def broken(_: Any) -> bool:
+            raise RuntimeError("boom")
+
+        with caplog.at_level(logging.DEBUG, logger=VALIDATOR_LOGGER):
+            with pytest.raises(PropertyValidationError):
+                validate_property_values({"k": 1}, _strict(element_validator=broken), closed_world=True)
+        expected = contained_raise_log_level(RuntimeError("boom"))
+        records = [r for r in caplog.records if r.name == VALIDATOR_LOGGER]
+        assert records
+        assert max(r.levelno for r in records) == expected
 
 
 class TestSequenceUnpacking:
@@ -157,6 +191,44 @@ class TestRequiredWhen:
             validate_property_values({}, mapping, closed_world=True)
 
 
+class TestFrameworkSetKeys:
+    def test_absent_framework_set_key_is_skipped(self) -> None:
+        mapping = {"k": PropertySpec("k", framework_set=True, default=NO_DEFAULT)}
+        validate_property_values({}, mapping, closed_world=True)
+
+
+class TestRequiredWhenPresentKey:
+    def test_predicate_not_called_when_key_present(self) -> None:
+        calls: list[Any] = []
+
+        def predicate(options: Any) -> bool:
+            calls.append(options)
+            return True
+
+        mapping = {"k": PropertySpec("k", default=None, required_when=predicate)}
+        validate_property_values({"k": 1}, mapping, closed_world=True)
+        assert calls == []
+
+
+class TestKeyTypes:
+    def test_non_str_undeclared_key_rejected_with_str_key(self) -> None:
+        with pytest.raises(PropertyValidationError) as exc:
+            validate_property_values({1: "x"}, {}, closed_world=True)  # type: ignore[dict-item]
+        assert exc.value.key == "1"
+
+    def test_mixed_type_undeclared_keys_do_not_raise_type_error(self) -> None:
+        with pytest.raises(PropertyValidationError):
+            validate_property_values({1: "x", "a": "y"}, {}, closed_world=True)  # type: ignore[dict-item]
+
+
+class TestMappingProxyValues:
+    def test_valid_and_invalid(self) -> None:
+        mapping = _strict(allowed_values=("a",))
+        validate_property_values(types.MappingProxyType({"k": "a"}), mapping, closed_world=True)
+        with pytest.raises(PropertyValidationError):
+            validate_property_values(types.MappingProxyType({"k": "c"}), mapping, closed_world=True)
+
+
 class TestMappingShape:
     def test_non_property_spec_entry_is_type_error(self) -> None:
         with pytest.raises(TypeError):
@@ -181,6 +253,17 @@ class TestSecretHygiene:
                 validate_property_values({"k": value}, _strict(**spec_kwargs), closed_world=True)
         assert SECRET not in str(exc.value)
         assert exc.value.__cause__ is None
+        assert exc.value.__context__ is None
+        assert SECRET not in caplog.text
+
+    @pytest.mark.parametrize("allowed", [("a",), {"a"}], ids=["tuple", "set"])
+    def test_raising_eq_membership_is_rejected_and_does_not_leak(
+        self, allowed: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(PropertyValidationError) as exc:
+                validate_property_values({"k": _RaisingEq()}, _strict(allowed_values=allowed), closed_world=True)
+        assert SECRET not in str(exc.value)
         assert exc.value.__context__ is None
         assert SECRET not in caplog.text
 

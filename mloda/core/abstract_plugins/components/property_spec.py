@@ -233,6 +233,10 @@ def element_admitted(spec: PropertySpec, element: Any, on_raise: Callable[[Excep
     # Swallows: an unhashable element can never be a member, so the TypeError is a clean rejection.
     except TypeError:
         return False
+    # Swallows: a membership test that raises cannot judge the value, so it is rejected.
+    except Exception as exc:
+        on_raise(exc)
+        return False
 
 
 def property_spec(

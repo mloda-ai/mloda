@@ -209,6 +209,8 @@ credentials dict, against a `PropertySpec` mapping. It raises `PropertyValidatio
 and `reason`) on the first failure.
 
 - It checks required presence, `required_when`, and strict values.
+- `required_when` runs only when the key is absent (the reader rule).
+- Ignored: `framework_set` keys, `match_guard`, `deferred_binding`, and `context`.
 - `closed_world=True` rejects undeclared keys; `False` ignores them.
 - Defaults are never applied: `required_when` receives an `Options` of the raw values, unlike on a feature group.
 - Errors and logs never contain a value.

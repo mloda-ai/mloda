@@ -149,6 +149,18 @@ class TestAggregatedFeatureGroup:
         assert len(rejection_window) == 1
         assert "bogus" in next(iter(rejection_window.values())).reason
 
+    def test_agreeing_declared_in_features_keep_options_and_scope(self) -> None:
+        child = Feature("sales", options=Options(context={"some_key": 1}), feature_group="SomeReader")
+        options = Options(context={"in_features": [child]})
+        assert PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", options)
+
+        result = PandasAggregatedFeatureGroup().input_features(options, FeatureName("sales__sum_aggr"))
+
+        assert result is not None
+        [declared] = result
+        assert declared.options.get("some_key") == 1
+        assert declared.feature_group_scope == "SomeReader"
+
     def test_input_features(self) -> None:
         """Test input_features method."""
         options = Options()

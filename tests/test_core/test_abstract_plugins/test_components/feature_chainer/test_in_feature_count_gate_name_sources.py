@@ -181,6 +181,70 @@ class TestDeclaredInFeaturesAgreeWithName:
 
         assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["a", "b"])) is True
 
+    @staticmethod
+    def _declared() -> list[Feature]:
+        return [
+            Feature("f1", options=Options(context={"k1": 1}), feature_group="ScopeOne944"),
+            Feature("f2", options=Options(context={"k2": 2}), feature_group="ScopeTwo944"),
+        ]
+
+    def test_agreeing_list_returns_the_declared_features(self) -> None:
+        declared = self._declared()
+        result = _NameSourceGate944().input_features(_options(declared), FeatureName(self.NAME))
+
+        assert result is not None
+        by_name = {str(f.name): f for f in result}
+        assert set(by_name) == {"f1", "f2"}
+        assert by_name["f1"].options.get("k1") == 1
+        assert by_name["f2"].options.get("k2") == 2
+        assert by_name["f1"].feature_group_scope == "ScopeOne944"
+        assert by_name["f2"].feature_group_scope == "ScopeTwo944"
+
+    @pytest.mark.parametrize("container", [set, frozenset])
+    def test_agreeing_set_returns_the_declared_features(self, container: Any) -> None:
+        result = _NameSourceGate944().input_features(_options(container(self._declared())), FeatureName(self.NAME))
+
+        assert result is not None
+        by_name = {str(f.name): f for f in result}
+        assert set(by_name) == {"f1", "f2"}
+        assert by_name["f1"].options.get("k1") == 1
+        assert by_name["f2"].feature_group_scope == "ScopeTwo944"
+
+    def test_string_entries_yield_features_equal_to_the_bare_ones(self) -> None:
+        result = _NameSourceGate944().input_features(_options(["f1", "f2"]), FeatureName(self.NAME))
+
+        assert result is not None
+        assert {str(f.name) for f in result} == {"f1", "f2"}
+        assert all(f.feature_group_scope is None for f in result)
+
+    def test_no_in_features_returns_bare_features(self) -> None:
+        result = _NameSourceGate944().input_features(_options(), FeatureName(self.NAME))
+
+        assert result is not None
+        assert {str(f.name) for f in result} == {"f1", "f2"}
+        assert all(f.feature_group_scope is None for f in result)
+
+    def test_downgraded_reordered_list_returns_the_bare_name_features(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+        declared = list(reversed(self._declared()))
+
+        result = _NameSourceGate944().input_features(_options(declared), FeatureName(self.NAME))
+
+        assert result is not None
+        assert {str(f.name) for f in result} == {"f1", "f2"}
+        assert all(f.feature_group_scope is None for f in result)
+        assert all(f.options.get("k1") is None and f.options.get("k2") is None for f in result)
+
+    def test_inherited_in_features_returns_the_bare_name_features(self) -> None:
+        options = _options(self._declared())
+        options.inherited_context_keys = frozenset({DefaultOptionKeys.in_features.value})
+
+        result = _NameSourceGate944().input_features(options, FeatureName(self.NAME))
+
+        assert result is not None
+        assert all(f.feature_group_scope is None for f in result)
+        assert all(f.options.get("k1") is None and f.options.get("k2") is None for f in result)
+
 
 class TestOptionPathGateUnchanged:
     """Without a name that identifies the group, the option value is still what gets counted."""

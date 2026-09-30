@@ -734,6 +734,38 @@ def test_end2end_python_feature_abstract_family_base_scope_resolves_to_pandas_su
     assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 100
 
 
+class ScopePythonAggregationSourceB(FeatureGroup):
+    """Second source of the same feature name with different values."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"scope_python_sales"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"scope_python_sales": [1, 2, 3, 4]}
+
+
+def test_end2end_declared_in_features_scope_is_honored_on_the_name_path() -> None:
+    """A declared in_features Feature pinned to a source is what the name-path aggregation reads."""
+    declared = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
+    feature = Feature("scope_python_sales__sum_aggr", Options(context={"in_features": [declared]}))
+
+    results = list(
+        mloda.run_all(
+            [feature],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
+            ),
+        )
+    )
+
+    aggregated = [df for df in results if "scope_python_sales__sum_aggr" in df.columns]
+    assert len(aggregated) == 1
+    assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 10
+
+
 # ---------------------------------------------------------------------------
 # A name-owning candidate's marked match abort must not outrank the scope and domain gates
 # ---------------------------------------------------------------------------

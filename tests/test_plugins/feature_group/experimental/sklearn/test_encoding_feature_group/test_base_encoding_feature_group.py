@@ -64,6 +64,18 @@ class TestEncodingFeatureGroup:
 
         assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options) is True
 
+    def test_column_suffixed_name_returns_the_declared_base_feature(self) -> None:
+        declared = Feature("x", options=Options(context={"some_key": 1}), feature_group="SomeReader")
+        options = Options(context={DefaultOptionKeys.in_features: [declared]})
+
+        result = PandasEncodingFeatureGroup().input_features(options, FeatureName("x~1__onehot_encoded"))
+
+        assert result is not None
+        [returned] = result
+        assert returned.name == "x"
+        assert returned.options.get("some_key") == 1
+        assert returned.feature_group_scope == "SomeReader"
+
     def test_column_suffixed_name_aborts_on_other_in_features(self) -> None:
         options = Options(context={DefaultOptionKeys.in_features: ["y"]})
 

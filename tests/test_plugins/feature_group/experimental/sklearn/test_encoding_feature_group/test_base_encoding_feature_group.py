@@ -59,14 +59,14 @@ class TestEncodingFeatureGroup:
             )
 
     def test_column_suffixed_name_matches_declared_base_in_features(self) -> None:
-        """The declared source is the column base, as input_features builds it, not the ~suffixed name."""
-        options = Options(context={DefaultOptionKeys.in_features: ["x"]})
+        """The declared column base matches and is returned with its options and scope."""
+        plain = Options(context={DefaultOptionKeys.in_features: ["x"]})
+        assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), plain) is True
 
-        assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options) is True
-
-    def test_column_suffixed_name_returns_the_declared_base_feature(self) -> None:
         declared = Feature("x", options=Options(context={"some_key": 1}), feature_group="SomeReader")
         options = Options(context={DefaultOptionKeys.in_features: [declared]})
+
+        assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options) is True
 
         result = PandasEncodingFeatureGroup().input_features(options, FeatureName("x~1__onehot_encoded"))
 

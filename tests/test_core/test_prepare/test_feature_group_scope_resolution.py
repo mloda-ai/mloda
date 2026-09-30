@@ -746,39 +746,26 @@ class ScopePythonAggregationSourceB(FeatureGroup):
         return {"scope_python_sales": [1, 2, 3, 4]}
 
 
-def test_end2end_declared_in_features_scope_is_honored_on_the_name_path() -> None:
-    """A declared in_features Feature pinned to a source is what the name-path aggregation reads."""
-    declared = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
-    feature = Feature("scope_python_sales__sum_aggr", Options(context={"in_features": [declared]}))
-
-    results = list(
-        mloda.run_all(
-            [feature],
-            compute_frameworks={PandasDataFrame},
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
-            ),
-        )
-    )
-
-    aggregated = [df for df in results if "scope_python_sales__sum_aggr" in df.columns]
-    assert len(aggregated) == 1
-    assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 10
-
-
-def test_end2end_one_declared_child_shared_by_two_name_path_consumers() -> None:
-    """A child Feature shared by two consumers with different group options must not leak options between them."""
+@pytest.mark.parametrize("path", ["name_path", "config_path"])
+def test_end2end_one_declared_child_shared_by_two_consumers(path: str) -> None:
+    """A shared declared child keeps its scope and is not mutated by either consumer's group options."""
     child = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
-    sum_feature = Feature(
-        "scope_python_sales__sum_aggr", Options(group={"g_shared": 1}, context={"in_features": [child]})
-    )
-    max_feature = Feature(
-        "scope_python_sales__max_aggr", Options(group={"g_shared": 2}, context={"in_features": [child]})
-    )
+    context = {"in_features": [child]}
+    if path == "name_path":
+        sum_name, max_name = "scope_python_sales__sum_aggr", "scope_python_sales__max_aggr"
+        sum_group: dict[str, Any] = {"g_shared": 1}
+        max_group: dict[str, Any] = {"g_shared": 2}
+    else:
+        sum_name, max_name = "scope_cfg_sum", "scope_cfg_max"
+        sum_group = {"g_shared": 1, "aggregation_type": "sum"}
+        max_group = {"g_shared": 2, "aggregation_type": "max"}
 
     results = list(
         mloda.run_all(
-            [sum_feature, max_feature],
+            [
+                Feature(sum_name, Options(group=sum_group, context=context)),
+                Feature(max_name, Options(group=max_group, context=context)),
+            ],
             compute_frameworks={PandasDataFrame},
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
@@ -786,37 +773,10 @@ def test_end2end_one_declared_child_shared_by_two_name_path_consumers() -> None:
         )
     )
 
-    summed = [df for df in results if "scope_python_sales__sum_aggr" in df.columns]
-    maxed = [df for df in results if "scope_python_sales__max_aggr" in df.columns]
-    assert summed[0]["scope_python_sales__sum_aggr"].iloc[0] == 10
-    assert maxed[0]["scope_python_sales__max_aggr"].iloc[0] == 4
-    assert child.options.get("g_shared") is None
-
-
-def test_end2end_one_declared_child_shared_by_two_config_path_consumers() -> None:
-    """Config-path consumers sharing one declared child must not leak group options into each other."""
-    child = Feature("scope_python_sales", feature_group=ScopePythonAggregationSourceB)
-    sum_feature = Feature(
-        "scope_cfg_sum", Options(group={"g_shared": 1, "aggregation_type": "sum"}, context={"in_features": [child]})
-    )
-    max_feature = Feature(
-        "scope_cfg_max", Options(group={"g_shared": 2, "aggregation_type": "max"}, context={"in_features": [child]})
-    )
-
-    results = list(
-        mloda.run_all(
-            [sum_feature, max_feature],
-            compute_frameworks={PandasDataFrame},
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
-            ),
-        )
-    )
-
-    summed = [df for df in results if "scope_cfg_sum" in df.columns]
-    maxed = [df for df in results if "scope_cfg_max" in df.columns]
-    assert summed[0]["scope_cfg_sum"].iloc[0] == 10
-    assert maxed[0]["scope_cfg_max"].iloc[0] == 4
+    summed = [df for df in results if sum_name in df.columns]
+    maxed = [df for df in results if max_name in df.columns]
+    assert summed[0][sum_name].iloc[0] == 10
+    assert maxed[0][max_name].iloc[0] == 4
     assert child.options.get("g_shared") is None
 
 

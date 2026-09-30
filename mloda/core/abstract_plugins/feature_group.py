@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     COLUMN_SEPARATOR,
     FeatureChainParser,
+    PropertyValueRejection,
     option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
@@ -34,7 +35,11 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data import
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_OWNED_STAGE, has_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_OWNED_STAGE,
+    has_match_rejection,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -628,8 +633,23 @@ class FeatureGroup(ABC):
 
         A veto recorded while the user explicitly addressed the reader family gates the name-based
         rules below; the MatchData rule still decides on its own.
-        """
 
+        A matched candidate must still pass the present-value validation and ``match_guard`` of its
+        PROPERTY_MAPPING; an override that delegates via ``super()`` keeps them.
+        """
+        if not cls._matches_by_default_rules(feature_name, options, data_access_collection):
+            return False
+
+        return cls._passes_option_declarations(options)
+
+    @classmethod
+    def _matches_by_default_rules(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> bool:
+        """The name and input-data rules of the default matcher."""
         base_feature_name = cls.get_column_base_feature(feature_name)
 
         if cls._is_root_and_matches_input_data(base_feature_name, options, data_access_collection):
@@ -653,6 +673,28 @@ class FeatureGroup(ABC):
             return True
 
         return False
+
+    @classmethod
+    def _passes_option_declarations(cls, options: Options) -> bool:
+        """Judge the present option values and ``match_guard`` of PROPERTY_MAPPING, as the mixin matcher does."""
+        property_mapping = cls.PROPERTY_MAPPING
+        if not property_mapping:
+            return True
+
+        # A marked abort crosses the containment; an unmarked rejection is this candidate's non-match.
+        try:
+            FeatureChainParser._validate_present_option_values(options, property_mapping)
+        except PropertyValueRejection as exc:
+            if is_match_abort(exc):
+                raise
+            record_match_rejection(cls.__name__, str(exc))
+            return False
+        except ValueError as exc:
+            if is_match_abort(exc):
+                raise
+            return False
+
+        return FeatureChainParser._validate_match_guards(cls.__name__, options, property_mapping)
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:

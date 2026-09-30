@@ -58,7 +58,7 @@ import logging
 import os
 from copy import copy
 from collections.abc import Callable, Sequence
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -75,14 +75,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParser,
     INPUT_SEPARATOR,
     PropertyValueRejection,
-    option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution
 from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import (
-    contained_raise_log_level,
     contained_raise_reason,
     escalate_match_abort,
     is_match_abort,
@@ -143,6 +141,8 @@ class FeatureChainParserMixin:
     See docs/in_depth/property-mapping.md for full details and examples.
     """
 
+    # Read by the class-definition guards, which cannot import this module (cycle) to tell a mixin group from a plain one.
+    IS_CHAIN_PARSER_MIXIN: ClassVar[bool] = True
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
     MIN_IN_FEATURES: int = 1
     MAX_IN_FEATURES: int | None = None
@@ -605,72 +605,22 @@ class FeatureChainParserMixin:
     def _first_rejecting_guard(
         cls, options: Options, property_mapping: dict[str, PropertySpec] | None
     ) -> tuple[str, Any] | None:
-        """Return the (key, value) of the first match_guard that rejects its option value, or None.
-
-        A guard rejects by returning a falsy value or by raising. Shared by the match decision
-        (_validate_match_guards) and the diagnostic (_strict_validation_rejection_reason), so the
-        two can never disagree on what a guard rejected.
-        """
-        if property_mapping is None:
-            return None
-
-        for key, mapping_entry in property_mapping.items():
-            guard = mapping_entry.match_guard
-            if guard is None:
-                continue
-            value = options.get(key)
-            # An opted-in explicit None reaches the guard; every flagless spec still skips a None (#768).
-            if not option_key_is_present(mapping_entry, key, options):
-                continue
-            try:
-                rejected = not guard(value)
-            # Swallows: a guard that raises cannot judge the value, so the value counts as rejected.
-            except Exception as exc:
-                level = contained_raise_log_level(exc)
-                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
-                if level == logging.DEBUG:
-                    logger.debug("match_guard for '%s' %s for value %r", key, contained_raise_reason(exc), value)
-                else:
-                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
-                    logger.warning("match_guard for '%s' %s", key, contained_raise_reason(exc))
-                rejected = True
-            if rejected:
-                return key, value
-        return None
+        """The first (key, value) a match_guard rejects, or None; see ``FeatureChainParser._first_rejecting_guard``."""
+        return FeatureChainParser._first_rejecting_guard(options, property_mapping, logger)
 
     @classmethod
     def _guard_rejection_reason(cls, key: str, value: Any, spec: PropertySpec) -> str | None:
-        """The reportable reason for a guard rejection of ``key``/``value``, or ``None`` if unreportable.
-
-        Shared by the match-time recorder and the diagnostic facade, so the two text sources cannot drift.
-        """
-        if spec.expected is not None:
-            shown = safe_value_text(value)
-            return f"option '{key}' must be {spec.expected}, got {shown}"
-        if spec.strict_validation:
-            shown = safe_value_text(value)
-            return f"Property value {shown} rejected by match_guard for '{key}'"
-        return None
+        """The reportable reason for a guard rejection, or None; see ``FeatureChainParser._guard_rejection_reason``."""
+        return FeatureChainParser._guard_rejection_reason(key, value, spec)
 
     @classmethod
     def _validate_match_guards(
         cls, result: bool, options: Options, property_mapping: dict[str, PropertySpec] | None
     ) -> bool:
-        # Enforce match_guard constraints from PROPERTY_MAPPING
+        """Enforce the match_guard constraints once the parser matched; see ``FeatureChainParser``."""
         if not result:
             return True
-
-        rejection = cls._first_rejecting_guard(options, property_mapping)
-        if rejection is None:
-            return True
-
-        key, value = rejection
-        logger.debug("match_guard for '%s' rejected value %r", key, value)
-        if property_mapping is not None:
-            reason = cls._guard_rejection_reason(key, value, property_mapping[key])
-            if reason is not None:
-                record_match_rejection(cls.__name__, reason)
-        return False
+        return FeatureChainParser._validate_match_guards(cls.__name__, options, property_mapping, logger)
 
     @classmethod
     def _validate_in_features(

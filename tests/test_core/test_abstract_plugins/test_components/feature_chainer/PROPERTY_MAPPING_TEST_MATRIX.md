@@ -13,7 +13,7 @@ Public boundaries: `FeatureGroup.match_feature_group_criteria`, `FeatureChainPar
 
 | Axis | Values | Owning tests |
 |---|---|---|
-| Match path | config (options only), name (string-named), bare name | `test_name_path_validates_option_values.py` (config / name / bare name), `test_property_mapping_enforced_validators.py` (config + name per key) |
+| Match path | config (options only), name (string-named), bare name, plain group (no mixin) | `test_name_path_validates_option_values.py` (config / name / bare name), `test_property_mapping_enforced_validators.py` (config + name per key), `test_name_path_required_presence.py` / `test_strict_validation_returns_false.py` / `test_required_when_enforced_on_override.py` (plain group) |
 | Option source | group, context | `test_options_with_defaults.py` (group vs context fill), `test_retire_transitional_seams.py::TestOptionKeyIsPresentContextStorage` |
 | Presence | absent, present-as-None (flagless -> absent), explicit None opt-in -> present, present | `test_explicit_none_opt_in.py`, `test_retire_transitional_seams.py::TestOptionKeyIsPresent*`, `test_property_mapping_enforced_validators.py::TestStrictValidationDoesNotMakeKeysRequired` |
 | Required / conditional | required, `required_when` predicate, `default`, optional | `test_property_mapping_required_when.py`, `test_property_spec_builder.py` (default-based `_can_skip_required_check` verdicts), `test_universal_optional_matcher.py` (`required_when` / conditional verdicts) |

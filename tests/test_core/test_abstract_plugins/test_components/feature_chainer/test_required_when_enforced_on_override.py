@@ -9,13 +9,16 @@ and it must reach both the mixin matcher and the default FeatureGroup matcher.
 from __future__ import annotations
 
 import functools
+import logging
 import re
 from collections.abc import Callable
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer import feature_chain_author_guards
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
     NAME_PATH_PRESENCE_GUARD_FLAG,
@@ -26,12 +29,21 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParserMixin,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import PropertySpec
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.provider import DataCreator, PropertySpec, property_spec
+from mloda.user import mlodaAPI
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 OP_TYPE = "op_type"
 ORDER_BY = "order_by"
+NEEDS_KEY = "needs_key_pgo"
+THRESHOLD_KEY = "threshold_e2e_pgo"
+NEEDS_THRESHOLD_FEATURE = "needs_threshold_e2e_pgo"
 GUARDED_PATTERN = r".*__([\w]+)_guarded$"
 CUSTOM_SEPARATOR_PATTERN = r".*::([\w]+)_custom$"
 COMPILED_PATTERN = re.compile(r".*__([\w]+)_compiled$")
@@ -599,3 +611,232 @@ class TestFunctoolsWrapsOverrideKeepsItsOwnGuard:
         resolved = GuardedParent.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
         assert feature_chain_author_guards._matcher_carries_guard(resolved, REQUIRED_WHEN_GUARD_FLAG)
         assert feature_chain_author_guards._matcher_carries_guard(resolved, NAME_PATH_PRESENCE_GUARD_FLAG)
+
+
+@pytest.fixture
+def presence_checks(monkeypatch: pytest.MonkeyPatch) -> list[Options]:
+    """The options views the missing-required-keys rule is asked about from here on. Clear it after defining classes."""
+    seen: list[Options] = []
+    original = FeatureChainParser._name_path_missing_required_keys
+
+    def spy(cls: type[FeatureChainParser], effective_options: Options, property_mapping: dict[str, Any]) -> list[str]:
+        seen.append(effective_options)
+        return original(effective_options, property_mapping)
+
+    monkeypatch.setattr(FeatureChainParser, "_name_path_missing_required_keys", classmethod(spy))
+    return seen
+
+
+def _plain_required_mapping() -> dict[str, PropertySpec]:
+    return {NEEDS_KEY: property_spec("required, no default")}
+
+
+class NeedsThresholdFeatureGroup(FeatureGroup):
+    """A plain root group whose required key reaches calculate_feature."""
+
+    PROPERTY_MAPPING = {THRESHOLD_KEY: property_spec("required, no default")}
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({NEEDS_THRESHOLD_FEATURE})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({NEEDS_THRESHOLD_FEATURE: [repr(features.get_options_key(THRESHOLD_KEY))]})
+
+
+class TestPlainGroupEnforcement:
+    """The presence guard reaches plain groups: default matcher, inherited matcher and override alike."""
+
+    def test_plain_required_key_installs_the_presence_guard_only(self) -> None:
+        """A plain group with a required key carries the presence guard, and no required_when guard."""
+
+        class PlainWithRequiredKey(FeatureGroup):
+            PROPERTY_MAPPING = _plain_required_mapping()
+
+        resolved = PlainWithRequiredKey.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
+        assert getattr(resolved, NAME_PATH_PRESENCE_GUARD_FLAG, None) is resolved
+        assert getattr(resolved, REQUIRED_WHEN_GUARD_FLAG, None) is not resolved
+
+    def test_plain_group_without_a_flaggable_key_installs_no_guard(self) -> None:
+        """Only defaulted keys leave the presence guard nothing to do, so no wrapper is installed."""
+
+        class PlainAllDefaulted(FeatureGroup):
+            PROPERTY_MAPPING = {NEEDS_KEY: property_spec("optional", default=None)}
+
+        class PlainNoMapping(FeatureGroup):
+            """No PROPERTY_MAPPING at all."""
+
+        assert "match_feature_group_criteria" not in PlainAllDefaulted.__dict__
+        assert "match_feature_group_criteria" not in PlainNoMapping.__dict__
+
+    def test_plain_subclass_inherits_the_guard_without_a_second_wrapper(self) -> None:
+        class PlainParent(FeatureGroup):
+            PROPERTY_MAPPING = _plain_required_mapping()
+
+        class PlainChild(PlainParent):
+            """No override: inherits the guarded matcher."""
+
+        assert "match_feature_group_criteria" not in PlainChild.__dict__
+        assert PlainChild.match_feature_group_criteria(PlainChild.get_class_name(), Options()) is False
+        assert (
+            PlainChild.match_feature_group_criteria(PlainChild.get_class_name(), Options(context={NEEDS_KEY: "v"}))
+            is True
+        )
+
+    def test_plain_delegating_override_checks_presence_once(self, presence_checks: list[Options]) -> None:
+        """Guards nest: the delegating override and its guarded parent evaluate the rule once between them."""
+
+        class PlainParent(FeatureGroup):
+            PROPERTY_MAPPING = _plain_required_mapping()
+
+        class DelegatingPlainChild(PlainParent):
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: FeatureName | str,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+        name = DelegatingPlainChild.get_class_name()
+        presence_checks.clear()
+
+        assert DelegatingPlainChild.match_feature_group_criteria(name, Options()) is False
+        assert len(presence_checks) == 1
+
+        presence_checks.clear()
+        assert DelegatingPlainChild.match_feature_group_criteria(name, Options(context={NEEDS_KEY: "v"})) is True
+        assert len(presence_checks) == 1
+
+    def test_mixin_group_checks_presence_once_when_it_rejects(self, presence_checks: list[Options]) -> None:
+        """A mixin group keeps its single evaluation: the guard never repeats the inner path's verdict."""
+
+        class PatternedMixinGroup(FeatureChainParserMixin, FeatureGroup):
+            PREFIX_PATTERN = GUARDED_PATTERN
+            PROPERTY_MAPPING = {
+                OP_TYPE: PropertySpec(
+                    "Operation to apply", allowed_values={"sum": "Sum"}, context=True, strict_validation=True
+                ),
+                NEEDS_KEY: property_spec("required, no default"),
+            }
+
+        presence_checks.clear()
+
+        assert PatternedMixinGroup.match_feature_group_criteria("x__sum_guarded", Options()) is False
+        assert len(presence_checks) == 1
+
+    def test_mixin_group_evaluates_guard_and_validator_once(self) -> None:
+        """The mixin matcher already runs value validation and match_guard: the default matcher must not add a pass."""
+        guard_calls: list[Any] = []
+        validator_calls: list[Any] = []
+
+        def guard(value: Any) -> bool:
+            guard_calls.append(value)
+            return True
+
+        def validator(value: Any) -> bool:
+            validator_calls.append(value)
+            return True
+
+        class CountingMixinGroup(FeatureChainParserMixin, FeatureGroup):
+            MIN_IN_FEATURES = 0
+            PREFIX_PATTERN = GUARDED_PATTERN
+            PROPERTY_MAPPING = {
+                NEEDS_KEY: property_spec(
+                    "required, judged and guarded", strict=True, element_validator=validator, match_guard=guard
+                ),
+            }
+
+        options = Options(context={NEEDS_KEY: 3})
+
+        assert CountingMixinGroup.match_feature_group_criteria("x__a_guarded", options) is True
+        assert guard_calls == [3]
+        assert validator_calls == [3]
+
+    def test_plain_staticmethod_matcher_is_enforced(self) -> None:
+        """A staticmethod matcher keeps its calling convention under the presence guard, and is still enforced."""
+
+        class StaticPlainMatcher(FeatureGroup):
+            PROPERTY_MAPPING = _plain_required_mapping()
+
+            @staticmethod
+            def match_feature_group_criteria(
+                feature_name: FeatureName | str,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return True
+
+        assert StaticPlainMatcher.match_feature_group_criteria("anything", Options()) is False
+        assert StaticPlainMatcher.match_feature_group_criteria("anything", Options(context={NEEDS_KEY: "v"})) is True
+
+    def test_plain_descriptorless_matcher_is_skipped_with_a_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A plain group never fails at class definition: the guard is skipped and the author is told."""
+
+        def bare_matcher(*args: Any, **kwargs: Any) -> bool:
+            return True
+
+        with caplog.at_level(logging.WARNING):
+
+            class BareMatcherPlainGroup(FeatureGroup):
+                PROPERTY_MAPPING = _plain_required_mapping()
+                match_feature_group_criteria = bare_matcher
+
+        warned = [
+            record
+            for record in caplog.records
+            if record.levelno == logging.WARNING and "BareMatcherPlainGroup" in record.getMessage()
+        ]
+        assert warned, "the skipped guard must be announced with a WARNING naming the class"
+        assert BareMatcherPlainGroup.match_feature_group_criteria("anything", Options()) is True
+
+    def test_descriptorless_matcher_on_a_patterned_group_still_raises(self) -> None:
+        """Where the presence guard already refused a descriptorless matcher, it keeps refusing."""
+
+        def bare_matcher(*args: Any, **kwargs: Any) -> bool:
+            return True
+
+        with pytest.raises(ValueError) as excinfo:
+
+            class BareMatcherPatternedGroup(FeatureChainParserMixin, FeatureGroup):
+                PREFIX_PATTERN = GUARDED_PATTERN
+                PROPERTY_MAPPING = {
+                    OP_TYPE: PropertySpec(
+                        "Operation to apply", allowed_values={"sum": "Sum"}, context=True, strict_validation=True
+                    ),
+                }
+                match_feature_group_criteria = bare_matcher
+
+        assert "BareMatcherPatternedGroup" in str(excinfo.value)
+        assert "classmethod" in str(excinfo.value)
+
+
+class TestPlainGroupEndToEnd:
+    """A plain root group with a required key is a non-match without it, end to end."""
+
+    def test_missing_required_key_fails_resolution_with_the_reason(self) -> None:
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            mlodaAPI.run_all(
+                [Feature(NEEDS_THRESHOLD_FEATURE)],
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups({NeedsThresholdFeatureGroup}),
+            )
+
+        assert (f"  - NeedsThresholdFeatureGroup (option value): required option(s) {THRESHOLD_KEY} are absent") in str(
+            exc_info.value
+        )
+
+    def test_present_required_key_reaches_calculate_feature(self) -> None:
+        results = mlodaAPI.run_all(
+            [Feature(NEEDS_THRESHOLD_FEATURE, Options(context={THRESHOLD_KEY: "5"}))],
+            compute_frameworks={PyArrowTable},
+            plugin_collector=PluginCollector.enabled_feature_groups({NeedsThresholdFeatureGroup}),
+        )
+
+        assert results[0].column(NEEDS_THRESHOLD_FEATURE)[0].as_py() == "'5'"

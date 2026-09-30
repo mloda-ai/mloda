@@ -8,6 +8,7 @@ called to match a filter feature, even though the very same classmethod observes
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 
@@ -92,7 +93,32 @@ def _single_row(frame: Any, column: str) -> Any:
     return values[0]
 
 
-def _run(options: Options) -> dict[str, Any]:
+def _make_default_matcher_fg(spec: PropertySpec) -> type[FeatureGroup]:
+    """A throwaway root FeatureGroup on the DEFAULT matcher, declaring PFC_KEY with ``spec``."""
+
+    class PfcDefaultMatcherFeatureGroup(FeatureGroup):
+        PROPERTY_MAPPING = {PFC_KEY: spec}
+
+        @classmethod
+        def input_data(cls) -> DataCreator:
+            return DataCreator({PFC_MAIN, PFC_TARGET})
+
+        @classmethod
+        def final_filters(cls) -> bool:
+            return False
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            payload = {
+                "names": sorted(str(f.name) for f in features.features),
+                "filter_count": len(features.filters) if features.filters else 0,
+            }
+            return {str(feature.name): [payload] for feature in features.features}
+
+    return PfcDefaultMatcherFeatureGroup
+
+
+def _run(options: Options, make_fg: Callable[[], type[FeatureGroup]] = _make_probe_fg) -> dict[str, Any]:
     """Run PFC_MAIN under a global EQUAL filter on PFC_TARGET; return PFC_MAIN's payload row.
 
     The probe class and collector stay locals of THIS frame, so a failing assert in the caller
@@ -101,7 +127,7 @@ def _run(options: Options) -> dict[str, Any]:
     asserts below: otherwise a failing assert here would pin them into this frame's own traceback,
     which would trip the no-leak fixture's assertion as well and mask the real failure.
     """
-    fg = _make_probe_fg()
+    fg = make_fg()
     collector = PluginCollector.enabled_feature_groups({fg})
     global_filter = GlobalFilter()
     global_filter.add_filter(PFC_TARGET, FilterType.EQUAL, {"value": 1})
@@ -143,6 +169,36 @@ def test_filter_does_not_match_when_explicit_option_differs_from_default() -> No
     payload = _run(Options(context={PFC_KEY: PFC_OTHER_VAL}))
     assert PFC_TARGET not in payload["names"], f"the filter must not attach on a non-default value: {payload!r}"
     assert payload["filter_count"] == 0, f"no filter may match: {payload!r}"
+
+
+def test_plain_group_with_a_required_key_still_matches_its_filter_feature() -> None:
+    """The filter feature arrives with the resolved feature's options merged in, so the required key is present."""
+    payload = _run(
+        Options(context={PFC_KEY: PFC_OTHER_VAL}),
+        lambda: _make_default_matcher_fg(PropertySpec("Required, no default.", context=True)),
+    )
+
+    assert PFC_TARGET in payload["names"], f"the filter must attach PFC_TARGET: {payload!r}"
+    assert payload["filter_count"] == 1, f"exactly one filter must match: {payload!r}"
+
+
+def test_match_guard_on_a_plain_group_sees_the_materialized_default() -> None:
+    """The guard skips the absent key at resolve time, then judges the enriched (default) value on the filter."""
+    seen: list[Any] = []
+
+    def guard(value: Any) -> bool:
+        seen.append(value)
+        return bool(value == PFC_DEFAULT)
+
+    payload = _run(
+        Options(),
+        lambda: _make_default_matcher_fg(
+            PropertySpec("Guarded, defaulted.", context=True, default=PFC_DEFAULT, match_guard=guard)
+        ),
+    )
+
+    assert set(seen) == {PFC_DEFAULT}, f"the guard must judge the enriched filter options: {seen!r}"
+    assert PFC_TARGET in payload["names"], f"the accepted default must attach the filter: {payload!r}"
 
 
 PFC_NAME_KEY = "pfc_name_operation_1716"

@@ -171,7 +171,7 @@ def test_a_join_step_is_ignored_by_this_function() -> None:
 
 
 def test_a_feature_group_step_with_a_dynamic_feature_group_creator_class_is_rejected() -> None:
-    """Mirrors ConcatenatedFileContent._create_join_class in read_context_files.py."""
+    """A DynamicFeatureGroupCreator class cannot be pickled back by module path."""
     dynamic_fg = DynamicFeatureGroupCreator.create(properties={}, class_name=_DYNAMIC_CLASS_NAME)
     step = _feature_group_step(dynamic_fg)
 

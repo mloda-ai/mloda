@@ -46,11 +46,7 @@ from mloda_plugins.feature_group.experimental.forecasting.base import Forecastin
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
-    DynamicFeatureGroupCreator,
-)
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from mloda_plugins.feature_group.input_data.read_context_files import ConcatenatedFileContent
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_files.markdown_document_reader import MarkdownDocumentReader
 
@@ -64,7 +60,7 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 # get_options(...).get(...) and cls.options_with_defaults(...).get(...). Anything else (arbitrary methods
 # containing "option") is not an Options read. options_with_defaults is load-bearing here: a group that
 # resolves its declared defaults reads every key through it, so leaving it out blinds the scan to those
-# reads entirely (that is how ConcatenatedFileContent's disallowed_files/file_type reads went missing).
+# reads entirely.
 _OPTIONS_ACCESSORS = frozenset({"get_singular_option_from_options", "get_options", "options_with_defaults"})
 _OPTIONS_RECEIVER_NAMES = frozenset({"options", "option"})
 _READ_METHODS = frozenset({"get", "get_options_key", "reader_option"})
@@ -114,7 +110,6 @@ READER_ONLY_KEYS: frozenset[str] = frozenset({"BaseInputData", "data_access_hand
 
 # Individual source files whose reads are asserted key-by-key below, so a scanner blind spot cannot
 # silently drop them again. Relative to SCAN_ROOT.
-READ_CONTEXT_FILES_REL = "input_data/read_context_files.py"
 READ_FILE_REL = "input_data/read_file.py"
 READ_DOCUMENT_REL = "input_data/read_document.py"
 
@@ -134,16 +129,6 @@ def _load_all_plugins() -> Iterator[None]:
     yield
     gc.collect()
     gc.collect()
-
-
-@pytest.fixture(autouse=True)
-def _cleanup_dynamic_feature_groups() -> Iterator[None]:
-    """This module only imports ``ConcatenatedFileContent``, but a sibling test file in the same xdist
-    worker can register its join class first; pop it here too so this module never carries the leak
-    forward regardless of run order.
-    """
-    yield
-    DynamicFeatureGroupCreator._created_classes.pop(ConcatenatedFileContent.join_feature_name, None)
 
 
 def _make_leaked_reader_probe() -> type[BaseInputData]:
@@ -429,9 +414,9 @@ def test_no_undeclared_static_option_reads() -> None:
     """No shipped feature_group plugin reads an Options key that nothing declares (outside the narrow allowlist)."""
     assert SCAN_ROOT.exists(), SCAN_ROOT
     # Vacuity floor, NOT a target: its only job is to prove the rglob loops really walked the tree
-    # instead of finding nothing. Keep it around half the measured total (55 today) so that removing a
+    # instead of finding nothing. Keep it around half the measured total (35 today) so that removing a
     # read site stays a legitimate change; pinning it to the exact count made deleting reads fail here.
-    assert _count_reads(SCAN_ROOT) >= 28, "scan found too few reads; SCAN_ROOT is likely misconfigured"
+    assert _count_reads(SCAN_ROOT) >= 17, "scan found too few reads; SCAN_ROOT is likely misconfigured"
     violations = find_violations(
         SCAN_ROOT,
         declared_union(),
@@ -534,25 +519,7 @@ def test_read_document_selection_key_is_the_reader_class_name() -> None:
 
 
 class TestEveryKnownReadSiteStaysVisible:
-    """Per-key pins on the three reader/group files whose reads a scanner blind spot could drop."""
-
-    @pytest.mark.parametrize("key", ["disallowed_files", "file_type"])
-    def test_read_context_files_default_backed_reads_are_resolved(self, key: str) -> None:
-        """The two keys read through ``self.options_with_defaults(options)`` are seen by the scanner.
-
-        These are exactly the reads that vanished when the read site moved behind the accessor: the
-        receiver stopped being a name the scanner recognized as options-like.
-        """
-        assert key in _resolved_keys_in(READ_CONTEXT_FILES_REL)
-
-    @pytest.mark.parametrize("key", ["file_paths", "target_folder", "document_reader_class"])
-    def test_read_context_files_direct_reads_are_resolved(self, key: str) -> None:
-        """Control: the three keys still read straight off ``options`` are seen too."""
-        assert key in _resolved_keys_in(READ_CONTEXT_FILES_REL)
-
-    def test_read_context_files_resolves_all_five_declared_keys(self) -> None:
-        """The scanner's view of the file covers the whole declared inventory, with nothing extra."""
-        assert _resolved_keys_in(READ_CONTEXT_FILES_REL) == ConcatenatedFileContent.declared_option_keys()
+    """Per-key pins on the reader files whose reads a scanner blind spot could drop."""
 
     @pytest.mark.parametrize("rel", [READ_FILE_REL, READ_DOCUMENT_REL])
     def test_reader_match_time_reads_are_resolved(self, rel: str) -> None:

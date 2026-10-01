@@ -1,5 +1,7 @@
 import re
 import sqlite3
+from pathlib import Path
+from uuid import uuid4
 from typing import Any
 import pytest
 from unittest.mock import MagicMock, patch
@@ -9,8 +11,100 @@ import pyarrow as pa
 from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import Options
+from mloda.user import Credential, DataAccessCollection, PluginCollector, mloda
 from mloda.provider import FeatureSet
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+
+
+class TestSQLiteMatchIsolation:
+    @pytest.fixture
+    def two_tables(self, tmp_path: Path) -> str:
+        path = tmp_path / "two.sqlite"
+        with sqlite3.connect(path) as connection:
+            connection.execute("CREATE TABLE orders (order_amount INTEGER, order_count INTEGER)")
+            connection.execute("INSERT INTO orders VALUES (5, 2)")
+            connection.execute("CREATE TABLE users (user_age INTEGER)")
+            connection.execute("INSERT INTO users VALUES (30)")
+        return str(path)
+
+    @pytest.fixture(params=["typed", "named", "plain"])
+    def collection(self, two_tables: str, request: pytest.FixtureRequest) -> DataAccessCollection:
+        if request.param == "typed":
+            return DataAccessCollection(credentials=Credential(sqlite=two_tables))
+        if request.param == "named":
+            return DataAccessCollection(credentials={"database": Credential(sqlite=two_tables)})
+        return DataAccessCollection(credentials=[{"sqlite": two_tables}])
+
+    def run_features(self, names: list[str], collection: DataAccessCollection) -> list[Any]:
+        return mloda.run_all(
+            [Feature(name) for name in names],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=collection,
+            plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
+        )
+
+    def test_one_request_reads_distinct_tables(self, collection: DataAccessCollection) -> None:
+        results = self.run_features(["order_amount", "user_age"], collection)
+        assert {name: values for result in results for name, values in result.items()} == {
+            "order_amount": [5],
+            "user_age": [30],
+        }
+
+    def test_collection_reused_for_another_table(self, collection: DataAccessCollection) -> None:
+        assert self.run_features(["order_amount"], collection) == [{"order_amount": [5]}]
+        assert self.run_features(["user_age"], collection) == [{"user_age": [30]}]
+
+    def test_successful_match_does_not_mutate_collection(self, collection: DataAccessCollection) -> None:
+        before = {handle: dict(value) for handle, value in collection.credentials.items()}
+        assert self.run_features(["order_amount"], collection) == [{"order_amount": [5]}]
+        assert collection.credentials == before
+
+    def test_same_table_columns_remain_together(self, collection: DataAccessCollection) -> None:
+        assert self.run_features(["order_amount", "order_count"], collection) == [
+            {"order_amount": [5], "order_count": [2]}
+        ]
+
+    def test_direct_probe_does_not_mutate_credentials(self, two_tables: str) -> None:
+        credentials = {"sqlite": two_tables}
+        assert SQLITEReader.check_feature_in_data_access("order_amount", credentials)
+        assert credentials == {"sqlite": two_tables}
+
+    def test_resolved_match_keeps_registry_identity_and_redaction(self, two_tables: str) -> None:
+        synthetic_password = uuid4().hex
+        collection = DataAccessCollection(credentials=Credential(sqlite=two_tables, password=synthetic_password))
+        handle, original = next(iter(collection.credentials.items()))
+        matched = SQLITEReader.match_subclass_data_access(collection, ["order_amount"], Options())
+        assert matched is not original
+        assert collection.credentials[handle] is original
+        assert "table_name" not in original
+        assert matched["table_name"] == "orders"
+        assert synthetic_password not in repr(matched)
+        assert two_tables not in repr(matched)
+
+    def test_explicit_table_restricts_matching(self, two_tables: str) -> None:
+        with sqlite3.connect(two_tables) as connection:
+            connection.execute("ALTER TABLE orders ADD COLUMN shared_value INTEGER")
+            connection.execute("ALTER TABLE users ADD COLUMN shared_value INTEGER")
+        credentials = {"sqlite": two_tables, "table_name": "users"}
+        matched = SQLITEReader.match_subclass_data_access(credentials, ["shared_value"], Options())
+        assert matched["table_name"] == "users"
+        assert not SQLITEReader.check_feature_in_data_access("order_amount", credentials)
+        assert credentials == {"sqlite": two_tables, "table_name": "users"}
+
+    def test_explicit_table_metadata_remains_usable(self, two_tables: str) -> None:
+        credentials = {"sqlite": two_tables, "table_name": "orders"}
+        options = Options(context={"BaseInputData": (SQLITEReader, credentials)})
+        features = FeatureSet()
+        features.add(Feature("order_amount", options=options))
+        assert SQLITEReader.get_table(options) == "orders"
+        assert SQLITEReader.describe_columns(credentials) == {
+            "order_amount": DataType.INT64,
+            "order_count": DataType.INT64,
+        }
+        assert SQLITEReader.load_data(credentials, features).to_pydict() == {"order_amount": [5]}
+        assert credentials == {"sqlite": two_tables, "table_name": "orders"}
 
 
 class MockFeatureSet:

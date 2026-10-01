@@ -5,6 +5,7 @@ from typing import Any
 import pyarrow as pa
 import sqlite3
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda.user import Options
@@ -153,7 +154,7 @@ class SQLITEReader(ReadDB):
     - Built queries use SELECT statements for requested columns
     - Results are converted to PyArrow Table format for efficient processing
     - Connection validation occurs before attempting to read data
-    - Table names are automatically cached after first feature lookup
+    - Discovered table names are stored on each matched data access
     """
 
     @classmethod
@@ -269,18 +270,33 @@ class SQLITEReader(ReadDB):
 
     @classmethod
     def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        # get tables in the database
+        return cls._find_table(feature_name, data_access) is not None
+
+    @classmethod
+    def match_read_db_data_access(cls, data_accesses: list[Any], feature_names: list[str]) -> Any:
+        matched = super().match_read_db_data_access(data_accesses, feature_names)
+        if matched is None:
+            return None
+        table_name = cls._find_table(feature_names[0], matched)
+        if table_name is None:
+            return None
+        resolved = RegisteredCredential(matched)
+        cls.set_table_name(resolved, table_name)
+        return resolved
+
+    @classmethod
+    def _find_table(cls, feature_name: str, data_access: Any) -> str | None:
         result, _ = cls.read_db(data_access, query="SELECT name FROM sqlite_master WHERE type='table';")
         table_names = [table[0] for table in result]
 
-        # check if the feature_name is in the tables
         for table in table_names:
-            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({table});")
+            if data_access.get("table_name") and data_access["table_name"] != table:
+                continue
+            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(str(table))});")
             column_names = [column[1] for column in result]
             if feature_name in column_names:
-                cls.set_table_name(data_access, table)
-                return True
-        return False
+                return str(table)
+        return None
 
     @classmethod
     def set_table_name(cls, data_access: Any, table_name: str) -> None:

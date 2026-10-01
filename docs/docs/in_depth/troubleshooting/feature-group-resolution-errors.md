@@ -137,6 +137,8 @@ FeatureResolutionError: Multiple feature groups found for feature '<feature_name
 
 This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts. It is raised as `FeatureResolutionError` (a `ValueError` subclass) during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it.
 
+When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent.
+
 If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, it points to a real conflict between two distinct classes (different `(module, qualname)`).
 
 ### Solutions

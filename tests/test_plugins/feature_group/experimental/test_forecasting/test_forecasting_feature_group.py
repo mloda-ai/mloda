@@ -538,10 +538,11 @@ class TestForecastingFeatureGroup:
             "sales__linear_forecast_7day~lower",
             "sales__linear_forecast_7day~upper",
             "sales__linear_forecast_7day~0_x",
+            "sales__linear_forecast_7day~a\n",
         ],
     )
     def test_invalid_selector_tails_do_not_match(self, name: str) -> None:
-        """Bound names and selectors containing `_` are not forecasting features."""
+        """Bound names, selectors containing `_`, and a trailing newline are not forecasting features."""
         assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
         assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
 

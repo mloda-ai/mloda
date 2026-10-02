@@ -292,7 +292,10 @@ class SQLITEReader(ReadDB):
         matched = super().match_read_db_data_access(data_accesses, feature_names)
         if matched is None:
             return None
-        return RegisteredCredential({**matched, "table_name": cls._find_table(feature_names[0], matched)})
+        table = cls._find_table(feature_names[0], matched)
+        if table is None:
+            return matched
+        return RegisteredCredential({**matched, "table_name": table})
 
     @classmethod
     def get_table(cls, options: Options | None) -> Any:

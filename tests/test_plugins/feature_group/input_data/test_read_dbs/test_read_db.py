@@ -96,7 +96,7 @@ class TestInputDataDB:
     )
     def test_tables_per_match_leave_shared_credential_untouched(self, batches: list[list[Feature | str]]) -> None:
         dac = DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}])
-        seen: set[str] = set()
+        seen: dict[str, list[Any]] = {}
         for batch in batches:
             results = mloda.run_all(
                 batch,
@@ -105,8 +105,10 @@ class TestInputDataDB:
                 plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
             )
             for res in results:
-                seen.update(res.to_pydict().keys())
-        assert {str(name) for batch in batches for name in batch} <= seen
+                seen.update(res.to_pydict())
+        assert {str(name) for batch in batches for name in batch} <= seen.keys()
+        assert seen["order_amount"] == [5]
+        assert seen["name"] == ["Alice", "Bob"]
         assert all("table_name" not in cred for cred in dac.credentials.values())
 
     @pytest.mark.parametrize(

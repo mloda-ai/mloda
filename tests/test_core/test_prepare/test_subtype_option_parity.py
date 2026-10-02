@@ -161,7 +161,9 @@ class TestSbparMalformedPrefixPatternNeverRaises:
 
     def test_matcher_contains_malformed_pattern_and_keeps_class_name_match(self) -> None:
         assert (
-            SbparBadPrefixFG.match_feature_group_criteria(FeatureName(SbparBadPrefixFG.get_class_name()), Options())
+            SbparBadPrefixFG.match_feature_group_criteria(
+                FeatureName(SbparBadPrefixFG.get_class_name()), Options(context={SBPAR_KEY: "sum"})
+            )
             is True
         )
 

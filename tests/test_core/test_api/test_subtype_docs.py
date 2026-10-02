@@ -151,6 +151,7 @@ class SubDeclDocOptionFG(FeatureGroup):
             "Operation kind.",
             strict=True,
             allowed_values={"sum": "Sum", "median": "Median"},
+            default=None,
         ),
     }
 

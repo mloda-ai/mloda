@@ -81,6 +81,7 @@ PARSER_KEPT_METHODS = (
     "_name_path_missing_required_keys",
     "extract_property_values",
     "name_path_presence_rejection_reason",
+    "_presence_rejection_reason",
     "extract_in_feature",
     "validate_property_mapping_defaults",
 )

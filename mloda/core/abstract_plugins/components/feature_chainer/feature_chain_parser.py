@@ -378,6 +378,70 @@ class FeatureChainParser:
         return cls._validate_final_properties(property_tracker, property_mapping)
 
     @classmethod
+    def _first_rejecting_guard(
+        cls, options: Options, property_mapping: dict[str, PropertySpec] | None, log: logging.Logger = logger
+    ) -> tuple[str, Any] | None:
+        """The (key, value) of the first match_guard that rejects (falsy or raises), or None; records go to ``log``."""
+        if property_mapping is None:
+            return None
+
+        for key, mapping_entry in property_mapping.items():
+            guard = mapping_entry.match_guard
+            if guard is None:
+                continue
+            value = options.get(key)
+            # An opted-in explicit None reaches the guard; every flagless spec still skips a None (#768).
+            if not option_key_is_present(mapping_entry, key, options):
+                continue
+            try:
+                rejected = not guard(value)
+            # Swallows: a guard that raises cannot judge the value, so the value counts as rejected.
+            except Exception as exc:
+                level = contained_raise_log_level(exc)
+                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
+                if level == logging.DEBUG:
+                    log.debug("match_guard for '%s' %s for value %r", key, contained_raise_reason(exc), value)
+                else:
+                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
+                    log.warning("match_guard for '%s' %s", key, contained_raise_reason(exc))
+                rejected = True
+            if rejected:
+                return key, value
+        return None
+
+    @classmethod
+    def _guard_rejection_reason(cls, key: str, value: Any, spec: PropertySpec) -> str | None:
+        """The reportable reason for a guard rejection, or None if unreportable."""
+        if spec.expected is not None:
+            shown = safe_value_text(value)
+            return f"option '{key}' must be {spec.expected}, got {shown}"
+        if spec.strict_validation:
+            shown = safe_value_text(value)
+            return f"Property value {shown} rejected by match_guard for '{key}'"
+        return None
+
+    @classmethod
+    def _validate_match_guards(
+        cls,
+        owner_name: str,
+        options: Options,
+        property_mapping: dict[str, PropertySpec] | None,
+        log: logging.Logger = logger,
+    ) -> bool:
+        """Enforce the match_guard constraints of a PROPERTY_MAPPING; a reportable rejection is recorded."""
+        rejection = cls._first_rejecting_guard(options, property_mapping, log)
+        if rejection is None:
+            return True
+
+        key, value = rejection
+        log.debug("match_guard for '%s' rejected value %r", key, value)
+        if property_mapping is not None:
+            reason = cls._guard_rejection_reason(key, value, property_mapping[key])
+            if reason is not None:
+                record_match_rejection(owner_name, reason)
+        return False
+
+    @classmethod
     def _name_path_missing_required_keys(
         cls, effective_options: Options, property_mapping: dict[str, PropertySpec]
     ) -> list[str]:

@@ -17,6 +17,7 @@ import contextvars
 from collections.abc import Iterator
 from typing import Any, cast
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -31,14 +32,17 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.property_spec import property_spec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import Elimination, EvaluationResult
+from mloda.provider import DataCreator
 from mloda.user import mlodaAPI
-from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
 
 STRICT_FEATURE_OS005R = "strict_recording_feature_os005r"
@@ -780,3 +784,157 @@ class TestRecorderActivation:
         MATCH_REJECTION_REASONS.reset(token)
 
         assert recorded == {"FirstWinsOwnerOs005r": MatchRejection(reason="first reason os005r")}
+
+
+PLAIN_MISSING_FEATURE_PPR = "plain_missing_key_feature_ppr"
+PLAIN_EXPECTED_GUARD_FEATURE_PPR = "plain_expected_guard_feature_ppr"
+PLAIN_SILENT_GUARD_FEATURE_PPR = "plain_silent_guard_feature_ppr"
+PLAIN_SHARED_FEATURE_PPR = "plain_shared_feature_ppr"
+
+PLAIN_MISSING_REASON_PPR = (
+    "required option(s) needs_key_ppr are absent after declared defaults and name bindings"
+    "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+    "list it in the consumer's propagate_context_keys"
+)
+PLAIN_GUARD_REASON_PPR = "option 'limit_ppr' must be a whole number of 1 or more, got str '4'"
+
+
+class PlainMissingKeyFGPpr(FeatureGroup):
+    """Plain root group with a required key and no mixin."""
+
+    PROPERTY_MAPPING = {"needs_key_ppr": property_spec("required, no default")}
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({PLAIN_MISSING_FEATURE_PPR})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({PLAIN_MISSING_FEATURE_PPR: [repr(features.get_options_key("needs_key_ppr"))]})
+
+
+class PlainExpectedGuardFGPpr(FeatureGroup):
+    """Plain root group whose match_guard rejection is reportable through ``expected``."""
+
+    PROPERTY_MAPPING = {
+        "limit_ppr": property_spec(
+            "positive count", match_guard=_is_int_geq1_mge, expected="a whole number of 1 or more", default=None
+        )
+    }
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({PLAIN_EXPECTED_GUARD_FEATURE_PPR})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({PLAIN_EXPECTED_GUARD_FEATURE_PPR: [1]})
+
+
+class PlainSilentGuardFGPpr(FeatureGroup):
+    """Plain root group whose match_guard has no ``expected`` text: a rejection stays silent."""
+
+    PROPERTY_MAPPING = {"limit_ppr": property_spec("positive count", match_guard=_is_int_geq1_mge, default=None)}
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({PLAIN_SILENT_GUARD_FEATURE_PPR})
+
+
+class PlainDecliningFGPpr(FeatureGroup):
+    """Shares a feature name with its sibling, and declines it because its required key is missing."""
+
+    PROPERTY_MAPPING = {"needs_key_ppr": property_spec("required, no default")}
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({PLAIN_SHARED_FEATURE_PPR})
+
+
+class PlainAcceptingFGPpr(FeatureGroup):
+    """Shares a feature name with its sibling and declares no options."""
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({PLAIN_SHARED_FEATURE_PPR})
+
+
+class TestPlainGroupRejectionRecording:
+    """A plain group's rejections are recorded by the first pass and reach the failure report."""
+
+    def test_missing_required_key_reason_is_reported_from_the_first_pass(self) -> None:
+        feature = Feature(PLAIN_MISSING_FEATURE_PPR)
+        accessible_plugins: FeatureGroupEnvironmentMapping = {PlainMissingKeyFGPpr: {RecorderFwOneOs005r}}
+
+        result = _failed_result(feature, accessible_plugins)
+
+        assert result.eliminations == {
+            PlainMissingKeyFGPpr: Elimination(stage="value_rejection", reason=PLAIN_MISSING_REASON_PPR)
+        }
+
+    def test_expected_guard_rejection_reason_is_reported_from_the_first_pass(self) -> None:
+        feature = Feature(PLAIN_EXPECTED_GUARD_FEATURE_PPR, Options(context={"limit_ppr": "4"}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {PlainExpectedGuardFGPpr: {RecorderFwOneOs005r}}
+
+        result = _failed_result(feature, accessible_plugins)
+
+        assert result.eliminations == {
+            PlainExpectedGuardFGPpr: Elimination(stage="value_rejection", reason=PLAIN_GUARD_REASON_PPR)
+        }
+
+    def test_guard_rejection_without_expected_is_a_silent_non_match(self) -> None:
+        feature = Feature(PLAIN_SILENT_GUARD_FEATURE_PPR, Options(context={"limit_ppr": 0}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {PlainSilentGuardFGPpr: {RecorderFwOneOs005r}}
+
+        result = _failed_result(feature, accessible_plugins)
+
+        assert result.eliminations == {}
+
+    def test_end_to_end_expected_guard_near_miss_line(self) -> None:
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            mlodaAPI.run_all(
+                [Feature(PLAIN_EXPECTED_GUARD_FEATURE_PPR, Options(context={"limit_ppr": "4"}))],
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups({PlainExpectedGuardFGPpr}),
+            )
+
+        assert f"  - PlainExpectedGuardFGPpr (option value): {PLAIN_GUARD_REASON_PPR}" in str(exc_info.value)
+
+    def test_end_to_end_missing_required_key_reason(self) -> None:
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            mlodaAPI.run_all(
+                [Feature(PLAIN_MISSING_FEATURE_PPR)],
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups({PlainMissingKeyFGPpr}),
+            )
+
+        assert f"  - PlainMissingKeyFGPpr (option value): {PLAIN_MISSING_REASON_PPR}" in str(exc_info.value)
+
+    def test_end_to_end_present_required_key_reaches_calculate_feature(self) -> None:
+        results = mlodaAPI.run_all(
+            [Feature(PLAIN_MISSING_FEATURE_PPR, Options(context={"needs_key_ppr": "5"}))],
+            compute_frameworks={PyArrowTable},
+            plugin_collector=PluginCollector.enabled_feature_groups({PlainMissingKeyFGPpr}),
+        )
+
+        assert results[0].column(PLAIN_MISSING_FEATURE_PPR)[0].as_py() == "'5'"
+
+    def test_a_declining_plain_group_leaves_the_shared_name_to_its_sibling(self) -> None:
+        feature = Feature(PLAIN_SHARED_FEATURE_PPR)
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            PlainDecliningFGPpr: {RecorderFwOneOs005r},
+            PlainAcceptingFGPpr: {RecorderFwOneOs005r},
+        }
+
+        winner, frameworks = identify_winner(feature, accessible_plugins)
+
+        assert winner is PlainAcceptingFGPpr
+        assert frameworks == {RecorderFwOneOs005r}

@@ -79,6 +79,7 @@ does not understand can be absorbed silently.
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
 | Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s); for a `context=True` key the reason also names the remedy (`Options(context=...)`, and for an input feature the consumer's `propagate_context_keys`) |
+| Match time (plain group) | Present values, `match_guard`, required presence | Values and `match_guard` in the default matcher of every plain group; required presence on the raw options of a group without a pattern (a patterned plain group keeps the name-path rule) | The options | Non-match (`False`), with the reason recorded (for `match_guard`, only when the spec is strict or declares `expected`) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`), reported when the spec is strict or declares `expected` |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
 | Match time (guard installed at class definition) | `required_when` | A conditionally required option is present | `Options` | Non-match (`False`) |
@@ -181,24 +182,26 @@ attributable and collapsed the types back into one (#949). Migration edge: a bar
 `PropertySpec("...")` is required at selection; the old bare `ReaderOptionSpec("...")` is
 `PropertySpec("...", default=None)`.
 
-### A pattern-less feature group sits in between
+### A plain feature group
 
-A `FeatureGroup` that declares no `PREFIX_PATTERN` or `SUFFIX_PATTERN` carries a real
-`PROPERTY_MAPPING` (the `DefaultMatcherFeatureGroup` probe in
-`tests/.../feature_chainer/test_required_when_enforced_on_override.py` is the in-repo example), but
-only part of the enforced surface reaches it:
+A `FeatureGroup` without `FeatureChainParserMixin` (the `DefaultMatcherFeatureGroup` probe in
+`tests/.../feature_chainer/test_required_when_enforced_on_override.py` is the in-repo example)
+matches by name and input data, so its `PROPERTY_MAPPING` is enforced on the raw options:
 
-- `required_when` **is** enforced, for absence. Its guard is installed from
-  `FeatureGroup.__init_subclass__` and wraps the class's resolved `match_feature_group_criteria`
-  instead of living inside the chain-parser matcher, so an **absent** required key is a non-match at
+- On a group that declares no `PREFIX_PATTERN` or `SUFFIX_PATTERN`, a key that declares no `default`, no
+  `required_when` and no `deferred_binding=True` must be present, or the group is a non-match. Declare
+  `default=None` on a key that is optional. The guard is installed from `FeatureGroup.__init_subclass__`
+  around the class's resolved `match_feature_group_criteria`, so an override keeps it. A plain group with a
+  pattern keeps the name-path rule instead (see
+  [Required presence on the string-named path](#required-presence-on-the-string-named-path)).
+- `required_when` is enforced for absence by its own guard, so an **absent** required key is a non-match at
   match time, not a late `ValueError` inside `input_features`. Requiredness reads presence
-  (`options.get(key) is not None`), so a present-but-falsy value (a
-  required key passed as `[]` or `""`) satisfies the requirement and matches; a group that needs a
-  non-empty value checks it itself in `input_features`.
-- `strict_validation` is never reached: value validation lives inside the chain-parser matcher, and a
-  pattern-less group keeps the default class-name matcher, which does not call the parser. The
-  name-path presence rule is unavailable too, because it needs a parsed name and its guard installs
-  only for a class that declares a pattern.
+  (`options.get(key) is not None`), so a present-but-falsy value (a required key passed as `[]` or
+  `""`) satisfies the requirement and matches; a group that needs a non-empty value checks it itself in
+  `input_features`.
+- Present values are validated (`strict_validation`, `element_validator`) and `match_guard` runs, in the
+  default `match_feature_group_criteria` of every plain group. A matcher override keeps them by delegating
+  via `super().match_feature_group_criteria(...)`; one that does not must run them itself.
 - Declared defaults stay metadata until the group materializes them itself by calling
   `options_with_defaults` at its own read site. That call is what makes a declared default real at an
   `input_features` read site (see [Applying declared defaults](#applying-declared-defaults)).
@@ -433,7 +436,7 @@ One consequence for authors: `input_features` is called with the DECLARED, pre-d
 engine stashes them before intake rebinds, and a child inherits the same pre-default options), so a
 declared default does NOT reach an `input_features` read site. A group that wants it there calls
 `options_with_defaults` itself (see
-[A pattern-less feature group sits in between](#a-pattern-less-feature-group-sits-in-between)).
+[A plain feature group](#a-plain-feature-group)).
 
 Which stage sees which view of the options:
 
@@ -523,6 +526,12 @@ alone. A key is flagged when it declares no `default`, no `required_when`, and
 resolved. Exempt from the check: a declared default, a `required_when` key, a
 `deferred_binding=True` key, and the source key (`in_features`), whose presence the name prefix
 supplies and whose count `MIN/MAX_IN_FEATURES` enforces (an absent `in_features` counts as zero on the configuration path).
+
+A plain `FeatureGroup` (no mixin) without a pattern is checked the same way on its raw options, once a matching
+rule has accepted the name. A missing key records the reason and logs at debug level, so no warning is emitted per
+candidate probe. A plain group with a pattern keeps the name-path rule above, and a name no pattern owns keeps the
+default matcher's verdict. Migration: a bare `property_spec("...")` on a plain group is now required; declare
+`default=None` for an optional key.
 
 A flagged missing key makes the match a **non-match**: a warning names the group, the feature,
 and the missing key(s), and the resolution-failure report names the missing key(s) too. For missing
@@ -727,6 +736,8 @@ if it really is a whole-value check.
 | Reader selection enforcement: strict values, requiredness, the `framework_set` exemption, the attributable `input_data` rejection | `tests/.../test_components/test_reader_option_enforcement.py` |
 | Per-reader declarations, the declared `default` that is load-bearing at selection, and the bare-path branch it does not reach | `tests/.../input_data/test_reader_option_declarations.py` |
 | A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/.../feature_chainer/test_required_when_enforced_on_override.py`, `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
+| A plain group enforces required keys, strict values and `match_guard`, also through an override | `tests/.../feature_chainer/test_name_path_required_presence.py`, `test_strict_validation_returns_false.py`, `test_required_when_enforced_on_override.py` |
+| A plain group's rejection reasons reach the failure report | `tests/test_core/test_prepare/test_first_pass_rejection_recording.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
 | Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |

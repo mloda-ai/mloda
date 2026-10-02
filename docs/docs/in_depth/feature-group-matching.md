@@ -126,6 +126,8 @@ For feature groups not yet modernized, the default matching criteria still apply
    feature_name in FeatureGroup.feature_names_supported()
    ```
 
+5. **PROPERTY_MAPPING**: A group matched by rules 1 to 4 must still pass its `PROPERTY_MAPPING`: required options present, present values valid, and every `match_guard` satisfied. See [Property Mapping](property-mapping.md#a-plain-feature-group).
+
 An owned reader veto recorded during rule 1 (the user addressed the reader family by name and its declaration rejected the request, or its probe recorded a content decline and matched nothing) gates the name-based rules 2 to 4; see [Data Access Patterns](data-access-patterns.md) for the recording contract.
 
 ## Matching Examples

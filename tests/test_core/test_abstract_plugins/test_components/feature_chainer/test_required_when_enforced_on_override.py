@@ -28,10 +28,11 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import PropertySpec
+from mloda.provider import PropertySpec, property_spec
 
 OP_TYPE = "op_type"
 ORDER_BY = "order_by"
+NEEDS_KEY = "needs_key_pgo"
 GUARDED_PATTERN = r".*__([\w]+)_guarded$"
 CUSTOM_SEPARATOR_PATTERN = r".*::([\w]+)_custom$"
 COMPILED_PATTERN = re.compile(r".*__([\w]+)_compiled$")
@@ -599,3 +600,69 @@ class TestFunctoolsWrapsOverrideKeepsItsOwnGuard:
         resolved = GuardedParent.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
         assert feature_chain_author_guards._matcher_carries_guard(resolved, REQUIRED_WHEN_GUARD_FLAG)
         assert feature_chain_author_guards._matcher_carries_guard(resolved, NAME_PATH_PRESENCE_GUARD_FLAG)
+
+
+def _plain_required_mapping() -> dict[str, PropertySpec]:
+    return {NEEDS_KEY: property_spec("required, no default")}
+
+
+class TestPlainGroupEnforcement:
+    """The presence guard reaches plain groups: default matcher, inherited matcher and override alike."""
+
+    def test_plain_required_key_installs_the_presence_guard_only(self) -> None:
+        class PlainWithRequiredKey(FeatureGroup):
+            PROPERTY_MAPPING = _plain_required_mapping()
+
+        resolved = PlainWithRequiredKey.match_feature_group_criteria.__func__  # type: ignore[attr-defined]
+        assert getattr(resolved, NAME_PATH_PRESENCE_GUARD_FLAG, None) is resolved
+        assert getattr(resolved, REQUIRED_WHEN_GUARD_FLAG, None) is not resolved
+
+    def test_plain_group_without_a_flaggable_key_installs_no_guard(self) -> None:
+        class PlainAllDefaulted(FeatureGroup):
+            PROPERTY_MAPPING = {NEEDS_KEY: property_spec("optional", default=None)}
+
+        class PlainNoMapping(FeatureGroup):
+            """No PROPERTY_MAPPING at all."""
+
+        assert "match_feature_group_criteria" not in PlainAllDefaulted.__dict__
+        assert "match_feature_group_criteria" not in PlainNoMapping.__dict__
+
+    def test_plain_subclass_inherits_the_guard_without_a_second_wrapper(self) -> None:
+        class PlainParent(FeatureGroup):
+            PROPERTY_MAPPING = _plain_required_mapping()
+
+        class PlainChild(PlainParent):
+            """No override: inherits the guarded matcher."""
+
+        assert "match_feature_group_criteria" not in PlainChild.__dict__
+        assert PlainChild.match_feature_group_criteria(PlainChild.get_class_name(), Options()) is False
+        assert (
+            PlainChild.match_feature_group_criteria(PlainChild.get_class_name(), Options(context={NEEDS_KEY: "v"}))
+            is True
+        )
+
+    def test_plain_delegating_override_checks_presence_once(self, presence_checks: list[Options]) -> None:
+        """The delegating override and its guarded parent evaluate the rule once between them."""
+
+        class PlainParent(FeatureGroup):
+            PROPERTY_MAPPING = _plain_required_mapping()
+
+        class DelegatingPlainChild(PlainParent):
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: FeatureName | str,
+                options: Options,
+                data_access_collection: Any = None,
+            ) -> bool:
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+        name = DelegatingPlainChild.get_class_name()
+        presence_checks.clear()
+
+        assert DelegatingPlainChild.match_feature_group_criteria(name, Options()) is False
+        assert len(presence_checks) == 1
+
+        presence_checks.clear()
+        assert DelegatingPlainChild.match_feature_group_criteria(name, Options(context={NEEDS_KEY: "v"})) is True
+        assert len(presence_checks) == 1

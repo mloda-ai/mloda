@@ -5,7 +5,7 @@ Imports ``feature_chain_parser``; the parser never imports this module, which ke
 
 Depends on these parser-private names, so renaming one of them is a cross-module break:
 ``FeatureChainParser._can_skip_required_check``, ``._check_name_path_required_presence``, ``._merge_bindings``,
-and ``._name_path_missing_required_keys``.
+``._name_path_missing_required_keys``, and ``._presence_rejection_reason``.
 """
 
 from __future__ import annotations
@@ -45,6 +45,9 @@ REQUIRED_WHEN_GUARD_FLAG = "_mloda_required_when_guard"
 # The VALUE is the wrapper itself (self-reference), which is why a functools.wraps copy onto
 # another function never reads as that function's own guard.
 NAME_PATH_PRESENCE_GUARD_FLAG = "_mloda_name_path_presence_guard"
+
+# ClassVar on FeatureChainParserMixin, read here because importing the mixin would be a cycle.
+CHAIN_PARSER_MIXIN_MARKER = "IS_CHAIN_PARSER_MIXIN"
 
 # Marks a class whose captureless diagnostic already ran, so the two __init_subclass__ hooks
 # emit it at most once. Checked on the class's OWN dict so a subclass still evaluates fresh.
@@ -437,10 +440,18 @@ def _reject_staticmethod_matcher(owner: type[Any]) -> None:
         return
 
 
-def _reject_descriptorless_matcher(owner: type[Any]) -> None:
-    """Reject a matcher with no classmethod/staticmethod descriptor (and not a bound method) on a guarded class."""
+def _descriptorless_matcher(owner: type[Any]) -> Any:
+    """The matcher if it lacks a classmethod/staticmethod descriptor (and is not a bound method), else None."""
     attr = inspect.getattr_static(owner, "match_feature_group_criteria", None)
     if attr is None or isinstance(attr, (classmethod, staticmethod)) or inspect.ismethod(attr):
+        return None
+    return attr
+
+
+def _reject_descriptorless_matcher(owner: type[Any]) -> None:
+    """Reject a matcher with no classmethod/staticmethod descriptor (and not a bound method) on a guarded class."""
+    attr = _descriptorless_matcher(owner)
+    if attr is None:
         return
     raise ValueError(
         f"{owner.__name__} guards its match_feature_group_criteria, but it is a {type(attr).__name__} "
@@ -512,6 +523,16 @@ def install_required_when_guard(owner: type[Any]) -> None:
     setattr(owner, "match_feature_group_criteria", classmethod(guarded))
 
 
+def _plain_presence_holds(owner_name: str, options: Options, mapping: dict[str, PropertySpec]) -> bool:
+    """Required-presence rule on a plain group's raw options; debug-logged to avoid a warning per candidate probe."""
+    missing = FeatureChainParser._name_path_missing_required_keys(options, mapping)
+    if not missing:
+        return True
+    record_match_rejection(owner_name, FeatureChainParser._presence_rejection_reason(missing, mapping))
+    logger.debug("%s did not match: required option(s) %s are absent.", owner_name, ", ".join(sorted(missing)))
+    return False
+
+
 def install_name_path_presence_guard(owner: type[Any]) -> None:
     """Wrap a class's RESOLVED matcher so the name-path required-presence rule (#769) survives an override.
 
@@ -520,14 +541,28 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
     evaluates. An inner False stands untouched, so the inner path's own presence warning is never
     duplicated. Nesting order relative to the required_when guard is behaviorally irrelevant:
     each guard ANDs its own predicate onto the inner verdict and passes False through unchanged.
+
+    A plain group (no ``FeatureChainParserMixin``) without a pattern is checked on its raw options. A
+    patterned one keeps the name-path rule, so a name no pattern owns keeps the inner verdict.
     """
     property_mapping = getattr(owner, "PROPERTY_MAPPING", None)
     if not isinstance(property_mapping, dict):
         return
-    if not FeatureChainParser.prefix_patterns_of(owner):
+    plain = not getattr(owner, CHAIN_PARSER_MIXIN_MARKER, False)
+    has_patterns = bool(FeatureChainParser.prefix_patterns_of(owner))
+    if not plain and not has_patterns:
         return
     # Same exemptions as the inner rule: with empty options, the missing keys ARE the flaggable ones.
     if not FeatureChainParser._name_path_missing_required_keys(Options(), property_mapping):
+        return
+
+    if plain and not has_patterns and _descriptorless_matcher(owner) is not None:
+        # A plain group must not start failing at class definition; a patterned group already did.
+        logger.warning(
+            "%s declares a required option but its match_feature_group_criteria has no classmethod or "
+            "staticmethod descriptor, so the required-presence guard is not installed. Decorate it with @classmethod.",
+            owner.__name__,
+        )
         return
 
     _reject_descriptorless_matcher(owner)
@@ -582,7 +617,7 @@ def install_name_path_presence_guard(owner: type[Any]) -> None:
                 catching=(ValueError, re.error),
             )
             if not resolution.owned:
-                return True
+                return bool(patterns) or not plain or _plain_presence_holds(guarded_cls.__name__, options, mapping)
             effective_options = FeatureChainParser._merge_bindings(options, dict(resolution.bindings), mapping)
             return FeatureChainParser._check_name_path_required_presence(
                 guarded_cls.__name__, feature_name, effective_options, mapping

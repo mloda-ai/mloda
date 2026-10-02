@@ -408,6 +408,7 @@ class BaseInputData(ABC):
         """
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
 
+        accepted: list[tuple[Any, Any]] = []
         for subclass in subclasses:
             # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
             if not subclass._reader_options_admit(options, record_absence=False):
@@ -420,7 +421,18 @@ class BaseInputData(ABC):
                 if unmet is not None:
                     record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
                     continue
-                return (subclass, matched_data_access)
+                accepted.append((subclass, matched_data_access))
+
+        if len(accepted) == 1:
+            return accepted[0]
+        if accepted:
+            names = sorted(reader.get_class_name() for reader, _ in accepted)
+            # Contained: an ambiguous reader match is a user-fixable config error, not an engine abort.
+            raise ValueError(
+                f"Several readers accept the data access for feature(s) {', '.join(repr(str(n)) for n in feature_names)}: {', '.join(names)}. "
+                f"Pin one by its option key, e.g. Feature({str(feature_names[0])!r}, "
+                f"options={{{names[0]!r}: <data access>}})."
+            )
 
         cls._record_unowned_pin(data_access_collection, feature_names)
         return None, None

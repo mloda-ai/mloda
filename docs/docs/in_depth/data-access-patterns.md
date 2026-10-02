@@ -125,7 +125,7 @@ Reader selection answers "which plugin handles this input" the way [feature-grou
 | **Auto-loading** | Up-front plugin loading | Lazy per-family `_auto_load_group`, triggered only when no final readers are found |
 | **Accessibility policy** | Strict mode, collector policy, enabled compute frameworks | None: every final reader of the family is a candidate |
 | **Matching** | Criteria, domain, scope, capability, framework-pin, and links gates | Per-reader file, suffix, column-validation, and pinning rules |
-| **Ambiguity** | Multiple winners resolved by subclass preference, then reported | First match wins; a second conflicting reader for the same feature raises |
+| **Ambiguity** | Multiple winners resolved by subclass preference, then reported | Two readers accepting the same access raise; pin one by its option key to pick it |
 | **Outcome and diagnostics** | Structured evaluation result rendered into failure messages | A matched `(ReaderClass, data_access)` pair written into options; declines surface through the shared rejection channel |
 
 ### Declining with an attributable reason

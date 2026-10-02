@@ -21,6 +21,8 @@ import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import Options
@@ -247,3 +249,81 @@ class TestClassKeyNormalization565:
     def test_options_get_by_string_after_class_key_construction(self) -> None:
         options = Options(cast(dict[str, Any], {SiblingSel565ReaderA: _ACCESS_A}))
         assert options.get(SiblingSel565ReaderA.__name__) == _ACCESS_A
+
+
+_AMBIG_MARKER = "sibling_sel_1757_ambiguous_marker.dat"
+
+
+def _ambiguous_match(data_access: Any) -> Any:
+    if isinstance(data_access, DataAccessCollection):
+        return data_access if _AMBIG_MARKER in data_access.files.values() else None
+    return data_access if data_access == _AMBIG_MARKER else None
+
+
+class SiblingSel1757ReaderA(ReadFile):
+    """Final reader accepting only the unique ambiguity marker."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return _ambiguous_match(data_access)
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_a": [1]}
+
+
+class SiblingSel1757ReaderB(ReadFile):
+    """Sibling accepting the same unique ambiguity marker."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return _ambiguous_match(data_access)
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_b": [2]}
+
+
+_SOLO_MARKER = "sibling_sel_1757_solo_marker.dat"
+
+
+class SiblingSel1757SoloReader(ReadFile):
+    """Sole acceptor of its own unique marker."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        if isinstance(data_access, DataAccessCollection) and _SOLO_MARKER in data_access.files.values():
+            return data_access
+        return None
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_solo": [3]}
+
+
+class TestAmbiguousReaderMatch1757:
+    """Group F: several readers accepting one data access is an unmarked ValueError naming the pin remedy."""
+
+    def test_two_acceptors_raise_naming_both_and_pin_hint(self) -> None:
+        collection = DataAccessCollection(files={_AMBIG_MARKER})
+        with pytest.raises(ValueError) as excinfo:
+            ReadFile.match_data_access(["sibling_sel_1757_feat"], collection, options=Options())
+        message = str(excinfo.value)
+        assert "SiblingSel1757ReaderA" in message
+        assert "SiblingSel1757ReaderB" in message
+        assert message.index("SiblingSel1757ReaderA") < message.index("SiblingSel1757ReaderB")
+        assert "options=" in message
+        assert _AMBIG_MARKER not in message
+        assert not is_match_abort(excinfo.value)
+
+    def test_pinned_reader_still_resolves_via_feature_scope(self) -> None:
+        collection = DataAccessCollection(files={_AMBIG_MARKER})
+        options = Options(group={SiblingSel1757ReaderB.__name__: _AMBIG_MARKER})
+        assert ReadFile().matches("sibling_sel_1757_feat", options, collection) is True
+        assert options.get("BaseInputData") == (SiblingSel1757ReaderB, _AMBIG_MARKER)
+
+    def test_single_acceptor_returns_its_pair(self) -> None:
+        collection = DataAccessCollection(files={_SOLO_MARKER})
+        reader, access = ReadFile.match_data_access(["sibling_sel_1757_feat"], collection, options=Options())
+        assert reader is SiblingSel1757SoloReader
+        assert access is collection

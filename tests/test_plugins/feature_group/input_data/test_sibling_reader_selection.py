@@ -304,3 +304,112 @@ class TestAmbiguousReaderMatch1757:
         options = Options(group={SiblingSel1757ReaderB.__name__: _AMBIG_MARKER})
         assert ReadFile().matches("sibling_sel_1757_feat", options, collection) is True
         assert options.get("BaseInputData") == (SiblingSel1757ReaderB, _AMBIG_MARKER)
+
+
+_SAME_MARKER = "sibling_sel_1757_same_marker.dat"
+_DIFF_MARKER = "sibling_sel_1757_diff_marker.dat"
+_ALIAS_MARKER = "sibling_sel_1757_alias_marker.dat"
+
+
+def _accept(data_access: Any, marker: str, result: Any) -> Any:
+    if isinstance(data_access, DataAccessCollection):
+        return result if marker in data_access.files.values() else None
+    return None
+
+
+class SiblingSel1757SameParent(ReadFile):
+    """Final parent reader accepting only the unique same-access marker."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return _accept(data_access, _SAME_MARKER, _SAME_MARKER)
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_same_parent": [1]}
+
+
+class SiblingSel1757SameChild(SiblingSel1757SameParent):
+    """Final child returning the same access as its parent."""
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_same_child": [1]}
+
+
+class SiblingSel1757DiffParent(ReadFile):
+    """Final parent reader accepting only the unique different-access marker."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return _accept(data_access, _DIFF_MARKER, "diff_parent_access")
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_diff_parent": [1]}
+
+
+class SiblingSel1757DiffChild(SiblingSel1757DiffParent):
+    """Final child returning a different access than its parent."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return _accept(data_access, _DIFF_MARKER, "diff_child_access")
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_diff_child": [1]}
+
+
+class SiblingSel1757AliasPlain(ReadFile):
+    """Final reader accepting only the unique alias marker."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return _accept(data_access, _ALIAS_MARKER, _ALIAS_MARKER)
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_alias_plain": [1]}
+
+
+class SiblingSel1757Aliased(ReadFile):
+    """Final reader overriding data_access_name() with an alias."""
+
+    @classmethod
+    def data_access_name(cls) -> str:
+        return "sibling_sel_1757_alias_name"
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return _accept(data_access, _ALIAS_MARKER, _ALIAS_MARKER)
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1757_aliased": [1]}
+
+
+class TestSubclassPreferenceAndAlias1757:
+    """A subclass replaces its ancestor for the same access; aliases drive names and the pin hint."""
+
+    def test_child_wins_over_parent_for_the_same_access(self) -> None:
+        collection = DataAccessCollection(files={_SAME_MARKER})
+        matched = ReadFile.match_data_access(["sibling_sel_1757_same_feat"], collection, options=Options())
+        assert matched == (SiblingSel1757SameChild, _SAME_MARKER)
+
+    def test_child_and_parent_with_different_accesses_raise_naming_both(self) -> None:
+        collection = DataAccessCollection(files={_DIFF_MARKER})
+        with pytest.raises(ValueError) as excinfo:
+            ReadFile.match_data_access(["sibling_sel_1757_diff_feat"], collection, options=Options())
+        message = str(excinfo.value)
+        assert "SiblingSel1757DiffParent" in message
+        assert "SiblingSel1757DiffChild" in message
+
+    def test_aliased_sibling_is_named_and_hinted_by_its_alias(self) -> None:
+        collection = DataAccessCollection(files={_ALIAS_MARKER})
+        with pytest.raises(ValueError) as excinfo:
+            ReadFile.match_data_access(["sibling_sel_1757_alias_feat"], collection, options=Options())
+        message = str(excinfo.value)
+        assert "sibling_sel_1757_alias_name" in message
+        assert "SiblingSel1757Aliased" not in message
+        assert "options={'sibling_sel_1757_alias_name'" in message

@@ -622,20 +622,8 @@ class TestUnrelatedFamilyExceptionContainment:
         assert not any("broken plugin" in r.reason for r in rejection_window.values())
 
 
-class TestOwnedShapesThatMustNotGate:
-    """The owned shapes without an eligible recording, or with a later unpinned match, must keep resolving."""
-
-    def test_an_owned_plain_non_match_without_a_recording_does_not_gate(self, tmp_path: Path) -> None:
-        """A wrong-suffix path never establishes ownership of the file, so the name rule still recovers."""
-        path = tmp_path / "data.vg961other"
-        path.write_text("vg961_other_a,vg961_other_b\n1,2\n", encoding="utf-8")
-        feature = Feature(name=VG961_FILE_FEATURE, options={Vg961CsvReader.__name__: str(path)})
-        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg961FileFG: {PandasDataFrame}}
-
-        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
-
-        assert Vg961FileFG in result.identified
-        assert "BaseInputData" not in feature.options
+class TestOwnedShapesThatMustKeepResolving:
+    """Owned shapes that bind normally must keep resolving."""
 
     def test_a_pin_owned_and_valid_still_binds_for_a_db_sibling(self) -> None:
         """A pinned db reader that accepts the credentials and the feature still binds."""
@@ -650,6 +638,37 @@ class TestOwnedShapesThatMustNotGate:
 
 class TestPinnedReaderDoesNotFallBackToGlobalRoute:
     """A pinned reader that declines must not be replaced by a sibling or the collection-wide route."""
+
+    def test_a_pinned_non_match_without_a_recording_is_reported_and_gates(self, tmp_path: Path) -> None:
+        """A wrong-suffix pinned path records no reason itself, so an owned rejection naming the reader is added."""
+        path = tmp_path / "data.vg961other"
+        path.write_text("vg961_other_a,vg961_other_b\n1,2\n", encoding="utf-8")
+        feature = Feature(name=VG961_FILE_FEATURE, options={Vg961CsvReader.__name__: str(path)})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg961FileFG: {PandasDataFrame}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
+
+        assert Vg961FileFG not in result.identified
+        elimination = result.eliminations.get(Vg961FileFG)
+        assert elimination is not None
+        assert Vg961CsvReader.get_class_name() in elimination.reason
+        assert "BaseInputData" not in feature.options
+
+    def test_a_pinned_db_reader_rejecting_the_credentials_without_a_recording_is_reported(self) -> None:
+        """No recording and no match: the owned reason names the reader and never echoes the credentials."""
+        secret = "vg1756_secret_value"
+        feature = Feature(name=VG1756_FEATURE, options={Vg1756PinnedReader.__name__: {"vg1756_other": secret}})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1756DbFG: {PandasDataFrame}}
+        dac = DataAccessCollection(credentials=[{"vg1756_sibling": {}}])
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, dac)
+
+        assert result.identified == {}
+        elimination = result.eliminations.get(Vg1756DbFG)
+        assert elimination is not None
+        assert Vg1756PinnedReader.get_class_name() in elimination.reason
+        assert secret not in elimination.reason
+        assert "vg1756_other" not in elimination.reason
 
     def test_an_owned_decline_then_a_global_match_is_not_recovered(self, tmp_path: Path) -> None:
         """The pinned file declines with a recording; the other file in the collection must not rescue it."""

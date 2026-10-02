@@ -714,17 +714,22 @@ class TestRequiredness:
         assert matched is True
         assert rejection_window == {}
 
-    def test_a_raising_required_when_predicate_is_a_silent_non_match(
+    def test_a_raising_required_when_predicate_is_contained_and_reported_as_a_pin(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """A predicate that raises makes the reader a non-match WITHOUT a recorded rejection."""
+        """A raising predicate is contained as a non-match, reported only as a generic pin rejection."""
         options = Options({RoeRaisingPredicateReader.__name__: ROE_FUSSY_ACCESS})
 
         matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         assert "BaseInputData" not in options
-        assert rejection_window == {}
+        owner = RoeRaisingPredicateReader.get_class_name()
+        assert list(rejection_window) == [owner]
+        stored = rejection_window[owner]
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
+        assert "pinned" in stored.reason
+        assert "roe required_when predicate crash" not in stored.reason
 
     def test_unconditionally_required_key_absent_is_rejected(
         self, rejection_window: dict[str, MatchRejection], collect_after: None

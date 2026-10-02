@@ -125,7 +125,7 @@ class ReadDB(BaseInputData):
 
     @classmethod
     def claims_feature_name(cls, feature_name: str) -> bool:
-        """Name-only ownership checked before any credential probe; override to decline names outside this reader's namespace."""
+        """Name-only check run by the default match_subclass_data_access (an override must call it itself)."""
         return True
 
     @classmethod

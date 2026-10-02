@@ -340,23 +340,33 @@ class BaseInputData(ABC):
 
                 if _key == subclass.data_access_name():
                     # The user addressed this reader family by name (ownership), so vetoes record as owned.
-                    if not subclass._reader_options_admit(options, record_absence=True):
-                        break
-                    wrapped = subclass.wrap_feature_scoped_access(value)
-                    if wrapped is not value:
-                        options.set(key, wrapped)
-                        value = wrapped
-                    known_owners = match_rejection_owners()
-                    matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
-                    if matched_data_access:
-                        unmet = subclass._unmet_current_declaration()
-                        if unmet is not None:
+                    before_checks = match_rejection_owners()
+                    if subclass._reader_options_admit(options, record_absence=True):
+                        wrapped = subclass.wrap_feature_scoped_access(value)
+                        if wrapped is not value:
+                            options.set(key, wrapped)
+                            value = wrapped
+                        known_owners = match_rejection_owners()
+                        matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
+                            value, [feature_name], options=options
+                        )
+                        if matched_data_access:
+                            unmet = subclass._unmet_current_declaration()
+                            if unmet is None:
+                                cls.add_base_input_data_to_options(subclass, matched_data_access, options)
+                                return True
                             record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
-                            break
-                        cls.add_base_input_data_to_options(subclass, matched_data_access, options)
-                        return True
-                    # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
-                    restamp_match_rejections_since(known_owners, INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
+                        else:
+                            # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
+                            restamp_match_rejections_since(known_owners, INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
+                    if match_rejection_owners() <= before_checks:
+                        name = subclass.get_class_name()
+                        record_match_rejection(
+                            name,
+                            f"{name} is pinned for feature '{feature_name}' but matched nothing; "
+                            f"a pinned reader is final",
+                            stage=INPUT_DATA_OWNED_STAGE,
+                        )
                     break  # This case is if a feature requests an input feature, which should have scoped access.
         return False
 
@@ -427,13 +437,24 @@ class BaseInputData(ABC):
                     continue
                 accepted.append((subclass, matched_data_access))
 
+        # A subclass replaces its parent when both accept an equal access; different accesses stay ambiguous.
+        accepted = [
+            (reader, access)
+            for reader, access in accepted
+            if not any(
+                other is not reader and issubclass(other, reader) and (other_access == access) is True
+                for other, other_access in accepted
+            )
+        ]
         if len(accepted) == 1:
             return accepted[0]
         if accepted:
-            names = sorted(reader.get_class_name() for reader, _ in accepted)
+            names = sorted((reader.data_access_name() for reader, _ in accepted), key=str.casefold)
+            feature_list = ", ".join(repr(str(n)) for n in feature_names)
+            reader_list = ", ".join(names)
             # Contained: an ambiguous reader match is a user-fixable config error, not an engine abort.
             raise ValueError(
-                f"Several readers accept the data access for feature(s) {', '.join(repr(str(n)) for n in feature_names)}: {', '.join(names)}. "
+                f"Several readers accept the data access for feature(s) {feature_list}: {reader_list}. "
                 f"Pin one by its option key, e.g. Feature({str(feature_names[0])!r}, "
                 f"options={{{names[0]!r}: <data access>}})."
             )

@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import RE
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
+from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 if TYPE_CHECKING:
@@ -174,7 +175,7 @@ def build_plan_steps(
                         name: tuple(sorted(inputs))
                         for name, inputs in (step.features.declared_input_feature_edges or {}).items()
                     },
-                    specialized_from=tuple(sorted(replaced, key=lambda fg: (fg.get_class_name(), fg.__module__))),
+                    specialized_from=tuple(sorted(replaced, key=_candidate_sort_key)),
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

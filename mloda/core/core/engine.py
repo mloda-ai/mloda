@@ -32,6 +32,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
+from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.core.prepare.resolution_types import (
@@ -106,7 +107,7 @@ class Engine:
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
-        # Per surviving feature uuid, the parents its winning group replaced; absent when none.
+        # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
         self.execution_planner = self.create_setup_execution_plan(features)
@@ -238,11 +239,11 @@ class Engine:
         # Stash the declared pre-default options: dependency declaration and child inheritance observe
         # them; intake materialization canonicalizes default-equivalent twins.
         declared_options = feature.options
-        added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
+        added = self.add_feature_to_collection(
+            feature_group_class, feature, features.child_uuid, specialized_from=result.specialized_from
+        )
 
         if added:
-            if result.specialized_from:
-                self.specialized_from[feature.uuid] = result.specialized_from
             parent_domain = feature.domain.name if feature.domain else None
             self.resolved_input_feature_names[feature.uuid] = self._handle_input_features_recursion(
                 feature_group_class,
@@ -518,6 +519,7 @@ class Engine:
         feature: Feature,
         child_uuid: UUID | None,
         if_index_feature: bool = False,
+        specialized_from: tuple[type[FeatureGroup], ...] = (),
     ) -> bool:
         # Materialize declared defaults at intake: default-equivalent twins become equal and merge
         # via the duplicate path below; identity no-op without concrete defaults.
@@ -536,11 +538,16 @@ class Engine:
             self.feature_link_parents[feature.uuid] = set()
             feature_collection.add(feature)
             self._declared_options_by_uuid[feature.uuid] = declared_options
+            if specialized_from:
+                self.specialized_from[feature.uuid] = specialized_from
             return True
 
         existing_feature = next((f for f in feature_collection if feature == f), None)
 
         if existing_feature is not None:
+            if specialized_from:
+                merged = set(self.specialized_from.get(existing_feature.uuid, ())) | set(specialized_from)
+                self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
             existing_feature.options.union_own_keys(feature.options)
             for name, keys in feature.consumer_attributions:
                 existing_feature.add_consumer_attribution(name, keys)

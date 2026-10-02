@@ -20,6 +20,7 @@ from mloda.core.prepare.resolution_types import (
 )
 from mloda.core.prepare.resolution_failure_renderer import (
     render_resolution_failure,
+    _candidate_sort_key,
     _prefix_name,
     _supported_feature_names,
 )
@@ -162,18 +163,15 @@ class IdentifyFeatureGroupClass:
         self = cls(data_access_collection)
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
+            # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
+            specialized_from = tuple(sorted(self._replaced, key=_candidate_sort_key)) if len(identified) == 1 else ()
             result = EvaluationResult(
                 identified=identified,
                 criteria_matched=self._criteria_matched_feature_groups,
                 abstract_matched=self._abstract_matched_feature_groups,
                 candidate_frameworks=self._candidate_frameworks,
                 eliminations=self._eliminations,
-                specialized_from=(
-                    # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
-                    tuple(sorted(self._replaced, key=lambda fg: (fg.get_class_name(), fg.__module__)))
-                    if len(identified) == 1
-                    else ()
-                ),
+                specialized_from=specialized_from,
             )
             if result.failure_kind is not None:
                 # Every elimination (value_rejection included) was already recorded during the single filter pass;

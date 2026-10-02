@@ -212,11 +212,11 @@ def test_resolve_feature_unavailable_only_framework_fails_closed() -> None:
 
 
 RUNS_753 = [
-    pytest.param({CfwP753}, None, ChildProbe753, id="p_only"),
-    pytest.param({CfwQ753}, None, ParentProbe753, id="q_only"),
-    pytest.param({CfwP753, CfwQ753}, None, ChildProbe753, id="p_and_q_no_pin"),
-    pytest.param({CfwP753, CfwQ753}, "CfwP753", ChildProbe753, id="p_and_q_pinned_p"),
-    pytest.param({CfwP753, CfwQ753}, "CfwQ753", ParentProbe753, id="p_and_q_pinned_q"),
+    pytest.param({CfwP753}, None, ChildProbe753, (ParentProbe753,), id="p_only"),
+    pytest.param({CfwQ753}, None, ParentProbe753, (), id="q_only"),
+    pytest.param({CfwP753, CfwQ753}, None, ChildProbe753, (ParentProbe753,), id="p_and_q_no_pin"),
+    pytest.param({CfwP753, CfwQ753}, "CfwP753", ChildProbe753, (ParentProbe753,), id="p_and_q_pinned_p"),
+    pytest.param({CfwP753, CfwQ753}, "CfwQ753", ParentProbe753, (), id="p_and_q_pinned_q"),
 ]
 
 
@@ -224,9 +224,12 @@ def _feature_753(pin: str | None) -> Feature:
     return Feature(PARENT_CHILD_FEATURE, compute_framework=pin) if pin else Feature(PARENT_CHILD_FEATURE)
 
 
-@pytest.mark.parametrize("enabled, pin, winner", RUNS_753)
+@pytest.mark.parametrize("enabled, pin, winner, specialized_from", RUNS_753)
 def test_engine_parent_child_prefers_child_when_it_can_run(
-    enabled: set[type[ComputeFramework]], pin: str | None, winner: type[FeatureGroup]
+    enabled: set[type[ComputeFramework]],
+    pin: str | None,
+    winner: type[FeatureGroup],
+    specialized_from: tuple[type[FeatureGroup], ...],
 ) -> None:
     """The engine prefers the child over its parent whenever the child can run, whatever the framework sets."""
     accessible_plugins: FeatureGroupEnvironmentMapping = {
@@ -243,11 +246,15 @@ def test_engine_parent_child_prefers_child_when_it_can_run(
     assert set(result.identified) == {winner}
     expected = {CfwP753} if winner is ChildProbe753 else enabled & {CfwP753, CfwQ753}
     assert result.identified[winner] == expected
+    assert result.specialized_from == specialized_from
 
 
-@pytest.mark.parametrize("enabled, pin, winner", RUNS_753)
+@pytest.mark.parametrize("enabled, pin, winner, specialized_from", RUNS_753)
 def test_resolve_feature_parent_child_prefers_child_when_it_can_run(
-    enabled: set[type[ComputeFramework]], pin: str | None, winner: type[FeatureGroup]
+    enabled: set[type[ComputeFramework]],
+    pin: str | None,
+    winner: type[FeatureGroup],
+    specialized_from: tuple[type[FeatureGroup], ...],
 ) -> None:
     """resolve_feature agrees with the engine and credits frameworks per winner only."""
     collector = PluginCollector.enabled_feature_groups({ParentProbe753, ChildProbe753})

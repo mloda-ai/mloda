@@ -250,12 +250,6 @@ def test_base_class_scope_prefers_subclass_when_both_accessible() -> None:
     ("accessible_plugins", "expected_winner", "expected_specialized_from"),
     [
         pytest.param(
-            {ScopeSourceA: {MockComputeFramework}, ScopeSourceASub: {SecondMockComputeFramework}},
-            ScopeSourceASub,
-            (ScopeSourceA,),
-            id="differing_framework_sets",
-        ),
-        pytest.param(
             {
                 ScopeSourceA: {MockComputeFramework},
                 ScopeSourceASub: {MockComputeFramework},

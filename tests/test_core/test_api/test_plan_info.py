@@ -333,6 +333,33 @@ class PlanInfoChildSource(PlanInfoParentSource):
     """Subclass matching the same feature name as its parent."""
 
 
+class PlanInfoScopedSpecializedConsumer(FeatureGroup):
+    """Consumes the specialized feature scoped to the child, so the parent is gated out."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_info_specialized_value", feature_group=PlanInfoChildSource)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["plan_info_specialized_value"]
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
+class PlanInfoPlainSpecializedConsumer(PlanInfoScopedSpecializedConsumer):
+    """Consumes the same feature unscoped, so the child replaces the parent."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_info_specialized_value")}
+
+
 class PlanInfoUnknownStep:
     """Not a FeatureGroupStep/TransformFrameworkStep/JoinStep: build_plan_steps must reject it."""
 
@@ -377,7 +404,9 @@ _INVERTED_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow, PlanInfoInvertedConsumer}
 )
 _NESTED_OPTIONS_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNestedOptionsSource})
-_SPECIALIZED_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoParentSource, PlanInfoChildSource})
+_SPECIALIZED_PLUGINS = PluginCollector.enabled_feature_groups(
+    {PlanInfoParentSource, PlanInfoChildSource, PlanInfoScopedSpecializedConsumer, PlanInfoPlainSpecializedConsumer}
+)
 
 # The chained request from the issue: an aggregated feature over a source feature.
 _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
@@ -1145,6 +1174,26 @@ class TestExplain:
         assert len(compute_steps) == 1
         assert compute_steps[0].feature_group is PlanInfoChildSource
         assert compute_steps[0].specialized_from == (PlanInfoParentSource,)
+
+    @pytest.mark.parametrize(
+        "consumers",
+        [
+            pytest.param(["PlanInfoScopedSpecializedConsumer", "PlanInfoPlainSpecializedConsumer"], id="scoped_first"),
+            pytest.param(["PlanInfoPlainSpecializedConsumer", "PlanInfoScopedSpecializedConsumer"], id="plain_first"),
+        ],
+    )
+    def test_merged_input_features_keep_specialized_from_in_either_request_order(
+        self, consumers: list[Feature | str]
+    ) -> None:
+        explained = mlodaAPI.explain(
+            consumers,
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=_SPECIALIZED_PLUGINS,
+        )
+
+        source_steps = [step for step in explained if step.feature_group is PlanInfoChildSource]
+        assert len(source_steps) == 1
+        assert source_steps[0].specialized_from == (PlanInfoParentSource,)
 
     def test_explain_does_not_execute_the_plan(self) -> None:
         """PlanInfoNeverExecutes.calculate_feature raises. explain() must still succeed."""

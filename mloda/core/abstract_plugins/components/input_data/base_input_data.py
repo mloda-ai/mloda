@@ -387,6 +387,10 @@ class BaseInputData(ABC):
         if options.get(cls.data_access_name()):
             return False
 
+        # A pinned reader is final: its decline must not fall back to a sibling or the collection.
+        if any(sub.data_access_name() in options for sub in get_all_filtered_subclasses(BaseInputData, cls)):
+            return False
+
         data_access_cls, matched_data_access = cls.match_data_access(
             [feature_name], data_access_collection, options=options
         )

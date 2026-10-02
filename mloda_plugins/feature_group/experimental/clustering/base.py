@@ -5,12 +5,12 @@ Base implementation for clustering feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR
 from mloda.provider import (
+    FeatureChainParser,
     FeatureChainParserMixin,
 )
 from mloda.provider import COLUMN_DISCOVERY_HOOKS
@@ -166,24 +166,16 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the last double underscore)
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
-            raise ValueError(
-                f"Invalid clustering feature name format: {feature_name}. Missing double underscore separator."
-            )
-
-        suffix = feature_name[suffix_start + 2 :]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) != 3 or parts[0] != "cluster":
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid clustering feature name format: {feature_name}. "
                 f"Expected format: {{in_features}}__cluster_{{algorithm}}_{{k_value}}"
             )
 
-        algorithm, k_value = parts[1], parts[2]
+        captures = cast(dict[str, str], parsed.named_captures)
+        algorithm = captures[cls.ALGORITHM]
+        k_value = captures[cls.K_VALUE]
 
         # Validate algorithm
         if algorithm not in cls.CLUSTERING_ALGORITHMS:

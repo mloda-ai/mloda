@@ -4,14 +4,13 @@ Base implementation for forecasting feature groups.
 
 from __future__ import annotations
 
-import re
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParserMixin, FeatureSet
+from mloda.provider import FeatureChainParser, FeatureChainParserMixin, FeatureSet
 from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -26,20 +25,8 @@ def _is_bool(value: Any) -> bool:
     return isinstance(value, bool)
 
 
-# A selector tail excludes the reserved bound names and `_`, so it cannot be mistaken for a suffix part.
+# Selector tail of PREFIX_PATTERN: excludes the reserved names lower/upper and `_`.
 _SELECTOR_TAIL = r"(?!(?:lower|upper)\Z)[^~_\n]+"
-_SELECTOR_TAIL_RE = re.compile(_SELECTOR_TAIL)
-
-
-def _split_forecast_suffix(feature_name: str) -> tuple[str, str | None] | None:
-    """Split the text after the last `__` into (base, selector); None if there is no `__` or the tail is invalid."""
-    suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-    if suffix_start == -1:
-        return None
-    base, sep, tail = feature_name[suffix_start + 2 :].partition("~")
-    if not sep:
-        return base, None
-    return (base, tail) if _SELECTOR_TAIL_RE.fullmatch(tail) else None
 
 
 class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
@@ -222,35 +209,17 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        if CHAIN_SEPARATOR not in feature_name:
-            raise ValueError(
-                f"Invalid forecast feature name format: {feature_name}. Missing double underscore separator."
-            )
-        split = _split_forecast_suffix(feature_name)
-        if split is None:
-            raise ValueError(f"Invalid forecast feature name format: {feature_name}. Invalid selector.")
-        suffix = split[0]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) < 3 or parts[1] != "forecast":
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. "
                 f"Expected format: {{in_features}}__{{algorithm}}_forecast_{{horizon}}{{time_unit}}"
             )
 
-        algorithm = parts[0]
-        horizon_time = parts[2]
-
-        # Find where the digits end and the time unit begins
-        for i, char in enumerate(horizon_time):
-            if not char.isdigit():
-                break
-        else:
-            raise ValueError(f"Invalid horizon format: {horizon_time}. Must include time unit.")
-
-        horizon_str = horizon_time[:i]
-        time_unit = horizon_time[i:]
+        captures = cast(dict[str, str], parsed.named_captures)
+        algorithm = captures[cls.ALGORITHM]
+        horizon_str = captures[cls.HORIZON]
+        time_unit = captures[cls.TIME_UNIT]
 
         # Validate algorithm
         if algorithm not in cls.FORECASTING_ALGORITHMS:
@@ -264,7 +233,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
 
         # Convert horizon to integer
-        if not horizon_str.isdigit() or int(horizon_str) <= 0:
+        if int(horizon_str) <= 0:
             raise ValueError(f"Invalid horizon: {horizon_str}. Must be a positive integer.")
         horizon = int(horizon_str)
 
@@ -396,8 +365,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """Return the trailing `~<selector>` of a string-based forecast name, else None."""
         if not cls._has_valid_forecast_suffix(feature_name):
             return None
-        split = _split_forecast_suffix(feature_name)
-        return split[1] if split else None
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        return cast(str, parsed.operation_part).partition("~")[2] or None
 
     @classmethod
     def _column_artifacts(
@@ -452,33 +421,15 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     @classmethod
     def _has_valid_forecast_suffix(cls, feature_name: str) -> bool:
         """Check if feature_name has a suffix matching the forecast pattern."""
-        split = _split_forecast_suffix(feature_name)
-        if split is None:
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             return False
-        suffix = split[0]
-        parts = suffix.split("_")
-        if len(parts) < 3 or parts[1] != "forecast":
+        captures = cast(dict[str, str], parsed.named_captures)
+        if captures[cls.ALGORITHM] not in cls.FORECASTING_ALGORITHMS:
             return False
-        if parts[0] not in cls.FORECASTING_ALGORITHMS:
+        if captures[cls.TIME_UNIT] not in cls.TIME_UNITS:
             return False
-        horizon_time = parts[2]
-        # Find where digits end and time unit begins
-        digit_end = 0
-        for i, char in enumerate(horizon_time):
-            if not char.isdigit():
-                digit_end = i
-                break
-        else:
-            return False
-        if digit_end == 0:
-            return False
-        time_unit = horizon_time[digit_end:]
-        if time_unit not in cls.TIME_UNITS:
-            return False
-        horizon_str = horizon_time[:digit_end]
-        if int(horizon_str) <= 0:
-            return False
-        return True
+        return int(captures[cls.HORIZON]) > 0
 
     @classmethod
     def _extract_forecast_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:

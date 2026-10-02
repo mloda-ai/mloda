@@ -5,12 +5,12 @@ Base implementation for dimensionality reduction feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR
 from mloda.provider import (
+    FeatureChainParser,
     FeatureChainParserMixin,
 )
 from mloda.provider import COLUMNWISE_HOOKS
@@ -219,25 +219,16 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the last double underscore)
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
-            raise ValueError(
-                f"Invalid dimensionality reduction feature name format: {feature_name}. Missing double underscore separator."
-            )
-
-        suffix = feature_name[suffix_start + len(CHAIN_SEPARATOR) :]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) != 2 or not parts[1].endswith("d"):
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid dimensionality reduction feature name format: {feature_name}. "
                 f"Expected format: {{in_features}}__{{algorithm}}_{{dimension}}d"
             )
 
-        algorithm = parts[0]
-        dimension_str = parts[1][:-1]  # Remove the 'd' suffix
+        captures = cast(dict[str, str], parsed.named_captures)
+        algorithm = captures[cls.ALGORITHM]
+        dimension_str = captures[cls.DIMENSION]
 
         # Validate algorithm
         if algorithm not in cls.REDUCTION_ALGORITHMS:
@@ -247,13 +238,10 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             )
 
         # Validate dimension
-        try:
-            dimension = int(dimension_str)
-            if dimension <= 0:
-                raise ValueError(f"Invalid dimension: {dimension}. Must be a positive integer.")
-            return algorithm, dimension
-        except ValueError:
+        dimension = int(dimension_str)
+        if dimension <= 0:
             raise ValueError(f"Invalid dimension: {dimension_str}. Must be a positive integer.")
+        return algorithm, dimension
 
     @classmethod
     def _extract_algorithm_dimension_and_source_features(cls, feature: Feature) -> tuple[str, int, list[str], Options]:

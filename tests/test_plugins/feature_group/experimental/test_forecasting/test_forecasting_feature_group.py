@@ -341,6 +341,70 @@ class TestForecastingFeatureGroup:
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7invalid") is False
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("a__b__linear_forecast_7day__foo") is False
 
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "x__linear_forecast_0day",
+            "a__lin_ear_forecast_7day",
+            "x__mean_imputed__linear_forecast_0day",
+        ],
+    )
+    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            ForecastingFeatureGroup.parse_forecast_suffix(name)
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "x__linear_forecast_7day_extra",
+            "x__mean_imputed__linear_forecast_7day_extra",
+        ],
+    )
+    def test_trailing_part_after_the_time_unit_is_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            ForecastingFeatureGroup.parse_forecast_suffix(name)
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("x__linear_forecast_7day~0", "0"),
+            ("x__linear_forecast_7day~10", "10"),
+            ("x__mean_imputed__linear_forecast_7day~2", "2"),
+            ("x__linear_forecast_7day", None),
+            ("x__linear_forecast_7day~0__linear_forecast_3day", None),
+            ("x__bogus_forecast_7day~0", None),
+            ("x__linear_forecast_0day~0", None),
+        ],
+    )
+    def test_extract_selector(self, name: str, expected: str | None) -> None:
+        assert ForecastingFeatureGroup._extract_selector(name) == expected
+
+    def test_empty_source_raises(self) -> None:
+        name = "__linear_forecast_7day"
+        with pytest.raises(ValueError):
+            ForecastingFeatureGroup.parse_forecast_suffix(name)
+        with pytest.raises(ValueError):
+            ForecastingFeatureGroup._has_valid_forecast_suffix(name)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("x__linear_fcst_7day", ("linear", 7, "day")), ("x__mean_imputed__ridge_fcst_3hour", ("ridge", 3, "hour"))],
+    )
+    def test_parse_forecast_suffix_follows_an_overridden_prefix_pattern(
+        self, name: str, expected: tuple[str, int, str]
+    ) -> None:
+        """Parts are read from PREFIX_PATTERN."""
+
+        class FcstPatternGroup(ForecastingFeatureGroup):
+            PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_fcst_(?P<horizon>\d+)(?P<time_unit>[\w]+)$"
+
+        assert FcstPatternGroup.parse_forecast_suffix(name) == expected
+        assert FcstPatternGroup._has_valid_forecast_suffix(name) is True
+        with pytest.raises(ValueError):
+            FcstPatternGroup.parse_forecast_suffix("x__linear_forecast_7day")
+
     def test_extract_forecast_params_string_based(self) -> None:
         """Test that _extract_forecast_params extracts parameters from a string-based feature name."""
         feature = Feature("sales__linear_forecast_7day")

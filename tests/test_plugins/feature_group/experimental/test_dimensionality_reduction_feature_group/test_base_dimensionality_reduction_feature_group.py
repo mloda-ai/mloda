@@ -98,6 +98,42 @@ class TestDimensionalityReductionFeatureGroup:
         with pytest.raises(ValueError):
             DimensionalityReductionFeatureGroup.parse_reduction_suffix("customer_metrics_pca_2d")
 
+    @pytest.mark.parametrize("name", ["x__mean_imputed__pca_2d", "a__b__c__pca_2d", "a,b__mean_imputed__pca_2d"])
+    def test_chained_source_name_parses_from_the_last_suffix(self, name: str) -> None:
+        assert DimensionalityReductionFeatureGroup.parse_reduction_suffix(name) == ("pca", 2)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "x__pca_2_3d",
+            "x__pc_a_2d",
+            "x__pca_0d",
+            "x__mean_imputed__pca_2_3d",
+            "x__mean_imputed__pca_0d",
+            "__pca_2d",
+            "x__pca_+2d",
+        ],
+    )
+    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            DimensionalityReductionFeatureGroup.parse_reduction_suffix(name)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("x__pca_2dim", ("pca", 2)), ("x__mean_imputed__tsne_3dim", ("tsne", 3))],
+    )
+    def test_parse_reduction_suffix_follows_an_overridden_prefix_pattern(
+        self, name: str, expected: tuple[str, int]
+    ) -> None:
+        """Parts are read from PREFIX_PATTERN."""
+
+        class DimPatternGroup(DimensionalityReductionFeatureGroup):
+            PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_(?P<dimension>\d+)dim$"
+
+        assert DimPatternGroup.parse_reduction_suffix(name) == expected
+        with pytest.raises(ValueError):
+            DimPatternGroup.parse_reduction_suffix("x__pca_2d")
+
     def test_umap_is_not_declared(self) -> None:
         """umap is not implemented by any compute framework, so it must not be declared."""
         assert "umap" not in DimensionalityReductionFeatureGroup.REDUCTION_ALGORITHMS

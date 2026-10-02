@@ -368,3 +368,46 @@ class TestTimeWindowFeatureGroup:
         feature = Feature("some_feature", options)
         result = TimeWindowFeatureGroup._extract_time_window_params(feature)
         assert result == ("sum", 5, "hour")
+
+    @pytest.mark.parametrize("name", ["x__mean_imputed__sum_7_day_window", "a__b__c__sum_7_day_window"])
+    def test_chained_source_name_parses_from_the_last_suffix(self, name: str) -> None:
+        assert TimeWindowFeatureGroup.parse_time_window_prefix(name) == ("sum", 7, "day")
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "x__sum_7_day_extra_window",
+            "x__su_m_7_day_window",
+            "x__sum_7_da_y_window",
+            "x__sum_0_day_window",
+            "x__mean_imputed__sum_7_day_extra_window",
+        ],
+    )
+    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            TimeWindowFeatureGroup.parse_time_window_prefix(name)
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix(name) is False
+
+    def test_empty_source_raises(self) -> None:
+        name = "__sum_7_day_window"
+        with pytest.raises(ValueError):
+            TimeWindowFeatureGroup.parse_time_window_prefix(name)
+        with pytest.raises(ValueError):
+            TimeWindowFeatureGroup._has_valid_time_window_suffix(name)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("x__sum_7_day_win", ("sum", 7, "day")), ("x__mean_imputed__max_3_hour_win", ("max", 3, "hour"))],
+    )
+    def test_parse_time_window_prefix_follows_an_overridden_prefix_pattern(
+        self, name: str, expected: tuple[str, int, str]
+    ) -> None:
+        """Parts are read from PREFIX_PATTERN."""
+
+        class WinPatternGroup(TimeWindowFeatureGroup):
+            PREFIX_PATTERN = r".*__(?P<window_function>[\w]+)_(?P<window_size>\d+)_(?P<time_unit>[\w]+)_win$"
+
+        assert WinPatternGroup.parse_time_window_prefix(name) == expected
+        assert WinPatternGroup._has_valid_time_window_suffix(name) is True
+        with pytest.raises(ValueError):
+            WinPatternGroup.parse_time_window_prefix("x__sum_7_day_window")

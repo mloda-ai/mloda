@@ -182,6 +182,13 @@ class IdentifyFeatureGroupClass:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
             # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
             specialized_from = tuple(sorted(self._replaced, key=_candidate_sort_key)) if len(identified) == 1 else ()
+            if specialized_from:
+                logger.debug(
+                    "Feature %s: %s replaced %s",
+                    feature.name,
+                    ", ".join(c.__qualname__ for c in identified),
+                    ", ".join(c.__qualname__ for c in specialized_from),
+                )
             result = EvaluationResult(
                 identified=identified,
                 criteria_matched=self._criteria_matched_feature_groups,

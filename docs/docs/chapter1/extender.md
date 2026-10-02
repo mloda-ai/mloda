@@ -121,7 +121,9 @@ class FactsExtender(Extender):
         return result
 ```
 
-To unit-test an extender's `__call__` without running the engine, build a `HookContext` directly and `activate()` it. Only `hook`, `feature_group_class`, `feature_group_version` and `compute_framework_name` are required. `plugin_version`, `input_features` and `input_feature_edges` default to `None` (a mapping passed in is copied, like `carrier`), `feature_names` defaults to an empty tuple, and every other field defaults to `None`.
+`specialized_from` is a tuple of `module.qualname` strings naming the parent classes the step's feature group replaced via subclass preference, sorted, and `()` when none. On `FEATURE_GROUP_MATCHED` it is written once the match returns, like `feature_group_class`; on compute hooks and `INPUT_DATA_LOAD` it is the union over the step's features; on `JOIN` it is `()`.
+
+To unit-test an extender's `__call__` without running the engine, build a `HookContext` directly and `activate()` it. Only `hook`, `feature_group_class`, `feature_group_version` and `compute_framework_name` are required. `plugin_version`, `input_features` and `input_feature_edges` default to `None` (a mapping passed in is copied, like `carrier`), `feature_names` and `specialized_from` default to empty tuples, and every other field defaults to `None`.
 
 ```python
 from mloda.steward import ExtenderHook, HookContext

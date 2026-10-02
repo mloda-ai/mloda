@@ -552,3 +552,60 @@ class TestEngineSelectsExtenderOncePerRun:
         session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert extender.wraps_calls == 2
+
+
+class _MatchReplacedParentFeatureGroup(FeatureGroup):
+    """Parent that a subclass replaces at match time."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({f"{_MARKER}_replaced_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_MARKER}_replaced_col": [1, 2, 3]}
+
+
+class _MatchReplacingSubclassFeatureGroup(_MatchReplacedParentFeatureGroup):
+    """Subclass that wins over its parent."""
+
+
+class TestSpecializedFromOnMatchContext:
+    def test_match_context_names_the_replaced_parent(self) -> None:
+        extender = _MatchContextCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_replaced_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchReplacedParentFeatureGroup, _MatchReplacingSubclassFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.feature_group_class == (
+            f"{_MatchReplacingSubclassFeatureGroup.__module__}.{_MatchReplacingSubclassFeatureGroup.__qualname__}"
+        )
+        assert extender.captured.specialized_from == (
+            f"{_MatchReplacedParentFeatureGroup.__module__}.{_MatchReplacedParentFeatureGroup.__qualname__}",
+        )
+
+    def test_match_context_without_replacement_is_empty(self) -> None:
+        extender = _MatchContextCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_root_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchHookRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.specialized_from == ()

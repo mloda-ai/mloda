@@ -14,6 +14,7 @@ Follows the construction conventions in test_identify_feature_group_error_messag
 """
 
 import inspect
+import logging
 from collections.abc import Callable
 from abc import abstractmethod
 from typing import Any, ClassVar
@@ -898,3 +899,38 @@ def test_unpinned_contradiction_still_aborts(make_options: Callable[[], Options]
 
     with pytest.raises(ValueError):
         evaluate_or_raise(feature, _abort_candidates())
+
+
+def test_replacement_logs_one_debug_line_naming_feature_winner_and_parents(caplog: pytest.LogCaptureFixture) -> None:
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        ScopeSourceA: {MockComputeFramework},
+        ScopeSourceASub: {MockComputeFramework},
+    }
+
+    with caplog.at_level(logging.DEBUG, logger="mloda.core.prepare.identify_feature_group"):
+        evaluate_or_raise(
+            feature=Feature("subject_token", feature_group=ScopeSourceA),
+            accessible_plugins=accessible_plugins,
+            links=None,
+            data_access_collection=None,
+        )
+
+    lines = [r.getMessage() for r in caplog.records if r.name == "mloda.core.prepare.identify_feature_group"]
+    assert len(lines) == 1
+    assert "subject_token" in lines[0]
+    assert "ScopeSourceASub" in lines[0]
+    assert "ScopeSourceA" in lines[0].replace("ScopeSourceASub", "")
+
+
+def test_no_replacement_logs_no_debug_line(caplog: pytest.LogCaptureFixture) -> None:
+    accessible_plugins: FeatureGroupEnvironmentMapping = {ScopeSourceASub: {MockComputeFramework}}
+
+    with caplog.at_level(logging.DEBUG, logger="mloda.core.prepare.identify_feature_group"):
+        evaluate_or_raise(
+            feature=Feature("subject_token", feature_group=ScopeSourceA),
+            accessible_plugins=accessible_plugins,
+            links=None,
+            data_access_collection=None,
+        )
+
+    assert [r for r in caplog.records if r.name == "mloda.core.prepare.identify_feature_group"] == []

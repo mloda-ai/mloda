@@ -19,7 +19,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.user import DataAccessCollection, PluginCollector, mloda
+from mloda.provider import FeatureGroup
+from mloda.user import DataAccessCollection, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
@@ -1187,3 +1188,58 @@ class TestInputDataLoadHookUsesFrameworkRowCountNotDefaultLen:
         assert extender.captured is not None
         assert extender.captured.rows_out == _ROW_COUNT_SENTINEL
         assert extender.captured.rows_out != len(result)
+
+
+_REPLACED_COLUMN = f"{_MARKER}_replaced_col"
+
+
+class _ReplacedReadParentFeatureGroup(FeatureGroup):
+    """Reader feature group replaced by its subclass; matches only its own column so other tests are unaffected."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == _REPLACED_COLUMN and ReadFileFeature.match_feature_group_criteria(
+            feature_name, options, data_access_collection
+        )
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return ReadFile()
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return ReadFileFeature.calculate_feature.__func__(cls, data, features)  # type: ignore[attr-defined]
+
+
+class _ReplacingReadChildFeatureGroup(_ReplacedReadParentFeatureGroup):
+    """Winning subclass."""
+
+
+class TestInputDataLoadCarriesSpecializedFrom:
+    def test_load_context_matches_the_calculate_context(self, tmp_path: Path) -> None:
+        path = tmp_path / "data.csv"
+        _write_csv(path, _REPLACED_COLUMN, [1, 2, 3])
+
+        calc_extender = _CalcContextCapturingExtender()
+        fetch_extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            [_REPLACED_COLUMN],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_ReplacedReadParentFeatureGroup, _ReplacingReadChildFeatureGroup}
+            ),
+            function_extender={calc_extender, fetch_extender},
+        )
+
+        parent_name = f"{_ReplacedReadParentFeatureGroup.__module__}.{_ReplacedReadParentFeatureGroup.__qualname__}"
+        assert calc_extender.captured is not None
+        assert fetch_extender.captured is not None
+        assert calc_extender.captured.specialized_from == (parent_name,)
+        assert fetch_extender.captured.specialized_from == calc_extender.captured.specialized_from

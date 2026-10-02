@@ -61,6 +61,7 @@ class PlanStep:
     it participates in equality but is excluded from hashing.
 
     ``reader_data_access`` is a derived property reading the (reader class, data access) pair from group options.
+    ``data_access_identity`` is the credential-free projection of that pair, computed on access.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -114,6 +115,11 @@ class PlanStep:
         return (
             None if self.feature_set_options is None else self.feature_set_options.group.get(RESERVED_READER_OPTION_KEY)
         )
+
+    @property
+    def data_access_identity(self) -> str | None:
+        pair = self.reader_data_access
+        return None if pair is None else pair[0].data_access_identity(pair[1])
 
 
 def build_plan_steps(

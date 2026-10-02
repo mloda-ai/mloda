@@ -1000,7 +1000,7 @@ class TestPlanStepReaderDataAccess:
         step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
         assert step.reader_data_access is not None
         assert "hunter2" in json.dumps(dict(step.reader_data_access[1]))
-        assert step.data_access_identity == db
+        assert step.data_access_identity == f"{db}::t"
         assert step.data_access_identity_is_fallback is False
 
         safe = {f.name: getattr(step, f.name) for f in dataclasses.fields(step) if f.name != "feature_set_options"}

@@ -67,6 +67,24 @@ class _InputDataLoadCapturingExtender(Extender):
         return result
 
 
+class _AllContextsInputDataLoadCapturingExtender(Extender):
+    """Records the HookContext of every INPUT_DATA_LOAD call."""
+
+    def __init__(self, priority: int = 100) -> None:
+        self.priority = priority
+        self.captured: list[HookContext] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        self.captured.append(context)
+        return result
+
+
 class _InputDataLoadVetoExtender(Extender):
     """raise_on_error selects deny-before-load (True, default) vs deny-with-fallback (False)."""
 
@@ -356,8 +374,31 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identity is not None
         assert "hunter2" not in identity
         assert "alice" not in identity
-        assert identity == str(db_path)
+        assert identity == f"{db_path}::creds_table"
         assert fetch_context.data_access_identity_is_fallback is False
+
+    def test_features_from_different_tables_of_one_file_get_distinct_identities(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "two_tables.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE table_a (col_a INTEGER)")
+        conn.execute("CREATE TABLE table_b (col_b INTEGER)")
+        conn.execute("INSERT INTO table_a VALUES (1)")
+        conn.execute("INSERT INTO table_b VALUES (2)")
+        conn.commit()
+        conn.close()
+
+        extender = _AllContextsInputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            ["col_a", "col_b"],
+            compute_frameworks={PyArrowTable},
+            data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): str(db_path)}]),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            function_extender={extender},
+        )
+
+        identities = {c.data_access_identity for c in extender.captured}
+        assert identities == {f"{db_path}::table_a", f"{db_path}::table_b"}
 
 
 class TestSQLiteReaderDataAccessIdentity:
@@ -375,6 +416,33 @@ class TestSQLiteReaderDataAccessIdentity:
         }
         access = cases[kind]
         assert SQLITEReader.data_access_identity(access) == ("{user}" if kind == "missing_key" else "{sqlite}")
+
+    def test_path_and_table_name_join_with_double_colon(self, tmp_path: Path) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        access = {"sqlite": str(db), "table_name": "orders"}
+        assert SQLITEReader.data_access_identity(access) == f"{db}::orders"
+
+    def test_path_without_table_name_stays_the_path(self, tmp_path: Path) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        assert SQLITEReader.data_access_identity({"sqlite": str(db)}) == str(db)
+
+    @pytest.mark.parametrize("table_name", ["", 5, None, b"orders"])
+    def test_non_str_or_empty_table_name_stays_the_path(self, tmp_path: Path, table_name: Any) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        access = {"sqlite": str(db), "table_name": table_name}
+        assert SQLITEReader.data_access_identity(access) == str(db)
+
+    def test_password_is_not_leaked_alongside_table_name(self, tmp_path: Path) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        access = {"sqlite": str(db), "user": "alice", "password": "hunter2", "table_name": "orders"}  # nosec B105
+        identity = SQLITEReader.data_access_identity(access)
+        assert identity == f"{db}::orders"
+        assert "hunter2" not in identity
+        assert "alice" not in identity
 
 
 class TestDataAccessIdentityOfUriStrings:

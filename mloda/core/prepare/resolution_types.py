@@ -89,6 +89,8 @@ class EvaluationResult:
     candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks] = field(default_factory=dict)
     eliminations: dict[type[FeatureGroup], Elimination] = field(default_factory=dict)
     facts: RenderFacts = field(default_factory=RenderFacts)
+    # The classes the single winner replaced (subclass preference), empty without a single winner.
+    specialized_from: tuple[type[FeatureGroup], ...] = ()
 
     @property
     def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:

@@ -8,6 +8,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import RE
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
+from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 if TYPE_CHECKING:
@@ -60,6 +61,9 @@ class PlanStep:
     ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
     it participates in equality but is excluded from hashing.
 
+    ``specialized_from`` lists, for a compute step, the parent classes its feature group replaced for at least one
+    feature in the step (subclass preference), sorted by class name; empty otherwise.
+
     ``reader_data_access`` is a derived property reading the (reader class, data access) pair from group options.
     """
 
@@ -80,6 +84,7 @@ class PlanStep:
     feature_set_options: Options | None = field(default=None, compare=False)
     step_uuid: UUID | None = field(default=None, compare=False)
     input_feature_edges: Mapping[str, tuple[str, ...]] = field(default_factory=dict, hash=False)
+    specialized_from: tuple[type["FeatureGroup"], ...] = ()
 
     @property
     def feature_group_name(self) -> str | None:
@@ -119,13 +124,16 @@ class PlanStep:
 def build_plan_steps(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep],
     resolved_join_plan: "ResolvedJoinPlan | None" = None,
+    specialized_from: Mapping[UUID, tuple[type["FeatureGroup"], ...]] | None = None,
 ) -> list[PlanStep]:
     """Map the steps of an ExecutionPlan onto PlanStep records, in execution-plan order.
 
     Raises ValueError on an unknown step, mirroring ``ExecutionPlan.add_tfs``: a plan that silently
     drops a step it does not understand is a lie. Pass the plan's ``resolved_join_plan`` to fill the
-    join orientation fields; without it join steps report none.
+    join orientation fields; without it join steps report none. Pass ``specialized_from`` (feature uuid to
+    replaced parents) to fill each compute step's ``specialized_from``.
     """
+    replaced_by_uuid = specialized_from or {}
     records: dict[UUID, "ResolvedJoin"] = (
         {} if resolved_join_plan is None else {record.token: record for record in resolved_join_plan.records}
     )
@@ -139,6 +147,11 @@ def build_plan_steps(
             injected = tuple(sorted(set(feature_names) - set(requested)))
             declared = step.features.declared_input_feature_names
             input_feature_names = tuple(sorted(declared)) if declared else ()
+            replaced = {
+                parent
+                for feature_id in step.features.get_all_feature_ids()
+                for parent in replaced_by_uuid.get(feature_id, ())
+            }
             plan.append(
                 PlanStep(
                     step_kind="compute",
@@ -162,6 +175,7 @@ def build_plan_steps(
                         name: tuple(sorted(inputs))
                         for name, inputs in (step.features.declared_input_feature_edges or {}).items()
                     },
+                    specialized_from=tuple(sorted(replaced, key=_candidate_sort_key)),
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

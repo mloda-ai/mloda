@@ -39,6 +39,7 @@ Contract under test:
   * ``mlodaAPI.explain(features, ...)`` mirrors the ``prepare`` parameter shape with keyword-only
     parameters after ``features``, prepares without executing and returns the same records as
     ``prepare(...).resolved_plan()``.
+  * ``PlanStep.specialized_from`` lists the parent feature groups a compute step's winner replaced, else ``()``.
   * ``PlanStep`` is exported from both ``mloda.user`` and ``mloda.steward``.
 
 A caller must reach all of this without importing anything from the internal execution-step
@@ -312,6 +313,53 @@ class PlanInfoNestedOptionsSource(FeatureGroup):
         return {PandasDataFrame}
 
 
+class PlanInfoParentSource(FeatureGroup):
+    """Parent root source; its subclass PlanInfoChildSource replaces it during resolution."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"plan_info_specialized_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"plan_info_specialized_value": [1, 2, 3]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class PlanInfoChildSource(PlanInfoParentSource):
+    """Subclass matching the same feature name as its parent."""
+
+
+class PlanInfoScopedSpecializedConsumer(FeatureGroup):
+    """Consumes the specialized feature scoped to the child, so the parent is gated out."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_info_specialized_value", feature_group=PlanInfoChildSource)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["plan_info_specialized_value"]
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
+class PlanInfoPlainSpecializedConsumer(PlanInfoScopedSpecializedConsumer):
+    """Consumes the same feature unscoped, so the child replaces the parent."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_info_specialized_value")}
+
+
 class PlanInfoUnknownStep:
     """Not a FeatureGroupStep/TransformFrameworkStep/JoinStep: build_plan_steps must reject it."""
 
@@ -356,6 +404,9 @@ _INVERTED_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow, PlanInfoInvertedConsumer}
 )
 _NESTED_OPTIONS_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNestedOptionsSource})
+_SPECIALIZED_PLUGINS = PluginCollector.enabled_feature_groups(
+    {PlanInfoParentSource, PlanInfoChildSource, PlanInfoScopedSpecializedConsumer, PlanInfoPlainSpecializedConsumer}
+)
 
 # The chained request from the issue: an aggregated feature over a source feature.
 _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
@@ -483,6 +534,7 @@ class TestPlanStepDataclass:
             "feature_set_options",
             "step_uuid",
             "input_feature_edges",
+            "specialized_from",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -657,6 +709,34 @@ class TestPlanStepInputFeatureNamesField:
 
         assert base != with_inputs
         assert with_inputs == dataclasses.replace(base, input_feature_names=("plan_info_sales",))
+
+
+class TestPlanStepSpecializedFromField:
+    """specialized_from is an optional tuple of replaced parent classes, last on the dataclass."""
+
+    @staticmethod
+    def _compute_step() -> PlanStep:
+        return PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_specialized_value",),
+            feature_group=PlanInfoChildSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+
+    def test_specialized_from_defaults_to_an_empty_tuple(self) -> None:
+        assert self._compute_step().specialized_from == ()
+
+        fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert fields_by_name["specialized_from"].default == ()
+
+    def test_specialized_from_participates_in_equality(self) -> None:
+        base = self._compute_step()
+        replaced = dataclasses.replace(base, specialized_from=(PlanInfoParentSource,))
+
+        assert base != replaced
+        assert replaced == dataclasses.replace(base, specialized_from=(PlanInfoParentSource,))
 
 
 class TestPlanStepInputFeatureEdgesField:
@@ -946,6 +1026,8 @@ class TestResolvedPlanForChainedFeature:
         assert aggregation_step.feature_group_name == "PandasAggregatedFeatureGroup"
         assert aggregation_step.compute_framework_name == "PandasDataFrame"
 
+        assert all(step.specialized_from == () for step in plan)
+
     def test_compute_steps_carry_no_source_or_join_fields(self) -> None:
         """source_* and join_type are transform/join specific and stay None on compute steps."""
         plan = _prepare_chained_session().resolved_plan()
@@ -1080,6 +1162,38 @@ class TestExplain:
         assert isinstance(explained, list)
         assert all(isinstance(step, PlanStep) for step in explained)
         assert [step.feature_group for step in explained] == [PlanInfoPandasSource, PandasAggregatedFeatureGroup]
+
+    def test_explain_reports_the_parent_a_subclass_winner_replaced(self) -> None:
+        explained = mlodaAPI.explain(
+            ["plan_info_specialized_value"],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=_SPECIALIZED_PLUGINS,
+        )
+
+        compute_steps = [step for step in explained if step.step_kind == "compute"]
+        assert len(compute_steps) == 1
+        assert compute_steps[0].feature_group is PlanInfoChildSource
+        assert compute_steps[0].specialized_from == (PlanInfoParentSource,)
+
+    @pytest.mark.parametrize(
+        "consumers",
+        [
+            pytest.param(["PlanInfoScopedSpecializedConsumer", "PlanInfoPlainSpecializedConsumer"], id="scoped_first"),
+            pytest.param(["PlanInfoPlainSpecializedConsumer", "PlanInfoScopedSpecializedConsumer"], id="plain_first"),
+        ],
+    )
+    def test_merged_input_features_keep_specialized_from_in_either_request_order(
+        self, consumers: list[Feature | str]
+    ) -> None:
+        explained = mlodaAPI.explain(
+            consumers,
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=_SPECIALIZED_PLUGINS,
+        )
+
+        source_steps = [step for step in explained if step.feature_group is PlanInfoChildSource]
+        assert len(source_steps) == 1
+        assert source_steps[0].specialized_from == (PlanInfoParentSource,)
 
     def test_explain_does_not_execute_the_plan(self) -> None:
         """PlanInfoNeverExecutes.calculate_feature raises. explain() must still succeed."""

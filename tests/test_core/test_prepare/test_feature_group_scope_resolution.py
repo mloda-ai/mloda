@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import matches_feature_group_scope
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, matches_feature_group_scope
 from tests.helpers.plugin_stubs import StubFeatureGroup, make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.provider import BaseInputData, DataCreator, FeatureSet
@@ -193,6 +193,10 @@ class ScopeSourceASub(ScopeSourceA):
     """Subclass of ScopeSourceA; inherits its name matching."""
 
 
+class ScopeSourceASubSub(ScopeSourceASub):
+    """Grandchild of ScopeSourceA; inherits its name matching."""
+
+
 def test_base_class_scope_resolves_to_accessible_subclass() -> None:
     """A base-class scope matches subclasses of the scoped class.
 
@@ -215,6 +219,7 @@ def test_base_class_scope_resolves_to_accessible_subclass() -> None:
     )
     resolved_feature_group, _compute_frameworks = next(iter(identifier.identified.items()))
     assert resolved_feature_group is ScopeSourceASub
+    assert identifier.specialized_from == ()
 
 
 def test_base_class_scope_prefers_subclass_when_both_accessible() -> None:
@@ -238,6 +243,53 @@ def test_base_class_scope_prefers_subclass_when_both_accessible() -> None:
     )
     resolved_feature_group, _compute_frameworks = next(iter(identifier.identified.items()))
     assert resolved_feature_group is ScopeSourceASub
+    assert identifier.specialized_from == (ScopeSourceA,)
+
+
+@pytest.mark.parametrize(
+    ("accessible_plugins", "expected_winner", "expected_specialized_from"),
+    [
+        pytest.param(
+            {
+                ScopeSourceA: {MockComputeFramework},
+                ScopeSourceASub: {MockComputeFramework},
+                ScopeSourceASubSub: {MockComputeFramework},
+            },
+            ScopeSourceASubSub,
+            (ScopeSourceA, ScopeSourceASub),
+            id="grandparent_chain",
+        ),
+    ],
+)
+def test_subclass_replaces_parents_and_records_them(
+    accessible_plugins: FeatureGroupEnvironmentMapping,
+    expected_winner: type[FeatureGroup],
+    expected_specialized_from: tuple[type[FeatureGroup], ...],
+) -> None:
+    """The most specific subclass wins and names every replaced ancestor."""
+    identifier = evaluate_or_raise(
+        feature=Feature("subject_token", feature_group=ScopeSourceA),
+        accessible_plugins=accessible_plugins,
+        links=None,
+        data_access_collection=None,
+    )
+    resolved_feature_group, _compute_frameworks = next(iter(identifier.identified.items()))
+    assert resolved_feature_group is expected_winner
+    assert identifier.specialized_from == expected_specialized_from
+
+
+def test_no_single_winner_has_empty_specialized_from() -> None:
+    """Unrelated rivals on differing framework sets stay ambiguous, so nothing is recorded."""
+    feature = Feature("subject_token")
+    accessible_plugins: FeatureGroupEnvironmentMapping = {
+        ScopeSourceASub: {MockComputeFramework},
+        ScopeSourceB: {SecondMockComputeFramework},
+    }
+
+    result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
+
+    assert result.failure_kind == "multiple"
+    assert result.specialized_from == ()
 
 
 # ---------------------------------------------------------------------------

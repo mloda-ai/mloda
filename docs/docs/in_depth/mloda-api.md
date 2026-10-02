@@ -153,6 +153,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **injected_feature_names** (`tuple[str, ...]`): The engine-injected/dependency remainder of `feature_names` on a compute step, empty for join and transform steps.
 - **input_feature_names** (`tuple[str, ...]`): The sorted, deduplicated names a compute step's FeatureGroup declares as input, empty for a root step and for join and transform steps. It is the prepare-time twin of the run-time `HookContext.input_features`, which reads the same FeatureSet attribute.
 - **input_feature_edges** (`Mapping[str, tuple[str, ...]]`): Each output feature name of a compute step mapped to its sorted declared input names (empty for root, join and transform steps; injected features and features declaring no inputs are absent; same-named features in one step merge into one entry). Prepare-time twin of `HookContext.input_feature_edges`.
+- **specialized_from** (`tuple[type[FeatureGroup], ...]`): the parent FeatureGroup classes a compute step's FeatureGroup replaced through subclass preference for at least one of its features, sorted by class name; empty when nothing was replaced and for join and transform steps.
 - **feature_group** (`type[FeatureGroup] | None`): Resolved FeatureGroup; the destination for a transform step; the link's declared left side for a join.
 - **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.
 - **source_feature_group** / **source_compute_framework**: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.
@@ -218,7 +219,7 @@ from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, Resoluti
 - **`ResolutionDiagnosis`** (frozen dataclass): the return value of `diagnose`, never raised. Fields: `records` (`list[ResolutionRecord]`), `complete` (`bool`), `feature_name` (`str | None`), `failed_result` (`EvaluationResult | None`), `message` (`str | None`).
 - **`ResolutionRecord`** (frozen dataclass): one per feature, returned inside `resolution_report()`, `ResolutionDiagnosis.records`, and `FeatureResolutionError.partial_records`; never raised. Fields: `feature_name` (`str`), `requested` (`bool`), `result` (`EvaluationResult`).
 
-`EvaluationResult` is the captured matcher outcome carried by the fields above; it is defined in `mloda.core.prepare.resolution_types` and is not part of the public `__init__` exports.
+`EvaluationResult` is the captured matcher outcome carried by the fields above; it is defined in `mloda.core.prepare.resolution_types` and is not part of the public `__init__` exports. `EvaluationResult.specialized_from` carries, per feature, the parent classes the single winner replaced through subclass preference.
 
 ##### get_feature_group_docs
 

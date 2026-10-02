@@ -656,8 +656,10 @@ class TestPinnedReaderDoesNotFallBackToGlobalRoute:
 
     def test_a_pinned_db_reader_rejecting_the_credentials_without_a_recording_is_reported(self) -> None:
         """No recording and no match: the owned reason names the reader and never echoes the credentials."""
-        secret = "vg1756_secret_value"
-        feature = Feature(name=VG1756_FEATURE, options={Vg1756PinnedReader.__name__: {"vg1756_other": secret}})
+        credential_value = "vg1756_credential_value"
+        feature = Feature(
+            name=VG1756_FEATURE, options={Vg1756PinnedReader.__name__: {"vg1756_other": credential_value}}
+        )
         accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1756DbFG: {PandasDataFrame}}
         dac = DataAccessCollection(credentials=[{"vg1756_sibling": {}}])
 
@@ -667,7 +669,7 @@ class TestPinnedReaderDoesNotFallBackToGlobalRoute:
         elimination = result.eliminations.get(Vg1756DbFG)
         assert elimination is not None
         assert Vg1756PinnedReader.get_class_name() in elimination.reason
-        assert secret not in elimination.reason
+        assert credential_value not in elimination.reason
         assert "vg1756_other" not in elimination.reason
 
     def test_an_owned_decline_then_a_global_match_is_not_recovered(self, tmp_path: Path) -> None:

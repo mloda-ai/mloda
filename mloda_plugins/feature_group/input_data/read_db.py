@@ -100,6 +100,8 @@ class ReadDB(BaseInputData):
     def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
         """Checks if the given dictionary is a valid credentials object.
 
+        To check it against PropertySpecs, use mloda.provider.validate_property_values.
+
         Matcher exception contract: match_read_db_data_access treats only an unmarked
         NotImplementedError as a soft no-match; anything else, including one marked with
         escalate_match_abort, propagates and aborts matching for every reader sharing the

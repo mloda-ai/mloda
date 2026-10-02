@@ -93,6 +93,10 @@ from mloda.core.abstract_plugins.components.property_spec import (
     is_positive_int,
     property_spec,
 )
+from mloda.core.abstract_plugins.components.property_values_validation import (
+    PropertyValidationError,
+    validate_property_values,
+)
 
 # Match rejection recording
 from mloda.core.abstract_plugins.components.match_rejection import (
@@ -190,6 +194,8 @@ __all__ = [
     "is_positive_int",
     "property_spec",
     "NO_DEFAULT",
+    "PropertyValidationError",
+    "validate_property_values",
     # Match rejection recording
     "INPUT_DATA_STAGE",
     "NAME_STAGE",

@@ -173,3 +173,24 @@ class TestElementValidatorRaiseLogsNoExceptionObject:
         assert RIC975_VALIDATOR_KEY in messages[0], f"the key must stay in the message: {messages[0]}"
         assert "TypeError" in messages[0], f"the exception type must stay in the message: {messages[0]}"
         assert RIC975_VALIDATOR_JUDGMENT_MESSAGE in messages[0], f"the reason must stay readable: {messages[0]}"
+
+
+class _RaisingEq:
+    """An element whose equality check raises a non-TypeError."""
+
+    def __eq__(self, other: object) -> bool:
+        raise ValueError("ric975 eq raised")
+
+    def __hash__(self) -> int:
+        return 1
+
+
+class TestMembershipRaiseIsARejection:
+    """A membership check whose __eq__ raises ValueError is a reader non-match, never an escape."""
+
+    @pytest.mark.parametrize("allowed", [("a",), {"a"}], ids=["tuple", "set"])
+    def test_raising_eq_element_is_rejected(self, allowed: Any, caplog: pytest.LogCaptureFixture) -> None:
+        spec = PropertySpec("ric975 members", allowed_values=allowed, strict_validation=True)
+        with caplog.at_level(logging.DEBUG, logger=READER_LOGGER_NAME):
+            verdict = BaseInputData._present_reader_option_admits(RIC975_VALIDATOR_KEY, spec, [_RaisingEq()], False)
+        assert verdict is False

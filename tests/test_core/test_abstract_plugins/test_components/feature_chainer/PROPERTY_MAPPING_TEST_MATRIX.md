@@ -6,7 +6,7 @@ helper is itself an intentional contract (listed at the end). Keep this file in 
 
 Public boundaries: `FeatureGroup.match_feature_group_criteria`, `FeatureChainParser.parse_feature_name`
 / `extract_property_values` / `build_effective_options`, `FeatureGroup.options_with_defaults`,
-`option_key_is_present`, the identify engine (`identify_winner` / `evaluate_or_raise`), and
+`option_key_is_present`, `validate_property_values`, the identify engine (`identify_winner` / `evaluate_or_raise`), and
 `mloda.run_all` / compute.
 
 ## Axes

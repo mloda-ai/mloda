@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     CHAIN_SEPARATOR,
     COLUMN_SEPARATOR,
 )
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
@@ -259,24 +259,17 @@ class BaseInputData(ABC):
     @classmethod
     def _reader_option_element_admits(cls, key: str, spec: PropertySpec, element: Any) -> bool:
         """One element's verdict: a declared element_validator REPLACES membership."""
-        validator = spec.element_validator
-        if validator is not None:
-            try:
-                return bool(validator(element))
-            except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
-                logger.log(
-                    contained_raise_log_level(exc),
-                    "element_validator for reader option '%s' of %s %s; treating value as rejected.",
-                    key,
-                    cls.get_class_name(),
-                    contained_raise_reason(exc),
-                )
-                return False
-        try:
-            return spec.allowed_values is not None and element in spec.allowed_values
-        # Swallows: an unhashable element can never be a member, so the TypeError is a clean rejection.
-        except TypeError:
-            return False
+
+        def on_raise(exc: Exception) -> None:
+            logger.log(
+                contained_raise_log_level(exc),
+                "element_validator for reader option '%s' of %s %s; treating value as rejected.",
+                key,
+                cls.get_class_name(),
+                contained_raise_reason(exc),
+            )
+
+        return element_admitted(spec, element, on_raise)
 
     @classmethod
     def data_access_name(cls) -> str:

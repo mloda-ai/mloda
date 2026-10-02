@@ -203,6 +203,19 @@ only part of the enforced surface reaches it:
   `options_with_defaults` at its own read site. That call is what makes a declared default real at an
   `input_features` read site (see [Applying declared defaults](#applying-declared-defaults)).
 
+## Validating a plain dict
+
+`validate_property_values(values, mapping, *, closed_world)` (from `mloda.provider`) checks a plain dict, such as a
+credentials dict, against a `PropertySpec` mapping. It raises `PropertyValidationError` (a `ValueError` with `key`
+and `reason`) on the first failure.
+
+- It checks required presence, `required_when`, and strict values.
+- `required_when` runs only when the key is absent (the reader rule).
+- Ignored: `framework_set` keys, `match_guard`, `deferred_binding`, and `context`.
+- `closed_world=True` rejects undeclared keys; `False` ignores them.
+- Defaults are never applied: `required_when` receives an `Options` of the raw values, unlike on a feature group.
+- Errors and logs never contain a value.
+
 ## Choosing a mechanism
 
 | You want to say | Use |

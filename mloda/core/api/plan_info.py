@@ -4,7 +4,10 @@ from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.base_input_data import (
+    RESERVED_READER_OPTION_KEY,
+    _is_fallback_identity,
+)
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -65,6 +68,8 @@ class PlanStep:
     feature in the step (subclass preference), sorted by class name; empty otherwise.
 
     ``reader_data_access`` is a derived property reading the (reader class, data access) pair from group options.
+    ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for that
+    pair, computed on access.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -119,6 +124,16 @@ class PlanStep:
         return (
             None if self.feature_set_options is None else self.feature_set_options.group.get(RESERVED_READER_OPTION_KEY)
         )
+
+    @property
+    def data_access_identity(self) -> str | None:
+        pair = self.reader_data_access
+        return None if pair is None else pair[0].data_access_identity(pair[1])
+
+    @property
+    def data_access_identity_is_fallback(self) -> bool | None:
+        pair = self.reader_data_access
+        return None if pair is None else _is_fallback_identity(pair[1], pair[0].data_access_identity(pair[1]))
 
 
 def build_plan_steps(

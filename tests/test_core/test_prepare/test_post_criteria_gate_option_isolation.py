@@ -7,8 +7,7 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import pytest
 
@@ -186,6 +185,7 @@ class _Writes:
     context: dict[str, Any]
     non_forwarded: frozenset[str]
     reader: tuple[type[BaseInputData], str] | None = None
+    matches: bool = True
 
 
 def _make_candidate(
@@ -207,7 +207,7 @@ def _make_candidate(
         options.non_forwarded_group_keys = options.non_forwarded_group_keys | writes.non_forwarded
         if writes.reader is not None:
             BaseInputData.add_base_input_data_to_options(writes.reader[0], writes.reader[1], options)
-        return True
+        return writes.matches
 
     def names(cls: type[FeatureGroup]) -> set[str]:
         return {SHARED_FEATURE}
@@ -329,3 +329,42 @@ class TestUnrelatedDifferentReadersStillConflict:
 
         assert resolved.escaped is not None
         assert "BaseInputData already set with different values" in resolved.escaped
+
+
+class TestReplayStartsFromTheOriginalOptions:
+    """A non-matching candidate's reader write must not poison the replay of the surviving candidates."""
+
+    @pytest.mark.parametrize("stray_first", [False, True])
+    def test_stray_reader_write_does_not_break_multiple_survivors(self, stray_first: bool) -> None:
+        gc.collect()
+        shared = (ReaderParent_winner_iso, "a")
+        one = _make_candidate("SurvivorOneFG_winner_iso", _Writes({}, {}, frozenset(), shared), [])
+        two = _make_candidate("SurvivorTwoFG_winner_iso", _Writes({}, {}, frozenset(), shared), [])
+        stray = _make_candidate(
+            "StrayFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderSub_winner_iso, "b"), matches=False), []
+        )
+        resolved = _resolve([stray, one, two] if stray_first else [one, two, stray])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("SurvivorOneFG_winner_iso", "SurvivorTwoFG_winner_iso")
+
+
+class ReaderGrand_winner_iso(BaseInputData):
+    """Reader class of the grandparent candidate."""
+
+
+@pytest.mark.parametrize("order", [("gp", "p", "c"), ("c", "p", "gp"), ("p", "c", "gp")])
+class TestReaderlessWinnerInheritsNearestAncestorReader:
+    def test_nearest_replaced_ancestor_reader_wins(self, order: tuple[str, ...]) -> None:
+        gc.collect()
+        gp = _make_candidate("GrandFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderGrand_winner_iso, "a")), [])
+        p = _make_candidate(
+            "MidFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderParent_winner_iso, "b")), [], base=gp
+        )
+        c = _make_candidate("LeafFG_winner_iso", _Writes({}, {}, frozenset()), [], base=p)
+        by_key = {"gp": gp, "p": p, "c": c}
+        resolved = _resolve([by_key[k] for k in order])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("LeafFG_winner_iso",)
+        assert resolved.group[BaseInputData.__name__] == (ReaderParent_winner_iso, "b")

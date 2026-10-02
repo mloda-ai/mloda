@@ -549,6 +549,9 @@ class TestInstrumentPreservesSelf:
         assert not hasattr(wrapped, "__self__")
 
 
+_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from"}
+
+
 class TestHookContextKeywordDefaults:
     """Only hook, feature_group_class, feature_group_version, compute_framework_name stay required."""
 
@@ -605,9 +608,6 @@ class TestHookContextKeywordDefaults:
         for name in _EMPTY_TUPLE_DEFAULTS:
             tuple_field = next(field for field in dataclasses.fields(HookContext) if field.name == name)
             assert tuple_field.default == (), f"{name} should default to ()"
-
-
-_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from"}
 
 
 class TestHookContextSpecializedFromField:

@@ -725,7 +725,7 @@ class TestDeclaredInputMemoAttributesGuarded:
             gc.collect()
 
 
-_REPL_COL = "ctxrepl051_col"
+_REPL_COL = "ctx_replaced_col"
 
 
 class _ReplParentFeatureGroup(FeatureGroup):

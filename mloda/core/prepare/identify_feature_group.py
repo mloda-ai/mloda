@@ -610,11 +610,15 @@ class IdentifyFeatureGroupClass:
         if len(_identified_feature_groups) == 1:
             winner = next(iter(_identified_feature_groups))
             passed_states[winner].restore(feature)
-            # A winner that wrote no reader inherits the one its replaced parents resolved.
+            # A winner that wrote no reader inherits the pair of its nearest replaced ancestor that recorded one.
             if RESERVED_READER_OPTION_KEY not in feature.options.group:
-                self._replay_reader_pairs(feature, [passed_states[fg] for fg in self._replaced])
+                for klass in winner.__mro__:
+                    if klass in self._replaced and RESERVED_READER_OPTION_KEY in passed_states[klass].group:
+                        self._replay_reader_pairs(feature, [passed_states[klass]])
+                        break
         elif _identified_feature_groups:
             # Replaying each survivor's reader pair raises the double-reader conflict when they differ.
+            original.restore(feature)
             self._replay_reader_pairs(feature, [passed_states[fg] for fg in _identified_feature_groups])
             original.restore(feature)
         return _identified_feature_groups

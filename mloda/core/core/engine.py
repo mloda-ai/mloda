@@ -106,6 +106,8 @@ class Engine:
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
+        # Per surviving feature uuid, the parents its winning group replaced; absent when none.
+        self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
         self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
@@ -239,6 +241,8 @@ class Engine:
         added = self.add_feature_to_collection(feature_group_class, feature, features.child_uuid)
 
         if added:
+            if result.specialized_from:
+                self.specialized_from[feature.uuid] = result.specialized_from
             parent_domain = feature.domain.name if feature.domain else None
             self.resolved_input_feature_names[feature.uuid] = self._handle_input_features_recursion(
                 feature_group_class,

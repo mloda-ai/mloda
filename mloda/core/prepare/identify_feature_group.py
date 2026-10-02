@@ -127,6 +127,7 @@ class IdentifyFeatureGroupClass:
     _supported_names: dict[type[FeatureGroup], frozenset[str]]
     _prefixes: dict[type[FeatureGroup], str]
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
+    _replaced: set[type[FeatureGroup]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -143,6 +144,7 @@ class IdentifyFeatureGroupClass:
         self._supported_names = {}
         self._prefixes = {}
         self._declarations = {}
+        self._replaced = set()
         self._data_access_collection = data_access_collection
 
     @classmethod
@@ -166,6 +168,12 @@ class IdentifyFeatureGroupClass:
                 abstract_matched=self._abstract_matched_feature_groups,
                 candidate_frameworks=self._candidate_frameworks,
                 eliminations=self._eliminations,
+                specialized_from=(
+                    # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
+                    tuple(sorted(self._replaced, key=lambda fg: (fg.get_class_name(), fg.__module__)))
+                    if len(identified) == 1
+                    else ()
+                ),
             )
             if result.failure_kind is not None:
                 # Every elimination (value_rejection included) was already recorded during the single filter pass;
@@ -568,7 +576,9 @@ class IdentifyFeatureGroupClass:
 
             _identified_feature_groups[feature_group] = supported_frameworks
 
+        candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
+        self._replaced = candidates - set(_identified_feature_groups)
         return _identified_feature_groups
 
     def _declaration_requirement(

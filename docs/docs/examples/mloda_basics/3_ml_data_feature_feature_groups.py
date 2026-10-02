@@ -163,10 +163,9 @@ def _(mo):
 
         # check if the feature_name is in the tables
         for table in table_names:
-            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({table});")
+            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(table)});")
             column_names = [column[1] for column in result]
             if feature_name in column_names:
-                cls.set_table_name(data_access, table)
                 return True
         return False
     ```

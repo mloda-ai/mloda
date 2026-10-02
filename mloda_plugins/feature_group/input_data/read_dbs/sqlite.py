@@ -5,6 +5,7 @@ from typing import Any
 import pyarrow as pa
 import sqlite3
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.provider import FeatureSet
 from mloda.user import DataType
 from mloda.user import Options
@@ -133,7 +134,7 @@ class SQLITEReader(ReadDB):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `sqlite`: File path to the SQLite database file
-    - `table_name`: Automatically determined based on feature name lookup
+    - `table_name`: Found per feature while matching; a preset value restricts the lookup to that table
 
     ### Group Parameters
     Currently none for SQLITEReader. Parameters that affect Feature Group
@@ -153,7 +154,7 @@ class SQLITEReader(ReadDB):
     - Built queries use SELECT statements for requested columns
     - Results are converted to PyArrow Table format for efficient processing
     - Connection validation occurs before attempting to read data
-    - Table names are automatically cached after first feature lookup
+    - Each feature's table is bound to its own match result, so one credential serves several tables
     """
 
     @classmethod
@@ -268,29 +269,33 @@ class SQLITEReader(ReadDB):
         return table
 
     @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        # get tables in the database
-        result, _ = cls.read_db(data_access, query="SELECT name FROM sqlite_master WHERE type='table';")
-        table_names = [table[0] for table in result]
+    def _find_table(cls, feature_name: str, data_access: Any) -> str | None:
+        preset = data_access.get("table_name")
+        if preset:
+            table_names = [preset]
+        else:
+            result, _ = cls.read_db(data_access, query="SELECT name FROM sqlite_master WHERE type='table';")
+            table_names = [table[0] for table in result]
 
-        # check if the feature_name is in the tables
         for table in table_names:
-            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({table});")
-            column_names = [column[1] for column in result]
-            if feature_name in column_names:
-                cls.set_table_name(data_access, table)
-                return True
-        return False
+            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(str(table))});")
+            if feature_name in [column[1] for column in result]:
+                return str(table)
+        return None
 
     @classmethod
-    def set_table_name(cls, data_access: Any, table_name: str) -> None:
-        data = data_access
-        if data.get("table_name"):
-            if data["table_name"] != table_name:
-                raise ValueError(f"Table name is already set to {data['table_name']} and not {table_name}.")
-            return
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return cls._find_table(feature_name, data_access) is not None
 
-        data["table_name"] = table_name
+    @classmethod
+    def match_read_db_data_access(cls, data_accesses: list[Any], feature_names: list[str]) -> Any:
+        matched = super().match_read_db_data_access(data_accesses, feature_names)
+        if matched is None:
+            return None
+        table = cls._find_table(feature_names[0], matched)
+        if table is None:
+            return matched
+        return RegisteredCredential({**matched, "table_name": table})
 
     @classmethod
     def get_table(cls, options: Options | None) -> Any:

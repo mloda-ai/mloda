@@ -166,7 +166,6 @@ def _(mo):
             result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({table});")
             column_names = [column[1] for column in result]
             if feature_name in column_names:
-                cls.set_table_name(data_access, table)
                 return True
         return False
     ```

@@ -38,6 +38,9 @@ class TestInputDataDB:
 
         self.cursor.execute("CREATE TABLE test_table_2 (id INTEGER PRIMARY KEY, name TEXT)")
 
+        self.cursor.execute("CREATE TABLE orders (order_amount INTEGER)")
+        self.cursor.execute("INSERT INTO orders (order_amount) VALUES (5)")
+
         self.conn.commit()
 
     def teardown_method(self) -> None:
@@ -85,6 +88,42 @@ class TestInputDataDB:
             plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, SumFeature}),
         )
         assert "SumFeature_idid" in result[0].to_pydict()
+
+    @pytest.mark.parametrize(
+        "batches",
+        [[["name", "order_amount"]], [["name"], ["order_amount"]]],
+        ids=["one_run", "two_runs"],
+    )
+    def test_tables_per_match_leave_shared_credential_untouched(self, batches: list[list[Feature | str]]) -> None:
+        dac = DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}])
+        seen: set[str] = set()
+        for batch in batches:
+            results = mloda.run_all(
+                batch,
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=dac,
+                plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            )
+            for res in results:
+                seen.update(res.to_pydict().keys())
+        assert {str(name) for batch in batches for name in batch} <= seen
+        assert all("table_name" not in cred for cred in dac.credentials.values())
+
+    @pytest.mark.parametrize(
+        "preset, feature, expected",
+        [("test_table_2", "name", "test_table_2"), ("test_table", "order_amount", None)],
+        ids=["preset_has_column", "preset_lacks_column"],
+    )
+    def test_match_with_preset_table_name_checks_only_that_table(
+        self, preset: str, feature: str, expected: str | None
+    ) -> None:
+        credential = Credential(sqlite=self.db_path, table_name=preset)
+        result = SQLITEReader.match_subclass_data_access(credential, [feature], options=Options({}))
+        if expected is None:
+            assert not result
+        else:
+            assert result["table_name"] == expected
+        assert credential.data == {"sqlite": self.db_path, "table_name": preset}
 
 
 class TestSqliteConnectionLifecycle:
@@ -215,6 +254,8 @@ class TestReadDB:
         assert type(options.get("BaseInputData")[1]) is RegisteredCredential
         assert self.db_path not in str(options)
         assert "table_name" not in call_dict
+        assert "table_name" not in options.get(SQLITEReader.__name__)
+        assert options.get("BaseInputData")[1]["table_name"] == "test_table"
 
         first = options.get(SQLITEReader.__name__)
         matched_again = SQLITEReader.feature_scope_data_access(options, "name")

@@ -299,6 +299,11 @@ class TestSQLITEReader:
         with pytest.raises(ValueError):
             SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": malicious_table_name})
 
+        # The matcher path quotes a preset table_name too and declines instead of running the injection.
+        assert not SQLITEReader.check_feature_in_data_access(
+            "id", {"sqlite": temp_sqlite_db, "table_name": malicious_table_name}
+        )
+
         # test_table must still exist and be intact: the injected DROP never executed.
         result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "test_table"})
         assert result == {"id": DataType.INT64, "name": DataType.STRING, "age": DataType.INT64}

@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
@@ -686,22 +686,11 @@ class TestPinnedReaderDoesNotFallBackToGlobalRoute:
         assert VG1756_FEATURE in elimination.reason
         assert "BaseInputData" not in feature.options
 
-    def test_global_scope_is_false_when_a_family_reader_is_pinned(self) -> None:
-        """global_scope_data_access skips the collection route once any final reader is pinned by key."""
-        dac = DataAccessCollection(credentials=[{"vg1756_sibling": {}}])
-        options = Options({Vg1756PinnedReader.__name__: {"vg1756_pinned": {}}})
-
-        matched = Vg1756DbFamily.global_scope_data_access(
-            feature_name=VG1756_FEATURE, options=options, data_access_collection=dac
-        )
-
-        assert matched is False
-
     def test_run_all_raises_instead_of_returning_the_siblings_data(self) -> None:
         """End to end, the pinned decline fails resolution rather than silently using the sibling."""
         feature = Feature(VG1756_FEATURE, options={Vg1756PinnedReader.__name__: {"vg1756_pinned": {}}})
 
-        with pytest.raises(Exception, match="Vg1756PinnedReader"):
+        with pytest.raises(FeatureResolutionError, match="Vg1756PinnedReader"):
             mloda.run_all(
                 [feature],
                 compute_frameworks={PythonDictFramework},

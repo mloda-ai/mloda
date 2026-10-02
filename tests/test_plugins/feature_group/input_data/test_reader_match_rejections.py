@@ -332,39 +332,23 @@ def _malformed_dac() -> DataAccessCollection:
 
 
 class TestReadDbClaimsFeatureName:
-    """Issue #1753: an unclaimed feature name is a silent non-match before any credential probe."""
+    """An unclaimed feature name is a silent non-match before any credential probe."""
 
     def test_default_claims_every_feature_name(self) -> None:
         assert ReadDB.claims_feature_name("anything") is True
 
-    def test_unclaimed_name_skips_credential_probe_for_collection(
-        self, rejection_window: dict[str, Any], claim1753_calls: list[Any]
+    @pytest.mark.parametrize(
+        ("data_access", "options"),
+        [
+            pytest.param(_malformed_dac(), Options(), id="collection"),
+            pytest.param(_malformed_dac(), Options({"data_access_handle": CLAIM1753_HANDLE}), id="handle_hint"),
+            pytest.param({CLAIM1753_KEY: "malformed"}, Options(), id="plain_dict"),
+        ],
+    )
+    def test_unclaimed_name_skips_credential_probe(
+        self, rejection_window: dict[str, Any], claim1753_calls: list[Any], data_access: Any, options: Options
     ) -> None:
-        matched = Rej1753ClaimingDbReader.match_subclass_data_access(
-            _malformed_dac(), [CLAIM1753_FOREIGN_NAME], Options()
-        )
-
-        assert matched is None
-        assert claim1753_calls == []
-        assert rejection_window == {}
-
-    def test_unclaimed_name_skips_credential_probe_for_handle_hint(
-        self, rejection_window: dict[str, Any], claim1753_calls: list[Any]
-    ) -> None:
-        matched = Rej1753ClaimingDbReader.match_subclass_data_access(
-            _malformed_dac(), [CLAIM1753_FOREIGN_NAME], Options({"data_access_handle": CLAIM1753_HANDLE})
-        )
-
-        assert matched is None
-        assert claim1753_calls == []
-        assert rejection_window == {}
-
-    def test_unclaimed_name_skips_credential_probe_for_plain_dict(
-        self, rejection_window: dict[str, Any], claim1753_calls: list[Any]
-    ) -> None:
-        matched = Rej1753ClaimingDbReader.match_subclass_data_access(
-            {CLAIM1753_KEY: "malformed"}, [CLAIM1753_FOREIGN_NAME], Options()
-        )
+        matched = Rej1753ClaimingDbReader.match_subclass_data_access(data_access, [CLAIM1753_FOREIGN_NAME], options)
 
         assert matched is None
         assert claim1753_calls == []

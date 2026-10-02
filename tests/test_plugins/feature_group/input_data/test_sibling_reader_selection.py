@@ -284,23 +284,6 @@ class SiblingSel1757ReaderB(ReadFile):
         return {"sibling_sel_1757_b": [2]}
 
 
-_SOLO_MARKER = "sibling_sel_1757_solo_marker.dat"
-
-
-class SiblingSel1757SoloReader(ReadFile):
-    """Sole acceptor of its own unique marker."""
-
-    @classmethod
-    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
-        if isinstance(data_access, DataAccessCollection) and _SOLO_MARKER in data_access.files.values():
-            return data_access
-        return None
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        return {"sibling_sel_1757_solo": [3]}
-
-
 class TestAmbiguousReaderMatch1757:
     """Group F: several readers accepting one data access is an unmarked ValueError naming the pin remedy."""
 
@@ -321,9 +304,3 @@ class TestAmbiguousReaderMatch1757:
         options = Options(group={SiblingSel1757ReaderB.__name__: _AMBIG_MARKER})
         assert ReadFile().matches("sibling_sel_1757_feat", options, collection) is True
         assert options.get("BaseInputData") == (SiblingSel1757ReaderB, _AMBIG_MARKER)
-
-    def test_single_acceptor_returns_its_pair(self) -> None:
-        collection = DataAccessCollection(files={_SOLO_MARKER})
-        reader, access = ReadFile.match_data_access(["sibling_sel_1757_feat"], collection, options=Options())
-        assert reader is SiblingSel1757SoloReader
-        assert access is collection

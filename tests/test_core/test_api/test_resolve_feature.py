@@ -51,6 +51,7 @@ PROBE_FEATURE = "value__median_resolveprobe"
 SIBLING_SCOPED_FEATURE = "SiblingScopedResolve693"
 LONE_CHILD_SCOPED_FEATURE = "LoneChildScopedResolve693"
 UNRELATED_SCOPED_FEATURE = "UnrelatedScopedResolve693"
+SUBCLASS_FILTER_FEATURE = "SubclassFilterResolveFeature"
 
 
 class SplitCapResolveFeatureGroup(FeatureGroup):
@@ -282,6 +283,25 @@ class UnrelatedScopedResolve693FeatureGroup(FeatureGroup):
         return None
 
 
+class SubclassFilterResolveParent(FeatureGroup):
+    """Parent that matches the subclass-filter feature name."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if isinstance(feature_name, FeatureName):
+            feature_name = str(feature_name)
+        return feature_name == SUBCLASS_FILTER_FEATURE
+
+
+class SubclassFilterResolveChild(SubclassFilterResolveParent):
+    """Child inheriting the parent's matching."""
+
+
 @pytest.fixture(scope="module", autouse=True)
 def load_plugins() -> None:
     """Load all plugins before running tests in this module."""
@@ -479,70 +499,22 @@ class TestResolveFeatureSubclassFiltering:
     """Tests for subclass filtering behavior."""
 
     def test_resolve_feature_prefers_subclass_over_parent(self) -> None:
-        """Test that when both parent and child FeatureGroup match, only child is returned."""
+        """When parent and child both match, the child is resolved."""
+        collector = PluginCollector.enabled_feature_groups({SubclassFilterResolveParent, SubclassFilterResolveChild})
 
-        # Create parent and child FeatureGroups for testing
-        class ParentTestFeatureGroup(FeatureGroup):
-            """A parent feature group for testing subclass filtering."""
+        result = resolve_feature(SUBCLASS_FILTER_FEATURE, plugin_collector=collector)
 
-            @classmethod
-            def match_feature_group_criteria(
-                cls,
-                feature_name: FeatureName | str,
-                options: Options,
-                data_access_collection: DataAccessCollection | None = None,
-            ) -> bool:
-                return feature_name == "SubclassFilterTestFeature"
-
-        class ChildTestFeatureGroup(ParentTestFeatureGroup):
-            """A child feature group that also matches the same criteria."""
-
-            pass
-
-        # Both parent and child should match the feature name
-        feature_name = "SubclassFilterTestFeature"
-
-        result = resolve_feature(feature_name)
-
-        # The resolved feature_group should be the child (more specific) class
-        # Candidates may include both, but feature_group should be the child
-        if result.feature_group is not None:
-            # If resolution succeeded, it should prefer the child
-            assert result.feature_group == ChildTestFeatureGroup or issubclass(
-                result.feature_group, ParentTestFeatureGroup
-            )
+        assert result.error is None
+        assert result.feature_group is SubclassFilterResolveChild
 
     def test_resolve_feature_candidates_include_parent_before_filtering(self) -> None:
-        """Test that candidates list includes parent classes before subclass filtering."""
+        """Candidates keep the parent alongside the child before subclass filtering."""
+        collector = PluginCollector.enabled_feature_groups({SubclassFilterResolveParent, SubclassFilterResolveChild})
 
-        # This test verifies that candidates captures all matches before filtering
-        class ParentForCandidatesTest(FeatureGroup):
-            """Parent for candidates test."""
+        result = resolve_feature(SUBCLASS_FILTER_FEATURE, plugin_collector=collector)
 
-            @classmethod
-            def match_feature_group_criteria(
-                cls,
-                feature_name: FeatureName | str,
-                options: Options,
-                data_access_collection: DataAccessCollection | None = None,
-            ) -> bool:
-                return feature_name == "CandidatesTestFeature"
-
-        class ChildForCandidatesTest(ParentForCandidatesTest):
-            """Child for candidates test."""
-
-            pass
-
-        feature_name = "CandidatesTestFeature"
-
-        result = resolve_feature(feature_name)
-
-        # Candidates should include both parent and child (before filtering)
-        # This captures the "before subclass filtering" requirement
-        if len(result.candidates) >= 2:
-            candidate_names = [c.__name__ for c in result.candidates]
-            # At minimum, we should see our test classes if they matched
-            assert any("CandidatesTest" in name for name in candidate_names) or len(result.candidates) >= 1
+        assert len(result.candidates) == 2
+        assert set(result.candidates) == {SubclassFilterResolveParent, SubclassFilterResolveChild}
 
 
 class TestResolveFeatureCapabilityAware:

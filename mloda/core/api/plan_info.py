@@ -4,7 +4,10 @@ from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.base_input_data import (
+    RESERVED_READER_OPTION_KEY,
+    _is_fallback_identity,
+)
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -61,7 +64,8 @@ class PlanStep:
     it participates in equality but is excluded from hashing.
 
     ``reader_data_access`` is a derived property reading the (reader class, data access) pair from group options.
-    ``data_access_identity`` is the credential-free projection of that pair, computed on access.
+    ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for that
+    pair, computed on access.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -120,6 +124,11 @@ class PlanStep:
     def data_access_identity(self) -> str | None:
         pair = self.reader_data_access
         return None if pair is None else pair[0].data_access_identity(pair[1])
+
+    @property
+    def data_access_identity_is_fallback(self) -> bool | None:
+        pair = self.reader_data_access
+        return None if pair is None else _is_fallback_identity(pair[1], pair[0].data_access_identity(pair[1]))
 
 
 def build_plan_steps(

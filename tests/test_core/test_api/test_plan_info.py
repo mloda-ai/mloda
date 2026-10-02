@@ -77,8 +77,8 @@ from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.steward import Extender, ExtenderHook, HookContext
 from mloda.user import (
-    DataAccessCollection,
     Credential,
+    DataAccessCollection,
     Feature,
     FeatureName,
     Index,
@@ -92,13 +92,12 @@ from mloda.user import (
 )
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature  # noqa: F401
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader  # noqa: F401
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
 from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
-
 
 # ---------------------------------------------------------------------------
 # Test feature groups
@@ -875,6 +874,7 @@ class TestPlanStepReaderDataAccess:
 
         assert step.reader_data_access == (ParquetReader, str(file_path))
         assert step.data_access_identity == str(file_path)
+        assert step.data_access_identity_is_fallback is False
 
         reader, access = step.reader_data_access
         assert step.compute_framework is not None
@@ -883,12 +883,14 @@ class TestPlanStepReaderDataAccess:
     def test_reader_data_access_is_not_a_dataclass_field(self) -> None:
         assert "reader_data_access" not in {field.name for field in dataclasses.fields(PlanStep)}
         assert "data_access_identity" not in {field.name for field in dataclasses.fields(PlanStep)}
+        assert "data_access_identity_is_fallback" not in {field.name for field in dataclasses.fields(PlanStep)}
 
     def test_data_creator_backed_compute_step_reports_none(self) -> None:
         session = _prepare_chained_session()
         step = next(s for s in session.resolved_plan() if s.feature_group is PlanInfoPandasSource)
         assert step.reader_data_access is None
         assert step.data_access_identity is None
+        assert step.data_access_identity_is_fallback is None
 
     def test_join_and_transform_steps_report_none(self) -> None:
         prepared = _prepare_cross_framework_join_session().resolved_plan()
@@ -897,6 +899,7 @@ class TestPlanStepReaderDataAccess:
         for step in non_compute_steps:
             assert step.reader_data_access is None
             assert step.data_access_identity is None
+            assert step.data_access_identity_is_fallback is None
 
     def test_sqlite_password_stays_out_of_the_safe_fields(self, tmp_path: Path) -> None:
         db = str(tmp_path / "plan_info.db")
@@ -908,17 +911,35 @@ class TestPlanStepReaderDataAccess:
         dac = DataAccessCollection(credentials=Credential(sqlite=db, password="hunter2"))  # nosec B106
 
         explained = mloda.explain(
-            ["plan_info_db_col"], compute_frameworks={PythonDictFramework}, data_access_collection=dac
+            ["plan_info_db_col"],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
         )
 
         step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
         assert step.reader_data_access is not None
         assert "hunter2" in json.dumps(dict(step.reader_data_access[1]))
         assert step.data_access_identity == db
+        assert step.data_access_identity_is_fallback is False
 
         safe = {f.name: getattr(step, f.name) for f in dataclasses.fields(step) if f.name != "feature_set_options"}
         safe["data_access_identity"] = step.data_access_identity
         assert "hunter2" not in json.dumps(safe, default=str)
+
+    def test_non_string_access_falls_back_to_the_type_name(self) -> None:
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales",),
+            feature_group=PlanInfoPandasSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+            feature_set_options=Options(group={"BaseInputData": (BaseInputData, 42)}),
+        )
+        assert step.data_access_identity == "int"
+        assert step.data_access_identity_is_fallback is True
+
 
 # ---------------------------------------------------------------------------
 # build_plan_steps rejects unknown steps

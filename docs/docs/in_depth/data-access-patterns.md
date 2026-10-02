@@ -56,7 +56,7 @@ class ReadFileFeature(FeatureGroup):
 
 Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
 
-- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`. To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
+- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials`, `build_query`, and `claims_feature_name` (a name-only check that runs before any credential probe). To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
 
     ```python
     from typing import Any

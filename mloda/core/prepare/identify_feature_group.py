@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class _OptionsState:
-    """Copy of a feature's group options, context options and non-forwarded keys."""
+    """Snapshot of a feature's options."""
 
     group: dict[str, Any]
     context: dict[str, Any]

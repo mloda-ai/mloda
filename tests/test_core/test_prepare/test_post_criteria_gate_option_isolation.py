@@ -168,15 +168,15 @@ class TestPostCriteriaGateLeakIsVisitOrderDependent:
         assert LEAK_KEY not in snapshot.option_keys
 
 
-ORDER_KEY = "order_shared_key_os062"
-ORIGINAL_KEY = "original_key_os062"
+ORDER_KEY = "order_shared_key_winner_iso"
+ORIGINAL_KEY = "original_key_winner_iso"
 
 
-class ReaderParent_os062(BaseInputData):
+class ReaderParent_winner_iso(BaseInputData):
     """Reader class of the parent candidate."""
 
 
-class ReaderSub_os062(BaseInputData):
+class ReaderSub_winner_iso(BaseInputData):
     """Reader class of the subclass candidate."""
 
 
@@ -258,19 +258,19 @@ def _parent_and_sub(
 ) -> tuple[type[FeatureGroup], type[FeatureGroup]]:
     gc.collect()
     parent_writes = _Writes(
-        group={ORDER_KEY: "parent", "parent_only_os062": "p"},
-        context={"parent_ctx_only_os062": "p", "ctx_shared_os062": "parent"},
-        non_forwarded=frozenset({"parent_nf_os062"}),
-        reader=(ReaderParent_os062, "parent_access") if with_reader else None,
+        group={ORDER_KEY: "parent", "parent_only_winner_iso": "p"},
+        context={"parent_ctx_only_winner_iso": "p", "ctx_shared_winner_iso": "parent"},
+        non_forwarded=frozenset({"parent_nf_winner_iso"}),
+        reader=(ReaderParent_winner_iso, "parent_access") if with_reader else None,
     )
     sub_writes = _Writes(
         group={ORDER_KEY: "sub"},
-        context={"ctx_shared_os062": "sub"},
-        non_forwarded=frozenset({"sub_nf_os062"}),
-        reader=(ReaderSub_os062, "sub_access") if with_reader else None,
+        context={"ctx_shared_winner_iso": "sub"},
+        non_forwarded=frozenset({"sub_nf_winner_iso"}),
+        reader=(ReaderSub_winner_iso, "sub_access") if with_reader else None,
     )
-    parent = _make_candidate("ParentFG_os062", parent_writes, seen)
-    sub = _make_candidate("SubFG_os062", sub_writes, seen, base=parent)
+    parent = _make_candidate("ParentFG_winner_iso", parent_writes, seen)
+    sub = _make_candidate("SubFG_winner_iso", sub_writes, seen, base=parent)
     return parent, sub
 
 
@@ -283,18 +283,18 @@ class TestWinnerOptionsAreOriginalPlusOwnWrites:
         resolved = _resolve([parent, sub] if parent_first else [sub, parent])
 
         assert resolved.escaped is None
-        assert resolved.winners == ("SubFG_os062",)
+        assert resolved.winners == ("SubFG_winner_iso",)
         assert resolved.group == {ORIGINAL_KEY: "original", ORDER_KEY: "sub"}
-        assert resolved.context == {"ctx_shared_os062": "sub"}
-        assert resolved.non_forwarded == frozenset({"sub_nf_os062"})
+        assert resolved.context == {"ctx_shared_winner_iso": "sub"}
+        assert resolved.non_forwarded == frozenset({"sub_nf_winner_iso"})
 
     def test_different_reader_pairs_resolve_to_the_subclass_pair(self, parent_first: bool) -> None:
         parent, sub = _parent_and_sub([], with_reader=True)
         resolved = _resolve([parent, sub] if parent_first else [sub, parent])
 
         assert resolved.escaped is None
-        assert resolved.winners == ("SubFG_os062",)
-        assert resolved.group[BaseInputData.__name__] == (ReaderSub_os062, "sub_access")
+        assert resolved.winners == ("SubFG_winner_iso",)
+        assert resolved.group[BaseInputData.__name__] == (ReaderSub_winner_iso, "sub_access")
 
 
 class TestEachCandidateSeesTheOriginalOptions:
@@ -304,8 +304,8 @@ class TestEachCandidateSeesTheOriginalOptions:
     def test_unrelated_candidates_do_not_see_each_others_writes(self, first_wins_order: bool) -> None:
         gc.collect()
         seen: list[dict[str, Any]] = []
-        one = _make_candidate("UnrelatedOneFG_os062", _Writes({"one_key_os062": 1}, {}, frozenset()), seen)
-        two = _make_candidate("UnrelatedTwoFG_os062", _Writes({"two_key_os062": 2}, {}, frozenset()), seen)
+        one = _make_candidate("UnrelatedOneFG_winner_iso", _Writes({"one_key_winner_iso": 1}, {}, frozenset()), seen)
+        two = _make_candidate("UnrelatedTwoFG_winner_iso", _Writes({"two_key_winner_iso": 2}, {}, frozenset()), seen)
         resolved = _resolve([one, two] if first_wins_order else [two, one])
 
         assert resolved.escaped is None
@@ -319,8 +319,12 @@ class TestUnrelatedDifferentReadersStillConflict:
     @pytest.mark.parametrize("one_first", [True, False])
     def test_unrelated_candidates_with_different_reader_pairs_raise(self, one_first: bool) -> None:
         gc.collect()
-        one = _make_candidate("ReaderOneFG_os062", _Writes({}, {}, frozenset(), (ReaderParent_os062, "one_access")), [])
-        two = _make_candidate("ReaderTwoFG_os062", _Writes({}, {}, frozenset(), (ReaderSub_os062, "two_access")), [])
+        one = _make_candidate(
+            "ReaderOneFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderParent_winner_iso, "one_access")), []
+        )
+        two = _make_candidate(
+            "ReaderTwoFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderSub_winner_iso, "two_access")), []
+        )
         resolved = _resolve([one, two] if one_first else [two, one])
 
         assert resolved.escaped is not None

@@ -57,6 +57,7 @@ class _InputDataLoadCapturingExtender(Extender):
     def __init__(self, priority: int = 100) -> None:
         self.priority = priority
         self.captured: HookContext | None = None
+        self.all_captured: list[HookContext] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.INPUT_DATA_LOAD}
@@ -64,24 +65,8 @@ class _InputDataLoadCapturingExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         result = func(*args, **kwargs)
         self.captured = HookContext.current()
-        return result
-
-
-class _AllContextsInputDataLoadCapturingExtender(Extender):
-    """Records the HookContext of every INPUT_DATA_LOAD call."""
-
-    def __init__(self, priority: int = 100) -> None:
-        self.priority = priority
-        self.captured: list[HookContext] = []
-
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.INPUT_DATA_LOAD}
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        result = func(*args, **kwargs)
-        context = HookContext.current()
-        assert context is not None
-        self.captured.append(context)
+        if self.captured is not None:
+            self.all_captured.append(self.captured)
         return result
 
 
@@ -387,7 +372,7 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         conn.commit()
         conn.close()
 
-        extender = _AllContextsInputDataLoadCapturingExtender()
+        extender = _InputDataLoadCapturingExtender()
 
         mloda.run_all(
             ["col_a", "col_b"],
@@ -397,7 +382,7 @@ class TestDataAccessIdentityHidesDictCredentialValues:
             function_extender={extender},
         )
 
-        identities = {c.data_access_identity for c in extender.captured}
+        identities = {c.data_access_identity for c in extender.all_captured}
         assert identities == {f"{db_path}::table_a", f"{db_path}::table_b"}
 
 

@@ -134,7 +134,7 @@ class SQLITEReader(ReadDB):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `sqlite`: File path to the SQLite database file
-    - `table_name`: The table holding the feature, found per feature while matching and bound to its match result, never written to the credential; a preset value restricts the lookup to that table
+    - `table_name`: Found per feature while matching; a preset value restricts the lookup to that table
 
     ### Group Parameters
     Currently none for SQLITEReader. Parameters that affect Feature Group
@@ -292,7 +292,6 @@ class SQLITEReader(ReadDB):
         matched = super().match_read_db_data_access(data_accesses, feature_names)
         if matched is None:
             return None
-        # The copy keeps the caller's credential unchanged so one credential can serve several tables.
         return RegisteredCredential({**matched, "table_name": cls._find_table(feature_names[0], matched)})
 
     @classmethod

@@ -13,10 +13,11 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
-from mloda.provider import FeatureGroup, PropertySpec
-from mloda.user import Feature, FeatureName, Options, ParallelizationMode
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, PropertySpec
+from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 _UTILS_LOGGER = "mloda.core.abstract_plugins.components.utils"
@@ -722,3 +723,55 @@ class TestDeclaredInputMemoAttributesGuarded:
         finally:
             del _EdgesAttrMissingFeatureGroup
             gc.collect()
+
+
+_REPL_COL = "ctx_replaced_col"
+
+
+class _ReplParentFeatureGroup(FeatureGroup):
+    """Parent replaced by its subclass at match time."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_REPL_COL})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_REPL_COL: [1, 2, 3]}
+
+
+class _ReplChildFeatureGroup(_ReplParentFeatureGroup):
+    """Winning subclass."""
+
+
+class TestComputeHooksCarrySpecializedFrom:
+    def test_compute_hooks_name_the_replaced_parent(self) -> None:
+        extender = _AllHooksContextCapturingExtender()
+
+        mloda.run_all(
+            [Feature(_REPL_COL)],
+            compute_frameworks={PythonDictFramework},
+            plugin_collector=PluginCollector.enabled_feature_groups({_ReplParentFeatureGroup, _ReplChildFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        parent_name = f"{_ReplParentFeatureGroup.__module__}.{_ReplParentFeatureGroup.__qualname__}"
+        assert ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE in {context.hook for context in extender.captured}
+        assert all(context.specialized_from == (parent_name,) for context in extender.captured)
+
+    def test_hooks_without_replacement_carry_empty_tuple(self) -> None:
+        feature_set = _build_feature_set()
+        extender = _AllHooksContextCapturingExtender()
+        cfw = _build_framework({extender})
+        cfw.data = {"col": [1, 2, 3]}
+
+        cfw.run_validate_input_features(_RootFeatureGroup, feature_set)
+        cfw.run_calculate_feature(_RootFeatureGroup, feature_set)
+
+        assert extender.captured
+        assert all(context.specialized_from == () for context in extender.captured)

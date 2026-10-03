@@ -32,6 +32,7 @@ class HookContext:
     feature_group_version: str
     plugin_version: str | None = None
     feature_names: tuple[str, ...] = ()
+    specialized_from: tuple[str, ...] = ()
     input_features: frozenset[str] | None = None
     input_feature_edges: dict[str, tuple[str, ...]] | None = None
     compute_framework_name: str

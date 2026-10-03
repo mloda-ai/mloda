@@ -255,7 +255,7 @@ class TestRollbackIsPerCandidate:
     """A whole-loop snapshot would also undo an earlier winner's write, so the rollback is per candidate."""
 
     def test_earlier_matching_write_survives_a_later_contained_raise(self) -> None:
-        """The matching candidate runs first and keeps its write; only the later raising one is rolled back."""
+        """The matching candidate's write is recorded and applied to the sole survivor; the raising one leaves none."""
         snapshot = _evaluate((_make_mutating_match_fg, _make_mutating_raise_fg))
 
         assert snapshot.escaped is None

@@ -19,7 +19,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.user import DataAccessCollection, PluginCollector, mloda
+from mloda.provider import FeatureGroup
+from mloda.user import DataAccessCollection, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
@@ -56,6 +57,7 @@ class _InputDataLoadCapturingExtender(Extender):
     def __init__(self, priority: int = 100) -> None:
         self.priority = priority
         self.captured: HookContext | None = None
+        self.all_captured: list[HookContext] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.INPUT_DATA_LOAD}
@@ -63,6 +65,8 @@ class _InputDataLoadCapturingExtender(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         result = func(*args, **kwargs)
         self.captured = HookContext.current()
+        if self.captured is not None:
+            self.all_captured.append(self.captured)
         return result
 
 
@@ -355,8 +359,31 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identity is not None
         assert "hunter2" not in identity
         assert "alice" not in identity
-        assert identity == str(db_path)
+        assert identity == f"{db_path}::creds_table"
         assert fetch_context.data_access_identity_is_fallback is False
+
+    def test_features_from_different_tables_of_one_file_get_distinct_identities(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "two_tables.db"
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE table_a (col_a INTEGER)")
+        conn.execute("CREATE TABLE table_b (col_b INTEGER)")
+        conn.execute("INSERT INTO table_a VALUES (1)")
+        conn.execute("INSERT INTO table_b VALUES (2)")
+        conn.commit()
+        conn.close()
+
+        extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            ["col_a", "col_b"],
+            compute_frameworks={PyArrowTable},
+            data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): str(db_path)}]),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            function_extender={extender},
+        )
+
+        identities = {c.data_access_identity for c in extender.all_captured}
+        assert identities == {f"{db_path}::table_a", f"{db_path}::table_b"}
 
 
 class TestSQLiteReaderDataAccessIdentity:
@@ -374,6 +401,33 @@ class TestSQLiteReaderDataAccessIdentity:
         }
         access = cases[kind]
         assert SQLITEReader.data_access_identity(access) == ("{user}" if kind == "missing_key" else "{sqlite}")
+
+    def test_path_and_table_name_join_with_double_colon(self, tmp_path: Path) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        access = {"sqlite": str(db), "table_name": "orders"}
+        assert SQLITEReader.data_access_identity(access) == f"{db}::orders"
+
+    def test_path_without_table_name_stays_the_path(self, tmp_path: Path) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        assert SQLITEReader.data_access_identity({"sqlite": str(db)}) == str(db)
+
+    @pytest.mark.parametrize("table_name", ["", 5, None, b"orders"])
+    def test_non_str_or_empty_table_name_stays_the_path(self, tmp_path: Path, table_name: Any) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        access = {"sqlite": str(db), "table_name": table_name}
+        assert SQLITEReader.data_access_identity(access) == str(db)
+
+    def test_password_is_not_leaked_alongside_table_name(self, tmp_path: Path) -> None:
+        db = tmp_path / "x.db"
+        db.write_bytes(b"")
+        access = {"sqlite": str(db), "user": "alice", "password": "hunter2", "table_name": "orders"}  # nosec B105
+        identity = SQLITEReader.data_access_identity(access)
+        assert identity == f"{db}::orders"
+        assert "hunter2" not in identity
+        assert "alice" not in identity
 
 
 class TestDataAccessIdentityOfUriStrings:
@@ -1187,3 +1241,58 @@ class TestInputDataLoadHookUsesFrameworkRowCountNotDefaultLen:
         assert extender.captured is not None
         assert extender.captured.rows_out == _ROW_COUNT_SENTINEL
         assert extender.captured.rows_out != len(result)
+
+
+_REPLACED_COLUMN = f"{_MARKER}_replaced_col"
+
+
+class _ReplacedReadParentFeatureGroup(FeatureGroup):
+    """Reader feature group replaced by its subclass; matches only its own column so other tests are unaffected."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == _REPLACED_COLUMN and ReadFileFeature.match_feature_group_criteria(
+            feature_name, options, data_access_collection
+        )
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return ReadFile()
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return ReadFileFeature.calculate_feature.__func__(cls, data, features)  # type: ignore[attr-defined]
+
+
+class _ReplacingReadChildFeatureGroup(_ReplacedReadParentFeatureGroup):
+    """Winning subclass."""
+
+
+class TestInputDataLoadCarriesSpecializedFrom:
+    def test_load_context_matches_the_calculate_context(self, tmp_path: Path) -> None:
+        path = tmp_path / "data.csv"
+        _write_csv(path, _REPLACED_COLUMN, [1, 2, 3])
+
+        calc_extender = _CalcContextCapturingExtender()
+        fetch_extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            [_REPLACED_COLUMN],
+            compute_frameworks={PythonDictFramework},
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_ReplacedReadParentFeatureGroup, _ReplacingReadChildFeatureGroup}
+            ),
+            function_extender={calc_extender, fetch_extender},
+        )
+
+        parent_name = f"{_ReplacedReadParentFeatureGroup.__module__}.{_ReplacedReadParentFeatureGroup.__qualname__}"
+        assert calc_extender.captured is not None
+        assert fetch_extender.captured is not None
+        assert calc_extender.captured.specialized_from == (parent_name,)
+        assert fetch_extender.captured.specialized_from == calc_extender.captured.specialized_from

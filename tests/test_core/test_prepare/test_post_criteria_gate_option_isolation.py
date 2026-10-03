@@ -7,11 +7,14 @@ import gc
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import TypeVar
+from typing import Any, TypeVar
+
+import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -162,3 +165,206 @@ class TestPostCriteriaGateLeakIsVisitOrderDependent:
         assert snapshot.identified_names == (WINNER_CLASS_NAME,)
         assert snapshot.leak_value is None
         assert LEAK_KEY not in snapshot.option_keys
+
+
+ORDER_KEY = "order_shared_key_winner_iso"
+ORIGINAL_KEY = "original_key_winner_iso"
+
+
+class ReaderParent_winner_iso(BaseInputData):
+    """Reader class of the parent candidate."""
+
+
+class ReaderSub_winner_iso(BaseInputData):
+    """Reader class of the subclass candidate."""
+
+
+@dataclass(frozen=True)
+class _Writes:
+    group: dict[str, Any]
+    context: dict[str, Any]
+    non_forwarded: frozenset[str]
+    reader: tuple[type[BaseInputData], str] | None = None
+    matches: bool = True
+
+
+def _make_candidate(
+    name: str, writes: _Writes, seen: list[dict[str, Any]], base: type[FeatureGroup] = FeatureGroup
+) -> type[FeatureGroup]:
+    """Build a candidate that records the group options it was shown, then applies ``writes`` and matches."""
+
+    def match(
+        cls: type[FeatureGroup],
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if str(feature_name) != SHARED_FEATURE:
+            return False
+        seen.append(dict(options.group))
+        options.group.update(writes.group)
+        options.context.update(writes.context)
+        options.non_forwarded_group_keys = options.non_forwarded_group_keys | writes.non_forwarded
+        if writes.reader is not None:
+            BaseInputData.add_base_input_data_to_options(writes.reader[0], writes.reader[1], options)
+        return writes.matches
+
+    def names(cls: type[FeatureGroup]) -> set[str]:
+        return {SHARED_FEATURE}
+
+    def frameworks(cls: type[FeatureGroup]) -> set[type[ComputeFramework]] | None:
+        return {PostCriteriaGateFw_os061}
+
+    def inputs(self: FeatureGroup, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    namespace = {
+        "match_feature_group_criteria": classmethod(match),
+        "feature_names_supported": classmethod(names),
+        "compute_framework_rule": classmethod(frameworks),
+        "input_features": inputs,
+    }
+    return type(name, (base,), namespace)
+
+
+@dataclass(frozen=True)
+class _ResolvedOptions:
+    escaped: str | None
+    winners: tuple[str, ...]
+    group: dict[str, Any]
+    context: dict[str, Any]
+    non_forwarded: frozenset[str]
+
+
+def _resolve(candidates: list[type[FeatureGroup]]) -> _ResolvedOptions:
+    feature = Feature(SHARED_FEATURE, options={ORIGINAL_KEY: "original"})
+    plugins: FeatureGroupEnvironmentMapping = {c: {PostCriteriaGateFw_os061} for c in candidates}
+    result, escaped = _capture(partial(IdentifyFeatureGroupClass.evaluate, feature, plugins, None))
+    winners = () if result is None else tuple(sorted(fg.get_class_name() for fg in result.identified))
+    resolved = _ResolvedOptions(
+        escaped=escaped,
+        winners=winners,
+        group=dict(feature.options.group),
+        context=dict(feature.options.context),
+        non_forwarded=feature.options.non_forwarded_group_keys,
+    )
+    del result
+    gc.collect()
+    return resolved
+
+
+def _parent_and_sub(
+    seen: list[dict[str, Any]], with_reader: bool = False
+) -> tuple[type[FeatureGroup], type[FeatureGroup]]:
+    gc.collect()
+    parent_writes = _Writes(
+        group={ORDER_KEY: "parent", "parent_only_winner_iso": "p"},
+        context={"parent_ctx_only_winner_iso": "p", "ctx_shared_winner_iso": "parent"},
+        non_forwarded=frozenset({"parent_nf_winner_iso"}),
+        reader=(ReaderParent_winner_iso, "parent_access") if with_reader else None,
+    )
+    sub_writes = _Writes(
+        group={ORDER_KEY: "sub"},
+        context={"ctx_shared_winner_iso": "sub"},
+        non_forwarded=frozenset({"sub_nf_winner_iso"}),
+        reader=(ReaderSub_winner_iso, "sub_access") if with_reader else None,
+    )
+    parent = _make_candidate("ParentFG_winner_iso", parent_writes, seen)
+    sub = _make_candidate("SubFG_winner_iso", sub_writes, seen, base=parent)
+    return parent, sub
+
+
+@pytest.mark.parametrize("parent_first", [True, False])
+class TestWinnerOptionsAreOriginalPlusOwnWrites:
+    """A dropped parent's matcher writes must not survive on the feature the winning subclass computes."""
+
+    def test_options_hold_original_plus_winner_writes_only(self, parent_first: bool) -> None:
+        parent, sub = _parent_and_sub([])
+        resolved = _resolve([parent, sub] if parent_first else [sub, parent])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("SubFG_winner_iso",)
+        assert resolved.group == {ORIGINAL_KEY: "original", ORDER_KEY: "sub"}
+        assert resolved.context == {"ctx_shared_winner_iso": "sub"}
+        assert resolved.non_forwarded == frozenset({"sub_nf_winner_iso"})
+
+    def test_different_reader_pairs_resolve_to_the_subclass_pair(self, parent_first: bool) -> None:
+        parent, sub = _parent_and_sub([], with_reader=True)
+        resolved = _resolve([parent, sub] if parent_first else [sub, parent])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("SubFG_winner_iso",)
+        assert resolved.group[BaseInputData.__name__] == (ReaderSub_winner_iso, "sub_access")
+
+
+class TestEachCandidateSeesTheOriginalOptions:
+    """A candidate's matcher must see the request's options, not a sibling candidate's write."""
+
+    @pytest.mark.parametrize("first_wins_order", [True, False])
+    def test_unrelated_candidates_do_not_see_each_others_writes(self, first_wins_order: bool) -> None:
+        gc.collect()
+        seen: list[dict[str, Any]] = []
+        one = _make_candidate("UnrelatedOneFG_winner_iso", _Writes({"one_key_winner_iso": 1}, {}, frozenset()), seen)
+        two = _make_candidate("UnrelatedTwoFG_winner_iso", _Writes({"two_key_winner_iso": 2}, {}, frozenset()), seen)
+        resolved = _resolve([one, two] if first_wins_order else [two, one])
+
+        assert resolved.escaped is None
+        assert len(seen) == 2
+        assert seen == [{ORIGINAL_KEY: "original"}, {ORIGINAL_KEY: "original"}]
+
+
+class TestUnrelatedDifferentReadersStillConflict:
+    """Two unrelated survivors with different reader pairs keep raising the double-reader error."""
+
+    @pytest.mark.parametrize("one_first", [True, False])
+    def test_unrelated_candidates_with_different_reader_pairs_raise(self, one_first: bool) -> None:
+        gc.collect()
+        one = _make_candidate(
+            "ReaderOneFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderParent_winner_iso, "one_access")), []
+        )
+        two = _make_candidate(
+            "ReaderTwoFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderSub_winner_iso, "two_access")), []
+        )
+        resolved = _resolve([one, two] if one_first else [two, one])
+
+        assert resolved.escaped is not None
+        assert "BaseInputData already set with different values" in resolved.escaped
+
+
+class TestReplayStartsFromTheOriginalOptions:
+    """A non-matching candidate's reader write must not poison the replay of the surviving candidates."""
+
+    @pytest.mark.parametrize("stray_first", [False, True])
+    def test_stray_reader_write_does_not_break_multiple_survivors(self, stray_first: bool) -> None:
+        gc.collect()
+        shared = (ReaderParent_winner_iso, "a")
+        one = _make_candidate("SurvivorOneFG_winner_iso", _Writes({}, {}, frozenset(), shared), [])
+        two = _make_candidate("SurvivorTwoFG_winner_iso", _Writes({}, {}, frozenset(), shared), [])
+        stray = _make_candidate(
+            "StrayFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderSub_winner_iso, "b"), matches=False), []
+        )
+        resolved = _resolve([stray, one, two] if stray_first else [one, two, stray])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("SurvivorOneFG_winner_iso", "SurvivorTwoFG_winner_iso")
+
+
+class ReaderGrand_winner_iso(BaseInputData):
+    """Reader class of the grandparent candidate."""
+
+
+@pytest.mark.parametrize("order", [("gp", "p", "c"), ("c", "p", "gp"), ("p", "c", "gp")])
+class TestReaderlessWinnerInheritsNearestAncestorReader:
+    def test_nearest_replaced_ancestor_reader_wins(self, order: tuple[str, ...]) -> None:
+        gc.collect()
+        gp = _make_candidate("GrandFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderGrand_winner_iso, "a")), [])
+        p = _make_candidate(
+            "MidFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderParent_winner_iso, "b")), [], base=gp
+        )
+        c = _make_candidate("LeafFG_winner_iso", _Writes({}, {}, frozenset()), [], base=p)
+        by_key = {"gp": gp, "p": p, "c": c}
+        resolved = _resolve([by_key[k] for k in order])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("LeafFG_winner_iso",)
+        assert resolved.group[BaseInputData.__name__] == (ReaderParent_winner_iso, "b")

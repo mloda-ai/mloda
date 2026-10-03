@@ -552,3 +552,97 @@ class TestEngineSelectsExtenderOncePerRun:
         session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert extender.wraps_calls == 2
+
+
+class _MatchReplacedParentFeatureGroup(FeatureGroup):
+    """Parent that a subclass replaces at match time."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({f"{_MARKER}_replaced_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_MARKER}_replaced_col": [1, 2, 3]}
+
+
+class _MatchReplacingSubclassFeatureGroup(_MatchReplacedParentFeatureGroup):
+    """Subclass that wins over its parent."""
+
+
+class TestSpecializedFromOnMatchContext:
+    def test_match_context_names_the_replaced_parent(self) -> None:
+        extender = _MatchContextCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_replaced_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchReplacedParentFeatureGroup, _MatchReplacingSubclassFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.feature_group_class == (
+            f"{_MatchReplacingSubclassFeatureGroup.__module__}.{_MatchReplacingSubclassFeatureGroup.__qualname__}"
+        )
+        assert extender.captured.specialized_from == (
+            f"{_MatchReplacedParentFeatureGroup.__module__}.{_MatchReplacedParentFeatureGroup.__qualname__}",
+        )
+
+    def test_match_context_without_replacement_is_empty(self) -> None:
+        extender = _MatchContextCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_root_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchHookRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.specialized_from == ()
+
+
+class _ZzQualnameHolder:
+    """Namespace whose nested class sorts by qualname after, but by name before, a top-level sibling."""
+
+    class AlphaAncestorFeatureGroup(_MatchReplacedParentFeatureGroup):
+        """Grandparent: __name__ sorts first, qualname sorts last."""
+
+
+class _MatchMidAncestorFeatureGroup(_ZzQualnameHolder.AlphaAncestorFeatureGroup):
+    """Parent: __name__ sorts last, qualname sorts first."""
+
+
+class _MatchQualnameWinnerFeatureGroup(_MatchMidAncestorFeatureGroup):
+    """Wins over both ancestors."""
+
+
+class TestSpecializedFromOrderMatchesComputeHooks:
+    def test_specialized_from_is_sorted_by_the_qualified_string(self) -> None:
+        extender = _MatchContextCapturingExtender()
+        alpha = _ZzQualnameHolder.AlphaAncestorFeatureGroup
+        mid = _MatchMidAncestorFeatureGroup
+        expected = tuple(sorted(f"{c.__module__}.{c.__qualname__}" for c in (alpha, mid)))
+        assert expected != tuple(
+            f"{c.__module__}.{c.__qualname__}" for c in sorted((alpha, mid), key=lambda c: c.__name__)
+        )
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_replaced_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({alpha, mid, _MatchQualnameWinnerFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.specialized_from == expected

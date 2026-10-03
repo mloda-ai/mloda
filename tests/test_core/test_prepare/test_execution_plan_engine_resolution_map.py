@@ -5,6 +5,8 @@ carries no engine bookkeeping.
 
 from mloda.core.abstract_plugins.components.feature_set import merge_input_feature_edges
 from mloda.core.prepare.execution_plan import ExecutionPlan
+from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -169,3 +171,47 @@ class TestExecutionPlanEngineResolutionMap:
         assert not hasattr(feature, "declared_input_feature_names_resolved"), (
             "Feature must not carry an engine resolution flag; it lives on the engine keyed by uuid."
         )
+
+
+class TestExecutionPlanSpecializedFromStamping:
+    """The engine's preformatted specialized_from map is stamped per step by feature uuid, then dropped."""
+
+    def test_step_unions_replaced_parents_of_its_members_sorted(self) -> None:
+        framework_name = PythonDictFramework.get_class_name()
+        first = Feature("first", compute_framework=framework_name)
+        second = Feature("second", compute_framework=framework_name)
+        plain = Feature("plain", compute_framework=framework_name)
+
+        plan = ExecutionPlan(
+            specialized_from={
+                first.uuid: ("pkg.mod.B", "pkg.mod.A"),
+                second.uuid: ("pkg.mod.A",),
+            }
+        )
+        fg_steps = plan.run_feature_group(
+            (_ResolutionMapFeatureGroup, {first, second, plain}),
+            parent_to_children_mapping={},
+            pre_required_uuids=set(),
+        )
+
+        feature_set = next(iter(fg_steps.values())).features
+        assert feature_set.specialized_from == ("pkg.mod.A", "pkg.mod.B")
+
+    def test_step_without_entries_and_plan_without_map_default_to_empty(self) -> None:
+        framework_name = PythonDictFramework.get_class_name()
+        feature = Feature("plain", compute_framework=framework_name)
+
+        for plan in (ExecutionPlan(specialized_from={}), ExecutionPlan()):
+            fg_steps = plan.run_feature_group(
+                (_ResolutionMapFeatureGroup, {feature}),
+                parent_to_children_mapping={},
+                pre_required_uuids=set(),
+            )
+            assert next(iter(fg_steps.values())).features.specialized_from == ()
+
+    def test_plan_drops_the_engine_map_after_build(self) -> None:
+        plan = ExecutionPlan(specialized_from={Feature("x").uuid: ("pkg.mod.A",)})
+
+        plan.create_execution_plan([], Graph(), LinkTrekker())
+
+        assert plan.specialized_from is None

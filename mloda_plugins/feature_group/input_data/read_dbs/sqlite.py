@@ -151,10 +151,13 @@ class SQLITEReader(ReadDB):
 
     @classmethod
     def data_access_identity(cls, data_access: Any) -> str:
-        """The db_path() value when it names an existing file, never other values; else the base fallback."""
+        """`path::table` (or the path alone) when db_path() names an existing file, never other values."""
         if isinstance(data_access, Mapping):
             path = data_access.get(cls.db_path())
             if isinstance(path, str) and os.path.isfile(path):
+                table = data_access.get("table_name")
+                if isinstance(table, str) and table:
+                    return f"{path}::{table}"
                 return path
         return super().data_access_identity(data_access)
 

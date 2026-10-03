@@ -191,7 +191,13 @@ class Engine:
             self.global_filter.rehash_stored_filters()
 
         execution_planner = ExecutionPlan(
-            self.global_filter, self.api_input_data_collection, self.resolved_input_feature_names
+            self.global_filter,
+            self.api_input_data_collection,
+            self.resolved_input_feature_names,
+            {
+                uuid: tuple(f"{c.__module__}.{c.__qualname__}" for c in classes)
+                for uuid, classes in self.specialized_from.items()
+            },
         )
         execution_planner.create_execution_plan(
             planned_queue,
@@ -354,6 +360,9 @@ class Engine:
             result = resolve_or_raise(*args, **kwargs)
             winner = next(iter(result.identified.items()))[0]
             context.feature_group_class = f"{winner.__module__}.{winner.__qualname__}"
+            context.specialized_from = tuple(
+                sorted(f"{c.__module__}.{c.__qualname__}" for c in result.specialized_from)
+            )
             return result
 
         with context.activate():

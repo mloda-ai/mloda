@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -30,7 +30,7 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
     DeclarationRequirement,
     declaration_requirement_scope,
 )
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
@@ -51,6 +51,23 @@ from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _OptionsState:
+    """Snapshot of a feature's options."""
+
+    group: dict[str, Any]
+    context: dict[str, Any]
+    non_forwarded: frozenset[str]
+
+    @classmethod
+    def capture(cls, feature: Feature) -> "_OptionsState":
+        options = feature.options
+        return cls(dict(options.group), dict(options.context), options.non_forwarded_group_keys)
+
+    def restore(self, feature: Feature) -> None:
+        IdentifyFeatureGroupClass._restore_options(feature, self.group, self.context, self.non_forwarded)
 
 
 class FeatureResolutionError(ValueError):
@@ -165,6 +182,13 @@ class IdentifyFeatureGroupClass:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
             # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
             specialized_from = tuple(sorted(self._replaced, key=_candidate_sort_key)) if len(identified) == 1 else ()
+            if specialized_from:
+                logger.debug(
+                    "Feature %s: %s replaced %s",
+                    feature.name,
+                    ", ".join(c.__qualname__ for c in identified),
+                    ", ".join(c.__qualname__ for c in specialized_from),
+                )
             result = EvaluationResult(
                 identified=identified,
                 criteria_matched=self._criteria_matched_feature_groups,
@@ -453,8 +477,12 @@ class IdentifyFeatureGroupClass:
         data_access_collection: DataAccessCollection | None = None,
     ) -> FeatureGroupEnvironmentMapping:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
+        original = _OptionsState.capture(feature)
+        passed_states: dict[type[FeatureGroup], _OptionsState] = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
+            # Every matcher sees the request's original options, never a sibling candidate's write.
+            original.restore(feature)
             # Snapshot ahead of the criteria call: a later gate (domain, scope, ...) rejecting a candidate
             # whose criteria match SUCCEEDED must undo that candidate's write too, not just a failing probe's.
             group_before = dict(feature.options.group)
@@ -573,11 +601,34 @@ class IdentifyFeatureGroupClass:
                     continue
 
             _identified_feature_groups[feature_group] = supported_frameworks
+            passed_states[feature_group] = _OptionsState.capture(feature)
+            original.restore(feature)
 
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         self._replaced = candidates - set(_identified_feature_groups)
+        if len(_identified_feature_groups) == 1:
+            winner = next(iter(_identified_feature_groups))
+            passed_states[winner].restore(feature)
+            # A winner that wrote no reader inherits the pair of its nearest replaced ancestor that recorded one.
+            if RESERVED_READER_OPTION_KEY not in feature.options.group:
+                for klass in winner.__mro__:
+                    if klass in self._replaced and RESERVED_READER_OPTION_KEY in passed_states[klass].group:
+                        self._replay_reader_pairs(feature, [passed_states[klass]])
+                        break
+        elif _identified_feature_groups:
+            # Replaying each survivor's reader pair raises the double-reader conflict when they differ.
+            original.restore(feature)
+            self._replay_reader_pairs(feature, [passed_states[fg] for fg in _identified_feature_groups])
+            original.restore(feature)
         return _identified_feature_groups
+
+    @staticmethod
+    def _replay_reader_pairs(feature: Feature, states: list["_OptionsState"]) -> None:
+        for state in states:
+            pair = state.group.get(RESERVED_READER_OPTION_KEY)
+            if isinstance(pair, tuple) and len(pair) == 2:
+                BaseInputData.add_base_input_data_to_options(pair[0], pair[1], feature.options)
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature

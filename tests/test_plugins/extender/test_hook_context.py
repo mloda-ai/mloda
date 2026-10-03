@@ -549,6 +549,9 @@ class TestInstrumentPreservesSelf:
         assert not hasattr(wrapped, "__self__")
 
 
+_EMPTY_TUPLE_DEFAULTS = {"feature_names", "specialized_from"}
+
+
 class TestHookContextKeywordDefaults:
     """Only hook, feature_group_class, feature_group_version, compute_framework_name stay required."""
 
@@ -598,9 +601,22 @@ class TestHookContextKeywordDefaults:
         identity_fields = {"hook", "feature_group_class", "feature_group_version", "compute_framework_name"}
 
         for field in dataclasses.fields(HookContext):
-            if field.name in identity_fields or field.name == "feature_names":
+            if field.name in identity_fields or field.name in _EMPTY_TUPLE_DEFAULTS:
                 continue
             assert field.default is None, f"{field.name} should default to None"
 
-        feature_names_field = next(field for field in dataclasses.fields(HookContext) if field.name == "feature_names")
-        assert feature_names_field.default == ()
+        for name in _EMPTY_TUPLE_DEFAULTS:
+            tuple_field = next(field for field in dataclasses.fields(HookContext) if field.name == name)
+            assert tuple_field.default == (), f"{name} should default to ()"
+
+
+class TestHookContextSpecializedFromField:
+    """HookContext carries the replaced parents' module.qualname, () when nothing was replaced."""
+
+    def test_defaults_to_empty_tuple(self) -> None:
+        assert _make_context().specialized_from == ()
+
+    def test_can_be_set_via_constructor(self) -> None:
+        context = _make_context(specialized_from=("pkg.mod.Parent",))
+
+        assert context.specialized_from == ("pkg.mod.Parent",)

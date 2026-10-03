@@ -97,6 +97,7 @@ class ExecutionPlan:
         global_filter: GlobalFilter | None = None,
         api_input_data_collection: ApiInputDataCollection | None = None,
         resolved_input_feature_names: dict[UUID, frozenset[str] | None] | None = None,
+        specialized_from: dict[UUID, tuple[str, ...]] | None = None,
     ) -> None:
         # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.
         self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
@@ -104,6 +105,7 @@ class ExecutionPlan:
         self.global_filter = global_filter
         self.api_input_data_collection = api_input_data_collection
         self.resolved_input_feature_names = resolved_input_feature_names
+        self.specialized_from = specialized_from
 
         # Helper variable
         self.feature_set_collections: list[set[UUID]] = []
@@ -179,6 +181,7 @@ class ExecutionPlan:
         # neither must the engine's resolved_input_feature_names map that run_feature_group read.
         self.declared_frameworks = {}
         self.resolved_input_feature_names = None
+        self.specialized_from = None
 
     def add_feature_group_step(
         self,
@@ -1930,6 +1933,11 @@ Available join types:
                     feature_set.declared_input_feature_names = frozenset(union) or None
                     feature_set.declared_input_feature_edges = merge_input_feature_edges(edge_pairs)
                     feature_set.declared_input_features_resolved = True
+
+                if self.specialized_from is not None:
+                    feature_set.specialized_from = tuple(
+                        sorted({name for f in sub_features for name in self.specialized_from.get(f.uuid, ())})
+                    )
 
                 self.add_artifact_to_feature_set(feature_group, feature_set)
                 self.add_single_filters_to_feature_set(feature_group, feature_set)

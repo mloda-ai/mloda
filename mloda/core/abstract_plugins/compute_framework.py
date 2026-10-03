@@ -815,10 +815,12 @@ class ComputeFramework(ABC):
         feature_names: tuple[str, ...] = ()
         input_features: frozenset[str] | None = None
         input_feature_edges: dict[str, tuple[str, ...]] | None = None
+        specialized_from: tuple[str, ...] = ()
         if isinstance(features, FeatureSet):
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
             input_feature_edges = getattr(features, "declared_input_feature_edges", None)
+            specialized_from = getattr(features, "specialized_from", ())
 
         return HookContext(
             hook=hook,
@@ -837,6 +839,7 @@ class ComputeFramework(ABC):
                 warn_once_for=feature_group_cls,
             ),
             feature_names=feature_names,
+            specialized_from=specialized_from,
             input_features=input_features,
             input_feature_edges=input_feature_edges,
             compute_framework_name=self.get_class_name(),

@@ -205,6 +205,9 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
         if similar:
             msg += f"\nDid you mean one of: {similar}?"
 
+    if result.facts.scope_suggestions:
+        msg += f"\nDid you mean one of: {list(result.facts.scope_suggestions)}?"
+
     skipped_block = _render_skipped_plugins_block(result.facts.skipped_plugins)
     if skipped_block is not None:
         msg += f"\n{skipped_block}"

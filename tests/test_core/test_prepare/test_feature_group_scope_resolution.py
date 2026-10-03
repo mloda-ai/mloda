@@ -1123,3 +1123,16 @@ def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> 
     assert "ReadDBFeature" in message
     assert f"SQLITEReader: {db_path}::scope_reader_table" in message
     assert secret not in message
+
+
+def test_mistyped_string_scope_suggests_the_intended_group(tmp_path: Path) -> None:
+    csv_path, parquet_path = _reader_files(tmp_path)
+
+    with pytest.raises(Exception) as exc_info:
+        _run_reader_roots(
+            Feature(READER_COL, feature_group="CsvFGG"), DataAccessCollection(files={csv_path, parquet_path})
+        )
+
+    message = str(exc_info.value)
+    assert "Did you mean" in message
+    assert "CsvFG" in message.split("Did you mean", 1)[1]

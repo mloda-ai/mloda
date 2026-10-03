@@ -1,6 +1,7 @@
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
+from difflib import get_close_matches
 from dataclasses import replace
 from typing import Any
 
@@ -230,7 +231,26 @@ class IdentifyFeatureGroupClass:
             ),
             skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
             sources=self._capture_sources(result),
+            scope_suggestions=self._capture_scope_suggestions(result, accessible_plugins, feature),
         )
+
+    @staticmethod
+    def _capture_scope_suggestions(
+        result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping, feature: Feature
+    ) -> tuple[str, ...]:
+        """Close names for a string scope that no accessible candidate has in its MRO; probes no candidate."""
+        scope = feature.feature_group_scope
+        if result.failure_kind != "none" or not isinstance(scope, str):
+            return ()
+        if any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
+            return ()
+        names = {
+            ancestor.__name__
+            for fg in accessible_plugins
+            for ancestor in fg.__mro__
+            if ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
+        }
+        return tuple(get_close_matches(scope, sorted(names), n=3, cutoff=0.6))
 
     def _capture_sources(self, result: EvaluationResult) -> dict[type[FeatureGroup], str]:
         """Credential-free 'Reader: identity' of every identified candidate that matched a data source."""

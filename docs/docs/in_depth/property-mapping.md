@@ -119,7 +119,7 @@ matcher therefore keeps the contract, whether the override delegates or not.
 The last four rows are the whole reader surface, and the match-time ones sit outside the ordered
 sequence above: a user-facing `READER_OPTIONS` key is consumed during reader selection, and no other
 moment fires for it. The reserved `"BaseInputData"` key is the exception, written transiently while matching and
-moved onto `Feature.input_data_match`, which `BaseInputData.load` and `SQLITEReader.get_table` read at load time.
+moved onto `Feature.input_data_match`; `BaseInputData.load` and `SQLITEReader.get_table` read `FeatureSet.input_data_match` at load time.
 See [One spec type, two surfaces](#one-spec-type-two-surfaces).
 
 ## One spec type, two surfaces

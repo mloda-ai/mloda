@@ -1,6 +1,7 @@
 import copy
 import enum
 import pickle  # nosec B403
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -12,6 +13,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 
 
 def test_feature_equals() -> None:
@@ -330,3 +332,52 @@ def test_similarity_hash_includes_the_full_pair() -> None:
     assert one == two
     assert one.similarity_hash() != two.similarity_hash()
     assert one.base_similarity_hash() != two.base_similarity_hash()
+
+
+class IdentityCountingReader4412(BaseInputData):
+    calls = 0
+
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        cls.calls += 1
+        return f"counted:{data_access}"
+
+
+class IdentityRaisingReader4412(BaseInputData):
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        raise RuntimeError("identity boom")
+
+
+def test_hash_and_eq_never_call_data_access_identity_after_assignment() -> None:
+    f = Feature("x4412")
+    g = Feature("x4412")
+    f.input_data_match = (IdentityCountingReader4412, "src")
+    g.input_data_match = (IdentityCountingReader4412, "src")
+    before = IdentityCountingReader4412.calls
+
+    for _ in range(5):
+        hash(f)
+        assert f == g
+
+    assert IdentityCountingReader4412.calls == before
+
+
+def test_hashed_feature_stays_found_after_its_file_is_deleted(tmp_path: Path) -> None:
+    path = tmp_path / "feature_hash_gone.csv"
+    path.write_text("x\n1\n")
+    f = Feature("x")
+    f.input_data_match = (CsvReader, str(path))
+    members = {f}
+    assert f in members
+
+    path.unlink()
+
+    assert f in members
+
+
+def test_raising_data_access_identity_does_not_break_hash() -> None:
+    f = Feature("y4412")
+    f.input_data_match = (IdentityRaisingReader4412, "src")
+
+    assert isinstance(hash(f), int)

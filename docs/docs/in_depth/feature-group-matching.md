@@ -31,6 +31,8 @@ Containment covers plugin raises only: a framework-owned raise (a two-readers co
 
 Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) tables the gates the two paths share and where filter policy differs.
 
+A filter whose column is served by a different data source than its feature is dropped and recorded in `dropped_filters` as an `input data` near-miss naming both sources. A string `feature_group` scope that matches no accessible group adds a `Did you mean one of: ...?` line to the failure message.
+
 The probe runs per feature, but a matched filter attaches to the whole `FeatureSet`, so a non-match for one feature does not suppress a filter a sibling matched. See [Filter scope](filter_data.md#filter-scope-is-the-featureset).
 
 Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match. Filter matching additionally reports a falsy value that is not `False`, and each distinct report is a WARNING once per setup.

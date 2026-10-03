@@ -79,6 +79,8 @@ class RenderFacts:
     skipped_plugins: tuple[tuple[str, str], ...] = ()
     # "Reader: credential-free identity" of each identified candidate that matched a data source.
     sources: dict[type[FeatureGroup], str] = field(default_factory=dict)
+    # Close class names for a string scope no accessible candidate has in its MRO.
+    scope_suggestions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

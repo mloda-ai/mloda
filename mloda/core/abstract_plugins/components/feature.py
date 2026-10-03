@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.options import Options, validate_forwarding_directives
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
 
@@ -446,11 +446,22 @@ class Feature:
             )
         )
 
+    @property
+    def input_data_match(self) -> tuple[type[BaseInputData], Any] | None:
+        return self._input_data_match
+
+    @input_data_match.setter
+    def input_data_match(self, value: tuple[type[BaseInputData], Any] | None) -> None:
+        self._input_data_match = value
+        self._input_data_match_cached_key: tuple[type[BaseInputData], str] | None = None
+        if value is not None:
+            reader, access = value
+            fallback = type(access).__name__
+            identity = safe_field(lambda: reader.data_access_identity(access), fallback)
+            self._input_data_match_cached_key = (reader, identity)
+
     def _input_data_match_key(self) -> tuple[type[BaseInputData], str] | None:
-        if self.input_data_match is None:
-            return None
-        reader, access = self.input_data_match
-        return reader, reader.data_access_identity(access)
+        return self._input_data_match_cached_key
 
     def __copy__(self) -> Feature:
         """A value-equal Feature owning the mutable containers __eq__/__hash__ read (#910).

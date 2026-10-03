@@ -187,6 +187,16 @@ class GlobalFilter:
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
             if not self.criteria(feature_group, _filter, data_access_collection):
                 continue
+            host_key = feat._input_data_match_key()
+            filter_key = _filter.filter_feature._input_data_match_key()
+            if host_key is not None and filter_key is not None and host_key != filter_key:
+                self._record_near_miss(
+                    feature_group,
+                    _filter,
+                    "input_data",
+                    f"filter column is served by {filter_key[1]}, the feature by {host_key[1]}",
+                )
+                continue
             if self.domain(_filter, feat.domain, feature_group) is False:
                 self._record_near_miss(
                     feature_group, _filter, "domain", self._domain_reason(_filter, feat, feature_group)

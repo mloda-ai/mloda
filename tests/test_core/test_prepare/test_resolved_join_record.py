@@ -717,8 +717,9 @@ def _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only() 
     planned = _planned()
     link = _pair_link(Link.right)
 
-    left_pandas = feature("resolved_join_right_only_pyarrow_left_pandas", PandasDataFrame, link.left_index)
-    left_pyarrow = feature("resolved_join_right_only_pyarrow_left_pyarrow", PyArrowTable, link.left_index)
+    # One shared name: the scenario is about join-side resolution, and the child reads that name from either step.
+    left_pandas = feature("resolved_join_right_only_pyarrow_left", PandasDataFrame, link.left_index)
+    left_pyarrow = feature("resolved_join_right_only_pyarrow_left", PyArrowTable, link.left_index)
     right = feature("resolved_join_right_only_pyarrow_right", PyArrowTable, link.right_index)
     child = feature("resolved_join_right_only_pyarrow_child", PythonDictFramework)
 

@@ -396,8 +396,146 @@ class CombMixedKeys(FeatureGroup):
         return {cls.get_class_name(): pc.add(data.column("ConvIntKey"), data.column("ConvStrKey"))}
 
 
+class DirectSplitConsumer(FeatureGroup):
+    """Reads metric_a with an option and metric_b without one, both directly from SplitMetricSource."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("metric_a", options={"unit": "x"}), Feature.int32_of("metric_b")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("metric_a"), data.column("metric_b"))}
+
+
+class NonRootMetricRelay(FeatureGroup):
+    """Non-root feature group serving two names, each reading one SplitMetricSource column."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        source = {"relay_a": "metric_a", "relay_b": "metric_b"}[str(feature_name)]
+        return {Feature.int32_of(source)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        source = {"relay_a": "metric_a", "relay_b": "metric_b"}
+        name = str(features.get_all_names()[0])
+        return data.append_column(name, data.column(source[name]))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"relay_a", "relay_b"}
+
+
+class NonRootSplitConsumer(FeatureGroup):
+    """Reads relay_a with an option and relay_b without, splitting NonRootMetricRelay over two root steps."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("relay_a", options={"unit": "x"}), Feature.int32_of("relay_b")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("relay_a"), data.column("relay_b"))}
+
+
+class LinkedDirectConsumer(FeatureGroup):
+    """Reads l_a and l_b directly from LinkedSplitSource, split by option and joined by a Link."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("l_a", options={"unit": "x"}), Feature.int32_of("l_b", options={"unit": "y"})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("l_a"), data.column("l_b"))}
+
+
 class TestMissingLinksError:
     """Test suite for missing Links validation"""
+
+    def test_data_type_split_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of("DtypeCombiner")],
+                links=set(),
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups({SplitSourceDtype, DtypeCombiner}),
+            )
+
+        error_message = str(exc_info.value)
+        assert "DtypeCombiner" in error_message
+        assert "SplitSourceDtype" in error_message
+        assert "missing Links" in error_message
+        assert "separate steps" in error_message
+        assert "Link.inner_on(SplitSourceDtype, SplitSourceDtype)" not in error_message
+        # Discriminators match options only, so they cannot resolve a data-type split.
+        assert "left_discriminator" not in error_message
+        assert "data type" in error_message
+
+    def test_direct_option_split_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of("DirectSplitConsumer")],
+                links=set(),
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups({SplitMetricSource, DirectSplitConsumer}),
+            )
+
+        error_message = str(exc_info.value)
+        assert "DirectSplitConsumer" in error_message
+        assert "unit" in error_message
+        assert "left_discriminator" in error_message
+        # The example must pass discriminators to Link.inner, not inside JoinSpec.
+        assert '"shared_column", left_discriminator' not in error_message
+        assert "left_discriminator={" in error_message
+        assert "right_discriminator={" in error_message
+
+    def test_non_root_split_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of("NonRootSplitConsumer")],
+                links=set(),
+                compute_frameworks={PyArrowTable},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SplitMetricSource, NonRootMetricRelay, NonRootSplitConsumer}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+        assert "NonRootSplitConsumer" in error_message
+        assert "NonRootMetricRelay" in error_message
+        assert "missing Links" in error_message
+
+    def test_linked_direct_split_still_runs(self) -> None:
+        link = Link.inner(
+            JoinSpec(LinkedSplitSource, "id"),
+            JoinSpec(LinkedSplitSource, "id"),
+            left_discriminator={"unit": "x"},
+            right_discriminator={"unit": "y"},
+        )
+
+        results = mloda.run_all(
+            features=[Feature.int32_of("LinkedDirectConsumer")],
+            links={link},
+            compute_frameworks={PyArrowTable},
+            plugin_collector=PluginCollector.enabled_feature_groups({LinkedSplitSource, LinkedDirectConsumer}),
+        )
+
+        values = [table.column("LinkedDirectConsumer").to_pylist() for table in results]
+        assert values == [[110, 220, 330]]
 
     def test_missing_links_raises_helpful_error(self) -> None:
         """
@@ -523,6 +661,7 @@ class TestMissingLinksError:
             "The two buckets DtypeCombiner spans differ only by data type, not by any option; the "
             "unrelated 'unit' split elsewhere must not be blamed"
         )
+        assert "unlinked sources (missing Links)" in error_message
 
     def test_option_split_hint_does_not_blame_a_harmless_intermediate_split(self) -> None:
         """Bug 2: X5Intermediate (non-root) splits into two option buckets, but that split causes no

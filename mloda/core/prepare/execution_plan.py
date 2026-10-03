@@ -481,20 +481,33 @@ class ExecutionPlan:
         missing-Link configuration problem, not a bug."""
         split_text = option_split_paragraph(ep.features.option_split_hint)
         feature_name = format_feature_group_class(ep.feature_group)
-        first_name = format_feature_group_class(first_hop.from_feature_group)
-        second_name = format_feature_group_class(second_hop.from_feature_group)
-        first_class_name = first_hop.from_feature_group.get_class_name()
-        second_class_name = second_hop.from_feature_group.get_class_name()
-        further_text = "".join(f" and '{format_feature_group_class(hop.from_feature_group)}'" for hop in further_hops)
 
-        return f"""
-Feature group '{feature_name}' depends on parents from two different, unlinked source feature
-groups: '{first_name}' and '{second_name}'{further_text}.
-{split_text}
-When a feature depends on multiple input features from different sources, you must provide explicit
-Links to specify how to merge them. Without Links, the framework cannot determine how to combine the
-data, and only one of the two sources would ever be read.
+        hops = [first_hop, second_hop, *further_hops]
+        step_counts: dict[type[FeatureGroup], int] = {}
+        for hop in hops:
+            step_counts[hop.from_feature_group] = step_counts.get(hop.from_feature_group, 0) + 1
+        source_texts = [
+            f"'{format_feature_group_class(group)}'" + (f" ({count} separate steps)" if count > 1 else "")
+            for group, count in step_counts.items()
+        ]
+        sources_text = " and ".join(source_texts)
 
+        hint = ep.features.option_split_hint
+        hinted_class_name = hint[0] if hint is not None else None
+        repeated_paragraph = ""
+        for group, count in step_counts.items():
+            if count > 1 and group.get_class_name() != hinted_class_name:
+                repeated_paragraph += (
+                    f"\n'{format_feature_group_class(group)}' ran as separate steps because its requests differ in "
+                    "data type, compute framework, or source. Align those requests so one step serves them all.\n"
+                )
+
+        example_groups = list(step_counts)
+        first_class_name = example_groups[0].get_class_name()
+        second_class_name = example_groups[1].get_class_name() if len(example_groups) > 1 else first_class_name
+        link_options = ""
+        if first_class_name != second_class_name:
+            link_options = f"""
 Option 1: Explicit JoinSpec (works with any feature group):
     from mloda.user import Link, JoinSpec
 
@@ -511,7 +524,29 @@ Option 2: Shorthand via index_columns() (requires feature groups to define index
     links = {{
         Link.inner_on({first_class_name}, {second_class_name})
     }}
+"""
+        elif first_class_name == hinted_class_name:
+            link_options = f"""
+Option 1: Explicit JoinSpec (works with any feature group):
+    from mloda.user import Link, JoinSpec
 
+    links = {{
+        Link.inner(
+            JoinSpec({first_class_name}, "shared_column"),
+            JoinSpec({second_class_name}, "shared_column"),
+            left_discriminator={{"option_key": "left_value"}},
+            right_discriminator={{"option_key": "right_value"}},
+        )
+    }}
+"""
+
+        return f"""
+Feature group '{feature_name}' depends on parents from {len(hops)} unlinked sources (missing Links): {sources_text}.
+{split_text}{repeated_paragraph}
+When a feature depends on multiple input features from different sources, you must provide explicit
+Links to specify how to merge them. Without Links, the framework cannot determine how to combine the
+data, and only one of the sources would ever be read.
+{link_options}
 Available join types:
 - Link.inner(left, right)    - Keep only matching rows from both sides
 - Link.left(left, right)     - Keep all rows from left, matching from right
@@ -639,6 +674,17 @@ Available join types:
             for feature_uuid in ep.get_uuids()
         }
 
+        root_steps: set[UUID] = {
+            ep.uuid
+            for ep in execution_plan
+            if isinstance(ep, FeatureGroupStep)
+            and not any(graph.parent_to_children_mapping.get(uuid) for uuid in ep.get_uuids())
+        }
+
+        def root_steps_of(parent: UUID) -> set[UUID]:
+            closure = {parent} | graph.parent_to_children_mapping.get(parent, set())
+            return {owning_step_of.get(uuid, uuid) for uuid in closure} & root_steps
+
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
@@ -708,6 +754,11 @@ Available join types:
                     member_parents = graph.parent_to_children_mapping.get(member_uuid, set())
                     parents |= member_parents - self.get_parent_parents(member_parents, graph)
 
+                names_by_step: dict[UUID, set[str]] = defaultdict(set)
+                for parent in parents:
+                    names_by_step[owning_step_of.get(parent, parent)].add(str(graph.get_nodes()[parent].feature.name))
+                consumed_names_by_step = {step: frozenset(names) for step, names in names_by_step.items()}
+
                 # Explicit hops and join-served parents (delivered pre-merged by a JoinStep, no hop built)
                 # both compete for this step's one binding, so both get grouped by the same linkage test
                 # below. Order-independent: collected here, grouped once after the loop.
@@ -762,13 +813,14 @@ Available join types:
                     else:
                         same_framework_entries.append((parent_node_property.feature_group_class, parent))
 
-                # Group entries by transitive linkage: same feature-group class, one entry's own class a
-                # subclass (or superclass) of the other's (catches a case-override hop whose parent lost the
-                # JoinStep's own uuid to a same-role sibling, see `_case_override_beats_nearer_wrong_framework_left`,
-                # without also bridging two entries that merely share an unrelated common ancestor via some
-                # third join's declared side), or `_parents_linked_by_join`. A subclass pairing must
-                # additionally share genuine graph ancestry unless it is join-served, so two plain hops that
-                # merely subclass one another over otherwise unrelated roots are not merged.
+                # Group entries by transitive linkage: same feature-group class (unless split across
+                # unrelated root steps), one entry's own class a subclass (or superclass) of the other's
+                # (catches a case-override hop whose parent lost the JoinStep's own uuid to a same-role sibling,
+                # see `_case_override_beats_nearer_wrong_framework_left`, without also bridging two entries that
+                # merely share an unrelated common ancestor via some third join's declared side), or
+                # `_parents_linked_by_join`. A subclass pairing must additionally share genuine graph ancestry
+                # unless it is join-served, so two plain hops that merely subclass one another over otherwise
+                # unrelated roots are not merged.
                 def _entries_linked(
                     entry_a: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
                     entry_b: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
@@ -776,7 +828,16 @@ Available join types:
                     hop_a, parent_a = entry_a
                     hop_b, parent_b = entry_b
                     if hop_a.from_feature_group is hop_b.from_feature_group:
-                        return True
+                        # Steps match by column name only, a heuristic: same names means either step
+                        # supplies every column.
+                        step_a = owning_step_of.get(parent_a, parent_a)
+                        step_b = owning_step_of.get(parent_b, parent_b)
+                        split_root_steps = (
+                            not (root_steps_of(parent_a) & root_steps_of(parent_b))
+                            and consumed_names_by_step[step_a] != consumed_names_by_step[step_b]
+                        )
+                        if not split_root_steps:
+                            return True
                     if isinstance(hop_a, _SameFrameworkParent) or isinstance(hop_b, _SameFrameworkParent):
                         closure_a = {parent_a} | graph.parent_to_children_mapping.get(parent_a, set())
                         closure_b = {parent_b} | graph.parent_to_children_mapping.get(parent_b, set())

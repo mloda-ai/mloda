@@ -67,7 +67,7 @@ class TestGeoDistanceModernization:
         # Run the mloda
         api = mloda(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -128,7 +128,7 @@ class TestGeoDistanceModernization:
         # Run the mloda
         api = mloda(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -171,10 +171,10 @@ class TestGeoDistanceModernization:
         )
 
         # Run both approaches
-        api1 = mloda([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([string_feature], [PandasDataFrame], plugin_collector=plugin_collector)
         results1 = api1.run()
 
-        api2 = mloda([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([config_feature], [PandasDataFrame], plugin_collector=plugin_collector)
         results2 = api2.run()
 
         # Both should produce results with their respective feature names
@@ -209,7 +209,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
         # Test invalid number of source features (only 1 instead of 2)
@@ -223,7 +223,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
         # Test invalid number of source features (3 instead of 2)
@@ -237,7 +237,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
     def test_multiple_distance_types_configuration_based(self) -> None:
@@ -274,7 +274,7 @@ class TestGeoDistanceModernization:
             features.append(feature)
 
         # Run the mloda with multiple features
-        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda(features, [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # Verify all features were created
@@ -317,7 +317,7 @@ class TestGeoDistanceModernization:
         )
 
         # Run the mloda with both features
-        api = mloda([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda([feature1, feature2], [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # Both features should be processed together (same Feature Group resolution)
@@ -400,7 +400,7 @@ class TestGeoDistanceModernization:
         ]
 
         # Run the mloda with mixed features
-        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda(features, [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # All features should be processed successfully

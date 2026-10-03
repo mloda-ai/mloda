@@ -183,7 +183,7 @@ class TestSimplifiedApiData:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_simple,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,  # No api_input_data_collection needed!
         )
 
@@ -218,7 +218,7 @@ class TestSimplifiedApiData:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_simple,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
         )
 
@@ -232,7 +232,7 @@ class TestSimplifiedApiData:
     def test_requested_features_from_two_api_data_sets_return_separate_results(self) -> None:
         result = mloda.run_all(
             ["a", "b"],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             api_data={"first": {"a": ["one"]}, "second": {"b": ["one", "two"]}},
         )
 
@@ -247,7 +247,7 @@ class TestSimplifiedApiData:
     def test_features_from_same_api_data_set_share_a_frame(self) -> None:
         result = mloda.run_all(
             ["a", "a2", "b"],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             api_data={"first": {"a": [1], "a2": [2]}, "second": {"b": [1, 2]}},
         )
 
@@ -259,7 +259,7 @@ class TestSimplifiedApiData:
             mloda.run_all(
                 [Feature(name="MultiKeyApiFeature")],
                 plugin_collector=self._enabled_multikey,
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 api_data={"First": {"first_id": [1, 2]}, "Second": {"second_id": [1, 2], "second_value": ["x", "y"]}},
             )
 
@@ -278,7 +278,7 @@ class TestSimplifiedApiData:
                     Feature(name="first_id", options={"unit": "x"}, index=Index(("first_id",))),
                 ],
                 plugin_collector=self._enabled_multikey,
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 api_data={"First": {"first_id": [1, 2]}, "Second": {"second_id": [1, 2], "second_value": ["x", "y"]}},
             )
 
@@ -291,7 +291,7 @@ class TestSimplifiedApiData:
         with pytest.raises(ValueError, match=r"(?s)(?=.*'a')(?=.*first)(?=.*second)"):
             mloda.run_all(
                 ["a"],
-                compute_frameworks={PythonDictFramework},
+                compute_frameworks=[PythonDictFramework],
                 api_data={"first": {"a": [1]}, "second": {"a": [1, 2]}},
             )
 
@@ -320,7 +320,7 @@ class TestSimplifiedApiData:
 
         result = mloda.run_all(
             feature_list,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
         )
 
@@ -355,7 +355,7 @@ class TestSimplifiedApiData:
 
         result = mloda.run_all(
             feature_list,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
         )
 
@@ -384,7 +384,7 @@ class TestSimplifiedApiData:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_join,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
         )
 
@@ -407,7 +407,7 @@ class TestSimplifiedApiData:
         result = mloda.run_all(
             feature_list,
             plugin_collector=_enabled_creator_only,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=None,  # Explicitly None
         )
 
@@ -430,7 +430,7 @@ class TestSimplifiedApiData:
         result = mloda.run_all(
             feature_list,
             plugin_collector=_enabled_creator_only,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data={},  # Empty dict
         )
 

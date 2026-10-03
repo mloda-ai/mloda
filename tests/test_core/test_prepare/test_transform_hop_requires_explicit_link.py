@@ -72,7 +72,7 @@ def test_two_unlinked_source_framework_instances_raise_missing_links_error_at_pr
         mloda.prepare(
             features=[Feature("unlinked_consumer_result")],
             links=set(),
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=PluginCollector.enabled_feature_groups({UnlinkedRootA, UnlinkedRootB, UnlinkedConsumer}),
         )
 
@@ -301,35 +301,35 @@ class SubMixConsumer(_Consumer):
     OUTPUT = "sub_mix_result"
 
 
-_UNLINKED_CASES: list[tuple[str, set[type[FeatureGroup]], set[type[ComputeFramework]], list[str]]] = [
+_UNLINKED_CASES: list[tuple[str, set[type[FeatureGroup]], list[type[ComputeFramework]], list[str]]] = [
     (
         "unlinked_pa_consumer_result",
         {UnlinkedPaRootA, UnlinkedPaRootB, UnlinkedPaConsumer},
-        {PyArrowTable},
+        [PyArrowTable],
         ["UnlinkedPaRootA", "UnlinkedPaRootB"],
     ),
     (
         "unlinked_pa_triple_result",
         {UnlinkedPaRootA, UnlinkedPaRootB, UnlinkedPaRootC, UnlinkedPaTripleConsumer},
-        {PyArrowTable},
+        [PyArrowTable],
         ["UnlinkedPaRootA", "UnlinkedPaRootB", "UnlinkedPaRootC"],
     ),
     (
         "unlinked_mix_result",
         {UnlinkedPaRootA, UnlinkedMixPandasRoot, UnlinkedMixConsumer},
-        {PandasDataFrame, PyArrowTable},
+        [PandasDataFrame, PyArrowTable],
         ["UnlinkedPaRootA", "UnlinkedMixPandasRoot"],
     ),
     (
         "sub_pa_result",
         {SubPaRootA, SubPaRootB, SubPaConsumer},
-        {PyArrowTable},
+        [PyArrowTable],
         ["SubPaRootA", "SubPaRootB"],
     ),
     (
         "sub_mix_result",
         {SubPaRootA, SubMixPdRootB, SubMixConsumer},
-        {PandasDataFrame, PyArrowTable},
+        [PandasDataFrame, PyArrowTable],
         ["SubPaRootA", "SubMixPdRootB"],
     ),
 ]
@@ -349,7 +349,7 @@ _UNLINKED_CASES: list[tuple[str, set[type[FeatureGroup]], set[type[ComputeFramew
 def test_unlinked_parents_raise_missing_links_error_regardless_of_framework(
     feature_name: str,
     groups: set[type[FeatureGroup]],
-    frameworks: set[type[ComputeFramework]],
+    frameworks: list[type[ComputeFramework]],
     named: list[str],
 ) -> None:
     with pytest.raises(ValueError) as exc_info:
@@ -377,7 +377,7 @@ def _column_values(results: list[Any], column: str) -> list[int]:
     raise AssertionError(f"column {column} not found in results")
 
 
-def _run(feature_name: str, groups: set[type[FeatureGroup]], frameworks: set[type[ComputeFramework]]) -> list[Any]:
+def _run(feature_name: str, groups: set[type[FeatureGroup]], frameworks: list[type[ComputeFramework]]) -> list[Any]:
     return mloda.run_all(
         [Feature(feature_name)],
         compute_frameworks=frameworks,
@@ -407,7 +407,7 @@ class DiamondConsumer(_Consumer):
 
 
 def test_same_root_diamond_in_one_framework_plans_and_runs() -> None:
-    results = _run("diamond_result", {DiamondRoot, DiamondD1, DiamondD2, DiamondConsumer}, {PyArrowTable})
+    results = _run("diamond_result", {DiamondRoot, DiamondD1, DiamondD2, DiamondConsumer}, [PyArrowTable])
     assert _column_values(results, "diamond_result") == [302, 304, 306]
 
 
@@ -427,7 +427,7 @@ class RootDerivedConsumer(_Consumer):
 
 
 def test_root_plus_derived_in_one_framework_plans_and_runs() -> None:
-    results = _run("rd_result", {RootDerivedRoot, RootDerivedDX, RootDerivedConsumer}, {PyArrowTable})
+    results = _run("rd_result", {RootDerivedRoot, RootDerivedDX, RootDerivedConsumer}, [PyArrowTable])
     assert _column_values(results, "rd_result") == [1011, 1022, 1033]
 
 
@@ -449,7 +449,7 @@ class HopConsumer(_Consumer):
 
 
 def test_same_root_with_one_hop_plans_and_runs() -> None:
-    results = _run("hop_result", {HopRoot, HopDX, HopConsumer}, {PandasDataFrame, PyArrowTable})
+    results = _run("hop_result", {HopRoot, HopDX, HopConsumer}, [PandasDataFrame, PyArrowTable])
     assert _column_values(results, "hop_result") == [1011, 1022, 1033]
 
 
@@ -463,5 +463,5 @@ class FanInConsumer(_Consumer):
 
 
 def test_same_class_fan_in_in_one_framework_plans_and_runs() -> None:
-    results = _run("fan_result", {FanInRoot, FanInConsumer}, {PyArrowTable})
+    results = _run("fan_result", {FanInRoot, FanInConsumer}, [PyArrowTable])
     assert _column_values(results, "fan_result") == [11, 22, 33]

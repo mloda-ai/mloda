@@ -723,7 +723,7 @@ class TestExpectedGuardRejectionRecording:
         with pytest.raises(FeatureResolutionError) as exc_info:
             mlodaAPI.run_all(
                 [Feature(EXPECTED_E2E_FEATURE_MGE, Options(context={"concurrency_e2e_mge": "4"}))],
-                compute_frameworks={RecorderFwOneOs005r},
+                compute_frameworks=[RecorderFwOneOs005r],
                 plugin_collector=PluginCollector.enabled_feature_groups({ExpectedGuardEndToEndFGMge}),
             )
 
@@ -902,7 +902,7 @@ class TestPlainGroupRejectionRecording:
         with pytest.raises(FeatureResolutionError) as exc_info:
             mlodaAPI.run_all(
                 [Feature(PLAIN_EXPECTED_GUARD_FEATURE_PPR, Options(context={"limit_ppr": "4"}))],
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups({PlainExpectedGuardFGPpr}),
             )
 
@@ -912,7 +912,7 @@ class TestPlainGroupRejectionRecording:
         with pytest.raises(FeatureResolutionError) as exc_info:
             mlodaAPI.run_all(
                 [Feature(PLAIN_MISSING_FEATURE_PPR)],
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups({PlainMissingKeyFGPpr}),
             )
 
@@ -921,7 +921,7 @@ class TestPlainGroupRejectionRecording:
     def test_end_to_end_present_required_key_reaches_calculate_feature(self) -> None:
         results = mlodaAPI.run_all(
             [Feature(PLAIN_MISSING_FEATURE_PPR, Options(context={"needs_key_ppr": "5"}))],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             plugin_collector=PluginCollector.enabled_feature_groups({PlainMissingKeyFGPpr}),
         )
 

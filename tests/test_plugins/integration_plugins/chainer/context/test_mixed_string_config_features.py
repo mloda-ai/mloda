@@ -80,7 +80,7 @@ class TestMixedStringConfigFeatures:
                 config_feature3,  # Config-based (same group as config_feature2)
                 "Sales",  # Base data
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 
@@ -127,7 +127,7 @@ class TestMixedStringConfigFeatures:
 
         result = mloda.run_all(
             [config_target, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 
@@ -177,7 +177,7 @@ class TestMixedStringConfigFeatures:
 
         result = mloda.run_all(
             [string_feature, config_feature_same_group, config_feature_diff_group, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 

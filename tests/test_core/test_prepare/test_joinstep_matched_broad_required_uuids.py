@@ -132,7 +132,7 @@ def test_joinstep_matched_does_not_swallow_unrelated_unlinked_parent() -> None:
         mloda.prepare(
             features=[Feature("four_parent_consumer_result")],
             links={Link.inner_on(LinkedRootA, LinkedRootB)},
-            compute_frameworks={PandasDataFrame, PyArrowTable, PythonDictFramework},
+            compute_frameworks=[PandasDataFrame, PyArrowTable, PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {LinkedRootA, LinkedRootB, OrphanRootC, OrphanRootD, FourParentConsumer}
             ),
@@ -150,7 +150,7 @@ def test_joinstep_matched_raises_for_literal_three_parent_scenario() -> None:
         mloda.prepare(
             features=[Feature("three_parent_consumer_result")],
             links={Link.inner_on(LinkedRootA, LinkedRootB)},
-            compute_frameworks={PandasDataFrame, PyArrowTable, PythonDictFramework},
+            compute_frameworks=[PandasDataFrame, PyArrowTable, PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {LinkedRootA, LinkedRootB, OrphanRootC, ThreeParentConsumer}
             ),
@@ -273,7 +273,7 @@ def test_joinstep_matched_raises_when_every_parent_is_join_served() -> None:
                 Link.inner_on(IndependentJoinPairOneLeft, IndependentJoinPairOneRight),
                 Link.inner_on(IndependentJoinPairTwoLeft, IndependentJoinPairTwoRight),
             },
-            compute_frameworks={PandasDataFrame, PyArrowTable, PythonDictFramework},
+            compute_frameworks=[PandasDataFrame, PyArrowTable, PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     IndependentJoinPairOneLeft,

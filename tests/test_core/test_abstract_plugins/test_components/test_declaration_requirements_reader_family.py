@@ -355,7 +355,7 @@ DEPTH_FRAME_LINK = Link.inner(JoinSpec(DeclDepthFG1648, JOIN_KEY), JoinSpec(Decl
 def _run(names: list[Feature | str], dac: DataAccessCollection | None, links: set[Link] | None = None) -> Any:
     return mloda.run_all(
         names,
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         parallelization_modes={ParallelizationMode.SYNC},
         data_access_collection=dac,
         plugin_collector=ENABLED,

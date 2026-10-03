@@ -113,7 +113,7 @@ example_feature_list = [f"ExampleB_{f}" for f in feature_list]
 
 result = mloda.run_all(
     example_feature_list,
-    compute_frameworks={PyArrowTable, PandasDataFrame},
+    compute_frameworks=[PandasDataFrame, PyArrowTable],
     data_access_collection=data_access_collection,
 )
 result[0]

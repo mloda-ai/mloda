@@ -309,7 +309,7 @@ class TestTypeConstraintIntegrationRunAll:
 
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -334,6 +334,6 @@ class TestTypeConstraintIntegrationRunAll:
         with pytest.raises(ValueError, match="No feature groups found"):
             mloda.run_all(
                 [feature],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=plugin_collector,
             )

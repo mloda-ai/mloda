@@ -326,7 +326,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_doubled")],
-            compute_frameworks={PyArrowTable, DuckDBFramework},
+            compute_frameworks=[PyArrowTable, DuckDBFramework],
             plugin_collector=plugin_collector,
             data_access_collection=dac,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -347,7 +347,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_matchdata_doubled")],
-            compute_frameworks={PyArrowTable, DuckDBFramework},
+            compute_frameworks=[PyArrowTable, DuckDBFramework],
             plugin_collector=plugin_collector,
             data_access_collection=dac,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -376,7 +376,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_doubled_threading")],
-            compute_frameworks={PyArrowTable, destination_framework},
+            compute_frameworks=[PyArrowTable, destination_framework],
             plugin_collector=plugin_collector,
             parallelization_modes=modes,
             flight_server=flight_server,
@@ -391,7 +391,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_root_val")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework},
+            compute_frameworks=[_ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -410,7 +410,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_root_val"), Feature("mixed_mode_root_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -441,7 +441,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_root_val"), Feature("mixed_mode_root_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -472,7 +472,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("join_sum"), Feature("left_val_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -540,7 +540,7 @@ class TestPureMultiprocessingTransformHopDoesNotLeakFlightTable:
 
         result = mloda.run_all(
             [Feature("mp_transform_doubled")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -800,7 +800,7 @@ class TestCrossFrameworkJoinHopDropTiming:
 
         stream = mloda.stream_all(
             [Feature("xfw_join_sum")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, _ThreadingOnlyPyArrowTable},
+            compute_frameworks=[_ThreadingOnlyPyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -879,7 +879,7 @@ class TestCrossFrameworkJoinHopDropTiming:
 
         stream = mloda.stream_all(
             [Feature("cfw_hop_join_sum"), Feature("cfw_hop_sibling_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, _ThreadingOnlyPyArrowTable},
+            compute_frameworks=[_ThreadingOnlyPyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -1347,7 +1347,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         stream = mloda.stream_all(
             [Feature("mp_transform_doubled")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -1435,7 +1435,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         result = mloda.run_all(
             [Feature("mp_transform_doubled"), Feature("fw_class_guard_join_sum")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
@@ -1497,7 +1497,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         stream = mloda.stream_all(
             [Feature("gap1_hop_doubled"), Feature("gap1_sibling_tripled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, _ThreadingOnlyPyArrowTable},
+            compute_frameworks=[_ThreadingOnlyPyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -1540,7 +1540,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         result = mloda.run_all(
             [Feature("diamond_hop_result")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )
@@ -1562,7 +1562,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _run() -> Any:
             return mloda.run_all(
                 [Feature("diamond_hop_result")],
-                compute_frameworks={PythonDictFramework, PyArrowTable},
+                compute_frameworks=[PyArrowTable, PythonDictFramework],
                 plugin_collector=plugin_collector,
                 parallelization_modes={ParallelizationMode.SYNC},
             )
@@ -1617,7 +1617,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         result = mloda.run_all(
             [Feature("chain_hop_chain3_val")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -1682,7 +1682,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         result = mloda.run_all(
             [Feature("coarse_guard_hop_val"), Feature("coarse_guard_join_sum")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC},
@@ -1722,7 +1722,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _run() -> Any:
             return mloda.run_all(
                 [Feature("coarse_guard_hop_val"), Feature("coarse_guard_join_sum")],
-                compute_frameworks={PythonDictFramework, PyArrowTable},
+                compute_frameworks=[PyArrowTable, PythonDictFramework],
                 plugin_collector=plugin_collector,
                 links={link},
                 parallelization_modes={ParallelizationMode.SYNC},
@@ -1914,7 +1914,7 @@ class TestChainedJoinSharedSourceSurvivesBothHops:
 
         result = mloda.run_all(
             [Feature("h3_x")],
-            compute_frameworks={PandasDataFrame, PyArrowTable, PythonDictFramework},
+            compute_frameworks=[PandasDataFrame, PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             links=links,
             parallelization_modes={ParallelizationMode.SYNC},

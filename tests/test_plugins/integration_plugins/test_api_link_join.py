@@ -137,7 +137,7 @@ class TestApiLinkJoin:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_left,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data={"ApiExample": {"api_id": [1, 2, 3, 4], "api_value": ["w", "x", "y", "z"]}},
         )
 
@@ -160,7 +160,7 @@ class TestApiLinkJoin:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled_append,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data={"ApiExample": {"api_id": [1, 2], "api_value": ["x", "y"]}},
         )
 

@@ -76,7 +76,7 @@ class TestTextCleaningFeatureGroupIntegration:
         # Test with configuration-based features directly
         results = mloda.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -105,7 +105,7 @@ class TestTextCleaningFeatureGroupIntegration:
         # Test with mloda parsing the features
         results2 = mloda.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

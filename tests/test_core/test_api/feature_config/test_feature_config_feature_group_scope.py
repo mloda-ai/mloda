@@ -610,7 +610,7 @@ def _run(config_str: str) -> list[Any]:
     return list(
         mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups({ConfigScopeSourceA, ConfigScopeSourceB}),
         )
     )
@@ -685,7 +685,7 @@ def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass()
     results = list(
         mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     ConfigScopeAggregationSource,

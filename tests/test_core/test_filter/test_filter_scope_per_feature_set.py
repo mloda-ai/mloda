@@ -159,7 +159,7 @@ def _run(
     with caplog.at_level(logging.WARNING, logger=EP_LOGGER_NAME):
         results = mloda.run_all(
             features,
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
         )
@@ -234,7 +234,7 @@ def _cross_run_warnings(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ..
     with caplog.at_level(logging.WARNING, logger=EP_LOGGER_NAME):
         mloda.run_all(
             [Feature(FSP_SAME, _options("b"))],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
         )
@@ -242,7 +242,7 @@ def _cross_run_warnings(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ..
         caplog.clear()
         mloda.run_all(
             [Feature(FSP_SAME, _options("a"))],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
         )
@@ -287,7 +287,7 @@ def _repeated_report_levels(caplog: pytest.LogCaptureFixture) -> tuple[tuple[int
     with caplog.at_level(logging.DEBUG, logger=EP_LOGGER_NAME):
         mloda.run_all(
             _mode_pair(False),
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
         )
@@ -395,7 +395,7 @@ def _drive_scoped_filter_run() -> dict[str, list[int]]:
 
     results = mloda.run_all(
         requested,
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )

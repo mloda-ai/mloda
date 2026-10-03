@@ -403,7 +403,7 @@ class TestMissingValuePyArrowIntegration:
         # Run the mloda with multiple imputation features
         result = mloda.run_all(
             feature_list,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             plugin_collector=plugin_collector,
         )
 

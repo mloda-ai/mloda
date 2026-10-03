@@ -28,7 +28,7 @@ def test_run_api_populates_runner() -> None:
 
     result = MlodaTestRunner.run_api(
         features,
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         plugin_collector=PluginCollector.enabled_feature_groups({RunnerFieldRootFeature}),
     )
 

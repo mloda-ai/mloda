@@ -724,7 +724,7 @@ class TestPinnedReaderDoesNotFallBackToGlobalRoute:
         with pytest.raises(FeatureResolutionError, match="Vg1756PinnedReader"):
             mloda.run_all(
                 [feature],
-                compute_frameworks={PythonDictFramework},
+                compute_frameworks=[PythonDictFramework],
                 data_access_collection=DataAccessCollection(credentials=[{"vg1756_sibling": {}}]),
                 plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
             )

@@ -193,7 +193,7 @@ class TestResolveOperationRunAll:
 
         results = mloda.run_all(
             ["Sales__sum_aggr"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -219,7 +219,7 @@ class TestResolveOperationRunAll:
 
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

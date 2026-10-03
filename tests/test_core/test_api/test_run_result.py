@@ -120,7 +120,7 @@ def _order_probe_ids_in_plan(plan: list[PlanStep]) -> list[str]:
 def _run_probe(features: list[Feature | str]) -> Any:
     return mlodaAPI.run_all(
         features,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=_PROBE_PLUGINS,
     )
@@ -131,7 +131,7 @@ def _run_probe(features: list[Feature | str]) -> Any:
 def _run_all(features: list[Feature | str] | None = None) -> Any:
     return mlodaAPI.run_all(
         features if features is not None else _CHAINED_FEATURES,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=_PLUGINS,
     )
@@ -140,7 +140,7 @@ def _run_all(features: list[Feature | str] | None = None) -> Any:
 def _stream_all(features: list[Feature | str] | None = None) -> Any:
     return mlodaAPI.stream_all(
         features if features is not None else _CHAINED_FEATURES,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=_PLUGINS,
     )
@@ -209,7 +209,7 @@ class TestRunResultPlan:
 
         session = mloda.prepare(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_PLUGINS,
             parallelization_modes={ParallelizationMode.SYNC},
         )
@@ -278,7 +278,7 @@ class TestStreamAllPlansEagerly:
         with pytest.raises(ValueError, match="No feature groups found"):
             mlodaAPI.stream_all(
                 ["run_result_unresolvable_647"],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 parallelization_modes={ParallelizationMode.SYNC},
                 plugin_collector=_PLUGINS,
             )
@@ -372,7 +372,7 @@ class TestSubclassDispatch:
 
         results = CustomAPI.run_all(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=_PLUGINS,
         )
@@ -424,7 +424,7 @@ class TestResultStreamFrames:
     def test_frames_pair_each_frame_with_the_step_whose_options_produced_it(self) -> None:
         stream = mlodaAPI.stream_all(
             [Feature("run_result_probe_value", options={"source_table": t}) for t in ("A", "B")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=_PROBE_PLUGINS,
         )
@@ -459,7 +459,7 @@ class TestRunAllListOrderMatchesPlanOrder:
     def _run_with_plan_first_gated(self) -> Any:
         session = mloda.prepare(
             [_order_probe_feature("alpha"), _order_probe_feature("beta")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_ORDER_PROBE_PLUGINS,
             parallelization_modes={ParallelizationMode.SYNC},
         )
@@ -472,7 +472,7 @@ class TestRunAllListOrderMatchesPlanOrder:
                 _order_probe_feature(slow_probe_id, role="slow"),
                 _order_probe_feature(fast_probe_id, role="fast"),
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_ORDER_PROBE_PLUGINS,
             parallelization_modes={ParallelizationMode.THREADING},
         )
@@ -490,7 +490,7 @@ class TestRunAllListOrderMatchesPlanOrder:
         """Regression guard: SYNC is single-threaded, so this already passes today."""
         results = mlodaAPI.run_all(
             [_order_probe_feature("alpha"), _order_probe_feature("beta")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_ORDER_PROBE_PLUGINS,
             parallelization_modes={ParallelizationMode.SYNC},
         )

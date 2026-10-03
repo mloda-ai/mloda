@@ -317,7 +317,7 @@ class TestMissingValuePandasIntegration:
         # Run the mloda with multiple imputation features
         result = mloda.run_all(
             feature_list,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

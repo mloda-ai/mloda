@@ -97,7 +97,7 @@ def _run(mapping: dict[str, PropertySpec], host_options: Options, filter_options
     global_filter.add_filter(Feature(UNW_TARGET, filter_options), FilterType.EQUAL, {"value": 1})
     results = mloda.run_all(
         [Feature(UNW_HOST, host_options)],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )

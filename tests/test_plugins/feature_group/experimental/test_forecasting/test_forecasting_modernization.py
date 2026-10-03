@@ -61,7 +61,7 @@ class TestForecastingModernization:
         # Run the mloda
         api = mloda(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -96,7 +96,7 @@ class TestForecastingModernization:
         # Run the mloda
         api = mloda(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -134,10 +134,10 @@ class TestForecastingModernization:
         )
 
         # Run both approaches
-        api1 = mloda([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([string_feature], [PandasDataFrame], plugin_collector=plugin_collector)
         results1 = api1.run()
 
-        api2 = mloda([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([config_feature], [PandasDataFrame], plugin_collector=plugin_collector)
         results2 = api2.run()
 
         # Both should produce results with their respective feature names
@@ -169,7 +169,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
         # Test invalid time unit
@@ -185,7 +185,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
         # Test invalid horizon (negative)
@@ -201,7 +201,7 @@ class TestForecastingModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
     def test_multiple_algorithms_configuration_based(self) -> None:
@@ -230,7 +230,7 @@ class TestForecastingModernization:
             features.append(feature)
 
         # Run the mloda with multiple features
-        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda(features, [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # Verify all features were created
@@ -274,7 +274,7 @@ class TestForecastingModernization:
         )
 
         # Run the mloda with both features
-        api = mloda([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda([feature1, feature2], [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # Both features should be processed together (same Feature Group resolution)

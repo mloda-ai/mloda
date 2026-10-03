@@ -130,7 +130,7 @@ class TestSwappedLinkOrientationReconciliation:
                 Feature(name=SwappedChildPyArrowLeft.get_class_name()),
             ],
             links={link},
-            compute_frameworks=["PyArrowTable", "PandasDataFrame"],
+            compute_frameworks=["PandasDataFrame", "PyArrowTable"],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     SwappedParentLeft,

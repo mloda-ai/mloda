@@ -204,7 +204,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             flight_server=flight_server,
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
-            compute_frameworks={SqliteFramework},
+            compute_frameworks=[SqliteFramework],
         )
 
         final_data = result[0]
@@ -234,7 +234,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             feature_list,
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
-            compute_frameworks={SqliteFramework},
+            compute_frameworks=[SqliteFramework],
             plugin_collector=plugin_collector,
         )
 
@@ -261,7 +261,7 @@ class TestSqliteIntegrationWithMlodaAPI:
         result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
-            compute_frameworks={SqliteFramework},
+            compute_frameworks=[SqliteFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )
@@ -291,7 +291,7 @@ class TestSqliteIntegrationWithMlodaAPI:
         result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
-            compute_frameworks={SqliteFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, SqliteFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )

@@ -69,7 +69,7 @@ _PLUGINS = PluginCollector.enabled_feature_groups({SharedSourceRootFG, SharedSou
 def _prepare_session() -> mlodaAPI:
     return mloda.prepare(
         ["shared_result"],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=_PLUGINS,
     )
 

@@ -159,7 +159,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
             feature_list,
             flight_server=flight_server,
             parallelization_modes=modes,
-            compute_frameworks={PolarsLazyDataFrame},
+            compute_frameworks=[PolarsLazyDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -189,7 +189,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         )
         eager_result = mloda.run_all(
             feature_list,
-            compute_frameworks={PolarsDataFrame},
+            compute_frameworks=[PolarsDataFrame],
             plugin_collector=eager_plugin_collector,
         )
 
@@ -199,7 +199,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         )
         lazy_result = mloda.run_all(
             feature_list,
-            compute_frameworks={PolarsLazyDataFrame},
+            compute_frameworks=[PolarsLazyDataFrame],
             plugin_collector=lazy_plugin_collector,
         )
 
@@ -233,7 +233,7 @@ class TestPolarsLazyIntegrationWithMlodaAPI:
         result = mloda.run_all(
             feature_list,
             flight_server=flight_server,
-            compute_frameworks={PolarsLazyDataFrame},
+            compute_frameworks=[PolarsLazyDataFrame],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )

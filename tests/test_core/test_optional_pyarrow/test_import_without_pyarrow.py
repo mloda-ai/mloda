@@ -89,7 +89,7 @@ class InlinePythonDictCreator(FeatureGroup):
 
 result = mloda.run_all(
     [Feature("inline_value")],
-    compute_frameworks={PythonDictFramework},
+    compute_frameworks=[PythonDictFramework],
     plugin_collector=PluginCollector.enabled_feature_groups({InlinePythonDictCreator}),
 )
 

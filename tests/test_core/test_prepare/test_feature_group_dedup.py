@@ -548,7 +548,7 @@ def test_diagnose_projects_redefinition_conflict_and_matches_prepare() -> None:
     v2 = _exec_fg_in_main(qualname, src_v2, "cell-diagnose850-v2")
     _REF_STORE.extend([v1, v2])
 
-    diagnosis = mlodaAPI.diagnose([feature_name], compute_frameworks={PandasDataFrame})
+    diagnosis = mlodaAPI.diagnose([feature_name], compute_frameworks=[PandasDataFrame])
 
     assert isinstance(diagnosis, ResolutionDiagnosis)
     assert diagnosis.complete is False
@@ -562,7 +562,7 @@ def test_diagnose_projects_redefinition_conflict_and_matches_prepare() -> None:
 
     # Parity with the raising path: prepare() throws the exact text diagnose() projected.
     with pytest.raises(RedefinitionConflictError) as exc_info:
-        mlodaAPI.prepare([feature_name], compute_frameworks={PandasDataFrame})
+        mlodaAPI.prepare([feature_name], compute_frameworks=[PandasDataFrame])
     assert diagnosis.message == str(exc_info.value)
 
 

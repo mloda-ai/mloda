@@ -113,7 +113,7 @@ def _plan_append(link: Link, consumers: list[type[FeatureGroup]]) -> None:
     mloda.run_all(
         [Feature(name=consumer.get_class_name()) for consumer in consumers],
         links={link},
-        compute_frameworks=["PyArrowTable", "PandasDataFrame"],
+        compute_frameworks=["PandasDataFrame", "PyArrowTable"],
         plugin_collector=PluginCollector.enabled_feature_groups({SharedAppendSource, *consumers}),
         parallelization_modes={ParallelizationMode.SYNC},
     )

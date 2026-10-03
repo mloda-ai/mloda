@@ -133,7 +133,7 @@ def _run(options: Options, make_fg: Callable[[], type[FeatureGroup]] = _make_pro
     global_filter.add_filter(PFC_TARGET, FilterType.EQUAL, {"value": 1})
     results = mloda.run_all(
         [Feature(PFC_MAIN, options)],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )

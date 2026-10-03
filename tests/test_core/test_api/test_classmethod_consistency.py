@@ -70,7 +70,7 @@ class TestSubclassDispatch:
 
         session = CustomAPI.prepare(
             _features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=_api_data,
             plugin_collector=_enabled,
         )
@@ -86,7 +86,7 @@ class TestSubclassDispatch:
         with patch.object(CustomAPI, "prepare", wraps=CustomAPI.prepare) as mock_prepare:
             CustomAPI.run_all(
                 _features,
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 api_data=_api_data,
                 plugin_collector=_enabled,
             )
@@ -102,7 +102,7 @@ class TestSubclassDispatch:
             list(
                 CustomAPI.stream_all(
                     _features,
-                    compute_frameworks={PandasDataFrame},
+                    compute_frameworks=[PandasDataFrame],
                     api_data=_api_data,
                     plugin_collector=_enabled,
                 )
@@ -116,7 +116,7 @@ class TestBaseClassBehaviorUnchanged:
     def test_run_all_still_works_on_base_class(self) -> None:
         result = mlodaAPI.run_all(
             _features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=_api_data,
             plugin_collector=_enabled,
         )
@@ -128,7 +128,7 @@ class TestBaseClassBehaviorUnchanged:
 
         result = mlodaAPI.stream_all(
             _features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=_api_data,
             plugin_collector=_enabled,
         )
@@ -139,7 +139,7 @@ class TestBaseClassBehaviorUnchanged:
     def test_mloda_alias_run_all_works(self) -> None:
         result = mloda.run_all(
             _features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=_api_data,
             plugin_collector=_enabled,
         )
@@ -151,7 +151,7 @@ class TestBaseClassBehaviorUnchanged:
 
         result = stream_all(
             _features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=_api_data,
             plugin_collector=_enabled,
         )

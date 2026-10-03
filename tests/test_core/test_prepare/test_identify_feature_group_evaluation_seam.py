@@ -230,7 +230,7 @@ class TestSingleFrameworkPinValidatedBeforeMatching:
         feature = Feature(PIN_NO_MATCH_FEATURE)
         feature.compute_frameworks = {PandasDataFrame, PythonDictFramework}
 
-        diagnosis = mlodaAPI.diagnose([feature], compute_frameworks={PandasDataFrame})
+        diagnosis = mlodaAPI.diagnose([feature], compute_frameworks=[PandasDataFrame])
 
         assert diagnosis.complete is False
         assert diagnosis.records == []
@@ -242,5 +242,5 @@ class TestSingleFrameworkPinValidatedBeforeMatching:
         assert PythonDictFramework.get_class_name() in diagnosis.message
 
         with pytest.raises(ComputeFrameworkPinError) as exc_info:
-            mlodaAPI.prepare([feature], compute_frameworks={PandasDataFrame})
+            mlodaAPI.prepare([feature], compute_frameworks=[PandasDataFrame])
         assert diagnosis.message == str(exc_info.value)

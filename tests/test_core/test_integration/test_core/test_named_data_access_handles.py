@@ -209,7 +209,7 @@ class TestNamedDataAccessHandlesIntegration:
         plugin_collector = PluginCollector.enabled_feature_groups({_SqliteSeedCreator, _DoubledValueFG})
         result = mloda.run_all(
             [Feature(name="doubled_value", options={"_SqliteSeedCreator": conn})],
-            compute_frameworks={SqliteFramework},
+            compute_frameworks=[SqliteFramework],
             data_access_collection=dac,
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},

@@ -244,7 +244,7 @@ def test_right_join_keeps_every_right_row_and_drops_unmatched_left_rows(
     results = mloda.run_all(
         [Feature(name=RightBindChild.get_class_name())],
         links={link},
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=PluginCollector.enabled_feature_groups(
             {RightBindLeftInArrow, RightBindRightInPandas, RightBindChild}
         ),
@@ -270,7 +270,7 @@ def test_right_join_binds_the_declared_left_side_when_the_declared_right_side_su
     results = mloda.run_all(
         [Feature(name=RightBindPolyChild.get_class_name())],
         links={link},
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=PluginCollector.enabled_feature_groups(
             {RightBindPolyBase, RightBindPolyDerived, RightBindPolyChild}
         ),
@@ -300,7 +300,7 @@ def test_right_join_binds_the_declared_left_side_when_a_sibling_subclass_is_a_se
     results = mloda.run_all(
         [Feature(name=RightBindAncestorChild.get_class_name())],
         links={link, sibling_link},
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=PluginCollector.enabled_feature_groups(
             {RightBindAncestorBase, RightBindAncestorRight, RightBindAncestorSibling, RightBindAncestorChild}
         ),

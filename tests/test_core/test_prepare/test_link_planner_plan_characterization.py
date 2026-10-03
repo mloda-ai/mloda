@@ -372,7 +372,7 @@ class TestSharedLinkServingTwoChildren:
         results = mloda.run_all(
             [Feature(name=child.get_class_name()) for child in children],
             links={link},
-            compute_frameworks=["PyArrowTable", "PandasDataFrame"],
+            compute_frameworks=["PandasDataFrame", "PyArrowTable"],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {LinkPlanSharedLeft, LinkPlanSharedRight, *children}
             ),

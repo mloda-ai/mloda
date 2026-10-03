@@ -54,7 +54,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Test with mloda API
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -93,7 +93,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Test with mloda API
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -132,7 +132,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Test with mloda API
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -190,7 +190,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Test with pre-parsed features
         results = mloda.run_all(
             [f1],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -212,7 +212,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Test with mloda parsing the features
         results2 = mloda.run_all(
             [f1],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -264,7 +264,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # Test with custom pipeline
         results = mloda.run_all(
             [f1],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -305,14 +305,14 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # First run - should create and save artifact
         results1 = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
         # Second run - should reuse artifact
         results2 = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -358,7 +358,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         # First run - create feature WITHOUT artifact options (mloda will set artifact_to_save)
         feature1 = Feature("income__sklearn_pipeline_scaling", Options(feature_options))
 
-        api1 = mloda([feature1], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([feature1], [PandasDataFrame], plugin_collector=plugin_collector)
         results1 = api1.run()
         artifacts1 = api1.get_artifacts()
 
@@ -390,7 +390,7 @@ class TestSklearnPipelineFeatureGroupIntegration:
         combined_options = {**feature_options, **artifacts1}
         feature2 = Feature("income__sklearn_pipeline_scaling", Options(combined_options))
 
-        api2 = mloda([feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([feature2], [PandasDataFrame], plugin_collector=plugin_collector)
         results2 = api2.run()
         artifacts2 = api2.get_artifacts()
 

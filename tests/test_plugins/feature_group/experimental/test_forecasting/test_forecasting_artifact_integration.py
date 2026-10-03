@@ -62,7 +62,7 @@ class TestForecastingArtifactIntegration:
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
         feature = Feature(feature_name, options)
 
-        api = mloda([feature], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         columns = [c for r in results for c in r.columns]
@@ -75,7 +75,7 @@ class TestForecastingArtifactIntegration:
 
         feature2 = Feature(feature_name, options=options)
         feature2.options.add_to_group(feature_name, artifacts[feature_name])
-        api2 = mloda([feature2], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([feature2], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
         results2 = api2.run()
 
         columns2 = [c for r in results2 for c in r.columns]
@@ -92,7 +92,7 @@ class TestForecastingArtifactIntegration:
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
         feature = Feature(f"{base_name}~1", options)
 
-        results = mloda([feature], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector).run()
+        results = mloda([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector).run()
 
         columns = [c for r in results for c in r.columns]
         assert f"{base_name}~1" in columns
@@ -108,14 +108,14 @@ class TestForecastingArtifactIntegration:
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
         features: list[Feature | str] = [Feature(base_name, options), Feature(f"{base_name}~1", options)]
 
-        api = mloda(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
         api.run()
         artifact = api.get_artifacts()[base_name]
 
         options2 = Options({DefaultOptionKeys.reference_time: "time_filter"})
         options2.add_to_group(base_name, artifact)
         features2: list[Feature | str] = [Feature(base_name, options2), Feature(f"{base_name}~1", options2)]
-        api2 = mloda(features2, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda(features2, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
         results2 = api2.run()
 
         columns2 = [c for r in results2 for c in r.columns]
@@ -141,7 +141,7 @@ class TestForecastingArtifactIntegration:
         # First run: Train and save the model artifact
         api = mloda(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -163,7 +163,7 @@ class TestForecastingArtifactIntegration:
         # Create a new mloda with the artifact
         api2 = mloda(
             [feature2],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

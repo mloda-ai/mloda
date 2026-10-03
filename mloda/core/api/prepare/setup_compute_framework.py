@@ -1,4 +1,4 @@
-from typing import cast
+from collections.abc import Sequence
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -10,17 +10,14 @@ class SetupComputeFramework:
 
     def __init__(
         self,
-        user_compute_frameworks: set[type[ComputeFramework]] | list[str] | None,
+        user_compute_frameworks: Sequence[str | type[ComputeFramework]] | None,
         features: Features,
         parallelization_modes: set[ParallelizationMode] | None = None,
     ) -> None:
         available_compute_frameworks = get_all_subclasses(ComputeFramework)
 
         if user_compute_frameworks:
-            if isinstance(user_compute_frameworks, list):
-                user_set_compute_frameworks: set[str | type[ComputeFramework]] = set(user_compute_frameworks)
-            else:
-                user_set_compute_frameworks = cast(set[str | type[ComputeFramework]], user_compute_frameworks)
+            user_set_compute_frameworks: set[str | type[ComputeFramework]] = set(user_compute_frameworks)
 
             available_compute_frameworks = self.filter_user_set_in_available_sub_classes(
                 user_set_compute_frameworks, available_compute_frameworks

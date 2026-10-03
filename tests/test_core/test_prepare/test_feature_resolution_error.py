@@ -152,7 +152,7 @@ class TestFeatureResolutionErrorEndToEnd:
         with pytest.raises(FeatureResolutionError):
             mlodaAPI.run_all(
                 [NO_MATCH_FEATURE_809],
-                compute_frameworks={ResolutionErrorFw_809},
+                compute_frameworks=[ResolutionErrorFw_809],
                 plugin_collector=PluginCollector.enabled_feature_groups({ResolutionErrorKnownFG_809}),
             )
 

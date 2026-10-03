@@ -85,7 +85,7 @@ from mloda.user.pandas import PandasDataFrame
 features = ["sales__sum_aggr"]
 result = mloda.run_all(
     features,
-    compute_frameworks={PandasDataFrame},
+    compute_frameworks=[PandasDataFrame],
     api_data={"SalesData": {"sales": [10.0, 20.0, 30.0]}},
 )
 assert "sales__sum_aggr" in result[0].columns

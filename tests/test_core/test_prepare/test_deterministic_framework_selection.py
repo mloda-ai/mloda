@@ -330,15 +330,15 @@ def sqlite_conn() -> Iterator[sqlite3.Connection]:
     conn.close()
 
 
-def _frameworks() -> set[type[ComputeFramework]]:
+def _frameworks() -> list[type[ComputeFramework]]:
     pytest.importorskip("duckdb")
     duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
     sqlite_fw = _load_framework(f"{_BASE}.sqlite.sqlite_framework", "SqliteFramework")
-    return {duckdb_fw, sqlite_fw}
+    return [duckdb_fw, sqlite_fw]
 
 
 def _compute_framework_names(
-    feature: Feature | str, fg: type[FeatureGroup], frameworks: set[type[ComputeFramework]]
+    feature: Feature | str, fg: type[FeatureGroup], frameworks: list[type[ComputeFramework]]
 ) -> list[str | None]:
     steps = mloda.explain(
         [feature], compute_frameworks=frameworks, plugin_collector=PluginCollector.enabled_feature_groups({fg})
@@ -352,7 +352,7 @@ def test_run_all_unrestricted_root_avoids_unconnected_duckdb() -> None:
 
     result = mloda.run_all(
         ["conn_aware_duck_pa_root"],
-        compute_frameworks={duckdb_fw, PyArrowTable},
+        compute_frameworks=[PyArrowTable, duckdb_fw],
         plugin_collector=PluginCollector.enabled_feature_groups({ConnAwareDuckPyArrowRootFG}),
     )
 

@@ -255,7 +255,7 @@ class TestValidateEnforcesOnPandas:
         pc = PluginCollector.enabled_feature_groups({_Src, _TypedMatch})
         results = mloda.run_all(
             [UFeature("price_typed_match")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=pc,
         )
         df = next(d for d in results if "price_typed_match" in d.columns)
@@ -317,7 +317,7 @@ class TestValidateEnforcesOnPandas:
         with _pytest.raises(Exception, match="STRING") as exc_info:
             mloda.run_all(
                 [UFeature("price_typed_mismatch")],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=pc,
             )
         assert "STRING" in str(exc_info.value)

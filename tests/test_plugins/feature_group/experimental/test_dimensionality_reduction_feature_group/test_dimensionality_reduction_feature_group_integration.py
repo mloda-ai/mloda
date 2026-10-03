@@ -121,7 +121,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         ]
 
         # Run the mloda
-        result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        result = mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
@@ -160,7 +160,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         features: list[str | Feature] = ["feature0", "feature1", "feature2", pca_feature, tsne_feature]
 
         # Run the mloda
-        result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        result = mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
 
         # Validate the results
         validate_dimensionality_reduction_results(result)
@@ -183,7 +183,7 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         ]
 
         # Run the mloda
-        result = mloda.run_all(features, compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        result = mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
 
         # Verify we have at least one result
         assert len(result) >= 1, "Expected at least one result"

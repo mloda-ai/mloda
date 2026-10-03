@@ -205,7 +205,7 @@ def test_link_joining_in_a_framework_no_member_supports_raises() -> None:
         mloda.run_all(
             [Feature(MultiLinkChildSame.get_class_name())],
             links=links,
-            compute_frameworks={PyArrowTable, PandasDataFrame},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=_ENABLED_SAME,
         )
@@ -225,7 +225,7 @@ def test_link_joining_across_distinct_frameworks_delivers_every_parent_column() 
     results = mloda.run_all(
         [Feature(MultiLinkChildDistinct.get_class_name())],
         links=links,
-        compute_frameworks={PyArrowTable, PandasDataFrame, SecondCfw},
+        compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw],
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=_ENABLED_DISTINCT,
     )
@@ -246,7 +246,7 @@ def test_link_joining_across_distinct_frameworks_with_the_shared_parent_swapped_
         mloda.run_all(
             [Feature(MultiLinkChildDistinct.get_class_name())],
             links=links,
-            compute_frameworks={PyArrowTable, PandasDataFrame, SecondCfw},
+            compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw],
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=_ENABLED_DISTINCT,
         )
@@ -264,7 +264,7 @@ def test_link_joining_a_shared_parent_twice_within_one_framework_must_not_raise(
     results = mloda.run_all(
         [Feature(SameFrameworkConsumer.get_class_name())],
         links=links,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=_ENABLED_SAME_FRAMEWORK,
     )

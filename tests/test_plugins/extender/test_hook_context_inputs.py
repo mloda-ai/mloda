@@ -754,7 +754,7 @@ class TestComputeHooksCarrySpecializedFrom:
 
         mloda.run_all(
             [Feature(_REPL_COL)],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups({_ReplParentFeatureGroup, _ReplChildFeatureGroup}),
             parallelization_modes={ParallelizationMode.SYNC},
             function_extender={extender},

@@ -141,7 +141,7 @@ class TestApiIntakeStampsAreNeverOwn:
 
         api = mlodaAPI(
             [requested],
-            compute_frameworks={BaseTestComputeFramework1},
+            compute_frameworks=[BaseTestComputeFramework1],
             plugin_collector=PluginCollector.enabled_feature_groups({OwnLockLinkingFG, OwnLockConsumerFG}),
             strict_type_enforcement=True,
             api_data={"OwnLockApiKey": {"ownlock_api_column": [1]}},
@@ -167,7 +167,7 @@ class TestApiIntakeStampsAreNeverOwn:
 
         api = mlodaAPI(
             [requested],
-            compute_frameworks={BaseTestComputeFramework1},
+            compute_frameworks=[BaseTestComputeFramework1],
             plugin_collector=PluginCollector.enabled_feature_groups({OwnLockLinkingFG, OwnLockConsumerFG}),
             strict_type_enforcement=True,
             api_data={"OwnLockApiKey": {"ownlock_api_column": [1]}},

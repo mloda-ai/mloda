@@ -90,7 +90,7 @@ class TestChainedFeatures:
                 feature1,
                 "Sales",
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 
@@ -128,7 +128,7 @@ class TestChainedFeatures:
 
         result = mloda.run_all(
             [feature4, feature5, feature6],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 

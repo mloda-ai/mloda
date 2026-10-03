@@ -668,7 +668,7 @@ def test_end2end_nested_group_options_feature_is_resolved_into_a_dependency() ->
     results: list[Any] = list(
         mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {NestedConfigEngineSource, NestedConfigEngineDoubler}
             ),

@@ -395,7 +395,7 @@ class TestEngineHarvestsReaderRejection:
         with pytest.raises(FeatureResolutionError) as excinfo:
             mloda.prepare(
                 ["rej727_net_spend"],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {Rej727FileFG, Rej727NetSpend, Rej727LineValue}
                 ),

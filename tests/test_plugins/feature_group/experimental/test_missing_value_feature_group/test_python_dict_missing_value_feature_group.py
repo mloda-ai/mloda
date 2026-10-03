@@ -380,7 +380,7 @@ class TestMissingValuePythonDictIntegration:
         # Run the mloda with multiple imputation features
         result = mloda.run_all(
             feature_list,  # type: ignore
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=plugin_collector,
         )
 

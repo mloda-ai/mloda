@@ -197,7 +197,7 @@ def _run(probe: _Probe, via_derived: bool, second_host: bool = False) -> dict[st
     global_filter.add_filter(Feature(probe.target, _explicit_none_options(probe)), FilterType.EQUAL, {"value": 1})
     results = mloda.run_all(
         requested,
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )

@@ -94,7 +94,7 @@ def test_features_runtime_one_by_one() -> None:
     # Run mloda with all features being tested
     results = mloda.run_all(
         features_to_test,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=plugin_collector,
     )
 
@@ -168,7 +168,7 @@ def test_feature_3_step1_onehot_encoding() -> None:
     # Run with BOTH features - the intermediate one must be created first
     results = mloda.run_all(
         [intermediate_feature, chained_feature],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=plugin_collector,
     )
 

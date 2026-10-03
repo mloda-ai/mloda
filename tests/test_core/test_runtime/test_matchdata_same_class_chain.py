@@ -79,7 +79,7 @@ class TestMatchDataSameClassChainKeepsConnection:
 
         result = mloda.run_all(
             [Feature("chain_b", Options({"ChainSameClassDuckDBFG": conn}))],
-            compute_frameworks={DuckDBFramework},
+            compute_frameworks=[DuckDBFramework],
             plugin_collector=plugin_collector,
         )
 
@@ -95,7 +95,7 @@ class TestMatchDataSameClassChainKeepsConnection:
         result = mloda.run_all(
             [Feature("chain_b")],
             data_access_collection=DataAccessCollection(connections={conn}),
-            compute_frameworks={DuckDBFramework},
+            compute_frameworks=[DuckDBFramework],
             plugin_collector=plugin_collector,
         )
 

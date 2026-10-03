@@ -127,7 +127,7 @@ class TestListValuedOptionsE2E:
 
         result = mloda.run_all(
             [feature_abc],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 
@@ -157,7 +157,7 @@ class TestListValuedOptionsE2E:
 
         result = mloda.run_all(
             [feature_cba],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 
@@ -187,7 +187,7 @@ class TestListValuedOptionsE2E:
 
         result = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 

@@ -65,7 +65,7 @@ def _run_two_sessions() -> dict[str, Any]:
 
     first = mloda.prepare(
         [EPA_ROOT],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )
@@ -75,7 +75,7 @@ def _run_two_sessions() -> dict[str, Any]:
     global_filter.add_filter(Feature(EPA_TARGET_B), FilterType.EQUAL, {"value": 2})
     second = mloda.prepare(
         [EPA_ROOT],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )

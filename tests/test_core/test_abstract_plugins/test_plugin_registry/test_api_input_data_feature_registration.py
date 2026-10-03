@@ -106,7 +106,7 @@ class TestApiInputDataFeatureUnderStrictMode:
 
         result = mloda.run_all(
             [VALUE_COLUMN],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             api_data=API_DATA,
         )
 

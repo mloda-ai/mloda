@@ -100,7 +100,7 @@ def _raised_failure_error() -> FeatureResolutionError:
     """Catch the typed error the raising prepare path produces for the failing request."""
     with pytest.raises(FeatureResolutionError) as exc_info:
         mloda.prepare(
-            _failing_request_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_PLUGINS_836PR
+            _failing_request_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS_836PR
         )
     return exc_info.value
 
@@ -225,7 +225,7 @@ class TestSetupConfigurationError:
         with pytest.raises(SetupConfigurationError):
             mloda.prepare(
                 [CONSUMER_FEATURE_836PR],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=_PLUGINS_836PR,
                 column_ordering="bogus",
             )
@@ -259,7 +259,7 @@ class TestDiagnoseRecordsComeFromTheErrorPayload:
 
     def test_diagnose_records_equal_the_errors_partial_records(self) -> None:
         diagnosis = mloda.diagnose(
-            _failing_request_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_PLUGINS_836PR
+            _failing_request_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS_836PR
         )
         error = _raised_failure_error()
 
@@ -279,7 +279,7 @@ class TestPrePlanningSetupErrorsAreConfigurationErrors:
 
     def test_duplicate_string_feature_raises_setup_configuration_error(self) -> None:
         with pytest.raises(SetupConfigurationError) as exc_info:
-            mloda.prepare([DUPLICATE_FEATURE_836PR, DUPLICATE_FEATURE_836PR], compute_frameworks={PandasDataFrame})
+            mloda.prepare([DUPLICATE_FEATURE_836PR, DUPLICATE_FEATURE_836PR], compute_frameworks=[PandasDataFrame])
 
         assert str(exc_info.value) == f"You are adding same feature as string twice: {DUPLICATE_FEATURE_836PR}"
 

@@ -1,6 +1,7 @@
 import contextlib
 from copy import deepcopy
 from dataclasses import replace
+from collections.abc import Sequence
 from typing import Any, Callable, Generator
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
@@ -60,7 +61,7 @@ class mlodaAPI:
     def __init__(
         self,
         requested_features: Features | list[Feature | str],
-        compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
         global_filter: GlobalFilter | None = None,
@@ -144,7 +145,7 @@ class mlodaAPI:
     def run_all(
         cls,
         features: Features | list[Feature | str],
-        compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
@@ -234,7 +235,7 @@ class mlodaAPI:
     def stream_all(
         cls,
         features: Features | list[Feature | str],
-        compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
         parallelization_modes: set[ParallelizationMode] = {ParallelizationMode.SYNC},
@@ -296,7 +297,7 @@ class mlodaAPI:
     def prepare(
         cls,
         features: Features | list[Feature | str],
-        compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
         global_filter: GlobalFilter | None = None,
@@ -333,7 +334,7 @@ class mlodaAPI:
         cls,
         features: Features | list[Feature | str],
         *,
-        compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
         global_filter: GlobalFilter | None = None,
@@ -377,7 +378,7 @@ class mlodaAPI:
         cls,
         features: Features | list[Feature | str],
         *,
-        compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
         global_filter: GlobalFilter | None = None,

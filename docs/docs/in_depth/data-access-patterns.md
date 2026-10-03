@@ -56,7 +56,7 @@ class ReadFileFeature(FeatureGroup):
 
 Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
 
-- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials` and `build_query`. To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
+- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials`, `build_query`, and `claims_feature_name` (a name-only check that runs before any credential probe). To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
 
     ```python
     from typing import Any
@@ -125,7 +125,7 @@ Reader selection answers "which plugin handles this input" the way [feature-grou
 | **Auto-loading** | Up-front plugin loading | Lazy per-family `_auto_load_group`, triggered only when no final readers are found |
 | **Accessibility policy** | Strict mode, collector policy, enabled compute frameworks | None: every final reader of the family is a candidate |
 | **Matching** | Criteria, domain, scope, capability, framework-pin, and links gates | Per-reader file, suffix, column-validation, and pinning rules |
-| **Ambiguity** | Multiple winners resolved by subclass preference, then reported | First match wins; a second conflicting reader for the same feature raises |
+| **Ambiguity** | Multiple winners resolved by subclass preference, then reported | Two readers accepting the same access raise (a subclass replaces its parent for the same access); pin one by its option key to pick it |
 | **Outcome and diagnostics** | Structured evaluation result rendered into failure messages | A matched `(ReaderClass, data_access)` pair written into options; declines surface through the shared rejection channel |
 
 ### Declining with an attributable reason
@@ -182,7 +182,7 @@ Rules for reader authors:
 
 `ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
 
-A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's `data_access_name()`) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in `init_reader`. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.
+A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's `data_access_name()`) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in `init_reader`. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. A pinned reader is final: when it declines, neither a sibling reader nor the DataAccessCollection serves the feature. Since group options forward to input features, a pin on a derived feature binds its inputs too. A pinned reader that matches nothing without a recorded reason is reported under its own name. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.
 
 ## MatchData Pattern
 

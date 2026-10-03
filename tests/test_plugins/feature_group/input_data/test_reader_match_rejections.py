@@ -285,6 +285,96 @@ class TestReadDbMatchRejections:
         assert rejection_window == {}
 
 
+CLAIM1753_PREFIX = "rej1753_"
+CLAIM1753_KEY = "rej1753db_marker"
+CLAIM1753_HANDLE = "rej1753_handle"
+CLAIM1753_OWN_NAME = "rej1753_own_column"
+CLAIM1753_FOREIGN_NAME = "other1753_column"
+
+
+class Rej1753ClaimingDbReader(ReadDB):
+    """Final reader whose credential slot can be malformed; claims only rej1753_ feature names."""
+
+    probe_calls: list[Any] = []
+
+    @classmethod
+    def claims_feature_name(cls, feature_name: str) -> bool:
+        return feature_name.startswith(CLAIM1753_PREFIX)
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
+        if CLAIM1753_KEY not in credentials:
+            return False
+        cls.probe_calls.append(credentials)
+        if credentials[CLAIM1753_KEY] is not True:
+            record_match_rejection(cls.get_class_name(), "malformed rej1753 credential slot", stage="input_data")
+            return False
+        return True
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return True
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {CLAIM1753_OWN_NAME: [1]}
+
+
+@pytest.fixture()
+def claim1753_calls() -> Iterator[list[Any]]:
+    Rej1753ClaimingDbReader.probe_calls.clear()
+    yield Rej1753ClaimingDbReader.probe_calls
+    Rej1753ClaimingDbReader.probe_calls.clear()
+
+
+def _malformed_dac() -> DataAccessCollection:
+    return DataAccessCollection(credentials={CLAIM1753_HANDLE: {CLAIM1753_KEY: "malformed"}})
+
+
+class TestReadDbClaimsFeatureName:
+    """An unclaimed feature name is a silent non-match before any credential probe."""
+
+    def test_default_claims_every_feature_name(self) -> None:
+        assert ReadDB.claims_feature_name("anything") is True
+
+    @pytest.mark.parametrize(
+        ("data_access", "options"),
+        [
+            pytest.param(_malformed_dac(), Options(), id="collection"),
+            pytest.param(_malformed_dac(), Options({"data_access_handle": CLAIM1753_HANDLE}), id="handle_hint"),
+            pytest.param({CLAIM1753_KEY: "malformed"}, Options(), id="plain_dict"),
+        ],
+    )
+    def test_unclaimed_name_skips_credential_probe(
+        self, rejection_window: dict[str, Any], claim1753_calls: list[Any], data_access: Any, options: Options
+    ) -> None:
+        matched = Rej1753ClaimingDbReader.match_subclass_data_access(data_access, [CLAIM1753_FOREIGN_NAME], options)
+
+        assert matched is None
+        assert claim1753_calls == []
+        assert rejection_window == {}
+
+    def test_claimed_name_still_probes_and_records_malformed_slot(
+        self, rejection_window: dict[str, Any], claim1753_calls: list[Any]
+    ) -> None:
+        matched = Rej1753ClaimingDbReader.match_subclass_data_access(_malformed_dac(), [CLAIM1753_OWN_NAME], Options())
+
+        assert matched is None
+        assert len(claim1753_calls) >= 1
+        assert list(rejection_window) == [Rej1753ClaimingDbReader.get_class_name()]
+
+    def test_claimed_name_with_valid_credentials_matches(
+        self, rejection_window: dict[str, Any], claim1753_calls: list[Any]
+    ) -> None:
+        dac = DataAccessCollection(credentials={CLAIM1753_HANDLE: {CLAIM1753_KEY: True}})
+
+        matched = Rej1753ClaimingDbReader.match_subclass_data_access(dac, [CLAIM1753_OWN_NAME], Options())
+
+        assert matched is not None
+        assert len(claim1753_calls) >= 1
+        assert rejection_window == {}
+
+
 class TestEngineHarvestsReaderRejection:
     """Engine integration, deliberately WITHOUT a window fixture: the engine owns the per-candidate window."""
 

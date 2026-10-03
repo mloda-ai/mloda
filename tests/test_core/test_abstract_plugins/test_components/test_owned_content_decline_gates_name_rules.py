@@ -22,12 +22,14 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
-from mloda.user import DataAccessCollection, Feature, FeatureName, Options
+from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
+from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -260,6 +262,60 @@ class Vg1454FileFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {VG1454_FILE_FEATURE}
+
+
+VG1756_FEATURE = "vg1756_x1"
+
+
+class Vg1756DbFamily(ReadDB):
+    """Family base of the two-sibling db shape; it overrides nothing, so it never classifies as final."""
+
+
+class Vg1756PinnedReader(Vg1756DbFamily):
+    """Final db reader accepting only its unique credentials, then declining every feature."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: Any) -> bool:
+        return isinstance(credentials, dict) and ("vg1756_pinned" in credentials or VG961_DB_MARKER in credentials)
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return False
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return [{VG1756_FEATURE: "from Vg1756PinnedReader"}]
+
+
+class Vg1756SiblingReader(Vg1756DbFamily):
+    """Final db reader accepting only its unique credentials and only the unique feature."""
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: Any) -> bool:
+        return isinstance(credentials, dict) and ("vg1756_sibling" in credentials or VG961_DB_MARKER in credentials)
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return feature_name == VG1756_FEATURE
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return [{VG1756_FEATURE: "from Vg1756SiblingReader"}]
+
+
+class Vg1756DbFG(FeatureGroup):
+    """Root FG over the two-sibling db family, claiming vg1756_x1 by name."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return Vg1756DbFamily()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {VG1756_FEATURE}
 
 
 @pytest.fixture()
@@ -566,11 +622,25 @@ class TestUnrelatedFamilyExceptionContainment:
         assert not any("broken plugin" in r.reason for r in rejection_window.values())
 
 
-class TestOwnedShapesThatMustNotGate:
-    """The owned shapes without an eligible recording, or with a later unpinned match, must keep resolving."""
+class TestOwnedShapesThatMustKeepResolving:
+    """Owned shapes that bind normally must keep resolving."""
 
-    def test_an_owned_plain_non_match_without_a_recording_does_not_gate(self, tmp_path: Path) -> None:
-        """A wrong-suffix path never establishes ownership of the file, so the name rule still recovers."""
+    def test_a_pin_owned_and_valid_still_binds_for_a_db_sibling(self) -> None:
+        """A pinned db reader that accepts the credentials and the feature still binds."""
+        feature = Feature(name=VG1756_FEATURE, options={Vg1756SiblingReader.__name__: {"vg1756_sibling": {}}})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1756DbFG: {PandasDataFrame}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
+
+        assert Vg1756DbFG in result.identified
+        assert result.eliminations == {}
+
+
+class TestPinnedReaderDoesNotFallBackToGlobalRoute:
+    """A pinned reader that declines must not be replaced by a sibling or the collection-wide route."""
+
+    def test_a_pinned_non_match_without_a_recording_is_reported_and_gates(self, tmp_path: Path) -> None:
+        """A wrong-suffix pinned path records no reason itself, so an owned rejection naming the reader is added."""
         path = tmp_path / "data.vg961other"
         path.write_text("vg961_other_a,vg961_other_b\n1,2\n", encoding="utf-8")
         feature = Feature(name=VG961_FILE_FEATURE, options={Vg961CsvReader.__name__: str(path)})
@@ -578,11 +648,32 @@ class TestOwnedShapesThatMustNotGate:
 
         result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
 
-        assert Vg961FileFG in result.identified
+        assert Vg961FileFG not in result.identified
+        elimination = result.eliminations.get(Vg961FileFG)
+        assert elimination is not None
+        assert Vg961CsvReader.get_class_name() in elimination.reason
         assert "BaseInputData" not in feature.options
 
-    def test_an_owned_decline_then_a_global_match_still_pins_the_pair(self, tmp_path: Path) -> None:
-        """The addressed file declines with a recording, then the global collection matches the other file."""
+    def test_a_pinned_db_reader_rejecting_the_credentials_without_a_recording_is_reported(self) -> None:
+        """No recording and no match: the owned reason names the reader and never echoes the credentials."""
+        credential_value = "vg1756_credential_value"
+        feature = Feature(
+            name=VG1756_FEATURE, options={Vg1756PinnedReader.__name__: {"vg1756_other": credential_value}}
+        )
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1756DbFG: {PandasDataFrame}}
+        dac = DataAccessCollection(credentials=[{"vg1756_sibling": {}}])
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, dac)
+
+        assert result.identified == {}
+        elimination = result.eliminations.get(Vg1756DbFG)
+        assert elimination is not None
+        assert Vg1756PinnedReader.get_class_name() in elimination.reason
+        assert credential_value not in elimination.reason
+        assert "vg1756_other" not in elimination.reason
+
+    def test_an_owned_decline_then_a_global_match_is_not_recovered(self, tmp_path: Path) -> None:
+        """The pinned file declines with a recording; the other file in the collection must not rescue it."""
         path_a = tmp_path / f"a{VG961_FILE_SUFFIX}"
         path_a.write_text("vg961_other\n1\n", encoding="utf-8")
         path_b = tmp_path / f"b{VG961_FILE_SUFFIX}"
@@ -594,9 +685,39 @@ class TestOwnedShapesThatMustNotGate:
             feature, accessible_plugins, None, DataAccessCollection(files={str(path_b)})
         )
 
-        assert Vg961FileFG in result.identified
-        assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Vg961CsvReader, str(path_b))
+        assert Vg961FileFG not in result.identified
+        elimination = result.eliminations.get(Vg961FileFG)
+        assert elimination is not None
+        assert Vg961CsvReader.get_class_name() in elimination.reason
+        assert "lacks the column" in elimination.reason
+
+    def test_a_declining_pinned_db_reader_is_not_replaced_by_a_sibling(self) -> None:
+        """The sibling accepts the collection credentials, but the pinned reader's decline stands."""
+        feature = Feature(name=VG1756_FEATURE, options={Vg1756PinnedReader.__name__: {"vg1756_pinned": {}}})
+        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg1756DbFG: {PandasDataFrame}}
+        dac = DataAccessCollection(credentials=[{"vg1756_sibling": {}}])
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, dac)
+
+        assert result.identified == {}
+        elimination = result.eliminations.get(Vg1756DbFG)
+        assert elimination is not None
+        assert Vg1756PinnedReader.get_class_name() in elimination.reason
+        assert "declined" in elimination.reason
+        assert VG1756_FEATURE in elimination.reason
+        assert "BaseInputData" not in feature.options
+
+    def test_run_all_raises_instead_of_returning_the_siblings_data(self) -> None:
+        """End to end, the pinned decline fails resolution rather than silently using the sibling."""
+        feature = Feature(VG1756_FEATURE, options={Vg1756PinnedReader.__name__: {"vg1756_pinned": {}}})
+
+        with pytest.raises(FeatureResolutionError, match="Vg1756PinnedReader"):
+            mloda.run_all(
+                [feature],
+                compute_frameworks={PythonDictFramework},
+                data_access_collection=DataAccessCollection(credentials=[{"vg1756_sibling": {}}]),
+                plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
+            )
 
 
 class TestAliasedDataAccessNameOwnership:

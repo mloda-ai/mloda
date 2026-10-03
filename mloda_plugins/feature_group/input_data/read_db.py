@@ -24,7 +24,7 @@ class ReadDB(BaseInputData):
 
     load_data is a template method exposing an opt-in lifecycle seam: a new
     backend implements ``produce_rows``, ``connect``, and ``is_valid_credentials``
-    (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``)
+    (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``/``claims_feature_name``)
     instead of overriding ``load_data`` wholesale. Overriding ``load_data`` directly
     is still supported.
 
@@ -124,6 +124,11 @@ class ReadDB(BaseInputData):
         raise NotImplementedError
 
     @classmethod
+    def claims_feature_name(cls, feature_name: str) -> bool:
+        """Name-only check run by the default match_subclass_data_access (an override must call it itself)."""
+        return True
+
+    @classmethod
     def _credentials_predicate(cls, credentials: Any) -> bool:
         """Wraps is_valid_credentials as a predicate, treating an unmarked NotImplementedError as no match."""
         try:
@@ -135,6 +140,9 @@ class ReadDB(BaseInputData):
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        if not all(cls.claims_feature_name(name) for name in feature_names):
+            return None
+
         data_accesses: list[Any] = []
 
         if isinstance(data_access, DataAccessCollection):

@@ -372,18 +372,22 @@ class TestReaderFamilyResolution:
 
         assert feature.options.get("BaseInputData") == (DeclScaledDepthReader1648, SCALED_ACCESS)
 
-    def test_two_requests_of_one_input_only_the_requiring_one_is_steered(self) -> None:
+    def test_requiring_request_is_steered_while_plain_request_is_ambiguous(self) -> None:
+        """The requiring request picks its reader; the plain one fails on several accepting readers."""
         requiring = _requiring(Feature(DEPTH))
         plain = Feature(DEPTH)
 
         evaluate_or_raise(requiring, DEPTH_MAPPING, data_access_collection=DEPTH_DAC)
-        evaluate_or_raise(plain, DEPTH_MAPPING, data_access_collection=DEPTH_DAC)
 
         assert requiring.options.get("BaseInputData") == (DeclScaledDepthReader1648, SCALED_ACCESS)
-        assert plain.options.get("BaseInputData") in {
-            (DeclPlainDepthReader1648, PLAIN_ACCESS),
-            (DeclScaledDepthReader1648, SCALED_ACCESS),
-        }
+
+        result = IdentifyFeatureGroupClass.evaluate(plain, DEPTH_MAPPING, None, DEPTH_DAC)
+
+        assert result.identified == {}
+        reasons = " ".join(e.reason for e in result.eliminations.values())
+        assert DeclPlainDepthReader1648.__name__ in reasons
+        assert DeclScaledDepthReader1648.__name__ in reasons
+        assert "options=" in reasons, reasons
 
     def test_family_without_a_satisfying_reader_is_refused_before_any_load(self) -> None:
         feature = _requiring(Feature(LONELY_DEPTH))

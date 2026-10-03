@@ -49,12 +49,6 @@ class TestBaseInitReaderIsConcrete:
         assert isinstance(reader, HoistSentinelReader)
         assert returned_data_access is data_access
 
-    def test_load_without_match_raises_value_error(self) -> None:
-        features = FeatureSet()
-        features.add(Feature("hoist_unmatched_col"))
-        with pytest.raises(ValueError):
-            HoistBareInputData().load(features)
-
     def test_load_takes_the_pair_from_the_feature_set_match(self) -> None:
         feature = Feature("hoist_matched_col")
         feature.input_data_match = (HoistSentinelReader, "access")

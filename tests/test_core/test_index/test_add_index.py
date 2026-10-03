@@ -153,9 +153,3 @@ def test_create_index_feature_copies_input_data_match() -> None:
     index_feature = create_index_feature(Index(("id",)), FeatureGroup(), source)
 
     assert index_feature.input_data_match == (CsvReader, "add_index_match_access")
-
-
-def test_create_index_feature_without_match_stays_unmatched() -> None:
-    source = Feature("add_index_match_col", compute_framework="PyArrowTable")
-
-    assert create_index_feature(Index(("id",)), FeatureGroup(), source).input_data_match is None

@@ -1121,4 +1121,5 @@ def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> 
     message = str(exc_info.value)
     assert "CsvFG" in message
     assert "ReadDBFeature" in message
+    assert f"SQLITEReader: {db_path}::scope_reader_table" in message
     assert secret not in message

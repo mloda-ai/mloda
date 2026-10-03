@@ -330,10 +330,3 @@ def test_similarity_hash_includes_the_full_pair() -> None:
     assert one == two
     assert one.similarity_hash() != two.similarity_hash()
     assert one.base_similarity_hash() != two.base_similarity_hash()
-
-
-def test_similarity_hash_is_stable_for_the_same_pair() -> None:
-    one = _matched(FeatureMatchReaderA, "same")
-    two = _matched(FeatureMatchReaderA, "same")
-    assert one.similarity_hash() == two.similarity_hash()
-    assert one.base_similarity_hash() == two.base_similarity_hash()

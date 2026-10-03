@@ -398,15 +398,6 @@ def _roe_nullable_reader(tag: str) -> type[BaseInputData]:
 
 
 @pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a recording window around one selection call, mirroring the engine's per-candidate window."""
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
-
-
-@pytest.fixture()
 def collect_after() -> Iterator[None]:
     """Reclaim test-local RoeLocal* readers out of __subclasses__ before the next test on this worker."""
     yield

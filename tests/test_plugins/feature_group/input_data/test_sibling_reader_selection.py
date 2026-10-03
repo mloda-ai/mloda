@@ -15,7 +15,6 @@ requires a unique marker value (or marker options key) and returns None otherwis
 so it can never hijack matching in other tests running in the same worker process.
 """
 
-from collections.abc import Iterator
 from typing import Any, cast
 
 import pyarrow as pa
@@ -23,7 +22,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
@@ -205,16 +204,6 @@ class SiblingSel1777ValueFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {_VALUE_FEATURE}
-
-
-@pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    try:
-        yield window
-    finally:
-        MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestPinnedReaderConflict1777:

@@ -25,7 +25,6 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.match_rejection import (
-    MATCH_REJECTION_REASONS,
     record_match_rejection,
 )
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -157,15 +156,6 @@ class Rej727LineValue(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {"rej727_line_value"}
-
-
-@pytest.fixture()
-def rejection_window() -> Iterator[dict[str, Any]]:
-    """Open a recording window around one direct matcher call, mirroring the engine's per-candidate window."""
-    window: dict[str, Any] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 def _write_csv(path: Path, header: str) -> str:

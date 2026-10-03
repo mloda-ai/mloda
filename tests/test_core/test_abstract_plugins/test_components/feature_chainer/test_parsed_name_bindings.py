@@ -12,7 +12,6 @@ from __future__ import annotations
 import dataclasses
 import logging
 import re
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -21,7 +20,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParser,
     PropertyValueRejection,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.feature_chainer import parsed_feature_name
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
@@ -648,15 +647,6 @@ class TestBuildEffectiveOptions:
 
         assert effective.propagate_context_keys == frozenset({NOTES_KEY})
         assert effective.get(SIZE_KEY) == "2"
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a per-test recording window and always close it again."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestBoundValuesAreVisible:

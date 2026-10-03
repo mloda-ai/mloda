@@ -2,27 +2,17 @@
 present validates, missing declines, and an unreadable file declines when unpinned but propagates
 when pinned."""
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.orc as pyarrow_orc
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.provider import CHAIN_SEPARATOR
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
 from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
-
-
-@pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a recording window around one direct matcher call, mirroring the engine's per-candidate window."""
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 def _write_feather(directory: Path, columns: list[str]) -> str:

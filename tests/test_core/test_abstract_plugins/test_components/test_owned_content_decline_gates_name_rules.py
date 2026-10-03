@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -317,15 +316,6 @@ class Vg1756DbFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {VG1756_FEATURE}
-
-
-@pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a recording window around one call, mirroring the engine's per-candidate window."""
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestProbeScopedRestamp:

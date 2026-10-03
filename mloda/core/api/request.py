@@ -30,7 +30,7 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_preference
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import current_verified_context
@@ -101,9 +101,11 @@ class mlodaAPI:
 
             self.strict_type_enforcement = strict_type_enforcement
             self.features = self._process_features(_requested_features, api_input_data_collection)
-            self.compute_framework = SetupComputeFramework(
+            setup_compute_framework = SetupComputeFramework(
                 compute_frameworks, self.features, parallelization_modes=parallelization_modes
-            ).compute_frameworks
+            )
+            self.compute_framework = setup_compute_framework.compute_frameworks
+            self.framework_preference = setup_compute_framework.framework_preference
             self.links = links
             self.data_access_collection = data_access_collection
             self.global_filter = global_filter
@@ -166,7 +168,7 @@ class mlodaAPI:
 
         Args:
             features: Features to compute.
-            compute_frameworks: Compute frameworks to use.
+            compute_frameworks: Ordered list of compute frameworks to use; the first listed is preferred.
             links: Links between feature groups.
             data_access_collection: Data access configuration.
             parallelization_modes: Parallelization modes.
@@ -662,18 +664,19 @@ class mlodaAPI:
     def _create_engine(self) -> Engine:
         filtered = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
         function_extender = set(filtered) if filtered is not None else None
-        engine = Engine(
-            self.features,
-            self.compute_framework,
-            self.links,
-            self.data_access_collection,
-            self.global_filter,
-            self.api_input_data_collection,
-            self.plugin_collector,
-            column_ordering=self.column_ordering,
-            function_extender=function_extender,
-            run_id=self.run_id,
-        )
+        with framework_preference(self.framework_preference):
+            engine = Engine(
+                self.features,
+                self.compute_framework,
+                self.links,
+                self.data_access_collection,
+                self.global_filter,
+                self.api_input_data_collection,
+                self.plugin_collector,
+                column_ordering=self.column_ordering,
+                function_extender=function_extender,
+                run_id=self.run_id,
+            )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")
         return engine

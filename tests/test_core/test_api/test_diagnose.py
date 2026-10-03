@@ -314,6 +314,17 @@ class TestDiagnoseConfigurationError:
     def test_configuration_error_is_incomplete(self) -> None:
         assert _diagnose_config_error().complete is False
 
+    def test_set_of_compute_frameworks_is_incomplete_with_the_ordered_list_hint(self) -> None:
+        diagnosis = mloda.diagnose(
+            _success_features(),
+            compute_frameworks={"PandasDataFrame"},  # type: ignore[arg-type]
+            plugin_collector=_DIAGNOSE_PLUGINS,
+        )
+
+        assert diagnosis.complete is False
+        assert diagnosis.message is not None
+        assert "ordered list" in diagnosis.message
+
     def test_configuration_error_has_empty_records(self) -> None:
         assert _diagnose_config_error().records == []
 

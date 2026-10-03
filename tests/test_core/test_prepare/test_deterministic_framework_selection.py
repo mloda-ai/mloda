@@ -3,6 +3,7 @@ Set iteration over class objects is id-based, so the reduction ranks candidates 
 and breaks remaining ties by class name.
 """
 
+import gc
 import importlib
 import sqlite3
 from collections.abc import Iterator
@@ -12,12 +13,12 @@ from typing import Any, ClassVar
 import pyarrow as pa
 import pytest
 
-from mloda.provider import BaseInputData, DataCreator, FeatureSet
+from mloda.provider import BaseInputData, ConnectionRequirement, DataCreator, FeatureSet
 from mloda.user import PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_preference
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.graph.graph import Graph
@@ -384,3 +385,110 @@ def test_pinned_duckdb_feature_keeps_its_pin(sqlite_conn: sqlite3.Connection) ->
     names = _compute_framework_names(feature, ConnAwarePinnedRootFG, _frameworks())
 
     assert names == ["DuckDBFramework"]
+
+
+# --- run-level framework preference -------------------------------------------------------------
+
+
+class PreferencePandasPyArrowRootFG(_ConnAwareRoot):
+    NAME = "preference_pd_pa_root"
+
+
+class PreferenceRequiredRootFG(_ConnAwareRoot):
+    NAME = "preference_required_root"
+
+
+class PreferenceUnavailableRootFG(_ConnAwareRoot):
+    NAME = "preference_unavailable_root"
+
+
+def _default_winner() -> str:
+    return ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]).get_class_name()
+
+
+def test_preference_first_listed_among_candidates_wins() -> None:
+    with framework_preference([PyArrowTable, PandasDataFrame]):
+        assert ComputeFramework.select_deterministic([PandasDataFrame, PyArrowTable]) is PyArrowTable
+    with framework_preference([PandasDataFrame, PyArrowTable]):
+        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PandasDataFrame
+
+
+def test_preference_ranks_unlisted_candidates_after_listed_in_default_order() -> None:
+    zulu, alfa, _, bravo = _throwaway_frameworks()
+
+    with framework_preference([zulu]):
+        assert ComputeFramework.select_deterministic({alfa, zulu, bravo}) is zulu
+        assert ComputeFramework.select_deterministic({alfa, bravo, PandasDataFrame}) is PandasDataFrame
+
+
+def test_no_preference_leaves_the_default_unchanged() -> None:
+    with framework_preference([]):
+        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PandasDataFrame
+
+
+def test_preference_is_empty_again_after_the_context_manager_exits() -> None:
+    with framework_preference([PyArrowTable]):
+        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PyArrowTable
+
+    assert _default_winner() == "PandasDataFrame"
+
+
+def test_preference_is_empty_again_when_the_body_raises() -> None:
+    with pytest.raises(RuntimeError):
+        with framework_preference([PyArrowTable]):
+            raise RuntimeError("boom")
+
+    assert _default_winner() == "PandasDataFrame"
+
+
+@pytest.mark.parametrize(
+    ("order", "expected"),
+    [
+        (["PyArrowTable", "PandasDataFrame"], ["PyArrowTable"]),
+        (["PandasDataFrame", "PyArrowTable"], ["PandasDataFrame"]),
+    ],
+)
+def test_planning_follows_the_listed_order(order: list[Any], expected: list[str | None]) -> None:
+    frameworks = [_load_framework(_MODULE_OF[name], name) for name in order]
+
+    names = _compute_framework_names("preference_pd_pa_root", PreferencePandasPyArrowRootFG, frameworks)
+
+    assert names == expected
+
+
+def test_required_framework_listed_first_without_connection_still_loses() -> None:
+    class ZzRequiredThrowawayFramework(ComputeFramework):
+        @classmethod
+        def connection_requirement(cls) -> ConnectionRequirement:
+            return ConnectionRequirement.REQUIRED
+
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+    try:
+        names = _compute_framework_names(
+            "preference_required_root", PreferenceRequiredRootFG, [ZzRequiredThrowawayFramework, PandasDataFrame]
+        )
+    finally:
+        del ZzRequiredThrowawayFramework
+        gc.collect()
+
+    assert names == ["PandasDataFrame"]
+
+
+def test_unavailable_framework_listed_first_falls_back_to_the_next_listed() -> None:
+    unavailable = _throwaway_frameworks()[0]
+
+    names = _compute_framework_names(
+        "preference_unavailable_root", PreferenceUnavailableRootFG, [unavailable, PyArrowTable, PandasDataFrame]
+    )
+
+    assert names == ["PyArrowTable"]
+
+
+def test_preference_is_empty_again_after_a_planning_run_that_raises() -> None:
+    with pytest.raises(Exception):
+        _compute_framework_names("preference_no_such_feature", PreferencePandasPyArrowRootFG, [PyArrowTable])
+
+    assert _default_winner() == "PandasDataFrame"

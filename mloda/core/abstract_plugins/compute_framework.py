@@ -35,6 +35,21 @@ _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
 )
 
+_framework_position: ContextVar[dict[type["ComputeFramework"], int]] = ContextVar("_framework_position", default={})
+
+
+@contextlib.contextmanager
+def framework_preference(order: Sequence[type["ComputeFramework"]]) -> Generator[None, None, None]:
+    """Rank frameworks by their position in order for select_deterministic within the scope."""
+    positions: dict[type[ComputeFramework], int] = {}
+    for framework in order:
+        positions.setdefault(framework, len(positions))
+    token = _framework_position.set(positions)
+    try:
+        yield
+    finally:
+        _framework_position.reset(token)
+
 
 def _no_rows(data: Any) -> int | None:
     """row_count stand-in for hooks whose return value carries no row semantics."""
@@ -744,14 +759,17 @@ class ComputeFramework(ABC):
     @staticmethod
     @final
     def select_deterministic(frameworks: Iterable[type["ComputeFramework"]]) -> type["ComputeFramework"]:
-        """Pick by connection requirement, then a total name key (set iteration over classes is id-based)."""
+        """Pick by the run's preference, connection requirement, then a total name key (set iteration is id-based)."""
         candidates = list(frameworks)
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
 
+        position = _framework_position.get()
+
         # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
-        def key(framework: type["ComputeFramework"]) -> tuple[int, str, str, str]:
+        def key(framework: type["ComputeFramework"]) -> tuple[int, int, str, str, str]:
             return (
+                position.get(framework, len(position)),
                 _CONNECTION_RANK[framework.connection_requirement()],
                 framework.get_class_name(),
                 framework.__module__,

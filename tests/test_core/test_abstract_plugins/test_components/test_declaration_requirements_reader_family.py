@@ -84,7 +84,7 @@ class DeclDepthFamily1648(_DeclMarkedReader):
 
 
 class DeclPlainDepthReader1648(DeclDepthFamily1648):
-    """Declares nothing (subclass iteration is set-ordered, so it may be probed before or after its sibling)."""
+    """Declares nothing (feature-scoped probe runs pinned readers in name order; the collection route is set-ordered)."""
 
     ACCESS = PLAIN_ACCESS
     HANDLE = DEPTH_HANDLE

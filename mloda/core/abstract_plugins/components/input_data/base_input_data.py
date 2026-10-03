@@ -328,14 +328,35 @@ class BaseInputData(ABC):
             return True
         return False
 
+    @staticmethod
+    def _drop_replaced_parents(
+        accepted: list[tuple[type["BaseInputData"], Any]],
+    ) -> list[tuple[type["BaseInputData"], Any]]:
+        """Drop a reader when a strict subclass in the list accepted an equal access."""
+        return [
+            (reader, access)
+            for reader, access in accepted
+            if not any(
+                other is not reader and issubclass(other, reader) and (other_access == access) is True
+                for other, other_access in accepted
+            )
+        ]
+
     @classmethod
     def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
-        """
-        We check for the feature scope data access if any child classes match the data access.
-        """
+        """Pinned readers are probed in name order; the single accepting pin (after subclass
+        replacement) serves the feature, several raise."""
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
-        subclasses = sorted(subclasses, key=lambda sub: sub.data_access_name().casefold())
-        accepting: list[tuple[Any, Any]] = []
+        subclasses = sorted(
+            subclasses,
+            key=lambda sub: (
+                sub.data_access_name().casefold(),
+                sub.data_access_name(),
+                sub.__module__,
+                sub.__qualname__,
+            ),
+        )
+        accepting: list[tuple[type[BaseInputData], Any]] = []
         for subclass in subclasses:
             for key, value in options.items():
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
@@ -370,10 +391,16 @@ class BaseInputData(ABC):
                             stage=INPUT_DATA_OWNED_STAGE,
                         )
                     break  # This case is if a feature requests an input feature, which should have scoped access.
+        accepting = cls._drop_replaced_parents(accepting)
         if not accepting:
             return False
         if len(accepting) > 1:
-            names = ", ".join(sorted((sub.data_access_name() for sub, _ in accepting), key=str.casefold))
+            short = [sub.data_access_name() for sub, _ in accepting]
+            labels = [
+                f"{sub.__module__}.{sub.__qualname__}" if short.count(name) > 1 else name
+                for (sub, _), name in zip(accepting, short)
+            ]
+            names = ", ".join(sorted(labels, key=lambda label: (label.casefold(), label)))
             # Contained: several accepting pinned readers is a user-fixable config error, not an engine abort.
             raise ValueError(
                 f"Feature '{feature_name}' pins several readers that accept it: {names}. "
@@ -450,14 +477,7 @@ class BaseInputData(ABC):
                 accepted.append((subclass, matched_data_access))
 
         # A subclass replaces its parent when both accept an equal access; different accesses stay ambiguous.
-        accepted = [
-            (reader, access)
-            for reader, access in accepted
-            if not any(
-                other is not reader and issubclass(other, reader) and (other_access == access) is True
-                for other, other_access in accepted
-            )
-        ]
+        accepted = cls._drop_replaced_parents(accepted)
         if len(accepted) == 1:
             return accepted[0]
         if accepted:

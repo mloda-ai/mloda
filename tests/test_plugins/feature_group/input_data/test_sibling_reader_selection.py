@@ -119,8 +119,99 @@ class TestSiblingSelectionViaClassNameStringKey:
         assert "BaseInputData" not in options
 
 
+_REPL_ALIAS = "sibling_sel_1777_alias"
+_REPL_MARKER = "sibling_sel_1777_repl_marker"
+_TWIN_ALIAS = "sibling_sel_1777_twin_alias"
+_TWIN_MARKER = "sibling_sel_1777_twin_marker"
+
+
+class SiblingSel1777ReplParent(ReadFile):
+    """Final aliased parent accepting only its unique marker."""
+
+    @classmethod
+    def data_access_name(cls) -> str:
+        return _REPL_ALIAS
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return data_access if data_access == _REPL_MARKER else None
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1777_repl_parent": [1]}
+
+
+class SiblingSel1777ReplChild(SiblingSel1777ReplParent):
+    """Final child inheriting the parent's alias and match."""
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1777_repl_child": [1]}
+
+
+class SiblingSel1777TwinA(ReadFile):
+    """Final reader sharing the twin alias."""
+
+    @classmethod
+    def data_access_name(cls) -> str:
+        return _TWIN_ALIAS
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return data_access if data_access == _TWIN_MARKER else None
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1777_twin_a": [1]}
+
+
+class SiblingSel1777TwinB(ReadFile):
+    """Unrelated final reader sharing the twin alias."""
+
+    @classmethod
+    def data_access_name(cls) -> str:
+        return _TWIN_ALIAS
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return data_access if data_access == _TWIN_MARKER else None
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"sibling_sel_1777_twin_b": [2]}
+
+
 class TestPinnedReaderConflict1777:
     """Two accepting pins of one family raise without leaking access values; declining pins are skipped."""
+
+    def test_final_subclass_replaces_parent_sharing_the_pinned_key(self) -> None:
+        options = Options({_REPL_ALIAS: _REPL_MARKER})
+        assert BaseInputData.feature_scope_data_access(options, "sibling_sel_1777_repl_feat") is True
+        assert options.get("BaseInputData") == (SiblingSel1777ReplChild, _REPL_MARKER)
+
+    def test_unrelated_readers_sharing_an_alias_are_named_by_qualified_name(self) -> None:
+        options = Options({_TWIN_ALIAS: _TWIN_MARKER})
+        with pytest.raises(ValueError) as excinfo:
+            BaseInputData.feature_scope_data_access(options, "sibling_sel_1777_twin_feat")
+        message = str(excinfo.value)
+        for reader in (SiblingSel1777TwinA, SiblingSel1777TwinB):
+            assert f"{reader.__module__}.{reader.__qualname__}" in message
+        assert not is_match_abort(excinfo.value)
+
+    def test_all_declining_pins_eliminate_deterministically_naming_first_pin(self) -> None:
+        feature = Feature(
+            name="sibling_sel_1777_decline_feat",
+            options={
+                SiblingSel565ReaderA.__name__: "sibling_sel_1777_unknown",
+                SiblingSel565ReaderB.__name__: "sibling_sel_1777_unknown",
+            },
+        )
+        accessible: FeatureGroupEnvironmentMapping = {ReadFileFeature: {PyArrowTable}}
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None, None)
+        assert result.identified == {}
+        elimination = result.eliminations.get(ReadFileFeature)
+        assert elimination is not None
+        assert "SiblingSel565ReaderA" in elimination.reason
 
     def test_two_accepting_pins_raise_naming_both_without_writing(self) -> None:
         group = {SiblingSel565ReaderA.__name__: _ACCESS_A, SiblingSel565ReaderB.__name__: _ACCESS_B}

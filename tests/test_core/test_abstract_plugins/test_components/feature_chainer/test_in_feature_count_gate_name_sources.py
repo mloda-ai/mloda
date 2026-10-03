@@ -6,7 +6,6 @@ in_features option, so the gate must count the same sources the name path would 
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -14,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, NAME_STAGE, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, MatchRejection
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda.user import Feature, FeatureName, Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -265,15 +264,6 @@ BELOW_MIN_NAME_944 = "f1__op1_gate944"
 ABOVE_MAX_NAME_944 = "f1&f2&f3&f4__op1_gate944"
 BELOW_MIN_REASON_944 = f"Feature '{BELOW_MIN_NAME_944}' requires at least 2 in_feature(s), but found 1"
 ABOVE_MAX_REASON_944 = f"Feature '{ABOVE_MAX_NAME_944}' allows at most 3 in_feature(s), but found 4"
-
-
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a per-test recording window and always close it again."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestNameSourceCountRejectionIsRecorded:

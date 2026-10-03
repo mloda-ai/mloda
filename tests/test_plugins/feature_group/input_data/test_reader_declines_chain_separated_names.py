@@ -7,14 +7,13 @@ name carries a "chaindecline" marker to stay inert for other tests under pytest-
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
 import pyarrow as pa
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
@@ -268,15 +267,6 @@ class ChainDeclineDbChainedFG(FeatureChainParserMixin, FeatureGroup):
         ),
         DefaultOptionKeys.in_features: PropertySpec("Source features", context=True),
     }
-
-
-@pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a recording window around one direct matcher call, mirroring the engine's per-candidate window."""
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 def _document_dac(route: str, tmp_path: Path, file_name: str) -> tuple[DataAccessCollection, str]:

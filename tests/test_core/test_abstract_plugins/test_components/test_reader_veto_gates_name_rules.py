@@ -5,11 +5,9 @@ input-data-free candidates and valid values keep resolving. Leaked vg954 fixture
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-import pytest
 
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
@@ -303,15 +301,6 @@ def _vg954_required_setup(tag: str) -> tuple[type[BaseInputData], type[FeatureGr
             return {VG954_REQUIRED_FEATURE_NAME}
 
     return Vg954LocalRequiredReader, Vg954LocalRequiredFG
-
-
-@pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a recording window around one call, mirroring the engine's per-candidate window."""
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
 
 
 class TestHasMatchRejection:

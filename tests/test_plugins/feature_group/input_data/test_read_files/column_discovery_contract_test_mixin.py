@@ -6,14 +6,13 @@ get_column_names, describe_columns, load_data, and count_rows. Unprefixed so pyt
 
 import shutil
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.provider import CHAIN_SEPARATOR, FeatureSet
 from mloda.user import DataAccessCollection, DataType, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -37,14 +36,6 @@ class ColumnDiscoveryContractTestMixin:
     def data_file(self, tmp_path: Path) -> str:
         """Return a file path with columns c1, a1, b1 (all INT64). Override per reader."""
         raise NotImplementedError
-
-    @pytest.fixture()
-    def rejection_window(self) -> Iterator[dict[str, MatchRejection]]:
-        """Open a recording window around one direct matcher call, mirroring the engine's per-candidate window."""
-        window: dict[str, MatchRejection] = {}
-        token = MATCH_REJECTION_REASONS.set(window)
-        yield window
-        MATCH_REJECTION_REASONS.reset(token)
 
     def test_describe_columns_returns_real_types(self, data_file: str) -> None:
         described = self.reader_cls.describe_columns(data_file)

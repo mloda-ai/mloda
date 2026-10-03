@@ -370,6 +370,8 @@ def test_unlinked_parents_raise_missing_links_error_regardless_of_framework(
     error_message = str(exc_info.value)
     assert "depends on parents from" in error_message
     assert "unlinked sources (missing Links)" in error_message
+    assert f"{len(named)} unlinked sources" in error_message
+    assert "two different" not in error_message
     assert "Link" in error_message
     for name in named:
         assert name in error_message

@@ -463,21 +463,6 @@ class LinkedDirectConsumer(FeatureGroup):
         return {cls.get_class_name(): pc.add(data.column("l_a"), data.column("l_b"))}
 
 
-class ThreeSourceConsumer(FeatureGroup):
-    """Reads from three unrelated root feature groups with no Link."""
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature.int32_of("RootFeatureA"), Feature.int32_of("RootFeatureB"), Feature.int32_of("r5")}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return None
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {cls.get_class_name(): pc.add(data.column("RootFeatureA"), data.column("RootFeatureB"))}
-
-
 class TestMissingLinksError:
     """Test suite for missing Links validation"""
 
@@ -547,24 +532,6 @@ class TestMissingLinksError:
 
         values = [table.column("LinkedDirectConsumer").to_pylist() for table in results]
         assert values == [[110, 220, 330]]
-
-    def test_three_unlinked_sources_wording(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            mloda.prepare(
-                features=[Feature.int32_of("ThreeSourceConsumer")],
-                links=set(),
-                compute_frameworks={PyArrowTable},
-                plugin_collector=PluginCollector.enabled_feature_groups(
-                    {RootFeatureA, RootFeatureB, R5Root, ThreeSourceConsumer}
-                ),
-            )
-
-        error_message = str(exc_info.value)
-        assert "RootFeatureA" in error_message
-        assert "RootFeatureB" in error_message
-        assert "R5Root" in error_message
-        assert "3 unlinked sources" in error_message
-        assert "two different" not in error_message
 
     def test_missing_links_raises_helpful_error(self) -> None:
         """

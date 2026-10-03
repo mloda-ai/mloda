@@ -189,7 +189,7 @@ _VALUE_FEATURE = "sibling_sel_1777_value_feat"
 
 
 class SiblingSel1777ValueFG(FeatureGroup):
-    """Plain root group fronting ReadFile with a strict mapped value; unique feature name."""
+    """Root group fronting ReadFile; the required strict mapped key keeps it from matching other tests' features."""
 
     PROPERTY_MAPPING = {
         _VALUE_KEY: PropertySpec("Mode", allowed_values={"good": "Good mode"}, context=True, strict_validation=True),

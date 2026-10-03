@@ -171,8 +171,20 @@ ACCESS_ONE = "same_name_access_one_845s"
 ACCESS_TWO = "same_name_access_two_845s"
 
 
-def _make_same_name_fg(module: str, access: str) -> type[FeatureGroup]:
-    """MatchData group named SAME_NAME_CLASS in the given module, resolving access in global scope only."""
+class _NonBoolEq845s:
+    """Expression-style value whose ``__eq__`` returns a non-bool."""
+
+    def __eq__(self, other: object) -> Any:
+        return ("expr", id(other))
+
+    __hash__ = object.__hash__
+
+
+def _make_same_name_fg(module: str, access: Any, feature_scope: bool = False) -> type[FeatureGroup]:
+    """MatchData group named SAME_NAME_CLASS in the given module, resolving access in global scope only.
+
+    With feature_scope, it instead claims the feature-scope connection object and ignores the global scope.
+    """
     gc.collect()
 
     class SameNameMatchDataFG845s(FeatureGroup, MatchData):
@@ -194,9 +206,11 @@ def _make_same_name_fg(module: str, access: str) -> type[FeatureGroup]:
             data_access_collection: DataAccessCollection | None = None,
             framework_connection_object: Any | None = None,
         ) -> Any:
-            if str(feature_name) != SAME_NAME_FEATURE or data_access_collection is None:
+            if str(feature_name) != SAME_NAME_FEATURE:
                 return None
-            return access
+            if feature_scope:
+                return framework_connection_object if data_access_collection is None else None
+            return access if data_access_collection is not None else None
 
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
@@ -211,19 +225,30 @@ class _SameNameSnapshot:
     group_untouched: bool
 
 
-def _evaluate_same_name(accesses: tuple[str, str], reverse: bool) -> _SameNameSnapshot:
-    """Evaluate two same-name groups with the given global-scope accesses, optionally in reverse order."""
-    fg_one = _make_same_name_fg(SAME_NAME_MODULES[0], accesses[0])
-    fg_two = _make_same_name_fg(SAME_NAME_MODULES[1], accesses[1])
+def _evaluate_same_name(
+    accesses: tuple[str, str], reverse: bool, scope_value: Any = None, use_scope: bool = False
+) -> _SameNameSnapshot:
+    """Evaluate two same-name groups with the given global-scope accesses, optionally in reverse order.
+
+    With use_scope, the request carries scope_value under SAME_NAME_CLASS and both groups match it via feature scope.
+    """
+    fg_one = _make_same_name_fg(SAME_NAME_MODULES[0], accesses[0], use_scope)
+    fg_two = _make_same_name_fg(SAME_NAME_MODULES[1], accesses[1], use_scope)
     try:
-        original_group: dict[str, Any] = {}
+        original_group: dict[str, Any] = {SAME_NAME_CLASS: scope_value} if use_scope else {}
         feature = Feature(SAME_NAME_FEATURE, options=Options(group=dict(original_group)))
-        data_access = DataAccessCollection(connections={"h1": ACCESS_ONE, "h2": ACCESS_TWO})
+        data_access: DataAccessCollection | None = (
+            None if use_scope else DataAccessCollection(connections={"h1": ACCESS_ONE, "h2": ACCESS_TWO})
+        )
         ordered = [fg_two, fg_one] if reverse else [fg_one, fg_two]
         plugins: FeatureGroupEnvironmentMapping = {fg: {MatchDataFw845r} for fg in ordered}
         result, escaped = _capture(partial(IdentifyFeatureGroupClass.evaluate, feature, plugins, None, data_access))
         count = 0 if result is None else len(result.identified)
-        untouched = feature.options.group == original_group and SAME_NAME_CLASS not in feature.options.group
+        group = feature.options.group
+        if use_scope:
+            untouched = list(group) == [SAME_NAME_CLASS] and group[SAME_NAME_CLASS] is scope_value
+        else:
+            untouched = group == original_group and SAME_NAME_CLASS not in group
         snapshot = _SameNameSnapshot(escaped=escaped, identified_count=count, group_untouched=untouched)
         del result
         del plugins
@@ -253,6 +278,15 @@ class TestMatchDataConflictBetweenSurvivors:
     @pytest.mark.parametrize("reverse", [False, True])
     def test_equal_accesses_keep_both_survivors(self, reverse: bool) -> None:
         snapshot = _evaluate_same_name((ACCESS_ONE, ACCESS_ONE), reverse)
+
+        assert snapshot.escaped is None
+        assert snapshot.identified_count == 2
+        assert snapshot.group_untouched
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    @pytest.mark.parametrize("scope_value", [_NonBoolEq845s(), float("nan")], ids=["non_bool_eq", "nan"])
+    def test_feature_scope_value_self_compare_keeps_both_survivors(self, reverse: bool, scope_value: Any) -> None:
+        snapshot = _evaluate_same_name((ACCESS_ONE, ACCESS_ONE), reverse, scope_value, use_scope=True)
 
         assert snapshot.escaped is None
         assert snapshot.identified_count == 2

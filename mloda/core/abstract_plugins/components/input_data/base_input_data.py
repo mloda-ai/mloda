@@ -408,7 +408,7 @@ class BaseInputData(ABC):
                 f"Feature '{feature_name}' pins several readers that accept it: {names}. "
                 "A pinned reader is final, so pin each reader on its own feature."
             )
-        # The declining pins' vetoes must not mask the winner's later failure reason.
+        # Records from this call (declining pins, the winner's discarded declines) must not mask a later failure reason.
         drop_match_rejections_since(entry_owners)
         cls.add_base_input_data_to_options(accepting[0][0], accepting[0][1], options)
         return True

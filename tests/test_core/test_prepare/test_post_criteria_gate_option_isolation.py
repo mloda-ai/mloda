@@ -244,8 +244,12 @@ class _ResolvedOptions:
     own_group_keys: frozenset[str] = frozenset()
 
 
-def _resolve(candidates: list[type[FeatureGroup]]) -> _ResolvedOptions:
-    feature = Feature(SHARED_FEATURE, options={ORIGINAL_KEY: "original"})
+def _requested_own_keys() -> frozenset[str]:
+    return Feature(SHARED_FEATURE, options={ORIGINAL_KEY: "original"}).options.own_group_keys
+
+
+def _resolve(candidates: list[type[FeatureGroup]], domain: str | None = None) -> _ResolvedOptions:
+    feature = Feature(SHARED_FEATURE, options={ORIGINAL_KEY: "original"}, domain=domain)
     plugins: FeatureGroupEnvironmentMapping = {c: {PostCriteriaGateFw_os061} for c in candidates}
     result, escaped = _capture(partial(IdentifyFeatureGroupClass.evaluate, feature, plugins, None))
     winners = () if result is None else tuple(sorted(fg.get_class_name() for fg in result.identified))
@@ -338,6 +342,10 @@ class TestUnrelatedDifferentReadersStillConflict:
 
         assert resolved.escaped is not None
         assert "BaseInputData already set with different values" in resolved.escaped
+        assert resolved.group == {ORIGINAL_KEY: "original"}
+        assert resolved.context == {}
+        assert BaseInputData.__name__ not in resolved.group
+        assert resolved.own_group_keys == _requested_own_keys()
 
 
 class TestReplayStartsFromTheOriginalOptions:
@@ -356,6 +364,10 @@ class TestReplayStartsFromTheOriginalOptions:
 
         assert resolved.escaped is None
         assert resolved.winners == ("SurvivorOneFG_winner_iso", "SurvivorTwoFG_winner_iso")
+        assert resolved.group == {ORIGINAL_KEY: "original"}
+        assert resolved.context == {}
+        assert BaseInputData.__name__ not in resolved.group
+        assert resolved.own_group_keys == _requested_own_keys()
 
 
 class ReaderGrand_winner_iso(BaseInputData):
@@ -384,7 +396,48 @@ WINNER_OWN_KEY = "winner_own_key_winner_iso"
 
 
 class TestDroppedCandidateLeavesNoOwnKey:
-    """A replaced parent's add_to_group key must not become an own key of the feature the subclass wins."""
+    """A dropped candidate's add_to_group key must not become an own key of the feature the winner computes.
+
+    A winner's own add_to_group write counting as own is intended (own-key sets are adopted from the winner).
+    """
+
+    @pytest.mark.parametrize("winner_first", [True, False])
+    def test_domain_dropped_candidates_own_key_is_not_own(self, winner_first: bool) -> None:
+        gc.collect()
+        wrong = type(
+            "WrongDomBase_winner_iso", (FeatureGroup,), {"get_domain": classmethod(lambda cls: Domain("w_dom"))}
+        )
+        right = type(
+            "RightDomBase_winner_iso", (FeatureGroup,), {"get_domain": classmethod(lambda cls: Domain("r_dom"))}
+        )
+        dropped = _make_candidate(
+            "DomDroppedFG_winner_iso", _Writes({}, {}, frozenset(), api_group={DROPPED_KEY: "dropped"}), [], base=wrong
+        )
+        winner = _make_candidate(
+            "DomWinnerFG_winner_iso", _Writes({DROPPED_KEY: "win"}, {}, frozenset()), [], base=right
+        )
+        resolved = _resolve([winner, dropped] if winner_first else [dropped, winner], domain="r_dom")
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("DomWinnerFG_winner_iso",)
+        assert resolved.group[DROPPED_KEY] == "win"
+        assert DROPPED_KEY not in resolved.own_group_keys
+
+    @pytest.mark.parametrize("winner_first", [True, False])
+    def test_non_matching_candidates_own_key_is_not_own(self, winner_first: bool) -> None:
+        gc.collect()
+        dropped = _make_candidate(
+            "FalseDroppedFG_winner_iso",
+            _Writes({}, {}, frozenset(), matches=False, api_group={DROPPED_KEY: "dropped"}),
+            [],
+        )
+        winner = _make_candidate("FalseWinnerFG_winner_iso", _Writes({DROPPED_KEY: "win"}, {}, frozenset()), [])
+        resolved = _resolve([winner, dropped] if winner_first else [dropped, winner])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("FalseWinnerFG_winner_iso",)
+        assert resolved.group[DROPPED_KEY] == "win"
+        assert DROPPED_KEY not in resolved.own_group_keys
 
     @pytest.mark.parametrize("parent_first", [True, False])
     def test_dropped_parents_own_key_is_not_own(self, parent_first: bool) -> None:

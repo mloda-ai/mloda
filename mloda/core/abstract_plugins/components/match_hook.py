@@ -49,7 +49,7 @@ def call_match_hook(
     option-write conflict during reader selection escalates as a contradiction, decided at the reader-selection
     raise.
 
-    The contained exception is handed back rather than judged here: each seam records and rolls back its own way.
+    The contained exception is handed back rather than judged here: each seam records and isolates options its own way.
     """
     try:
         # bool() inside the try: reading a plugin's return is itself a plugin call (#927).

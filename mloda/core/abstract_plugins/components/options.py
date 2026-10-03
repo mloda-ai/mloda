@@ -395,7 +395,7 @@ class Options:
         return self.rebuild(dict(self.group), dict(self.context))
 
     def _fork(self) -> "Options":
-        """A faithful copy owning its group/context dicts; keeps the subclass and skips __init__ checks."""
+        """Shallow copy owning its group/context dicts; values and subclass attributes are shared by reference."""
         forked = object.__new__(type(self))
         forked.__dict__.update(self.__dict__)
         forked.group = dict(self.group)

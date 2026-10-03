@@ -189,10 +189,12 @@ class IdentifyFeatureGroupClass:
                 result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature, links))
         finally:
             # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
-            # keep both alive until a gc pass. Dropping the outcomes makes each memo's lifetime what it claims,
+            # keep both alive until a gc pass. Dropping the outcomes and option forks (user values) makes each
+            # memo's lifetime what it claims,
             # in a finally because a re-raising gate or an escalated match abort leaves without a return.
             self._domain_outcomes.clear()
             self._links_outcomes.clear()
+            self._matched_options.clear()
         return result
 
     def _capture_render_facts(

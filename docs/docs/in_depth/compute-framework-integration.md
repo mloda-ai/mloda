@@ -285,7 +285,7 @@ When a feature is requested:
 3. It selects a compatible compute framework
 4. It uses the framework-specific implementation for calculations
 
-When several frameworks fit, frameworks that run on their own (Pandas, Polars, PyArrow) win over `SELF_MANAGED` ones (Spark, Iceberg), which win over `REQUIRED` ones (DuckDB, SQLite); ties break by class name. A `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. To use DuckDB or SQLite, pin or restrict the framework.
+When several frameworks fit, frameworks that run on their own (Pandas, Polars, PyArrow) win over `SELF_MANAGED` ones (Spark, Iceberg), which win over `REQUIRED` ones (DuckDB, SQLite); ties break by class name. A `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. A connection alone does not select DuckDB or SQLite: pin every feature that should run there, or restrict the run with `compute_frameworks={DuckDBFramework}`.
 
 Framework authors declare this by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`).
 

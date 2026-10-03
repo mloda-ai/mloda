@@ -278,6 +278,29 @@ class UnlinkedMixConsumer(_Consumer):
     OUTPUT = "unlinked_mix_result"
 
 
+class SubPaRootA(_Root):
+    DATA = {"sub_pa_root_a": [1, 2, 3]}
+
+
+class SubPaRootB(SubPaRootA):
+    DATA = {"sub_pa_root_b": [10, 20, 30]}
+
+
+class SubMixPdRootB(SubPaRootA):
+    DATA = {"sub_mix_pd_root_b": [10, 20, 30]}
+    FRAMEWORK = PandasDataFrame
+
+
+class SubPaConsumer(_Consumer):
+    INPUTS = ("sub_pa_root_a", "sub_pa_root_b")
+    OUTPUT = "sub_pa_result"
+
+
+class SubMixConsumer(_Consumer):
+    INPUTS = ("sub_pa_root_a", "sub_mix_pd_root_b")
+    OUTPUT = "sub_mix_result"
+
+
 _UNLINKED_CASES: list[tuple[str, set[type[FeatureGroup]], set[type[ComputeFramework]], list[str]]] = [
     (
         "unlinked_pa_consumer_result",
@@ -297,13 +320,31 @@ _UNLINKED_CASES: list[tuple[str, set[type[FeatureGroup]], set[type[ComputeFramew
         {PandasDataFrame, PyArrowTable},
         ["UnlinkedPaRootA", "UnlinkedMixPandasRoot"],
     ),
+    (
+        "sub_pa_result",
+        {SubPaRootA, SubPaRootB, SubPaConsumer},
+        {PyArrowTable},
+        ["SubPaRootA", "SubPaRootB"],
+    ),
+    (
+        "sub_mix_result",
+        {SubPaRootA, SubMixPdRootB, SubMixConsumer},
+        {PandasDataFrame, PyArrowTable},
+        ["SubPaRootA", "SubMixPdRootB"],
+    ),
 ]
 
 
 @pytest.mark.parametrize(
     "feature_name,groups,frameworks,named",
     _UNLINKED_CASES,
-    ids=["one_framework_two_roots", "one_framework_three_roots", "mixed_hop_and_no_hop"],
+    ids=[
+        "one_framework_two_roots",
+        "one_framework_three_roots",
+        "mixed_hop_and_no_hop",
+        "subclass_roots_one_framework",
+        "subclass_roots_mixed",
+    ],
 )
 def test_unlinked_parents_raise_missing_links_error_regardless_of_framework(
     feature_name: str,

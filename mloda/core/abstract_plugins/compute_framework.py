@@ -61,6 +61,13 @@ class EmptyResultError(ValueError):
     zero rows with a schema is valid."""
 
 
+_CONNECTION_RANK = {
+    ConnectionRequirement.NONE: 0,
+    ConnectionRequirement.SELF_MANAGED: 1,
+    ConnectionRequirement.REQUIRED: 2,
+}
+
+
 class ComputeFramework(ABC):
     """
     Documentation ComputeFramework:
@@ -742,12 +749,10 @@ class ComputeFramework(ABC):
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
 
-        rank = {ConnectionRequirement.NONE: 0, ConnectionRequirement.SELF_MANAGED: 1, ConnectionRequirement.REQUIRED: 2}
-
         # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
         def key(framework: type["ComputeFramework"]) -> tuple[int, str, str, str]:
             return (
-                rank[framework.connection_requirement()],
+                _CONNECTION_RANK[framework.connection_requirement()],
                 framework.get_class_name(),
                 framework.__module__,
                 framework.__qualname__,

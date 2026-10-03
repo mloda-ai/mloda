@@ -639,7 +639,7 @@ class Engine:
         self,
         feature: Feature,
         compute_frameworks: set[type[ComputeFramework]],
-        feature_group_class: type[FeatureGroup] | None = None,
+        feature_group_class: type[FeatureGroup],
     ) -> Feature:
         """
         This function ensures that the feature always has a compute framework set!
@@ -660,11 +660,9 @@ class Engine:
     def _drop_unconnected_required(
         feature: Feature,
         compute_frameworks: set[type[ComputeFramework]],
-        feature_group_class: type[FeatureGroup] | None,
+        feature_group_class: type[FeatureGroup],
     ) -> set[type[ComputeFramework]]:
         """Drop REQUIRED frameworks lacking a matching connection in the options; keep the set if none would remain."""
-        if feature_group_class is None:
-            return compute_frameworks
         conn = feature.options.get(feature_group_class.get_class_name())
         kept = {
             cfw

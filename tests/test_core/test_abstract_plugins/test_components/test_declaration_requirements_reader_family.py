@@ -349,14 +349,17 @@ def _scoped_depth() -> Feature:
     return Feature(DEPTH, options=addressed)
 
 
-def _run(names: list[Feature | str], dac: DataAccessCollection | None) -> Any:
+DEPTH_FRAME_LINK = Link.inner(JoinSpec(DeclDepthFG1648, JOIN_KEY), JoinSpec(DeclFrameFG1648, JOIN_KEY))
+
+
+def _run(names: list[Feature | str], dac: DataAccessCollection | None, links: set[Link] | None = None) -> Any:
     return mloda.run_all(
         names,
         compute_frameworks={PythonDictFramework},
         parallelization_modes={ParallelizationMode.SYNC},
         data_access_collection=dac,
         plugin_collector=ENABLED,
-        links={Link.inner(JoinSpec(DeclDepthFG1648, JOIN_KEY), JoinSpec(DeclFrameFG1648, JOIN_KEY))},
+        links=links,
     )
 
 
@@ -465,13 +468,13 @@ class TestDeclarationRequirementsEndToEnd:
     """A consumer's Feature carries the requirement per input and resolution honours it."""
 
     def test_global_family_sibling_reader_supplies_the_depth(self) -> None:
-        result = _run([OUT_GLOBAL], DEPTH_DAC)
+        result = _run([OUT_GLOBAL], DEPTH_DAC, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_GLOBAL] == [1]
         assert LOAD_LOG == [DeclScaledDepthReader1648.__name__]
 
     def test_scoped_family_sibling_reader_supplies_the_depth(self) -> None:
-        result = _run([OUT_SCOPED], None)
+        result = _run([OUT_SCOPED], None, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_SCOPED] == [1]
         assert LOAD_LOG == [DeclScaledDepthReader1648.__name__]

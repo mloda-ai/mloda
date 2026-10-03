@@ -127,7 +127,7 @@ class MetricConverter(FeatureGroup):
 
 class MetricCombiner(FeatureGroup):
     """Declares inputs spanning both option buckets of SplitMetricSource (via MetricConverter
-    and directly via metric_b) with no Link, triggering the runtime KeyError."""
+    and directly via metric_b) with no Link, which is rejected at plan time."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {
@@ -404,7 +404,7 @@ class TestMissingLinksError:
         Test that a helpful error is raised when a feature has multiple dependencies
         but no Links are provided.
 
-        Expected Error Location: During runtime
+        Expected Error Location: At plan time (mloda.prepare)
         Expected Error Type: Exception (wraps ValueError)
         Expected Error Content:
             - Mentions "Links" or "multiple dependencies"

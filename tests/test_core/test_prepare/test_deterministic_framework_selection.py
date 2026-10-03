@@ -1,5 +1,6 @@
 """One compute framework wins every reduction, whatever the set iteration order.
-Set iteration over class objects is id-based, so the reduction pins to the lowest class name.
+Set iteration over class objects is id-based, so the reduction ranks candidates first
+and breaks remaining ties by class name.
 """
 
 import importlib
@@ -254,7 +255,7 @@ def _load_framework(module: str, name: str) -> type[ComputeFramework]:
 
 @pytest.mark.parametrize(("module", "name", "expected"), _REQUIREMENTS)
 def test_connection_requirement_per_shipped_framework(module: str, name: str, expected: str) -> None:
-    from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+    from mloda.provider import ConnectionRequirement
 
     framework = _load_framework(module, name)
 
@@ -262,7 +263,7 @@ def test_connection_requirement_per_shipped_framework(module: str, name: str, ex
 
 
 def test_connection_requirement_members() -> None:
-    from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+    from mloda.provider import ConnectionRequirement
 
     assert [member.name for member in ConnectionRequirement] == ["NONE", "SELF_MANAGED", "REQUIRED"]
 

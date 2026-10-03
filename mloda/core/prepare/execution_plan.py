@@ -786,9 +786,7 @@ Available join types:
                     if issubclass(hop_a.from_feature_group, hop_b.from_feature_group) or issubclass(
                         hop_b.from_feature_group, hop_a.from_feature_group
                     ):
-                        join_adjacent = isinstance(hop_a, _JoinServedParent | _SameFrameworkParent) or isinstance(
-                            hop_b, _JoinServedParent | _SameFrameworkParent
-                        )
+                        join_adjacent = isinstance(hop_a, _JoinServedParent) or isinstance(hop_b, _JoinServedParent)
                         if join_adjacent or self._shares_graph_ancestor(parent_a, parent_b, graph):
                             return True
                     return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph)
@@ -863,11 +861,12 @@ Available join types:
                                 tfs.required_uuids = shared_required_uuids - tfs.get_uuids()
 
                 if len(hop_groups) > 1:
-                    raise ValueError(
-                        self._conflicting_transform_hops_error(
-                            ep, hop_groups[0][0][0], hop_groups[1][0][0], [group[0][0] for group in hop_groups[2:]]
-                        )
+                    # Set iteration order of parents varies with the hash seed, so name groups in a stable order.
+                    reps = sorted(
+                        (group[0][0] for group in hop_groups),
+                        key=lambda hop: (hop.from_feature_group.get_class_name(), hop.from_feature_group.__module__),
                     )
+                    raise ValueError(self._conflicting_transform_hops_error(ep, reps[0], reps[1], reps[2:]))
 
             else:
                 raise ValueError(f"Element {ep} is not a valid element.")

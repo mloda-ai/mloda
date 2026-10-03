@@ -135,6 +135,8 @@ for step in results.plan:
 
 `RunResult.frames()` pairs each result frame with the compute `PlanStep` that produced it, by `step_uuid`; the list itself is in plan order, one element per step that produced requested output.
 
+To pin a resolved plan, see [Plan Lock](plan-lock.md).
+
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
 
 ```python

@@ -1,7 +1,4 @@
-"""Prints one json line holding the plan-lock text a fresh interpreter produces.
-No test_ prefix, so pytest never collects it; the PYTHONHASHSEED test runs it as a script.
-Its classes live in __main__, hence _lock_text instead of write_plan_lock.
-"""
+"""Prints the plan-lock text a fresh interpreter produces, for the hash-seed stability test."""
 
 import json
 from typing import Any

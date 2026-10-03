@@ -6,8 +6,6 @@ Strict mode and `PluginPolicy` decide which classes may take part in a request. 
 
 ## Usage
 
-Resolve the plan, check it against the lock file, then run.
-
 ```py
 from mloda.steward import check_plan_lock
 

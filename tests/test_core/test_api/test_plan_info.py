@@ -1454,7 +1454,7 @@ class TestPlanLock:
 
         check_plan_lock(explain_plan(), lock)
 
-    # Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
+    # Fresh interpreters are slow, so this needs more than the suite-wide timeout.
     @pytest.mark.timeout(60)
     def test_plan_lock_text_is_stable_across_hash_seeds(self) -> None:
         outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=[0, 1, 2])

@@ -498,33 +498,45 @@ class ExecutionPlan:
         for group, count in step_counts.items():
             if count > 1 and group.get_class_name() != hinted_class_name:
                 repeated_paragraph += (
-                    f"\n'{format_feature_group_class(group)}' ran as separate steps because its requests differ "
-                    "(options, data type, or source). Align those requests so one step serves them all, or Link "
-                    "the steps with left_discriminator/right_discriminator.\n"
+                    f"\n'{format_feature_group_class(group)}' ran as separate steps because its requests differ in "
+                    "data type, compute framework, or source. Align those requests so one step serves them all.\n"
                 )
 
         example_groups = list(step_counts)
         first_class_name = example_groups[0].get_class_name()
         second_class_name = example_groups[1].get_class_name() if len(example_groups) > 1 else first_class_name
-        if first_class_name == second_class_name:
-            link_example = f"""        Link.inner(
+        link_options = ""
+        if first_class_name != second_class_name:
+            link_options = f"""
+Option 1: Explicit JoinSpec (works with any feature group):
+    from mloda.user import Link, JoinSpec
+
+    links = {{
+        Link.inner(
             JoinSpec({first_class_name}, "shared_column"),
             JoinSpec({second_class_name}, "shared_column"),
-            left_discriminator={{"option_key": "left_value"}},
-            right_discriminator={{"option_key": "right_value"}},
-        )"""
-            option_two = ""
-        else:
-            link_example = f"""        Link.inner(
-            JoinSpec({first_class_name}, "shared_column"),
-            JoinSpec({second_class_name}, "shared_column"),
-        )"""
-            option_two = f"""
+        )
+    }}
+
 Option 2: Shorthand via index_columns() (requires feature groups to define index_columns()):
     from mloda.user import Link
 
     links = {{
         Link.inner_on({first_class_name}, {second_class_name})
+    }}
+"""
+        elif first_class_name == hinted_class_name:
+            link_options = f"""
+Option 1: Explicit JoinSpec (works with any feature group):
+    from mloda.user import Link, JoinSpec
+
+    links = {{
+        Link.inner(
+            JoinSpec({first_class_name}, "shared_column"),
+            JoinSpec({second_class_name}, "shared_column"),
+            left_discriminator={{"option_key": "left_value"}},
+            right_discriminator={{"option_key": "right_value"}},
+        )
     }}
 """
 
@@ -534,14 +546,7 @@ Feature group '{feature_name}' depends on parents from {len(hops)} unlinked sour
 When a feature depends on multiple input features from different sources, you must provide explicit
 Links to specify how to merge them. Without Links, the framework cannot determine how to combine the
 data, and only one of the sources would ever be read.
-
-Option 1: Explicit JoinSpec (works with any feature group):
-    from mloda.user import Link, JoinSpec
-
-    links = {{
-{link_example}
-    }}
-{option_two}
+{link_options}
 Available join types:
 - Link.inner(left, right)    - Keep only matching rows from both sides
 - Link.left(left, right)     - Keep all rows from left, matching from right
@@ -808,13 +813,14 @@ Available join types:
                     else:
                         same_framework_entries.append((parent_node_property.feature_group_class, parent))
 
-                # Group entries by transitive linkage: same feature-group class, one entry's own class a
-                # subclass (or superclass) of the other's (catches a case-override hop whose parent lost the
-                # JoinStep's own uuid to a same-role sibling, see `_case_override_beats_nearer_wrong_framework_left`,
-                # without also bridging two entries that merely share an unrelated common ancestor via some
-                # third join's declared side), or `_parents_linked_by_join`. A subclass pairing must
-                # additionally share genuine graph ancestry unless it is join-served, so two plain hops that
-                # merely subclass one another over otherwise unrelated roots are not merged.
+                # Group entries by transitive linkage: same feature-group class (unless split across
+                # unrelated root steps), one entry's own class a subclass (or superclass) of the other's
+                # (catches a case-override hop whose parent lost the JoinStep's own uuid to a same-role sibling,
+                # see `_case_override_beats_nearer_wrong_framework_left`, without also bridging two entries that
+                # merely share an unrelated common ancestor via some third join's declared side), or
+                # `_parents_linked_by_join`. A subclass pairing must additionally share genuine graph ancestry
+                # unless it is join-served, so two plain hops that merely subclass one another over otherwise
+                # unrelated roots are not merged.
                 def _entries_linked(
                     entry_a: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
                     entry_b: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
@@ -822,12 +828,12 @@ Available join types:
                     hop_a, parent_a = entry_a
                     hop_b, parent_b = entry_b
                     if hop_a.from_feature_group is hop_b.from_feature_group:
-                        # Same consumed names is a heuristic: either step then supplies every column.
+                        # Steps match by column name only, a heuristic: same names means either step
+                        # supplies every column.
                         step_a = owning_step_of.get(parent_a, parent_a)
                         step_b = owning_step_of.get(parent_b, parent_b)
                         split_root_steps = (
-                            step_a != step_b
-                            and not (root_steps_of(parent_a) & root_steps_of(parent_b))
+                            not (root_steps_of(parent_a) & root_steps_of(parent_b))
                             and consumed_names_by_step[step_a] != consumed_names_by_step[step_b]
                         )
                         if not split_root_steps:

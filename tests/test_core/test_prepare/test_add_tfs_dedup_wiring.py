@@ -270,6 +270,32 @@ def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
     assert dest_step.tfs_ids == {step.uuid for step in tfs_steps}
 
 
+def test_two_non_root_steps_of_one_class_over_one_shared_root_step_do_not_raise() -> None:
+    """Split non-root steps (different names) that descend from one shared root step stay linked."""
+    graph = Graph()
+
+    root = _feature("dedup_shared_root", PyArrowTable)
+    _root_node(graph, root, DedupLeftFG)
+    producer_root = _producer_step(DedupLeftFG, root, PyArrowTable)
+
+    mid_a = _feature("dedup_mid_a", PyArrowTable)
+    mid_b = _feature("dedup_mid_b", PyArrowTable)
+    graph.add_node(mid_a.uuid, NodeProperties(mid_a, DedupUpstreamFG))
+    graph.add_node(mid_b.uuid, NodeProperties(mid_b, DedupUpstreamFG))
+    graph.parent_to_children_mapping[mid_a.uuid] = {root.uuid}
+    graph.parent_to_children_mapping[mid_b.uuid] = {root.uuid}
+    producer_a = _producer_step(DedupUpstreamFG, mid_a, PyArrowTable)
+    producer_b = _producer_step(DedupUpstreamFG, mid_b, PyArrowTable)
+
+    dest_feature = _feature("dedup_dest_non_root", PyArrowTable)
+    feature_set = FeatureSet()
+    feature_set.add(dest_feature)
+    graph.parent_to_children_mapping[dest_feature.uuid] = {mid_a.uuid, mid_b.uuid}
+    dest_step = FeatureGroupStep(DedupDestFG, feature_set, set(), PyArrowTable)
+
+    ExecutionPlan().add_tfs([producer_root, producer_a, producer_b, dest_step], graph)
+
+
 def test_two_root_steps_of_one_class_providing_different_names_raise_missing_links() -> None:
     """Only one of the split steps is ever bound, so a consumer reading a different name from each loses a column."""
     producers, dest_step, graph = _split_root_steps_scenario("dedup_shared_a", "dedup_shared_b")

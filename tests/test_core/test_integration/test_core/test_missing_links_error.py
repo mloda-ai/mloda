@@ -481,6 +481,9 @@ class TestMissingLinksError:
         assert "missing Links" in error_message
         assert "separate steps" in error_message
         assert "Link.inner_on(SplitSourceDtype, SplitSourceDtype)" not in error_message
+        # Discriminators match options only, so they cannot resolve a data-type split.
+        assert "left_discriminator" not in error_message
+        assert "data type" in error_message
 
     def test_direct_option_split_raises_at_plan_time(self) -> None:
         with pytest.raises(ValueError) as exc_info:
@@ -513,6 +516,7 @@ class TestMissingLinksError:
 
         error_message = str(exc_info.value)
         assert "NonRootSplitConsumer" in error_message
+        assert "NonRootMetricRelay" in error_message
         assert "missing Links" in error_message
 
     def test_linked_direct_split_still_runs(self) -> None:

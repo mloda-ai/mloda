@@ -132,7 +132,7 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
     """Tests for SetupComputeFramework filtering by parallelization_modes."""
 
     def test_multiprocessing_mode_excludes_sqlite_framework(self) -> None:
-        """Passing parallelization_modes={MULTIPROCESSING} with user_compute_frameworks={SqliteFramework}
+        """Passing parallelization_modes={MULTIPROCESSING} with user_compute_frameworks=[SqliteFramework]
         must raise ValueError because SqliteFramework only supports SYNC.
 
         After filtering, no compatible framework remains, which must trigger a ValueError.
@@ -140,31 +140,31 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
         features = Features([Feature("test_feature")])
         with pytest.raises(ValueError):
             SetupComputeFramework(
-                user_compute_frameworks={SqliteFramework},
+                user_compute_frameworks=[SqliteFramework],
                 features=features,
                 parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             )
 
     def test_sync_mode_includes_sqlite_framework(self) -> None:
-        """Passing parallelization_modes={SYNC} with user_compute_frameworks={SqliteFramework}
+        """Passing parallelization_modes={SYNC} with user_compute_frameworks=[SqliteFramework]
         must succeed because SqliteFramework supports SYNC.
         """
         features = Features([Feature("test_feature")])
         setup = SetupComputeFramework(
-            user_compute_frameworks={SqliteFramework},
+            user_compute_frameworks=[SqliteFramework],
             features=features,
             parallelization_modes={ParallelizationMode.SYNC},
         )
         assert SqliteFramework in setup.compute_frameworks
 
     def test_multiprocessing_mode_excludes_duckdb_framework(self) -> None:
-        """Passing parallelization_modes={MULTIPROCESSING} with user_compute_frameworks={DuckDBFramework}
+        """Passing parallelization_modes={MULTIPROCESSING} with user_compute_frameworks=[DuckDBFramework]
         must raise ValueError because DuckDBFramework only supports SYNC.
         """
         features = Features([Feature("test_feature")])
         with pytest.raises(ValueError):
             SetupComputeFramework(
-                user_compute_frameworks={DuckDBFramework},
+                user_compute_frameworks=[DuckDBFramework],
                 features=features,
                 parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             )
@@ -175,7 +175,7 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
         """
         features = Features([Feature("test_feature")])
         setup = SetupComputeFramework(
-            user_compute_frameworks={SqliteFramework},
+            user_compute_frameworks=[SqliteFramework],
             features=features,
         )
         assert SqliteFramework in setup.compute_frameworks
@@ -185,7 +185,7 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
         features = Features([Feature("test_feature")])
         with pytest.raises(ValueError, match="parallelization modes"):
             SetupComputeFramework(
-                user_compute_frameworks={SparkFramework},
+                user_compute_frameworks=[SparkFramework],
                 features=features,
                 parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             )
@@ -195,7 +195,7 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
         features = Features([Feature("test_feature")])
         with pytest.raises(ValueError, match="parallelization modes"):
             SetupComputeFramework(
-                user_compute_frameworks={IcebergFramework},
+                user_compute_frameworks=[IcebergFramework],
                 features=features,
                 parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             )
@@ -204,7 +204,7 @@ class TestSetupComputeFrameworkParallelizationModeFiltering:
         """IcebergFramework supports SYNC, so SetupComputeFramework must accept it."""
         features = Features([Feature("test_feature")])
         setup = SetupComputeFramework(
-            user_compute_frameworks={IcebergFramework},
+            user_compute_frameworks=[IcebergFramework],
             features=features,
             parallelization_modes={ParallelizationMode.SYNC},
         )

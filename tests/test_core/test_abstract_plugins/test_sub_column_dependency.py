@@ -182,7 +182,7 @@ class TestSubColumnDependencyResolution:
 
         api = mloda(
             features_to_request,
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results = api.run()
@@ -353,7 +353,7 @@ class TestSubColumnIntegration:
 
         result = mloda.run_all(
             ["sub_column_consumer_output"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -423,7 +423,7 @@ class TestSubColumnIntegration:
 
         result = mloda.run_all(
             ["validating_consumer_output"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -483,7 +483,7 @@ class TestSubColumnIntegration:
 
         result = mloda.run_all(
             ["multi_sub_column_consumer_output"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -550,7 +550,7 @@ class TestSubColumnIntegration:
 
         result = mloda.run_all(
             ["sub_column_consumer_output__value_doubled"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -593,7 +593,7 @@ class TestSubColumnIntegration:
 
         result = mloda.run_all(
             ["base_feature", "sub_column_consumer_output"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -693,7 +693,7 @@ class TestSubColumnIntegration:
 
         result = mloda.run_all(
             ["second_consumer_output"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

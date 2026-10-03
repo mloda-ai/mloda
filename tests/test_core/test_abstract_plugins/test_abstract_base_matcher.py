@@ -112,7 +112,7 @@ class TestAbstractBaseMatcher:
 
         results = mloda.run_all(
             features=[Feature("issue692_root_feature")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

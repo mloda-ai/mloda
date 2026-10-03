@@ -210,7 +210,7 @@ def _frame_with_column(results: list[Any], column: str) -> Any:
 def _run(features: list[Feature | str], groups: set[type[FeatureGroup]]) -> list[Any]:
     return mloda.run_all(
         features,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=PluginCollector.enabled_feature_groups(groups),
     )
 

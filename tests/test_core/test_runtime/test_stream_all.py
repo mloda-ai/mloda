@@ -20,7 +20,7 @@ class TestStreamAllClassMethod:
         features = Features([Feature(name="EngineRunnerTest1", initial_requested_data=True)])
         result = mlodaAPI.stream_all(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes={ParallelizationMode.SYNC},
         )
 
@@ -49,7 +49,7 @@ class TestStreamAllImportFromUser:
         features = Features([Feature(name="EngineRunnerTest1", initial_requested_data=True)])
         result = stream_all(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes={ParallelizationMode.SYNC},
         )
 

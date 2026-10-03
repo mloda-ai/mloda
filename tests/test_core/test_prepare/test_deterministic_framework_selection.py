@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pandas as pd
 import pyarrow as pa
 import pytest
 
@@ -17,10 +18,11 @@ from mloda.user import PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_preference
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolve_links import ResolveLinks
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -89,6 +91,21 @@ def _same_name_frameworks() -> tuple[type[ComputeFramework], type[ComputeFramewo
     return alfa(), bravo()
 
 
+def _same_name_and_qualname_frameworks() -> tuple[type[ComputeFramework], type[ComputeFramework]]:
+    """Two frameworks identical in class name and qualname, separated only by module."""
+
+    def make(module: str) -> type[ComputeFramework]:
+        class ZzSharedModuleThrowawayFramework(ComputeFramework):
+            @staticmethod
+            def is_available() -> bool:
+                return False
+
+        ZzSharedModuleThrowawayFramework.__module__ = module
+        return ZzSharedModuleThrowawayFramework
+
+    return make("zz_module_b"), make("zz_module_a")
+
+
 def _link() -> Link:
     return Link.inner(
         JoinSpec(DeterminismLeftFeatureGroup, "idx"),
@@ -130,6 +147,14 @@ def test_select_deterministic_breaks_a_shared_class_name_by_qualname() -> None:
     assert ".alfa." in forward.__qualname__, forward.__qualname__
 
 
+def test_select_deterministic_breaks_a_shared_name_and_qualname_by_module() -> None:
+    module_b, module_a = _same_name_and_qualname_frameworks()
+    assert module_a.__qualname__ == module_b.__qualname__
+
+    for order in ([module_b, module_a], [module_a, module_b]):
+        assert ComputeFramework.select_deterministic(order) is module_a
+
+
 def test_select_deterministic_rejects_empty_input() -> None:
     with pytest.raises(ValueError):
         ComputeFramework.select_deterministic([])
@@ -137,7 +162,7 @@ def test_select_deterministic_rejects_empty_input() -> None:
 
 def test_the_throwaway_frameworks_stay_out_of_plugin_discovery() -> None:
     """get_cfw_subclasses is what planning consults; nothing this module defines may reach it."""
-    held = set(_throwaway_frameworks()) | set(_same_name_frameworks())
+    held = set(_throwaway_frameworks()) | set(_same_name_frameworks()) | set(_same_name_and_qualname_frameworks())
 
     discovered = PreFilterPlugins.get_cfw_subclasses()
 
@@ -172,6 +197,17 @@ def test_link_trekker_key_reduces_every_framework_pair_the_same_way() -> None:
         assert key[0] is link
         assert key[1].get_class_name() == expected
         assert key[2].get_class_name() == expected
+
+
+def test_link_trekker_key_follows_a_non_default_preference_on_both_sides() -> None:
+    link = _link()
+
+    with framework_preference({PyArrowTable: 0, PandasDataFrame: 1}):
+        key = ResolveLinks(Graph()).create_link_trekker_key(
+            link, {PyArrowTable, PandasDataFrame}, {PandasDataFrame, PyArrowTable}
+        )
+
+    assert key == (link, PyArrowTable, PyArrowTable)
 
 
 def test_link_trekker_key_keeps_single_framework_sides() -> None:
@@ -330,15 +366,15 @@ def sqlite_conn() -> Iterator[sqlite3.Connection]:
     conn.close()
 
 
-def _frameworks() -> set[type[ComputeFramework]]:
+def _frameworks() -> list[type[ComputeFramework]]:
     pytest.importorskip("duckdb")
     duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
     sqlite_fw = _load_framework(f"{_BASE}.sqlite.sqlite_framework", "SqliteFramework")
-    return {duckdb_fw, sqlite_fw}
+    return [duckdb_fw, sqlite_fw]
 
 
 def _compute_framework_names(
-    feature: Feature | str, fg: type[FeatureGroup], frameworks: set[type[ComputeFramework]]
+    feature: Feature | str, fg: type[FeatureGroup], frameworks: list[type[ComputeFramework]]
 ) -> list[str | None]:
     steps = mloda.explain(
         [feature], compute_frameworks=frameworks, plugin_collector=PluginCollector.enabled_feature_groups({fg})
@@ -352,7 +388,7 @@ def test_run_all_unrestricted_root_avoids_unconnected_duckdb() -> None:
 
     result = mloda.run_all(
         ["conn_aware_duck_pa_root"],
-        compute_frameworks={duckdb_fw, PyArrowTable},
+        compute_frameworks=[PyArrowTable, duckdb_fw],
         plugin_collector=PluginCollector.enabled_feature_groups({ConnAwareDuckPyArrowRootFG}),
     )
 
@@ -384,3 +420,135 @@ def test_pinned_duckdb_feature_keeps_its_pin(sqlite_conn: sqlite3.Connection) ->
     names = _compute_framework_names(feature, ConnAwarePinnedRootFG, _frameworks())
 
     assert names == ["DuckDBFramework"]
+
+
+# --- run-level framework preference -------------------------------------------------------------
+
+
+class PreferencePandasPyArrowRootFG(_ConnAwareRoot):
+    NAME = "preference_pd_pa_root"
+
+
+class PreferenceRequiredRootFG(_ConnAwareRoot):
+    NAME = "preference_required_root"
+
+
+class PreferenceUnavailableRootFG(_ConnAwareRoot):
+    NAME = "preference_unavailable_root"
+
+
+def _default_winner() -> str:
+    return ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]).get_class_name()
+
+
+def test_preference_first_listed_among_candidates_wins() -> None:
+    with framework_preference({PyArrowTable: 0, PandasDataFrame: 1}):
+        assert ComputeFramework.select_deterministic([PandasDataFrame, PyArrowTable]) is PyArrowTable
+    with framework_preference({PandasDataFrame: 0, PyArrowTable: 1}):
+        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PandasDataFrame
+
+
+def test_preference_ranks_unlisted_candidates_after_listed_in_default_order() -> None:
+    zulu, alfa, _, bravo = _throwaway_frameworks()
+
+    with framework_preference({zulu: 0}):
+        assert ComputeFramework.select_deterministic({alfa, zulu, bravo}) is zulu
+        assert ComputeFramework.select_deterministic({alfa, bravo, PandasDataFrame}) is PandasDataFrame
+
+
+def test_unlisted_candidates_rank_after_every_listed_one_when_positions_repeat() -> None:
+    zulu, alfa, _, bravo = _throwaway_frameworks()
+
+    with framework_preference({zulu: 1, bravo: 1}):
+        assert ComputeFramework.select_deterministic({alfa, zulu, bravo}) is bravo
+        assert ComputeFramework.select_deterministic({alfa, zulu, PandasDataFrame}) is zulu
+
+
+def test_a_shared_position_is_broken_by_the_module() -> None:
+    module_b, module_a = _same_name_and_qualname_frameworks()
+
+    with framework_preference({module_b: 0, module_a: 0, PandasDataFrame: 1}):
+        assert ComputeFramework.select_deterministic({module_b, module_a, PandasDataFrame}) is module_a
+
+
+def test_no_preference_leaves_the_default_unchanged() -> None:
+    with framework_preference({}):
+        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PandasDataFrame
+
+
+@pytest.mark.parametrize("body_raises", [False, True], ids=["exits_normally", "body_raises"])
+def test_preference_is_empty_again_after_the_context_manager_ends(body_raises: bool) -> None:
+    def run_body() -> None:
+        with framework_preference({PyArrowTable: 0}):
+            assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PyArrowTable
+            if body_raises:
+                raise RuntimeError("boom")
+
+    if body_raises:
+        with pytest.raises(RuntimeError, match="boom"):
+            run_body()
+    else:
+        run_body()
+
+    assert _default_winner() == "PandasDataFrame"
+
+
+@pytest.mark.parametrize(
+    ("order", "expected"),
+    [
+        (["PyArrowTable", "PandasDataFrame"], ["PyArrowTable"]),
+        (["PandasDataFrame", "PyArrowTable"], ["PandasDataFrame"]),
+    ],
+)
+def test_planning_follows_the_listed_order(order: list[Any], expected: list[str | None]) -> None:
+    frameworks = [_load_framework(_MODULE_OF[name], name) for name in order]
+
+    names = _compute_framework_names("preference_pd_pa_root", PreferencePandasPyArrowRootFG, frameworks)
+
+    assert names == expected
+
+
+def test_required_framework_listed_first_without_connection_still_loses() -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+
+    names = _compute_framework_names("preference_required_root", PreferenceRequiredRootFG, [sqlite_fw, PandasDataFrame])
+
+    assert names == ["PandasDataFrame"]
+
+
+def test_unavailable_framework_listed_first_falls_back_to_the_next_listed() -> None:
+    unavailable = _throwaway_frameworks()[0]
+
+    names = _compute_framework_names(
+        "preference_unavailable_root", PreferenceUnavailableRootFG, [unavailable, PyArrowTable, PandasDataFrame]
+    )
+
+    assert names == ["PyArrowTable"]
+
+
+def test_preference_is_empty_again_after_a_planning_run_that_raises() -> None:
+    with pytest.raises(FeatureResolutionError):
+        _compute_framework_names("preference_no_such_feature", PreferencePandasPyArrowRootFG, [PyArrowTable])
+
+    assert _default_winner() == "PandasDataFrame"
+
+
+class PreferencePinnedPandasRootFG(_ConnAwareRoot):
+    NAME = "preference_pinned_pandas_root"
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({cls.NAME: [1, 2, 3]})
+
+
+def test_feature_pinned_to_pandas_still_runs_on_pandas_under_a_pyarrow_first_run_list() -> None:
+    feature = Feature("preference_pinned_pandas_root", compute_framework="PandasDataFrame")
+
+    result = mloda.run_all(
+        [feature],
+        compute_frameworks=["PyArrowTable", "PandasDataFrame"],
+        plugin_collector=PluginCollector.enabled_feature_groups({PreferencePinnedPandasRootFG}),
+    )
+
+    assert len(result) == 1
+    assert isinstance(result[0], pd.DataFrame)

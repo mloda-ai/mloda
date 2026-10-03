@@ -153,7 +153,7 @@ def test_run_link_calls_validate_join_step_uuids_with_non_empty_sides() -> None:
         mloda.prepare(
             features=[Feature("wiring_join_child_result")],
             links={Link.inner_on(WiringJoinLeftFG, WiringJoinRightFG)},
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {WiringJoinLeftFG, WiringJoinRightFG, WiringJoinChild}
             ),

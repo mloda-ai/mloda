@@ -132,7 +132,7 @@ class TestClusteringFeatureGroupIntegration:
         # Run the mloda
         result = mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -195,7 +195,7 @@ class TestClusteringFeatureGroupIntegration:
         # Run the mloda
         result = mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -223,7 +223,7 @@ class TestClusteringFeatureGroupIntegration:
         # Run the mloda
         result = mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

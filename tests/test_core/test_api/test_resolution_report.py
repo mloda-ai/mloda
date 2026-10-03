@@ -155,7 +155,7 @@ def _prepare_session() -> mlodaAPI:
     """A prepared session whose requested consumer chains off one derived source feature."""
     return mloda.prepare(
         ["ResReportConsumer_811"],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_RES_REPORT_PLUGINS,
     )
 
@@ -313,7 +313,7 @@ class TestResolutionReportDoesNotRematch:
 
         session = mloda.prepare(
             ["res_report_counted_811"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_COUNTING_PLUGINS,
         )
         after_prepare = dict(RES_REPORT_MATCH_CALLS_811)

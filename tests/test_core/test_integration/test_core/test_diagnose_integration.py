@@ -81,7 +81,7 @@ class TestDiagnoseEndToEnd_812:
 
     def test_full_request_yields_a_complete_diagnosis(self) -> None:
         """A fully resolvable request diagnoses complete and mirrors prepare().resolution_report()."""
-        diagnosis = mloda.diagnose(_success_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_PLUGINS)
+        diagnosis = mloda.diagnose(_success_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS)
 
         assert isinstance(diagnosis, ResolutionDiagnosis)
         assert diagnosis.complete is True
@@ -112,13 +112,13 @@ class TestDiagnoseEndToEnd_812:
 
         # Same eager planning as prepare(): the records equal what prepare(...).resolution_report() reports.
         report = mloda.prepare(
-            _success_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_PLUGINS
+            _success_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS
         ).resolution_report()
         assert diagnosis.records == report
 
     def test_unknown_feature_yields_a_resolution_failure_diagnosis(self) -> None:
         """Adding an unknown name projects the raising path's FeatureResolutionError, records held so far."""
-        diagnosis = mloda.diagnose(_failure_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_PLUGINS)
+        diagnosis = mloda.diagnose(_failure_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS)
 
         assert diagnosis.complete is False
         assert diagnosis.feature_name == UNKNOWN_FEATURE
@@ -135,7 +135,7 @@ class TestDiagnoseEndToEnd_812:
 
         # The projection equals the raising path's typed error for the same failing request.
         with pytest.raises(FeatureResolutionError) as exc_info:
-            mloda.prepare(_failure_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_PLUGINS)
+            mloda.prepare(_failure_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_PLUGINS)
         caught = exc_info.value
 
         assert diagnosis.message == str(caught)

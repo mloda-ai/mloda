@@ -56,7 +56,7 @@ class TestScalingFeatureGroupIntegration:
         # Phase 1: Train and save artifacts
         api1 = mloda(
             [scaling_feature],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
@@ -86,7 +86,7 @@ class TestScalingFeatureGroupIntegration:
 
         api2 = mloda(
             [scaling_feature_reuse],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results2 = api2.run()

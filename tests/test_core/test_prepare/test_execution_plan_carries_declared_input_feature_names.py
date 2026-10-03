@@ -82,7 +82,7 @@ class TestExecutionPlanCarriesDeclaredInputFeatureNames:
 
         mloda.run_all(
             [Feature(CIF_DEPENDENT_FEATURE)],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             function_extender={extender},
         )
@@ -105,7 +105,7 @@ class TestExecutionPlanCarriesDeclaredInputFeatureEdges:
 
         mloda.run_all(
             [Feature(CIF_DEPENDENT_FEATURE)],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             function_extender={extender},
         )

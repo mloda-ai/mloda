@@ -106,7 +106,7 @@ class TestTextFileReaderEndToEnd:
                 Feature(name, options={"TextFileReader": str(file_path)})
                 for name in ("TextFileReader", "source", "file_type")
             ],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups({ReadDocumentFeature}),
         )
 

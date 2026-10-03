@@ -61,7 +61,7 @@ Now, we run the query to the feature group to save the artifact. This example is
 from mloda.user import mloda
 from mloda.user.pyarrow import PyArrowTable
 
-api = mloda(["BaseExampleArtifactFeature"], {PyArrowTable})
+api = mloda(["BaseExampleArtifactFeature"], [PyArrowTable])
 api.run()
 artifacts = api.get_artifacts()
 print(artifacts)
@@ -79,7 +79,7 @@ Now, let us use this artifact.
 from mloda.user import Feature, mloda
 
 feat = Feature(name="BaseExampleArtifactFeature", options=artifacts)
-mloda.run_all([feat], {PyArrowTable})
+mloda.run_all([feat], [PyArrowTable])
 ```
 
 Result:
@@ -104,7 +104,7 @@ from mloda.user import mloda
 from mloda.user.pyarrow import PyArrowTable
 
 # 1. Prepare once
-session = mloda.prepare(["BaseExampleArtifactFeature"], {PyArrowTable})
+session = mloda.prepare(["BaseExampleArtifactFeature"], [PyArrowTable])
 
 # 2. First run: save mode (train)
 session.run()
@@ -119,7 +119,7 @@ result = session.run(artifacts=saved_artifacts)
 
 ```py
 # pseudocode
-session = mloda.prepare(["MyArtifactFeature"], {PyArrowTable})
+session = mloda.prepare(["MyArtifactFeature"], [PyArrowTable])
 
 for fold_data in folds:
     # Train fold

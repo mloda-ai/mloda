@@ -30,7 +30,7 @@ class TestmlodaAPI:
     def test_init_with_all_params(self) -> None:
         features = [Feature("BaseTestGraphFeatureGroup3")]
 
-        compute_fws = [fw.get_class_name() for fw in get_all_subclasses(ComputeFramework)]
+        compute_fws = sorted(fw.get_class_name() for fw in get_all_subclasses(ComputeFramework))
         links = {
             Link.inner(
                 JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),

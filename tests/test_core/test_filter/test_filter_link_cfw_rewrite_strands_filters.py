@@ -92,7 +92,7 @@ def test_link_cfw_rewrite_keeps_stored_filters_usable() -> None:
 
     result = MlodaTestRunner.run_api(
         features,
-        compute_frameworks={PyArrowTable, SecondCfw},
+        compute_frameworks=[PyArrowTable, SecondCfw],
         parallelization_modes={ParallelizationMode.SYNC},
         global_filter=global_filter,
         links=links,

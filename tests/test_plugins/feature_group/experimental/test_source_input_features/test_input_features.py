@@ -85,7 +85,7 @@ class TestInputFeatures:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
         )
 
         for res in result:
@@ -116,7 +116,7 @@ class TestInputFeatures:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data={"Example": {"FeatureInputAPITest": ["TestValue3", "TestValue4"]}},
         )
         for res in result:
@@ -142,7 +142,7 @@ class TestInputFeatures:
         result = mloda.run_all(
             feature_list,
             plugin_collector=self._enabled,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
         )
         for res in result:
             assert len(res) == 2

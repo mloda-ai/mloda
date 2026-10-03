@@ -91,7 +91,7 @@ class TestComplexEncodingChaining:
         # Phase 1: Train and save artifacts for all complex features
         api1 = mloda(
             complex_features,
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
@@ -173,7 +173,7 @@ class TestComplexEncodingChaining:
 
         api2 = mloda(
             complex_features_reuse,
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results2 = api2.run()

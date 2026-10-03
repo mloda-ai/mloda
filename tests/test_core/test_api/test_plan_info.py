@@ -422,7 +422,7 @@ _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
 def _prepare_chained_session() -> mlodaAPI:
     return mloda.prepare(
         _CHAINED_FEATURES,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_AGGREGATION_PLUGINS,
     )
 
@@ -430,7 +430,7 @@ def _prepare_chained_session() -> mlodaAPI:
 def _prepare_chained_session_with(recorder: PlanInfoCalculateHookRecorder) -> mlodaAPI:
     return mloda.prepare(
         _CHAINED_FEATURES,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_AGGREGATION_PLUGINS,
         function_extender={recorder},
     )
@@ -441,7 +441,7 @@ def _prepare_single_framework_join_session() -> mlodaAPI:
 
     return mloda.prepare(
         ["PlanInfoJoinConsumer"],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         links={link},
         plugin_collector=_JOIN_PLUGINS,
     )
@@ -457,7 +457,7 @@ def _cross_link() -> Link:
 def _prepare_cross_join(consumer: str, plugins: PluginCollector) -> mlodaAPI:
     return mloda.prepare(
         [consumer],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         links={_cross_link()},
         plugin_collector=plugins,
     )
@@ -475,7 +475,7 @@ def _prepare_inverted_cross_framework_join_session() -> mlodaAPI:
 def _prepare_nested_options_session() -> mlodaAPI:
     return mloda.prepare(
         [Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}})],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_NESTED_OPTIONS_PLUGINS,
     )
 
@@ -944,7 +944,7 @@ class TestPlanStepReaderDataAccess:
 
         explained = mloda.explain(
             ["plan_info_rows_a"],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             data_access_collection=dac,
         )
 
@@ -992,7 +992,7 @@ class TestPlanStepReaderDataAccess:
 
         explained = mloda.explain(
             ["plan_info_db_col"],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=dac,
             plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
         )
@@ -1098,7 +1098,7 @@ class TestResolvedPlanForChainedFeature:
         """
         session = mloda.prepare(
             ["plan_info_sales", "plan_info_price"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
@@ -1185,7 +1185,7 @@ class TestExplain:
     def test_explain_matches_prepare_resolved_plan(self) -> None:
         explained = mlodaAPI.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
         prepared = _prepare_chained_session().resolved_plan()
@@ -1197,7 +1197,7 @@ class TestExplain:
         compares multisets rather than requiring the two resolutions to match exactly."""
         explained = mlodaAPI.explain(
             ["PlanInfoCrossConsumer"],
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             links={_cross_link()},
             plugin_collector=_CROSS_JOIN_PLUGINS,
         )
@@ -1209,7 +1209,7 @@ class TestExplain:
     def test_explain_returns_plan_steps(self) -> None:
         explained = mlodaAPI.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
@@ -1220,7 +1220,7 @@ class TestExplain:
     def test_explain_reports_the_parent_a_subclass_winner_replaced(self) -> None:
         explained = mlodaAPI.explain(
             ["plan_info_specialized_value"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_SPECIALIZED_PLUGINS,
         )
 
@@ -1241,7 +1241,7 @@ class TestExplain:
     ) -> None:
         explained = mlodaAPI.explain(
             consumers,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_SPECIALIZED_PLUGINS,
         )
 
@@ -1253,7 +1253,7 @@ class TestExplain:
         """PlanInfoNeverExecutes.calculate_feature raises. explain() must still succeed."""
         explained = mlodaAPI.explain(
             ["plan_info_never_executed"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_NEVER_EXECUTES_PLUGINS,
         )
 
@@ -1264,7 +1264,7 @@ class TestExplain:
     def test_explain_is_reachable_from_the_mloda_alias(self) -> None:
         explained = mloda.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
@@ -1287,7 +1287,7 @@ class TestExplain:
     def test_explain_still_accepts_its_parameters_by_keyword(self) -> None:
         explained = mlodaAPI.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
@@ -1305,7 +1305,7 @@ class TestTransformStepMapping:
     def test_transform_step_maps_from_and_to_group_and_framework(self) -> None:
         session = mloda.prepare(
             ["plan_info_arrow_sales__mean_aggr"],
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=_TRANSFORM_PLUGINS,
         )
 
@@ -1330,7 +1330,7 @@ class TestTransformStepMapping:
     def test_transform_step_sits_between_its_compute_steps(self) -> None:
         session = mloda.prepare(
             ["plan_info_arrow_sales__mean_aggr"],
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=_TRANSFORM_PLUGINS,
         )
 

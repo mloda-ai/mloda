@@ -262,7 +262,7 @@ def test_multi_column_auto_resolution_with_chaining() -> None:
     # Run the computation
     api = mloda(
         features_to_request,
-        {PandasDataFrame},
+        [PandasDataFrame],
         plugin_collector=plugin_collector,
     )
     results = api.run()

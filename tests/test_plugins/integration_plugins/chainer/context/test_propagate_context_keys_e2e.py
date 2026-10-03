@@ -46,7 +46,7 @@ class TestPropagateContextKeysE2E:
         )
         result = mloda.run_all(
             [feat_c, feat_b, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         assert find_column(result, "feat_b") == [1200, 1400, 1600, 1800, 2000]
@@ -74,7 +74,7 @@ class TestPropagateContextKeysE2E:
         )
         result = mloda.run_all(
             [feat_d, feat_b, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         assert find_column(result, "feat_b_noprop") == [200, 400, 600, 800, 1000]
@@ -104,7 +104,7 @@ class TestPropagateContextKeysE2E:
         )
         result = mloda.run_all(
             [feat_e, feat_b, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         assert find_column(result, "feat_b_sel") == [700, 900, 1100, 1300, 1500]
@@ -136,7 +136,7 @@ class TestPropagateContextKeysE2E:
         # feat_with_prop values: feat_base*3+500 = [2600, 3200, 3800, 4400, 5000]
         result = mloda.run_all(
             [feat_with_prop, feat_base, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         assert find_column(result, "feat_base") == [700, 900, 1100, 1300, 1500]
@@ -167,7 +167,7 @@ class TestPropagateContextKeysE2E:
         # feat_no_prop values: feat_base2*3+500 = [1100, 1700, 2300, 2900, 3500]
         result2 = mloda.run_all(
             [feat_no_prop, feat_base2, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         assert find_column(result2, "feat_base2") == [200, 400, 600, 800, 1000]
@@ -220,7 +220,7 @@ class TestPropagateContextKeysE2E:
         )
         result = mloda.run_all(
             [feat_z, feat_y, feat_x, "Sales"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         assert find_column(result, "feat_x") == [200, 400, 600, 800, 1000]

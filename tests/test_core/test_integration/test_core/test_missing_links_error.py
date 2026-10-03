@@ -417,7 +417,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("MultiDependencyFeature")],
                 links=set(),  # EMPTY - this should trigger the error
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {RootFeatureA, RootFeatureB, MultiDependencyFeature}
                 ),
@@ -448,7 +448,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("MultiDependencyFeature")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {RootFeatureA, RootFeatureB, MultiDependencyFeature}
                 ),
@@ -466,7 +466,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("MetricCombiner")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {SplitMetricSource, MetricConverter, MetricCombiner}
                 ),
@@ -489,7 +489,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("MetricCombiner"), Feature.int32_of("MetricConverterScale")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {SplitMetricSource, MetricConverter, MetricConverterScale, MetricCombiner}
                 ),
@@ -511,7 +511,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("DtypeCombiner"), Feature.int32_of("DtypeOptionSibling")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {SplitSourceDtype, DtypeCombiner, DtypeOptionSibling}
                 ),
@@ -533,7 +533,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("Z5UnrelatedTypo")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups({R5Root, X5Intermediate, Z5UnrelatedTypo}),
             )
 
@@ -561,7 +561,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("LinkedCombiner")],
                 links={link},
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {LinkedSplitSource, LinkedConverter, LinkedCombiner}
                 ),
@@ -583,7 +583,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("CombMixedKeys")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {MixedKeySource, ConvIntKey, ConvStrKey, CombMixedKeys}
                 ),

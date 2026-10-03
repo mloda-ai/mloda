@@ -26,7 +26,7 @@ import tests.test_core.test_integration.test_core.test_runner_one_compute_framew
 from mloda.user import Feature, Features, ParallelizationMode, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-COMPUTE_FRAMEWORKS: set[Any] = {PyArrowTable}
+COMPUTE_FRAMEWORKS: list[Any] = [PyArrowTable]
 PARALLELIZATION_MODES: set[ParallelizationMode] = {ParallelizationMode.SYNC}
 
 

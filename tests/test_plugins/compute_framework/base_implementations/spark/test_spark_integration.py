@@ -287,7 +287,7 @@ class TestSparkIntegrationWithMlodaAPI:
             parallelization_modes=modes,
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
-            compute_frameworks={SparkFramework},
+            compute_frameworks=[SparkFramework],
         )
 
         # The result should be a Spark DataFrame
@@ -325,7 +325,7 @@ class TestSparkIntegrationWithMlodaAPI:
             feature_list,  # type: ignore
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
-            compute_frameworks={SparkFramework},
+            compute_frameworks=[SparkFramework],
             plugin_collector=plugin_collector,
         )
 
@@ -372,7 +372,7 @@ class TestSparkIntegrationWithMlodaAPI:
         result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
-            compute_frameworks={SparkFramework},
+            compute_frameworks=[SparkFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )
@@ -408,7 +408,7 @@ class TestSparkIntegrationWithMlodaAPI:
         result = mloda.run_all(
             feature_list,  # type: ignore
             flight_server=flight_server,
-            compute_frameworks={SparkFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, SparkFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )
@@ -434,7 +434,7 @@ class TestSparkIntegrationWithMlodaAPI:
             feature_list,  # type: ignore
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
-            compute_frameworks={SparkFramework},
+            compute_frameworks=[SparkFramework],
             plugin_collector=plugin_collector,
         )
 
@@ -490,6 +490,6 @@ class TestSparkIntegrationWithMlodaAPI:
                 feature_list,  # type: ignore
                 flight_server=flight_server,
                 parallelization_modes={ParallelizationMode.SYNC},
-                compute_frameworks={SparkFramework},
+                compute_frameworks=[SparkFramework],
                 plugin_collector=plugin_collector,
             )

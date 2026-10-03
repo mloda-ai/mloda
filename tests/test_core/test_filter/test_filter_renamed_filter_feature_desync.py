@@ -47,7 +47,7 @@ def test_filter_on_renamed_filter_feature_filters_rows() -> None:
 
     result = MlodaTestRunner.run_api(
         features,
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         parallelization_modes={ParallelizationMode.SYNC},
         global_filter=global_filter,
         plugin_collector=_ENABLED,

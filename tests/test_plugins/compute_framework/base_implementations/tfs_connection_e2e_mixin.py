@@ -66,7 +66,7 @@ class TfsConnectionEndToEndMixin:
         dac = DataAccessCollection(connections={live_connection})
         result = mloda.run_all(
             [Feature(self.destination_feature_name)],
-            compute_frameworks={self.source_framework_class, self.destination_framework_class},
+            compute_frameworks=[self.source_framework_class, self.destination_framework_class],
             plugin_collector=plugin_collector,
             data_access_collection=dac,
             parallelization_modes={ParallelizationMode.SYNC},

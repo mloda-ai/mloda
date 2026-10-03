@@ -45,7 +45,7 @@ class TestNFeature:
 
     def test_n_feature_as_input(self) -> None:
         # Run the mloda with NFeatureConsumer, which depends on NFeatureNameBase
-        result = mloda.run_all(["NFeatureConsumer"], compute_frameworks={PandasDataFrame})
+        result = mloda.run_all(["NFeatureConsumer"], compute_frameworks=[PandasDataFrame])
 
         # Verify the results
         res = result[0]

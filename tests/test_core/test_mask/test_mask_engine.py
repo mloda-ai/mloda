@@ -427,7 +427,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )
@@ -443,7 +443,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )
@@ -460,7 +460,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )
@@ -477,7 +477,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )
@@ -494,7 +494,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )
@@ -511,7 +511,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )
@@ -528,7 +528,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )
@@ -545,7 +545,7 @@ class TestMaskEngineIntegration:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
         )

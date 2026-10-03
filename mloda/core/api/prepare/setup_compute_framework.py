@@ -1,4 +1,4 @@
-from typing import cast
+from collections.abc import Sequence
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -10,21 +10,30 @@ class SetupComputeFramework:
 
     def __init__(
         self,
-        user_compute_frameworks: set[type[ComputeFramework]] | list[str] | None,
+        user_compute_frameworks: Sequence[str | type[ComputeFramework]] | None,
         features: Features,
         parallelization_modes: set[ParallelizationMode] | None = None,
     ) -> None:
         available_compute_frameworks = get_all_subclasses(ComputeFramework)
 
-        if user_compute_frameworks:
-            if isinstance(user_compute_frameworks, list):
-                user_set_compute_frameworks: set[str | type[ComputeFramework]] = set(user_compute_frameworks)
-            else:
-                user_set_compute_frameworks = cast(set[str | type[ComputeFramework]], user_compute_frameworks)
-
-            available_compute_frameworks = self.filter_user_set_in_available_sub_classes(
-                user_set_compute_frameworks, available_compute_frameworks
+        if user_compute_frameworks is not None and (
+            not isinstance(user_compute_frameworks, Sequence) or isinstance(user_compute_frameworks, (str, bytes))
+        ):
+            raise ValueError(
+                "compute_frameworks must be an ordered list, the first entry preferred, "
+                f'for example ["PolarsDataFrame", "PandasDataFrame"], got {type(user_compute_frameworks).__name__}.'
             )
+
+        preference: dict[type[ComputeFramework], int] = {}
+        if user_compute_frameworks:
+            matched = self.filter_user_set_in_available_sub_classes(
+                user_compute_frameworks, available_compute_frameworks
+            )
+            # Same-named classes share the index of the first entry naming them.
+            preference = {s: self._position(s, user_compute_frameworks) for s in matched}
+            available_compute_frameworks = matched
+
+        self.framework_preference = preference
 
         if parallelization_modes is not None:
             available_compute_frameworks = self._filter_by_parallelization_modes(
@@ -65,21 +74,28 @@ class SetupComputeFramework:
 
     def filter_user_set_in_available_sub_classes(
         self,
-        api_request_compute_frameworks: set[str | type[ComputeFramework]],
+        api_request_compute_frameworks: Sequence[str | type[ComputeFramework]],
         sub_classes: set[type[ComputeFramework]],
     ) -> set[type[ComputeFramework]]:
-        compute_frameworks = set()
-        compute_frameworks = {
-            sub
-            for sub in sub_classes
-            if sub.get_class_name() in api_request_compute_frameworks or sub in api_request_compute_frameworks
-        }
-
-        if not compute_frameworks:
+        unmatched = [
+            entry
+            for entry in api_request_compute_frameworks
+            if not any(sub is entry or sub.get_class_name() == entry for sub in sub_classes)
+        ]
+        if unmatched:
             available_names = sorted(cls.get_class_name() for cls in sub_classes)
             plugin_loader_hint = " Did you call PluginLoader.all()?" if not sub_classes else ""
             raise ValueError(
-                f"No given compute frameworks {api_request_compute_frameworks} found in "
+                f"No given compute frameworks {unmatched} found in "
                 f"available compute frameworks: {available_names}.{plugin_loader_hint}"
             )
-        return compute_frameworks
+        count = len(api_request_compute_frameworks)
+        return {sub for sub in sub_classes if self._position(sub, api_request_compute_frameworks) < count}
+
+    @staticmethod
+    def _position(sub: type[ComputeFramework], entries: Sequence[str | type[ComputeFramework]]) -> int:
+        """Index of the first entry naming sub, else len(entries)."""
+        for index, entry in enumerate(entries):
+            if sub is entry or sub.get_class_name() == entry:
+                return index
+        return len(entries)

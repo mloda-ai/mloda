@@ -47,7 +47,7 @@ example_feature_list = [f"ExampleB_{f}" for f in feature_list]
 
 mloda.run_all(
     feature_list,
-    compute_frameworks={"PyArrowTable"},
+    compute_frameworks=["PyArrowTable"],
     data_access_collection=data_access_collection,
     function_extender={DokuExtender()}
 )

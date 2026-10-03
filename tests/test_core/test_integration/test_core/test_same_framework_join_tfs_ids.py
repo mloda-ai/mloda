@@ -87,7 +87,7 @@ def test_same_framework_inner_join_child_requiring_both_sides_computes_correct_s
     results = mloda.run_all(
         [Feature(name=SftfsChild.get_class_name())],
         links={link},
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=PluginCollector.enabled_feature_groups({SftfsLeft, SftfsRight, SftfsChild}),
     )
 

@@ -878,17 +878,17 @@ class TestScopeGate:
             f"probing B must attach exactly the B-scoped filter, got: {snapshot.scopes_by_probe[1]}"
         )
 
-    def test_the_canonical_seam_eliminates_the_same_scope_at_the_scope_gate(self) -> None:
+    def test_the_canonical_seam_skips_an_out_of_scope_candidate_silently(self) -> None:
         snapshot = _drive_canonical(_make_plain_matcher_fg, scope=MISSING_SCOPE_728)
 
         assert snapshot.escaped is None, f"nothing may cross evaluate: {snapshot.escaped}"
         assert snapshot.identified == (), f"a scope naming no class must win nothing, got: {snapshot.identified}"
-        assert snapshot.eliminations == ((PLAIN_CLASS_NAME, "scope", SCOPE_REASON),), (
-            f"exactly one scope elimination, got: {snapshot.eliminations}"
+        assert snapshot.eliminations == (), (
+            f"an out-of-scope candidate records no elimination, got: {snapshot.eliminations}"
         )
 
-    def test_the_filter_seam_records_the_stage_the_canonical_seam_eliminates_at(self) -> None:
-        """Same candidate, same gate, same words: one shared fact rather than two seams describing a scope drop."""
+    def test_the_filter_seam_records_a_scope_drop_the_canonical_seam_does_not(self) -> None:
+        """The seams differ on purpose: resolution skips out-of-scope candidates before probing, the filter seam probes first."""
         filter_side = _drive_scoped_matching(_make_plain_matcher_fg, _fixed_scope(MISSING_SCOPE_728))
         canonical = _drive_canonical(_make_plain_matcher_fg, scope=MISSING_SCOPE_728)
 
@@ -896,9 +896,7 @@ class TestScopeGate:
         assert filter_side.drops == ((PLAIN_CLASS_NAME, "scope", SCOPE_REASON),), (
             f"the filter seam must record the scope drop, got: {filter_side.drops}"
         )
-        assert filter_side.drops == canonical.eliminations, (
-            f"both seams must name one stage and one reason, got: {filter_side.drops} vs {canonical.eliminations}"
-        )
+        assert canonical.eliminations == (), f"the canonical seam must record none, got: {canonical.eliminations}"
 
 
 class TestFrameworkPinCardinality:

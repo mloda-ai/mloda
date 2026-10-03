@@ -975,7 +975,8 @@ class TestEngineIntegration:
 
         assert RoeEnforcementFG in result.identified
         assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (RoeEngineReader, ROE_ENGINE_ACCESS)
+        assert feature.input_data_match == (RoeEngineReader, ROE_ENGINE_ACCESS)
+        assert "BaseInputData" not in feature.options
 
 
 class TestModuleLeakPolicy:

@@ -421,7 +421,7 @@ class TestEngineHarvestsReaderRejection:
 
         assert Rej727FileFG in result.identified
         assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Rej727CsvHeaderReader, file_path)
+        assert feature.input_data_match == (Rej727CsvHeaderReader, file_path)
 
 
 class TestEngineFallsBackOnUnknownStage:

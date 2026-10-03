@@ -11,6 +11,7 @@ import pytest
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.user import Credential
 from mloda.user import DataAccessCollection
+from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import PluginCollector
@@ -215,16 +216,17 @@ class TestReadDB:
         """ReadDB does not override count_rows, so this pins BaseInputData's own default of None."""
         assert ReadDB.count_rows(None, PythonDictFramework) is None
 
-    def test_init_reader_no_options(self) -> None:
-        read_db = ReadDB()
+    def test_load_without_input_data_match_raises(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("read_db_unmatched_col"))
         with pytest.raises(ValueError):
-            read_db.init_reader(None)
+            ReadDB().load(features)
 
-    def test_init_reader_no_data_access(self) -> None:
-        read_db = ReadDB()
-        options = Options()
-        with pytest.raises(ValueError):
-            read_db.init_reader(options)
+    def test_init_reader_takes_the_pair(self) -> None:
+        access = {SQLITEReader.db_path(): "unused.db"}
+        reader, returned_access = ReadDB().init_reader((SQLITEReader, access))
+        assert isinstance(reader, SQLITEReader)
+        assert returned_access is access
 
     def test_match_subclass_data_access(self) -> None:
         data_access = DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}])
@@ -287,31 +289,19 @@ class TestReadDB:
         with pytest.raises(NotImplementedError):
             ReadDB.get_connection(None)
 
-    def test_init_reader_none_options_message(self) -> None:
-        """When init_reader is called with None, the error should mention the class name.
-
-        Currently the message is a generic 'Options were not set.' without indicating
-        which ReadDB subclass encountered the problem.
-        """
+    def test_load_without_match_message_names_the_class_and_the_attribute(self) -> None:
+        """The error for an unmatched FeatureSet names the reader class and input_data_match."""
 
         class CustomReadDB(ReadDB):
             @classmethod
             def connect(cls, credentials: Any) -> Any:
                 return None
 
-        reader = CustomReadDB()
-        with pytest.raises(ValueError, match=r"CustomReadDB"):
-            reader.init_reader(None)
-
-    def test_init_reader_missing_base_input_data_message(self) -> None:
-        """When options lack BaseInputData key, the error should mention 'BaseInputData'.
-
-        Currently the message is a generic 'Reader data access was not set.' without
-        telling the user which key is missing from options.
-        """
-        read_db = ReadDB()
-        with pytest.raises(ValueError, match=r"BaseInputData"):
-            read_db.init_reader(Options())
+        features = FeatureSet()
+        features.add(Feature("read_db_unmatched_col"))
+        with pytest.raises(ValueError, match=r"CustomReadDB") as excinfo:
+            CustomReadDB().load(features)
+        assert "input_data_match" in str(excinfo.value)
 
     def test_match_read_db_data_access_multiple_features_message(self) -> None:
         """When match_read_db_data_access receives multiple feature names, the error

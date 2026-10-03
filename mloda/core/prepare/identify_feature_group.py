@@ -1,6 +1,7 @@
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
+from difflib import get_close_matches
 from dataclasses import replace
 from typing import Any
 
@@ -132,6 +133,7 @@ class IdentifyFeatureGroupClass:
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
     _matched_options: dict[type[FeatureGroup], Options]
+    _input_data_matches: dict[type[FeatureGroup], tuple[type[BaseInputData], Any]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -150,6 +152,7 @@ class IdentifyFeatureGroupClass:
         self._declarations = {}
         self._replaced = set()
         self._matched_options = {}
+        self._input_data_matches = {}
         self._data_access_collection = data_access_collection
 
     @classmethod
@@ -196,6 +199,7 @@ class IdentifyFeatureGroupClass:
             self._domain_outcomes.clear()
             self._links_outcomes.clear()
             self._matched_options.clear()
+            self._input_data_matches.clear()
         return result
 
     def _capture_render_facts(
@@ -226,7 +230,42 @@ class IdentifyFeatureGroupClass:
                 else frozenset()
             ),
             skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
+            sources=self._capture_sources(result),
+            scope_suggestions=self._capture_scope_suggestions(result, accessible_plugins, feature),
         )
+
+    @staticmethod
+    def _capture_scope_suggestions(
+        result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping, feature: Feature
+    ) -> tuple[str, ...]:
+        """Close names for a string scope that no accessible candidate has in its MRO; probes no candidate."""
+        scope = feature.feature_group_scope
+        if result.failure_kind != "none" or not isinstance(scope, str):
+            return ()
+        if any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
+            return ()
+        names = {
+            ancestor.__name__
+            for fg in accessible_plugins
+            for ancestor in fg.__mro__
+            if ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
+        }
+        return tuple(get_close_matches(scope, sorted(names), n=3, cutoff=0.6))
+
+    def _capture_sources(self, result: EvaluationResult) -> dict[type[FeatureGroup], str]:
+        """Credential-free 'Reader: identity' of every identified candidate that matched a data source."""
+        sources: dict[type[FeatureGroup], str] = {}
+        for feature_group in result.identified:
+            pair = self._input_data_matches.get(feature_group)
+            if pair is None:
+                continue
+            reader, access = pair
+            sources[feature_group] = safe_field(
+                lambda: f"{reader.data_access_name()}: {reader.data_access_identity(access)}",
+                "",
+                field=f"{reader.__name__}.data_access_identity",
+            )
+        return {fg: text for fg, text in sources.items() if text}
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
         """Class name and prefix of every eliminated near-miss, so the none message can suppress a
@@ -468,12 +507,15 @@ class IdentifyFeatureGroupClass:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
+            # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
+            if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
             requirement = self._declaration_requirement(feature_group, feature)
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
             # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
-            # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
+            # never probed. Recorded regardless of domain or of the overall outcome (a sibling may win).
             try:
                 with declaration_requirement_scope(requirement):
                     criteria_matched = self._filter_feature_group_by_criteria(
@@ -484,8 +526,6 @@ class IdentifyFeatureGroupClass:
                     raise
                 if not self._filter_feature_group_by_domain(feature_group, feature):
                     self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
-                elif not self._filter_feature_group_by_scope(feature_group, feature):
-                    self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
                 else:
                     raise
                 continue
@@ -508,11 +548,7 @@ class IdentifyFeatureGroupClass:
                 self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
                 continue
 
-            if not self._filter_feature_group_by_scope(feature_group, feature):
-                self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
-                continue
-
-            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win, and
+            # Abstract bases can match name+domain but cannot be instantiated; never let one win, and
             # never record one as a near-miss: the abstract_only message owns them.
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
@@ -566,7 +602,7 @@ class IdentifyFeatureGroupClass:
                 continue
 
             if requirement is not None:
-                reader = self._written_reader(options, feature.options.group)
+                reader = self._written_reader(feature_group, feature.options.group)
                 unmet = requirement.unmet_reason((reader or feature_group).__name__, reader)
                 if unmet is not None:
                     self._record_elimination(feature_group, "declarations", unmet)
@@ -580,27 +616,21 @@ class IdentifyFeatureGroupClass:
         if len(_identified_feature_groups) == 1:
             winner = next(iter(_identified_feature_groups))
             winner_options = self._matched_options[winner]
+            pair = self._input_data_matches.get(winner)
             # A winner that wrote no reader inherits the pair of its nearest replaced ancestor that recorded one.
-            if RESERVED_READER_OPTION_KEY not in winner_options.group:
+            if pair is None:
                 for klass in winner.__mro__:
-                    if klass in self._replaced and RESERVED_READER_OPTION_KEY in self._matched_options[klass].group:
-                        self._replay_reader_pairs(winner_options, [self._matched_options[klass]])
+                    if klass in self._replaced and klass in self._input_data_matches:
+                        pair = self._input_data_matches[klass]
                         break
             feature.options._adopt(winner_options)
+            feature.input_data_match = pair
         elif _identified_feature_groups:
-            # Replaying each survivor's reader pair and MatchData write raises the conflict when they differ.
+            # Replaying each survivor's MatchData write raises the conflict when they differ.
             scratch = feature.options._fork()
             survivors = {fg: self._matched_options[fg] for fg in _identified_feature_groups}
-            self._replay_reader_pairs(scratch, list(survivors.values()))
             self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
-
-    @staticmethod
-    def _replay_reader_pairs(target: Options, sources: list[Options]) -> None:
-        for source in sources:
-            pair = source.group.get(RESERVED_READER_OPTION_KEY)
-            if isinstance(pair, tuple) and len(pair) == 2:
-                BaseInputData.add_base_input_data_to_options(pair[0], pair[1], target)
 
     @staticmethod
     def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:
@@ -620,13 +650,12 @@ class IdentifyFeatureGroupClass:
         consumer = feature.resolving_consumer or f"request for '{feature.name}'"
         return DeclarationRequirement(consumer, required, feature_group, self._declarations)
 
-    @staticmethod
-    def _written_reader(options: Options, original_group: dict[str, Any]) -> type | None:
+    def _written_reader(self, feature_group: type[FeatureGroup], original_group: dict[str, Any]) -> type | None:
         """The reader of the (ReaderClass, data_access) pair this candidate's criteria match wrote, if it wrote one."""
-        matched = options.group.get(RESERVED_READER_OPTION_KEY)
+        matched = self._input_data_matches.get(feature_group)
         if matched is original_group.get(RESERVED_READER_OPTION_KEY):
             return None
-        return matched[0] if isinstance(matched, tuple) and matched else None
+        return matched[0] if matched else None
 
     def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
@@ -713,8 +742,12 @@ class IdentifyFeatureGroupClass:
         """
         options = feature.options._fork()
         probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
+        # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.
+        written = options.group.pop(RESERVED_READER_OPTION_KEY, None)
         if probe.matched:
             self._matched_options[feature_group] = options
+            if isinstance(written, tuple) and len(written) == 2:
+                self._input_data_matches[feature_group] = written
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

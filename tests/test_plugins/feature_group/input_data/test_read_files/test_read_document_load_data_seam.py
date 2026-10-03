@@ -519,14 +519,15 @@ class TestReadDocumentUsesResolvedDataAccessPath:
         assert envelope["file_type"] == "text"
 
     def test_global_scope_matched_path_reaches_the_template_end_to_end(self, tmp_path: Path) -> None:
-        """(2b) End-to-end global scope: options carry ONLY the reserved BaseInputData tuple
+        """(2b) End-to-end global scope: the feature carries ONLY the input_data_match pair
         (as global DataAccessCollection matching stores it), and instance.load(features)
         returns the correct envelope.
         """
         file_path = tmp_path / "doc.text"
         file_path.write_text("global scope body\n", encoding="utf-8")
 
-        feature = Feature(name="doc_feature", options={"BaseInputData": (TextFileReader, str(file_path))})
+        feature = Feature(name="doc_feature")
+        feature.input_data_match = (TextFileReader, str(file_path))
         feature_set = FeatureSet()
         feature_set.add(feature)
 

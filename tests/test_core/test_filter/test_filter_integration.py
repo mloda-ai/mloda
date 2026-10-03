@@ -1,8 +1,12 @@
+from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 
-from mloda.user import FeatureName
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.user import DataAccessCollection, FeatureName, PluginCollector, mloda
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
 from mloda.user import Options
@@ -165,3 +169,89 @@ class TestGlobalFilter:
         for result in runner.get_result():
             res = result.to_pydict()
             assert res == {"GlobalFilterHasDifferentNameTest": [1]}
+
+
+class TestGlobalFilterOnReaderBackedColumn:
+    """A filter on a CSV column keeps its reader match off the options and still filters."""
+
+    @staticmethod
+    def _csv(tmp_path: Path) -> str:
+        path = tmp_path / "gf_reader_backed.csv"
+        path.write_text("gf_csv_key,gf_csv_val\n1,10\n2,20\n3,30\n")
+        return str(path)
+
+    def test_filter_on_csv_column_loads_filtered_rows(self, tmp_path: Path) -> None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_csv_val", "equal", {"value": 20})
+
+        results = mloda.run_all(
+            [Feature("gf_csv_val")],
+            compute_frameworks=["PyArrowTable"],
+            data_access_collection=DataAccessCollection(files={self._csv(tmp_path)}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
+            global_filter=global_filter,
+        )
+
+        assert len(results) == 1
+        assert results[0].to_pydict() == {"gf_csv_val": [20]}
+
+    def test_matched_filter_feature_carries_the_pair_on_input_data_match(self, tmp_path: Path) -> None:
+        csv_path = self._csv(tmp_path)
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_csv_val", "equal", {"value": 20})
+
+        matched = global_filter.identify_matched_filters(
+            ReadFileFeature, Feature("gf_csv_val"), DataAccessCollection(files={csv_path})
+        )
+
+        assert len(matched) == 1
+        filter_feature = next(iter(matched)).filter_feature
+        assert filter_feature.input_data_match == (CsvReader, csv_path)
+        assert RESERVED_READER_OPTION_KEY not in filter_feature.options.group
+        assert RESERVED_READER_OPTION_KEY not in filter_feature.options.context
+
+
+class TestGlobalFilterFromAnotherSource:
+    """A filter whose column lives in a different reader source than the host is dropped, not attached."""
+
+    @staticmethod
+    def _two_files(tmp_path: Path) -> tuple[str, str]:
+        one = tmp_path / "gf_other_one.csv"
+        one.write_text("gf_other_a,gf_other_k\n1,1\n2,2\n3,3\n")
+        two = tmp_path / "gf_other_two.csv"
+        two.write_text("gf_other_b,gf_other_k2\n10,1\n20,2\n30,3\n")
+        return str(one), str(two)
+
+    def _run(self, global_filter: GlobalFilter, feature: str, files: set[str]) -> list[Any]:
+        return list(
+            mloda.run_all(
+                [Feature(feature)],
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=DataAccessCollection(files=files),
+                plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
+                global_filter=global_filter,
+            )
+        )
+
+    def test_filter_on_other_file_is_dropped_and_recorded(self, tmp_path: Path) -> None:
+        one, two = self._two_files(tmp_path)
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_other_b", "equal", {"value": 20})
+
+        results = self._run(global_filter, "gf_other_a", {one, two})
+
+        assert results[0].to_pydict() == {"gf_other_a": [1, 2, 3]}
+        assert len(global_filter.dropped_filters) == 1
+        reason = " ".join(str(getattr(r, "reason", r)) for r in global_filter.dropped_filters.values())
+        assert one in reason
+        assert two in reason
+
+    def test_filter_on_same_file_still_filters(self, tmp_path: Path) -> None:
+        one, two = self._two_files(tmp_path)
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_other_k", "equal", {"value": 2})
+
+        results = self._run(global_filter, "gf_other_a", {one, two})
+
+        assert results[0].to_pydict() == {"gf_other_a": [2]}
+        assert global_filter.dropped_filters == {}

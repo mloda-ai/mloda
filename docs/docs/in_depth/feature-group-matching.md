@@ -31,6 +31,8 @@ Containment covers plugin raises only: a framework-owned raise (a two-readers co
 
 Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) tables the gates the two paths share and where filter policy differs.
 
+A filter whose column is served by a different data source than its feature is dropped and recorded in `dropped_filters` as an `input data` near-miss naming both sources. A string `feature_group` scope that matches no accessible group adds a `Did you mean one of: ...?` line to the failure message.
+
 The probe runs per feature, but a matched filter attaches to the whole `FeatureSet`, so a non-match for one feature does not suppress a filter a sibling matched. See [Filter scope](filter_data.md#filter-scope-is-the-featureset).
 
 Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match. Filter matching additionally reports a falsy value that is not `False`, and each distinct report is a WARNING once per setup.
@@ -41,7 +43,7 @@ The options view depends on the caller: feature resolution passes declared (pre-
 
 #### Option writes from a match hook
 
-A match hook may write into the options it is handed. Each candidate matches against its own shallow copy of the request's options, and only the winner's copy (values, non-forwarded marks, own-key provenance) is applied to the feature. A candidate that returns `False`, raises, or is dropped by a later gate leaves nothing behind, and a failed resolution leaves the options as requested. A readerless subclass inherits its nearest replaced ancestor's reader pair, and two unrelated survivors with different reader pairs, or different MatchData writes under one class name, raise. The hook keeps its `bool` return, so existing hooks need no change, but must not keep the options reference after returning. Rebind a value rather than mutating a nested container in place, since the copy is shallow.
+A match hook may write into the options it is handed. Each candidate matches against its own shallow copy of the request's options, and only the winner's copy (values, non-forwarded marks, own-key provenance) is applied to the feature. A candidate that returns `False`, raises, or is dropped by a later gate leaves nothing behind, and a failed resolution leaves the options as requested. A readerless subclass inherits its nearest replaced ancestor's reader pair, and two unrelated survivors give "Multiple feature groups found", naming each candidate's source; the reader pair is never adopted into the options. Different MatchData writes under one class name raise. The hook keeps its `bool` return, so existing hooks need no change, but must not keep the options reference after returning. Rebind a value rather than mutating a nested container in place, since the copy is shallow.
 
 ### 2. PROPERTY_MAPPING Configuration
 

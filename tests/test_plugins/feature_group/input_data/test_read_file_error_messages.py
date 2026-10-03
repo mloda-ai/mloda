@@ -1,4 +1,4 @@
-"""Tests for improved error messages in ReadFile."""
+"""Tests for error messages of ReadFile.load without a match."""
 
 import pytest
 
@@ -6,6 +6,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -25,27 +26,19 @@ class ConcreteReadFile(ReadFile):
         return None
 
 
-class TestReadFileInitReaderErrorMessages:
-    """Tests for init_reader error message clarity."""
+class TestReadFileLoadWithoutMatchErrorMessages:
+    """load() without an input_data_match names the reader class and the missing attribute."""
 
-    def test_options_none_error_mentions_base_input_data(self) -> None:
-        reader = ConcreteReadFile()
-        with pytest.raises(ValueError, match="BaseInputData"):
-            reader.init_reader(None)
+    @staticmethod
+    def _unmatched_features() -> FeatureSet:
+        features = FeatureSet()
+        features.add(Feature("read_file_unmatched_col"))
+        return features
 
-    def test_options_none_error_contains_example(self) -> None:
-        reader = ConcreteReadFile()
-        with pytest.raises(ValueError, match="Options\\(context="):
-            reader.init_reader(None)
+    def test_error_mentions_input_data_match(self) -> None:
+        with pytest.raises(ValueError, match="input_data_match"):
+            ConcreteReadFile().load(self._unmatched_features())
 
-    def test_reader_data_access_none_error_mentions_base_input_data(self) -> None:
-        reader = ConcreteReadFile()
-        options = Options(context={"other_key": "value"})
-        with pytest.raises(ValueError, match="BaseInputData"):
-            reader.init_reader(options)
-
-    def test_reader_data_access_none_error_contains_example(self) -> None:
-        reader = ConcreteReadFile()
-        options = Options(context={"other_key": "value"})
-        with pytest.raises(ValueError, match="ReaderClass, data_access"):
-            reader.init_reader(options)
+    def test_error_names_the_reader_class(self) -> None:
+        with pytest.raises(ValueError, match="ConcreteReadFile"):
+            ConcreteReadFile().load(self._unmatched_features())

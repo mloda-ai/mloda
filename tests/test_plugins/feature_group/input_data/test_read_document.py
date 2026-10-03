@@ -106,25 +106,24 @@ class TestReadDocumentAbstractMethods:
 
 
 class TestReadDocumentLoad:
-    def _make_feature_set(self, options: Options) -> FeatureSet:
+    def _make_feature_set(self, pair: tuple[type[BaseInputData], Any]) -> FeatureSet:
         fs = FeatureSet()
-        fs.add(Feature("doc_content", options=options))
+        feature = Feature("doc_content")
+        feature.input_data_match = pair
+        fs.add(feature)
         return fs
 
     def test_load_delegates_to_reader(self) -> None:
-        options = Options(group={"BaseInputData": (ConcreteReadDocument, "/path/doc.json")})
-        features = self._make_feature_set(options)
+        features = self._make_feature_set((ConcreteReadDocument, "/path/doc.json"))
 
         instance = ConcreteReadDocument()
         result = instance.load(features)
 
         assert result == {"content": "test_data"}
 
-    def test_load_raises_when_options_none(self) -> None:
+    def test_load_raises_when_no_input_data_match(self) -> None:
         features = FeatureSet()
-        feature = Feature("doc_content")
-        feature.options = None  # type: ignore[assignment]
-        features.add(feature)
+        features.add(Feature("doc_content"))
 
         instance = ConcreteReadDocument()
         with pytest.raises(ValueError):
@@ -140,9 +139,10 @@ class TestReadDocumentLoad:
             def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
                 return None
 
-        options = Options(group={"BaseInputData": (NoneReturningReader, "/path/doc.json")})
         features = FeatureSet()
-        features.add(Feature("doc_content", options=options))
+        feature = Feature("doc_content")
+        feature.input_data_match = (NoneReturningReader, "/path/doc.json")
+        features.add(feature)
 
         instance = NoneReturningReader()
         with pytest.raises(ValueError):
@@ -150,23 +150,9 @@ class TestReadDocumentLoad:
 
 
 class TestReadDocumentInitReader:
-    def test_init_reader_extracts_from_options(self) -> None:
-        options = Options(group={"BaseInputData": (ConcreteReadDocument, "/data/doc.json")})
-
+    def test_init_reader_extracts_from_the_pair(self) -> None:
         instance = ConcreteReadDocument()
-        reader, data_access = instance.init_reader(options)
+        reader, data_access = instance.init_reader((ConcreteReadDocument, "/data/doc.json"))
 
         assert isinstance(reader, ConcreteReadDocument)
         assert data_access == "/data/doc.json"
-
-    def test_init_reader_raises_when_options_none(self) -> None:
-        instance = ConcreteReadDocument()
-        with pytest.raises(ValueError):
-            instance.init_reader(None)
-
-    def test_init_reader_raises_when_base_input_data_missing(self) -> None:
-        options = Options(group={"some_other_key": "value"})
-
-        instance = ConcreteReadDocument()
-        with pytest.raises(ValueError):
-            instance.init_reader(options)

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Callable, TypeVar
-
 import logging
 import reprlib
 import traceback
 import weakref
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
@@ -57,7 +57,7 @@ def safe_exc_str(exc: BaseException) -> str:
 
 # Weakly held so a warn_once_for key (typically a class) isn't pinned past its lifetime; non-weakly-referenceable
 # keys fall back to a plain set.
-_warn_once_for_weak: "weakref.WeakSet[Any]" = weakref.WeakSet()
+_warn_once_for_weak: weakref.WeakSet[Any] = weakref.WeakSet()
 _warn_once_for_strong: set[object] = set()
 
 
@@ -65,7 +65,7 @@ def _warn_once_for_seen(key: object) -> bool:
     """True if `key` was already seen, else records it. Never raises: a bad hash/weakref hook degrades to False."""
     try:
         # __weakrefoffset__, not hasattr(key, "__weakref__"): the latter tests instances-of-key, not key itself.
-        registry: "weakref.WeakSet[Any] | set[object]" = (
+        registry: weakref.WeakSet[Any] | set[object] = (
             _warn_once_for_weak if getattr(type(key), "__weakrefoffset__", 0) else _warn_once_for_strong
         )
         if key in registry:
@@ -105,9 +105,25 @@ def contained_raise_reason(exc: BaseException) -> str:
     return f"raised {type(exc).__name__}: {scrub_credentials(safe_exc_str(exc))}"
 
 
+def _format_tb_without_msg(exc: BaseException) -> str:
+    lines = []
+    if exc.__cause__ is not None:
+        lines.append(_format_tb_without_msg(exc.__cause__))
+        lines.append("\nThe above exception was the direct cause of the following exception:\n\n")
+    elif exc.__context__ is not None and not exc.__suppress_context__:
+        lines.append(_format_tb_without_msg(exc.__context__))
+        lines.append("\nDuring handling of the above exception, another exception occurred:\n\n")
+
+    if exc.__traceback__ is not None:
+        lines.append("Traceback (most recent call last):\n")
+        lines.extend(traceback.format_tb(exc.__traceback__))
+    lines.append(f"{type(exc).__name__}\n")
+    return "".join(lines)
+
+
 def failure_report(exc: BaseException) -> tuple[str, str]:
     """(message, traceback) for a failure log or MlodaRunError, both scrubbed of credentials."""
-    tb = scrub_credentials("".join(traceback.format_exception(exc)))
+    tb = scrub_credentials(_format_tb_without_msg(exc))
     message = f"An error occurred: {scrub_credentials(safe_exc_str(exc))}\nFull traceback:\n{tb}"
     return message, tb
 

@@ -32,14 +32,6 @@ Loads all plugin groups.
 ### `load_entry_points(group: str | None = None)`
 Discovers plugins from installed packages that declare [entry points](#entry-points). Pass a group name to restrict discovery to one group; `None` loads all three. Returns the sorted, deduplicated list of registry keys it registered.
 
-### `disable_auto_load(group: str)`
-Prevents a group from being auto-loaded lazily. Call this before any plugin discovery if you want full control over what is loaded.
-
-```python
-PluginLoader.disable_auto_load("feature_group/input_data/read_files")
-PluginLoader.disable_auto_load("compute_framework")
-```
-
 ### `list_loaded_modules(plugin_category: str | None)`
 Lists loaded plugin modules, optionally filtered by category.
 

@@ -21,9 +21,6 @@ class ReadDocument(BaseInputData):
     _auto_load_group triggers lazy plugin discovery when no ReadDocument subclasses
     are found in the process. Only the read_files subdirectory is loaded.
 
-    To suppress auto-loading:
-        PluginLoader.disable_auto_load("feature_group/input_data/read_files")
-
     By default, ReadDocument skips file types owned by ReadFile (CSV, JSON,
     Parquet, etc.) to avoid conflicts. To read a structured file type as a
     document, set the ``document_suffixes`` option on the Feature:

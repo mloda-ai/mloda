@@ -532,7 +532,7 @@ class BaseInputData(ABC):
 
         for family in BaseInputData.__subclasses__():
             auto_load_group = family.__dict__.get("_auto_load_group")
-            if auto_load_group is not None and auto_load_group not in PluginLoader._disabled_groups:
+            if auto_load_group is not None:
                 PluginLoader().load_group(auto_load_group)
         return list(get_all_subclasses(BaseInputData))
 
@@ -830,7 +830,6 @@ def get_all_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseIn
         if auto_load_group is not None:
             from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
-            if auto_load_group not in PluginLoader._disabled_groups:
-                PluginLoader().load_group(auto_load_group)
-                filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
+            PluginLoader().load_group(auto_load_group)
+            filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
     return filtered_subclasses

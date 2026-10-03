@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator, Iterable, Sequence
 from contextvars import ContextVar
 from typing import Any, final
 from uuid import UUID, uuid4
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
@@ -256,6 +257,11 @@ class ComputeFramework(ABC):
         subclasses that need to provide a connection object.
         """
         self.framework_connection_object = None
+
+    @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        """Whether this framework runs on its own, manages its own session, or needs a supplied connection."""
+        return ConnectionRequirement.NONE
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
@@ -731,14 +737,21 @@ class ComputeFramework(ABC):
     @staticmethod
     @final
     def select_deterministic(frameworks: Iterable[type["ComputeFramework"]]) -> type["ComputeFramework"]:
-        """Set iteration over class objects is id-based, so reduce by a total name key instead."""
+        """Pick by connection requirement, then a total name key (set iteration over classes is id-based)."""
         candidates = list(frameworks)
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
 
+        rank = {ConnectionRequirement.NONE: 0, ConnectionRequirement.SELF_MANAGED: 1, ConnectionRequirement.REQUIRED: 2}
+
         # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
-        def key(framework: type["ComputeFramework"]) -> tuple[str, str, str]:
-            return (framework.get_class_name(), framework.__module__, framework.__qualname__)
+        def key(framework: type["ComputeFramework"]) -> tuple[int, str, str, str]:
+            return (
+                rank[framework.connection_requirement()],
+                framework.get_class_name(),
+                framework.__module__,
+                framework.__qualname__,
+            )
 
         return min(candidates, key=key)
 

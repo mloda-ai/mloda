@@ -29,6 +29,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import (
 from mloda.core.version import get_mloda_version
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework as ComputeFramework
 from mloda.core.abstract_plugins.hook_context import OutputSchema as OutputSchema
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement as ConnectionRequirement
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError as EmptyResultError
 
 # Utilities
@@ -146,6 +147,7 @@ __all__ = [
     "ThirdPartyVersionMode",
     "ComputeFramework",
     "OutputSchema",
+    "ConnectionRequirement",
     "EmptyResultError",
     # Utilities
     "HashableDict",

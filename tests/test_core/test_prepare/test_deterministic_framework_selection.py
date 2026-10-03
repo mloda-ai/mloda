@@ -2,9 +2,17 @@
 Set iteration over class objects is id-based, so the reduction pins to the lowest class name.
 """
 
+import importlib
+import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
+import pyarrow as pa
 import pytest
+
+from mloda.provider import BaseInputData, DataCreator, FeatureSet
+from mloda.user import PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
@@ -218,3 +226,176 @@ def test_fresh_interpreters_reduce_to_the_same_frameworks() -> None:
     assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):
         assert output == _PROBE_EXPECTED, f"probe {position} reduced to {output}, expected {_PROBE_EXPECTED}"
+
+
+# ---------------------------------------------------------------------------
+# Connection-aware default (#1055)
+# ---------------------------------------------------------------------------
+
+_BASE = "mloda_plugins.compute_framework.base_implementations"
+# (module, class name, expected requirement name); the modules guard their backend imports
+_REQUIREMENTS: list[tuple[str, str, str]] = [
+    (f"{_BASE}.pandas.dataframe", "PandasDataFrame", "NONE"),
+    (f"{_BASE}.polars.dataframe", "PolarsDataFrame", "NONE"),
+    (f"{_BASE}.polars.lazy_dataframe", "PolarsLazyDataFrame", "NONE"),
+    (f"{_BASE}.pyarrow.table", "PyArrowTable", "NONE"),
+    (f"{_BASE}.python_dict.python_dict_framework", "PythonDictFramework", "NONE"),
+    (f"{_BASE}.spark.spark_framework", "SparkFramework", "SELF_MANAGED"),
+    (f"{_BASE}.iceberg.iceberg_framework", "IcebergFramework", "SELF_MANAGED"),
+    (f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework", "REQUIRED"),
+    (f"{_BASE}.sqlite.sqlite_framework", "SqliteFramework", "REQUIRED"),
+]
+
+
+def _load_framework(module: str, name: str) -> type[ComputeFramework]:
+    framework: type[ComputeFramework] = getattr(importlib.import_module(module), name)
+    return framework
+
+
+@pytest.mark.parametrize(("module", "name", "expected"), _REQUIREMENTS)
+def test_connection_requirement_per_shipped_framework(module: str, name: str, expected: str) -> None:
+    from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+
+    framework = _load_framework(module, name)
+
+    assert framework.connection_requirement() is ConnectionRequirement[expected]
+
+
+def test_connection_requirement_members() -> None:
+    from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
+
+    assert [member.name for member in ConnectionRequirement] == ["NONE", "SELF_MANAGED", "REQUIRED"]
+
+
+def test_select_deterministic_prefers_no_connection_over_required() -> None:
+    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
+
+    assert ComputeFramework.select_deterministic([duckdb_fw, PyArrowTable]) is PyArrowTable
+    assert ComputeFramework.select_deterministic([PyArrowTable, duckdb_fw]) is PyArrowTable
+
+
+def test_select_deterministic_keeps_name_order_within_a_rank() -> None:
+    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
+    sqlite_fw = _load_framework(f"{_BASE}.sqlite.sqlite_framework", "SqliteFramework")
+
+    assert ComputeFramework.select_deterministic([sqlite_fw, duckdb_fw]) is duckdb_fw
+    assert ComputeFramework.select_deterministic([duckdb_fw, sqlite_fw]) is duckdb_fw
+
+
+def test_select_deterministic_prefers_self_managed_over_required() -> None:
+    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
+    spark_fw = _load_framework(f"{_BASE}.spark.spark_framework", "SparkFramework")
+
+    assert ComputeFramework.select_deterministic([duckdb_fw, spark_fw]) is spark_fw
+
+
+def test_select_deterministic_prefers_none_over_self_managed() -> None:
+    spark_fw = _load_framework(f"{_BASE}.spark.spark_framework", "SparkFramework")
+
+    assert ComputeFramework.select_deterministic([spark_fw, PyArrowTable]) is PyArrowTable
+
+
+# --- planning and run ---------------------------------------------------------------------------
+
+
+class ConnAwareDuckPyArrowRootFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"conn_aware_duck_pa_root"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"conn_aware_duck_pa_root": [1, 2, 3]})
+
+
+class ConnAwareSqliteRootFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"conn_aware_sqlite_root"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"conn_aware_sqlite_root": [1, 2, 3]})
+
+
+class ConnAwareNoConnRootFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"conn_aware_noconn_root"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"conn_aware_noconn_root": [1, 2, 3]})
+
+
+class ConnAwarePinnedRootFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"conn_aware_pinned_root"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"conn_aware_pinned_root": [1, 2, 3]})
+
+
+@pytest.fixture
+def sqlite_conn() -> Iterator[sqlite3.Connection]:
+    conn = sqlite3.connect(":memory:")
+    yield conn
+    conn.close()
+
+
+def _frameworks() -> set[type[ComputeFramework]]:
+    pytest.importorskip("duckdb")
+    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
+    sqlite_fw = _load_framework(f"{_BASE}.sqlite.sqlite_framework", "SqliteFramework")
+    return {duckdb_fw, sqlite_fw}
+
+
+def _compute_framework_names(
+    feature: Feature | str, fg: type[FeatureGroup], frameworks: set[type[ComputeFramework]]
+) -> list[str | None]:
+    steps = mloda.explain(
+        [feature], compute_frameworks=frameworks, plugin_collector=PluginCollector.enabled_feature_groups({fg})
+    )
+    return [step.compute_framework_name for step in steps if step.step_kind == "compute"]
+
+
+def test_run_all_unrestricted_root_avoids_unconnected_duckdb() -> None:
+    pytest.importorskip("duckdb")
+    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
+
+    result = mloda.run_all(
+        ["conn_aware_duck_pa_root"],
+        compute_frameworks={duckdb_fw, PyArrowTable},
+        plugin_collector=PluginCollector.enabled_feature_groups({ConnAwareDuckPyArrowRootFG}),
+    )
+
+    assert len(result) == 1
+    assert isinstance(result[0], pa.Table)
+
+
+def test_root_with_sqlite_connection_plans_on_sqlite(sqlite_conn: sqlite3.Connection) -> None:
+    feature = Feature("conn_aware_sqlite_root", options={"ConnAwareSqliteRootFG": sqlite_conn})
+
+    names = _compute_framework_names(feature, ConnAwareSqliteRootFG, _frameworks())
+
+    assert names == ["SqliteFramework"]
+
+
+def test_root_without_any_connection_keeps_duckdb() -> None:
+    names = _compute_framework_names("conn_aware_noconn_root", ConnAwareNoConnRootFG, _frameworks())
+
+    assert names == ["DuckDBFramework"]
+
+
+def test_pinned_duckdb_feature_keeps_its_pin(sqlite_conn: sqlite3.Connection) -> None:
+    feature = Feature(
+        "conn_aware_pinned_root",
+        options={"ConnAwarePinnedRootFG": sqlite_conn},
+        compute_framework="DuckDBFramework",
+    )
+
+    names = _compute_framework_names(feature, ConnAwarePinnedRootFG, _frameworks())
+
+    assert names == ["DuckDBFramework"]

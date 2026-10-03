@@ -285,6 +285,10 @@ When a feature is requested:
 3. It selects a compatible compute framework
 4. It uses the framework-specific implementation for calculations
 
+When several frameworks fit, the choice is deterministic: frameworks that run on their own come first (Pandas, Polars, PyArrow, ...), then `SELF_MANAGED` ones (Spark, Iceberg), then `REQUIRED` ones (DuckDB, SQLite), then by class name. A `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, when another framework fits. To use DuckDB or SQLite, pin or restrict the framework.
+
+Framework authors declare this by overriding the `connection_requirement()` classmethod, which returns a `ConnectionRequirement` (`NONE` by default).
+
 ## Data Transformation
 
 When data needs to move between compute frameworks:
@@ -297,7 +301,7 @@ For more details on how data transformation works between compute frameworks, se
 
 ## Framework Notes
 
-- **DuckDB**: feature groups need a connection object supplied via the data access collection; mloda validates it and pins its session timezone to UTC but never opens or closes it. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
+- **DuckDB**: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
 - **Spark**: requires PySpark and a Java 17+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
 - **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 

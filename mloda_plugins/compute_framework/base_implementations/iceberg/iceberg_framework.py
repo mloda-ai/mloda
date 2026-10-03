@@ -3,7 +3,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine
 from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import (
@@ -82,6 +82,10 @@ class IcebergFramework(ComputeFramework):
                     self.framework_connection_object = framework_connection_object
                 else:
                     raise ValueError(f"Expected an Iceberg catalog or table, got {type(framework_connection_object)}")
+
+    @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        return ConnectionRequirement.SELF_MANAGED
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:

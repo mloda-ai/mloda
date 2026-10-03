@@ -8,7 +8,7 @@ from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engi
     spark_name_fold,
 )
 from mloda.user import FeatureName, ParallelizationMode
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
@@ -59,6 +59,10 @@ class SparkFramework(ComputeFramework):
                     .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
                     .getOrCreate()
                 )
+
+    @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        return ConnectionRequirement.SELF_MANAGED
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:

@@ -57,7 +57,7 @@ import dataclasses
 import json
 import sqlite3
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, get_args, get_origin
 from uuid import UUID
@@ -74,9 +74,18 @@ import pytest
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.api.plan_info import build_plan_steps
+from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.steward import Extender, ExtenderHook, HookContext
+from mloda.steward import (
+    Extender,
+    ExtenderHook,
+    HookContext,
+    PlanLockMismatchError,
+    check_plan_lock,
+    write_plan_lock,
+)
+from tests.helpers.probe_runner import run_probes
 from mloda.user import (
     Credential,
     DataAccessCollection,
@@ -367,6 +376,18 @@ class PlanInfoPlainSpecializedConsumer(PlanInfoScopedSpecializedConsumer):
         return {Feature("plan_info_specialized_value")}
 
 
+class PlanInfoAnyFrameworkSource(FeatureGroup):
+    """Root source without a compute_framework_rule, so the framework choice is the planner's."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"plan_info_any_framework_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"plan_info_any_framework_value": [1, 2, 3]}
+
+
 class PlanInfoUnknownStep:
     """Not a FeatureGroupStep/TransformFrameworkStep/JoinStep: build_plan_steps must reject it."""
 
@@ -411,6 +432,8 @@ _INVERTED_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow, PlanInfoInvertedConsumer}
 )
 _NESTED_OPTIONS_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNestedOptionsSource})
+_ANY_FRAMEWORK_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoAnyFrameworkSource})
+_PLAN_LOCK_PROBE = Path(__file__).with_name("plan_lock_probe.py")
 _SPECIALIZED_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoParentSource, PlanInfoChildSource, PlanInfoScopedSpecializedConsumer, PlanInfoPlainSpecializedConsumer}
 )
@@ -981,7 +1004,8 @@ class TestPlanStepReaderDataAccess:
             assert step.data_access_identity is None
             assert step.data_access_identity_is_fallback is None
 
-    def test_sqlite_password_stays_out_of_the_safe_fields(self, tmp_path: Path) -> None:
+    @staticmethod
+    def _explain_sqlite_plan(tmp_path: Path) -> tuple[str, list[PlanStep]]:
         db = str(tmp_path / "plan_info.db")
         conn = sqlite3.connect(db)
         conn.execute("CREATE TABLE t (plan_info_db_col INTEGER)")
@@ -996,6 +1020,10 @@ class TestPlanStepReaderDataAccess:
             data_access_collection=dac,
             plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
         )
+        return db, explained
+
+    def test_sqlite_password_stays_out_of_the_safe_fields(self, tmp_path: Path) -> None:
+        db, explained = self._explain_sqlite_plan(tmp_path)
 
         step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
         assert step.reader_data_access is not None
@@ -1006,6 +1034,17 @@ class TestPlanStepReaderDataAccess:
         safe = {f.name: getattr(step, f.name) for f in dataclasses.fields(step) if f.name != "feature_set_options"}
         safe["data_access_identity"] = step.data_access_identity
         assert "hunter2" not in json.dumps(safe, default=str)
+
+    def test_sqlite_plan_lock_keeps_credentials_and_path_out_and_names_the_reader(self, tmp_path: Path) -> None:
+        db, explained = self._explain_sqlite_plan(tmp_path)
+
+        text = _lock_text(explained)
+
+        assert "hunter2" not in text
+        assert db not in text
+        reader_class = SQLITEReader
+        records = json.loads(text)["compute"]
+        assert [record["reader"] for record in records] == [f"{reader_class.__module__}:{reader_class.__qualname__}"]
 
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
         step = PlanStep(
@@ -1292,6 +1331,129 @@ class TestExplain:
         )
 
         assert len(explained) == 2
+
+
+# ---------------------------------------------------------------------------
+# plan lock
+# ---------------------------------------------------------------------------
+
+
+def _class_path(cls: type) -> str:
+    return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def _explain_any_framework(frameworks: set[type[ComputeFramework]]) -> list[PlanStep]:
+    return mloda.explain(
+        ["plan_info_any_framework_value"],
+        compute_frameworks=frameworks,
+        plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+    )
+
+
+def _explain_nested_options_twice() -> list[PlanStep]:
+    return mloda.explain(
+        [
+            Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}}),
+            Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "mutated"}}),
+        ],
+        compute_frameworks={PandasDataFrame},
+        plugin_collector=_NESTED_OPTIONS_PLUGINS,
+    )
+
+
+def _explain_any_framework_twice() -> list[PlanStep]:
+    return mloda.explain(
+        [
+            Feature("plan_info_any_framework_value", compute_framework="PandasDataFrame"),
+            Feature("plan_info_any_framework_value", compute_framework="PyArrowTable"),
+        ],
+        compute_frameworks={PandasDataFrame, PyArrowTable},
+        plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+    )
+
+
+class TestPlanLock:
+    def test_a_specialization_change_is_caught(self, tmp_path: Path) -> None:
+        lock = tmp_path / "plan.lock"
+        parent_only = mloda.explain(
+            ["plan_info_specialized_value"],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoParentSource}),
+        )
+        specialized = mloda.explain(
+            ["plan_info_specialized_value"],
+            compute_frameworks={PandasDataFrame},
+            plugin_collector=_SPECIALIZED_PLUGINS,
+        )
+        write_plan_lock(parent_only, lock)
+
+        assert [record["specialized_from"] for record in json.loads(lock.read_text())["compute"]] == [[]]
+        assert json.loads(_lock_text(specialized))["compute"][0]["specialized_from"] == [
+            _class_path(PlanInfoParentSource)
+        ]
+
+        with pytest.raises(PlanLockMismatchError) as excinfo:
+            check_plan_lock(specialized, lock)
+
+        assert "PlanInfoChildSource" in str(excinfo.value)
+        assert "PlanInfoParentSource" in str(excinfo.value)
+
+    def test_a_framework_tie_break_change_is_caught(self, tmp_path: Path) -> None:
+        lock = tmp_path / "plan.lock"
+        write_plan_lock(_explain_any_framework({PyArrowTable}), lock)
+
+        both = _explain_any_framework({PandasDataFrame, PyArrowTable})
+        assert [step.compute_framework for step in both] == [PandasDataFrame], "the tie-break must pick pandas"
+
+        with pytest.raises(PlanLockMismatchError, match="PandasDataFrame"):
+            check_plan_lock(both, lock)
+
+    @pytest.mark.parametrize("kind", ["join", "transform"])
+    def test_a_join_or_transform_framework_swap_is_caught(self, tmp_path: Path, kind: str) -> None:
+        lock = tmp_path / "plan.lock"
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+        write_plan_lock(plan, lock)
+        swapped = [
+            dataclasses.replace(step, compute_framework=PyArrowTable) if step.step_kind == kind else step
+            for step in plan
+        ]
+        assert swapped != plan
+
+        with pytest.raises(PlanLockMismatchError):
+            check_plan_lock(swapped, lock)
+
+    def test_a_fresh_session_of_the_same_request_passes(self, tmp_path: Path) -> None:
+        lock = tmp_path / "plan.lock"
+        first = _prepare_cross_framework_join_session().resolved_plan()
+        second = _prepare_cross_framework_join_session().resolved_plan()
+        write_plan_lock(first, lock)
+
+        first_token = next(step.join_token for step in first if step.step_kind == "join")
+        second_token = next(step.join_token for step in second if step.step_kind == "join")
+        assert first_token != second_token
+
+        check_plan_lock(second, lock)
+
+    @pytest.mark.parametrize(
+        ("explain_plan", "differing_key"),
+        [
+            pytest.param(_explain_nested_options_twice, None, id="options"),
+            pytest.param(_explain_any_framework_twice, "compute_framework", id="framework"),
+        ],
+    )
+    def test_duplicate_steps_keep_one_record_each(
+        self, tmp_path: Path, explain_plan: Callable[[], list[PlanStep]], differing_key: str | None
+    ) -> None:
+        lock = tmp_path / "plan.lock"
+        plan = explain_plan()
+        write_plan_lock(plan, lock)
+
+        records = json.loads(lock.read_text())["compute"]
+        assert len(records) == 2
+        if differing_key is not None:
+            assert records[0][differing_key] != records[1][differing_key]
+
+        check_plan_lock(explain_plan(), lock)
 
 
 # ---------------------------------------------------------------------------
@@ -1869,3 +2031,17 @@ class TestCallerNeedsNoInternalImport:
     def test_public_entry_points_exist_on_the_public_api(self) -> None:
         assert hasattr(mlodaAPI, "resolved_plan")
         assert hasattr(mlodaAPI, "explain")
+
+
+# Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
+@pytest.mark.timeout(60)
+def test_plan_lock_text_is_stable_across_hash_seeds() -> None:
+    outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=[0, 1, 2])
+
+    assert len(outputs) == 3
+    assert outputs[0] == outputs[1] == outputs[2]
+
+    content = json.loads(outputs[0]["lock"])
+    assert len(content["compute"]) > 1
+    assert len(content["joins"]) >= 1
+    assert len(content["transforms"]) >= 1

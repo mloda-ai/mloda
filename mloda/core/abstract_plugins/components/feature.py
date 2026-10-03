@@ -7,6 +7,7 @@ from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
 
 if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -175,6 +176,9 @@ class Feature:
         # Feature names from the request down to this input's consumer, overwritten by the engine
         # (empty for a request); excluded from equality and hash.
         self.resolving_path: tuple[str, ...] = ()
+
+        # (reader class, data access) the engine matched for this feature; credential-free key in equality/hash.
+        self.input_data_match: tuple[type[BaseInputData], Any] | None = None
 
         # Group keys forwarded onto this input feature, set by Features.merge_options; excluded
         # from equality and hash like link/index.
@@ -422,6 +426,7 @@ class Feature:
             and self.compute_frameworks == other.compute_frameworks
             and self.data_type == other.data_type
             and self._child_options_key() == other._child_options_key()
+            and self._input_data_match_key() == other._input_data_match_key()
         )
 
     def __hash__(self) -> int:
@@ -437,8 +442,15 @@ class Feature:
                 compute_frameworks_hashable,
                 self.data_type,
                 self._child_options_key(),
+                self._input_data_match_key(),
             )
         )
+
+    def _input_data_match_key(self) -> tuple[type[BaseInputData], str] | None:
+        if self.input_data_match is None:
+            return None
+        reader, access = self.input_data_match
+        return reader, reader.data_access_identity(access)
 
     def __copy__(self) -> Feature:
         """A value-equal Feature owning the mutable containers __eq__/__hash__ read (#910).
@@ -534,9 +546,10 @@ class Feature:
             frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
         )
         split_context = self._split_context_hashable(keys)
+        match = None if self.input_data_match is None else _deep_hashable(self.input_data_match)
         if include_data_type and self.data_type is not None:
-            return hash((self.options, compute_frameworks_hashable, split_context, self.data_type))
-        return hash((self.options, compute_frameworks_hashable, split_context))
+            return hash((self.options, compute_frameworks_hashable, split_context, match, self.data_type))
+        return hash((self.options, compute_frameworks_hashable, split_context, match))
 
     def similarity_hash(self, split_keys: frozenset[str] | None = None) -> int:
         """Grouping hash over options, compute framework, split-key context values, and data type.

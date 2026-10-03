@@ -5,7 +5,6 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    RESERVED_READER_OPTION_KEY,
     _is_fallback_identity,
 )
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
@@ -67,7 +66,7 @@ class PlanStep:
     ``specialized_from`` lists, for a compute step, the parent classes its feature group replaced for at least one
     feature in the step (subclass preference), sorted by class name; empty otherwise.
 
-    ``reader_data_access`` is a derived property reading the (reader class, data access) pair from group options.
+    ``reader_data_access`` is the (reader class, data access) pair of ``FeatureSet.input_data_match``, excluded from equality.
     ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for that
     pair, computed on access.
     """
@@ -90,6 +89,7 @@ class PlanStep:
     step_uuid: UUID | None = field(default=None, compare=False)
     input_feature_edges: Mapping[str, tuple[str, ...]] = field(default_factory=dict, hash=False)
     specialized_from: tuple[type["FeatureGroup"], ...] = ()
+    reader_data_access: tuple[type["BaseInputData"], Any] | None = field(default=None, compare=False)
 
     @property
     def feature_group_name(self) -> str | None:
@@ -118,12 +118,6 @@ class PlanStep:
     @property
     def declared_right_framework_names(self) -> tuple[str, ...]:
         return tuple(framework.get_class_name() for framework in self.declared_right_frameworks)
-
-    @property
-    def reader_data_access(self) -> tuple[type["BaseInputData"], Any] | None:
-        return (
-            None if self.feature_set_options is None else self.feature_set_options.group.get(RESERVED_READER_OPTION_KEY)
-        )
 
     @property
     def data_access_identity(self) -> str | None:
@@ -191,6 +185,7 @@ def build_plan_steps(
                         for name, inputs in (step.features.declared_input_feature_edges or {}).items()
                     },
                     specialized_from=tuple(sorted(replaced, key=_candidate_sort_key)),
+                    reader_data_access=_safe_deepcopy(step.features.input_data_match, {}),
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

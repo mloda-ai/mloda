@@ -11,6 +11,7 @@ from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMas
 from mloda.core.filter.single_filter import SingleFilter
 
 if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 
@@ -111,6 +112,10 @@ class FeatureSet:
 
         self.artifact_to_load = None
         self.artifact_to_save = self.get_name_of_one_feature()
+
+    @property
+    def input_data_match(self) -> "tuple[type[BaseInputData], Any] | None":
+        return next((f.input_data_match for f in self.features if f.input_data_match is not None), None)
 
     def add(self, feature: Feature) -> None:
         self.features.add(feature)

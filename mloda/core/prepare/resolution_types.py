@@ -77,6 +77,8 @@ class RenderFacts:
     dead_only_names: frozenset[str] = frozenset()
     # Every plugin module/entry point PluginLoader skipped for a missing optional dependency, sorted.
     skipped_plugins: tuple[tuple[str, str], ...] = ()
+    # "Reader: credential-free identity" of each identified candidate that matched a data source.
+    sources: dict[type[FeatureGroup], str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

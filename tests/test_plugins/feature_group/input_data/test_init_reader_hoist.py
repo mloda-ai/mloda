@@ -1,33 +1,18 @@
 """Pins init_reader as the single concrete implementation on BaseInputData.
 
-Contract:
-
-    BaseInputData.init_reader(self, options: Options | None) -> tuple[BaseInputData, Any]
-    is concrete; ReadDB, ReadFile, and ReadDocument have no overrides.
-
-    Semantics of the hoisted implementation:
-      - options is None: ValueError whose message starts
-        "Options were not set for {self.__class__.__name__}" and contains "BaseInputData",
-        "Options(context=", and an example line containing "ReaderClass" and "data_access".
-      - options.get("BaseInputData") is None (key missing or None): ValueError containing
-        "'BaseInputData' key is missing", the class name, and the same example hints.
-      - happy path: options carrying {"BaseInputData": (SomeReaderClass, data_access)}
-        returns (instance of SomeReaderClass, data_access).
-
-Test isolation note:
-All BaseInputData subclasses used here are defined at MODULE scope, never inside test
-methods, so they are picklable and stable in the global subclass registry. They leave
-every matching-related classmethod (suffix, is_valid_credentials, load_data hooks, ...)
-unimplemented, so they never classify as final readers and plugin discovery in sibling
-tests can never select them.
+Contract: init_reader(self, reader_data_access) takes the (ReaderClass, data_access) pair and
+returns (reader instance, data_access); load(features) takes the pair from features.input_data_match
+and raises ValueError when it is None. Subclasses are module-level and never final readers.
 """
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
-from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -38,11 +23,7 @@ class HoistBareInputData(BaseInputData):
 
 
 class HoistSentinelReader(BaseInputData):
-    """Reader class carried inside the 'BaseInputData' options tuple for the happy-path pin."""
-
-
-class HoistDocumentReader(ReadDocument):
-    """ReadDocument family member; pins the message upgrade over the current terse wording."""
+    """Reader class carried inside the pair for the happy-path pin."""
 
 
 class TestInitReaderIsHoistedToBase:
@@ -62,64 +43,25 @@ class TestInitReaderIsHoistedToBase:
 class TestBaseInitReaderIsConcrete:
     """BaseInputData.init_reader becomes the single concrete implementation."""
 
-    def test_options_none_raises_value_error_not_not_implemented(self) -> None:
-        reader = HoistBareInputData()
-        with pytest.raises(ValueError) as excinfo:
-            reader.init_reader(None)
-        message = str(excinfo.value)
-        assert "HoistBareInputData" in message
-        assert "BaseInputData" in message
-
-    def test_options_none_message_contract(self) -> None:
-        reader = HoistBareInputData()
-        with pytest.raises(ValueError) as excinfo:
-            reader.init_reader(None)
-        message = str(excinfo.value)
-        assert message.startswith("Options were not set for HoistBareInputData")
-        assert "Options(context=" in message
-        assert "ReaderClass" in message
-        assert "data_access" in message
-
-    def test_missing_key_message_contract(self) -> None:
-        reader = HoistBareInputData()
-        options = Options(context={"other_key": "value"})
-        with pytest.raises(ValueError) as excinfo:
-            reader.init_reader(options)
-        message = str(excinfo.value)
-        assert "'BaseInputData' key is missing" in message
-        assert "HoistBareInputData" in message
-        assert "ReaderClass" in message
-        assert "data_access" in message
-
     def test_happy_path_returns_reader_instance_and_data_access(self) -> None:
         data_access: dict[str, Any] = {"dsn": "x"}
-        options = Options(group={"BaseInputData": (HoistSentinelReader, data_access)})
-        reader, returned_data_access = HoistBareInputData().init_reader(options)
+        reader, returned_data_access = HoistBareInputData().init_reader((HoistSentinelReader, data_access))
         assert isinstance(reader, HoistSentinelReader)
         assert returned_data_access is data_access
 
+    def test_load_without_match_raises_value_error(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("hoist_unmatched_col"))
+        with pytest.raises(ValueError):
+            HoistBareInputData().load(features)
 
-class TestFamilyBehaviorAfterHoist:
-    """The families keep (or gain) the parameterized error messages through the shared base."""
-
-    @pytest.mark.parametrize(
-        "family, expected_name",
-        [
-            (ReadDB, "ReadDB"),
-            (ReadFile, "ReadFile"),
-            (HoistDocumentReader, "HoistDocumentReader"),
-        ],
-    )
-    def test_options_none_mentions_class_name(self, family: type[BaseInputData], expected_name: str) -> None:
-        reader = family()
-        with pytest.raises(ValueError, match="Options were not set") as excinfo:
-            reader.init_reader(None)
-        assert expected_name in str(excinfo.value)
-
-    def test_read_db_missing_key_matches_base_contract(self) -> None:
-        # Options bracket access returns None for a missing key, so even ReadDB's current
-        # bracket-access implementation must funnel a keyless Options into the same
-        # ValueError as the base (never KeyError or a None-unpack TypeError).
-        options = Options(context={"other_key": "value"})
-        with pytest.raises(ValueError, match="'BaseInputData' key is missing"):
-            ReadDB().init_reader(options)
+    def test_load_takes_the_pair_from_the_feature_set_match(self) -> None:
+        feature = Feature("hoist_matched_col")
+        feature.input_data_match = (HoistSentinelReader, "access")
+        features = FeatureSet()
+        features.add(feature)
+        with patch.object(BaseInputData, "_load_data_via_hook", return_value="loaded") as hook:
+            assert HoistBareInputData().load(features) == "loaded"
+        reader, data_access, _ = hook.call_args.args
+        assert isinstance(reader, HoistSentinelReader)
+        assert data_access == "access"

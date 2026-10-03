@@ -217,12 +217,8 @@ class TestInputData:
 
 
 class TestReadFileValidationErrors:
-    def test_init_reader_none_options_message(self) -> None:
-        """When init_reader is called with None, the error should mention the class name.
-
-        Currently the message is a generic 'Options were not set.' without indicating
-        which reader class encountered the problem.
-        """
+    def test_load_without_match_message_names_class_and_attribute(self) -> None:
+        """An unmatched FeatureSet raises a ValueError naming the reader class and input_data_match."""
 
         class MyCustomReader(ReadFile):
             @classmethod
@@ -233,30 +229,11 @@ class TestReadFileValidationErrors:
             def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
-        reader = MyCustomReader()
-        with pytest.raises(ValueError, match=r"MyCustomReader"):
-            reader.init_reader(None)
-
-    def test_init_reader_missing_base_input_data_message(self) -> None:
-        """When options lack BaseInputData, the error should mention 'BaseInputData'.
-
-        Currently the message is a generic 'Reader data access was not set.' without
-        telling the user which key is missing.
-        """
-
-        class AnotherReader(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return []
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        reader = AnotherReader()
-        options = Options(group={"SomeOtherKey": "value"})
-        with pytest.raises(ValueError, match=r"BaseInputData"):
-            reader.init_reader(options)
+        features = FeatureSet()
+        features.add(Feature("unmatched_read_file_col"))
+        with pytest.raises(ValueError, match=r"MyCustomReader") as excinfo:
+            MyCustomReader().load(features)
+        assert "input_data_match" in str(excinfo.value)
 
 
 class TestReadFile:
@@ -311,8 +288,7 @@ class TestReadFile:
             def suffix(cls) -> tuple[str, ...]:
                 return (".csv",)
 
-        options = Options(group={"BaseInputData": (TestReadFile, "dummy.csv")})
-        reader, data_access = TestReadFile().init_reader(options)
+        reader, data_access = TestReadFile().init_reader((TestReadFile, "dummy.csv"))
         assert isinstance(reader, TestReadFile)
         assert data_access == "dummy.csv"
 
@@ -330,11 +306,11 @@ class TestReadFile:
             def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
                 return pa.table({"id": [1, 2], "V1": [3, 4], "V2": [5, 6]})
 
-        options = Options(group={"BaseInputData": (TestReadFile, "dummy.csv")})
         features = FeatureSet()
-        features.add(Feature("id", options=options))
-        features.add(Feature("V1", options=options))
-        features.add(Feature("V2", options=options))
+        for name in ("id", "V1", "V2"):
+            feature = Feature(name)
+            feature.input_data_match = (TestReadFile, "dummy.csv")
+            features.add(feature)
         data = TestReadFile().load(features)
         assert data.column_names == ["id", "V1", "V2"]
 

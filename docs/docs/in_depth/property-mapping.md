@@ -118,8 +118,8 @@ matcher therefore keeps the contract, whether the override delegates or not.
 
 The last four rows are the whole reader surface, and the match-time ones sit outside the ordered
 sequence above: a user-facing `READER_OPTIONS` key is consumed during reader selection, and no other
-moment fires for it. The reserved `"BaseInputData"` key is the exception, written at selection and read
-back at load time by `BaseInputData.init_reader` and by `SQLITEReader.get_table`.
+moment fires for it. The reserved `"BaseInputData"` key is the exception, written transiently while matching and
+moved onto `Feature.input_data_match`, which `BaseInputData.load` and `SQLITEReader.get_table` read at load time.
 See [One spec type, two surfaces](#one-spec-type-two-surfaces).
 
 ## One spec type, two surfaces
@@ -150,7 +150,7 @@ consequences keep the shared type honest on this surface:
   `deferred_binding=True` and `context=False` describe name matching and value placement, which a
   reader does not have, so `BaseInputData.__init_subclass__` rejects them instead of leaving them
   silently inert (#865). `framework_set=True` marks the one framework-written key, the reserved
-  `"BaseInputData"` pair written by `add_base_input_data_to_options` and read by `init_reader`.
+  `"BaseInputData"` pair, written transiently while matching and never kept in the options.
   Such keys are exempt from enforcement, so enforcement fields on them are rejected too, as is
   `allow_explicit_none`, which the admit path never reads on a framework-written key; on
   `PROPERTY_MAPPING` the field is rejected outright. The reserved key is checked as the MRO merge

@@ -18,5 +18,6 @@ def create_index_feature(index: Index, feature_group: FeatureGroup, feature: Fea
         domain=domain,
     )
 
+    new_index_feature.input_data_match = feature.input_data_match
     new_index_feature.name = feature_group.set_feature_name(feature.options, new_index_feature.name)
     return new_index_feature

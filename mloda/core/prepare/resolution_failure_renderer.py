@@ -107,6 +107,7 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     lines = "\n".join(
         f"  - {fg.__name__} ({fg.__module__})"
         + (f" [domain: {result.facts.domains[fg]}]" if fg in result.facts.domains else "")
+        + (f" [source: {result.facts.sources[fg]}]" if fg in result.facts.sources else "")
         for fg in sorted(result.identified, key=_candidate_sort_key)
     )
     scope_line = f"{callout}\n" if callout else ""

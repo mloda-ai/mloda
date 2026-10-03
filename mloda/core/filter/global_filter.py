@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.options import Options, _isolate_for
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
@@ -338,6 +339,10 @@ class GlobalFilter:
             filter.filter_feature.options,
             data_access_collection,
         )
+        # The pair carries credentials: it moves off the options onto the filter feature.
+        written = filter.filter_feature.options.group.pop(RESERVED_READER_OPTION_KEY, None)
+        if probe.matched and isinstance(written, tuple) and len(written) == 2:
+            filter.filter_feature.input_data_match = written
         if probe.matcher_error is not None:
             reason = contained_raise_reason(probe.matcher_error)
             self._record_dropped_filter(feature_group, filter, reason)

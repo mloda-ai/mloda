@@ -15,10 +15,14 @@ Follows the construction conventions in test_identify_feature_group_error_messag
 
 import inspect
 import logging
+import sqlite3
+from pathlib import Path
 from collections.abc import Callable
 from abc import abstractmethod
 from typing import Any, ClassVar
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -27,11 +31,20 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, matches_feature_group_scope
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.prepare.identify_feature_group import (
+    FeatureResolutionError,
+    IdentifyFeatureGroupClass,
+    matches_feature_group_scope,
+)
 from tests.helpers.plugin_stubs import StubFeatureGroup, make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.provider import BaseInputData, DataCreator, FeatureSet
-from mloda.user import PluginCollector, mloda
+from mloda.user import Credential, DataAccessCollection, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
@@ -965,3 +978,147 @@ def test_no_replacement_logs_no_debug_line(caplog: pytest.LogCaptureFixture) -> 
         )
 
     assert [r for r in caplog.records if r.name == "mloda.core.prepare.identify_feature_group"] == []
+
+
+# ---------------------------------------------------------------------------
+# Two reader-backed roots matching one column: ambiguous bare, loadable when scoped
+# ---------------------------------------------------------------------------
+
+READER_COL = "scope_reader_shared_col"
+
+
+class CsvFG(FeatureGroup):
+    """Root reading the shared column through CsvReader."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return CsvReader()
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Any = None,
+    ) -> bool:
+        # Only the unique column, so no other test's file feature can resolve here.
+        return str(feature_name) == READER_COL and super().match_feature_group_criteria(
+            feature_name, options, data_access_collection
+        )
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return CsvReader().load(features)
+
+
+class ParquetFG(FeatureGroup):
+    """Root reading the shared column through ParquetReader."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return ParquetReader()
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Any = None,
+    ) -> bool:
+        # Only the unique column, so no other test's file feature can resolve here.
+        return str(feature_name) == READER_COL and super().match_feature_group_criteria(
+            feature_name, options, data_access_collection
+        )
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return ParquetReader().load(features)
+
+
+def _reader_files(tmp_path: Path) -> tuple[str, str]:
+    csv_path = tmp_path / "scope_reader_shared.csv"
+    csv_path.write_text(f"{READER_COL}\n1\n2\n3\n")
+    parquet_path = tmp_path / "scope_reader_shared.parquet"
+    pq.write_table(pa.table({READER_COL: [10, 20, 30]}), str(parquet_path))
+    return str(csv_path), str(parquet_path)
+
+
+def _run_reader_roots(feature: Feature, dac: DataAccessCollection) -> list[Any]:
+    return list(
+        mloda.run_all(
+            [feature],
+            compute_frameworks={PyArrowTable},
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, ParquetFG}),
+        )
+    )
+
+
+def test_two_reader_backed_roots_are_ambiguous_and_name_their_sources(tmp_path: Path) -> None:
+    csv_path, parquet_path = _reader_files(tmp_path)
+
+    with pytest.raises(FeatureResolutionError, match="Multiple feature groups found") as exc_info:
+        _run_reader_roots(Feature(READER_COL), DataAccessCollection(files={csv_path, parquet_path}))
+
+    message = str(exc_info.value)
+    assert "CsvFG" in message
+    assert "ParquetFG" in message
+    assert f"CsvReader: {csv_path}" in message
+    assert f"ParquetReader: {parquet_path}" in message
+    assert "BaseInputData already set" not in message
+
+
+@pytest.mark.parametrize(
+    ("scope", "expected"), [("CsvFG", [1, 2, 3]), ("ParquetFG", [10, 20, 30])], ids=["csv", "parquet"]
+)
+def test_scoped_reader_backed_root_loads_its_own_file(tmp_path: Path, scope: str, expected: list[int]) -> None:
+    csv_path, parquet_path = _reader_files(tmp_path)
+
+    results = _run_reader_roots(
+        Feature(READER_COL, feature_group=scope), DataAccessCollection(files={csv_path, parquet_path})
+    )
+
+    assert len(results) == 1
+    assert results[0].to_pydict() == {READER_COL: expected}
+
+
+def test_resolved_reader_feature_holds_its_pair_on_input_data_match_not_in_options(tmp_path: Path) -> None:
+    csv_path, parquet_path = _reader_files(tmp_path)
+    feature = Feature(READER_COL, feature_group="CsvFG")
+
+    mloda.run_all(
+        [feature],
+        compute_frameworks={PyArrowTable},
+        data_access_collection=DataAccessCollection(files={csv_path, parquet_path}),
+        plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, ParquetFG}),
+        copy_features=False,
+    )
+
+    assert feature.input_data_match == (CsvReader, csv_path)
+    assert RESERVED_READER_OPTION_KEY not in feature.options.group
+    assert RESERVED_READER_OPTION_KEY not in feature.options.context
+
+
+def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> None:
+    csv_path, _ = _reader_files(tmp_path)
+    db_path = str(tmp_path / "scope_reader_shared.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute(f"CREATE TABLE scope_reader_table ({READER_COL} INTEGER)")
+    conn.execute("INSERT INTO scope_reader_table VALUES (100)")
+    conn.commit()
+    conn.close()
+    secret = "scope-reader-secret-value"  # nosec B105
+    dac = DataAccessCollection(files={csv_path}, credentials=Credential(sqlite=db_path, password=secret))  # nosec B106
+
+    with pytest.raises(FeatureResolutionError, match="Multiple feature groups found") as exc_info:
+        mloda.run_all(
+            [Feature(READER_COL)],
+            compute_frameworks={PyArrowTable},
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, ReadDBFeature}),
+        )
+
+    message = str(exc_info.value)
+    assert "CsvFG" in message
+    assert "ReadDBFeature" in message
+    assert secret not in message

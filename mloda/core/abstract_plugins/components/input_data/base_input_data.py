@@ -74,8 +74,8 @@ def _is_fallback_identity(data_access: Any, identity: str) -> bool:
 class BaseInputData(ABC):
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
         RESERVED_READER_OPTION_KEY: PropertySpec(
-            "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
-            "and read back by init_reader.",
+            "The matched (ReaderClass, data_access) pair, written transiently while matching and "
+            "never kept in options; it lives on Feature.input_data_match.",
             default=None,
             framework_set=True,
         ),
@@ -575,43 +575,19 @@ class BaseInputData(ABC):
             )
         options.add_to_group(RESERVED_READER_OPTION_KEY, (cls_to_be_added, matched_data_access))
 
-    def init_reader(self, options: Options | None) -> tuple["BaseInputData", Any]:
-        if options is None:
-            raise ValueError(
-                f"Options were not set for {self.__class__.__name__}.init_reader().\n"
-                "Provide an Options object with a 'BaseInputData' key mapping to a tuple of "
-                "(ReaderClass, data_access).\n"
-                "Example:\n"
-                "  options = Options(context={\n"
-                "      'BaseInputData': (ReaderClass, data_access)\n"
-                "  })"
-            )
-
-        reader_data_access = options.get(RESERVED_READER_OPTION_KEY)
-
-        if reader_data_access is None:
-            raise ValueError(
-                f"'BaseInputData' key is missing in the provided Options for {self.__class__.__name__}.\n"
-                "The 'BaseInputData' key in Options must map to a tuple of "
-                "(ReaderClass, data_access).\n"
-                "Example:\n"
-                "  options = Options(context={\n"
-                "      'BaseInputData': (ReaderClass, data_access)\n"
-                "  })"
-            )
-
+    def init_reader(self, reader_data_access: tuple[type["BaseInputData"], Any]) -> tuple["BaseInputData", Any]:
         reader, data_access = reader_data_access
         return reader(), data_access
 
     def load(self, features: FeatureSet) -> Any:
-        _options = None
-        for feature in features.features:
-            if _options:
-                if _options != feature.options:
-                    raise ValueError("All features must have the same options.")
-            _options = feature.options
+        match = features.input_data_match
+        if match is None:
+            raise ValueError(
+                f"{self.__class__.__name__}.load() found no input_data_match on the feature set; "
+                "the reader match is set while the feature group is identified."
+            )
 
-        reader, data_access = self.init_reader(_options)
+        reader, data_access = self.init_reader(match)
         data = self._load_data_via_hook(reader, data_access, features)
 
         if data is None:

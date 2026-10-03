@@ -73,10 +73,10 @@ class TestSetupComputeFramework:
         with pytest.raises(ValueError) as exc_info:
             setup_compute_framework.filter_user_set_in_available_sub_classes(["missing_compute_framework"], set())
 
-        message = str(exc_info.value)
-        assert "missing_compute_framework" in message
-        assert "available compute frameworks: []" in message
-        assert "Did you call PluginLoader.all()?" in message
+        assert str(exc_info.value) == (
+            "No given compute frameworks ['missing_compute_framework'] found in "
+            "available compute frameworks: []. Did you call PluginLoader.all()?"
+        )
 
     def test_filter_user_set_in_available_sub_classes_non_empty_available_classes_keeps_existing_message(
         self, features: Features
@@ -88,10 +88,10 @@ class TestSetupComputeFramework:
                 ["missing_compute_framework"], {ComputeFramework}
             )
 
-        message = str(exc_info.value)
-        assert "missing_compute_framework" in message
-        assert "['ComputeFramework']" in message
-        assert "PluginLoader" not in message
+        assert str(exc_info.value) == (
+            "No given compute frameworks ['missing_compute_framework'] found in "
+            "available compute frameworks: ['ComputeFramework']."
+        )
 
     @pytest.mark.parametrize(
         "bad",

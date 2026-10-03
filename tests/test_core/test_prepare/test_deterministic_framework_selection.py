@@ -426,17 +426,19 @@ def test_no_preference_leaves_the_default_unchanged() -> None:
         assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PandasDataFrame
 
 
-def test_preference_is_empty_again_after_the_context_manager_exits() -> None:
-    with framework_preference([PyArrowTable]):
-        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PyArrowTable
-
-    assert _default_winner() == "PandasDataFrame"
-
-
-def test_preference_is_empty_again_when_the_body_raises() -> None:
-    with pytest.raises(RuntimeError):
+@pytest.mark.parametrize("body_raises", [False, True], ids=["exits_normally", "body_raises"])
+def test_preference_is_empty_again_after_the_context_manager_ends(body_raises: bool) -> None:
+    def run_body() -> None:
         with framework_preference([PyArrowTable]):
-            raise RuntimeError("boom")
+            assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PyArrowTable
+            if body_raises:
+                raise RuntimeError("boom")
+
+    if body_raises:
+        with pytest.raises(RuntimeError, match="boom"):
+            run_body()
+    else:
+        run_body()
 
     assert _default_winner() == "PandasDataFrame"
 

@@ -26,21 +26,14 @@ from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
-from mloda.provider import FeatureGroup
-from mloda.provider import FeatureSet
-from mloda.user import Feature
-from mloda.user import ParallelizationMode
-from mloda.user import PluginCollector
-from mloda.user import mloda
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
 # Importing the framework registers it as a ComputeFramework subclass so
 # ``compute_frameworks=["PythonDictFramework"]`` resolves during ``run_all``.
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
-
 
 # --------------------------------------------------------------------------- #
 # Minimal root FeatureGroups whose calculate_feature raises a chosen error type
@@ -180,6 +173,49 @@ class UnpicklableSecretLeakFeatureGroup(FeatureGroup):
 _ENABLED_SECRET_LEAK = PluginCollector.enabled_feature_groups({SecretLeakFeatureGroup})
 _ENABLED_SECRET_LEAK_CHAINED = PluginCollector.enabled_feature_groups({SecretLeakChainedFeatureGroup})
 _ENABLED_UNPICKLABLE_SECRET_LEAK = PluginCollector.enabled_feature_groups({UnpicklableSecretLeakFeatureGroup})
+
+
+_ROW_LEAK_MARKER = "Jane Doe, DOB 1990"
+
+
+class RowLeakError(ValueError):
+    """A specific error type for testing row leakage."""
+
+
+class RowLeakFeatureGroup(FeatureGroup):
+    """Root FG whose ``calculate_feature`` raises an error carrying row values."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_row_leak_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise RowLeakError(f"Failed parsing row: {_ROW_LEAK_MARKER}")
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_row_leak_col"}
+
+
+class RowLeakChainedFeatureGroup(FeatureGroup):
+    """Root FG that raises ``RuntimeError`` from a ``RowLeakError``."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_row_leak_chained_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise RuntimeError("Calculation failed") from RowLeakError(f"Inner row error: {_ROW_LEAK_MARKER}")
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_row_leak_chained_col"}
+
+
+_ENABLED_ROW_LEAK = PluginCollector.enabled_feature_groups({RowLeakFeatureGroup})
+_ENABLED_ROW_LEAK_CHAINED = PluginCollector.enabled_feature_groups({RowLeakChainedFeatureGroup})
 
 
 def test_sync_secret_leak_direct_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
@@ -484,3 +520,53 @@ def test_multiprocessing_unpicklable_exception_does_not_hang(flight_server: Any)
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
         )
+
+
+def test_sync_row_leak_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """Row values in the exception message must not be logged to ERROR records."""
+    with pytest.raises(RowLeakError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_row_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ROW_LEAK,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert _ROW_LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_multiprocessing_row_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    """Row values in the exception message must not be logged to ERROR records in MULTIPROCESSING."""
+    with pytest.raises(RowLeakError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_row_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ROW_LEAK,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+    assert _ROW_LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_sync_row_leak_chained_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """Row values in chained exception messages must not be logged to ERROR records."""
+    with pytest.raises(RuntimeError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_row_leak_chained_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ROW_LEAK_CHAINED,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert isinstance(excinfo.value.__cause__, RowLeakError)
+    assert _ROW_LEAK_MARKER in str(excinfo.value.__cause__)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)

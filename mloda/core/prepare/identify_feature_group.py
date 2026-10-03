@@ -693,9 +693,9 @@ class IdentifyFeatureGroupClass:
     ) -> bool:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
-        The shared probe owns the per-candidate window and the containment; this seam keeps only its own
-        policy: each probe runs on its own fork, so a contained raise leaves nothing behind, and the per-candidate recording, never as an
-        exception object whose traceback would pin the plugin class.
+        The shared probe owns the per-candidate window and the containment. This seam runs each probe on its own
+        fork of the options, so a contained raise leaves nothing behind, and records the per-candidate outcome as
+        text, never as an exception object whose traceback would pin the plugin class.
 
         Mark-or-contain policy: see call_match_hook.
         """

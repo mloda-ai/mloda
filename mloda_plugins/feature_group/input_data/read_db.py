@@ -19,9 +19,6 @@ class ReadDB(BaseInputData):
     _auto_load_group triggers lazy plugin discovery when no ReadDB subclasses
     are found in the process. Only the read_dbs subdirectory is loaded.
 
-    To suppress auto-loading:
-        PluginLoader.disable_auto_load("feature_group/input_data/read_dbs")
-
     load_data is a template method exposing an opt-in lifecycle seam: a new
     backend implements ``produce_rows``, ``connect``, and ``is_valid_credentials``
     (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``/``claims_feature_name``)

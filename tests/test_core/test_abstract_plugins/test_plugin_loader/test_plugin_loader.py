@@ -89,42 +89,11 @@ class TestPluginLoader:
         for res in result:
             assert "feature_group" not in res
 
-    def test_disable_auto_load_adds_to_disabled_groups(self) -> None:
-        PluginLoader._disabled_groups.discard("_test_group")
-        PluginLoader.disable_auto_load("_test_group")
-        assert "_test_group" in PluginLoader._disabled_groups
-        PluginLoader._disabled_groups.discard("_test_group")
-
-    def test_disable_auto_load_suppresses_lazy_load(self) -> None:
-        """When auto-load is disabled for a group, get_all_filtered_subclasses returns empty without loading."""
-        from unittest.mock import MagicMock
-
-        from mloda_plugins.feature_group.input_data.read_file import ReadFile
-
-        PluginLoader.disable_auto_load("feature_group/input_data/read_files")
-        mock_load = MagicMock()
-        try:
-            with patch(
-                "mloda.core.abstract_plugins.components.input_data.base_input_data._collect_filtered_subclasses",
-                return_value=[],
-            ):
-                with patch(
-                    "mloda.core.abstract_plugins.plugin_loader.plugin_loader.PluginLoader.load_group",
-                    mock_load,
-                ):
-                    result = get_all_filtered_subclasses(ReadFile, ReadFile)
-            assert result == []
-            mock_load.assert_not_called()
-        finally:
-            PluginLoader._disabled_groups.discard("feature_group/input_data/read_files")
-
     def test_auto_load_triggers_when_subclasses_empty(self) -> None:
         """Auto-load fires load_group when _collect_filtered_subclasses returns empty."""
         from unittest.mock import MagicMock
 
         from mloda_plugins.feature_group.input_data.read_file import ReadFile
-
-        PluginLoader._disabled_groups.discard("feature_group/input_data/read_files")
 
         mock_load = MagicMock()
 

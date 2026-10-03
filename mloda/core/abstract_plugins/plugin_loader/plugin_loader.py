@@ -75,7 +75,6 @@ def traceback_blames_root(exc: ImportError, root: str) -> bool:
 
 
 class PluginLoader:
-    _disabled_groups: ClassVar[set[str]] = set()
     _cached_loader: ClassVar["PluginLoader | None"] = None
     _cached_generation: ClassVar[int | None] = None
     _building_thread_id: ClassVar[int | None] = None
@@ -84,10 +83,6 @@ class PluginLoader:
     _skipped: ClassVar[dict[str, str]] = {}
     # Separate from _skipped (which only tracks skipped plugins): last problem warned about per malformed marker.
     _warned_markers: ClassVar[dict[tuple[str | None, str], str]] = {}
-
-    @classmethod
-    def disable_auto_load(cls, group: str) -> None:
-        cls._disabled_groups.add(group)
 
     @classmethod
     def skipped_plugins(cls) -> dict[str, str]:

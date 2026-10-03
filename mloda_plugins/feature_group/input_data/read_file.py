@@ -22,9 +22,6 @@ class ReadFile(BaseInputData):
     are found in the process (i.e. when the user has not imported CsvReader etc.).
     Only the read_files subdirectory is loaded, not the entire feature_group tree.
 
-    To suppress auto-loading:
-        PluginLoader.disable_auto_load("feature_group/input_data/read_files")
-
     This class should be inherited by all classes that are responsible for reading files.
 
     _structured_suffixes lists file extensions that ReadFile owns by default.

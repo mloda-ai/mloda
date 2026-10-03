@@ -176,8 +176,6 @@ def _make_same_name_fg(module: str, access: str) -> type[FeatureGroup]:
     gc.collect()
 
     class SameNameMatchDataFG845s(FeatureGroup, MatchData):
-        """Unrelated twin sharing its class name with another module's group."""
-
         __module__ = module
 
         @classmethod
@@ -208,8 +206,6 @@ def _make_same_name_fg(module: str, access: str) -> type[FeatureGroup]:
 
 @dataclass(frozen=True)
 class _SameNameSnapshot:
-    """Plain-data readout of one same-name evaluation."""
-
     escaped: str | None
     identified_count: int
     group_untouched: bool

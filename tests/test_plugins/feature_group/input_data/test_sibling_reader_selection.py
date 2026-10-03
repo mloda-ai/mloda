@@ -298,7 +298,8 @@ class TestPinnedReaderConflict1777:
         assert result.identified == {}
         elimination = result.eliminations.get(SiblingSel1777ValueFG)
         assert elimination is not None
-        assert _BAD_VALUE in elimination.reason or _VALUE_KEY in elimination.reason
+        assert elimination.stage == "value_rejection"
+        assert f"'{_BAD_VALUE}' not found in mapping for '{_VALUE_KEY}'" in elimination.reason
         assert "matched nothing" not in elimination.reason
 
     def test_resolution_contains_conflict_as_matcher_error(self) -> None:

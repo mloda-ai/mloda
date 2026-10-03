@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
     MatchRejection,
+    drop_match_rejections_since,
     match_rejection_owners,
     record_match_rejection,
     restamp_match_rejections_since,
@@ -390,6 +391,25 @@ class TestProbeScopedRestamp:
 
         assert rejection_window[VG1006_UNIT_OWNER].stage == INPUT_DATA_STAGE
         assert rejection_window[VG1006_UNIT_OTHER_OWNER].stage == INPUT_DATA_OWNED_STAGE
+
+    def test_drop_without_a_window_is_a_no_op(self) -> None:
+        assert MATCH_REJECTION_REASONS.get() is None
+        drop_match_rejections_since(frozenset())
+        assert MATCH_REJECTION_REASONS.get() is None
+
+    def test_drop_keeps_owners_in_the_snapshot(self, rejection_window: dict[str, MatchRejection]) -> None:
+        record_match_rejection(VG1006_UNIT_OWNER, VG1006_UNIT_REASON, stage=INPUT_DATA_OWNED_STAGE)
+        drop_match_rejections_since(match_rejection_owners())
+
+        assert set(rejection_window) == {VG1006_UNIT_OWNER}
+
+    def test_drop_removes_owners_recorded_after_the_snapshot(self, rejection_window: dict[str, MatchRejection]) -> None:
+        record_match_rejection(VG1006_UNIT_OWNER, VG1006_UNIT_REASON, stage=INPUT_DATA_OWNED_STAGE)
+        known_owners = match_rejection_owners()
+        record_match_rejection(VG1006_UNIT_OTHER_OWNER, VG1006_UNIT_REASON, stage=INPUT_DATA_OWNED_STAGE)
+        drop_match_rejections_since(known_owners)
+
+        assert set(rejection_window) == {VG1006_UNIT_OWNER}
 
 
 class TestProbeScopedRestampAtTheCallSite:

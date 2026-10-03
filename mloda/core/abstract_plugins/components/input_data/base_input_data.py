@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
     context_forwarding_remedy,
+    drop_match_rejections_since,
     match_rejection_owners,
     record_match_rejection,
     restamp_match_rejections_since,
@@ -356,6 +357,7 @@ class BaseInputData(ABC):
                 sub.__qualname__,
             ),
         )
+        entry_owners = match_rejection_owners()
         accepting: list[tuple[type[BaseInputData], Any]] = []
         for subclass in subclasses:
             for key, value in options.items():
@@ -406,6 +408,8 @@ class BaseInputData(ABC):
                 f"Feature '{feature_name}' pins several readers that accept it: {names}. "
                 "A pinned reader is final, so pin each reader on its own feature."
             )
+        # The declining pins' vetoes must not mask the winner's later failure reason.
+        drop_match_rejections_since(entry_owners)
         cls.add_base_input_data_to_options(accepting[0][0], accepting[0][1], options)
         return True
 

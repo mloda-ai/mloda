@@ -3,7 +3,7 @@ must raise a "missing Links" ValueError at plan-build time, not silently bind on
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -188,119 +188,94 @@ def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -
 # Unlinked parents must be rejected whatever frameworks run, not only when a transform hop is involved.
 
 
-class UnlinkedPaRootA(FeatureGroup):
+class _Root(FeatureGroup):
+    """Data-creator root: DATA maps column name to values, built in FRAMEWORK's native type."""
+
+    DATA: ClassVar[dict[str, list[int]]] = {}
+    FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
+
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"unlinked_pa_root_a"})
+        return DataCreator(set(cls.DATA))
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if cls.FRAMEWORK is PandasDataFrame:
+            import pandas as pd
+
+            return pd.DataFrame(cls.DATA)
         import pyarrow as pa
 
-        return pa.table({"unlinked_pa_root_a": [1, 2, 3]})
+        return pa.table(cls.DATA)
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+        return {cls.FRAMEWORK}
 
 
-class UnlinkedPaRootB(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"unlinked_pa_root_b"})
+class _Consumer(FeatureGroup):
+    """Consumer: OUTPUT is the sum of the INPUTS columns plus ADD, computed in FRAMEWORK's native type."""
 
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow as pa
+    INPUTS: ClassVar[tuple[str, ...]] = ()
+    OUTPUT: ClassVar[str] = ""
+    ADD: ClassVar[int] = 0
+    FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
 
-        return pa.table({"unlinked_pa_root_b": [10, 20, 30]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-
-class UnlinkedPaRootC(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"unlinked_pa_root_c"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow as pa
-
-        return pa.table({"unlinked_pa_root_c": [100, 200, 300]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-
-class UnlinkedPaConsumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("unlinked_pa_root_a"), Feature("unlinked_pa_root_b")}
+        return {Feature(name) for name in self.INPUTS}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data.append_column("unlinked_pa_consumer_result", data.column(0))
+        if cls.FRAMEWORK is PandasDataFrame:
+            total = sum(data[name] for name in cls.INPUTS) + cls.ADD
+            data[cls.OUTPUT] = total
+            return data
+        import pyarrow.compute as pc
+
+        total = data[cls.INPUTS[0]]
+        for name in cls.INPUTS[1:]:
+            total = pc.add(total, data[name])
+        return data.append_column(cls.OUTPUT, pc.add(total, cls.ADD))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+        return {cls.FRAMEWORK}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return {"unlinked_pa_consumer_result"}
+        return {cls.OUTPUT} if cls.OUTPUT else set()
 
 
-class UnlinkedPaTripleConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("unlinked_pa_root_a"), Feature("unlinked_pa_root_b"), Feature("unlinked_pa_root_c")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data.append_column("unlinked_pa_triple_result", data.column(0))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"unlinked_pa_triple_result"}
+class UnlinkedPaRootA(_Root):
+    DATA = {"unlinked_pa_root_a": [1, 2, 3]}
 
 
-class UnlinkedMixPandasRoot(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"unlinked_mix_pd_root"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pandas as pd
-
-        return pd.DataFrame({"unlinked_mix_pd_root": [10, 20, 30]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
+class UnlinkedPaRootB(_Root):
+    DATA = {"unlinked_pa_root_b": [10, 20, 30]}
 
 
-class UnlinkedMixConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("unlinked_pa_root_a"), Feature("unlinked_mix_pd_root")}
+class UnlinkedPaRootC(_Root):
+    DATA = {"unlinked_pa_root_c": [100, 200, 300]}
 
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data.append_column("unlinked_mix_result", data.column(0))
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+class UnlinkedPaConsumer(_Consumer):
+    INPUTS = ("unlinked_pa_root_a", "unlinked_pa_root_b")
+    OUTPUT = "unlinked_pa_consumer_result"
 
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"unlinked_mix_result"}
+
+class UnlinkedPaTripleConsumer(_Consumer):
+    INPUTS = ("unlinked_pa_root_a", "unlinked_pa_root_b", "unlinked_pa_root_c")
+    OUTPUT = "unlinked_pa_triple_result"
+
+
+class UnlinkedMixPandasRoot(_Root):
+    DATA = {"unlinked_mix_pd_root": [10, 20, 30]}
+    FRAMEWORK = PandasDataFrame
+
+
+class UnlinkedMixConsumer(_Consumer):
+    INPUTS = ("unlinked_pa_root_a", "unlinked_mix_pd_root")
+    OUTPUT = "unlinked_mix_result"
 
 
 _UNLINKED_CASES: list[tuple[str, set[type[FeatureGroup]], set[type[ComputeFramework]], list[str]]] = [
@@ -369,77 +344,25 @@ def _run(feature_name: str, groups: set[type[FeatureGroup]], frameworks: set[typ
     )
 
 
-class DiamondRoot(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"diamond_a"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow as pa
-
-        return pa.table({"diamond_a": [1, 2, 3]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+class DiamondRoot(_Root):
+    DATA = {"diamond_a": [1, 2, 3]}
 
 
-class DiamondD1(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("diamond_a")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow.compute as pc
-
-        return data.append_column("diamond_d1", pc.add(data["diamond_a"], 100))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"diamond_d1"}
+class DiamondD1(_Consumer):
+    INPUTS = ("diamond_a",)
+    OUTPUT = "diamond_d1"
+    ADD = 100
 
 
-class DiamondD2(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("diamond_a")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow.compute as pc
-
-        return data.append_column("diamond_d2", pc.add(data["diamond_a"], 200))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"diamond_d2"}
+class DiamondD2(_Consumer):
+    INPUTS = ("diamond_a",)
+    OUTPUT = "diamond_d2"
+    ADD = 200
 
 
-class DiamondConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("diamond_d1"), Feature("diamond_d2")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow.compute as pc
-
-        return data.append_column("diamond_result", pc.add(data["diamond_d1"], data["diamond_d2"]))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"diamond_result"}
+class DiamondConsumer(_Consumer):
+    INPUTS = ("diamond_d1", "diamond_d2")
+    OUTPUT = "diamond_result"
 
 
 def test_same_root_diamond_in_one_framework_plans_and_runs() -> None:
@@ -447,58 +370,19 @@ def test_same_root_diamond_in_one_framework_plans_and_runs() -> None:
     assert _column_values(results, "diamond_result") == [302, 304, 306]
 
 
-class RootDerivedRoot(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"rd_x", "rd_y"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow as pa
-
-        return pa.table({"rd_x": [1, 2, 3], "rd_y": [10, 20, 30]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+class RootDerivedRoot(_Root):
+    DATA = {"rd_x": [1, 2, 3], "rd_y": [10, 20, 30]}
 
 
-class RootDerivedDX(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("rd_x")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow.compute as pc
-
-        return data.append_column("rd_dx", pc.add(data["rd_x"], 1000))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"rd_dx"}
+class RootDerivedDX(_Consumer):
+    INPUTS = ("rd_x",)
+    OUTPUT = "rd_dx"
+    ADD = 1000
 
 
-class RootDerivedConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("rd_dx"), Feature("rd_y")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow.compute as pc
-
-        return data.append_column("rd_result", pc.add(data["rd_dx"], data["rd_y"]))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"rd_result"}
+class RootDerivedConsumer(_Consumer):
+    INPUTS = ("rd_dx", "rd_y")
+    OUTPUT = "rd_result"
 
 
 def test_root_plus_derived_in_one_framework_plans_and_runs() -> None:
@@ -506,57 +390,21 @@ def test_root_plus_derived_in_one_framework_plans_and_runs() -> None:
     assert _column_values(results, "rd_result") == [1011, 1022, 1033]
 
 
-class HopRoot(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"hop_x", "hop_y"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pandas as pd
-
-        return pd.DataFrame({"hop_x": [1, 2, 3], "hop_y": [10, 20, 30]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
+class HopRoot(_Root):
+    DATA = {"hop_x": [1, 2, 3], "hop_y": [10, 20, 30]}
+    FRAMEWORK = PandasDataFrame
 
 
-class HopDX(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("hop_x")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow.compute as pc
-
-        return data.append_column("hop_dx", pc.add(data["hop_x"], 1000))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"hop_dx"}
+class HopDX(_Consumer):
+    INPUTS = ("hop_x",)
+    OUTPUT = "hop_dx"
+    ADD = 1000
 
 
-class HopConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("hop_dx"), Feature("hop_y")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        data["hop_result"] = data["hop_dx"] + data["hop_y"]
-        return data
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"hop_result"}
+class HopConsumer(_Consumer):
+    INPUTS = ("hop_dx", "hop_y")
+    OUTPUT = "hop_result"
+    FRAMEWORK = PandasDataFrame
 
 
 def test_same_root_with_one_hop_plans_and_runs() -> None:
@@ -564,39 +412,13 @@ def test_same_root_with_one_hop_plans_and_runs() -> None:
     assert _column_values(results, "hop_result") == [1011, 1022, 1033]
 
 
-class FanInRoot(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"fan_p", "fan_q"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow as pa
-
-        return pa.table({"fan_p": [1, 2, 3], "fan_q": [10, 20, 30]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+class FanInRoot(_Root):
+    DATA = {"fan_p": [1, 2, 3], "fan_q": [10, 20, 30]}
 
 
-class FanInConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("fan_p"), Feature("fan_q")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        import pyarrow.compute as pc
-
-        return data.append_column("fan_result", pc.add(data["fan_p"], data["fan_q"]))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"fan_result"}
+class FanInConsumer(_Consumer):
+    INPUTS = ("fan_p", "fan_q")
+    OUTPUT = "fan_result"
 
 
 def test_same_class_fan_in_in_one_framework_plans_and_runs() -> None:

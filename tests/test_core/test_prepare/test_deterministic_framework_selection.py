@@ -6,7 +6,7 @@ import importlib
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pyarrow as pa
 import pytest
@@ -229,7 +229,7 @@ def test_fresh_interpreters_reduce_to_the_same_frameworks() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Connection-aware default (#1055)
+# Connection-aware default
 # ---------------------------------------------------------------------------
 
 _BASE = "mloda_plugins.compute_framework.base_implementations"
@@ -267,75 +267,59 @@ def test_connection_requirement_members() -> None:
     assert [member.name for member in ConnectionRequirement] == ["NONE", "SELF_MANAGED", "REQUIRED"]
 
 
-def test_select_deterministic_prefers_no_connection_over_required() -> None:
-    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
-
-    assert ComputeFramework.select_deterministic([duckdb_fw, PyArrowTable]) is PyArrowTable
-    assert ComputeFramework.select_deterministic([PyArrowTable, duckdb_fw]) is PyArrowTable
-
-
-def test_select_deterministic_keeps_name_order_within_a_rank() -> None:
-    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
-    sqlite_fw = _load_framework(f"{_BASE}.sqlite.sqlite_framework", "SqliteFramework")
-
-    assert ComputeFramework.select_deterministic([sqlite_fw, duckdb_fw]) is duckdb_fw
-    assert ComputeFramework.select_deterministic([duckdb_fw, sqlite_fw]) is duckdb_fw
+_MODULE_OF = {name: module for module, name, _ in _REQUIREMENTS}
+_RANK_CASES: list[tuple[list[str], str]] = [
+    (["DuckDBFramework", "PyArrowTable"], "PyArrowTable"),
+    (["PyArrowTable", "DuckDBFramework"], "PyArrowTable"),
+    (["SqliteFramework", "DuckDBFramework"], "DuckDBFramework"),
+    (["DuckDBFramework", "SqliteFramework"], "DuckDBFramework"),
+    (["DuckDBFramework", "SparkFramework"], "SparkFramework"),
+    (["SparkFramework", "PyArrowTable"], "PyArrowTable"),
+]
 
 
-def test_select_deterministic_prefers_self_managed_over_required() -> None:
-    duckdb_fw = _load_framework(f"{_BASE}.duckdb.duckdb_framework", "DuckDBFramework")
-    spark_fw = _load_framework(f"{_BASE}.spark.spark_framework", "SparkFramework")
+@pytest.mark.parametrize(
+    ("inputs", "expected"),
+    _RANK_CASES,
+    ids=[f"{'+'.join(i)}->{e}" for i, e in _RANK_CASES],
+)
+def test_select_deterministic_orders_by_connection_rank_then_name(inputs: list[str], expected: str) -> None:
+    frameworks = [_load_framework(_MODULE_OF[name], name) for name in inputs]
 
-    assert ComputeFramework.select_deterministic([duckdb_fw, spark_fw]) is spark_fw
-
-
-def test_select_deterministic_prefers_none_over_self_managed() -> None:
-    spark_fw = _load_framework(f"{_BASE}.spark.spark_framework", "SparkFramework")
-
-    assert ComputeFramework.select_deterministic([spark_fw, PyArrowTable]) is PyArrowTable
+    assert ComputeFramework.select_deterministic(frameworks).get_class_name() == expected
 
 
 # --- planning and run ---------------------------------------------------------------------------
 
 
-class ConnAwareDuckPyArrowRootFG(FeatureGroup):
+class _ConnAwareRoot(FeatureGroup):
+    """Data-creator root named by NAME; subclasses differ only by class name and NAME."""
+
+    NAME: ClassVar[str] = ""
+
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"conn_aware_duck_pa_root"})
+        return DataCreator({cls.NAME} if cls.NAME else set())
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pa.table({"conn_aware_duck_pa_root": [1, 2, 3]})
+        return pa.table({cls.NAME: [1, 2, 3]})
 
 
-class ConnAwareSqliteRootFG(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"conn_aware_sqlite_root"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pa.table({"conn_aware_sqlite_root": [1, 2, 3]})
+class ConnAwareDuckPyArrowRootFG(_ConnAwareRoot):
+    NAME = "conn_aware_duck_pa_root"
 
 
-class ConnAwareNoConnRootFG(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"conn_aware_noconn_root"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pa.table({"conn_aware_noconn_root": [1, 2, 3]})
+class ConnAwareSqliteRootFG(_ConnAwareRoot):
+    NAME = "conn_aware_sqlite_root"
 
 
-class ConnAwarePinnedRootFG(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"conn_aware_pinned_root"})
+class ConnAwareNoConnRootFG(_ConnAwareRoot):
+    NAME = "conn_aware_noconn_root"
 
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pa.table({"conn_aware_pinned_root": [1, 2, 3]})
+
+class ConnAwarePinnedRootFG(_ConnAwareRoot):
+    NAME = "conn_aware_pinned_root"
 
 
 @pytest.fixture

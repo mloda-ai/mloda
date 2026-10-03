@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, TypeVar
 
+import pytest
+
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -160,3 +162,102 @@ class TestMatchDataConflictAbortsTheMatch:
         assert snapshot.escaped is not None, "a rival candidate must not hide the two-readers conflict"
         assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
         assert CONFLICT_TEXT in snapshot.escaped
+
+
+SAME_NAME_FEATURE = "same_name_match_data_feat_845s"
+SAME_NAME_CLASS = "SameNameMatchDataFG845s"
+SAME_NAME_MODULES = ("same_name_module_one_845s", "same_name_module_two_845s")
+ACCESS_ONE = "same_name_access_one_845s"
+ACCESS_TWO = "same_name_access_two_845s"
+
+
+def _make_same_name_fg(module: str, access: str) -> type[FeatureGroup]:
+    """MatchData group named SAME_NAME_CLASS in the given module, resolving access in global scope only."""
+    gc.collect()
+
+    class SameNameMatchDataFG845s(FeatureGroup, MatchData):
+        """Unrelated twin sharing its class name with another module's group."""
+
+        __module__ = module
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {SAME_NAME_FEATURE}
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            return {MatchDataFw845r}
+
+        @classmethod
+        def match_data_access(
+            cls,
+            feature_name: str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+            framework_connection_object: Any | None = None,
+        ) -> Any:
+            if str(feature_name) != SAME_NAME_FEATURE or data_access_collection is None:
+                return None
+            return access
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return None
+
+    return SameNameMatchDataFG845s
+
+
+@dataclass(frozen=True)
+class _SameNameSnapshot:
+    """Plain-data readout of one same-name evaluation."""
+
+    escaped: str | None
+    identified_count: int
+    group_untouched: bool
+
+
+def _evaluate_same_name(accesses: tuple[str, str], reverse: bool) -> _SameNameSnapshot:
+    """Evaluate two same-name groups with the given global-scope accesses, optionally in reverse order."""
+    fg_one = _make_same_name_fg(SAME_NAME_MODULES[0], accesses[0])
+    fg_two = _make_same_name_fg(SAME_NAME_MODULES[1], accesses[1])
+    try:
+        original_group: dict[str, Any] = {}
+        feature = Feature(SAME_NAME_FEATURE, options=Options(group=dict(original_group)))
+        data_access = DataAccessCollection(connections={"h1": ACCESS_ONE, "h2": ACCESS_TWO})
+        ordered = [fg_two, fg_one] if reverse else [fg_one, fg_two]
+        plugins: FeatureGroupEnvironmentMapping = {fg: {MatchDataFw845r} for fg in ordered}
+        result, escaped = _capture(partial(IdentifyFeatureGroupClass.evaluate, feature, plugins, None, data_access))
+        count = 0 if result is None else len(result.identified)
+        untouched = feature.options.group == original_group and SAME_NAME_CLASS not in feature.options.group
+        snapshot = _SameNameSnapshot(escaped=escaped, identified_count=count, group_untouched=untouched)
+        del result
+        del plugins
+        del feature
+        return snapshot
+    finally:
+        del fg_one
+        del fg_two
+        gc.collect()
+
+
+class TestMatchDataConflictBetweenSurvivors:
+    """Same-named MatchData survivors with different global accesses must raise the conflict."""
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_different_accesses_escape_with_conflict(self, reverse: bool) -> None:
+        snapshot = _evaluate_same_name((ACCESS_ONE, ACCESS_TWO), reverse)
+
+        assert snapshot.escaped is not None, "different accesses under one class name must conflict"
+        assert snapshot.escaped.startswith(f"{RAISE_TYPE_NAME}: ")
+        assert f"{SAME_NAME_CLASS} {CONFLICT_TEXT}" in snapshot.escaped
+        assert snapshot.identified_count == 0
+        assert ACCESS_ONE not in snapshot.escaped
+        assert ACCESS_TWO not in snapshot.escaped
+        assert snapshot.group_untouched
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_equal_accesses_keep_both_survivors(self, reverse: bool) -> None:
+        snapshot = _evaluate_same_name((ACCESS_ONE, ACCESS_ONE), reverse)
+
+        assert snapshot.escaped is None
+        assert snapshot.identified_count == 2
+        assert snapshot.group_untouched

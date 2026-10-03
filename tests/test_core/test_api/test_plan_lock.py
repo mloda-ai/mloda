@@ -80,11 +80,12 @@ def test_missing_file_raises_with_path_hint_and_content_and_creates_nothing(tmp_
 
 
 def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None:
-    lock = tmp_path / "plan.lock"
+    lock = tmp_path / "a" / "b" / "plan.lock"
     plan = _plan()
 
     write_plan_lock(plan, lock)
 
+    assert b"\r" not in lock.read_bytes()
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
@@ -121,14 +122,6 @@ def test_a_differing_plan_raises_with_a_unified_diff_and_leaves_the_file_alone(t
     assert lock.read_text(encoding="utf-8") == before
 
 
-def test_write_creates_missing_parent_directories(tmp_path: Path) -> None:
-    lock = tmp_path / "a" / "b" / "plan.lock"
-
-    write_plan_lock(_plan(), lock)
-
-    assert lock.read_text(encoding="utf-8") == _lock_text(_plan())
-
-
 @pytest.mark.parametrize(
     "plan",
     [
@@ -154,23 +147,15 @@ def test_a_crlf_rewritten_lock_still_passes_check(tmp_path: Path) -> None:
     check_plan_lock(plan, lock)
 
 
-def test_written_file_uses_lf_line_endings(tmp_path: Path) -> None:
-    lock = tmp_path / "plan.lock"
-
-    write_plan_lock(_plan(), lock)
-
-    assert b"\r" not in lock.read_bytes()
-
-
-def test_identical_compute_steps_give_two_records() -> None:
-    content = json.loads(_lock_text([_compute_step(), _compute_step()]))
-
-    assert len(content["compute"]) == 2
-    assert content["compute"][0] == content["compute"][1]
-
-
-def test_compute_steps_differing_only_in_framework_give_two_distinct_records() -> None:
-    content = json.loads(_lock_text([_compute_step(), _compute_step(compute_framework=PyArrowTable)]))
+@pytest.mark.parametrize(
+    "second_overrides, distinct",
+    [
+        pytest.param({}, False, id="identical"),
+        pytest.param({"compute_framework": PyArrowTable}, True, id="framework_only"),
+    ],
+)
+def test_compute_steps_give_two_records(second_overrides: dict[str, object], distinct: bool) -> None:
+    content = json.loads(_lock_text([_compute_step(), _compute_step(**second_overrides)]))
 
     assert len(content["compute"]) == 2
-    assert content["compute"][0] != content["compute"][1]
+    assert (content["compute"][0] != content["compute"][1]) is distinct

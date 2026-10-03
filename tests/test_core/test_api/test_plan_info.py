@@ -1042,9 +1042,8 @@ class TestPlanStepReaderDataAccess:
 
         assert "hunter2" not in text
         assert db not in text
-        reader_class = SQLITEReader
         records = json.loads(text)["compute"]
-        assert [record["reader"] for record in records] == [f"{reader_class.__module__}:{reader_class.__qualname__}"]
+        assert [record["reader"] for record in records] == [f"{SQLITEReader.__module__}:{SQLITEReader.__qualname__}"]
 
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
         step = PlanStep(
@@ -1454,6 +1453,19 @@ class TestPlanLock:
             assert records[0][differing_key] != records[1][differing_key]
 
         check_plan_lock(explain_plan(), lock)
+
+    # Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
+    @pytest.mark.timeout(60)
+    def test_plan_lock_text_is_stable_across_hash_seeds(self) -> None:
+        outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=[0, 1, 2])
+
+        assert len(outputs) == 3
+        assert outputs[0] == outputs[1] == outputs[2]
+
+        content = json.loads(outputs[0]["lock"])
+        assert len(content["compute"]) > 1
+        assert len(content["joins"]) >= 1
+        assert len(content["transforms"]) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -2031,17 +2043,3 @@ class TestCallerNeedsNoInternalImport:
     def test_public_entry_points_exist_on_the_public_api(self) -> None:
         assert hasattr(mlodaAPI, "resolved_plan")
         assert hasattr(mlodaAPI, "explain")
-
-
-# Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
-@pytest.mark.timeout(60)
-def test_plan_lock_text_is_stable_across_hash_seeds() -> None:
-    outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=[0, 1, 2])
-
-    assert len(outputs) == 3
-    assert outputs[0] == outputs[1] == outputs[2]
-
-    content = json.loads(outputs[0]["lock"])
-    assert len(content["compute"]) > 1
-    assert len(content["joins"]) >= 1
-    assert len(content["transforms"]) >= 1

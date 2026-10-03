@@ -328,12 +328,35 @@ class BaseInputData(ABC):
             return True
         return False
 
+    @staticmethod
+    def _drop_replaced_parents(
+        accepted: list[tuple[type["BaseInputData"], Any]],
+    ) -> list[tuple[type["BaseInputData"], Any]]:
+        """Drop a reader when a strict subclass in the list accepted an equal access."""
+        return [
+            (reader, access)
+            for reader, access in accepted
+            if not any(
+                other is not reader and issubclass(other, reader) and (other_access == access) is True
+                for other, other_access in accepted
+            )
+        ]
+
     @classmethod
     def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
-        """
-        We check for the feature scope data access if any child classes match the data access.
-        """
+        """Pinned readers are probed in name order; the single accepting pin (after subclass
+        replacement) serves the feature, several raise."""
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
+        subclasses = sorted(
+            subclasses,
+            key=lambda sub: (
+                sub.data_access_name().casefold(),
+                sub.data_access_name(),
+                sub.__module__,
+                sub.__qualname__,
+            ),
+        )
+        accepting: list[tuple[type[BaseInputData], Any]] = []
         for subclass in subclasses:
             for key, value in options.items():
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
@@ -353,8 +376,8 @@ class BaseInputData(ABC):
                         if matched_data_access:
                             unmet = subclass._unmet_current_declaration()
                             if unmet is None:
-                                cls.add_base_input_data_to_options(subclass, matched_data_access, options)
-                                return True
+                                accepting.append((subclass, matched_data_access))
+                                break
                             record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
                         else:
                             # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
@@ -368,7 +391,23 @@ class BaseInputData(ABC):
                             stage=INPUT_DATA_OWNED_STAGE,
                         )
                     break  # This case is if a feature requests an input feature, which should have scoped access.
-        return False
+        accepting = cls._drop_replaced_parents(accepting)
+        if not accepting:
+            return False
+        if len(accepting) > 1:
+            short = [sub.data_access_name() for sub, _ in accepting]
+            labels = [
+                f"{sub.__module__}.{sub.__qualname__}" if short.count(name) > 1 else name
+                for (sub, _), name in zip(accepting, short)
+            ]
+            names = ", ".join(sorted(labels, key=lambda label: (label.casefold(), label)))
+            # Contained: several accepting pinned readers is a user-fixable config error, not an engine abort.
+            raise ValueError(
+                f"Feature '{feature_name}' pins several readers that accept it: {names}. "
+                "A pinned reader is final, so pin each reader on its own feature."
+            )
+        cls.add_base_input_data_to_options(accepting[0][0], accepting[0][1], options)
+        return True
 
     @classmethod
     def deal_with_base_input_data_name_as_cls_or_str(cls, key: Any) -> str:
@@ -438,14 +477,7 @@ class BaseInputData(ABC):
                 accepted.append((subclass, matched_data_access))
 
         # A subclass replaces its parent when both accept an equal access; different accesses stay ambiguous.
-        accepted = [
-            (reader, access)
-            for reader, access in accepted
-            if not any(
-                other is not reader and issubclass(other, reader) and (other_access == access) is True
-                for other, other_access in accepted
-            )
-        ]
+        accepted = cls._drop_replaced_parents(accepted)
         if len(accepted) == 1:
             return accepted[0]
         if accepted:

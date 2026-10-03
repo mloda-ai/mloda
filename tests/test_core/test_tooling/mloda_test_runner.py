@@ -33,6 +33,7 @@ from mloda.provider import ComputeFramework
 from mloda.steward import Extender
 from mloda.user import mloda
 from mloda.user import GlobalFilter
+from mloda.core.abstract_plugins.compute_framework import framework_preference
 from mloda.core.core.engine import Engine
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.run import ExecutionOrchestrator
@@ -197,9 +198,15 @@ class MlodaTestRunner:
         if parallelization_modes is None:
             parallelization_modes = {ParallelizationMode.SYNC}
 
-        engine = Engine(
-            features, set(compute_frameworks), links, global_filter=global_filter, function_extender=function_extender
-        )
+        positions = {framework: index for index, framework in reversed(list(enumerate(compute_frameworks)))}
+        with framework_preference(positions):
+            engine = Engine(
+                features,
+                set(compute_frameworks),
+                links,
+                global_filter=global_filter,
+                function_extender=function_extender,
+            )
 
         use_flight = ParallelizationMode.MULTIPROCESSING in parallelization_modes
         runner = engine.compute(flight_server if use_flight else None)

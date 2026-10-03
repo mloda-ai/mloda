@@ -16,22 +16,24 @@ class SetupComputeFramework:
     ) -> None:
         available_compute_frameworks = get_all_subclasses(ComputeFramework)
 
-        if user_compute_frameworks is not None and not isinstance(user_compute_frameworks, list):
+        if user_compute_frameworks is not None and (
+            not isinstance(user_compute_frameworks, Sequence) or isinstance(user_compute_frameworks, (str, bytes))
+        ):
             raise ValueError(
                 "compute_frameworks must be an ordered list, the first entry preferred, "
                 f'for example ["PolarsDataFrame", "PandasDataFrame"], got {type(user_compute_frameworks).__name__}.'
             )
 
-        preference: list[type[ComputeFramework]] = []
+        preference: dict[type[ComputeFramework], int] = {}
         if user_compute_frameworks:
             matched = self.filter_user_set_in_available_sub_classes(
                 user_compute_frameworks, available_compute_frameworks
             )
-            # Same-named classes share the position of the first entry naming them.
-            preference = sorted(matched, key=lambda s: (self._position(s, user_compute_frameworks), s.__qualname__))
+            # Same-named classes share the index of the first entry naming them.
+            preference = {s: self._position(s, user_compute_frameworks) for s in matched}
             available_compute_frameworks = matched
 
-        self.framework_preference: tuple[type[ComputeFramework], ...] = tuple(preference)
+        self.framework_preference = preference
 
         if parallelization_modes is not None:
             available_compute_frameworks = self._filter_by_parallelization_modes(

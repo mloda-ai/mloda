@@ -25,7 +25,7 @@ class TestSetupComputeFramework:
         assert {fw.get_class_name() for fw in setup_compute_framework.compute_frameworks} == set(
             user_compute_frameworks
         )
-        assert [fw.get_class_name() for fw in setup_compute_framework.framework_preference] == user_compute_frameworks
+        assert setup_compute_framework.framework_preference == {PyArrowTable: 0, PandasDataFrame: 1}
 
     def test_init_without_user_compute_frameworks(self, features: Features) -> None:
         setup_compute_framework = SetupComputeFramework(None, features)
@@ -95,23 +95,30 @@ class TestSetupComputeFramework:
 
     @pytest.mark.parametrize(
         "bad",
-        [{"PandasDataFrame"}, frozenset({"PandasDataFrame"}), ("PandasDataFrame",), "PandasDataFrame", set()],
-        ids=["set", "frozenset", "tuple", "str", "empty_set"],
+        [
+            {"PandasDataFrame"},
+            frozenset({"PandasDataFrame"}),
+            "PandasDataFrame",
+            b"PandasDataFrame",
+            {"PandasDataFrame": 0},
+            set(),
+        ],
+        ids=["set", "frozenset", "str", "bytes", "dict", "empty_set"],
     )
-    def test_non_list_raises_with_ordered_list_hint(self, features: Features, bad: Any) -> None:
+    def test_non_sequence_raises_with_ordered_list_hint(self, features: Features, bad: Any) -> None:
         with pytest.raises(ValueError, match="ordered list") as exc_info:
             SetupComputeFramework(bad, features)
 
         assert '["PolarsDataFrame", "PandasDataFrame"]' in str(exc_info.value)
 
-    @pytest.mark.parametrize("empty", [None, []], ids=["none", "empty_list"])
-    def test_none_and_empty_list_keep_all_frameworks_without_preference(
-        self, features: Features, empty: list[str] | None
+    @pytest.mark.parametrize("empty", [None, [], ()], ids=["none", "empty_list", "empty_tuple"])
+    def test_none_and_empty_sequence_keep_all_frameworks_without_preference(
+        self, features: Features, empty: Any
     ) -> None:
         setup_compute_framework = SetupComputeFramework(empty, features)
 
         assert setup_compute_framework.compute_frameworks == get_all_subclasses(ComputeFramework)
-        assert setup_compute_framework.framework_preference == ()
+        assert setup_compute_framework.framework_preference == {}
 
     def test_unknown_name_raises_even_when_another_entry_matches(self, features: Features) -> None:
         with pytest.raises(ValueError, match="NoSuchFramework"):
@@ -121,13 +128,34 @@ class TestSetupComputeFramework:
         forward = SetupComputeFramework(["PyArrowTable", "PandasDataFrame"], features)
         backward = SetupComputeFramework(["PandasDataFrame", "PyArrowTable"], features)
 
-        assert forward.framework_preference == (PyArrowTable, PandasDataFrame)
-        assert backward.framework_preference == (PandasDataFrame, PyArrowTable)
+        assert forward.framework_preference == {PyArrowTable: 0, PandasDataFrame: 1}
+        assert backward.framework_preference == {PandasDataFrame: 0, PyArrowTable: 1}
 
-    def test_framework_preference_dedups_by_class(self, features: Features) -> None:
+    def test_tuple_is_accepted_and_keeps_order(self, features: Features) -> None:
+        setup_compute_framework = SetupComputeFramework(("PandasDataFrame", PyArrowTable), features)
+
+        assert setup_compute_framework.framework_preference == {PandasDataFrame: 0, PyArrowTable: 1}
+        assert setup_compute_framework.compute_frameworks == {PandasDataFrame, PyArrowTable}
+
+    def test_framework_preference_dedups_by_class_keeping_first_index(self, features: Features) -> None:
         setup_compute_framework = SetupComputeFramework(["PandasDataFrame", PandasDataFrame], features)
 
-        assert setup_compute_framework.framework_preference == (PandasDataFrame,)
+        assert setup_compute_framework.framework_preference == {PandasDataFrame: 0}
+
+    def test_classes_sharing_one_name_share_one_position(self, features: Features) -> None:
+        def make() -> type[ComputeFramework]:
+            class ZzSetupSharedNameFramework(ComputeFramework):
+                @staticmethod
+                def is_available() -> bool:
+                    return False
+
+            return ZzSetupSharedNameFramework
+
+        first, second = make(), make()
+
+        setup_compute_framework = SetupComputeFramework(["PyArrowTable", "ZzSetupSharedNameFramework"], features)
+
+        assert setup_compute_framework.framework_preference == {PyArrowTable: 0, first: 1, second: 1}
 
     def test_set_through_mloda_api_raises_setup_configuration_error(self) -> None:
         with pytest.raises(SetupConfigurationError, match="ordered list"):

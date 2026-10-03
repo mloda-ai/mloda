@@ -1,7 +1,7 @@
 import contextlib
 import pickle  # nosec B403
 from abc import ABC
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextvars import ContextVar
 from typing import Any, final
 from uuid import UUID, uuid4
@@ -39,12 +39,9 @@ _framework_position: ContextVar[dict[type["ComputeFramework"], int]] = ContextVa
 
 
 @contextlib.contextmanager
-def framework_preference(order: Sequence[type["ComputeFramework"]]) -> Generator[None, None, None]:
-    """Rank frameworks by their position in order for select_deterministic within the scope."""
-    positions: dict[type[ComputeFramework], int] = {}
-    for framework in order:
-        positions.setdefault(framework, len(positions))
-    token = _framework_position.set(positions)
+def framework_preference(positions: Mapping[type["ComputeFramework"], int]) -> Generator[None, None, None]:
+    """Rank frameworks by their position for select_deterministic within the scope; equal positions tie."""
+    token = _framework_position.set(dict(positions))
     try:
         yield
     finally:
@@ -765,11 +762,12 @@ class ComputeFramework(ABC):
             raise ValueError("Cannot select a compute framework from an empty collection.")
 
         position = _framework_position.get()
+        unlisted = max(position.values(), default=-1) + 1
 
         # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
         def key(framework: type["ComputeFramework"]) -> tuple[int, int, str, str, str]:
             return (
-                position.get(framework, len(position)),
+                position.get(framework, unlisted),
                 _CONNECTION_RANK[framework.connection_requirement()],
                 framework.get_class_name(),
                 framework.__module__,

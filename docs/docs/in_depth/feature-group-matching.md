@@ -39,6 +39,10 @@ A match hook that refuses the feature because of its name, for example an unknow
 
 The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See [Applying declared defaults](property-mapping.md#applying-declared-defaults).
 
+#### Option writes from a match hook
+
+A match hook may write into the options it is handed. Each candidate matches against its own shallow copy of the request's options, and only the winner's copy (values, non-forwarded marks, own-key provenance) is applied to the feature. A candidate that returns `False`, raises, or is dropped by a later gate leaves nothing behind, and a failed resolution leaves the options as requested. A readerless subclass inherits its nearest replaced ancestor's reader pair, and two unrelated survivors with different reader pairs raise. The hook keeps its `bool` return, so existing hooks need no change, but must not keep the options reference after returning. Rebind a value rather than mutating a nested container in place, since the copy is shallow.
+
 ### 2. PROPERTY_MAPPING Configuration
 
 The `PROPERTY_MAPPING` defines how configuration-based features are validated:

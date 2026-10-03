@@ -297,6 +297,7 @@ class _ResolutionSnapshot:
     warnings: tuple[str, ...]
     matcher_errors: tuple[tuple[str, str], ...]
     option_keys: tuple[str, ...]
+    fork_kept: bool
 
 
 def _drive_resolution(build: Callable[[], type[FeatureGroup]], caplog: pytest.LogCaptureFixture) -> _ResolutionSnapshot:
@@ -305,9 +306,11 @@ def _drive_resolution(build: Callable[[], type[FeatureGroup]], caplog: pytest.Lo
     fg = build()
     identifier = IdentifyFeatureGroupClass()
     feature = Feature(FILTER_FEATURE)
+    matched: Any = None
     try:
         with caplog.at_level(logging.DEBUG, logger=IFG_LOGGER_NAME):
             value, escaped = _capture(partial(identifier._filter_feature_group_by_criteria, fg, feature, None))
+        matched = identifier._matched_options
         return _ResolutionSnapshot(
             is_false=value is False,
             is_true=value is True,
@@ -318,9 +321,10 @@ def _drive_resolution(build: Callable[[], type[FeatureGroup]], caplog: pytest.Lo
                 sorted((group.get_class_name(), reason) for group, reason in identifier._matcher_errors.items())
             ),
             option_keys=tuple(sorted(str(key) for key in feature.options.keys())),
+            fork_kept=fg in matched,
         )
     finally:
-        del fg, identifier, feature
+        del fg, identifier, feature, matched
         gc.collect()
 
 
@@ -564,6 +568,7 @@ class TestRaisingBoolIsContained:
         assert OPTION_KEY_927 not in snapshot.option_keys, (
             f"the write must not survive an unreadable return, got: {snapshot.option_keys}"
         )
+        assert snapshot.fork_kept is False, "the non-matching candidate's fork must not be kept"
         assert len(snapshot.matcher_errors) == 1, (
             f"containment must record the candidate's defect, got: {snapshot.matcher_errors}"
         )

@@ -2,7 +2,7 @@
 re-raise and the return coercion.
 
 Both match seams held their own try around ``match_feature_group_criteria`` and drifted apart twice (#991).
-Each keeps only its own recording and rollback now, driven by the outcome this helper hands back.
+Each keeps only its own recording and option isolation now, driven by the outcome this helper hands back.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def call_match_hook(
     option-write conflict during reader selection escalates as a contradiction, decided at the reader-selection
     raise.
 
-    The contained exception is handed back rather than judged here: each seam records and rolls back its own way.
+    The contained exception is handed back rather than judged here: each seam records and isolates options its own way.
     """
     try:
         # bool() inside the try: reading a plugin's return is itself a plugin call (#927).

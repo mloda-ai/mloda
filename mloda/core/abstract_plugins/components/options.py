@@ -394,6 +394,26 @@ class Options:
         """
         return self.rebuild(dict(self.group), dict(self.context))
 
+    def _fork(self) -> "Options":
+        """Shallow copy owning its group/context dicts; values and subclass attributes are shared by reference."""
+        forked = object.__new__(type(self))
+        forked.__dict__.update(self.__dict__)
+        forked.group = dict(self.group)
+        forked.context = dict(self.context)
+        return forked
+
+    def _adopt(self, other: "Options") -> None:
+        """Takes other's values and bookkeeping in place; this object and its two dicts keep their identity."""
+        group = self.group
+        context = self.context
+        self.__dict__.update(other.__dict__)
+        self.group = group
+        self.context = context
+        group.clear()
+        group.update(other.group)
+        context.clear()
+        context.update(other.context)
+
     def __deepcopy__(self, memo: dict[int, Any]) -> "Options":
         def safe_deepcopy_dict(d: dict[str, Any]) -> dict[str, Any]:
             """Safely deepcopy a dictionary, falling back to shallow copy for unpickleable objects."""

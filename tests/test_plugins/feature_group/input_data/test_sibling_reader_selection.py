@@ -23,6 +23,8 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.utils import is_match_abort
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import Options
@@ -115,6 +117,55 @@ class TestSiblingSelectionViaClassNameStringKey:
         options = Options({"SiblingSel565NoSuchReader": _ACCESS_A})
         assert BaseInputData.feature_scope_data_access(options, "sibling_sel_565_feat") is False
         assert "BaseInputData" not in options
+
+
+class TestPinnedReaderConflict1777:
+    """Two accepting pins of one family raise without leaking access values; declining pins are skipped."""
+
+    def test_two_accepting_pins_raise_naming_both_without_writing(self) -> None:
+        group = {SiblingSel565ReaderA.__name__: _ACCESS_A, SiblingSel565ReaderB.__name__: _ACCESS_B}
+        options = Options(group=dict(group))
+        with pytest.raises(ValueError) as excinfo:
+            BaseInputData.feature_scope_data_access(options, "sibling_sel_1777_feat")
+        message = str(excinfo.value)
+        assert "SiblingSel565ReaderA" in message
+        assert "SiblingSel565ReaderB" in message
+        assert message.index("SiblingSel565ReaderA") < message.index("SiblingSel565ReaderB")
+        assert "pin each reader on its own feature" in message
+        assert _ACCESS_A not in message
+        assert _ACCESS_B not in message
+        assert not is_match_abort(excinfo.value)
+        assert "BaseInputData" not in options
+        assert options.group == group
+
+    @pytest.mark.parametrize(
+        "access_a,access_b,winner,access",
+        [
+            (_ACCESS_A, _ACCESS_A, SiblingSel565ReaderA, _ACCESS_A),
+            (_ACCESS_B, _ACCESS_B, SiblingSel565ReaderB, _ACCESS_B),
+        ],
+        ids=["b_declines", "a_declines"],
+    )
+    def test_declining_pin_is_skipped_and_accepting_pin_wins(
+        self, access_a: str, access_b: str, winner: type, access: str
+    ) -> None:
+        options = Options({SiblingSel565ReaderA.__name__: access_a, SiblingSel565ReaderB.__name__: access_b})
+        assert BaseInputData.feature_scope_data_access(options, "sibling_sel_1777_feat") is True
+        assert options.get("BaseInputData") == (winner, access)
+
+    def test_resolution_contains_conflict_as_matcher_error(self) -> None:
+        feature = Feature(
+            name="sibling_sel_1777_feat",
+            options={SiblingSel565ReaderA.__name__: _ACCESS_A, SiblingSel565ReaderB.__name__: _ACCESS_B},
+        )
+        accessible: FeatureGroupEnvironmentMapping = {ReadFileFeature: {PyArrowTable}}
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None, None)
+        assert result.identified == {}
+        elimination = result.eliminations.get(ReadFileFeature)
+        assert elimination is not None
+        assert elimination.stage == "matcher_error"
+        assert "SiblingSel565ReaderA" in elimination.reason
+        assert "SiblingSel565ReaderB" in elimination.reason
 
 
 class TestSiblingSelectionViaClassKey:

@@ -334,6 +334,8 @@ class BaseInputData(ABC):
         We check for the feature scope data access if any child classes match the data access.
         """
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
+        subclasses = sorted(subclasses, key=lambda sub: sub.data_access_name().casefold())
+        accepting: list[tuple[Any, Any]] = []
         for subclass in subclasses:
             for key, value in options.items():
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
@@ -353,8 +355,8 @@ class BaseInputData(ABC):
                         if matched_data_access:
                             unmet = subclass._unmet_current_declaration()
                             if unmet is None:
-                                cls.add_base_input_data_to_options(subclass, matched_data_access, options)
-                                return True
+                                accepting.append((subclass, matched_data_access))
+                                break
                             record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
                         else:
                             # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
@@ -368,7 +370,17 @@ class BaseInputData(ABC):
                             stage=INPUT_DATA_OWNED_STAGE,
                         )
                     break  # This case is if a feature requests an input feature, which should have scoped access.
-        return False
+        if not accepting:
+            return False
+        if len(accepting) > 1:
+            names = ", ".join(sorted((sub.data_access_name() for sub, _ in accepting), key=str.casefold))
+            # Contained: several accepting pinned readers is a user-fixable config error, not an engine abort.
+            raise ValueError(
+                f"Feature '{feature_name}' pins several readers that accept it: {names}. "
+                "A pinned reader is final, so pin each reader on its own feature."
+            )
+        cls.add_base_input_data_to_options(accepting[0][0], accepting[0][1], options)
+        return True
 
     @classmethod
     def deal_with_base_input_data_name_as_cls_or_str(cls, key: Any) -> str:

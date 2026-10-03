@@ -23,6 +23,8 @@ from mloda.user import (
     DataAccessCollection,
     Feature,
     FeatureName,
+    JoinSpec,
+    Link,
     Options,
     ParallelizationMode,
     PluginCollector,
@@ -50,6 +52,8 @@ NAMERULE_ACCESS = "decl_namerule_access_1648"
 NAMERULE_HANDLE = "decl_namerule_handle_1648"
 OTHER_HANDLE = "decl_other_handle_1648"
 
+JOIN_KEY = "decl_join_key_1648"
+
 LOAD_LOG: list[str] = []
 SHARED_LONELY_INPUT: list[Feature] = []
 
@@ -76,7 +80,7 @@ class _DeclMarkedReader(BaseInputData):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         LOAD_LOG.append(cls.__name__)
-        return {cls.FEATURE: [1]}
+        return {cls.FEATURE: [1], JOIN_KEY: [1]}
 
 
 class DeclDepthFamily1648(_DeclMarkedReader):
@@ -219,7 +223,7 @@ class DeclFrameFG1648(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {FRAME: [1]}
+        return {FRAME: [1], JOIN_KEY: [1]}
 
 
 class _DeclConsumer(FeatureGroup):
@@ -352,6 +356,7 @@ def _run(names: list[Feature | str], dac: DataAccessCollection | None) -> Any:
         parallelization_modes={ParallelizationMode.SYNC},
         data_access_collection=dac,
         plugin_collector=ENABLED,
+        links={Link.inner(JoinSpec(DeclDepthFG1648, JOIN_KEY), JoinSpec(DeclFrameFG1648, JOIN_KEY))},
     )
 
 

@@ -410,6 +410,10 @@ def _link_with_an_unlinked_third_parent() -> Unlinked:
     planned.graph.add_node(unlinked.uuid, NodeProperties(unlinked, ResolvedJoinUnlinked))
     planned.queue.append((ResolvedJoinUnlinked, {unlinked}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    # The third parent descends from the left side, so it shares that side's source step.
+    planned.graph.adjacency_list[left.uuid].append(unlinked.uuid)
+    planned.graph.adjacency_list[unlinked.uuid] = []
+    planned.graph.parent_to_children_mapping[unlinked.uuid] = {left.uuid}
     _add_child(planned, child, left, right, unlinked)
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 

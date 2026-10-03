@@ -1,4 +1,4 @@
-"""A FeatureGroupStep whose parents live on two different, unlinked source-framework instances
+"""A FeatureGroupStep whose parents live on different, unlinked source-framework instances
 must raise a "missing Links" ValueError at plan-build time, not silently bind only one hop's data.
 """
 
@@ -167,7 +167,11 @@ def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -
         assert output["outcome"] == "rejected", (
             f"cross-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
-        assert "depends on parents from two different, unlinked source feature" in output["error"], (
+        assert "depends on parents from" in output["error"], (
+            f"cross-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime "
+            f"KeyError: {output}"
+        )
+        assert "unlinked sources (missing Links)" in output["error"], (
             f"cross-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime "
             f"KeyError: {output}"
         )
@@ -178,7 +182,10 @@ def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -
         assert output["outcome"] == "rejected", (
             f"same-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
-        assert "depends on parents from two different, unlinked source feature" in output["error"], (
+        assert "depends on parents from" in output["error"], (
+            f"same-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime KeyError: {output}"
+        )
+        assert "unlinked sources (missing Links)" in output["error"], (
             f"same-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime KeyError: {output}"
         )
         assert "ScRootA" in output["error"], f"same-framework PYTHONHASHSEED={seed}: {output}"
@@ -361,7 +368,8 @@ def test_unlinked_parents_raise_missing_links_error_regardless_of_framework(
         )
 
     error_message = str(exc_info.value)
-    assert "depends on parents from two different, unlinked source feature" in error_message
+    assert "depends on parents from" in error_message
+    assert "unlinked sources (missing Links)" in error_message
     assert "Link" in error_message
     for name in named:
         assert name in error_message

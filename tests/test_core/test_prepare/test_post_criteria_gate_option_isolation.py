@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -186,6 +187,8 @@ class _Writes:
     non_forwarded: frozenset[str]
     reader: tuple[type[BaseInputData], str] | None = None
     matches: bool = True
+    api_group: dict[str, Any] | None = None
+    abort: bool = False
 
 
 def _make_candidate(
@@ -207,6 +210,10 @@ def _make_candidate(
         options.non_forwarded_group_keys = options.non_forwarded_group_keys | writes.non_forwarded
         if writes.reader is not None:
             BaseInputData.add_base_input_data_to_options(writes.reader[0], writes.reader[1], options)
+        for api_key, api_value in (writes.api_group or {}).items():
+            options.add_to_group(api_key, api_value)
+        if writes.abort:
+            raise escalate_match_abort(ValueError("abort_winner_iso"))
         return writes.matches
 
     def names(cls: type[FeatureGroup]) -> set[str]:
@@ -234,6 +241,7 @@ class _ResolvedOptions:
     group: dict[str, Any]
     context: dict[str, Any]
     non_forwarded: frozenset[str]
+    own_group_keys: frozenset[str] = frozenset()
 
 
 def _resolve(candidates: list[type[FeatureGroup]]) -> _ResolvedOptions:
@@ -247,6 +255,7 @@ def _resolve(candidates: list[type[FeatureGroup]]) -> _ResolvedOptions:
         group=dict(feature.options.group),
         context=dict(feature.options.context),
         non_forwarded=feature.options.non_forwarded_group_keys,
+        own_group_keys=feature.options.own_group_keys,
     )
     del result
     gc.collect()
@@ -368,3 +377,67 @@ class TestReaderlessWinnerInheritsNearestAncestorReader:
         assert resolved.escaped is None
         assert resolved.winners == ("LeafFG_winner_iso",)
         assert resolved.group[BaseInputData.__name__] == (ReaderParent_winner_iso, "b")
+
+
+DROPPED_KEY = "dropped_own_key_winner_iso"
+WINNER_OWN_KEY = "winner_own_key_winner_iso"
+
+
+class TestDroppedCandidateLeavesNoOwnKey:
+    """A replaced parent's add_to_group key must not become an own key of the feature the subclass wins."""
+
+    @pytest.mark.parametrize("parent_first", [True, False])
+    def test_dropped_parents_own_key_is_not_own(self, parent_first: bool) -> None:
+        gc.collect()
+        parent = _make_candidate(
+            "OwnParentFG_winner_iso", _Writes({}, {}, frozenset(), api_group={DROPPED_KEY: "parent"}), []
+        )
+        sub = _make_candidate(
+            "OwnSubFG_winner_iso",
+            _Writes({DROPPED_KEY: "sub"}, {}, frozenset(), api_group={WINNER_OWN_KEY: "sub"}),
+            [],
+            base=parent,
+        )
+        resolved = _resolve([parent, sub] if parent_first else [sub, parent])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("OwnSubFG_winner_iso",)
+        assert resolved.group[DROPPED_KEY] == "sub"
+        assert DROPPED_KEY not in resolved.own_group_keys
+        assert WINNER_OWN_KEY in resolved.own_group_keys
+
+
+class TestEscalatedAbortLeavesTheRequestUntouched:
+    def test_abort_after_a_write_escapes_without_mutating_the_request(self) -> None:
+        gc.collect()
+        aborting = _make_candidate(
+            "AbortingFG_winner_iso",
+            _Writes({"abort_grp_winner_iso": 1}, {"abort_ctx_winner_iso": 2}, frozenset(), abort=True),
+            [],
+        )
+        resolved = _resolve([aborting])
+
+        assert resolved.escaped is not None
+        assert "abort_winner_iso" in resolved.escaped
+        assert resolved.group == {ORIGINAL_KEY: "original"}
+        assert resolved.context == {}
+
+
+CAPABILITY_KEY = "capability_key_winner_iso"
+
+
+class TestCapabilityHookSeesTheCandidatesOwnWrites:
+    def test_supports_compute_framework_reads_the_matcher_write(self) -> None:
+        gc.collect()
+        candidate = _make_candidate("CapabilityFG_winner_iso", _Writes({CAPABILITY_KEY: "v"}, {}, frozenset()), [])
+
+        def supports(
+            cls: type[FeatureGroup], feature_name: FeatureName | str, options: Options, framework: Any
+        ) -> bool:
+            return bool(options.get(CAPABILITY_KEY) == "v")
+
+        candidate.supports_compute_framework = classmethod(supports)  # type: ignore[method-assign, assignment]
+        resolved = _resolve([candidate])
+
+        assert resolved.escaped is None
+        assert resolved.winners == ("CapabilityFG_winner_iso",)

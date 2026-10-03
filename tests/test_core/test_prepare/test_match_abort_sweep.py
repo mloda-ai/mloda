@@ -88,8 +88,11 @@ _DECIDED_ABOVE_BY_READER_SELECTION = (
     "ever reaches an absent key"
 )
 _MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
-_UPDATE_COLLISION = "name collision: dict.update, not the link resolver's"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
+_FORK_COLLISION = (
+    "real edge, collided verdict: Options._fork is a raise-free, swallow-free copy; its dict.update name collides with a "
+    "raising, swallowing update() elsewhere"
+)
 _MERGED_DECLARATION_RAISES = (
     "real edge: own_declaration's ValueError for a malformed declaration; __init_subclass__ already "
     "validates every class in the MRO at definition time, so this walk cannot raise for a class that "
@@ -105,6 +108,7 @@ _MERGED_DECLARATION_SWALLOWS_DIRECT = "name collision: dict.update inside merged
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/options.py", "add_to_group"): _DECIDED_ABOVE_BY_READER_SELECTION,
+    ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "__init__"): _READER_AUTO_LOAD,
@@ -125,7 +129,6 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
         "a rejection with a reason"
     ),
-    ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (
         _MERGED_DECLARATION_RAISES
@@ -138,6 +141,7 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
         "it degrades one field in a rendering path, so swallowing a marked exception is its contract"
     ),
@@ -167,7 +171,6 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
         "a rejection with a reason"
     ),
-    ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (
         _MERGED_DECLARATION_SWALLOWS_DIRECT

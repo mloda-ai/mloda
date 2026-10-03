@@ -2,7 +2,7 @@
 re-raise and the return coercion.
 
 Both match seams held their own try around ``match_feature_group_criteria`` and drifted apart twice (#991).
-Each keeps only its own recording and rollback now, driven by the outcome this helper hands back.
+Each keeps only its own recording and option isolation now, driven by the outcome this helper hands back.
 """
 
 from __future__ import annotations

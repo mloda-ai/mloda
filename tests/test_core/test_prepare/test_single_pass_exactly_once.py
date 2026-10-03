@@ -299,8 +299,8 @@ class SinglePassBareOnlyFG_782(CountingSinglePassFG_782):
 class SinglePassReaderFG_782(CountingSinglePassFG_782):
     """Reader-style matcher: consults the DataAccessCollection AND enriches the Options it is handed.
 
-    The enrichment is the #782 hazard in miniature. Each call stamps a fresh probe key, so the number of
-    probe keys left on ``feature.options`` is exactly the number of times the matcher was asked about it.
+    The enrichment is the #782 hazard in miniature. Each call stamps a fresh probe key on the fork it is
+    handed, so a declined attempt leaves no probe key on ``feature.options``; call counts are in HOOK_CALLS.
     """
 
     MATCHES = frozenset({READER_FEATURE_782})
@@ -1107,21 +1107,21 @@ class TestRenderingIsPureAndMutatesNothing:
         )
         assert after == before
 
-    def test_the_engine_attempt_enriches_the_options_exactly_once(self) -> None:
-        """The single decision pass stamps one probe key; a speculative re-match would stamp more."""
+    def test_the_engine_attempt_leaves_no_probe_key_on_the_options(self) -> None:
+        """The matcher writes then declines; its write lives on a fork, so the request keeps no probe key."""
         scenario = reader_scenario()
 
         _engine_error(scenario)
 
-        assert _probe_keys(scenario.feature.options) == [f"{OPTION_PROBE_PREFIX_782}0"]
+        assert _probe_keys(scenario.feature.options) == []
 
-    def test_a_resolve_feature_attempt_enriches_the_options_exactly_once(self) -> None:
-        """Same budget across the diagnostic API."""
+    def test_a_resolve_feature_attempt_leaves_no_probe_key_on_the_options(self) -> None:
+        """Same across the diagnostic API."""
         scenario = reader_scenario()
 
         _resolve_error(scenario)
 
-        assert _probe_keys(scenario.feature.options) == [f"{OPTION_PROBE_PREFIX_782}0"]
+        assert _probe_keys(scenario.feature.options) == []
 
     def test_the_engine_attempt_leaves_the_options_where_evaluate_left_them(self) -> None:
         """The failure path adds no mutation of its own on top of the decision pass."""

@@ -1,7 +1,7 @@
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Any
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -32,6 +32,7 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
 )
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.domain import Domain
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import (
@@ -51,23 +52,6 @@ from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class _OptionsState:
-    """Snapshot of a feature's options."""
-
-    group: dict[str, Any]
-    context: dict[str, Any]
-    non_forwarded: frozenset[str]
-
-    @classmethod
-    def capture(cls, feature: Feature) -> "_OptionsState":
-        options = feature.options
-        return cls(dict(options.group), dict(options.context), options.non_forwarded_group_keys)
-
-    def restore(self, feature: Feature) -> None:
-        IdentifyFeatureGroupClass._restore_options(feature, self.group, self.context, self.non_forwarded)
 
 
 class FeatureResolutionError(ValueError):
@@ -146,6 +130,7 @@ class IdentifyFeatureGroupClass:
     _prefixes: dict[type[FeatureGroup], str]
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
+    _matched_options: dict[type[FeatureGroup], Options]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -163,6 +148,7 @@ class IdentifyFeatureGroupClass:
         self._prefixes = {}
         self._declarations = {}
         self._replaced = set()
+        self._matched_options = {}
         self._data_access_collection = data_access_collection
 
     @classmethod
@@ -477,18 +463,8 @@ class IdentifyFeatureGroupClass:
         data_access_collection: DataAccessCollection | None = None,
     ) -> FeatureGroupEnvironmentMapping:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
-        original = _OptionsState.capture(feature)
-        passed_states: dict[type[FeatureGroup], _OptionsState] = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
-            # Every matcher sees the request's original options, never a sibling candidate's write.
-            original.restore(feature)
-            # Snapshot ahead of the criteria call: a later gate (domain, scope, ...) rejecting a candidate
-            # whose criteria match SUCCEEDED must undo that candidate's write too, not just a failing probe's.
-            group_before = dict(feature.options.group)
-            context_before = dict(feature.options.context)
-            non_forwarded_before = feature.options.non_forwarded_group_keys
-
             requirement = self._declaration_requirement(feature_group, feature)
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
@@ -509,7 +485,6 @@ class IdentifyFeatureGroupClass:
                     self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
                 else:
                     raise
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
             if not criteria_matched:
                 # A contained matcher raise is always a near-miss: the raise says nothing about name ownership.
@@ -528,27 +503,25 @@ class IdentifyFeatureGroupClass:
 
             if not self._filter_feature_group_by_domain(feature_group, feature):
                 self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             if not self._filter_feature_group_by_scope(feature_group, feature):
                 self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win, and
             # never record one as a near-miss: the abstract_only message owns them.
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             self._criteria_matched_feature_groups.add(feature_group)
+            options = self._matched_options[feature_group]
 
             supported_frameworks = {
                 cfw
                 for cfw in compute_frameworks
-                if feature_group.supports_compute_framework(feature.name, feature.options, cfw)
+                if feature_group.supports_compute_framework(feature.name, options, cfw)
             }
 
             # The split the capability hook just produced over this candidate's own accessible frameworks:
@@ -573,7 +546,6 @@ class IdentifyFeatureGroupClass:
                         "frameworks_not_enabled",
                         "none of its compute frameworks are enabled for this run",
                     )
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):
@@ -584,51 +556,47 @@ class IdentifyFeatureGroupClass:
                     "framework_pin",
                     f"pinned compute framework '{pin_name}' is not among its supported {supported_names}",
                 )
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             if not self._filter_feature_group_by_links(feature_group, links):
                 self._record_elimination(feature_group, "links", "no index column matches the run's links")
-                self._restore_options(feature, group_before, context_before, non_forwarded_before)
                 continue
 
             if requirement is not None:
-                reader = self._written_reader(feature, group_before)
+                reader = self._written_reader(options, feature.options.group)
                 unmet = requirement.unmet_reason((reader or feature_group).__name__, reader)
                 if unmet is not None:
                     self._record_elimination(feature_group, "declarations", unmet)
-                    self._restore_options(feature, group_before, context_before, non_forwarded_before)
                     continue
 
             _identified_feature_groups[feature_group] = supported_frameworks
-            passed_states[feature_group] = _OptionsState.capture(feature)
-            original.restore(feature)
 
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         self._replaced = candidates - set(_identified_feature_groups)
         if len(_identified_feature_groups) == 1:
             winner = next(iter(_identified_feature_groups))
-            passed_states[winner].restore(feature)
+            winner_options = self._matched_options[winner]
             # A winner that wrote no reader inherits the pair of its nearest replaced ancestor that recorded one.
-            if RESERVED_READER_OPTION_KEY not in feature.options.group:
+            if RESERVED_READER_OPTION_KEY not in winner_options.group:
                 for klass in winner.__mro__:
-                    if klass in self._replaced and RESERVED_READER_OPTION_KEY in passed_states[klass].group:
-                        self._replay_reader_pairs(feature, [passed_states[klass]])
+                    if klass in self._replaced and RESERVED_READER_OPTION_KEY in self._matched_options[klass].group:
+                        self._replay_reader_pairs(winner_options, [self._matched_options[klass]])
                         break
+            feature.options._adopt(winner_options)
         elif _identified_feature_groups:
             # Replaying each survivor's reader pair raises the double-reader conflict when they differ.
-            original.restore(feature)
-            self._replay_reader_pairs(feature, [passed_states[fg] for fg in _identified_feature_groups])
-            original.restore(feature)
+            self._replay_reader_pairs(
+                feature.options._fork(), [self._matched_options[fg] for fg in _identified_feature_groups]
+            )
         return _identified_feature_groups
 
     @staticmethod
-    def _replay_reader_pairs(feature: Feature, states: list["_OptionsState"]) -> None:
-        for state in states:
-            pair = state.group.get(RESERVED_READER_OPTION_KEY)
+    def _replay_reader_pairs(target: Options, sources: list[Options]) -> None:
+        for source in sources:
+            pair = source.group.get(RESERVED_READER_OPTION_KEY)
             if isinstance(pair, tuple) and len(pair) == 2:
-                BaseInputData.add_base_input_data_to_options(pair[0], pair[1], feature.options)
+                BaseInputData.add_base_input_data_to_options(pair[0], pair[1], target)
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature
@@ -641,10 +609,10 @@ class IdentifyFeatureGroupClass:
         return DeclarationRequirement(consumer, required, feature_group, self._declarations)
 
     @staticmethod
-    def _written_reader(feature: Feature, group_before: dict[str, Any]) -> type | None:
+    def _written_reader(options: Options, original_group: dict[str, Any]) -> type | None:
         """The reader of the (ReaderClass, data_access) pair this candidate's criteria match wrote, if it wrote one."""
-        matched = feature.options.group.get(RESERVED_READER_OPTION_KEY)
-        if matched is group_before.get(RESERVED_READER_OPTION_KEY):
+        matched = options.group.get(RESERVED_READER_OPTION_KEY)
+        if matched is original_group.get(RESERVED_READER_OPTION_KEY):
             return None
         return matched[0] if isinstance(matched, tuple) and matched else None
 
@@ -717,20 +685,6 @@ class IdentifyFeatureGroupClass:
 
         return False
 
-    @staticmethod
-    def _restore_options(
-        feature: Feature,
-        group_before: dict[str, Any],
-        context_before: dict[str, Any],
-        non_forwarded_before: frozenset[str],
-    ) -> None:
-        """Roll ``feature.options`` back to a snapshot taken before a candidate's own write."""
-        feature.options.group.clear()
-        feature.options.group.update(group_before)
-        feature.options.context.clear()
-        feature.options.context.update(context_before)
-        feature.options.non_forwarded_group_keys = non_forwarded_before
-
     def _filter_feature_group_by_criteria(
         self,
         feature_group: type[FeatureGroup],
@@ -740,20 +694,15 @@ class IdentifyFeatureGroupClass:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
         The shared probe owns the per-candidate window and the containment; this seam keeps only its own
-        policy: the option rollback on a contained raise and the per-candidate recording, never as an
+        policy: each probe runs on its own fork, so a contained raise leaves nothing behind, and the per-candidate recording, never as an
         exception object whose traceback would pin the plugin class.
 
         Mark-or-contain policy: see call_match_hook.
         """
-        # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.
-        group_before = dict(feature.options.group)
-        context_before = dict(feature.options.context)
-        non_forwarded_before = feature.options.non_forwarded_group_keys
-        probe = probe_match_criteria(feature_group, feature.name, feature.options, data_access_collection)
-        if probe.matcher_error is not None or probe.value_rejection is not None:
-            # Only the contained branch rolls back: a matcher that returns True keeps its write,
-            # which is how a matched reader is linked through mloda.
-            self._restore_options(feature, group_before, context_before, non_forwarded_before)
+        options = feature.options._fork()
+        probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
+        if probe.matched:
+            self._matched_options[feature_group] = options
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

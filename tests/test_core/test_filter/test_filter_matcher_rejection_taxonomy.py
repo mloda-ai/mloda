@@ -552,6 +552,7 @@ class _RtxResolutionSnapshot:
     is_false: bool
     escaped: str | None
     option_keys: tuple[str, ...]
+    fork_kept: bool
 
 
 def _drive_resolution(make: _RtxFactory) -> _RtxResolutionSnapshot:
@@ -559,15 +560,18 @@ def _drive_resolution(make: _RtxFactory) -> _RtxResolutionSnapshot:
     fg, read_window = make()
     identifier = IdentifyFeatureGroupClass()
     feature = Feature(FILTER_FEATURE)
+    matched: Any = None
     try:
         value, escaped = _capture(partial(identifier._filter_feature_group_by_criteria, fg, feature, None))
+        matched = identifier._matched_options
         return _RtxResolutionSnapshot(
             is_false=value is False,
             escaped=escaped,
             option_keys=tuple(sorted(str(key) for key in feature.options.keys())),
+            fork_kept=fg in matched,
         )
     finally:
-        del fg, read_window, identifier, feature
+        del fg, read_window, identifier, feature, matched
         gc.collect()
 
 
@@ -948,6 +952,7 @@ class TestHostilePluginReadsStayContained:
         assert MARKER_KEY not in snapshot.option_keys, (
             f"the write must not survive the contained rejection, got: {snapshot.option_keys}"
         )
+        assert snapshot.fork_kept is False, "the rejected candidate's fork must not be kept"
 
     def test_an_unnameable_group_still_gets_its_decline_recorded(self) -> None:
         """The decline's DEBUG report reads get_class_name, a plugin-owned field that must degrade, not raise."""

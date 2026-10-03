@@ -633,6 +633,8 @@ class FeatureGroup(ABC):
         A veto recorded while the user explicitly addressed the reader family gates the name-based
         rules below; the MatchData rule still decides on its own.
 
+        Writes to ``options`` reach the feature only if this candidate wins.
+
         A matched candidate must also pass the value validation and ``match_guard`` of its PROPERTY_MAPPING.
         """
         if not cls._matches_by_default_rules(feature_name, options, data_access_collection):

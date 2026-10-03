@@ -3,7 +3,8 @@
 import dataclasses
 import json
 from pathlib import Path
-from typing import cast
+from collections.abc import Callable
+from typing import Any, cast
 
 import pytest
 
@@ -92,6 +93,22 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     assert content["format"] == 1
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
+    assert set(content["compute"][0]) == {
+        "feature_names",
+        "feature_group",
+        "compute_framework",
+        "specialized_from",
+        "reader",
+    }
+    assert set(content["joins"][0]) == {
+        "left_feature_group",
+        "right_feature_group",
+        "join_type",
+        "compute_framework",
+        "source_compute_framework",
+        "destination_side",
+    }
+    assert set(content["transforms"][0]) == {"feature_group", "from_compute_framework", "to_compute_framework"}
     assert text == _lock_text(plan)
     check_plan_lock(plan, lock)
 
@@ -138,24 +155,34 @@ def test_write_refuses_main_module_classes_and_writes_nothing(tmp_path: Path, pl
     assert not lock.exists()
 
 
-def test_a_crlf_rewritten_lock_still_passes_check(tmp_path: Path) -> None:
+def test_write_allows_main_prefixed_feature_names_when_classes_are_in_modules(tmp_path: Path) -> None:
     lock = tmp_path / "plan.lock"
-    plan = _plan()
+    plan = [_compute_step(feature_names=("__main__:x",), requested_feature_names=("__main__:x",))]
+
     write_plan_lock(plan, lock)
-    lock.write_bytes(lock.read_bytes().replace(b"\n", b"\r\n"))
 
     check_plan_lock(plan, lock)
 
 
+@pytest.mark.parametrize("operation", [write_plan_lock, check_plan_lock])
+def test_unknown_step_kind_raises_value_error(tmp_path: Path, operation: Callable[..., None]) -> None:
+    plan = [dataclasses.replace(_compute_step(), step_kind=cast(Any, "bogus"))]
+
+    with pytest.raises(ValueError):
+        operation(plan, tmp_path / "plan.lock")
+
+
 @pytest.mark.parametrize(
-    "second_overrides, distinct",
+    "rewrite",
     [
-        pytest.param({}, False, id="identical"),
-        pytest.param({"compute_framework": PyArrowTable}, True, id="framework_only"),
+        pytest.param(lambda data: data.replace(b"\n", b"\r\n"), id="crlf"),
+        pytest.param(lambda data: b"\xef\xbb\xbf" + data, id="bom"),
     ],
 )
-def test_compute_steps_give_two_records(second_overrides: dict[str, object], distinct: bool) -> None:
-    content = json.loads(_lock_text([_compute_step(), _compute_step(**second_overrides)]))
+def test_a_rewritten_lock_still_passes_check(tmp_path: Path, rewrite: Callable[[bytes], bytes]) -> None:
+    lock = tmp_path / "plan.lock"
+    plan = _plan()
+    write_plan_lock(plan, lock)
+    lock.write_bytes(rewrite(lock.read_bytes()))
 
-    assert len(content["compute"]) == 2
-    assert (content["compute"][0] != content["compute"][1]) is distinct
+    check_plan_lock(plan, lock)

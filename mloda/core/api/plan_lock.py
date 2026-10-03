@@ -53,7 +53,7 @@ def _lock_content(plan: Sequence[PlanStep]) -> dict[str, Any]:
                     "destination_side": step.join_destination_side,
                 }
             )
-        else:
+        elif step.step_kind == "transform":
             transforms.append(
                 {
                     "feature_group": _class_path(step.feature_group),
@@ -61,6 +61,8 @@ def _lock_content(plan: Sequence[PlanStep]) -> dict[str, Any]:
                     "to_compute_framework": _class_path(step.compute_framework),
                 }
             )
+        else:
+            raise ValueError(f"Unknown plan step kind {step.step_kind!r}.")
     return {
         "format": PLAN_LOCK_FORMAT,
         "requested_features": sorted(requested),
@@ -70,29 +72,40 @@ def _lock_content(plan: Sequence[PlanStep]) -> dict[str, Any]:
     }
 
 
+def _dump(content: dict[str, Any]) -> str:
+    return json.dumps(content, sort_keys=True, indent=2) + "\n"
+
+
 def _lock_text(plan: Sequence[PlanStep]) -> str:
-    return json.dumps(_lock_content(plan), sort_keys=True, indent=2) + "\n"
+    return _dump(_lock_content(plan))
 
 
-def _main_paths(value: Any) -> set[str]:
-    if isinstance(value, str):
-        return {value} if value.startswith("__main__:") else set()
-    if isinstance(value, dict):
-        value = list(value.values())
-    if isinstance(value, list):
-        return {path for item in value for path in _main_paths(item)}
-    return set()
+_PATH_FIELDS = {
+    "compute": ("feature_group", "compute_framework", "reader"),
+    "joins": ("left_feature_group", "right_feature_group", "compute_framework", "source_compute_framework"),
+    "transforms": ("feature_group", "from_compute_framework", "to_compute_framework"),
+}
+
+
+def _main_paths(content: dict[str, Any]) -> set[str]:
+    paths: set[str | None] = set()
+    for section, fields in _PATH_FIELDS.items():
+        for record in content[section]:
+            paths.update(record[field] for field in fields)
+            paths.update(record.get("specialized_from", []))
+    return {path for path in paths if path and path.startswith("__main__:")}
 
 
 def write_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> None:
     """Write the canonical lock file for the plan, refusing classes defined in __main__."""
-    mains = _main_paths(_lock_content(plan))
+    content = _lock_content(plan)
+    mains = _main_paths(content)
     if mains:
         raise ValueError(f"Cannot lock classes defined in __main__, move them into a module: {sorted(mains)}")
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     with open(target, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(_lock_text(plan))
+        handle.write(_dump(content))
 
 
 def check_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> None:
@@ -104,7 +117,7 @@ def check_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> N
             f"Plan lock file {target} does not exist. Call write_plan_lock(plan, path) to create it "
             f"with this content:\n{resolved}"
         )
-    locked = json.loads(target.read_text(encoding="utf-8"))
+    locked = json.loads(target.read_text(encoding="utf-8-sig"))
     if locked == json.loads(resolved):
         return
     diff = difflib.unified_diff(

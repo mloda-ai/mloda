@@ -39,7 +39,7 @@ It never holds option values, `data_access_identity`, versions, per-run ids or t
 ## Churn sources
 
 - Moving a class to another module changes its path.
-- Dynamically created FeatureGroups get unstable paths.
+- Classes created at runtime (for example via `DynamicFeatureGroupCreator`) get a module path that does not say where they came from (`abc:<ClassName>`), so two with the same class name share one path.
 - Classes defined in `__main__` are refused by `write_plan_lock`.
 
 A corrupt lock file raises `json.JSONDecodeError`.

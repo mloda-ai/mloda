@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import logging
 import reprlib
+import sys
 import traceback
 import weakref
 from collections.abc import Callable
 from typing import Any, TypeVar
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+
+if sys.version_info >= (3, 11):
+    # Imported, not used as a bare builtin: the 3.10 ruff gate has no BaseExceptionGroup name.
+    from builtins import BaseExceptionGroup
 
 logger = logging.getLogger(__name__)
 
@@ -105,24 +110,71 @@ def contained_raise_reason(exc: BaseException) -> str:
     return f"raised {type(exc).__name__}: {scrub_credentials(safe_exc_str(exc))}"
 
 
-def _format_tb_without_msg(exc: BaseException) -> str:
-    lines = []
-    if exc.__cause__ is not None:
-        lines.append(_format_tb_without_msg(exc.__cause__))
-        lines.append("\nThe above exception was the direct cause of the following exception:\n\n")
-    elif exc.__context__ is not None and not exc.__suppress_context__:
-        lines.append(_format_tb_without_msg(exc.__context__))
-        lines.append("\nDuring handling of the above exception, another exception occurred:\n\n")
+_CAUSE_SEPARATOR = "\nThe above exception was the direct cause of the following exception:\n\n"
+_CONTEXT_SEPARATOR = "\nDuring handling of the above exception, another exception occurred:\n\n"
+_MAX_GROUP_DEPTH = 10
 
-    if exc.__traceback__ is not None:
-        lines.append("Traceback (most recent call last):\n")
-        lines.extend(traceback.format_tb(exc.__traceback__))
-    lines.append(f"{type(exc).__name__}\n")
+
+def _exc_type_name(exc: BaseException) -> str:
+    """Type name as stdlib renders it: bare for builtins and __main__, else module-qualified."""
+    cls = type(exc)
+    module = getattr(cls, "__module__", None)
+    if not isinstance(module, str):
+        module = "<unknown>"
+    if module in ("builtins", "__main__"):
+        return cls.__qualname__
+    return f"{module}.{cls.__qualname__}"
+
+
+def _format_tb_without_msg(exc: BaseException, seen: set[int] | None = None, depth: int = 0) -> str:
+    """Cycle-safe traceback of exc, its chain and group members: type names and frames, no messages or notes."""
+    seen = set() if seen is None else seen
+    chain: list[tuple[BaseException, str]] = []
+    current: BaseException | None = exc
+    separator = ""
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append((current, separator))
+        if current.__cause__ is not None:
+            current, separator = current.__cause__, _CAUSE_SEPARATOR
+        elif current.__context__ is not None and not current.__suppress_context__:
+            current, separator = current.__context__, _CONTEXT_SEPARATOR
+        else:
+            current = None
+
+    lines: list[str] = []
+    for item, item_separator in reversed(chain):
+        if item.__traceback__ is not None:
+            lines.append("Traceback (most recent call last):\n")
+            lines.extend(traceback.format_tb(item.__traceback__))
+        lines.append(f"{_exc_type_name(item)}\n")
+        if sys.version_info >= (3, 11) and isinstance(item, BaseExceptionGroup):
+            lines.append(_format_group_members(item, seen, depth + 1))
+        lines.append(item_separator)
     return "".join(lines)
 
 
+if sys.version_info >= (3, 11):
+
+    def _format_group_members(group: BaseExceptionGroup[BaseException], seen: set[int], depth: int) -> str:
+        """Each not yet rendered sub-exception of group, numbered, up to _MAX_GROUP_DEPTH nesting levels."""
+        if depth > _MAX_GROUP_DEPTH:
+            return "+---------------- ... (max group depth reached) ----------------\n"
+        lines: list[str] = []
+        for index, member in enumerate(group.exceptions, 1):
+            if id(member) not in seen:
+                lines.append(f"+---------------- {index} ----------------\n")
+                lines.append(_format_tb_without_msg(member, seen, depth))
+        if lines:
+            lines.append("+------------------------------------\n")
+        return "".join(lines)
+
+
 def failure_report(exc: BaseException) -> tuple[str, str]:
-    """(message, traceback) for a failure log or MlodaRunError, both scrubbed of credentials."""
+    """(message, traceback) for a failure log or MlodaRunError, both scrubbed of credentials.
+
+    The traceback omits exception messages and notes (they can carry row values); the message keeps the scrubbed text.
+    """
     tb = scrub_credentials(_format_tb_without_msg(exc))
     message = f"An error occurred: {scrub_credentials(safe_exc_str(exc))}\nFull traceback:\n{tb}"
     return message, tb

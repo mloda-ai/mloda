@@ -6,7 +6,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import OutputSchema
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.user import FeatureName, ParallelizationMode
@@ -38,6 +38,10 @@ class SqliteFramework(ComputeFramework):
             return  # same connection passed again — safe no-op
         framework_connection_object.create_function("REGEXP", 2, _regexp, deterministic=True)
         self.framework_connection_object = framework_connection_object
+
+    @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        return ConnectionRequirement.REQUIRED
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:

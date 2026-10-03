@@ -16,6 +16,7 @@ from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import (
@@ -280,7 +281,7 @@ class Engine:
         feature_group_class: type[FeatureGroup],
     ) -> None:
         """Sets the compute framework and data type for the feature."""
-        feature = self.set_compute_framework(feature, compute_frameworks)
+        feature = self.set_compute_framework(feature, compute_frameworks, feature_group_class)
         feature.data_type = self.set_data_type(feature, feature_group_class)
 
     def _property_mapping_keys(self, feature_group_class: type[FeatureGroup]) -> frozenset[str]:
@@ -634,7 +635,12 @@ class Engine:
         )
         return frozenset(str(f.name) for f in features.collection)
 
-    def set_compute_framework(self, feature: Feature, compute_frameworks: set[type[ComputeFramework]]) -> Feature:
+    def set_compute_framework(
+        self,
+        feature: Feature,
+        compute_frameworks: set[type[ComputeFramework]],
+        feature_group_class: type[FeatureGroup],
+    ) -> Feature:
         """
         This function ensures that the feature always has a compute framework set!
         """
@@ -645,8 +651,25 @@ class Engine:
                 )
         else:
             # Hash-safe only because this runs before add_feature_to_collection stores the feature.
-            feature.compute_frameworks = compute_frameworks
+            feature.compute_frameworks = self._drop_unconnected_required(
+                feature, compute_frameworks, feature_group_class
+            )
         return feature
+
+    @staticmethod
+    def _drop_unconnected_required(
+        feature: Feature,
+        compute_frameworks: set[type[ComputeFramework]],
+        feature_group_class: type[FeatureGroup],
+    ) -> set[type[ComputeFramework]]:
+        """Drop REQUIRED frameworks lacking a matching connection in the options; keep the set if none would remain."""
+        conn = feature.options.get(feature_group_class.get_class_name())
+        kept = {
+            cfw
+            for cfw in compute_frameworks
+            if cfw.connection_requirement() is not ConnectionRequirement.REQUIRED or cfw._connection_matches(conn)
+        }
+        return kept or compute_frameworks
 
     def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> DataType | None:
         fg_data_type = feature_group_class.return_data_type_rule(feature)

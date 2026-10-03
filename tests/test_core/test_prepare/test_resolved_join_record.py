@@ -190,7 +190,7 @@ class Built(NamedTuple):
     declared_frameworks: DeclaredFrameworks
 
 
-class Unlinked(NamedTuple):
+class ThirdParent(NamedTuple):
     plan: ExecutionPlan
     link: Link
     left_uuid: UUID
@@ -396,8 +396,8 @@ def _pair_with_declined_orientation() -> Built:
     return _finish(planned, link, Sides(left.uuid, right.uuid, kept.uuid))
 
 
-def _link_with_an_unlinked_third_parent() -> Unlinked:
-    """A right join whose child also has a parent the link never mentions."""
+def _link_with_a_third_parent_it_never_mentions() -> ThirdParent:
+    """A right join whose child also has a third parent, descending from the left side, that the link never mentions."""
     planned = _planned()
     link = _pair_link(Link.right)
 
@@ -410,6 +410,10 @@ def _link_with_an_unlinked_third_parent() -> Unlinked:
     planned.graph.add_node(unlinked.uuid, NodeProperties(unlinked, ResolvedJoinUnlinked))
     planned.queue.append((ResolvedJoinUnlinked, {unlinked}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    # The third parent descends from the left side, so it shares that side's source step.
+    planned.graph.adjacency_list[left.uuid].append(unlinked.uuid)
+    planned.graph.adjacency_list[unlinked.uuid] = []
+    planned.graph.parent_to_children_mapping[unlinked.uuid] = {left.uuid}
     _add_child(planned, child, left, right, unlinked)
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
@@ -419,7 +423,7 @@ def _link_with_an_unlinked_third_parent() -> Unlinked:
         unlinked.uuid: frozenset({PandasDataFrame, PythonDictFramework}),
     }
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared)
-    return Unlinked(planned.plan, link, left.uuid, right.uuid, unlinked.uuid)
+    return ThirdParent(planned.plan, link, left.uuid, right.uuid, unlinked.uuid)
 
 
 def _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent() -> FrameworkCollision:
@@ -754,6 +758,9 @@ def _inner_join_ambiguous_split_stays_on_the_tiebreak_answer() -> Built:
     planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
     planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    # The farther left parent descends from the nearest one, so the two are linked by ancestry.
+    planned.graph.adjacency_list[nearest_left.uuid].append(far_left.uuid)
+    planned.graph.parent_to_children_mapping[far_left.uuid] = {nearest_left.uuid}
     _add_child(planned, child, nearest_left, far_left, nearest_right, far_right)
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
@@ -974,7 +981,7 @@ def test_a_right_joins_destination_stays_right_when_declared_right_is_the_only_p
 
 
 def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> None:
-    unlinked = _link_with_an_unlinked_third_parent()
+    unlinked = _link_with_a_third_parent_it_never_mentions()
 
     record = _one_record(unlinked.plan, unlinked.link)
 
@@ -986,7 +993,7 @@ def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> N
 
 
 def test_a_declared_side_keeps_only_the_frameworks_its_own_parents_declared() -> None:
-    unlinked = _link_with_an_unlinked_third_parent()
+    unlinked = _link_with_a_third_parent_it_never_mentions()
 
     record = _one_record(unlinked.plan, unlinked.link)
 
@@ -1115,7 +1122,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _self_join_with_split_declarations,
         _append_pair,
         _two_links,
-        _link_with_an_unlinked_third_parent,
+        _link_with_a_third_parent_it_never_mentions,
         _case_override_inverted,
         _case_override_beats_nearer_wrong_framework_left,
         _case_override_disagrees_with_the_nearest_split,

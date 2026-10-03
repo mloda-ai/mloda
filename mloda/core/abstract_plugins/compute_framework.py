@@ -5,6 +5,7 @@ from collections.abc import Callable, Generator, Iterable, Sequence
 from contextvars import ContextVar
 from typing import Any, final
 from uuid import UUID, uuid4
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
@@ -58,6 +59,13 @@ def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
 class EmptyResultError(ValueError):
     """Raised when a final requested feature's result carries no schema (zero columns);
     zero rows with a schema is valid."""
+
+
+_CONNECTION_RANK = {
+    ConnectionRequirement.NONE: 0,
+    ConnectionRequirement.SELF_MANAGED: 1,
+    ConnectionRequirement.REQUIRED: 2,
+}
 
 
 class ComputeFramework(ABC):
@@ -256,6 +264,11 @@ class ComputeFramework(ABC):
         subclasses that need to provide a connection object.
         """
         self.framework_connection_object = None
+
+    @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        """Whether this framework runs on its own, manages its own session, or needs a supplied connection."""
+        return ConnectionRequirement.NONE
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
@@ -731,14 +744,19 @@ class ComputeFramework(ABC):
     @staticmethod
     @final
     def select_deterministic(frameworks: Iterable[type["ComputeFramework"]]) -> type["ComputeFramework"]:
-        """Set iteration over class objects is id-based, so reduce by a total name key instead."""
+        """Pick by connection requirement, then a total name key (set iteration over classes is id-based)."""
         candidates = list(frameworks)
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
 
         # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
-        def key(framework: type["ComputeFramework"]) -> tuple[str, str, str]:
-            return (framework.get_class_name(), framework.__module__, framework.__qualname__)
+        def key(framework: type["ComputeFramework"]) -> tuple[int, str, str, str]:
+            return (
+                _CONNECTION_RANK[framework.connection_requirement()],
+                framework.get_class_name(),
+                framework.__module__,
+                framework.__qualname__,
+            )
 
         return min(candidates, key=key)
 
@@ -913,24 +931,18 @@ class ComputeFramework(ABC):
         Raises a helpful ValueError suggesting the KeyError might be due to missing Links.
         """
         # Local import: feature_set -> feature -> compute_framework would cycle at module level.
-        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet, option_split_paragraph
 
         feature_name = feature_group.get_class_name()
         error_str = str(error)
 
-        option_split_paragraph = ""
-        if isinstance(features, FeatureSet) and features.option_split_hint is not None:
-            split_feature_group_name, differing_keys = features.option_split_hint
-            differing_keys_str = ", ".join(sorted((str(k) for k in differing_keys), key=str))
-            option_split_paragraph = f"""
-'{split_feature_group_name}' also ran as a separate step with differing option(s) ({differing_keys_str})
-in this run, which is the likely cause. Align the differing option(s) across the requests, or add
-a Link if the split is intentional.
-"""
+        paragraph = ""
+        if isinstance(features, FeatureSet):
+            paragraph = option_split_paragraph(features.option_split_hint)
 
         error_message = f"""
 Feature '{feature_name}' failed with a KeyError: {error_str}
-{option_split_paragraph}
+{paragraph}
 This might be caused by missing Links when your feature has multiple dependencies.
 
 When a feature depends on multiple input features, you must provide explicit Links to specify

@@ -24,6 +24,19 @@ def merge_input_feature_edges(pairs: Iterable[tuple[str, Iterable[str]]]) -> dic
     return {name: tuple(sorted(inputs)) for name, inputs in sorted(merged.items())} or None
 
 
+def option_split_paragraph(hint: tuple[str, frozenset[Any]] | None) -> str:
+    """Error-message paragraph naming the root whose option split likely caused a missing-Link failure."""
+    if hint is None:
+        return ""
+    split_feature_group_name, differing_keys = hint
+    differing_keys_str = ", ".join(sorted((str(k) for k in differing_keys), key=str))
+    return f"""
+'{split_feature_group_name}' also ran as a separate step with differing option(s) ({differing_keys_str})
+in this run, which is the likely cause. Align the differing option(s) across the requests, or add
+a Link if the split is intentional.
+"""
+
+
 class FeatureSet:
     def __init__(self, features: Iterable[Feature] | None = None) -> None:
         self.features: set[Feature] = set()

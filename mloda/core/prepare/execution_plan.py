@@ -41,7 +41,11 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_set import FeatureSet, merge_input_feature_edges
+from mloda.core.abstract_plugins.components.feature_set import (
+    FeatureSet,
+    merge_input_feature_edges,
+    option_split_paragraph,
+)
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from collections import defaultdict
@@ -87,6 +91,12 @@ class AppendOrUnionSides(NamedTuple):
 class _JoinServedParent(NamedTuple):
     """Stand-in for a parent delivered by a JoinStep (no TransformFrameworkStep is built for it), so it
     can still be named in the missing-Links conflict error."""
+
+    from_feature_group: type[FeatureGroup]
+
+
+class _SameFrameworkParent(NamedTuple):
+    """Stand-in for a parent already in the step's framework, so unlinked ones are still detected."""
 
     from_feature_group: type[FeatureGroup]
 
@@ -463,21 +473,24 @@ class ExecutionPlan:
     @staticmethod
     def _conflicting_transform_hops_error(
         ep: FeatureGroupStep,
-        first_hop: TransformFrameworkStep | _JoinServedParent,
-        second_hop: TransformFrameworkStep | _JoinServedParent,
+        first_hop: TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent,
+        second_hop: TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent,
+        further_hops: list[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent],
     ) -> str:
         """A FeatureGroupStep can only bind one incoming source; two distinct, unlinked ones is a
         missing-Link configuration problem, not a bug."""
+        split_text = option_split_paragraph(ep.features.option_split_hint)
         feature_name = format_feature_group_class(ep.feature_group)
         first_name = format_feature_group_class(first_hop.from_feature_group)
         second_name = format_feature_group_class(second_hop.from_feature_group)
         first_class_name = first_hop.from_feature_group.get_class_name()
         second_class_name = second_hop.from_feature_group.get_class_name()
+        further_text = "".join(f" and '{format_feature_group_class(hop.from_feature_group)}'" for hop in further_hops)
 
         return f"""
 Feature group '{feature_name}' depends on parents from two different, unlinked source feature
-groups: '{first_name}' and '{second_name}'.
-
+groups: '{first_name}' and '{second_name}'{further_text}.
+{split_text}
 When a feature depends on multiple input features from different sources, you must provide explicit
 Links to specify how to merge them. Without Links, the framework cannot determine how to combine the
 data, and only one of the two sources would ever be read.
@@ -698,8 +711,9 @@ Available join types:
                 # Explicit hops and join-served parents (delivered pre-merged by a JoinStep, no hop built)
                 # both compete for this step's one binding, so both get grouped by the same linkage test
                 # below. Order-independent: collected here, grouped once after the loop.
-                bound_entries: list[tuple[TransformFrameworkStep | _JoinServedParent, UUID]] = []
+                bound_entries: list[tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID]] = []
                 join_served_entries: list[tuple[type[FeatureGroup], UUID]] = []
+                same_framework_entries: list[tuple[type[FeatureGroup], UUID]] = []
                 seen_hop_uuids: set[UUID] = set()
 
                 for parent in parents:
@@ -745,6 +759,8 @@ Available join types:
                         ep.tfs_ids.add(canonical_tfs.uuid)
 
                         need_to_upload_collector.add(parent)
+                    else:
+                        same_framework_entries.append((parent_node_property.feature_group_class, parent))
 
                 # Group entries by transitive linkage: same feature-group class, one entry's own class a
                 # subclass (or superclass) of the other's (catches a case-override hop whose parent lost the
@@ -754,13 +770,19 @@ Available join types:
                 # additionally share genuine graph ancestry unless it is join-served, so two plain hops that
                 # merely subclass one another over otherwise unrelated roots are not merged.
                 def _entries_linked(
-                    entry_a: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
-                    entry_b: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
+                    entry_a: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
+                    entry_b: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
                 ) -> bool:
                     hop_a, parent_a = entry_a
                     hop_b, parent_b = entry_b
                     if hop_a.from_feature_group is hop_b.from_feature_group:
                         return True
+                    if isinstance(hop_a, _SameFrameworkParent) or isinstance(hop_b, _SameFrameworkParent):
+                        closure_a = {parent_a} | graph.parent_to_children_mapping.get(parent_a, set())
+                        closure_b = {parent_b} | graph.parent_to_children_mapping.get(parent_b, set())
+                        owners_a = {owning_step_of.get(u, u) for u in closure_a}
+                        if any(owning_step_of.get(u, u) in owners_a for u in closure_b):
+                            return True
                     if issubclass(hop_a.from_feature_group, hop_b.from_feature_group) or issubclass(
                         hop_b.from_feature_group, hop_a.from_feature_group
                     ):
@@ -770,8 +792,8 @@ Available join types:
                     return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph)
 
                 def _add_to_groups(
-                    groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID]]],
-                    entry: tuple[TransformFrameworkStep | _JoinServedParent, UUID],
+                    groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID]]],
+                    entry: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
                 ) -> None:
                     linked_groups = [
                         group for group in groups if any(_entries_linked(entry, member) for member in group)
@@ -785,13 +807,18 @@ Available join types:
                     else:
                         groups.append([entry])
 
-                hop_groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent, UUID]]] = []
+                hop_groups: list[
+                    list[tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID]]
+                ] = []
                 for entry in bound_entries:
                     _add_to_groups(hop_groups, entry)
 
                 # Join-served parents compete for the same binding, so merge them into the same groups too.
                 for served_feature_group, served_parent in join_served_entries:
                     _add_to_groups(hop_groups, (_JoinServedParent(served_feature_group), served_parent))
+
+                for same_feature_group, same_parent in same_framework_entries:
+                    _add_to_groups(hop_groups, (_SameFrameworkParent(same_feature_group), same_parent))
 
                 # Two distinct hops linked only because one's from_feature_group subclasses the other's
                 # read the same physical source cfw instance at runtime, but each
@@ -834,9 +861,12 @@ Available join types:
                                 tfs.required_uuids = shared_required_uuids - tfs.get_uuids()
 
                 if len(hop_groups) > 1:
-                    raise ValueError(
-                        self._conflicting_transform_hops_error(ep, hop_groups[0][0][0], hop_groups[1][0][0])
+                    # Set iteration order of parents varies with the hash seed, so name groups in a stable order.
+                    reps = sorted(
+                        (group[0][0] for group in hop_groups),
+                        key=lambda hop: (hop.from_feature_group.get_class_name(), hop.from_feature_group.__module__),
                     )
+                    raise ValueError(self._conflicting_transform_hops_error(ep, reps[0], reps[1], reps[2:]))
 
             else:
                 raise ValueError(f"Element {ep} is not a valid element.")

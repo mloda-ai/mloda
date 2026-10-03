@@ -59,6 +59,22 @@ class ScopeSourceB(StubFeatureGroup):
     SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
 
 
+class ProbedScopeSourceB(ScopeSourceB):
+    """Source B variant that counts its criteria probes."""
+
+    MATCHER_CALLS: ClassVar[int] = 0
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: Any = None,
+    ) -> bool:
+        ProbedScopeSourceB.MATCHER_CALLS += 1
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+
 InaccessibleScopeSource = make_fg(
     "InaccessibleScopeSource",
     matches="subject_token",
@@ -106,6 +122,21 @@ def test_scope_class_resolves_uniquely_by_identity() -> None:
     )
     resolved_feature_group, _compute_frameworks = next(iter(identifier.identified.items()))
     assert resolved_feature_group is ScopeSourceA
+
+
+def test_scope_pin_never_probes_the_out_of_scope_candidate() -> None:
+    """The scope gate runs before the criteria probe: the unpinned candidate's matcher is never called."""
+    ProbedScopeSourceB.MATCHER_CALLS = 0
+
+    identifier = evaluate_or_raise(
+        feature=Feature("subject_token", feature_group=ScopeSourceA),
+        accessible_plugins={ScopeSourceA: {MockComputeFramework}, ProbedScopeSourceB: {MockComputeFramework}},
+        links=None,
+        data_access_collection=None,
+    )
+
+    assert next(iter(identifier.identified)) is ScopeSourceA
+    assert ProbedScopeSourceB.MATCHER_CALLS == 0
 
 
 def test_scope_string_resolves_uniquely_by_class_name() -> None:

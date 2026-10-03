@@ -468,12 +468,15 @@ class IdentifyFeatureGroupClass:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
+            # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
+            if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
             requirement = self._declaration_requirement(feature_group, feature)
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
             # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
-            # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
+            # never probed. Recorded regardless of domain or of the overall outcome (a sibling may win).
             try:
                 with declaration_requirement_scope(requirement):
                     criteria_matched = self._filter_feature_group_by_criteria(
@@ -484,8 +487,6 @@ class IdentifyFeatureGroupClass:
                     raise
                 if not self._filter_feature_group_by_domain(feature_group, feature):
                     self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
-                elif not self._filter_feature_group_by_scope(feature_group, feature):
-                    self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
                 else:
                     raise
                 continue
@@ -508,11 +509,7 @@ class IdentifyFeatureGroupClass:
                 self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
                 continue
 
-            if not self._filter_feature_group_by_scope(feature_group, feature):
-                self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
-                continue
-
-            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win, and
+            # Abstract bases can match name+domain but cannot be instantiated; never let one win, and
             # never record one as a near-miss: the abstract_only message owns them.
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)

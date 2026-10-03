@@ -2784,7 +2784,7 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
         # Suppression is resolution, not just text: requesting the sibling fails at the same gate.
         sibling = _evaluate(scope_gate_sibling_scenario())
         assert sibling.failure_kind == "none"
-        assert sibling.eliminations[OutsideScopeDeclarerFG791].stage == "scope"
+        assert OutsideScopeDeclarerFG791 not in sibling.eliminations
 
         assert SCOPE_GATE_SIBLING_791 in result.facts.dead_only_names
         # The in-scope group is untouched by the gate, so its own name stays suggestible.

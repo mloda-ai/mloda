@@ -15,6 +15,7 @@ requires a unique marker value (or marker options key) and returns None otherwis
 so it can never hijack matching in other tests running in the same worker process.
 """
 
+from collections.abc import Iterator
 from typing import Any, cast
 
 import pyarrow as pa
@@ -22,11 +23,12 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.provider import FeatureSet
-from mloda.user import Feature
+from mloda.provider import FeatureGroup, FeatureSet, PropertySpec
+from mloda.user import Feature, FeatureName
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -181,6 +183,40 @@ class SiblingSel1777TwinB(ReadFile):
         return {"sibling_sel_1777_twin_b": [2]}
 
 
+_VALUE_KEY = "sibling_sel_1777_mode"
+_BAD_VALUE = "sibling_sel_1777_bad_mode"
+_VALUE_FEATURE = "sibling_sel_1777_value_feat"
+
+
+class SiblingSel1777ValueFG(FeatureGroup):
+    """Root group fronting ReadFile; the required strict mapped key keeps it from matching other tests' features."""
+
+    PROPERTY_MAPPING = {
+        _VALUE_KEY: PropertySpec("Mode", allowed_values={"good": "Good mode"}, context=True, strict_validation=True),
+    }
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return ReadFile()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {_VALUE_FEATURE}
+
+
+@pytest.fixture()
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    window: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(window)
+    try:
+        yield window
+    finally:
+        MATCH_REJECTION_REASONS.reset(token)
+
+
 class TestPinnedReaderConflict1777:
     """Two accepting pins of one family raise without leaking access values; declining pins are skipped."""
 
@@ -238,11 +274,33 @@ class TestPinnedReaderConflict1777:
         ids=["b_declines", "a_declines"],
     )
     def test_declining_pin_is_skipped_and_accepting_pin_wins(
-        self, access_a: str, access_b: str, winner: type, access: str
+        self, access_a: str, access_b: str, winner: type, access: str, rejection_window: dict[str, MatchRejection]
     ) -> None:
         options = Options({SiblingSel565ReaderA.__name__: access_a, SiblingSel565ReaderB.__name__: access_b})
         assert BaseInputData.feature_scope_data_access(options, "sibling_sel_1777_feat") is True
         assert options.get("BaseInputData") == (winner, access)
+        assert set(rejection_window) == set()
+
+    @pytest.mark.parametrize(
+        "access_a,access_b", [(_ACCESS_A, _ACCESS_A), (_ACCESS_B, _ACCESS_B)], ids=["b_declines", "a_declines"]
+    )
+    def test_later_value_failure_is_reported_not_the_losing_pin(self, access_a: str, access_b: str) -> None:
+        feature = Feature(
+            name=_VALUE_FEATURE,
+            options={
+                SiblingSel565ReaderA.__name__: access_a,
+                SiblingSel565ReaderB.__name__: access_b,
+                _VALUE_KEY: _BAD_VALUE,
+            },
+        )
+        accessible: FeatureGroupEnvironmentMapping = {SiblingSel1777ValueFG: {PyArrowTable}}
+        result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None, None)
+        assert result.identified == {}
+        elimination = result.eliminations.get(SiblingSel1777ValueFG)
+        assert elimination is not None
+        assert elimination.stage == "value_rejection"
+        assert f"'{_BAD_VALUE}' not found in mapping for '{_VALUE_KEY}'" in elimination.reason
+        assert "matched nothing" not in elimination.reason
 
     def test_resolution_contains_conflict_as_matcher_error(self) -> None:
         feature = Feature(

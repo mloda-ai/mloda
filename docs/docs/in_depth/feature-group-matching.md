@@ -41,7 +41,7 @@ The options view depends on the caller: feature resolution passes declared (pre-
 
 #### Option writes from a match hook
 
-A match hook may write into the options it is handed. Each candidate matches against its own shallow copy of the request's options, and only the winner's copy (values, non-forwarded marks, own-key provenance) is applied to the feature. A candidate that returns `False`, raises, or is dropped by a later gate leaves nothing behind, and a failed resolution leaves the options as requested. A readerless subclass inherits its nearest replaced ancestor's reader pair, and two unrelated survivors with different reader pairs raise. The hook keeps its `bool` return, so existing hooks need no change, but must not keep the options reference after returning. Rebind a value rather than mutating a nested container in place, since the copy is shallow.
+A match hook may write into the options it is handed. Each candidate matches against its own shallow copy of the request's options, and only the winner's copy (values, non-forwarded marks, own-key provenance) is applied to the feature. A candidate that returns `False`, raises, or is dropped by a later gate leaves nothing behind, and a failed resolution leaves the options as requested. A readerless subclass inherits its nearest replaced ancestor's reader pair, and two unrelated survivors with different reader pairs, or different MatchData writes under one class name, raise. The hook keeps its `bool` return, so existing hooks need no change, but must not keep the options reference after returning. Rebind a value rather than mutating a nested container in place, since the copy is shallow.
 
 ### 2. PROPERTY_MAPPING Configuration
 

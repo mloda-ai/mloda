@@ -33,6 +33,7 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import (
@@ -587,10 +588,11 @@ class IdentifyFeatureGroupClass:
                         break
             feature.options._adopt(winner_options)
         elif _identified_feature_groups:
-            # Replaying each survivor's reader pair raises the double-reader conflict when they differ.
-            self._replay_reader_pairs(
-                feature.options._fork(), [self._matched_options[fg] for fg in _identified_feature_groups]
-            )
+            # Replaying each survivor's reader pair and MatchData write raises the conflict when they differ.
+            scratch = feature.options._fork()
+            survivors = {fg: self._matched_options[fg] for fg in _identified_feature_groups}
+            self._replay_reader_pairs(scratch, list(survivors.values()))
+            self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
 
     @staticmethod
@@ -599,6 +601,14 @@ class IdentifyFeatureGroupClass:
             pair = source.group.get(RESERVED_READER_OPTION_KEY)
             if isinstance(pair, tuple) and len(pair) == 2:
                 BaseInputData.add_base_input_data_to_options(pair[0], pair[1], target)
+
+    @staticmethod
+    def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:
+        for feature_group, source in survivors.items():
+            if issubclass(feature_group, MatchData):
+                key = feature_group.get_class_name()
+                if key in source.group:
+                    feature_group.add_base_input_data_to_options(source.group[key], target)
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature

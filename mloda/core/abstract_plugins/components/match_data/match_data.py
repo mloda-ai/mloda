@@ -95,8 +95,9 @@ class MatchData:
 
         if cls_name in options:
             existing_data = options.get(cls_name)
+            # Identity first, so a replayed value never compares with itself.
             # `is True`, not a truth test: a non-bool __eq__ result (numpy array) must not raise unmarked here.
-            if (existing_data == matched_data_access) is True:
+            if existing_data is matched_data_access or (existing_data == matched_data_access) is True:
                 options.mark_non_forwarded(cls_name)
                 return
 

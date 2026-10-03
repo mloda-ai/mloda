@@ -62,6 +62,16 @@ def restamp_match_rejections_since(known_owners: frozenset[str], from_stage: str
         reasons[owner_name] = MatchRejection(rejection.reason, to_stage)
 
 
+def drop_match_rejections_since(known_owners: frozenset[str]) -> None:
+    """Drop every owner recorded after the snapshot; no-op outside a window."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return
+    for owner_name in list(reasons):
+        if owner_name not in known_owners:
+            del reasons[owner_name]
+
+
 def has_match_rejection(stage: str) -> bool:
     """True iff the active window holds a rejection with exactly this stage; False without an active window."""
     reasons = MATCH_REJECTION_REASONS.get()

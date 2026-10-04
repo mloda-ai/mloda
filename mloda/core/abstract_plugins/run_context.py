@@ -1,6 +1,9 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
+
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,12 @@ class RunContext:
     def __post_init__(self) -> None:
         # Copy on ingest so a hook mutating the carrier never reaches the caller's dict.
         if self.carrier is not None:
-            object.__setattr__(self, "carrier", dict(self.carrier))
+            object.__setattr__(self, "carrier", _frozen_dict(self.carrier))
         if self.plugin_versions is not None:
             object.__setattr__(self, "plugin_versions", dict(self.plugin_versions))
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        for name, value in state.items():
+            object.__setattr__(self, name, value)
+        if self.carrier is not None:
+            object.__setattr__(self, "carrier", _frozen_dict(self.carrier))

@@ -13,6 +13,7 @@ from contextvars import ContextVar
 from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
 
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 
@@ -45,29 +46,6 @@ def input_data_load_gate_scope() -> Generator[None, None, None]:
 def input_data_load_gate_scopes_active() -> int:
     with _gate_scopes_lock:
         return _gate_scopes
-
-
-def _read_only(self: Any, *args: Any, **kwargs: Any) -> Any:
-    raise TypeError("read-only dict")
-
-
-class _ReadOnlyDict(dict[Any, Any]):
-    """dict that rejects mutation and pickles/copies as a plain dict."""
-
-    __init__ = __setitem__ = __delitem__ = update = pop = popitem = clear = setdefault = __ior__ = _read_only
-
-    def __new__(cls, *args: Any) -> Any:
-        # Rebuilding via type(x)(items) (dataclasses.asdict) yields a plain dict; ingest uses _frozen_carrier.
-        return dict(*args)
-
-    def __reduce__(self) -> tuple[Any, ...]:
-        return (dict, (dict(self),))
-
-
-def _frozen_dict(source: dict[Any, Any]) -> Any:
-    frozen = dict.__new__(_ReadOnlyDict)
-    dict.update(frozen, source)
-    return frozen
 
 
 @dataclass(kw_only=True)

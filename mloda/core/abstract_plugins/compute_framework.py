@@ -74,6 +74,10 @@ def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
     return tuple((str(key), safe_field(lambda: _python_dtype(data[key]), None)) for key in sorted(data, key=str))
 
 
+_SEAL_FLAG = "_run_context_sealed"
+_SEALED_ATTRS = frozenset({"run_context", "worker_index", _SEAL_FLAG})
+
+
 class EmptyResultError(ValueError):
     """Raised when a final requested feature's result carries no schema (zero columns);
     zero rows with a schema is valid."""
@@ -148,10 +152,19 @@ class ComputeFramework(ABC):
         self.framework_connection_object: Any | None = None
 
     @final
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError(f"{name!r} cannot be reassigned on a framework attached to a run")
+        object.__setattr__(self, name, value)
+
+    @final
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Materialize a deferred worker extender payload on the actual unpickle, so an
         extender's own __setstate__ (e.g. building a live handle) fires in the worker's pid."""
         self.__dict__.update(state)
+        restored = self.__dict__.get("run_context")
+        if restored is not None and restored.run_id:
+            object.__setattr__(self, _SEAL_FLAG, True)
         if self._pending_extender_payload is not None:
             self.function_extender, self._hook_extenders = pickle.loads(self._pending_extender_payload)  # nosec B301
             self._pending_extender_payload = None

@@ -128,7 +128,7 @@ def worker(
         error_out(cfw_register, command_queue)
         return
 
-    cfw.worker_index = worker_index
+    object.__setattr__(cfw, "worker_index", worker_index)
     run_context = RunContext()
     reason: CloseReason = "error"
 

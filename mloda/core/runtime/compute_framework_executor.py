@@ -110,7 +110,8 @@ class ComputeFrameworkExecutor:
         if not dispatched_to_worker and self.hook_extenders is not None:
             new_cfw._hook_extenders = self.hook_extenders
         # replace() re-runs __post_init__, so each framework owns its carrier copy.
-        new_cfw.run_context = replace(self.cfw_register.get_run_context())
+        object.__setattr__(new_cfw, "run_context", replace(self.cfw_register.get_run_context()))
+        object.__setattr__(new_cfw, "_run_context_sealed", True)
 
         # add to register
         self.cfw_register.add_cfw_to_compute_frameworks(new_cfw.get_uuid(), cf_class.get_class_name(), children_if_root)

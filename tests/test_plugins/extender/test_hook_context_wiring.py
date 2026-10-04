@@ -16,8 +16,8 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import FeatureGroup
-from mloda.user import Feature, ParallelizationMode
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"
@@ -738,3 +738,101 @@ class TestWorkerIndexWiring:
         captured = extender.captured
         assert captured is not None
         assert captured.worker_index is None
+
+
+_FORGED_ID = "forged-run-id"
+_forge_outcomes: dict[str, type[BaseException] | None] = {}
+
+
+def _attempt(name: str, assign: Any) -> None:
+    try:
+        assign()
+    except Exception as exc:
+        _forge_outcomes[name] = type(exc)
+    else:
+        _forge_outcomes[name] = None
+
+
+class _ForgingFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"sealed_forge_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cfw = ComputeFramework.current()
+        assert cfw is not None
+
+        def forge_run_context() -> None:
+            cfw.run_context = RunContext(run_id=_FORGED_ID)
+
+        def forge_worker_index() -> None:
+            cfw.worker_index = 99
+
+        _attempt("run_context", forge_run_context)
+        _attempt("worker_index", forge_worker_index)
+        return {"sealed_forge_col": [1, 2, 3]}
+
+
+class _MultiHookCapturingExtender(Extender):
+    """Records the HookContext seen after CALCULATE and VALIDATE_OUTPUT hooks."""
+
+    def __init__(self) -> None:
+        self.priority = 100
+        self.captured: dict[ExtenderHook, HookContext] = {}
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, ExtenderHook.VALIDATE_OUTPUT_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        self.captured[context.hook] = context
+        return result
+
+
+class TestAttachedFrameworkIsSealedDuringARealRun:
+    def _run(self) -> _MultiHookCapturingExtender:
+        _forge_outcomes.clear()
+        extender = _MultiHookCapturingExtender()
+        mloda.run_all(
+            [Feature(name="sealed_forge_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_ForgingFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        return extender
+
+    def test_feature_group_cannot_reassign_run_context_or_worker_index(self) -> None:
+        self._run()
+
+        assert _forge_outcomes == {"run_context": AttributeError, "worker_index": AttributeError}
+
+    def test_later_hooks_keep_the_real_identity(self) -> None:
+        extender = self._run()
+
+        calculate = extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]
+        validate = extender.captured[ExtenderHook.VALIDATE_OUTPUT_FEATURE]
+        assert calculate.run_id is not None
+        assert calculate.run_id != _FORGED_ID
+        assert validate.run_id == calculate.run_id
+        assert validate.worker_index == calculate.worker_index != 99
+
+
+class TestUnattachedFrameworkStaysAssignable:
+    def test_run_context_and_worker_index_are_assignable_and_reassignable(self) -> None:
+        cfw = _build_framework(set())
+
+        cfw.run_context = RunContext(run_id="a")
+        cfw.run_context = RunContext(run_id="b")
+        cfw.worker_index = 1
+        cfw.worker_index = 2
+
+        assert cfw.run_context.run_id == "b"
+        assert cfw.worker_index == 2

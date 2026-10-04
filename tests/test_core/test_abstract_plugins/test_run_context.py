@@ -1,6 +1,7 @@
 """Tests for RunContext: the frozen dataclass bundling per-run run_id/carrier/child_bootstrap."""
 
 import dataclasses
+import json
 import pickle  # nosec B403
 from datetime import datetime, timezone
 
@@ -114,19 +115,60 @@ class TestRunContextCarrierCopiedOnIngest:
         assert ctx.carrier == given
         assert ctx.carrier is not given
 
-    def test_mutating_the_stored_carrier_does_not_leak_into_the_given_dict(self) -> None:
+    def test_mutating_the_stored_carrier_raises_and_does_not_leak_into_the_given_dict(self) -> None:
         given = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 
         ctx = RunContext(carrier=given)
         assert ctx.carrier is not None
-        ctx.carrier["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            ctx.carrier["mutated"] = "yes"
 
         assert "mutated" not in given
+        assert "mutated" not in ctx.carrier
 
     def test_carrier_none_stays_none(self) -> None:
         ctx = RunContext(carrier=None)
 
         assert ctx.carrier is None
+
+
+class TestRunContextCarrierReadOnly:
+    @staticmethod
+    def _assert_read_only(carrier: object) -> None:
+        assert isinstance(carrier, dict)
+        with pytest.raises(TypeError):
+            carrier["x"] = "y"
+        with pytest.raises(TypeError):
+            carrier.pop("k")
+        with pytest.raises(TypeError):
+            carrier.clear()
+
+    def test_read_only_after_replace_without_changes(self) -> None:
+        replaced = dataclasses.replace(RunContext(carrier={"k": "v"}))
+
+        self._assert_read_only(replaced.carrier)
+        assert replaced.carrier == {"k": "v"}
+
+    def test_read_only_after_replace_with_a_new_carrier(self) -> None:
+        replaced = dataclasses.replace(RunContext(), carrier={"k": "v"})
+
+        self._assert_read_only(replaced.carrier)
+
+    def test_read_only_after_pickle_round_trip(self) -> None:
+        ctx = RunContext(run_id="r", carrier={"k": "v"})
+
+        restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
+
+        self._assert_read_only(restored.carrier)
+        assert restored.carrier == {"k": "v"}
+        assert restored == ctx
+
+    def test_stays_a_dict_and_serializes_to_json(self) -> None:
+        ctx = RunContext(carrier={"k": "v"})
+
+        assert isinstance(ctx.carrier, dict)
+        assert ctx.carrier == {"k": "v"}
+        assert json.dumps(ctx.carrier) == '{"k": "v"}'
 
 
 class TestRunContextPluginVersionsCopiedOnIngest:

@@ -237,14 +237,12 @@ def test_two_feature_group_steps_with_different_parents_get_separate_transform_h
 # ---------------------------------------------------------------------------
 
 
-def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
-    """One FeatureGroup class commonly splits into multiple steps by (framework, options,
-    dependency level); two such steps feeding one consumer share one conceptual source and
-    must not be mistaken for the missing-Link case."""
+def _split_root_steps_scenario(name_a: str, name_b: str) -> tuple[list[FeatureGroupStep], FeatureGroupStep, Graph]:
+    """Two root steps of one class feeding one consumer, each providing the given feature name."""
     graph = Graph()
 
-    parent_a = _feature("dedup_shared_a", PyArrowTable)
-    parent_b = _feature("dedup_shared_b", PyArrowTable)
+    parent_a = _feature(name_a, PyArrowTable)
+    parent_b = _feature(name_b, PyArrowTable)
     _root_node(graph, parent_a, DedupUpstreamFG)
     _root_node(graph, parent_b, DedupUpstreamFG)
 
@@ -257,11 +255,55 @@ def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
     graph.parent_to_children_mapping[dest_feature.uuid] = {parent_a.uuid, parent_b.uuid}
     dest_step = FeatureGroupStep(DedupDestFG, feature_set, set(), PandasDataFrame)
 
-    new_plan = ExecutionPlan().add_tfs([producer_a, producer_b, dest_step], graph)
+    return [producer_a, producer_b], dest_step, graph
+
+
+def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
+    """Two root steps of one class that provide the same feature name feed one consumer: either
+    step supplies every needed column, so this must not be mistaken for the missing-Link case."""
+    producers, dest_step, graph = _split_root_steps_scenario("dedup_shared", "dedup_shared")
+
+    new_plan = ExecutionPlan().add_tfs([*producers, dest_step], graph)
 
     tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
     assert len(tfs_steps) == 2, f"expected two distinct hops (different producer instances), got: {tfs_steps}"
     assert dest_step.tfs_ids == {step.uuid for step in tfs_steps}
+
+
+def test_two_non_root_steps_of_one_class_over_one_shared_root_step_do_not_raise() -> None:
+    """Split non-root steps (different names) that descend from one shared root step stay linked."""
+    graph = Graph()
+
+    root = _feature("dedup_shared_root", PyArrowTable)
+    _root_node(graph, root, DedupLeftFG)
+    producer_root = _producer_step(DedupLeftFG, root, PyArrowTable)
+
+    mid_a = _feature("dedup_mid_a", PyArrowTable)
+    mid_b = _feature("dedup_mid_b", PyArrowTable)
+    graph.add_node(mid_a.uuid, NodeProperties(mid_a, DedupUpstreamFG))
+    graph.add_node(mid_b.uuid, NodeProperties(mid_b, DedupUpstreamFG))
+    graph.parent_to_children_mapping[mid_a.uuid] = {root.uuid}
+    graph.parent_to_children_mapping[mid_b.uuid] = {root.uuid}
+    producer_a = _producer_step(DedupUpstreamFG, mid_a, PyArrowTable)
+    producer_b = _producer_step(DedupUpstreamFG, mid_b, PyArrowTable)
+
+    dest_feature = _feature("dedup_dest_non_root", PyArrowTable)
+    feature_set = FeatureSet()
+    feature_set.add(dest_feature)
+    graph.parent_to_children_mapping[dest_feature.uuid] = {mid_a.uuid, mid_b.uuid}
+    dest_step = FeatureGroupStep(DedupDestFG, feature_set, set(), PyArrowTable)
+
+    ExecutionPlan().add_tfs([producer_root, producer_a, producer_b, dest_step], graph)
+
+
+def test_two_root_steps_of_one_class_providing_different_names_raise_missing_links() -> None:
+    """Only one of the split steps is ever bound, so a consumer reading a different name from each loses a column."""
+    producers, dest_step, graph = _split_root_steps_scenario("dedup_shared_a", "dedup_shared_b")
+
+    with pytest.raises(ValueError, match="unlinked sources \\(missing Links\\)") as exc_info:
+        ExecutionPlan().add_tfs([*producers, dest_step], graph)
+
+    assert "DedupUpstreamFG" in str(exc_info.value)
 
 
 def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
@@ -480,7 +522,7 @@ def test_join_served_parent_linked_to_only_one_hop_still_raises() -> None:
     not merely be present, for the missing-Links check to stand down."""
     scenario = _bridge_scenario(bridged=False)
 
-    with pytest.raises(ValueError, match="two different, unlinked source feature"):
+    with pytest.raises(ValueError, match="depends on parents from .* unlinked sources \\(missing Links\\)"):
         ExecutionPlan().add_tfs(
             [scenario.producer_x, scenario.producer_y, scenario.join_step, scenario.dest_step], scenario.graph
         )
@@ -565,7 +607,7 @@ def test_join_served_sibling_parent_does_not_bridge_two_unrelated_declared_side_
     unrelated sibling subclass's hop into its group; the two hops share no genuine Link."""
     scenario = _sibling_bridge_scenario()
 
-    with pytest.raises(ValueError, match="two different, unlinked source feature"):
+    with pytest.raises(ValueError, match="depends on parents from .* unlinked sources \\(missing Links\\)"):
         ExecutionPlan().add_tfs(
             [scenario.producer_s1, scenario.producer_s2, scenario.join_step, scenario.consumer_step],
             scenario.graph,

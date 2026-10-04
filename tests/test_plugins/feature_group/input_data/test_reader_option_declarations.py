@@ -274,3 +274,13 @@ class TestJsonFGDocumentSuffixes:
 
     def test_explicit_none_reads_as_absent(self, json_path: str) -> None:
         assert _json_group_claims(json_path, Options(context={"document_suffixes": None}))
+
+    @pytest.mark.parametrize("value", [5, frozenset({1}), [1, "a"]])
+    def test_a_non_str_collection_value_is_rejected_by_the_option_declaration(self, json_path: str, value: Any) -> None:
+        feature = Feature("rod_value", Options(context={"document_suffixes": value}))
+        dac = DataAccessCollection(files={"rod_payload": json_path})
+        result = IdentifyFeatureGroupClass.evaluate(feature, {JsonFG: {PyArrowTable}}, None, dac)
+        assert JsonFG not in result.identified
+        reason = result.eliminations[JsonFG].reason
+        assert "document_suffixes" in reason
+        assert "raised TypeError" not in reason

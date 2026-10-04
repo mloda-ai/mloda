@@ -30,8 +30,8 @@ class ParquetFG(ReadFileFG):
     @classmethod
     def describe_columns(cls, match: SourceMatch) -> dict[str, DataType | None]:
         pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
-        parquet_file = pyarrow_parquet.ParquetFile(match.access)
-        return {field.name: DataType.from_arrow_type_safe(field.type) for field in parquet_file.schema_arrow}
+        with pyarrow_parquet.ParquetFile(match.access) as parquet_file:
+            return {field.name: DataType.from_arrow_type_safe(field.type) for field in parquet_file.schema_arrow}
 
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
@@ -42,7 +42,8 @@ class ParquetFG(ReadFileFG):
         if cls._overrides_load_neutral(ParquetFG):
             return None
         pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
-        num_rows: int = pyarrow_parquet.ParquetFile(match.access).metadata.num_rows
+        with pyarrow_parquet.ParquetFile(match.access) as parquet_file:
+            num_rows: int = parquet_file.metadata.num_rows
         return num_rows
 
 

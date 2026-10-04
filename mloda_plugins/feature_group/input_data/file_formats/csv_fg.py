@@ -6,6 +6,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.provider import ComputeFramework, ReadFileFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     FileSourcePyArrowTransformer,
@@ -24,7 +25,12 @@ class CsvFG(ReadFileFG):
     @classmethod
     def column_names(cls, path: str) -> Collection[str]:
         with open(path, newline="", encoding="utf-8-sig") as f:
-            return next(csv.reader(f), [])
+            try:
+                return next(csv.reader(f), [])
+            except csv.Error as exc:
+                if is_match_abort(exc):
+                    raise
+                raise ValueError(str(exc)) from exc
 
     @classmethod
     def count_rows(cls, match: SourceMatch, compute_framework: type[ComputeFramework]) -> int | None:

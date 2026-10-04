@@ -3,10 +3,11 @@
 A subclass declares ``suffixes()`` and ``column_names(path)``; the base claims a feature when a file has the column.
 """
 
+import inspect
 import os
 from abc import abstractmethod
 from collections.abc import Collection
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
@@ -20,6 +21,12 @@ from mloda.core.abstract_plugins.components.utils import is_match_abort
 
 _HANDLE_OPTION = "data_access_handle"
 _DOCUMENT_SUFFIXES_OPTION = "document_suffixes"
+
+
+def _is_suffix_value(value: Any) -> bool:
+    if isinstance(value, str):
+        return True
+    return isinstance(value, (list, tuple, set, frozenset)) and all(isinstance(item, str) for item in value)
 
 
 class ReadFileFG(FormatFeatureGroup):
@@ -40,7 +47,13 @@ class ReadFileFG(FormatFeatureGroup):
             expected="a str handle name",
         ),
         _DOCUMENT_SUFFIXES_OPTION: PropertySpec(
-            "Suffixes handed over to document readers; this group never claims them.", default=None, context=True
+            "Suffixes handed over to document readers; this group never claims them.",
+            default=None,
+            strict_validation=True,
+            context=True,
+            element_validator=_is_suffix_value,
+            match_guard=_is_suffix_value,
+            expected="a str or a collection of str suffixes",
         ),
     }
     SAMPLE_SIZE_BYTES: ClassVar[int] = 0
@@ -70,6 +83,8 @@ class ReadFileFG(FormatFeatureGroup):
     ) -> bool:
         if super().is_pointed(feature_name, options, data_access_collection):
             return True
+        if inspect.isabstract(cls):
+            return False
         pinned = cls._pinned_path(feature_name, data_access_collection)
         return pinned is not None and cls._owns(pinned, cls._document_suffixes(options))
 
@@ -83,10 +98,16 @@ class ReadFileFG(FormatFeatureGroup):
             for handle, path in (data_access_collection.files.items() if data_access_collection else ())
             if os.path.abspath(path) in sources
         )
-        named = f" (file handles: {', '.join(repr(h) for h in handles)})" if handles else ""
+        name = cls.get_class_name()
+        if handles:
+            return (
+                f"pin one source with a column_to_file entry, point {name} at one file with "
+                f"options={{{name!r}: <path>}}, or select one with data_access_handle "
+                f"(file handles: {', '.join(repr(h) for h in handles)})."
+            )
         return (
-            f"pin one source with a column_to_file entry, point {cls.get_class_name()} at one file with "
-            f"options={{{cls.get_class_name()!r}: <path>}}, or select one with data_access_handle{named}."
+            f"point {name} at one file with options={{{name!r}: <path>}}, or add the file as a files handle "
+            "and pin it with a column_to_file entry."
         )
 
     @classmethod
@@ -100,6 +121,13 @@ class ReadFileFG(FormatFeatureGroup):
         excluded = cls._document_suffixes(options)
         is_file_route = route.source_kind == "file"
         pointer = cls._pointer_value(options)
+        if pointer is None and cls._pointer_key(options) is not None:
+            if is_file_route:
+                bad = type(options.get(cast(str, cls._pointer_key(options)))).__name__
+                record_match_rejection(
+                    cls.get_class_name(), f"the pointer value must be a path, got {bad}", stage=INPUT_DATA_STAGE
+                )
+            return []
         if pointer is not None:
             if os.path.isdir(pointer):
                 return [] if is_file_route else cls._folder_entries(pointer, excluded)
@@ -161,17 +189,19 @@ class ReadFileFG(FormatFeatureGroup):
     @staticmethod
     def _document_suffixes(options: Options) -> tuple[str, ...]:
         value = options.get(_DOCUMENT_SUFFIXES_OPTION)
-        if value is None:
+        if value is None or not _is_suffix_value(value):
             return ()
         return (value,) if isinstance(value, str) else tuple(value)
 
     @classmethod
+    def _pointer_key(cls, options: Options) -> str | None:
+        return next((key for key in cls.pointer_keys() if key in options), None)
+
+    @classmethod
     def _pointer_value(cls, options: Options) -> str | None:
-        for key in cls.pointer_keys():
-            if key in options:
-                value = options.get(key)
-                return str(value) if isinstance(value, (str, os.PathLike)) else None
-        return None
+        key = cls._pointer_key(options)
+        value = None if key is None else options.get(key)
+        return str(value) if isinstance(value, (str, os.PathLike)) else None
 
     @staticmethod
     def _pinned_path(feature_name: str, data_access_collection: DataAccessCollection | None) -> str | None:
@@ -193,16 +223,23 @@ class ReadFileFG(FormatFeatureGroup):
 
     @classmethod
     def _listing(cls, kind: str, match: SourceMatch) -> Collection[str] | None:
+        names, failure = cls._listing_result(kind, match)
+        if failure is not None:
+            cls._reject_listing(os.path.abspath(match.access), failure)
+        return names
+
+    @classmethod
+    def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
+        return cls._listing_result("full", match)[1]
+
+    @classmethod
+    def _listing_result(cls, kind: str, match: SourceMatch) -> tuple[Collection[str] | None, str | None]:
         path = os.path.abspath(match.access)
         if not os.path.isfile(path):
-            cls._reject_listing(path, "it is not a regular file")
-            return None
+            return None, "it is not a regular file"
         stat_result = os.stat(path)
         key = (cls, kind, path, stat_result.st_mtime_ns, stat_result.st_size)
-        names, failure = run_cached(key, lambda: cls._read_listing(kind, match.access))
-        if failure is not None:
-            cls._reject_listing(path, failure)
-        return names
+        return run_cached(key, lambda: cls._read_listing(kind, match.access))
 
     @classmethod
     def _read_listing(cls, kind: str, access: str) -> tuple[tuple[str, ...] | None, str | None]:

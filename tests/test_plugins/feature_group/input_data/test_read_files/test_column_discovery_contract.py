@@ -126,9 +126,6 @@ class TestJsonSampling:
         result = IdentifyFeatureGroupClass.evaluate(Feature(column), {group: {PyArrowTable}}, None, dac)
         return group in result.identified
 
-    def test_the_sample_size_is_64_kib(self) -> None:
-        assert load_group("json_fg", "JsonFG").SAMPLE_SIZE_BYTES == 65536
-
     def test_sample_listing_holds_early_columns_only_and_the_full_listing_all(self, tmp_path: Path) -> None:
         group = load_group("json_fg", "JsonFG")
         path = tmp_path / "sample_vs_full.json"

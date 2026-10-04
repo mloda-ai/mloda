@@ -251,8 +251,8 @@ def _(mo):
 
     An example of a unit test could look like:
     ```python
-    def test_csv_fg_2(self) -> None:
-       def test_parse_options_are_customized(self, mock_read_csv):
+    @patch("pyarrow.csv.read_csv")
+    def test_parse_options_are_customized(self, mock_read_csv):
             # Ensure the parse options are as expected
             expected_parse_options = pyarrow_csv.ParseOptions(
                 delimiter=",",
@@ -260,11 +260,12 @@ def _(mo):
                 ignore_empty_lines=True
             )
 
-            # Call the method to trigger parse options usage
-            CsvFG2.load_neutral(Mock(), Mock(spec=FeatureSet))
+            # The custom read lives in the loader registered for PyArrowTable
+            loader = CsvFG2._loader_for(PyArrowTable)
+            loader(SourceMatch(source="data.csv", access="data.csv"), Mock(spec=FeatureSet))
 
-            # Verify that the _parse_options in CsvFG2 are customized
-            self.assertEqual(CsvFG2._parse_options, expected_parse_options)
+            # Verify that the read used the customized parse options
+            self.assertEqual(mock_read_csv.call_args.kwargs["parse_options"], expected_parse_options)
     ```
 
     This allows us to apply software engineering practices consistently throughout the entire data workflow.

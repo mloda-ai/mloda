@@ -12,6 +12,7 @@ import stat
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -188,6 +189,8 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert "column_to_file" in message
         assert self._group_name() in message
         assert "narrow with a data_access_handle or column_to_file." not in message
+        assert "data_access_handle" not in message  # a folder handle still holds both files, so it cannot pick one
+        assert "file handles" not in message
         assert "toyfmt-secret-value" not in message
 
     def test_file_folder_with_one_fitting_and_one_other_file_resolves(self) -> None:
@@ -278,6 +281,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         with pytest.raises(ValueError) as exc_info:
             self._resolve(Feature(self.present_column), dac)
         assert os.path.abspath(corrupt) in str(exc_info.value)
+        assert "could not read its columns" in str(exc_info.value)
 
     def test_file_pinned_chain_shaped_real_column_resolves_while_an_unpinned_chain_shaped_name_declines(self) -> None:
         name = f"toyfmt_pinchain{CHAIN_SEPARATOR}real"
@@ -480,6 +484,65 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         with pytest.raises(ValueError) as exc_info:
             self._resolve(pointed, None)
         assert os.path.abspath(path) in str(exc_info.value)
+        assert "could not read its columns" in str(exc_info.value)
+
+    def test_file_pointed_at_a_missing_file_aborts_with_the_listing_reason(self) -> None:
+        missing = self.tmp_path / f"pointed_missing{self._suffix()}"
+        pointed = Feature(self.present_column, Options({self._group_name(): str(missing)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        message = str(exc_info.value)
+        assert os.path.abspath(missing) in message
+        assert "not a regular file" in message
+
+    # pointer of the wrong type
+
+    def test_file_a_non_path_pointer_declines_naming_its_type_and_never_searches_the_collection(self) -> None:
+        feature = Feature(self.present_column, Options({self._group_name(): 5}))
+        result = self._evaluate(feature, self.own_dac())
+        assert self.feature_group_class not in result.identified
+        assert "int" in result.eliminations[self.feature_group_class].reason
+
+    # loader versus a load_neutral override
+
+    def _load_through_gated_subclass(self, loader_value: int | None, neutral_value: int) -> Any:
+        """Run a gated subclass overriding load_neutral (and optionally registering its own loader) under PyArrowTable."""
+        parent = self.feature_group_class
+        column = self.present_column
+        sub_name = f"{parent.__name__}ToyfmtLoaderProbe{neutral_value}"
+
+        def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
+            if sub_name not in options:
+                return False
+            return bool(
+                getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
+            )
+
+        def load_neutral(cls: Any, match: SourceMatch, features: Any) -> Any:
+            return pa.table({column: [neutral_value]})
+
+        sub = type(
+            sub_name,
+            (parent,),
+            {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
+        )
+        if loader_value is not None:
+            getattr(sub, "register_loader")(PyArrowTable, lambda match, features: pa.table({column: [loader_value]}))
+        result = mloda.run_all(
+            [Feature(column, Options({sub_name: str(self.own_path)}))],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({cast(type[FormatFeatureGroup], sub)}),
+        )
+        values = result[0].column(column).to_pylist()
+        del sub, result, gated, load_neutral
+        gc.collect()
+        return values
+
+    def test_file_a_load_neutral_override_is_used_under_pyarrow_table(self) -> None:
+        assert self._load_through_gated_subclass(None, 7101) == [7101]
+
+    def test_file_a_subclass_registering_its_own_loader_keeps_that_loader_over_its_load_neutral(self) -> None:
+        assert self._load_through_gated_subclass(7202, 7201) == [7202]
 
     # names
 

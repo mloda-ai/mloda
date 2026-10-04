@@ -337,6 +337,16 @@ class TestDataAccessHandleRejectsCollectionsOutright:
         assert CsvFG not in result.identified
         assert "data_access_handle" in result.eliminations[CsvFG].reason
 
+    def test_a_pointed_file_missing_the_column_declines_with_the_option_rejection_not_an_abort(
+        self, two_csv_files: tuple[str, str]
+    ) -> None:
+        path_a, _ = two_csv_files
+        options = Options({"CsvFG": path_a}, context={"data_access_handle": ["users", "transactions"]})
+        feature = Feature("hint_absent_column", options)
+        result = IdentifyFeatureGroupClass.evaluate(feature, _CSV_PLUGINS, None, None)
+        assert CsvFG not in result.identified
+        assert "data_access_handle" in result.eliminations[CsvFG].reason
+
     def test_db_reader_rejects_a_list_handle_instead_of_crashing(self, two_sqlite_dbs: tuple[Path, Path]) -> None:
         db_a, db_b = two_sqlite_dbs
         dac = DataAccessCollection(

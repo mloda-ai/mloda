@@ -605,8 +605,7 @@ class BaseInputData(ABC):
         """Forces every already-visible family's own auto-load group once before collecting, since
         get_all_filtered_subclasses only auto-loads a family whose OWN filtered list is currently empty;
         a family with even one final reader already defined (e.g. a user's own custom subclass) would
-        otherwise never load its siblings (the stock CsvFG alongside a user's own ReadFileFG subclass,
-        say).
+        otherwise never load its siblings (the stock document readers, say).
         """
         from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 

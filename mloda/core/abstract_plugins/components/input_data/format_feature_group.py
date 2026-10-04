@@ -75,6 +75,11 @@ class FormatFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
+        """Why the source cannot enumerate its columns, None when no reason is known."""
+        return None
+
+    @classmethod
     def has_column(cls, match: SourceMatch, column: str) -> bool | None:
         """Whether the source has the column, None when unknown."""
         columns = cls.columns(match)
@@ -151,6 +156,8 @@ class FormatFeatureGroup(FeatureGroup):
                 )
                 if loader is not None:
                     return loader
+            if "load_neutral" in klass.__dict__:
+                return None
         return None
 
     @classmethod
@@ -207,6 +214,14 @@ class FormatFeatureGroup(FeatureGroup):
         )
 
     @classmethod
+    def _listed_columns(cls, match: SourceMatch) -> str:
+        columns = cls.columns(match)
+        if columns is not None:
+            return _listed(columns)
+        reason = cls.unknown_columns_reason(match)
+        return "unknown" if reason is None else f"unknown ({reason})"
+
+    @classmethod
     def _abort(cls, error: ValueError) -> bool:
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
         if aborts_are_contained():
@@ -247,9 +262,9 @@ class FormatFeatureGroup(FeatureGroup):
                     fitting[match.source] = match
                 else:
                     undeclared = True
+        if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls._passes_option_declarations(options):
+            return False
         if len(fitting) > 1:
-            if not cls._passes_option_declarations(options):
-                return False
             return cls._abort(
                 ValueError(
                     f"{cls.get_class_name()} found feature '{name}' in several sources: "
@@ -262,7 +277,7 @@ class FormatFeatureGroup(FeatureGroup):
             return True
         if seen:
             described = "; ".join(
-                f"{source} has columns {_listed(cls.columns(match))}" for source, match in sorted(seen.items())
+                f"{source} has columns {cls._listed_columns(match)}" for source, match in sorted(seen.items())
             )
             reason = f"column '{base_name}' is in none of the sources of {cls.get_class_name()}: {described}"
             if pointed:

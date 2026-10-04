@@ -15,7 +15,9 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.provider import FormatFeatureGroup, ReadFileFG
-from mloda.user import DataAccessCollection
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.user import DataAccessCollection, Feature
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     FileLoadsIntoFrameworkMixin,
     PyArrowTableAdapter,
@@ -183,3 +185,33 @@ class TestPinnedFileOwnedBySomeFileGroup:
         path.write_text("toyfmt_g6_other\n1\n")
         BaseInputData._record_unowned_pin(self._dac(path, "toyfmt_g6_other"), ["toyfmt_g6_other"])
         assert len(self._unowned_pin_reasons(rejection_window)) == 1
+
+
+class TestAbstractReadFileFGWithAPin:
+    """A column_to_file pin must not make the abstract ReadFileFG raise from its match hook."""
+
+    def _reasons(self, result: Any) -> list[str]:
+        return [e.reason for e in result.eliminations.values()]
+
+    def test_probed_next_to_a_concrete_group_it_declines_without_a_match_hook_error(self, tmp_path: Path) -> None:
+        path = tmp_path / f"pinned{TOY_SUFFIX}"
+        write_toy_file(path, {"toyfmt_abs_pin_col": [1]})
+        dac = DataAccessCollection(files={"abs_pin": str(path)}, column_to_file={"toyfmt_abs_pin_col": "abs_pin"})
+        plugins: Any = {ReadFileFG: {PyArrowTable}, ToyFileFormatFG: {PyArrowTable}}
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature("toyfmt_abs_pin_col"), plugins, None, dac)
+
+        assert ToyFileFormatFG in result.identified
+        assert not [r for r in self._reasons(result) if "raised TypeError" in r]
+        assert ReadFileFG not in result.identified
+
+    def test_a_pin_to_a_file_no_group_owns_declines_without_a_match_hook_error(self, tmp_path: Path) -> None:
+        path = tmp_path / "pinned.toyfmtnobody"
+        path.write_text("toyfmt_abs_pin_other\n1\n")
+        dac = DataAccessCollection(files={"abs_pin": str(path)}, column_to_file={"toyfmt_abs_pin_other": "abs_pin"})
+        plugins: Any = {ReadFileFG: {PyArrowTable}, ToyFileFormatFG: {PyArrowTable}}
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature("toyfmt_abs_pin_other"), plugins, None, dac)
+
+        assert result.identified == {}
+        assert not [r for r in self._reasons(result) if "raised TypeError" in r]

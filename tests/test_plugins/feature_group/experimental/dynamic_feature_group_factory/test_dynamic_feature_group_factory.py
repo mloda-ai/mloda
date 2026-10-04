@@ -18,8 +18,8 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeatureComposite,
     SourceTuple,
 )
-from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
+from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
@@ -83,7 +83,7 @@ class TestDynamicFeatureGroupFactory:
 
         # Create a dynamic feature group
         DynamicTestFeatureGroup = DynamicFeatureGroupCreator.create(
-            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=ReadDBFeature
+            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=ReadDocumentFeature
         )
 
         # Test match criteria
@@ -103,7 +103,7 @@ class TestDynamicFeatureGroupFactory:
 
         # Test that the created class is a subclass of FeatureGroup
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
-        assert issubclass(DynamicTestFeatureGroup, ReadDBFeature)
+        assert issubclass(DynamicTestFeatureGroup, ReadDocumentFeature)
 
     def test_dynamic_feature_group_creator_with_complex_logic(self) -> None:
         def custom_set_feature_name(self: Any, config: Options, feature_name: FeatureName) -> FeatureName:

@@ -20,6 +20,7 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any, cast
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
@@ -29,7 +30,7 @@ from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.provider import FeatureGroup, FeatureSet, PropertySpec, ReadFileFG
-from mloda.user import Feature, FeatureName
+from mloda.user import Feature, FeatureName, PluginCollector, mloda
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -56,6 +57,10 @@ class SiblingSelFG(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return cls.input_data().load(features)  # type: ignore[union-attr]
 
 
 class SiblingSel565ReaderA(SiblingSelFamily):
@@ -84,6 +89,28 @@ class SiblingSel565ReaderB(SiblingSelFamily):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return {"sibling_sel_565_b": [2]}
+
+
+_URL_MARKER_KEY = "sibling_sel_565_url_marker"
+_URL_ACCESS = "fake-http://example/sibling_sel_565/data"
+_URL_FEATURE_NAME = "sibling_sel_565_url_value"
+_URL_FEATURE_VALUES = [11, 22, 33]
+
+
+class SiblingSel565UrlReader(SiblingSelFamily):
+    """Non-file reader recipe: final, no suffix, gated by a unique marker option key."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        if options.get(_URL_MARKER_KEY) is None:
+            return None
+        if isinstance(data_access, str) and data_access.startswith("fake-http://"):
+            return data_access
+        return None
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return pa.table({_URL_FEATURE_NAME: _URL_FEATURE_VALUES})
 
 
 class SiblingSel565NotAReader:
@@ -622,3 +649,19 @@ class TestSecondCsvFormatGroupIsAmbiguous:
 
         assert "CsvFG" in str(excinfo.value)
         assert "SiblingSelSecondCsvFG" in str(excinfo.value)
+
+
+class TestUrlReaderRecipeEndToEnd:
+    """A non-file reader pinned by class-name string or class key runs end to end through a root group."""
+
+    @pytest.mark.parametrize("by_class", [False, True])
+    def test_url_reader_end_to_end(self, by_class: bool) -> None:
+        key: Any = SiblingSel565UrlReader if by_class else SiblingSel565UrlReader.__name__
+        feature = Feature(name=_URL_FEATURE_NAME, options={key: _URL_ACCESS, _URL_MARKER_KEY: True})
+        features: list[Feature | str] = [feature]
+        result = mloda.run_all(
+            features,
+            compute_frameworks=["PyArrowTable"],
+            plugin_collector=PluginCollector.enabled_feature_groups({SiblingSelFG}),
+        )
+        assert result[0].to_pydict()[_URL_FEATURE_NAME] == _URL_FEATURE_VALUES

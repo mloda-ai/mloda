@@ -37,8 +37,9 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.provider import FeatureSet
-from mloda.user import Feature
+from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -300,3 +301,38 @@ class TestCsvFGCountRows:
         assert base.count_rows(match, PythonDictFramework) is not None
         del _CsvCountRowsLoaderProbeFG
         gc.collect()
+
+
+class TestCsvHeaderParseError:
+    """A header larger than csv.field_size_limit() raises csv.Error; it must be a per-file failure."""
+
+    @staticmethod
+    def _oversized(path: Path) -> None:
+        path.write_text("x" * (csv.field_size_limit() + 1000))
+
+    def test_a_folder_with_an_unparseable_header_and_a_valid_csv_resolves_the_valid_one(self, tmp_path: Path) -> None:
+        folder = tmp_path / "hdr_folder"
+        folder.mkdir()
+        self._oversized(folder / "a_bad.csv")
+        good = folder / "b_good.csv"
+        good.write_text("csv_hdr_err_col\n1\n")
+        feature = Feature("csv_hdr_err_col")
+
+        result = IdentifyFeatureGroupClass.evaluate(
+            feature, {_csv_fg(): {PyArrowTable}}, None, DataAccessCollection(folders={"hdr_dir": str(folder)})
+        )
+
+        assert _csv_fg() in result.identified
+        assert feature.input_data_match is not None
+        assert feature.input_data_match[1].source == os.path.abspath(good)
+
+    def test_pointed_at_the_unparseable_file_aborts_with_the_reason(self, tmp_path: Path) -> None:
+        bad = tmp_path / "hdr_bad.csv"
+        self._oversized(bad)
+        feature = Feature("csv_hdr_err_col", Options({"CsvFG": str(bad)}))
+
+        with pytest.raises(ValueError) as exc_info:
+            resolve_or_raise(feature, {_csv_fg(): {PyArrowTable}}, None, None)
+
+        assert os.path.abspath(bad) in str(exc_info.value)
+        assert "could not read its columns" in str(exc_info.value)

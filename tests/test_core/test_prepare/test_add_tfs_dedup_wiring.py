@@ -244,15 +244,17 @@ def _split_root_steps_scenario(
     *,
     data_type_a: DataType | None = None,
     data_type_b: DataType | None = None,
-    options_a: dict[str, Any] | None = None,
-    options_b: dict[str, Any] | None = None,
+    options_a: dict[str, Any] | Options | None = None,
+    options_b: dict[str, Any] | Options | None = None,
     separate_consumers: bool = False,
     extra_name: str | None = None,
+    source_b: type[FeatureGroup] = DedupUpstreamFG,
 ) -> tuple[list[FeatureGroupStep], FeatureGroupStep, Graph]:
     """Root steps of one class feeding one consumer step, each providing the given feature name.
 
     With ``separate_consumers`` each of the two parents is read by its own consumer feature in the
-    dest step; ``extra_name`` adds a third parent, read by the first consumer feature."""
+    dest step; ``extra_name`` adds a third parent, read by the first consumer feature; ``source_b`` is the
+    feature group class of the second parent."""
     graph = Graph()
 
     parent_a = Feature(name_a, options=options_a, data_type=data_type_a)
@@ -265,8 +267,9 @@ def _split_root_steps_scenario(
 
     producers = []
     for parent in parents:
-        _root_node(graph, parent, DedupUpstreamFG)
-        producers.append(_producer_step(DedupUpstreamFG, parent, PyArrowTable))
+        source = source_b if parent is parent_b else DedupUpstreamFG
+        _root_node(graph, parent, source)
+        producers.append(_producer_step(source, parent, PyArrowTable))
 
     dest_feature = _feature("dedup_dest_multi", PandasDataFrame)
     feature_set = FeatureSet()
@@ -274,13 +277,21 @@ def _split_root_steps_scenario(
     if separate_consumers:
         other_dest_feature = _feature("dedup_dest_multi_other", PandasDataFrame)
         feature_set.add(other_dest_feature)
-        graph.parent_to_children_mapping[dest_feature.uuid] = {parent_a.uuid}
+        graph.parent_to_children_mapping[dest_feature.uuid] = {
+            parent.uuid for parent in parents if parent is not parent_b
+        }
         graph.parent_to_children_mapping[other_dest_feature.uuid] = {parent_b.uuid}
     else:
         graph.parent_to_children_mapping[dest_feature.uuid] = {parent.uuid for parent in parents}
     dest_step = FeatureGroupStep(DedupDestFG, feature_set, set(), PandasDataFrame)
 
     return producers, dest_step, graph
+
+
+def _forwarded_context(value: str) -> Options:
+    options = Options(context={"fwd_key": value})
+    options.inherited_context_keys = frozenset({"fwd_key"})
+    return options
 
 
 class _SameNameCase(NamedTuple):
@@ -292,6 +303,9 @@ _SAME_NAME_RAISE_CASES = {
     "option_differs": _SameNameCase({"options_a": {"unit": "x"}}, ["unit"]),
     "data_type_differs": _SameNameCase(
         {"data_type_a": DataType.INT32, "data_type_b": DataType.INT64}, ["INT32", "INT64"]
+    ),
+    "forwarded_context_differs": _SameNameCase(
+        {"options_a": _forwarded_context("x"), "options_b": _forwarded_context("y")}, ["fwd_key"]
     ),
     "conflict_plus_different_name_split": _SameNameCase(
         {"options_a": {"unit": "x"}, "extra_name": "dedup_shared_other"}, ["unit"]
@@ -315,13 +329,25 @@ def test_one_consumer_reading_one_name_in_two_unlinked_variants_raises(case: _Sa
     assert "missing Links" not in message
 
 
-def test_two_consumer_features_each_reading_one_variant_do_not_raise() -> None:
-    """Different consumer features in one step may each read their own variant of the same name."""
+def test_different_consumer_features_reading_differing_variants_stay_planned() -> None:
+    """Kept planning: consumers in one step may read variants whose options the source ignores (mixed string/config chainer)."""
     producers, dest_step, graph = _split_root_steps_scenario(
         "dedup_shared", "dedup_shared", options_a={"unit": "x"}, separate_consumers=True
     )
 
     ExecutionPlan().add_tfs([*producers, dest_step], graph)
+
+
+def test_one_consumer_reading_one_name_from_two_different_classes_raises_missing_links() -> None:
+    """Differently-classed sources are a missing Link, not the same-name variant conflict."""
+    producers, dest_step, graph = _split_root_steps_scenario(
+        "dedup_shared", "dedup_shared", options_a={"unit": "x"}, source_b=DedupLeftFG
+    )
+
+    with pytest.raises(ValueError, match="unlinked sources \\(missing Links\\)") as exc_info:
+        ExecutionPlan().add_tfs([*producers, dest_step], graph)
+
+    assert "differ in" not in str(exc_info.value)
 
 
 def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:

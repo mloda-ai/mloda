@@ -329,3 +329,11 @@ def test_features_with_identical_inherited_context_share_one_group() -> None:
         "Features with identical group options, inherited context, compute framework, and "
         f"data_type must keep sharing one FeatureSet. Got {len(groups)} groups: {groups}"
     )
+
+
+def test_grouping_is_callable_on_the_class() -> None:
+    features = {Feature("static_grouping_a", data_type=DataType.INT32), Feature("static_grouping_b")}
+
+    groups = ExecutionPlan.group_features_by_compute_framework_and_options(features)
+
+    assert sum(len(group) for group in groups.values()) == 2

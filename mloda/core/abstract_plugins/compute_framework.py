@@ -48,6 +48,24 @@ def framework_preference(positions: Mapping[type["ComputeFramework"], int]) -> G
         _framework_position.reset(token)
 
 
+def framework_rank_key(
+    positions: Mapping[type["ComputeFramework"], int],
+) -> Callable[[type["ComputeFramework"]], tuple[int, int, str, str, str]]:
+    """Total-order key: listed position, connection rank, then class name, module, qualname."""
+    unlisted = max(positions.values(), default=-1) + 1
+
+    def key(framework: type["ComputeFramework"]) -> tuple[int, int, str, str, str]:
+        return (
+            positions.get(framework, unlisted),
+            _CONNECTION_RANK[framework.connection_requirement()],
+            framework.get_class_name(),
+            framework.__module__,
+            framework.__qualname__,
+        )
+
+    return key
+
+
 def _no_rows(data: Any) -> int | None:
     """row_count stand-in for hooks whose return value carries no row semantics."""
     return None
@@ -755,26 +773,15 @@ class ComputeFramework(ABC):
 
     @staticmethod
     @final
-    def select_deterministic(frameworks: Iterable[type["ComputeFramework"]]) -> type["ComputeFramework"]:
+    def select_deterministic(
+        frameworks: Iterable[type["ComputeFramework"]],
+        positions: Mapping[type["ComputeFramework"], int] | None = None,
+    ) -> type["ComputeFramework"]:
         """Pick by the run's preference, connection requirement, then a total name key (set iteration is id-based)."""
         candidates = list(frameworks)
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
-
-        position = _framework_position.get()
-        unlisted = max(position.values(), default=-1) + 1
-
-        # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
-        def key(framework: type["ComputeFramework"]) -> tuple[int, int, str, str, str]:
-            return (
-                position.get(framework, unlisted),
-                _CONNECTION_RANK[framework.connection_requirement()],
-                framework.get_class_name(),
-                framework.__module__,
-                framework.__qualname__,
-            )
-
-        return min(candidates, key=key)
+        return min(candidates, key=framework_rank_key(_framework_position.get() if positions is None else positions))
 
     @final
     def __eq__(self, other: object) -> bool:

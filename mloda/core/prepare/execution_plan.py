@@ -2195,7 +2195,8 @@ Available join types:
                 new_set.update(parent_to_children_mapping[feature.uuid])
         return new_set
 
-    def group_features_by_compute_framework_and_options(self, features: set[Feature]) -> dict[int, set[Feature]]:
+    @staticmethod
+    def group_features_by_compute_framework_and_options(features: set[Feature]) -> dict[int, set[Feature]]:
         """Group features by compute framework, options, and data type.
 
         Features with data_type=None are "lenient" - they join existing groups

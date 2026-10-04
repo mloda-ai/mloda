@@ -3,6 +3,7 @@ Set iteration over class objects is id-based, so the reduction ranks candidates 
 and breaks remaining ties by class name.
 """
 
+import copy
 import importlib
 import sqlite3
 from collections.abc import Iterator
@@ -18,7 +19,7 @@ from mloda.user import PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_preference
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_preference, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.graph.graph import Graph
@@ -552,3 +553,91 @@ def test_feature_pinned_to_pandas_still_runs_on_pandas_under_a_pyarrow_first_run
 
     assert len(result) == 1
     assert isinstance(result[0], pd.DataFrame)
+
+
+# --- central choice: Feature.chosen_compute_framework and explicit positions ----------------------
+
+
+def _two_framework_feature(name: str = "chosen_feature") -> Feature:
+    feature = Feature(name)
+    feature.compute_frameworks = {PyArrowTable, PandasDataFrame}
+    return feature
+
+
+def test_chosen_compute_framework_defaults_to_none() -> None:
+    assert _two_framework_feature().chosen_compute_framework is None
+
+
+def test_get_compute_framework_returns_the_chosen_one() -> None:
+    feature = _two_framework_feature()
+    feature.chosen_compute_framework = PyArrowTable
+
+    assert feature.get_compute_framework() is PyArrowTable
+
+
+def test_chosen_compute_framework_is_not_part_of_identity() -> None:
+    plain = _two_framework_feature()
+    chosen = _two_framework_feature()
+    chosen.chosen_compute_framework = PyArrowTable
+
+    assert plain == chosen
+    assert hash(plain) == hash(chosen)
+    assert plain.similarity_hash(frozenset()) == chosen.similarity_hash(frozenset())
+    assert plain.base_similarity_hash(frozenset()) == chosen.base_similarity_hash(frozenset())
+
+
+def test_copy_keeps_the_chosen_compute_framework() -> None:
+    feature = _two_framework_feature()
+    feature.chosen_compute_framework = PyArrowTable
+
+    assert copy.copy(feature).chosen_compute_framework is PyArrowTable
+
+
+@pytest.mark.parametrize(
+    ("positions", "candidates", "expected"),
+    [
+        ({PyArrowTable: 0, PandasDataFrame: 1}, [PandasDataFrame, PyArrowTable], PyArrowTable),
+        ({PandasDataFrame: 0, PyArrowTable: 1}, [PyArrowTable, PandasDataFrame], PandasDataFrame),
+        ({}, [PyArrowTable, PandasDataFrame], PandasDataFrame),
+        (None, [PyArrowTable, PandasDataFrame], PandasDataFrame),
+        ({PyArrowTable: 0}, [PandasDataFrame, PyArrowTable], PyArrowTable),
+    ],
+    ids=["pa_first", "pd_first", "empty", "none", "unlisted_after_listed"],
+)
+def test_select_deterministic_follows_explicit_positions(
+    positions: dict[type[ComputeFramework], int] | None,
+    candidates: list[type[ComputeFramework]],
+    expected: type[ComputeFramework],
+) -> None:
+    assert ComputeFramework.select_deterministic(candidates, positions) is expected
+
+
+def test_select_deterministic_positions_tie_breaks_by_module_after_name() -> None:
+    module_b, module_a = _same_name_and_qualname_frameworks()
+
+    assert ComputeFramework.select_deterministic({module_b, module_a}, {module_b: 0, module_a: 0}) is module_a
+
+
+def test_select_deterministic_positions_rank_connection_before_name() -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+
+    assert ComputeFramework.select_deterministic([sqlite_fw, PyArrowTable], {sqlite_fw: 0, PyArrowTable: 0}) is (
+        PyArrowTable
+    )
+
+
+def test_framework_rank_key_orders_by_position_then_default() -> None:
+    zulu, alfa, _, bravo = _throwaway_frameworks()
+    key = framework_rank_key({zulu: 0, bravo: 1})
+
+    candidates: list[type[ComputeFramework]] = [alfa, bravo, zulu, PandasDataFrame]
+
+    assert sorted(candidates, key=key) == [zulu, bravo, PandasDataFrame, alfa]
+
+
+def test_framework_rank_key_without_positions_is_the_default_order() -> None:
+    key = framework_rank_key({})
+
+    candidates: list[type[ComputeFramework]] = [PyArrowTable, PandasDataFrame]
+
+    assert sorted(candidates, key=key) == [PandasDataFrame, PyArrowTable]

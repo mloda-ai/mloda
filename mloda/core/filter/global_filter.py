@@ -536,7 +536,7 @@ class GlobalFilter:
             filter.filter_feature.compute_frameworks = set(adopted) if adopted is not None else None
             return True
 
-        # case that the filter feature has an cf -> the pin must be one of the host's allowed frameworks.
+        # A pinned filter must name one of the host's allowed frameworks.
         pin = filter.filter_feature.get_compute_framework()
         return pin in (feat.compute_frameworks or set())
 

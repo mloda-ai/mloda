@@ -1,6 +1,5 @@
-"""ChooseComputeFrameworks as a unit: hard rules a-e, conversion cost, tie order, determinism.
-Graphs are built by hand from real Graph, Feature and Link objects; no run or Engine is involved.
-Default order of the shipped frameworks: PandasDataFrame, PyArrowTable, PythonDictFramework.
+"""ChooseComputeFrameworks as a unit: hard rules, conversion cost, tie order, determinism.
+Graphs are built by hand; no run or Engine is involved.
 """
 
 import time

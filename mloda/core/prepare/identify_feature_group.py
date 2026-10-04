@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
@@ -31,7 +31,8 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
     DeclarationRequirement,
     declaration_requirement_scope,
 )
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader, feature_group_scope
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
@@ -133,7 +134,7 @@ class IdentifyFeatureGroupClass:
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
     _matched_options: dict[type[FeatureGroup], Options]
-    _input_data_matches: dict[type[FeatureGroup], tuple[type[BaseInputData], Any]]
+    _input_data_matches: dict[type[FeatureGroup], tuple[DataAccessReader, Any]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -263,7 +264,7 @@ class IdentifyFeatureGroupClass:
             sources[feature_group] = safe_field(
                 lambda: f"{reader.data_access_name()}: {reader.data_access_identity(access)}",
                 "",
-                field=f"{reader.__name__}.data_access_identity",
+                field=f"{getattr(reader, '__name__', 'reader')}.data_access_identity",
             )
         return {fg: text for fg, text in sources.items() if text}
 
@@ -655,7 +656,7 @@ class IdentifyFeatureGroupClass:
         matched = self._input_data_matches.get(feature_group)
         if matched is original_group.get(RESERVED_READER_OPTION_KEY):
             return None
-        return matched[0] if matched else None
+        return cast("type | None", matched[0]) if matched else None
 
     def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
@@ -741,7 +742,8 @@ class IdentifyFeatureGroupClass:
         Mark-or-contain policy: see call_match_hook.
         """
         options = feature.options._fork()
-        probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
+        with feature_group_scope(feature.feature_group_scope):
+            probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
         # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.
         written = options.group.pop(RESERVED_READER_OPTION_KEY, None)
         if probe.matched:

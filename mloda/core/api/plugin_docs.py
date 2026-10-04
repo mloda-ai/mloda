@@ -201,6 +201,7 @@ def get_feature_group_docs(
                 parametric_subtypes=parametric_subtypes,
                 subtype_support=subtype_support,
                 subtype_error=subtype_error,
+                claim_routes=list(getattr(fg_class, "CLAIM_ROUTES", ())),
             )
         )
 

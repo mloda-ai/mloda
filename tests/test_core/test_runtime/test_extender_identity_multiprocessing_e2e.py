@@ -691,6 +691,38 @@ def _refused_at_stream_run_call(ext: _LifecycleMatrixExtender, tmp_path: Path, m
     return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
 
 
+def _break_engine_setup(mp: pytest.MonkeyPatch) -> None:
+    def broken(self: Any, parallelization_modes: Any, flight_server: Any) -> None:
+        raise RuntimeError("engine setup failed")
+
+    mp.setattr(mloda, "_setup_engine_runner", broken)
+
+
+def _engine_setup_failure_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
+    session = _matrix_session(ext)
+    _break_engine_setup(mp)
+    with pytest.raises(RuntimeError, match="engine setup failed"):
+        session.run(parallelization_modes=_SYNC)
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+
+
+def _engine_setup_failure_at_stream_run_call(
+    ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch
+) -> list[Any]:
+    session = _matrix_session(ext)
+    _break_engine_setup(mp)
+    with pytest.raises(RuntimeError, match="engine setup failed"):
+        session.stream_run(parallelization_modes=_SYNC)
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+
+
+def _refused_at_stream_all_call(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
+    ext.refuse_run_start = True
+    with pytest.raises(RuntimeError, match="run start refused"):
+        mloda.stream_all([Feature(name=_RUN_COMPLETE_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+
+
 def _stream_consumed(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     assert list(_matrix_session(ext).stream_run(parallelization_modes=_SYNC))
     return [*_OK_PLAN, *_ok_run()]
@@ -745,6 +777,9 @@ _MATRIX: dict[str, Any] = {
     "finalizing_failure_stream_closed_early": _finalizing_failure_stream_closed_early,
     "run_start_refusal_batch": _refused_batch,
     "run_start_refusal_at_stream_run_call": _refused_at_stream_run_call,
+    "run_start_refusal_at_stream_all_call": _refused_at_stream_all_call,
+    "engine_setup_failure_batch": _engine_setup_failure_batch,
+    "engine_setup_failure_at_stream_run_call": _engine_setup_failure_at_stream_run_call,
     "stream_consumed": _stream_consumed,
     "stream_all_consumed": _stream_all_consumed,
     "stream_closed_early": _stream_closed_early,

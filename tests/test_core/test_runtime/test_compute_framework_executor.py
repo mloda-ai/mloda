@@ -1503,6 +1503,19 @@ class TestExecutorSealsTheAttachedFramework:
         assert cfw.run_context.run_id == "run-1"
         assert cfw.worker_index is None
 
+    @pytest.mark.parametrize("name", ["run_context", "worker_index", "_run_context_sealed"])
+    def test_attached_framework_rejects_deletion(self, name: str) -> None:
+        cfw = self._attached()
+
+        with pytest.raises(AttributeError):
+            delattr(cfw, name)
+
+        assert cfw.run_context.run_id == "run-1"
+        assert cfw.worker_index is None
+        assert cfw.__dict__["_run_context_sealed"] is True
+        with pytest.raises(AttributeError):
+            cfw.run_context = RunContext(run_id="forged")
+
     @pytest.mark.parametrize("name,value", [("run_context", RunContext(run_id="forged")), ("worker_index", 5)])
     def test_sealed_framework_stays_sealed_after_pickle_round_trip(self, name: str, value: Any) -> None:
         restored = pickle.loads(pickle.dumps(self._attached()))  # nosec B301

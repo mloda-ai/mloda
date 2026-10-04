@@ -138,7 +138,7 @@ class ComputeFramework(ABC):
         # function_extender only by __setstate__, i.e. only on the actual unpickle in the worker.
         self._pending_extender_payload: bytes | None = None
         # Set post-construction so a subclass's fixed __init__ signature isn't broken.
-        # RunContext is internal; hook authors should read run_id/carrier off HookContext instead.
+        # RunContext is exported from mloda.steward for on_run_start/on_run_complete.
         self.run_context: RunContext = RunContext()
         self.worker_index: int | None = None
 
@@ -157,6 +157,12 @@ class ComputeFramework(ABC):
         if name in _SEALED_ATTRS and self.__dict__.get(_SEAL_FLAG):
             raise AttributeError(f"{name!r} cannot be reassigned on a framework attached to a run")
         object.__setattr__(self, name, value)
+
+    @final
+    def __delattr__(self, name: str) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError(f"{name!r} cannot be deleted on a framework attached to a run")
+        object.__delattr__(self, name)
 
     @final
     def __setstate__(self, state: dict[str, Any]) -> None:
@@ -746,7 +752,7 @@ class ComputeFramework(ABC):
         finally:
             marker.active = None
             current_input_data_load_marker.reset(token)
-            if stamped and prior_marker is not None:
+            if stamped and prior_marker is not None and prior_marker.active is not None:
                 features._load_marker = prior_marker
 
     @final

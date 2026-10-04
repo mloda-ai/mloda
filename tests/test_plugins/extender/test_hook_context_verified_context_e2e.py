@@ -278,6 +278,11 @@ class _CalculateGate(_MatchedGateBase):
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
 
+class _CalculateGatePassingRunStart(_CalculateGate):
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.run_starts.append((plan.principal, run.principal))
+
+
 class TestRunStartIdentity:
     def test_calculate_hook_context_carries_the_run_identity_when_it_differs_from_the_plan(self) -> None:
         capture = _ContextCapturingExtender()
@@ -345,6 +350,18 @@ class TestFailClosedRunStartIdentityRefusal:
 
         assert capture.captured is None
         assert events.events == [("run_complete:failed:GateBypassError", "hash-run")]
+
+    def test_another_gate_overriding_on_run_start_does_not_satisfy_the_matched_gate(self) -> None:
+        capture = _ContextCapturingExtender()
+        other_gate = _CalculateGatePassingRunStart()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={_MatchedGateWithoutRunStart(), other_gate, capture})
+
+        with pytest.raises(GateBypassError):
+            with verified_context(**_RUN_SCOPE):
+                session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is None
 
     def test_the_refusal_also_raises_at_the_stream_run_call(self) -> None:
         with verified_context(**_PREPARE_SCOPE):

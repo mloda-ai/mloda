@@ -206,6 +206,17 @@ class TestHooksRunInAscendingPriorityOrder:
 
         assert order == [f"p{p}" for p in sorted(priorities)]
 
+    @pytest.mark.parametrize("hook", ["plan_start", "plan_complete", "run_start", "run_complete"])
+    def test_every_hook_visits_gates_before_other_extenders_regardless_of_priority(self, hook: str) -> None:
+        log: list[tuple[Any, ...]] = []
+        late_gate = _Recorder("gate", log, priority=900)
+        late_gate.never_fall_back = True
+        early = _Recorder("early", log, priority=1)
+        session = _prepare({early, late_gate})
+        session.run(parallelization_modes=_SYNC)
+
+        assert [e[0] for e in log if e[1] == hook] == ["gate", "early"]
+
     def test_an_extender_wrapping_no_hook_still_gets_every_lifecycle_hook(self) -> None:
         seen: list[str] = []
 

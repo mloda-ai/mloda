@@ -30,10 +30,12 @@ class RunContext:
         if self.carrier is not None:
             object.__setattr__(self, "carrier", _frozen_dict(self.carrier))
         if self.plugin_versions is not None:
-            object.__setattr__(self, "plugin_versions", dict(self.plugin_versions))
+            object.__setattr__(self, "plugin_versions", _frozen_dict(dict(self.plugin_versions)))
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         for name, value in state.items():
             object.__setattr__(self, name, value)
         if self.carrier is not None:
             object.__setattr__(self, "carrier", _frozen_dict(self.carrier))
+        if self.plugin_versions is not None:
+            object.__setattr__(self, "plugin_versions", _frozen_dict(dict(self.plugin_versions)))

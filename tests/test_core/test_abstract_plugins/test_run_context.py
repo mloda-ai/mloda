@@ -159,6 +159,19 @@ class TestRunContextCarrierReadOnly:
             assert restored.carrier == {"k": "v"}
             assert restored == ctx
 
+    @pytest.mark.parametrize("variant", ["constructed", "replace_unchanged", "replace_new", "pickle"])
+    def test_plugin_versions_is_a_read_only_dict(self, variant: str) -> None:
+        if variant == "constructed":
+            versions = RunContext(plugin_versions={"m": "1"}).plugin_versions
+        elif variant == "replace_unchanged":
+            versions = dataclasses.replace(RunContext(plugin_versions={"m": "1"})).plugin_versions
+        elif variant == "replace_new":
+            versions = dataclasses.replace(RunContext(), plugin_versions={"m": "1"}).plugin_versions
+        else:
+            versions = pickle.loads(pickle.dumps(RunContext(plugin_versions={"m": "1"}))).plugin_versions  # nosec B301
+        self._assert_read_only(versions)
+        assert versions == {"m": "1"}
+
     def test_stays_a_dict_and_serializes_to_json(self) -> None:
         ctx = RunContext(carrier={"k": "v"})
 

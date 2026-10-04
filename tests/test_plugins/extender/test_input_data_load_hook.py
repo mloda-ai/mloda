@@ -1288,6 +1288,18 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
             assert result == [1, 2, 3]
             assert _CountingReader.loads == 1
 
+    def test_inactive_prior_marker_is_not_restored_over_a_gated_calculation_marker(self) -> None:
+        leaked: list[FeatureSet] = []
+        _run_calculate(_framework_for("non_gate"), _threaded_load_feature_group("late", leaked))
+        gated = _framework_for("gate")
+        gated.run_calculate_feature(_threaded_load_feature_group("late", []), leaked[0])
+        _CountingReader.loads = 0
+
+        result, error = _load_in_thread(leaked[0])
+
+        assert isinstance(error, GateBypassError)
+        assert _CountingReader.loads == 0
+
     @pytest.mark.parametrize("kind", ["gate", "non_gate", "none"])
     def test_pickled_feature_set_loaded_outside_the_scope(self, kind: str) -> None:
         leaked: list[FeatureSet] = []

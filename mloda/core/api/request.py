@@ -641,10 +641,9 @@ class mlodaAPI:
     ) -> Generator[Any, None, None]:
         """Eager setup for ``stream_run``/``stream_all``; no yield, so carrier/verified_context read at call time."""
         _api_data = api_data if api_data is not None else self.api_data
-        runner = self._setup_engine_runner(parallelization_modes, flight_server)
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
         stream = self._stream_run_results(
-            runner, parallelization_modes, _api_data, artifacts, run_context, with_step_uuids
+            flight_server, parallelization_modes, _api_data, artifacts, run_context, with_step_uuids
         )
         # Primes the generator so a refusal at run start raises here, not on first iteration.
         next(stream)
@@ -662,7 +661,9 @@ class mlodaAPI:
         )
         matched_hook = self.engine.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED) if self.engine else None
         if identity_changed and matched_hook is not None and matched_hook.never_fall_back:
-            gates = [e for e in self._extenders if e.never_fall_back]
+            gates = [
+                e for e in self._extenders if e.never_fall_back and ExtenderHook.FEATURE_GROUP_MATCHED in e.wraps()
+            ]
             if not any(type(gate).on_run_start is not Extender.on_run_start for gate in gates):
                 raise GateBypassError(
                     "The run identity differs from the plan identity and no never_fall_back extender "
@@ -677,7 +678,7 @@ class mlodaAPI:
 
     def _stream_run_results(
         self,
-        runner: ExecutionOrchestrator,
+        flight_server: Any | None,
         parallelization_modes: set[ParallelizationMode],
         api_data: dict[str, dict[str, Any]] | None,
         artifacts: dict[str, Any] | None,
@@ -685,11 +686,12 @@ class mlodaAPI:
         with_step_uuids: bool,
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
-        # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
-        self.runner = runner
         outcome = LifecycleOutcome("succeeded")
         try:
             self._start_run(run_context)
+            runner = self._setup_engine_runner(parallelization_modes, flight_server)
+            # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
+            self.runner = runner
             yield None
             try:
                 self._enter_runner_context(

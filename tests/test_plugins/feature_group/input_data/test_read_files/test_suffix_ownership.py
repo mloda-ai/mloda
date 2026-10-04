@@ -4,6 +4,9 @@ The ``document_suffixes`` per-feature option overrides this default, letting Rea
 claim specific structured suffixes while ReadFile auto-excludes them.
 """
 
+import ast
+import importlib
+import inspect
 import os
 import tempfile
 from typing import Any
@@ -195,3 +198,55 @@ class TestStructuredSuffixesAttribute:
 
     def test_text_not_in_structured(self) -> None:
         assert ".text" not in ReadFile._structured_suffixes
+
+
+def _suffixes() -> Any:
+    """Imported lazily so a missing module fails these tests, not the collection of the whole file."""
+    return importlib.import_module("mloda_plugins.feature_group.input_data.file_suffixes")
+
+
+class TestSharedSuffixConstants:
+    """file_suffixes holds the single definition of each format's suffixes and their union."""
+
+    def test_per_format_constants(self) -> None:
+        assert _suffixes().CSV_SUFFIXES == (".csv", ".CSV")
+        assert _suffixes().PARQUET_SUFFIXES == (".parquet", ".PARQUET", ".pqt", ".PQT")
+        assert _suffixes().JSON_SUFFIXES == (".json", ".JSON")
+        assert _suffixes().FEATHER_SUFFIXES == (".feather",)
+        assert _suffixes().ORC_SUFFIXES == (".orc", ".ORC")
+
+    def test_structured_suffixes_is_the_union_of_the_formats(self) -> None:
+        union = frozenset(
+            _suffixes().CSV_SUFFIXES
+            + _suffixes().PARQUET_SUFFIXES
+            + _suffixes().JSON_SUFFIXES
+            + _suffixes().FEATHER_SUFFIXES
+            + _suffixes().ORC_SUFFIXES
+        )
+        assert isinstance(_suffixes().STRUCTURED_SUFFIXES, frozenset)
+        assert _suffixes().STRUCTURED_SUFFIXES == union
+
+    def test_structured_suffixes_equals_read_file_structured_suffixes(self) -> None:
+        assert _suffixes().STRUCTURED_SUFFIXES == ReadFile._structured_suffixes
+
+
+class TestReadDocumentIndependentOfReadFile:
+    """ReadDocument reads the shared constant and does not import the old ReadFile module."""
+
+    def test_read_document_source_does_not_import_read_file(self) -> None:
+        tree = ast.parse(inspect.getsource(importlib.import_module(ReadDocument.__module__)))
+        imported: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                imported.append(node.module)
+                imported.extend(f"{node.module}.{alias.name}" for alias in node.names)
+            elif isinstance(node, ast.Import):
+                imported.extend(alias.name for alias in node.names)
+
+        assert not [name for name in imported if name.split(".")[-1] == "read_file"]
+        assert "ReadFile" not in {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+
+    def test_read_document_skips_every_structured_suffix(self) -> None:
+        for suffix in sorted(_suffixes().STRUCTURED_SUFFIXES):
+            assert ReadDocument._is_structured_suffix(f"data{suffix}", frozenset()) is True
+            assert ReadDocument._is_structured_suffix(f"data{suffix}", frozenset({suffix})) is False

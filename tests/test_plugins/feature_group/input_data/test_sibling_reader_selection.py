@@ -6,7 +6,7 @@ class name (``BaseInputData.data_access_name()``, i.e. ``cls.__name__``). The ke
 may also be the reader class itself. The matched ``(ReaderClass, data_access)``
 pair is written to the matcher's options fork under the reserved ``"BaseInputData"`` key, moved onto
 ``Feature.input_data_match`` and consumed by ``init_reader`` at load time. For non-file sources (e.g. HTTP), subclassing
-``ReadFile`` and overriding ``match_subclass_data_access`` plus ``load_data`` is
+a reader family and overriding ``match_subclass_data_access`` plus ``load_data`` is
 the sanctioned pattern; ``suffix()`` is inert on that path.
 
 Isolation: test readers defined here are discovered process-wide via
@@ -44,7 +44,26 @@ _URL_FEATURE_NAME = "sibling_sel_565_url_value"
 _URL_FEATURE_VALUES = [11, 22, 33]
 
 
-class SiblingSel565ReaderA(ReadFile):
+class SiblingSelFamily(BaseInputData):
+    """Test-local reader family base; it overrides no load_data, so it never classifies as final."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return None
+
+
+class SiblingSelFG(FeatureGroup):
+    """Root group fronting SiblingSelFamily; matches only what a marker-gated reader of the family accepts."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return SiblingSelFamily()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class SiblingSel565ReaderA(SiblingSelFamily):
     """Final reader (wholesale load_data override) that only matches its own marker access string."""
 
     @classmethod
@@ -58,7 +77,7 @@ class SiblingSel565ReaderA(ReadFile):
         return {"sibling_sel_565_a": [1]}
 
 
-class SiblingSel565ReaderB(ReadFile):
+class SiblingSel565ReaderB(SiblingSelFamily):
     """Sibling of SiblingSel565ReaderA; only matches its own marker access string."""
 
     @classmethod
@@ -126,7 +145,7 @@ _TWIN_ALIAS = "sibling_sel_1777_twin_alias"
 _TWIN_MARKER = "sibling_sel_1777_twin_marker"
 
 
-class SiblingSel1777ReplParent(ReadFile):
+class SiblingSel1777ReplParent(SiblingSelFamily):
     """Final aliased parent accepting only its unique marker."""
 
     @classmethod
@@ -150,7 +169,7 @@ class SiblingSel1777ReplChild(SiblingSel1777ReplParent):
         return {"sibling_sel_1777_repl_child": [1]}
 
 
-class SiblingSel1777TwinA(ReadFile):
+class SiblingSel1777TwinA(SiblingSelFamily):
     """Final reader sharing the twin alias."""
 
     @classmethod
@@ -166,7 +185,7 @@ class SiblingSel1777TwinA(ReadFile):
         return {"sibling_sel_1777_twin_a": [1]}
 
 
-class SiblingSel1777TwinB(ReadFile):
+class SiblingSel1777TwinB(SiblingSelFamily):
     """Unrelated final reader sharing the twin alias."""
 
     @classmethod
@@ -188,7 +207,7 @@ _VALUE_FEATURE = "sibling_sel_1777_value_feat"
 
 
 class SiblingSel1777ValueFG(FeatureGroup):
-    """Root group fronting ReadFile; the required strict mapped key keeps it from matching other tests' features."""
+    """Root group fronting SiblingSelFamily; the required strict mapped key keeps it from matching other tests' features."""
 
     PROPERTY_MAPPING = {
         _VALUE_KEY: PropertySpec("Mode", allowed_values={"good": "Good mode"}, context=True, strict_validation=True),
@@ -196,7 +215,7 @@ class SiblingSel1777ValueFG(FeatureGroup):
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return ReadFile()
+        return SiblingSelFamily()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -231,10 +250,10 @@ class TestPinnedReaderConflict1777:
                 SiblingSel565ReaderB.__name__: "sibling_sel_1777_unknown",
             },
         )
-        accessible: FeatureGroupEnvironmentMapping = {ReadFileFeature: {PyArrowTable}}
+        accessible: FeatureGroupEnvironmentMapping = {SiblingSelFG: {PyArrowTable}}
         result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None, None)
         assert result.identified == {}
-        elimination = result.eliminations.get(ReadFileFeature)
+        elimination = result.eliminations.get(SiblingSelFG)
         assert elimination is not None
         assert "SiblingSel565ReaderA" in elimination.reason
 
@@ -296,10 +315,10 @@ class TestPinnedReaderConflict1777:
             name="sibling_sel_1777_feat",
             options={SiblingSel565ReaderA.__name__: _ACCESS_A, SiblingSel565ReaderB.__name__: _ACCESS_B},
         )
-        accessible: FeatureGroupEnvironmentMapping = {ReadFileFeature: {PyArrowTable}}
+        accessible: FeatureGroupEnvironmentMapping = {SiblingSelFG: {PyArrowTable}}
         result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None, None)
         assert result.identified == {}
-        elimination = result.eliminations.get(ReadFileFeature)
+        elimination = result.eliminations.get(SiblingSelFG)
         assert elimination is not None
         assert elimination.stage == "matcher_error"
         assert "SiblingSel565ReaderA" in elimination.reason
@@ -440,7 +459,7 @@ def _ambiguous_match(data_access: Any) -> Any:
     return data_access if data_access == _AMBIG_MARKER else None
 
 
-class SiblingSel1757ReaderA(ReadFile):
+class SiblingSel1757ReaderA(SiblingSelFamily):
     """Final reader accepting only the unique ambiguity marker."""
 
     @classmethod
@@ -452,7 +471,7 @@ class SiblingSel1757ReaderA(ReadFile):
         return {"sibling_sel_1757_a": [1]}
 
 
-class SiblingSel1757ReaderB(ReadFile):
+class SiblingSel1757ReaderB(SiblingSelFamily):
     """Sibling accepting the same unique ambiguity marker."""
 
     @classmethod
@@ -470,7 +489,7 @@ class TestAmbiguousReaderMatch1757:
     def test_two_acceptors_raise_naming_both_and_pin_hint(self) -> None:
         collection = DataAccessCollection(files={_AMBIG_MARKER})
         with pytest.raises(ValueError) as excinfo:
-            ReadFile.match_data_access(["sibling_sel_1757_feat"], collection, options=Options())
+            SiblingSelFamily.match_data_access(["sibling_sel_1757_feat"], collection, options=Options())
         message = str(excinfo.value)
         assert "SiblingSel1757ReaderA" in message
         assert "SiblingSel1757ReaderB" in message
@@ -482,7 +501,7 @@ class TestAmbiguousReaderMatch1757:
     def test_pinned_reader_still_resolves_via_feature_scope(self) -> None:
         collection = DataAccessCollection(files={_AMBIG_MARKER})
         options = Options(group={SiblingSel1757ReaderB.__name__: _AMBIG_MARKER})
-        assert ReadFile().matches("sibling_sel_1757_feat", options, collection) is True
+        assert SiblingSelFamily().matches("sibling_sel_1757_feat", options, collection) is True
         assert options.get("BaseInputData") == (SiblingSel1757ReaderB, _AMBIG_MARKER)
 
 
@@ -497,7 +516,7 @@ def _accept(data_access: Any, marker: str, result: Any) -> Any:
     return None
 
 
-class SiblingSel1757SameParent(ReadFile):
+class SiblingSel1757SameParent(SiblingSelFamily):
     """Final parent reader accepting only the unique same-access marker."""
 
     @classmethod
@@ -517,7 +536,7 @@ class SiblingSel1757SameChild(SiblingSel1757SameParent):
         return {"sibling_sel_1757_same_child": [1]}
 
 
-class SiblingSel1757DiffParent(ReadFile):
+class SiblingSel1757DiffParent(SiblingSelFamily):
     """Final parent reader accepting only the unique different-access marker."""
 
     @classmethod
@@ -541,7 +560,7 @@ class SiblingSel1757DiffChild(SiblingSel1757DiffParent):
         return {"sibling_sel_1757_diff_child": [1]}
 
 
-class SiblingSel1757AliasPlain(ReadFile):
+class SiblingSel1757AliasPlain(SiblingSelFamily):
     """Final reader accepting only the unique alias marker."""
 
     @classmethod
@@ -553,7 +572,7 @@ class SiblingSel1757AliasPlain(ReadFile):
         return {"sibling_sel_1757_alias_plain": [1]}
 
 
-class SiblingSel1757Aliased(ReadFile):
+class SiblingSel1757Aliased(SiblingSelFamily):
     """Final reader overriding data_access_name() with an alias."""
 
     @classmethod
@@ -574,13 +593,13 @@ class TestSubclassPreferenceAndAlias1757:
 
     def test_child_wins_over_parent_for_the_same_access(self) -> None:
         collection = DataAccessCollection(files={_SAME_MARKER})
-        matched = ReadFile.match_data_access(["sibling_sel_1757_same_feat"], collection, options=Options())
+        matched = SiblingSelFamily.match_data_access(["sibling_sel_1757_same_feat"], collection, options=Options())
         assert matched == (SiblingSel1757SameChild, _SAME_MARKER)
 
     def test_child_and_parent_with_different_accesses_raise_naming_both(self) -> None:
         collection = DataAccessCollection(files={_DIFF_MARKER})
         with pytest.raises(ValueError) as excinfo:
-            ReadFile.match_data_access(["sibling_sel_1757_diff_feat"], collection, options=Options())
+            SiblingSelFamily.match_data_access(["sibling_sel_1757_diff_feat"], collection, options=Options())
         message = str(excinfo.value)
         assert "SiblingSel1757DiffParent" in message
         assert "SiblingSel1757DiffChild" in message
@@ -588,7 +607,7 @@ class TestSubclassPreferenceAndAlias1757:
     def test_aliased_sibling_is_named_and_hinted_by_its_alias(self) -> None:
         collection = DataAccessCollection(files={_ALIAS_MARKER})
         with pytest.raises(ValueError) as excinfo:
-            ReadFile.match_data_access(["sibling_sel_1757_alias_feat"], collection, options=Options())
+            SiblingSelFamily.match_data_access(["sibling_sel_1757_alias_feat"], collection, options=Options())
         message = str(excinfo.value)
         assert "sibling_sel_1757_alias_name" in message
         assert "SiblingSel1757Aliased" not in message

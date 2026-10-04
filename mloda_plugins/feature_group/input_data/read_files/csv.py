@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.provider import FeatureSet
+from mloda_plugins.feature_group.input_data.file_suffixes import CSV_SUFFIXES
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 if TYPE_CHECKING:
@@ -149,10 +150,7 @@ class CsvReader(ReadFile):
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
-        return (
-            ".csv",
-            ".CSV",
-        )
+        return CSV_SUFFIXES
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

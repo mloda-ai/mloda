@@ -11,7 +11,7 @@ from mloda.provider import (
     record_match_rejection,
 )
 from mloda.user import DataAccessCollection, Options
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda_plugins.feature_group.input_data.file_suffixes import STRUCTURED_SUFFIXES
 
 
 class ReadDocument(BaseInputData):
@@ -195,7 +195,7 @@ class ReadDocument(BaseInputData):
     @classmethod
     def _is_structured_suffix(cls, filename: str, document_suffixes: frozenset[str]) -> bool:
         """Return True if filename has a structured suffix not overridden by document_suffixes."""
-        for s in ReadFile._structured_suffixes:
+        for s in STRUCTURED_SUFFIXES:
             if filename.endswith(s) and s not in document_suffixes:
                 return True
         return False

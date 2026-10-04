@@ -10,6 +10,7 @@ import pytest
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
 class TestColumnToFileHint:
@@ -74,7 +75,7 @@ class TestColumnToFileHint:
         assert result == "a.csv"
 
     def test_conflict_in_batch_raises(self) -> None:
-        class TestRF(ReadFile):
+        class TestRF(SuffixFileReader):
             @classmethod
             def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "val"]
@@ -92,7 +93,7 @@ class TestColumnToFileHint:
         assert "pinned to different files" in str(excinfo.value)
 
     def test_mixed_batch_raises(self) -> None:
-        class TestRF(ReadFile):
+        class TestRF(SuffixFileReader):
             @classmethod
             def get_column_names(cls, file_name: str) -> list[str]:
                 return ["id", "unpinned_col"]

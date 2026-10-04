@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any
 from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
 from mloda.user import DataType
+from mloda_plugins.feature_group.input_data.file_suffixes import FEATHER_SUFFIXES
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 if TYPE_CHECKING:
@@ -102,10 +103,7 @@ class FeatherReader(ReadFile):
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
-        return (
-            ".feather",
-            ".feather",
-        )
+        return FEATHER_SUFFIXES
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

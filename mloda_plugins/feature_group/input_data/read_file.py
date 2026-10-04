@@ -12,6 +12,7 @@ from mloda.provider import (
 )
 from mloda.user import DataType
 from mloda.user import Options
+from mloda_plugins.feature_group.input_data.file_suffixes import STRUCTURED_SUFFIXES
 
 
 class ReadFile(BaseInputData):
@@ -64,21 +65,7 @@ class ReadFile(BaseInputData):
         ),
     }
 
-    _structured_suffixes: "frozenset[str]" = frozenset(
-        {
-            ".csv",
-            ".CSV",
-            ".json",
-            ".JSON",
-            ".parquet",
-            ".PARQUET",
-            ".pqt",
-            ".PQT",
-            ".orc",
-            ".ORC",
-            ".feather",
-        }
-    )
+    _structured_suffixes: "frozenset[str]" = STRUCTURED_SUFFIXES
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

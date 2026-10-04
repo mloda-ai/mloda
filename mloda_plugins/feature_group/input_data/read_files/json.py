@@ -3,6 +3,7 @@ from typing import Any
 from mloda.core.optional_dependency import require
 from mloda.provider import FeatureSet
 from mloda.user import DataType
+from mloda_plugins.feature_group.input_data.file_suffixes import JSON_SUFFIXES
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 
@@ -117,10 +118,7 @@ class JsonReader(ReadFile):
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
-        return (
-            ".json",
-            ".JSON",
-        )
+        return JSON_SUFFIXES
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:

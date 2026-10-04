@@ -34,7 +34,7 @@ from mloda.provider import BaseInputData, ComputeFramework, FeatureGroup, Featur
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
 FEATURE_NAME_REJ727 = "rej727_column"
@@ -46,7 +46,7 @@ DB_MARKER_KEY_REJ727 = "rej727db_marker"
 DB_ACCESS_REJ727: dict[str, Any] = {DB_MARKER_KEY_REJ727: True}
 
 
-class Rej727ReaderFamily(ReadFile):
+class Rej727ReaderFamily(SuffixFileReader):
     """Family base of this module's readers; it overrides nothing, so it never classifies as final."""
 
 

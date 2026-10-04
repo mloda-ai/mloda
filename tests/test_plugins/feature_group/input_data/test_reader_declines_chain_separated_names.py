@@ -64,6 +64,7 @@ CHAINDECLINE_DB_ABORT_MARKER_KEY = "chaindecline_db_abort_marker"
 CHAINDECLINE_DB_ABORT_ACCESS: dict[str, Any] = {CHAINDECLINE_DB_ABORT_MARKER_KEY: True}
 CHAINDECLINE_DB_ABORT_PLAIN_FEATURE = "chaindecline_db_abort_plain_column"
 
+CHAINDECLINE_GENERIC_SUFFIX = ".chaindeclinegeneric"
 CHAINDECLINE_READDOC_SUFFIX = ".chaindeclinereaddoc"
 CHAINDECLINE_READDOC_UNOWNED_SUFFIX = ".chaindeclinereaddocunowned"
 
@@ -146,6 +147,44 @@ class ChainDeclineTypeErrorReader(ReadFile):
     @classmethod
     def get_column_names(cls, file_name: str) -> list[str]:
         raise TypeError("chaindecline code defect")
+
+
+class ChainDeclineGenericPinReader(BaseInputData):
+    """Never a final reader; routes a pinned request through BaseInputData._resolve_pinned_file only."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        return (CHAINDECLINE_GENERIC_SUFFIX,)
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        if isinstance(data_access, DataAccessCollection) and cls._pin_applies(data_access, feature_names):
+            return cls._resolve_pinned_file(data_access, feature_names)
+        return None
+
+
+class ChainDeclineGenericAbortReader(ChainDeclineGenericPinReader):
+    """Never a final reader; validate_columns raises a marked NotImplementedError."""
+
+    @classmethod
+    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
+        raise escalate_match_abort(NotImplementedError("chaindecline generic marked abort"))
+
+
+class ChainDeclineGenericTypeErrorReader(ChainDeclineGenericPinReader):
+    """Never a final reader; validate_columns raises a plain TypeError."""
+
+    @classmethod
+    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
+        raise TypeError("chaindecline generic code defect")
+
+
+class ChainDeclineGenericAbortSuffixReader(ChainDeclineGenericPinReader):
+    """Never a final reader; suffix() raises a marked NotImplementedError."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        raise escalate_match_abort(NotImplementedError("chaindecline generic suffix abort"))
 
 
 class ChainDeclineDocReader(ReadDocument):
@@ -474,6 +513,47 @@ class TestMarkedAbortsAndCodeDefectsPropagate:
 
         with pytest.raises(NotImplementedError) as excinfo:
             ChainDeclineAbortNotImplementedReader._resolve_pinned_file(dac, [CHAINDECLINE_ABORT_PLAIN_FEATURE])
+
+        assert is_match_abort(excinfo.value)
+
+
+class TestBaseInputDataPinnedResolutionPropagation:
+    """BaseInputData's pinned resolution exempts separator names and never contains marked aborts or defects."""
+
+    def test_pinned_chain_shaped_name_resolves_via_the_pin(self) -> None:
+        path = f"pinned{CHAINDECLINE_GENERIC_SUFFIX}"
+        dac = DataAccessCollection(
+            files={"chaindecline_generic_handle": path},
+            column_to_file={CHAINDECLINE_CHAIN_FEATURE: "chaindecline_generic_handle"},
+        )
+
+        assert ChainDeclineGenericPinReader._resolve_pinned_file(dac, [CHAINDECLINE_CHAIN_FEATURE]) == path
+        matched = ChainDeclineGenericPinReader.match_subclass_data_access(dac, [CHAINDECLINE_CHAIN_FEATURE], Options())
+        assert matched == path
+
+    def test_marked_abort_from_validate_columns_reraises_on_the_pinned_path(self) -> None:
+        dac = DataAccessCollection(
+            files={"chaindecline_generic_abort_handle": f"pinned{CHAINDECLINE_GENERIC_SUFFIX}"},
+            column_to_file={CHAINDECLINE_ABORT_PLAIN_FEATURE: "chaindecline_generic_abort_handle"},
+        )
+
+        with pytest.raises(NotImplementedError) as excinfo:
+            ChainDeclineGenericAbortReader._resolve_pinned_file(dac, [CHAINDECLINE_ABORT_PLAIN_FEATURE])
+
+        assert is_match_abort(excinfo.value)
+
+    def test_type_error_from_validate_columns_reraises_on_the_pinned_path(self) -> None:
+        dac = DataAccessCollection(
+            files={"chaindecline_generic_type_handle": f"pinned{CHAINDECLINE_GENERIC_SUFFIX}"},
+            column_to_file={CHAINDECLINE_ABORT_PLAIN_FEATURE: "chaindecline_generic_type_handle"},
+        )
+
+        with pytest.raises(TypeError):
+            ChainDeclineGenericTypeErrorReader._resolve_pinned_file(dac, [CHAINDECLINE_ABORT_PLAIN_FEATURE])
+
+    def test_marked_abort_from_suffix_reraises_instead_of_reading_as_no_suffix(self) -> None:
+        with pytest.raises(NotImplementedError) as excinfo:
+            ChainDeclineGenericAbortSuffixReader._matches_suffix("any.file")
 
         assert is_match_abort(excinfo.value)
 

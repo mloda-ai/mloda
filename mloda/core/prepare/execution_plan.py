@@ -831,14 +831,6 @@ Available join types:
                     else:
                         same_framework_entries.append((parent_node_property.feature_group_class, parent))
 
-                # Group entries by transitive linkage: same feature-group class (unless split across
-                # unrelated root steps), one entry's own class a subclass (or superclass) of the other's
-                # (catches a case-override hop whose parent lost the JoinStep's own uuid to a same-role sibling,
-                # see `_case_override_beats_nearer_wrong_framework_left`, without also bridging two entries that
-                # merely share an unrelated common ancestor via some third join's declared side), or
-                # `_parents_linked_by_join`. A subclass pairing must additionally share genuine graph ancestry
-                # unless it is join-served, so two plain hops that merely subclass one another over otherwise
-                # unrelated roots are not merged.
                 def _conflicting_variants(parent_a: UUID, parent_b: UUID) -> tuple[Feature, Feature] | None:
                     """The two same-name parent features of one consumer member that differ in data type or options."""
                     for member_uuid in ep.get_uuids():
@@ -853,6 +845,14 @@ Available join types:
                                 return feature_a, feature_b
                     return None
 
+                # Group entries by transitive linkage: same feature-group class (unless split across
+                # unrelated root steps), one entry's own class a subclass (or superclass) of the other's
+                # (catches a case-override hop whose parent lost the JoinStep's own uuid to a same-role sibling,
+                # see `_case_override_beats_nearer_wrong_framework_left`, without also bridging two entries that
+                # merely share an unrelated common ancestor via some third join's declared side), or
+                # `_parents_linked_by_join`. A subclass pairing must additionally share genuine graph ancestry
+                # unless it is join-served, so two plain hops that merely subclass one another over otherwise
+                # unrelated roots are not merged.
                 def _entries_linked(
                     entry_a: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],
                     entry_b: tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID],

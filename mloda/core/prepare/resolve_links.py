@@ -216,10 +216,10 @@ class ResolveLinks:
                 if link in already_joined:
                     continue
 
-                for link_id in link_uuids:
-                    if uuid == link_id:
-                        queue_with_link.append(link)
-                        already_joined.add(link)
+                # Schedule before the first consumer or descendant of one, so a hop binding is not overwritten later.
+                if uuid in link_uuids or self.graph.parent_to_children_mapping.get(uuid, set()) & set(link_uuids):
+                    queue_with_link.append(link)
+                    already_joined.add(link)
 
             queue_with_link.append(uuid)
 

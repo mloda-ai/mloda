@@ -343,3 +343,77 @@ def test_a_consumer_below_a_link_child_reads_the_joined_values() -> None:
 
     values = [sorted(result[DescLinkGrandchild.get_class_name()]) for result in results]
     assert values == [[22, 44, 66]]
+
+
+class TwoPathP(FeatureGroup):
+    """PyArrow consumer of root A only."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.multiply(data.column("mlg_a"), 100))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TwoPathQ(FeatureGroup):
+    """PyArrow link child of roots A and B."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a"), Feature("mlg_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data.column("mlg_a"), data.column("mlg_b")))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TwoPathC(FeatureGroup):
+    """Pandas-only consumer reaching A through P and through the A-B link child Q."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("TwoPathP"), Feature("TwoPathQ")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["TwoPathP"] + data["TwoPathQ"]
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+@pytest.mark.parametrize("extra_request", [[], ["mlg_a"]])
+@pytest.mark.parametrize("swap_link_sides", [False, True])
+def test_a_consumer_reaching_a_link_root_by_two_paths_is_correct_or_rejected_at_plan_time(
+    extra_request: list[str], swap_link_sides: bool
+) -> None:
+    """Guard: outcome depends on set order, so only plan-time ValueError or correct values are accepted."""
+    left, right = (MultiLinkRootBSame, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBSame)
+    kwargs: dict[str, Any] = {
+        "links": {Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "parallelization_modes": {ParallelizationMode.SYNC},
+        "plugin_collector": PluginCollector.enabled_feature_groups(
+            {MultiLinkRootA, MultiLinkRootBSame, TwoPathP, TwoPathQ, TwoPathC}
+        ),
+    }
+    features: list[Feature | str] = [Feature(TwoPathC.get_class_name()), *extra_request]
+
+    try:
+        session = mloda.prepare(features, **kwargs)
+    except ValueError:
+        return
+
+    results = session.run()
+
+    values = [sorted(result[TwoPathC.get_class_name()]) for result in results if TwoPathC.get_class_name() in result]
+    assert values == [[111, 222, 333]]

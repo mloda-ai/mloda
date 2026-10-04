@@ -502,12 +502,27 @@ class ExecutionPlan:
             for uuid in uuids:
                 producer_of[uuid] = index
 
+        member_uuids = {f.uuid: f for f in features}
+
         def direct_parents(feature: Feature) -> list[UUID]:
             ancestors = parent_to_children_mapping.get(feature.uuid, set())
             direct = ancestors - {p for a in ancestors for p in parent_to_children_mapping.get(a, set())}
-            return [uuid for uuid in direct if uuid in producer_of]
+            return sorted(uuid for uuid in direct if uuid in producer_of)
+
+        def same_group_ancestors(feature: Feature) -> list[Feature]:
+            ancestors = parent_to_children_mapping.get(feature.uuid, set())
+            return [member_uuids[u] for u in sorted(ancestors) if u in member_uuids]
+
+        def effective_parents(feature: Feature) -> list[UUID]:
+            found = set(direct_parents(feature))
+            for ancestor in same_group_ancestors(feature):
+                found.update(direct_parents(ancestor))
+            return sorted(found)
+
+        read_names: set[str] = set()
 
         def conflicts(parents_a: list[UUID], parents_b: list[UUID]) -> bool:
+            found = False
             for a in parents_a:
                 for b in parents_b:
                     if (
@@ -516,18 +531,37 @@ class ExecutionPlan:
                     ):
                         continue
                     if self._variant_conflict(nodes[a].feature, nodes[b].feature) is not None:
-                        return True
-            return False
+                        read_names.add(str(nodes[a].feature.name))
+                        found = True
+            return found
 
         buckets: list[list[tuple[Feature, list[UUID]]]] = []
-        for feature in sorted(features, key=lambda f: (str(f.name), str(f.uuid))):
-            parents = direct_parents(feature)
-            for bucket in buckets:
+        bucket_of: dict[UUID, int] = {}
+        ordered = sorted(features, key=lambda f: (str(f.name), str(f.data_type), str(f.options), str(f.uuid)))
+        for feature in ordered:
+            parents = effective_parents(feature)
+            for index, bucket in enumerate(buckets):
                 if not any(conflicts(parents, other) for _, other in bucket):
                     bucket.append((feature, parents))
+                    bucket_of[feature.uuid] = index
                     break
             else:
+                bucket_of[feature.uuid] = len(buckets)
                 buckets.append([(feature, parents)])
+        if len(buckets) > 1:
+            blocked = sorted(
+                str(f.name)
+                for f in features
+                if not parent_to_children_mapping.get(f.uuid)
+                or any(bucket_of[a.uuid] != bucket_of[f.uuid] for a in same_group_ancestors(f))
+            )
+            if blocked:
+                group = format_feature_group_class(nodes[ordered[0].uuid].feature_group_class)
+                raise ValueError(
+                    f"'{group}' reads input {sorted(read_names)} in differing variants (data type or options), "
+                    f"so its step cannot be split: members {blocked} serve every feature. "
+                    "Align the options of the differing requests or request the features in separate runs."
+                )
         return [{feature for feature, _ in bucket} for bucket in buckets]
 
     @staticmethod
@@ -580,7 +614,8 @@ class ExecutionPlan:
             if count > 1 and group.get_class_name() != hinted_class_name:
                 repeated_paragraph += (
                     f"\n'{format_feature_group_class(group)}' ran as separate steps because its requests differ in "
-                    "data type, compute framework, or source. Align those requests so one step serves them all.\n"
+                    "data type, compute framework, or source, or read differing variants of one input. "
+                    "Align those requests so one step serves them all.\n"
                 )
 
         example_groups = list(step_counts)
@@ -1010,6 +1045,23 @@ Available join types:
                             for tfs in cluster:
                                 # A step must never wait for a token it produces itself.
                                 tfs.required_uuids = shared_required_uuids - tfs.get_uuids()
+
+                # Hops of differing classes bridged by a join read one physical frame: each waits on every
+                # sibling's parent, else a hop may snapshot the frame before a sibling's parent landed in it.
+                for group in hop_groups:
+                    bridged: list[tuple[TransformFrameworkStep, UUID]] = [
+                        (bh, bp) for bh, bp in group if isinstance(bh, TransformFrameworkStep)
+                    ]
+                    snapshot = {id(bh): frozenset(bh.required_uuids) for bh, _ in bridged}
+                    for bh, bp in bridged:
+                        for other, other_parent in bridged:
+                            if (
+                                other is not bh
+                                and other.from_feature_group is not bh.from_feature_group
+                                and other.from_framework == bh.from_framework
+                                and self._parents_linked_by_join(bp, other_parent, left_join_frameworks, graph)
+                            ):
+                                bh.required_uuids |= snapshot[id(other)] - bh.get_uuids()
 
                 if len(hop_groups) > 1:
                     variant_errors: list[tuple[str, str, str]] = []

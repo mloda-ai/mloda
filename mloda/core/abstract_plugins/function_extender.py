@@ -29,7 +29,9 @@ class GateBypassError(RuntimeError):
     """Raised when an extender skips the wrapped call while a never_fall_back gate sits inside it."""
 
 
-_SEALED_ATTRS = frozenset({"never_fall_back", "raise_on_error", "priority", "_raise_on_error", "_priority"})
+_SEALED_ATTRS = frozenset(
+    {"never_fall_back", "raise_on_run_complete", "raise_on_error", "priority", "_raise_on_error", "_priority"}
+)
 
 
 class Extender(ABC):
@@ -88,6 +90,9 @@ class Extender(ABC):
     # For gates: True makes a failure always propagate, never falling back to the wrapped call.
     never_fall_back: bool = False
 
+    # For gates: True makes an Exception from on_run_complete fail a run that otherwise succeeded.
+    raise_on_run_complete: bool = False
+
     @abstractmethod
     def wraps(self) -> set[ExtenderHook]:
         pass
@@ -117,7 +122,9 @@ class Extender(ABC):
         success signal. Does not fire for prepare, explain, a never-iterated stream, a failure while
         planning before setup, or when finalizing raised (collecting artifacts, joining or terminating
         the workers). A session re-run fires again with the same run_id. raise_on_error and
-        never_fall_back do not apply: an Exception raised here is always logged, never propagated.
+        never_fall_back do not apply; an Exception here is logged, unless raise_on_run_complete is
+        True and the run succeeded (a stream only when exhausted), then the first such one is
+        re-raised after every extender was notified.
         The worker copy is pickled once per run at setup (a stream's first iteration), so for runs
         executed one after another it reflects the parent's state after the previous run's
         on_run_complete; its changes never flow back to the parent."""

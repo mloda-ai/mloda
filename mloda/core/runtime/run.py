@@ -113,6 +113,7 @@ class ExecutionOrchestrator:
         self.function_extender: set[Extender] | None = None
         self._run_id: str | None = None
         self._workers_joined: bool = True
+        self._run_succeeded: bool = False
         self.worker_extender_payload: bytes | None = None
         self._hook_extenders: dict[ExtenderHook, Extender] | None = None
         self._default_run_context: RunContext = run_context if run_context is not None else RunContext()
@@ -267,12 +268,20 @@ class ExecutionOrchestrator:
         self._drop_all_uploaded_flight_tables()
 
     def _notify_run_complete(self) -> None:
-        """A raising extender's on_run_complete() must not stop the others from running."""
+        """Notify every extender; log failures, except the first raise_on_run_complete one after a successful run."""
+        failure: Exception | None = None
         for extender in sorted(self.function_extender or (), key=lambda e: e.priority):
             try:
                 extender.on_run_complete(self._run_id)
             except Exception as e:
-                logger.error("Extender %s.on_run_complete() %s", extender.__class__.__name__, contained_raise_reason(e))
+                if extender.raise_on_run_complete and self._run_succeeded and failure is None:
+                    failure = e
+                else:
+                    logger.error(
+                        "Extender %s.on_run_complete() %s", extender.__class__.__name__, contained_raise_reason(e)
+                    )
+        if failure is not None:
+            raise failure
 
     def _drop_all_uploaded_flight_tables(self) -> None:
         """Final sweep of every cfw's flight table by uuid key, including worker-dispatched cfws."""
@@ -350,6 +359,7 @@ class ExecutionOrchestrator:
             # drop-check with a stale finished_ids (see _run_planner_pass), so nothing
             # guarantees another FeatureGroupStep is iterated afterwards to flush it.
             self._drop_data_for_finished_cfws(finished_ids)
+            self._run_succeeded = True
         finally:
             self._finalize()
 
@@ -381,6 +391,7 @@ class ExecutionOrchestrator:
             # See compute(): flush anything left in track_data_to_drop once finished_ids
             # is fully up to date, since no further FeatureGroupStep iteration is guaranteed.
             self._drop_data_for_finished_cfws(finished_ids)
+            self._run_succeeded = True
         finally:
             self._finalize()
 

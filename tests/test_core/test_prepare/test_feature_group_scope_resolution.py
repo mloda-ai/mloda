@@ -1047,7 +1047,7 @@ def _run_reader_roots(feature: Feature, dac: DataAccessCollection) -> list[Any]:
     return list(
         mloda.run_all(
             [feature],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             data_access_collection=dac,
             plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, ParquetFG}),
         )
@@ -1088,7 +1088,7 @@ def test_resolved_reader_feature_holds_its_pair_on_input_data_match_not_in_optio
 
     mloda.run_all(
         [feature],
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         data_access_collection=DataAccessCollection(files={csv_path, parquet_path}),
         plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, ParquetFG}),
         copy_features=False,
@@ -1113,7 +1113,7 @@ def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> 
     with pytest.raises(FeatureResolutionError, match="Multiple feature groups found") as exc_info:
         mloda.run_all(
             [Feature(READER_COL)],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             data_access_collection=dac,
             plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, ReadDBFeature}),
         )

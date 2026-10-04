@@ -647,6 +647,7 @@ class BaseInputData(ABC):
             input_feature_edges=calc_context.input_feature_edges,
             compute_framework_name=cfw.get_class_name(),
             run_id=calc_context.run_id,
+            plan_id=calc_context.plan_id,
             carrier=calc_context.carrier,
             tenant_id=calc_context.tenant_id,
             project_id=calc_context.project_id,

@@ -33,11 +33,13 @@ from mloda.core.abstract_plugins.function_extender import (
     ExtenderHook,
     build_hook_extenders,
 )
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.helpers.uuid7_assertions import assert_valid_uuid7
 
 
 class _CountingExtender(Extender):
@@ -326,7 +328,7 @@ def _prepare_run_complete_session(mode: ParallelizationMode, extenders: set[Exte
     "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
 )
 class TestRunCompleteNotifiesTheCallersOwnExtenderInTheParent:
-    def test_notified_once_in_the_parent_with_the_session_run_id(
+    def test_notified_once_in_the_parent_with_a_fresh_run_id(
         self, mode: ParallelizationMode, tmp_path: Path, flight_server: Any
     ) -> None:
         probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
@@ -334,9 +336,13 @@ class TestRunCompleteNotifiesTheCallersOwnExtenderInTheParent:
 
         session.run(parallelization_modes={mode}, flight_server=flight_server)
 
-        assert [(run_id, pid) for run_id, pid, _ in probe.completions] == [(session.run_id, os.getpid())]
+        assert [pid for _, pid, _ in probe.completions] == [os.getpid()]
+        run_id = probe.completions[0][0]
+        assert run_id is not None
+        assert_valid_uuid7(run_id)
+        assert run_id != session.plan_id
 
-    def test_running_the_session_twice_notifies_twice_with_the_same_run_id(
+    def test_running_the_session_twice_notifies_twice_with_a_different_run_id_each_time(
         self, mode: ParallelizationMode, tmp_path: Path, flight_server: Any
     ) -> None:
         probe = _RunCompleteProbeExtender(tmp_path / "closed.txt")
@@ -345,7 +351,9 @@ class TestRunCompleteNotifiesTheCallersOwnExtenderInTheParent:
         session.run(parallelization_modes={mode}, flight_server=flight_server)
         session.run(parallelization_modes={mode}, flight_server=flight_server)
 
-        assert [run_id for run_id, _, _ in probe.completions] == [session.run_id, session.run_id]
+        first, second = (run_id for run_id, _, _ in probe.completions)
+        assert first is not None and second is not None
+        assert first != second
 
 
 @pytest.mark.timeout(30)
@@ -392,7 +400,9 @@ class TestRunCompleteFiresWhenSetupFails:
                 )
             )
 
-        assert [(run_id, pid) for run_id, pid, _ in probe.completions] == [(session.run_id, os.getpid())]
+        assert [pid for _, pid, _ in probe.completions] == [os.getpid()]
+        assert probe.completions[0][0] is not None
+        assert probe.completions[0][0] != session.plan_id
 
 
 @pytest.mark.timeout(30)
@@ -431,3 +441,41 @@ class TestRunAllTwiceWithTheSameProbeCarriesPriorRunStateIntoTheSecondWorker:
         assert seen_completions == completions_after_first_run
         assert seen_remaining > 2.0
         assert seen_reason == "stop"
+
+
+class _WorkerIdentityRecorder(Extender):
+    """Appends (run_id, plan_id) per calculate to a file; the spawned worker's own copy writes it."""
+
+    def __init__(self, output_path: Path) -> None:
+        self._output_path = output_path
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        assert context is not None
+        with self._output_path.open("a") as handle:
+            handle.write(json.dumps([context.run_id, context.plan_id]) + "\n")
+        return result
+
+
+@pytest.mark.timeout(30)
+class TestPrepareOnceRunTwiceMultiprocessingWorkerIdentity:
+    def test_each_run_reaches_its_worker_with_a_fresh_run_id_and_the_same_plan_id(
+        self, tmp_path: Path, flight_server: Any
+    ) -> None:
+        output = tmp_path / "worker_ids.jsonl"
+        mode = ParallelizationMode.MULTIPROCESSING
+        session = _prepare_run_complete_session(mode, {_WorkerIdentityRecorder(output)})
+
+        session.run(parallelization_modes={mode}, flight_server=flight_server)
+        session.run(parallelization_modes={mode}, flight_server=flight_server)
+
+        (first_run, first_plan), (second_run, second_plan) = (
+            json.loads(line) for line in output.read_text().splitlines()
+        )
+        assert first_run is not None and second_run is not None
+        assert first_run != second_run
+        assert first_plan == second_plan == session.plan_id

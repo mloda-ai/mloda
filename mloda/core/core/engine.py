@@ -28,8 +28,8 @@ from mloda.core.abstract_plugins.function_extender import (
 )
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
+from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
@@ -71,7 +71,7 @@ class Engine:
         plugin_collector: PluginCollector | None = None,
         column_ordering: str | None = None,
         function_extender: set[Extender] | None = None,
-        run_id: str | None = None,
+        plan_context: PlanContext | None = None,
         framework_preference: Mapping[type[ComputeFramework], int] | None = None,
         output_framework: type[ComputeFramework] | None = None,
     ) -> None:
@@ -81,7 +81,8 @@ class Engine:
         # setup variables which track the primary sources and the compute platforms
         self.function_extender = function_extender if function_extender is not None else set()
         self._hook_extenders = build_hook_extenders(self.function_extender)
-        self.run_context = RunContext(run_id=run_id)
+        self.plan_context = plan_context
+        self.run_context = RunContext(plan_id=plan_context.plan_id if plan_context else None)
         # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
 
@@ -359,7 +360,7 @@ class Engine:
     def _resolve_with_match_hook(self, extender: Extender, feature: Feature, depth: int) -> EvaluationResult:
         """Dispatch resolve_or_raise through extender, instrumenting the call with a HookContext.
         feature_group_class is only known once resolve_or_raise returns, so the context starts with a placeholder and is written post-hoc."""
-        verified = current_verified_context()
+        plan = self.plan_context
         context = HookContext(
             hook=ExtenderHook.FEATURE_GROUP_MATCHED,
             feature_group_class="",
@@ -368,11 +369,12 @@ class Engine:
             feature_names=(str(feature.name),),
             input_features=None,
             compute_framework_name="",
-            run_id=self.run_context.run_id,
+            run_id=None,
+            plan_id=self.run_context.plan_id,
             carrier=None,
-            tenant_id=verified.tenant_id if verified else None,
-            project_id=verified.project_id if verified else None,
-            principal=verified.principal if verified else None,
+            tenant_id=plan.tenant_id if plan else None,
+            project_id=plan.project_id if plan else None,
+            principal=plan.principal if plan else None,
             worker_index=None,
             plan_feature_count=len(self.resolution_records) + 1,
             plan_node_count=len(self.feature_group_collection),

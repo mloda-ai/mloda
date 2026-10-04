@@ -89,6 +89,7 @@ class HookContext:
     duration_seconds: float | None = None
     status: str | None = None
     run_id: str | None = None
+    plan_id: str | None = None
     data_access_identity: str | None = None
     data_access_identity_is_fallback: bool | None = None
     tenant_id: str | None = None

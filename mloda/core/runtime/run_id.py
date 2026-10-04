@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import uuid
 
@@ -17,10 +18,10 @@ _RAND_B_MASK = (1 << _RAND_B_BITS) - 1
 
 
 def generate_run_id() -> str:
-    """Mint a UUIDv7 run id (RFC 9562).
+    """Mint a UUIDv7 id (RFC 9562): stdlib on Python 3.14+, hand-rolled below (this repo supports >=3.10)."""
+    if sys.version_info >= (3, 14):
+        return str(uuid.uuid7())  # type: ignore[attr-defined,unused-ignore]
 
-    Vendored because ``uuid.uuid7()`` needs Python 3.14+, and this repo supports >=3.10.
-    """
     unix_ts_ms = (time.time_ns() // 1_000_000) & _UNIX_TS_MS_MASK
 
     rand_bytes = os.urandom(10)

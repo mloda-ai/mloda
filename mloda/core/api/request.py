@@ -1,6 +1,7 @@
 import contextlib
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime, timezone
 from collections.abc import Sequence
 from typing import Any, Callable, Generator
 
@@ -32,6 +33,7 @@ from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -125,7 +127,15 @@ class mlodaAPI:
 
         self.runner: None | ExecutionOrchestrator = None
         self.engine: None | Engine = None
-        self.run_id = generate_run_id()
+        verified = current_verified_context()
+        self.plan_context = PlanContext(
+            plan_id=generate_run_id(),
+            tenant_id=verified.tenant_id if verified else None,
+            project_id=verified.project_id if verified else None,
+            principal=verified.principal if verified else None,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.plan_id = self.plan_context.plan_id
 
         self.engine = self._create_engine()
 
@@ -492,16 +502,17 @@ class mlodaAPI:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
-        verified = current_verified_context()
+        identity = current_verified_context() or self.plan_context
         return replace(
             self.engine.run_context,
-            run_id=self.run_id,
+            run_id=generate_run_id(),
+            started_at=datetime.now(timezone.utc),
             carrier=carrier,
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
-            tenant_id=verified.tenant_id if verified else None,
-            project_id=verified.project_id if verified else None,
-            principal=verified.principal if verified else None,
+            tenant_id=identity.tenant_id,
+            project_id=identity.project_id,
+            principal=identity.principal,
         )
 
     def run(
@@ -525,8 +536,8 @@ class mlodaAPI:
                 When provided, feature groups with matching artifact names
                 switch to load mode for this run, enabling train-then-predict
                 workflows without re-preparing.
-            carrier/child_bootstrap: See ``run_all``. Unlike ``run_id`` (minted once per
-                session), ``carrier`` may differ on each ``run()`` call.
+            carrier/child_bootstrap: See ``run_all``. Like ``run_id`` (minted per
+                call), ``carrier`` may differ on each ``run()`` call.
             graceful_shutdown_timeout: Seconds a MULTIPROCESSING worker gets to run its
                 extenders' ``close()`` before being terminated, shared across every extender in
                 that worker.
@@ -696,7 +707,7 @@ class mlodaAPI:
             self.plugin_collector,
             column_ordering=self.column_ordering,
             function_extender=function_extender,
-            run_id=self.run_id,
+            plan_context=self.plan_context,
             framework_preference=self.framework_preference,
             output_framework=self.output_framework,
         )

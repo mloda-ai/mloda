@@ -2,8 +2,10 @@
 
 import dataclasses
 import pickle  # nosec B403
+from datetime import datetime, timezone
 
 import pytest
+from mloda.core.abstract_plugins.plan_context import PlanContext
 
 import mloda.provider as provider
 import mloda.steward as steward
@@ -36,6 +38,63 @@ class TestRunContextDefaults:
         assert ctx.tenant_id == "acme"
         assert ctx.project_id == "proj1"
         assert ctx.principal == "hash123"
+
+
+class TestRunContextPlanIdAndStartedAt:
+    def test_plan_id_and_started_at_default_to_none(self) -> None:
+        ctx = RunContext()
+
+        assert ctx.plan_id is None
+        assert ctx.started_at is None
+
+    def test_plan_id_and_started_at_round_trip_through_constructor_and_pickle(self) -> None:
+        started = datetime.now(timezone.utc)
+        ctx = RunContext(run_id="r", plan_id="p", started_at=started)
+
+        restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
+
+        assert (restored.plan_id, restored.started_at) == ("p", started)
+
+    def test_plan_id_is_frozen(self) -> None:
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            RunContext(plan_id="p").plan_id = "forged"  # type: ignore[misc]
+
+
+def _plan_context(**overrides: object) -> PlanContext:
+    fields: dict[str, object] = {
+        "plan_id": "plan-1",
+        "tenant_id": "acme",
+        "project_id": "proj1",
+        "principal": "hash123",
+        "created_at": datetime.now(timezone.utc),
+    }
+    fields.update(overrides)
+    return PlanContext(**fields)  # type: ignore[arg-type]
+
+
+class TestPlanContext:
+    def test_exposes_the_five_fields(self) -> None:
+        created = datetime.now(timezone.utc)
+
+        ctx = _plan_context(created_at=created)
+
+        assert (ctx.plan_id, ctx.tenant_id, ctx.project_id, ctx.principal, ctx.created_at) == (
+            "plan-1",
+            "acme",
+            "proj1",
+            "hash123",
+            created,
+        )
+
+    @pytest.mark.parametrize("field", ["plan_id", "tenant_id", "project_id", "principal", "created_at"])
+    def test_is_frozen(self, field: str) -> None:
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(_plan_context(), field, "forged")
+
+    def test_pickle_round_trip(self) -> None:
+        ctx = _plan_context()
+
+        assert pickle.loads(pickle.dumps(ctx)) == ctx  # nosec B301
 
 
 class TestRunContextFrozen:

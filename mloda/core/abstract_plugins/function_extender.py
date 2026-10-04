@@ -121,7 +121,7 @@ class Extender(ABC):
         setup (e.g. the MULTIPROCESSING picklability preflight) or execution raised, so it is not a
         success signal. Does not fire for prepare, explain, a never-iterated stream, a failure while
         planning before setup, or when finalizing raised (collecting artifacts, joining or terminating
-        the workers). A session re-run fires again with the same run_id. raise_on_error and
+        the workers). A session re-run fires again with a new run_id. raise_on_error and
         never_fall_back do not apply; an Exception here is logged, unless raise_on_run_complete is
         True and the run succeeded (a stream only when exhausted), then the first such one is
         re-raised after every extender was notified.

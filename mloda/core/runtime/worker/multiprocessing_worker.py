@@ -198,6 +198,7 @@ def worker(
             deadline=time.monotonic() + run_context.graceful_shutdown_timeout,
             reason=reason,
             run_id=run_context.run_id,
+            plan_id=run_context.plan_id,
             worker_index=worker_index,
             carrier=run_context.carrier,
             tenant_id=run_context.tenant_id,

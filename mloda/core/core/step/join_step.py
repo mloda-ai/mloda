@@ -59,6 +59,7 @@ class JoinStep(Step):
             join_type=self.link.jointype.value,
             join_keys=self._join_keys(),
             run_id=cfw.run_context.run_id,
+            plan_id=cfw.run_context.plan_id,
             carrier=cfw.run_context.carrier,
             tenant_id=cfw.run_context.tenant_id,
             project_id=cfw.run_context.project_id,

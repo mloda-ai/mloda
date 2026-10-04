@@ -194,7 +194,6 @@ class TestOptionsCannotOverrideVerifiedContext:
 
 _PREPARE_SCOPE = {"tenant_id": "acme-prepare", "project_id": "proj-prepare", "principal": "hash-prepare"}
 _RUN_SCOPE = {"tenant_id": "tenant-run", "project_id": "proj-run", "principal": "hash-run"}
-_NO_SCOPE: dict[str, str | None] = {"tenant_id": None, "project_id": None, "principal": None}
 
 
 def _identity(context: HookContext) -> dict[str, str | None]:
@@ -202,7 +201,7 @@ def _identity(context: HookContext) -> dict[str, str | None]:
 
 
 class TestEachHookReportsTheIdentityActiveWhenItsPhaseBegan:
-    """A run outside any scope must not inherit the identity of the scope that prepared the session."""
+    """A run outside any scope inherits the identity of the scope that prepared the session."""
 
     @pytest.mark.parametrize("run_scope", [_RUN_SCOPE, None])
     def test_match_reports_prepare_scope_and_calculate_reports_run_scope(
@@ -217,4 +216,6 @@ class TestEachHookReportsTheIdentityActiveWhenItsPhaseBegan:
             session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_MATCHED]) == _PREPARE_SCOPE
-        assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]) == (run_scope or _NO_SCOPE)
+        assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]) == (
+            run_scope or _PREPARE_SCOPE
+        )

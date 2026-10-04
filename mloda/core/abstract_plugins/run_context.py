@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -10,6 +11,8 @@ class RunContext:
     """
 
     run_id: str | None = None
+    plan_id: str | None = None
+    started_at: datetime | None = None
     carrier: dict[str, str] | None = field(default=None, hash=False)  # a dict cannot hash; equality still compares it
     child_bootstrap: Callable[[], None] | None = None
     graceful_shutdown_timeout: float = 2.0

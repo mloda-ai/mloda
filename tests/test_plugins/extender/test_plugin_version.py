@@ -3,6 +3,7 @@ populate HookContext.plugin_version.
 """
 
 import importlib.metadata
+from datetime import datetime, timezone
 from collections.abc import Iterator
 from typing import Any
 
@@ -11,6 +12,7 @@ import pytest
 import mloda.core.abstract_plugins.plugin_version as plugin_version_module
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.core.engine import Engine
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -380,7 +382,13 @@ class TestPluginVersionResolvedAtPlanTimeUnderSync:
             None,
             plugin_collector=_plan_time_enabled,
             function_extender={extender},
-            run_id="engine-run-id",
+            plan_context=PlanContext(
+                plan_id="engine-plan-id",
+                tenant_id=None,
+                project_id=None,
+                principal=None,
+                created_at=datetime.now(timezone.utc),
+            ),
         )
 
         orchestrator = engine.compute()
@@ -393,7 +401,7 @@ class TestPluginVersionResolvedAtPlanTimeUnderSync:
         expected = f"v:{_PlanTimePluginVersionFeatureGroup.__module__}"
         assert extender.recorded, "extender never observed the feature group's calculate_feature call"
         assert extender.recorded == [expected]
-        assert extender.run_ids == ["engine-run-id"]
+        assert extender.run_ids == [None]
 
 
 class _PluginVersionCacheInfoRecordingExtender(Extender):

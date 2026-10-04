@@ -57,6 +57,7 @@ class TestHookContextConstruction:
         assert context.duration_seconds is None
         assert context.status is None
         assert context.run_id is None
+        assert context.plan_id is None
         assert context.data_access_identity is None
         assert context.tenant_id is None
         assert context.project_id is None
@@ -192,6 +193,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
         ("field", "value"),
         [
             ("run_id", "forged"),
+            ("plan_id", "forged"),
             ("tenant_id", "forged"),
             ("principal", "forged"),
             ("carrier", {"forged": "yes"}),
@@ -202,7 +204,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
         ],
     )
     def test_assigning_a_frozen_field_raises(self, field: str, value: Any) -> None:
-        context = _make_context(run_id="real", tenant_id="t", principal="p", carrier={"a": "b"})
+        context = _make_context(run_id="real", plan_id="real-plan", tenant_id="t", principal="p", carrier={"a": "b"})
         before = getattr(context, field)
 
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -212,11 +214,25 @@ class TestHookContextIsFrozenExceptOutcomeFields:
 
     @pytest.mark.parametrize(
         "field",
-        ["run_id", "tenant_id", "principal", "carrier", "data_access_identity", "feature_names", "feature_group_class"],
+        [
+            "run_id",
+            "plan_id",
+            "tenant_id",
+            "principal",
+            "carrier",
+            "data_access_identity",
+            "feature_names",
+            "feature_group_class",
+        ],
     )
     def test_deleting_a_frozen_field_raises_and_keeps_the_value(self, field: str) -> None:
         context = _make_context(
-            run_id="real", tenant_id="t", principal="p", carrier={"a": "b"}, data_access_identity="d"
+            run_id="real",
+            plan_id="real-plan",
+            tenant_id="t",
+            principal="p",
+            carrier={"a": "b"},
+            data_access_identity="d",
         )
         before = getattr(context, field)
 
@@ -398,8 +414,8 @@ class TestOutputSchemaPublicExport:
     """OutputSchema is re-exported as a public type alias from mloda.steward and mloda.provider."""
 
     def test_output_schema_is_the_same_object_as_the_core_alias(self) -> None:
-        from mloda.steward import OutputSchema
         from mloda.core.abstract_plugins.hook_context import OutputSchema as CoreOutputSchema
+        from mloda.steward import OutputSchema
 
         assert OutputSchema is CoreOutputSchema
 
@@ -409,8 +425,8 @@ class TestOutputSchemaPublicExport:
         assert "OutputSchema" in steward.__all__
 
     def test_provider_output_schema_is_the_same_object_as_the_core_alias(self) -> None:
-        from mloda.provider import OutputSchema
         from mloda.core.abstract_plugins.hook_context import OutputSchema as CoreOutputSchema
+        from mloda.provider import OutputSchema
 
         assert OutputSchema is CoreOutputSchema
 

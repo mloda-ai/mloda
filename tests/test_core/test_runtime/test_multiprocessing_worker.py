@@ -16,8 +16,8 @@ from uuid import uuid4
 import pytest
 
 from mloda.core.abstract_plugins.close_context import CloseContext
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
@@ -592,6 +592,7 @@ class TestCloseContextRemainingTracksTheSharedDeadline:
         cfw_register.get_location.return_value = "grpc://localhost:9999"
         run_context = RunContext(
             run_id="run-close-ctx",
+            plan_id="plan-close-ctx",
             carrier={"traceparent": "abc"},
             tenant_id="tenant-1",
             project_id="project-1",
@@ -615,6 +616,7 @@ class TestCloseContextRemainingTracksTheSharedDeadline:
         assert remainings[0] > 2.0
         assert recorded.reason == "stop"
         assert recorded.run_id == "run-close-ctx"
+        assert recorded.plan_id == "plan-close-ctx"
         assert recorded.worker_index == 3
         assert recorded.carrier == {"traceparent": "abc"}
         assert recorded.tenant_id == "tenant-1"

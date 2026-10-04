@@ -4,9 +4,9 @@ name: Metadata Guard
 # Always-on (no paths filters) so deleting or renaming it cannot merge green and break the sdist build.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "feat/reader-feature-groups" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "feat/reader-feature-groups" ]
 
 permissions:
   contents: read

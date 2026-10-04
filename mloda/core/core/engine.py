@@ -46,6 +46,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_featu
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
+from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -115,7 +116,8 @@ class Engine:
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        self.execution_planner = self.create_setup_execution_plan(features)
+        with run_match_cache():
+            self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
         self.tfs_connection_map = self._resolve_tfs_connection_map()

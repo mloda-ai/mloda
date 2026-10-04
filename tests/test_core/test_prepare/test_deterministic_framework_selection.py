@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
+from mloda.core.api.request import SetupConfigurationError
 from mloda.core.core.engine import Engine
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
@@ -837,6 +838,10 @@ class RcConsumer(_PlanConsumer):
     OUTPUT = "rc_out"
     FW_NAME = "PyArrowTable"
 
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"rc_out": data["rc_root"]})
+
 
 def test_a_feature_requested_and_consumed_has_one_step_on_the_consumers_framework() -> None:
     steps = _plan(["rc_root", "rc_out"], {RcRoot, RcConsumer}, [PandasDataFrame, PyArrowTable])
@@ -844,6 +849,73 @@ def test_a_feature_requested_and_consumed_has_one_step_on_the_consumers_framewor
     assert len(_compute_steps(steps, RcRoot)) == 1
     assert _compute_names(steps, RcRoot) == {"PyArrowTable"}
     assert _transforms(steps) == []
+
+
+_RC_GROUPS: set[type[FeatureGroup]] = {RcRoot, RcConsumer}
+_RC_FRAMEWORKS: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+_RC_REQUESTS = [pytest.param(["rc_root"], id="alone"), pytest.param(["rc_root", "rc_out"], id="together")]
+
+
+def _run_rc(features: list[Feature | str], output_framework: str | type[ComputeFramework] | None = None) -> Any:
+    return mloda.run_all(
+        features,
+        compute_frameworks=_RC_FRAMEWORKS,
+        plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+        output_framework=output_framework,
+    )
+
+
+@pytest.mark.parametrize("output", ["PandasDataFrame", PandasDataFrame], ids=["name", "class"])
+@pytest.mark.parametrize("features", _RC_REQUESTS)
+def test_output_framework_returns_every_frame_in_that_framework(output: Any, features: list[Feature | str]) -> None:
+    result = _run_rc(features, output)
+
+    assert len(result) == len(features)
+    assert all(isinstance(frame, pd.DataFrame) for frame in result)
+    for step, frame in result.frames():
+        assert step.result_framework is PandasDataFrame
+        assert type(frame) is step.result_framework.expected_data_framework()
+
+
+@pytest.mark.parametrize("features", _RC_REQUESTS)
+def test_result_framework_names_the_type_each_frame_comes_back_in(features: list[Feature | str]) -> None:
+    result = _run_rc(features)
+
+    for step, frame in result.frames():
+        assert step.result_framework is not None
+        assert type(frame) is step.result_framework.expected_data_framework()
+
+
+def test_requested_together_without_the_option_reports_pyarrow() -> None:
+    result = _run_rc(["rc_root", "rc_out"])
+
+    assert {step.result_framework_name for step, _ in result.frames()} == {"PyArrowTable"}
+
+
+def test_stream_all_honors_output_framework() -> None:
+    stream = mloda.stream_all(
+        ["rc_root", "rc_out"],
+        compute_frameworks=_RC_FRAMEWORKS,
+        plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+        output_framework="PandasDataFrame",
+    )
+
+    frames = list(stream)
+
+    assert len(frames) == 2
+    assert all(isinstance(frame, pd.DataFrame) for frame in frames)
+
+
+def test_a_required_connection_output_framework_without_a_connection_raises_at_prepare() -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+
+    with pytest.raises((SetupConfigurationError, ValueError), match="SqliteFramework"):
+        mloda.prepare(
+            ["rc_root"],
+            compute_frameworks=_RC_FRAMEWORKS,
+            plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+            output_framework=sqlite_fw,
+        )
 
 
 # An unrelated consumer must not move a root.

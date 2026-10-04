@@ -71,6 +71,9 @@ class PlanStep:
     ``compute_framework_reason`` is why the central choice put a compute step on its framework: the distinct
     reasons of its features, sorted and joined with "; ", or None (join/transform steps, or no recorded reason).
 
+    ``result_framework`` is the framework a compute step's requested features come back in: the
+    ``output_framework`` option if set, else ``compute_framework``; None without requested features and for join/transform steps.
+
     ``reader_data_access`` is the (reader class, data access) pair of ``FeatureSet.input_data_match``, excluded from equality.
     ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for that
     pair, computed on access.
@@ -96,6 +99,11 @@ class PlanStep:
     specialized_from: tuple[type["FeatureGroup"], ...] = ()
     reader_data_access: tuple[type["BaseInputData"], Any] | None = field(default=None, compare=False)
     compute_framework_reason: str | None = None
+    result_framework: type["ComputeFramework"] | None = None
+
+    @property
+    def result_framework_name(self) -> str | None:
+        return None if self.result_framework is None else self.result_framework.get_class_name()
 
     @property
     def feature_group_name(self) -> str | None:
@@ -140,6 +148,7 @@ def build_plan_steps(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep],
     resolved_join_plan: "ResolvedJoinPlan | None" = None,
     specialized_from: Mapping[UUID, tuple[type["FeatureGroup"], ...]] | None = None,
+    output_framework: type["ComputeFramework"] | None = None,
 ) -> list[PlanStep]:
     """Map the steps of an ExecutionPlan onto PlanStep records, in dependency order.
 
@@ -202,6 +211,7 @@ def build_plan_steps(
                     specialized_from=tuple(sorted(replaced, key=_candidate_sort_key)),
                     reader_data_access=_safe_deepcopy(step.features.input_data_match, {}),
                     compute_framework_reason="; ".join(sorted(reasons)) or None,
+                    result_framework=(output_framework or step.compute_framework) if requested else None,
                 )
             )
         elif isinstance(step, TransformFrameworkStep):

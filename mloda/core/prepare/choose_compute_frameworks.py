@@ -125,7 +125,9 @@ class ChooseComputeFrameworks:
         link_occurrences: list[tuple[Link, UUID, UUID, UUID]],
         filter_ties: list[tuple[UUID, UUID]],
         positions: Mapping[Framework, int],
+        output_framework: Framework | None = None,
     ) -> None:
+        self.output_framework = output_framework
         self.graph = graph
         self.nodes = nodes_per_feature_group
         self.occurrences = link_occurrences
@@ -197,6 +199,19 @@ class ChooseComputeFrameworks:
             self.paths[pair] = src is dst or self.transformer.get_transformation_chain(src, dst) is not None
         return self.paths[pair]
 
+    @staticmethod
+    def _requested(block: _Block) -> bool:
+        return any(feature.initial_requested_data for feature in block.features)
+
+    def _final_cost(self, block: _Block, framework: Framework) -> int:
+        """Cost of converting a requested block's result to the output framework at the end of the run."""
+        output = self.output_framework
+        if output is None or not self._requested(block) or framework is output:
+            return 0
+        if framework.expected_data_framework() is output.expected_data_framework():
+            return 0
+        return conversion_cost(framework, output)
+
     def _rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
         rules: list[_Rule] = []
         for parent, child in {(owner[p], owner[c]) for p, c in self.graph.edges if p in owner and c in owner}:
@@ -208,6 +223,17 @@ class ChooseComputeFrameworks:
                         f"transform path {blocks[parent].fg.__name__} -> {blocks[child].fg.__name__}",
                     )
                 )
+        output = self.output_framework
+        if output is not None:
+            for index, block in enumerate(blocks):
+                if self._requested(block):
+                    rules.append(
+                        _Rule(
+                            (index,),
+                            lambda v: self._convertible(v[0], output),
+                            f"transform path to output framework {output.get_class_name()}",
+                        )
+                    )
         for host, tied in self.ties:
             if host in owner and tied in owner:
                 rules.append(_Rule((owner[host], owner[tied]), lambda v: v[0] is v[1], "filter tied to its host"))
@@ -286,8 +312,13 @@ class ChooseComputeFrameworks:
         return rule.allows(tuple(values[b] for b in rule.blocks))
 
     def _prune(self, blocks: list[_Block], rules: list[_Rule]) -> list[list[Framework]]:
-        """Arc consistency over the rules that join two blocks; an emptied domain raises."""
+        """Unary rules filter domains, then arc consistency over the two-block rules; an emptied domain raises."""
         domains = [list(block.domain) for block in blocks]
+        for rule in (r for r in rules if len(self._rule_blocks(r)) == 1):
+            target = rule.blocks[0]
+            domains[target] = [v for v in domains[target] if self._allows(rule, {target: v})]
+            if not domains[target]:
+                raise ValueError(self._emptied(blocks[target], rule, None, []))
         pairwise = [r for r in rules if len(self._rule_blocks(r)) == 2]
         changed = True
         while changed:
@@ -308,11 +339,11 @@ class ChooseComputeFrameworks:
         return domains
 
     @staticmethod
-    def _emptied(block: _Block, rule: _Rule, other: _Block, other_domain: list[Framework]) -> str:
+    def _emptied(block: _Block, rule: _Rule, other: _Block | None, other_domain: list[Framework]) -> str:
         """Names the emptied block and, when its partner is fixed to one framework, the partner too."""
         message = f"No compute framework is left for features {', '.join(_names(block.features))}"
         message += f" (allowed: {sorted(fw.get_class_name() for fw in block.domain)}): {rule.why}"
-        if len(other_domain) == 1:
+        if other is not None and len(other_domain) == 1:
             message += (
                 f", with features {', '.join(_names(other.features))} fixed to {other_domain[0].get_class_name()}"
             )
@@ -351,7 +382,7 @@ class ChooseComputeFrameworks:
                 conversion_cost(values[parent], target)
                 for parent, kids in steps
                 for target in {values[c] for c in kids if values[c] is not values[parent]}
-            )
+            ) + self._final_cost(block, values[index])
 
         alternatives = [fw for fw in block.domain if fw is not chosen and feasible(fw)]
         if not alternatives:
@@ -421,6 +452,7 @@ class ChooseComputeFrameworks:
                 assigned[index] = value
                 narrowed = narrow(index, current)
                 new_cost = cost + sum(step_cost(*step) for step in steps[index]) - before
+                new_cost += self._final_cost(blocks[index], value)
                 if narrowed is not None and (best_cost[0] < 0 or new_cost < best_cost[0]):
                     descend(depth + 1, narrowed, new_cost)
                 del assigned[index]

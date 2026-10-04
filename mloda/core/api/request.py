@@ -72,6 +72,7 @@ class mlodaAPI:
         column_ordering: str | None = None,
         parallelization_modes: set[ParallelizationMode] | None = None,
         function_extender: set[Extender] | None = None,
+        output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
         # Setup boundary: any invalid request argument surfaces as the typed error before planning.
         try:
@@ -102,7 +103,10 @@ class mlodaAPI:
             self.strict_type_enforcement = strict_type_enforcement
             self.features = self._process_features(_requested_features, api_input_data_collection)
             setup_compute_framework = SetupComputeFramework(
-                compute_frameworks, self.features, parallelization_modes=parallelization_modes
+                compute_frameworks,
+                self.features,
+                parallelization_modes=parallelization_modes,
+                output_framework=output_framework,
             )
             self.compute_framework = setup_compute_framework.compute_frameworks
             self.framework_preference = setup_compute_framework.framework_preference
@@ -113,6 +117,7 @@ class mlodaAPI:
             self.api_data = api_data
             self.plugin_collector = plugin_collector
             self.function_extender = function_extender
+            self.output_framework = setup_compute_framework.output_framework
         except SetupConfigurationError:
             raise
         except ValueError as error:
@@ -162,6 +167,7 @@ class mlodaAPI:
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
+        output_framework: str | type[ComputeFramework] | None = None,
     ) -> RunResult:
         """
         Run feature computation in one step.
@@ -221,6 +227,7 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
             function_extender=function_extender,
+            output_framework=output_framework,
         )
         results = session.run(
             api_data=api_data,
@@ -257,6 +264,7 @@ class mlodaAPI:
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
+        output_framework: str | type[ComputeFramework] | None = None,
     ) -> ResultStream:
         """Stream results at feature-group granularity.
 
@@ -284,6 +292,7 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
             function_extender=function_extender,
+            output_framework=output_framework,
         )
         # Planning is eager in prepare, so the plan snapshot is available before iteration.
         return ResultStream(
@@ -315,6 +324,7 @@ class mlodaAPI:
         column_ordering: str | None = None,
         parallelization_modes: set[ParallelizationMode] | None = None,
         function_extender: set[Extender] | None = None,
+        output_framework: str | type[ComputeFramework] | None = None,
     ) -> "mlodaAPI":
         """Build an execution plan without running it.
 
@@ -334,6 +344,7 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
             function_extender=function_extender,
+            output_framework=output_framework,
         )
 
     @classmethod
@@ -352,6 +363,7 @@ class mlodaAPI:
         column_ordering: str | None = None,
         parallelization_modes: set[ParallelizationMode] | None = None,
         function_extender: set[Extender] | None = None,
+        output_framework: str | type[ComputeFramework] | None = None,
     ) -> list[PlanStep]:
         """Resolve the execution plan without executing it.
 
@@ -377,6 +389,7 @@ class mlodaAPI:
             column_ordering=column_ordering,
             parallelization_modes=parallelization_modes,
             function_extender=function_extender,
+            output_framework=output_framework,
         )
         return session.resolved_plan()
 
@@ -396,6 +409,7 @@ class mlodaAPI:
         column_ordering: str | None = None,
         parallelization_modes: set[ParallelizationMode] | None = None,
         function_extender: set[Extender] | None = None,
+        output_framework: str | type[ComputeFramework] | None = None,
     ) -> ResolutionDiagnosis:
         """Whole-request resolution preflight that does not raise on resolution or setup failures.
 
@@ -424,6 +438,7 @@ class mlodaAPI:
                 column_ordering=column_ordering,
                 parallelization_modes=parallelization_modes,
                 function_extender=function_extender,
+                output_framework=output_framework,
             )
         except FeatureResolutionError as error:
             return ResolutionDiagnosis(
@@ -456,6 +471,7 @@ class mlodaAPI:
             self.engine.execution_planner,
             self.engine.execution_planner.resolved_join_plan,
             specialized_from=self.engine.specialized_from,
+            output_framework=self.engine.output_framework,
         )
 
     def resolution_report(self) -> list[ResolutionRecord]:
@@ -682,6 +698,7 @@ class mlodaAPI:
             function_extender=function_extender,
             run_id=self.run_id,
             framework_preference=self.framework_preference,
+            output_framework=self.output_framework,
         )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")

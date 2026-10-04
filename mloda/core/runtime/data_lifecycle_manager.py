@@ -22,6 +22,8 @@ class DataLifecycleManager:
         transformer: ComputeFrameworkTransformer | None = None,
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
+        output_framework: type[ComputeFramework] | None = None,
+        output_connection: Any = None,
     ) -> None:
         """
         Initializes DataLifecycleManager with empty state and transformer.
@@ -37,6 +39,8 @@ class DataLifecycleManager:
         self.transformer = transformer if transformer is not None else ComputeFrameworkTransformer()
         self.column_ordering = column_ordering
         self.request_feature_order = request_feature_order
+        self.output_framework = output_framework
+        self.output_connection = output_connection
 
     def drop_data_for_finished_cfws(
         self,
@@ -150,12 +154,26 @@ class DataLifecycleManager:
         if not cfw._extract_column_names(data):
             return data
 
-        return cfw.select_data_by_column_names(
+        selected = cfw.select_data_by_column_names(
             data,
             selected_feature_names,
             column_ordering=self.column_ordering,
             request_feature_order=self.request_feature_order,
         )
+        return self._to_output_framework(cfw, selected)
+
+    def _to_output_framework(self, cfw: ComputeFramework, data: Any) -> Any:
+        """Converts a selected result to the output framework's data type, once at the end of the run."""
+        if self.output_framework is None:
+            return data
+        source = type(cfw).expected_data_framework()
+        target = self.output_framework.expected_data_framework()
+        if source is target:
+            return data
+        chain = self.transformer.get_transformation_chain(source, target)
+        if chain is None:
+            raise ValueError(f"No transformation from {source} to {target} for the output framework.")
+        return self.transformer.apply_chain(source, target, chain, data, self.output_connection)
 
     def get_results(self) -> list[Any]:
         """

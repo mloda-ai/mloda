@@ -1,9 +1,12 @@
 # mypy: disable-error-code="arg-type, unused-ignore"
 """Tests for DataLifecycleManager class that manages data dropping, result collection, and artifacts."""
 
+from typing import Any
 from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
+import pandas as pd
+import pyarrow as pa
 import pytest
 
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
@@ -11,6 +14,8 @@ from mloda.provider import ComputeFramework
 from mloda.provider import FeatureSet
 from mloda.user import FeatureName
 from mloda.provider import ComputeFrameworkTransformer
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 class TestDataLifecycleManagerInit:
@@ -344,6 +349,50 @@ class TestDataLifecycleManagerGetResultData:
 
         with pytest.raises(NotImplementedError, match="Cannot retrieve result data"):
             manager.get_result_data(mock_cfw, selected_feature_names, location=None)
+
+
+class TestDataLifecycleManagerOutputFramework:
+    """Results convert to the output framework once, after column selection."""
+
+    @staticmethod
+    def _arrow_cfw(data: Any) -> PyArrowTable:
+        cfw = PyArrowTable()
+        cfw.data = data
+        return cfw
+
+    def test_selected_result_is_converted_to_the_output_framework(self) -> None:
+        manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
+        cfw = self._arrow_cfw(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
+
+        result = manager.get_result_data(cfw, [FeatureName("feature1")])
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == ["feature1"]
+
+    def test_a_result_already_in_the_output_framework_is_unchanged(self) -> None:
+        manager = DataLifecycleManager(output_framework=PyArrowTable, output_connection=None)
+
+        result = manager.get_result_data(self._arrow_cfw(pa.table({"feature1": [1, 2]})), [FeatureName("feature1")])
+
+        assert isinstance(result, pa.Table)
+
+    def test_flight_location_result_is_converted_to_the_output_framework(self) -> None:
+        manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
+        cfw = self._arrow_cfw(None)
+
+        with patch("mloda.core.runtime.data_lifecycle_manager.FlightServer") as mock_flight_server:
+            mock_flight_server.download_table.return_value = pa.table({"feature1": [1, 2]})
+            result = manager.get_result_data(cfw, [FeatureName("feature1")], location="grpc://localhost:8815")
+
+        assert isinstance(result, pd.DataFrame)
+
+    def test_a_schema_less_result_is_returned_unchanged(self) -> None:
+        manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
+        empty = pa.table({})
+
+        result = manager.get_result_data(self._arrow_cfw(empty), [FeatureName("feature1")])
+
+        assert result is empty
 
 
 class TestDataLifecycleManagerGetResults:

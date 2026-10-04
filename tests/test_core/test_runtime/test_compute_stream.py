@@ -307,6 +307,18 @@ class _EarlyCloseFeatureGroup(FeatureGroup):
         return {_EARLY_CLOSE_COLUMN: [1, 2, 3]}
 
 
+def _early_close_kwargs(probe: _RunCompleteProbe) -> dict[str, Any]:
+    return {
+        "compute_frameworks": ["PythonDictFramework"],
+        "plugin_collector": PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
+        "function_extender": {probe},
+    }
+
+
+def _early_close_session(probe: _RunCompleteProbe) -> Any:
+    return mloda.prepare([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs(probe))
+
+
 class TestComputeStreamNotifiesExtenders:
     def test_early_closed_stream_notifies_extenders_once(self) -> None:
         probe = _RunCompleteProbe()
@@ -360,12 +372,7 @@ class TestComputeStreamNotifiesExtenders:
     def test_exhausted_api_stream_raises_the_opt_in_extender_failure(self) -> None:
         failure = RuntimeError("opt-in boom")
         probe = _RunCompleteProbe(error=failure, raise_on_run_complete=True)
-        session = mloda.prepare(
-            [Feature(name=_EARLY_CLOSE_COLUMN)],
-            compute_frameworks=["PythonDictFramework"],
-            plugin_collector=PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
-            function_extender={probe},
-        )
+        session = _early_close_session(probe)
 
         with pytest.raises(RuntimeError) as raised:
             list(session.stream_run())
@@ -375,12 +382,7 @@ class TestComputeStreamNotifiesExtenders:
 
     def test_early_closed_api_stream_does_not_raise_the_opt_in_extender_failure(self) -> None:
         probe = _RunCompleteProbe(error=RuntimeError("opt-in boom"), raise_on_run_complete=True)
-        session = mloda.prepare(
-            [Feature(name=_EARLY_CLOSE_COLUMN)],
-            compute_frameworks=["PythonDictFramework"],
-            plugin_collector=PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
-            function_extender={probe},
-        )
+        session = _early_close_session(probe)
 
         stream = session.stream_run()
         next(stream)
@@ -393,12 +395,7 @@ class TestComputeStreamNotifiesExtenders:
         probe = _RunCompleteProbe(error=failure, raise_on_run_complete=True)
 
         with pytest.raises(RuntimeError) as raised:
-            mloda.run_all(
-                [Feature(name=_EARLY_CLOSE_COLUMN)],
-                compute_frameworks=["PythonDictFramework"],
-                plugin_collector=PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
-                function_extender={probe},
-            )
+            mloda.run_all([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs(probe))
 
         assert raised.value is failure
 

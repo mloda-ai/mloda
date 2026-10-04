@@ -910,29 +910,28 @@ class TestExitNotifiesExtendersOfRunCompletion:
         assert raised.value is failure
         assert log == [("survivor", "run-1")]
 
-    def test_only_the_opt_in_failure_propagates_when_a_default_extender_also_raises(
-        self, caplog: pytest.LogCaptureFixture
+    @pytest.mark.parametrize(
+        "first_error, first_opt_in, second_error, second_opt_in",
+        [
+            (ValueError, False, RuntimeError, True),
+            (RuntimeError, True, ValueError, True),
+        ],
+        ids=["default_then_opt_in", "opt_in_then_opt_in"],
+    )
+    def test_only_the_propagating_failure_escapes_and_the_other_is_logged(
+        self,
+        first_error: type[BaseException],
+        first_opt_in: bool,
+        second_error: type[BaseException],
+        second_opt_in: bool,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         log: _RunLog = []
-        default = _RunCompleteRecorder("default", log, priority=10, raises=True, error=ValueError)
-        opt_in = _RunCompleteRecorder("opt_in", log, priority=20, raises=True, raise_on_run_complete=True)
-        orchestrator = _entered_orchestrator({default, opt_in}, empty_plan=True)
-
-        orchestrator.compute()
-        with caplog.at_level(logging.ERROR):
-            with pytest.raises(RuntimeError, match=_RUN_COMPLETE_BOOM):
-                orchestrator.__exit__(None, None, None)
-
-        assert log == [("default", "run-1"), ("opt_in", "run-1")]
-        errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
-        assert len(errors) == 1
-        assert "ValueError" in errors[0]
-
-    def test_only_the_first_of_two_opt_in_failures_propagates(self, caplog: pytest.LogCaptureFixture) -> None:
-        log: _RunLog = []
-        first = _RunCompleteRecorder("first", log, priority=10, raises=True, raise_on_run_complete=True)
+        first = _RunCompleteRecorder(
+            "first", log, priority=10, raises=True, error=first_error, raise_on_run_complete=first_opt_in
+        )
         second = _RunCompleteRecorder(
-            "second", log, priority=20, raises=True, error=ValueError, raise_on_run_complete=True
+            "second", log, priority=20, raises=True, error=second_error, raise_on_run_complete=second_opt_in
         )
         orchestrator = _entered_orchestrator({first, second}, empty_plan=True)
 

@@ -622,7 +622,7 @@ class _PlanRoot(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return None if cls.FW_NAME is None else {_target(cls.FW_NAME)}
+        return None if cls.FW_NAME is None else {_load_framework(_MODULE_OF[cls.FW_NAME], cls.FW_NAME)}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
@@ -645,7 +645,7 @@ class _PlanConsumer(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return None if cls.FW_NAME is None else {_target(cls.FW_NAME)}
+        return None if cls.FW_NAME is None else {_load_framework(_MODULE_OF[cls.FW_NAME], cls.FW_NAME)}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:

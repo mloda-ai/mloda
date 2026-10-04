@@ -76,3 +76,22 @@ def test_metadata_files_in_paths_ignore_are_guarded_by_an_always_on_workflow() -
                     f".github/workflows/ (push + pull_request, no paths/paths-ignore filters) that asserts "
                     f"{target!r} exists. Always-on workflows found: {sorted(p.name for p in guards)}"
                 )
+
+
+def test_workflows_trigger_on_the_same_branches() -> None:
+    """A branch missing from one workflow's branch list runs only part of the checks on it."""
+    branch_sets: dict[str, set[str]] = {}
+    for workflow in sorted(WORKFLOWS.glob("*.y*ml")):
+        config: dict[Any, Any] = yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}
+        triggers = _workflow_triggers(config)
+        for event in TRIGGERS:
+            branches = (triggers.get(event) or {}).get("branches")
+            if isinstance(branches, str):
+                branches = [branches]
+            if isinstance(branches, list):
+                branch_sets[f"{workflow.name}:{event}"] = {str(branch) for branch in branches}
+    assert branch_sets, "no workflow declares a `branches` list: this guard has gone stale"
+    distinct = {frozenset(branches) for branches in branch_sets.values()}
+    mapping = {key: sorted(value) for key, value in sorted(branch_sets.items())}
+    assert len(distinct) == 1, f"workflows trigger on different branches: {mapping}"
+    assert "main" in next(iter(distinct)), f"'main' is missing from the shared branch list: {mapping}"

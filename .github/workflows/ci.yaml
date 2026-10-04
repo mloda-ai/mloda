@@ -4,14 +4,14 @@ name: CI
 # Safe only while CI is not a required status check on main: a skipped required check never reports, blocking docs-only PRs.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "feat/reader-feature-groups" ]
     paths-ignore: &docs_only
       - CODE_OF_CONDUCT.md
       - NOTICE.md
       - README.md
       - SECURITY.md
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "feat/reader-feature-groups" ]
     paths-ignore: *docs_only
 
 permissions:

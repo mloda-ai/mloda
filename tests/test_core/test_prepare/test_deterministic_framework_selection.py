@@ -16,7 +16,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, DataCreator, FeatureSet
-from mloda.user import Index, Options, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Index, Options, PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -29,6 +29,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.probe_runner import run_probes
 
 _PROBE = Path(__file__).with_name("determinism_probe.py")
@@ -837,6 +838,10 @@ class RcConsumer(_PlanConsumer):
     OUTPUT = "rc_out"
     FW_NAME = "PyArrowTable"
 
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"rc_out": data["rc_root"]})
+
 
 def test_a_feature_requested_and_consumed_has_one_step_on_the_consumers_framework() -> None:
     steps = _plan(["rc_root", "rc_out"], {RcRoot, RcConsumer}, [PandasDataFrame, PyArrowTable])
@@ -844,6 +849,100 @@ def test_a_feature_requested_and_consumed_has_one_step_on_the_consumers_framewor
     assert len(_compute_steps(steps, RcRoot)) == 1
     assert _compute_names(steps, RcRoot) == {"PyArrowTable"}
     assert _transforms(steps) == []
+
+
+_RC_GROUPS: set[type[FeatureGroup]] = {RcRoot, RcConsumer}
+_RC_FRAMEWORKS: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+_RC_REQUESTS = [pytest.param(["rc_root"], id="alone"), pytest.param(["rc_root", "rc_out"], id="together")]
+
+
+def _run_rc(features: list[Feature | str], output_framework: str | type[ComputeFramework] | None = None) -> Any:
+    return mloda.run_all(
+        features,
+        compute_frameworks=_RC_FRAMEWORKS,
+        plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+        output_framework=output_framework,
+    )
+
+
+@pytest.mark.parametrize("output", ["PandasDataFrame", PandasDataFrame], ids=["name", "class"])
+@pytest.mark.parametrize("features", _RC_REQUESTS)
+def test_output_framework_returns_every_frame_in_that_framework(output: Any, features: list[Feature | str]) -> None:
+    result = _run_rc(features, output)
+
+    assert len(result) == len(features)
+    assert all(isinstance(frame, pd.DataFrame) for frame in result)
+    for step, frame in result.frames():
+        assert step.result_framework is PandasDataFrame
+        assert type(frame) is step.result_framework.expected_data_framework()
+
+
+@pytest.mark.parametrize(
+    ("features", "expected_names"),
+    [(["rc_root"], None), (["rc_root", "rc_out"], {"PyArrowTable"})],
+    ids=["alone", "together"],
+)
+def test_result_framework_names_the_type_each_frame_comes_back_in(
+    features: list[Feature | str], expected_names: set[str] | None
+) -> None:
+    result = _run_rc(features)
+
+    for step, frame in result.frames():
+        assert step.result_framework is not None
+        assert type(frame) is step.result_framework.expected_data_framework()
+    if expected_names is not None:
+        assert {step.result_framework_name for step, _ in result.frames()} == expected_names
+
+
+def test_stream_all_honors_output_framework() -> None:
+    stream = mloda.stream_all(
+        ["rc_root", "rc_out"],
+        compute_frameworks=_RC_FRAMEWORKS,
+        plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+        output_framework="PandasDataFrame",
+    )
+
+    frames = list(stream)
+
+    assert len(frames) == 2
+    assert all(isinstance(frame, pd.DataFrame) for frame in frames)
+
+
+def test_a_required_connection_output_framework_without_a_connection_raises_at_prepare() -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+
+    with pytest.raises(ValueError, match="SqliteFramework"):
+        mloda.prepare(
+            ["rc_root"],
+            compute_frameworks=_RC_FRAMEWORKS,
+            plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+            output_framework=sqlite_fw,
+        )
+
+
+def test_a_required_connection_output_framework_with_a_connection_prepares(sqlite_conn: sqlite3.Connection) -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+    access = DataAccessCollection(connections={sqlite_conn})
+
+    session = mloda.prepare(
+        ["rc_root"],
+        compute_frameworks=_RC_FRAMEWORKS,
+        data_access_collection=access,
+        plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+        output_framework=sqlite_fw,
+    )
+
+    assert session.engine is not None
+    assert session.engine.output_connection is sqlite_conn
+
+
+def test_an_output_framework_outside_the_run_list_still_converts() -> None:
+    expected = PythonDictFramework.expected_data_framework()
+
+    result = _run_rc(["rc_root"], "PythonDictFramework")
+
+    assert len(result) == 1
+    assert all(type(frame) is expected for frame in result)
 
 
 # An unrelated consumer must not move a root.

@@ -29,6 +29,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 -   **links** (optional): Define dataset merging links with Link objects.
 -   **data_access_collection** (optional): Provide data sources for feature identification.
 -   **function_extender** (optional): Add function extenders to customize computations. Session-level: accepted by every call that plans (the constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, `diagnose()`) and snapshotted then; not accepted by `run()`/`stream_run()`, so changing the set afterwards has no effect.
+-   **output_framework** (optional): Name or class of the compute framework results come back in. Session-level like `function_extender`: not accepted by `run()`/`stream_run()`. Converted once at the end of the run; without it, results stay in the chosen framework.
 
 #### Runner & Execution Configuration
 
@@ -166,11 +167,12 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **declared_left_frameworks** / **declared_right_frameworks** (`tuple[type[ComputeFramework], ...]`): the compute frameworks each declared side's parent features declared as candidates, sorted by class name, for a join step; empty otherwise, and empty when the plan recorded no candidates for the side. APPEND/UNION sides carry only the index-bearing parent.
 - **feature_set_options** (`Options | None`): a group-only, deep-copied snapshot of a compute step's `FeatureSet.options`, without the reader pair; None otherwise. Excluded from equality.
 - **compute_framework_reason** (`str | None`): why the central choice put a compute step on its framework (for example `pinned` or `saves 1 conversion`); None for join and transform steps.
+- **result_framework** (`type[ComputeFramework] | None`): the framework a compute step's requested features come back in, the `output_framework` if set, else the step's own framework; None without requested features and for join and transform steps.
 - **reader_data_access** (`tuple[type[BaseInputData], Any] | None`, field, excluded from equality): the `(ReaderClass, data_access)` pair a compute step resolved for reading its input data; None otherwise.
 - **data_access_identity** (`str | None`, property): the reader's `data_access_identity(data_access)` for a compute step's reader pair, None otherwise, the same value `HookContext.data_access_identity` carries. Core readers keep credentials out of it; a reader whose paths carry tokens must override `data_access_identity` (see [Extenders](../chapter1/extender.md)).
 - **data_access_identity_is_fallback** (`bool | None`, property): True when that identity is a fallback (the type name or bare key names) that names no source, False otherwise, None without a reader pair.
 - **step_uuid** (`UUID | None`): the compute step's uuid, the key `RunResult.frames()` and `ResultStream.frames()` pair by; None otherwise. Excluded from equality (fresh per planning run).
-- **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** (`str | None`): Class names of the above, None when unset.
+- **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** / **result_framework_name** (`str | None`): Class names of the above, None when unset.
 - **declared_left_framework_names** / **declared_right_framework_names** (`tuple[str, ...]`): class names of the two tuples above, same order.
 
 `reader_data_access` may hold credentials, so never log or serialize it raw; `dataclasses.asdict(step)` includes it, and `feature_set_options` no longer holds the pair. Use `data_access_identity` instead; the other fields hold names, classes and uuids.

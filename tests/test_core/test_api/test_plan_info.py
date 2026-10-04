@@ -566,6 +566,7 @@ class TestPlanStepDataclass:
             "specialized_from",
             "reader_data_access",
             "compute_framework_reason",
+            "result_framework",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -2161,3 +2162,65 @@ class TestCallerNeedsNoInternalImport:
     def test_public_entry_points_exist_on_the_public_api(self) -> None:
         assert hasattr(mlodaAPI, "resolved_plan")
         assert hasattr(mlodaAPI, "explain")
+
+
+class TestPlanStepResultFramework:
+    """result_framework is the type a step's requested output comes back in."""
+
+    @staticmethod
+    def _chained_plan(**options: Any) -> list[PlanStep]:
+        return mloda.explain(
+            _CHAINED_FEATURES,
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=_AGGREGATION_PLUGINS,
+            **options,
+        )
+
+    def test_result_framework_name_is_the_class_name(self) -> None:
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=(),
+            feature_group=None,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+        assert step.result_framework is None
+        assert step.result_framework_name is None
+
+        assert dataclasses.replace(step, result_framework=PyArrowTable).result_framework_name == "PyArrowTable"
+
+    def test_without_the_option_a_requested_step_reports_its_own_framework(self) -> None:
+        source, requested = [step for step in self._chained_plan() if step.step_kind == "compute"]
+
+        assert requested.result_framework is requested.compute_framework
+        assert source.result_framework is None
+
+    @pytest.mark.parametrize("via", ["explain", "resolved_plan"])
+    def test_the_option_sets_result_framework_on_requested_steps_only(self, via: str) -> None:
+        if via == "explain":
+            plan = self._chained_plan(output_framework="PyArrowTable")
+        else:
+            session = mloda.prepare(
+                _CHAINED_FEATURES,
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=_AGGREGATION_PLUGINS,
+                output_framework="PyArrowTable",
+            )
+            plan = session.resolved_plan()
+        source, requested = [step for step in plan if step.step_kind == "compute"]
+
+        assert requested.result_framework is PyArrowTable
+        assert source.result_framework is None
+
+    def test_join_and_transform_steps_report_no_result_framework(self) -> None:
+        plan = mloda.explain(
+            ["PlanInfoCrossConsumer"],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            links={_cross_link()},
+            plugin_collector=_CROSS_JOIN_PLUGINS,
+            output_framework=PandasDataFrame,
+        )
+
+        assert {step.step_kind for step in plan} >= {"join", "compute"}
+        assert all(step.result_framework is None for step in plan if step.step_kind != "compute")

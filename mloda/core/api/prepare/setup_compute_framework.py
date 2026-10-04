@@ -3,6 +3,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 
 
 class SetupComputeFramework:
@@ -13,7 +14,9 @@ class SetupComputeFramework:
         user_compute_frameworks: Sequence[str | type[ComputeFramework]] | None,
         features: Features,
         parallelization_modes: set[ParallelizationMode] | None = None,
+        output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
+        self.output_framework = self._resolve_output_framework(output_framework)
         available_compute_frameworks = get_all_subclasses(ComputeFramework)
 
         if user_compute_frameworks is not None and (
@@ -49,6 +52,19 @@ class SetupComputeFramework:
         )
 
         self.compute_frameworks = available_compute_frameworks
+
+    @staticmethod
+    def _resolve_output_framework(output: str | type[ComputeFramework] | None) -> type[ComputeFramework] | None:
+        if output is None:
+            return None
+        available = PreFilterPlugins.get_cfw_subclasses()
+        matches = [cls for cls in available if cls is output or cls.get_class_name() == output]
+        if not matches:
+            names = sorted(cls.get_class_name() for cls in available)
+            raise ValueError(f"output_framework {output!r} is not an available compute framework: {names}.")
+        if len(matches) > 1:
+            raise ValueError(f"output_framework {output!r} names more than one available compute framework.")
+        return matches[0]
 
     def validate_if_at_least_one_feature_compute_framework_is_in_available_compute_framework(
         self, features: Features, available_compute_frameworks: set[type[ComputeFramework]]

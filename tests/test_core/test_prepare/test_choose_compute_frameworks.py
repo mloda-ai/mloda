@@ -114,8 +114,10 @@ class _Net:
         options: dict[str, Any] | None = None,
         data_type: DataType | None = None,
         pinned: bool = False,
+        requested: bool = False,
     ) -> Feature:
         feature = Feature(name, options=options, data_type=data_type)
+        feature.initial_requested_data = requested
         feature.framework_pinned = pinned
         feature.compute_frameworks = None if allowed is None else set(allowed)
         self.graph.add_node(feature.uuid, NodeProperties(feature, fg))
@@ -148,15 +150,24 @@ class _Net:
         self,
         positions: Mapping[type[ComputeFramework], int] | None = None,
         chooser_class: type[ChooseComputeFrameworks] = ChooseComputeFrameworks,
+        output_framework: type[ComputeFramework] | None = None,
     ) -> ChooseComputeFrameworks:
-        return chooser_class(self.graph, self.nodes, self.occurrences, self.ties, dict(positions) if positions else {})
+        return chooser_class(
+            self.graph,
+            self.nodes,
+            self.occurrences,
+            self.ties,
+            dict(positions) if positions else {},
+            output_framework=output_framework,
+        )
 
     def choose(
         self,
         positions: Mapping[type[ComputeFramework], int] | None = None,
         chooser_class: type[ChooseComputeFrameworks] = ChooseComputeFrameworks,
+        output_framework: type[ComputeFramework] | None = None,
     ) -> None:
-        self.chooser(positions, chooser_class).choose()
+        self.chooser(positions, chooser_class, output_framework).choose()
 
     def conversions(self) -> int:
         """Graph edges whose ends ended up on different frameworks."""
@@ -581,6 +592,67 @@ def test_features_of_one_group_with_equal_options_and_allowed_set_get_one_framew
     net.choose()
 
     assert first.chosen_compute_framework is second.chosen_compute_framework
+
+
+# --- output framework ------------------------------------------------------------------------------------
+
+
+def test_a_free_requested_block_moves_to_the_output_framework() -> None:
+    net = _Net()
+    feature = net.add(ChooserRootFG, "output_pull_feature", {P, A}, requested=True)
+
+    net.choose({P: 0, A: 1}, output_framework=A)
+
+    assert feature.chosen_compute_framework is A
+    assert feature.chosen_compute_framework_reason == SAVES_ONE
+
+
+def test_an_unrequested_block_is_not_pulled_to_the_output_framework() -> None:
+    net = _Net()
+    feature = net.add(ChooserRootFG, "output_unrequested_feature", {P, A})
+
+    net.choose({P: 0, A: 1}, output_framework=A)
+
+    assert feature.chosen_compute_framework is P
+
+
+def test_a_requested_block_without_a_path_to_the_output_is_pruned_to_a_framework_with_one() -> None:
+    one, two = _throwaway_pair(shared_expected=False)
+    net = _Net()
+    feature = net.add(ChooserRootFG, "output_pruned_feature", {one, two}, requested=True)
+
+    net.choose({one: 0, two: 1}, output_framework=two)
+
+    assert feature.chosen_compute_framework is two
+
+
+def test_a_requested_block_with_no_path_to_the_output_is_infeasible() -> None:
+    one, two = _throwaway_pair(shared_expected=False)
+    net = _Net()
+    net.add(ChooserRootFG, "output_infeasible_feature", {one}, requested=True)
+
+    with pytest.raises(ValueError, match="output_infeasible_feature"):
+        net.choose(output_framework=two)
+
+
+def test_a_pinned_requested_block_with_no_path_to_the_output_is_infeasible() -> None:
+    one, two = _throwaway_pair(shared_expected=False)
+    net = _Net()
+    net.add(ChooserRootFG, "output_pinned_feature", {one}, pinned=True, requested=True)
+
+    with pytest.raises(ValueError, match="output_pinned_feature"):
+        net.choose(output_framework=two)
+
+
+def test_a_framework_sharing_the_outputs_expected_data_framework_costs_nothing() -> None:
+    one, two = _throwaway_pair(shared_expected=True)
+    net = _Net()
+    feature = net.add(ChooserRootFG, "output_twin_feature", {one, two}, requested=True)
+
+    net.choose({one: 0, two: 1}, output_framework=two)
+
+    assert feature.chosen_compute_framework is one
+    assert feature.chosen_compute_framework_reason == LIST_ORDER
 
 
 # --- reasons ---------------------------------------------------------------------------------------------

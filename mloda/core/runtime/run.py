@@ -95,6 +95,8 @@ class ExecutionOrchestrator:
         request_feature_order: list[str] | None = None,
         tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
         run_context: RunContext | None = None,
+        output_framework: type[ComputeFramework] | None = None,
+        output_connection: Any = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -122,7 +124,10 @@ class ExecutionOrchestrator:
 
         # Data lifecycle - delegate to DataLifecycleManager
         self.data_lifecycle_manager = DataLifecycleManager(
-            column_ordering=column_ordering, request_feature_order=request_feature_order
+            column_ordering=column_ordering,
+            request_feature_order=request_feature_order,
+            output_framework=output_framework,
+            output_connection=output_connection,
         )
 
         self._step_lock = threading.Lock()

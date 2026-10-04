@@ -10,7 +10,7 @@ import pytest
 
 from mloda.core.api.plan_lock import PLAN_LOCK_FORMAT, _lock_text
 from mloda.steward import PlanLockMismatchError, PlanStep, check_plan_lock, write_plan_lock
-from mloda.provider import FeatureGroup
+from mloda.provider import ComputeFramework, FeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
@@ -90,7 +90,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 2
+    assert content["format"] == PLAN_LOCK_FORMAT == 3
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
@@ -100,6 +100,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "compute_framework_reason",
         "specialized_from",
         "reader",
+        "result_framework",
     }
     assert set(content["joins"][0]) == {
         "left_feature_group",
@@ -112,6 +113,25 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     assert set(content["transforms"][0]) == {"feature_group", "from_compute_framework", "to_compute_framework"}
     assert text == _lock_text(plan)
     check_plan_lock(plan, lock)
+
+
+def test_the_result_framework_is_recorded_per_compute_record_and_a_changed_one_fails_check(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    write_plan_lock([_compute_step(result_framework=PyArrowTable)], lock)
+
+    recorded = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]["result_framework"]
+    assert recorded == f"{PyArrowTable.__module__}:{PyArrowTable.__qualname__}"
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock([_compute_step(result_framework=PandasDataFrame)], lock)
+
+
+def test_write_refuses_a_main_module_result_framework_and_writes_nothing(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+
+    with pytest.raises(ValueError, match="__main__"):
+        write_plan_lock([_compute_step(result_framework=cast("type[ComputeFramework]", _MainLike))], lock)
+
+    assert not lock.exists()
 
 
 def test_the_compute_reason_is_recorded_and_a_changed_reason_fails_check(tmp_path: Path) -> None:

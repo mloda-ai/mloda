@@ -160,3 +160,32 @@ class TestSetupComputeFramework:
     def test_set_through_mloda_api_raises_setup_configuration_error(self) -> None:
         with pytest.raises(SetupConfigurationError, match="ordered list"):
             mloda.prepare(["some_feature"], compute_frameworks={"PandasDataFrame"})  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize(
+        ("output", "expected"),
+        [("PyArrowTable", PyArrowTable), (PyArrowTable, PyArrowTable), (None, None)],
+        ids=["name", "class", "none"],
+    )
+    def test_output_framework_resolves_by_name_or_class(
+        self, features: Features, output: Any, expected: type[ComputeFramework] | None
+    ) -> None:
+        setup_compute_framework = SetupComputeFramework(["PandasDataFrame"], features, output_framework=output)
+
+        assert setup_compute_framework.output_framework is expected
+
+    def test_unknown_output_framework_raises(self, features: Features) -> None:
+        with pytest.raises(ValueError, match="NoSuchFramework"):
+            SetupComputeFramework(None, features, output_framework="NoSuchFramework")
+
+    def test_unavailable_output_framework_raises(self, features: Features) -> None:
+        class ZzSetupUnavailableOutputFramework(ComputeFramework):
+            @staticmethod
+            def is_available() -> bool:
+                return False
+
+        with pytest.raises(ValueError, match="ZzSetupUnavailableOutputFramework"):
+            SetupComputeFramework(None, features, output_framework="ZzSetupUnavailableOutputFramework")
+
+    def test_unknown_output_framework_through_mloda_api_raises_setup_configuration_error(self) -> None:
+        with pytest.raises(SetupConfigurationError, match="NoSuchFramework"):
+            mloda.prepare(["some_feature"], output_framework="NoSuchFramework")

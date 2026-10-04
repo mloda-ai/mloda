@@ -73,7 +73,9 @@ class Engine:
         function_extender: set[Extender] | None = None,
         run_id: str | None = None,
         framework_preference: Mapping[type[ComputeFramework], int] | None = None,
+        output_framework: type[ComputeFramework] | None = None,
     ) -> None:
+        self.output_framework = output_framework
         self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
         self.filter_ties: list[tuple[UUID, UUID]] = []
         # setup variables which track the primary sources and the compute platforms
@@ -101,6 +103,7 @@ class Engine:
         self.plugin_collector = plugin_collector
 
         self.data_access_collection = data_access_collection
+        self.output_connection = self._resolve_output_connection()
         self.column_ordering = column_ordering
         self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
@@ -128,6 +131,17 @@ class Engine:
             if isinstance(step, FeatureGroupStep)
         }
         return versions or None
+
+    def _resolve_output_connection(self) -> Any:
+        if self.output_framework is None:
+            return None
+        connection = self.output_framework.pick_connection_from_dac(self.data_access_collection)
+        if connection is None and self.output_framework.connection_requirement() is ConnectionRequirement.REQUIRED:
+            raise ValueError(
+                f"output_framework {self.output_framework.get_class_name()} requires a connection, "
+                "but none was found in the data access collection."
+            )
+        return connection
 
     def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
         """Resolve a connection per TFS destination framework at setup time.
@@ -161,6 +175,8 @@ class Engine:
             request_feature_order=self.request_feature_order,
             tfs_connection_map=self.tfs_connection_map,
             run_context=self.run_context,
+            output_framework=self.output_framework,
+            output_connection=self.output_connection,
         )
         if isinstance(orchestrator, ExecutionOrchestrator):
             return orchestrator
@@ -180,7 +196,9 @@ class Engine:
         graph = graph_builder.graph
 
         # resolve graph into a queue
-        resolver = ResolveGraph(graph, self.links, self.filter_ties, self.framework_positions)
+        resolver = ResolveGraph(
+            graph, self.links, self.filter_ties, self.framework_positions, output_framework=self.output_framework
+        )
         resolver.create_initial_queue()
 
         resolver.set_nodes_per_feature_group()

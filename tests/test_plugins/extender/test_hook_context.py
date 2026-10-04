@@ -161,12 +161,8 @@ class TestHookContextCarrierField:
         ):
             assert copied == carrier
             assert type(copied) is dict
-
-    def test_context_with_carrier_deepcopies_and_pickles(self) -> None:
-        context = _make_context(carrier={"a": "b"})
-
-        assert copy.deepcopy(context).carrier == {"a": "b"}
-        assert pickle.loads(pickle.dumps(context)).carrier == {"a": "b"}  # nosec B301
+        assert copy.deepcopy(context).carrier == carrier
+        assert pickle.loads(pickle.dumps(context)).carrier == carrier  # nosec B301
 
 
 class TestHookContextIsFrozenExceptOutcomeFields:

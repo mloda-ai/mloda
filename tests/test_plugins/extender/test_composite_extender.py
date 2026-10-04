@@ -919,17 +919,6 @@ class _RetryingExtender(Extender):
             return func(*args, **kwargs)
 
 
-class _PicklableExtender(Extender):
-    def __init__(self) -> None:
-        self.priority = 3
-
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        return func(*args, **kwargs)
-
-
 class TestGateTierOrdering:
     def test_gate_with_higher_priority_number_sorts_first_in_build_hook_extenders(self) -> None:
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders
@@ -1060,7 +1049,7 @@ class TestSealOnFirstUse:
 
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders
 
-        ext = _PicklableExtender()
+        ext = MockExtender("picklable", priority=3)
         build_hook_extenders([ext])
         clone = pickle.loads(pickle.dumps(ext))  # nosec B301
 

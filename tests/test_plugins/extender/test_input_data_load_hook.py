@@ -7,7 +7,6 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 
 import concurrent.futures
 import contextvars
-import dataclasses
 import logging
 import sqlite3
 from pathlib import Path, PurePosixPath
@@ -297,17 +296,19 @@ class TestComputeFrameworkCurrentShortCircuit:
         assert observed[0] is None
 
 
-def _build_calc_context(compute_framework_name: str = "stub") -> HookContext:
+def _build_calc_context(compute_framework_name: str = "stub", **overrides: Any) -> HookContext:
     """A minimal calculate-phase HookContext to activate() around a direct _load_data_via_hook call."""
-    return HookContext(
-        hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
-        feature_group_class="test.Fake",
-        feature_group_version="1",
-        plugin_version=None,
-        feature_names=("x",),
-        input_features=None,
-        compute_framework_name=compute_framework_name,
-    )
+    fields: dict[str, Any] = {
+        "hook": ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+        "feature_group_class": "test.Fake",
+        "feature_group_version": "1",
+        "plugin_version": None,
+        "feature_names": ("x",),
+        "input_features": None,
+        "compute_framework_name": compute_framework_name,
+    }
+    fields.update(overrides)
+    return HookContext(**fields)
 
 
 class _DirectLoadReader(BaseInputData):
@@ -977,10 +978,6 @@ class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
         assert str(path) in identity
 
 
-def _calc_context_with_carrier(carrier: dict[str, str]) -> HookContext:
-    return dataclasses.replace(_build_calc_context(), carrier=carrier)
-
-
 class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
     """Two INPUT_DATA_LOAD HookContexts built off the SAME ComputeFramework instance's
     run_context.carrier must not share the dict object."""
@@ -993,11 +990,11 @@ class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
         reader = _DirectLoadReader()
         features = FeatureSet()
 
-        with cfw.activate(), _calc_context_with_carrier(carrier).activate():
+        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
             BaseInputData._load_data_via_hook(reader, "access-one", features)
         first_context = extender.captured
 
-        with cfw.activate(), _calc_context_with_carrier(carrier).activate():
+        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
             BaseInputData._load_data_via_hook(reader, "access-two", features)
         second_context = extender.captured
 
@@ -1014,11 +1011,11 @@ class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
         reader = _DirectLoadReader()
         features = FeatureSet()
 
-        with cfw.activate(), _calc_context_with_carrier(carrier).activate():
+        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
             BaseInputData._load_data_via_hook(reader, "access-one", features)
         first_context = extender.captured
 
-        with cfw.activate(), _calc_context_with_carrier(carrier).activate():
+        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
             BaseInputData._load_data_via_hook(reader, "access-two", features)
         second_context = extender.captured
 
@@ -1042,9 +1039,7 @@ class TestInputDataLoadHookCarriesInputFeatureEdges:
         cfw = ComputeFramework(function_extender={extender})
         cfw.run_context = RunContext()
         reader = _DirectLoadReader()
-        calc_context = dataclasses.replace(
-            _build_calc_context(), input_feature_edges={"a": ("src_a",), "b": ("src_b",)}
-        )
+        calc_context = _build_calc_context(input_feature_edges={"a": ("src_a",), "b": ("src_b",)})
 
         with cfw.activate(), calc_context.activate():
             BaseInputData._load_data_via_hook(reader, "access", FeatureSet())
@@ -1071,8 +1066,7 @@ class TestInputDataLoadIdentityComesFromTheCalcContext:
     def test_forged_cfw_run_context_is_ignored(self) -> None:
         extender = _InputDataLoadCapturingExtender()
         cfw = ComputeFramework(function_extender={extender})
-        calc_context = dataclasses.replace(
-            _build_calc_context(),
+        calc_context = _build_calc_context(
             run_id="real-run",
             carrier={"traceparent": "real"},
             tenant_id="real-tenant",
@@ -1102,24 +1096,13 @@ class TestInputDataLoadIdentityComesFromTheCalcContext:
         assert captured.worker_index == 5
 
 
-class _GateInputDataLoadExtender(Extender):
-    """A gate INPUT_DATA_LOAD extender that delegates and counts its calls."""
+class _GateInputDataLoadExtender(_InputDataLoadCapturingExtender):
+    """A gate INPUT_DATA_LOAD extender that delegates and records its calls."""
 
     never_fall_back = True
 
-    def __init__(self) -> None:
-        self.priority = 100
-        self.calls = 0
 
-    def wraps(self) -> set[ExtenderHook]:
-        return {ExtenderHook.INPUT_DATA_LOAD}
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        self.calls += 1
-        return func(*args, **kwargs)
-
-
-class _CountingReader(BaseInputData):
+class _CountingReader(_DirectLoadReader):
     """Reader counting its load_data calls, for direct _load_data_via_hook calls."""
 
     loads = 0
@@ -1127,7 +1110,7 @@ class _CountingReader(BaseInputData):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         cls.loads += 1
-        return [1, 2, 3]
+        return super().load_data(data_access, features)
 
 
 def _threaded_load_feature_group(mode: str) -> type[FeatureGroup]:
@@ -1163,7 +1146,7 @@ class TestGateRefusesAThreadHoppedReaderLoad:
             _run_calculate(cfw, _threaded_load_feature_group("bare"))
 
         assert _CountingReader.loads == 0
-        assert gate.calls == 0
+        assert len(gate.all_captured) == 0
 
     def test_non_gate_extender_still_loads_across_a_thread_hop(self) -> None:
         extender = _InputDataLoadCapturingExtender()
@@ -1190,7 +1173,7 @@ class TestGateRefusesAThreadHoppedReaderLoad:
         result = _run_calculate(cfw, _threaded_load_feature_group("copied"))
 
         assert result == [1, 2, 3]
-        assert gate.calls == 1
+        assert len(gate.all_captured) == 1
         assert _CountingReader.loads == 1
 
     def test_gate_active_cfw_without_calc_context_raises(self) -> None:
@@ -1202,7 +1185,7 @@ class TestGateRefusesAThreadHoppedReaderLoad:
             BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
 
         assert _CountingReader.loads == 0
-        assert gate.calls == 0
+        assert len(gate.all_captured) == 0
 
     def test_non_gate_extender_without_calc_context_calls_the_reader_directly(self) -> None:
         extender = _InputDataLoadCapturingExtender()

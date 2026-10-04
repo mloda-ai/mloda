@@ -7,8 +7,11 @@ deny-with-fallback, and the "activate only when needed" short-circuit.
 
 import concurrent.futures
 import contextvars
+import copy
 import logging
+import pickle  # nosec B403
 import sqlite3
+import threading
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
@@ -21,9 +24,17 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import FeatureGroup
+from mloda.provider import DataCreator, FeatureGroup
 from mloda.steward import GateBypassError
-from mloda.user import DataAccessCollection, FeatureName, Options, PluginCollector, mloda
+from mloda.user import (
+    DataAccessCollection,
+    Feature,
+    FeatureName,
+    Options,
+    ParallelizationMode,
+    PluginCollector,
+    mloda,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
@@ -1104,14 +1115,33 @@ class _CountingReader(_DirectLoadReader):
         return super().load_data(data_access, features)
 
 
-def _threaded_load_feature_group(mode: str) -> type[FeatureGroup]:
-    """A FeatureGroup whose calculate_feature loads the reader from a worker thread (mode: bare or copied)."""
+def _threaded_load_feature_group(mode: str, leaked: list[FeatureSet] | None = None) -> type[FeatureGroup]:
+    """A FeatureGroup whose calculate_feature loads the reader from a worker thread.
+
+    mode: bare/copied (FeatureSet built in the hopped thread), received (the calculate FeatureSet),
+    built_in_calc (built in the calculation thread), deepcopy (copy of the received one), late (received one
+    appended to `leaked` and not loaded in the calculation).
+    """
 
     class _ThreadedLoadFeatureGroup(FeatureGroup):
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            hopped: FeatureSet | None = None
+            if mode == "received":
+                hopped = features
+            elif mode == "built_in_calc":
+                hopped = FeatureSet()
+            elif mode == "deepcopy":
+                hopped = copy.deepcopy(features)
+            elif mode == "late":
+                assert leaked is not None
+                leaked.append(features)
+                return [0]
+
             def load() -> Any:
-                return BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+                return BaseInputData._load_data_via_hook(
+                    _CountingReader(), "access", FeatureSet() if hopped is None else hopped
+                )
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 if mode == "copied":
@@ -1121,14 +1151,160 @@ def _threaded_load_feature_group(mode: str) -> type[FeatureGroup]:
     return _ThreadedLoadFeatureGroup
 
 
+def _load_in_thread(features: FeatureSet) -> tuple[Any, BaseException | None]:
+    """Load the reader with `features` from a fresh thread; returns (result, raised exception)."""
+    outcome: list[Any] = []
+
+    def run() -> None:
+        try:
+            outcome.append((BaseInputData._load_data_via_hook(_CountingReader(), "access", features), None))
+        except BaseException as exc:  # noqa: BLE001
+            outcome.append((None, exc))
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    result: tuple[Any, BaseException | None] = outcome[0]
+    return result
+
+
+def _framework_for(kind: str) -> ComputeFramework:
+    extenders: dict[str, set[Extender]] = {
+        "gate": {_GateInputDataLoadExtender()},
+        "non_gate": {_InputDataLoadCapturingExtender()},
+        "none": set(),
+    }
+    return PythonDictFramework(function_extender=extenders[kind])
+
+
 def _run_calculate(cfw: ComputeFramework, feature_group: type[FeatureGroup]) -> Any:
     return cfw.run_calculate_feature(feature_group, FeatureSet())
 
 
-class TestGateRefusesAThreadHoppedReaderLoad:
-    """Under a gate INPUT_DATA_LOAD extender, a load whose ContextVar was lost is refused, not run ungated."""
+class TestThreadHoppedReaderLoadIsDispatchedPerRun:
+    """A FeatureSet stamped by its run dispatches a hopped load through the hook; unstamped ones fail closed."""
 
-    def test_bare_thread_hop_raises_and_the_reader_never_loads(self) -> None:
+    def test_received_feature_set_hop_reaches_the_gate_with_the_calculate_identity(self) -> None:
+        gate = _GateInputDataLoadExtender()
+        calc = _CalcContextCapturingExtender()
+        cfw = PythonDictFramework(function_extender={gate, calc})
+        cfw.run_context = RunContext(run_id="run-hop", tenant_id="tenant-hop", principal="principal-hop")
+        _CountingReader.loads = 0
+
+        result = _run_calculate(cfw, _threaded_load_feature_group("received"))
+
+        assert result == [1, 2, 3]
+        assert len(gate.all_captured) == 1
+        assert _CountingReader.loads == 1
+        assert calc.captured is not None
+        load_context = gate.all_captured[0]
+        assert load_context.hook == ExtenderHook.INPUT_DATA_LOAD
+        assert load_context.run_id == calc.captured.run_id == "run-hop"
+        assert load_context.tenant_id == calc.captured.tenant_id == "tenant-hop"
+        assert load_context.principal == calc.captured.principal == "principal-hop"
+        assert load_context.feature_group_class == calc.captured.feature_group_class
+
+    def test_non_gate_extender_observes_the_hopped_load(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = PythonDictFramework(function_extender={extender})
+        _CountingReader.loads = 0
+
+        assert _run_calculate(cfw, _threaded_load_feature_group("received")) == [1, 2, 3]
+
+        assert len(extender.all_captured) == 1
+        assert _CountingReader.loads == 1
+
+    def test_a_gate_free_run_hops_while_another_runs_gated_scope_is_open(self) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+        errors: list[BaseException] = []
+
+        class _BlockingFeatureGroup(FeatureGroup):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                entered.set()
+                assert release.wait(timeout=5)
+                return [0]
+
+        def gated_run() -> None:
+            try:
+                _run_calculate(_framework_for("gate"), _BlockingFeatureGroup)
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        thread = threading.Thread(target=gated_run)
+        thread.start()
+        try:
+            assert entered.wait(timeout=5)
+            for kind in ("none", "non_gate"):
+                _CountingReader.loads = 0
+                result = _run_calculate(_framework_for(kind), _threaded_load_feature_group("received"))
+                assert result == [1, 2, 3]
+                assert _CountingReader.loads == 1
+        finally:
+            release.set()
+            thread.join(timeout=5)
+
+        assert not thread.is_alive()
+        assert errors == []
+
+    def test_feature_set_built_in_the_calculation_thread_and_loaded_in_a_pool_thread_is_gated(self) -> None:
+        gate = _GateInputDataLoadExtender()
+        cfw = PythonDictFramework(function_extender={gate})
+        _CountingReader.loads = 0
+
+        result = _run_calculate(cfw, _threaded_load_feature_group("built_in_calc"))
+
+        assert result == [1, 2, 3]
+        assert len(gate.all_captured) == 1
+        assert _CountingReader.loads == 1
+
+    def test_deepcopy_made_in_the_calculation_stays_stamped(self) -> None:
+        gate = _GateInputDataLoadExtender()
+        cfw = PythonDictFramework(function_extender={gate})
+        _CountingReader.loads = 0
+
+        result = _run_calculate(cfw, _threaded_load_feature_group("deepcopy"))
+
+        assert result == [1, 2, 3]
+        assert len(gate.all_captured) == 1
+        assert _CountingReader.loads == 1
+
+    @pytest.mark.parametrize("kind", ["gate", "non_gate", "none"])
+    def test_load_after_the_calculation_returned(self, kind: str) -> None:
+        leaked: list[FeatureSet] = []
+        cfw = _framework_for(kind)
+        _run_calculate(cfw, _threaded_load_feature_group("late", leaked))
+        _CountingReader.loads = 0
+
+        result, error = _load_in_thread(leaked[0])
+
+        if kind == "gate":
+            assert isinstance(error, GateBypassError)
+            assert _CountingReader.loads == 0
+        else:
+            assert error is None
+            assert result == [1, 2, 3]
+            assert _CountingReader.loads == 1
+
+    @pytest.mark.parametrize("kind", ["gate", "non_gate", "none"])
+    def test_pickled_feature_set_loaded_outside_the_scope(self, kind: str) -> None:
+        leaked: list[FeatureSet] = []
+        cfw = _framework_for(kind)
+        _run_calculate(cfw, _threaded_load_feature_group("late", leaked))
+        restored = pickle.loads(pickle.dumps(leaked[0]))  # nosec B301
+        _CountingReader.loads = 0
+
+        if kind == "gate":
+            with pytest.raises(GateBypassError):
+                BaseInputData._load_data_via_hook(_CountingReader(), "access", restored)
+            assert _CountingReader.loads == 0
+        else:
+            assert BaseInputData._load_data_via_hook(_CountingReader(), "access", restored) == [1, 2, 3]
+            assert _CountingReader.loads == 1
+
+    def test_bare_thread_hop_with_a_self_built_feature_set_raises_and_the_reader_never_loads(self) -> None:
         gate = _GateInputDataLoadExtender()
         cfw = PythonDictFramework(function_extender={gate})
         _CountingReader.loads = 0
@@ -1446,3 +1622,62 @@ class TestInputDataLoadCarriesSpecializedFrom:
         assert fetch_extender.captured is not None
         assert calc_extender.captured.specialized_from == (parent_name,)
         assert fetch_extender.captured.specialized_from == calc_extender.captured.specialized_from
+
+
+_MP_HOP_COLUMN = f"{_MARKER}_mp_hop_col"
+
+
+class _FileRecordingGateExtender(Extender):
+    """Gate that appends one line per call to a file, so a spawned worker's calls are visible to the parent."""
+
+    never_fall_back = True
+
+    def __init__(self, output_path: Path) -> None:
+        self.priority = 100
+        self._output_path = output_path
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        with self._output_path.open("a", encoding="utf-8") as handle:
+            handle.write("gate\n")
+        return func(*args, **kwargs)
+
+
+class _MultiprocessingHopFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_MP_HOP_COLUMN})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            loaded = pool.submit(lambda: BaseInputData._load_data_via_hook(_DirectLoadReader(), "access", features))
+            return {_MP_HOP_COLUMN: loaded.result()}
+
+
+@pytest.mark.timeout(30)
+class TestThreadHopInASpawnedWorkerReachesTheGate:
+    def test_hopped_load_in_a_multiprocessing_worker_reaches_the_gate(self, tmp_path: Path, flight_server: Any) -> None:
+        output_path = tmp_path / "gate_calls.txt"
+
+        session = mloda.prepare(
+            [Feature(name=_MP_HOP_COLUMN)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MultiprocessingHopFeatureGroup}),
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={_FileRecordingGateExtender(output_path)},
+        )
+
+        result = session.run(
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+        assert result[0][_MP_HOP_COLUMN] == [1, 2, 3] or list(result[0][_MP_HOP_COLUMN]) == [[1, 2, 3]]
+        assert output_path.read_text(encoding="utf-8").splitlines() == ["gate"]

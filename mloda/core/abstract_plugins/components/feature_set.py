@@ -6,6 +6,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
+from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.filter.single_filter import SingleFilter
@@ -58,6 +59,7 @@ class FeatureSet:
         self.option_split_hint: tuple[str, frozenset[Any]] | None = None
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()
+        self._load_marker: InputDataLoadMarker | None = current_input_data_load_marker.get()
 
         if features is not None:
             for feature in features:

@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, input_data_load_gate_scope, instrument
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
@@ -714,20 +715,39 @@ class ComputeFramework(ABC):
                 )
 
         fetch_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
-        if extender is None and fetch_extender is None:
-            return method(self.data, features)
-
-        context = self._build_hook_context(hook, feature_group, features)
         gated = fetch_extender is not None and fetch_extender.never_fall_back
-        with self.activate(), context.activate(), input_data_load_gate_scope() if gated else contextlib.nullcontext():
-            if extender is None:
+        marker = InputDataLoadMarker(fetch_extender is not None, gated)
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+
+        stamped = isinstance(features, FeatureSet)
+        prior_marker = features._load_marker if stamped else None
+        if stamped:
+            features._load_marker = marker
+        token = current_input_data_load_marker.set(marker)
+        try:
+            if extender is None and fetch_extender is None:
                 return method(self.data, features)
-            return _invoke_extender(
-                extender,
-                instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
-                self.data,
-                features,
-            )
+
+            context = self._build_hook_context(hook, feature_group, features)
+            marker.active = (self, context)
+            with (
+                self.activate(),
+                context.activate(),
+                input_data_load_gate_scope() if gated else contextlib.nullcontext(),
+            ):
+                if extender is None:
+                    return method(self.data, features)
+                return _invoke_extender(
+                    extender,
+                    instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
+                    self.data,
+                    features,
+                )
+        finally:
+            marker.active = None
+            current_input_data_load_marker.reset(token)
+            if stamped and prior_marker is not None:
+                features._load_marker = prior_marker
 
     @final
     def run_validate_input_features(self, feature_group: Any, features: Any) -> None:

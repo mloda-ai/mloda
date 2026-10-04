@@ -603,6 +603,18 @@ class BaseInputData(ABC):
 
         cfw = ComputeFramework.current()
         if cfw is None:
+            marker = features._load_marker
+            if marker is not None:
+                active = marker.active
+                if active is not None and marker.has_extender:
+                    with active[0].activate(), active[1].activate():
+                        return BaseInputData._load_data_via_hook(reader, data_access, features)
+                if marker.gate:
+                    raise GateBypassError(
+                        f"{type(reader).__qualname__}.load_data ran after its calculation finished under an "
+                        "INPUT_DATA_LOAD gate."
+                    )
+                return reader.load_data(data_access, features)
             if input_data_load_gate_scopes_active() > 0:
                 raise GateBypassError(
                     f"{type(reader).__qualname__}.load_data ran outside the calculation context while an "

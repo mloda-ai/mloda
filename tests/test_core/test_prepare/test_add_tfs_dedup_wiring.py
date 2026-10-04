@@ -310,6 +310,9 @@ _SAME_NAME_RAISE_CASES = {
     "conflict_plus_different_name_split": _SameNameCase(
         {"options_a": {"unit": "x"}, "extra_name": "dedup_shared_other"}, ["unit"]
     ),
+    "separate_consumers_option_differs": _SameNameCase(
+        {"options_a": {"unit": "x"}, "separate_consumers": True}, ["unit"]
+    ),
 }
 
 
@@ -324,22 +327,6 @@ def test_one_consumer_reading_one_name_in_two_unlinked_variants_raises(case: _Sa
 
     message = str(exc_info.value)
     for fragment in ["DedupDestFG", "DedupUpstreamFG", "dedup_shared", *case.fragments]:
-        assert fragment in message
-    assert "Link.inner" not in message
-    assert "missing Links" not in message
-
-
-def test_different_consumer_features_reading_differing_variants_in_one_step_raise() -> None:
-    """Consumer features sharing one step must not read differing variants of one name (steps are split upstream)."""
-    producers, dest_step, graph = _split_root_steps_scenario(
-        "dedup_shared", "dedup_shared", options_a={"unit": "x"}, separate_consumers=True
-    )
-
-    with pytest.raises(ValueError) as exc_info:
-        ExecutionPlan().add_tfs([*producers, dest_step], graph)
-
-    message = str(exc_info.value)
-    for fragment in ["DedupDestFG", "DedupUpstreamFG", "dedup_shared", "unit"]:
         assert fragment in message
     assert "Link.inner" not in message
     assert "missing Links" not in message

@@ -84,7 +84,7 @@ class Engine:
         self.run_context = RunContext(run_id=run_id)
         # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
-        self._frameworks_free_index: dict[type[FeatureGroup], dict[int, list[Feature]]] = defaultdict(dict)  # intake
+        self._frameworks_free_index: dict[type[FeatureGroup], dict[int, list[Feature]]] = defaultdict(dict)
 
         # use global filters
         self.global_filter = global_filter

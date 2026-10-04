@@ -279,43 +279,15 @@ def test_link_joining_a_shared_parent_twice_within_one_framework_must_not_raise(
     assert seen == {"sfw_d1|sfw_d2|sfw_p"}
 
 
-class DescLinkRootLeft(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"desc_l"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"desc_l": [1, 2, 3], "desc_idx": ["x", "y", "z"]}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-
-class DescLinkRootRight(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"desc_r"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"desc_r": [10, 20, 30], "desc_idx": ["x", "y", "z"]}
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-
 class DescLinkChild(FeatureGroup):
-    """PyArrow consumer of both join sides."""
+    """PyArrow consumer of both join sides (roots A and BSame)."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("desc_l"), Feature("desc_r")}
+        return {Feature("mlg_a"), Feature("mlg_b")}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data.append_column(cls.get_class_name(), pc.add(data.column("desc_l"), data.column("desc_r")))
+        return data.append_column(cls.get_class_name(), pc.add(data.column("mlg_a"), data.column("mlg_b")))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -340,24 +312,21 @@ class DescLinkGrandchild(FeatureGroup):
 
 
 _ENABLED_DESC = PluginCollector.enabled_feature_groups(
-    {DescLinkRootLeft, DescLinkRootRight, DescLinkChild, DescLinkGrandchild}
+    {MultiLinkRootA, MultiLinkRootBSame, DescLinkChild, DescLinkGrandchild}
 )
 
 
-def _desc_link() -> Link:
-    return Link.inner(
-        JoinSpec(DescLinkRootLeft, Index(("desc_idx",))), JoinSpec(DescLinkRootRight, Index(("desc_idx",)))
-    )
+def _desc_args() -> dict[str, Any]:
+    return {
+        "links": {Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX))},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "parallelization_modes": {ParallelizationMode.SYNC},
+        "plugin_collector": _ENABLED_DESC,
+    }
 
 
 def test_a_consumer_below_a_link_child_hops_once_from_the_link_childs_framework() -> None:
-    session = mloda.prepare(
-        [Feature(DescLinkGrandchild.get_class_name())],
-        links={_desc_link()},
-        compute_frameworks=[PandasDataFrame, PyArrowTable],
-        parallelization_modes={ParallelizationMode.SYNC},
-        plugin_collector=_ENABLED_DESC,
-    )
+    session = mloda.prepare([Feature(DescLinkGrandchild.get_class_name())], **_desc_args())
 
     assert session.engine is not None
     steps = list(session.engine.execution_planner)
@@ -370,13 +339,7 @@ def test_a_consumer_below_a_link_child_hops_once_from_the_link_childs_framework(
 
 
 def test_a_consumer_below_a_link_child_reads_the_joined_values() -> None:
-    results = mloda.run_all(
-        [Feature(DescLinkGrandchild.get_class_name())],
-        links={_desc_link()},
-        compute_frameworks=[PandasDataFrame, PyArrowTable],
-        parallelization_modes={ParallelizationMode.SYNC},
-        plugin_collector=_ENABLED_DESC,
-    )
+    results = mloda.run_all([Feature(DescLinkGrandchild.get_class_name())], **_desc_args())
 
     values = [sorted(result[DescLinkGrandchild.get_class_name()]) for result in results]
     assert values == [[22, 44, 66]]

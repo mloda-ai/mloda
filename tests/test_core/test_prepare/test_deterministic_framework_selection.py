@@ -1119,7 +1119,7 @@ def test_pinned_and_unpinned_request_share_one_step_in_the_pinned_framework(pinn
     ("pins_first", "expected_steps"), [(True, 3), (False, 2)], ids=["pins_first", "unpinned_first"]
 )
 def test_two_differing_pins_plus_unpinned_merge_only_into_an_earlier_pin(pins_first: bool, expected_steps: int) -> None:
-    """Pins first is ambiguous so nothing merges (3 steps); unpinned first merges into the first pin (2 steps)."""
+    """Pins first is ambiguous so nothing merges; unpinned first merges into the first pin."""
     pins: list[Feature | str] = [
         Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable"),
         Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PandasDataFrame"),

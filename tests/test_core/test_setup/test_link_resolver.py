@@ -182,6 +182,19 @@ class TestResolveGraph:
         feature.compute_frameworks = {BaseTestComputeFramework1}
         graph.add_node(uid, NodeProperties(feature, fg))
 
+    @staticmethod
+    def recorded_link_consumers(graph: Graph) -> set[uuid.UUID]:
+        """Resolve the Index1 link between the two test root groups; return all uuids the trekker recorded."""
+        link = Link.inner(
+            JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+            JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+        )
+        resolver = ResolveGraph(graph, {link})
+        resolver.create_initial_queue()
+        resolver.set_nodes_per_feature_group()
+        resolver.resolve_links()
+        return set().union(*resolver.resolver_links.get_link_trekker().data.values())
+
     def test_link_child_recorded_but_not_its_grandchild(self) -> None:
         graph = Graph()
         self.node(graph, uuid_1, "LeftRoot", BaseLinkTestFeatureGroup1)
@@ -191,18 +204,7 @@ class TestResolveGraph:
         for parent, child in [(uuid_1, uuid_3), (uuid_2, uuid_3), (uuid_3, uuid_4)]:
             graph.add_edge(parent, child, EdgeProperties(LinkChildFeatureGroup, LinkChildFeatureGroup))
 
-        link = Link.inner(
-            JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
-            JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
-        )
-        resolver = ResolveGraph(graph, {link})
-        resolver.create_initial_queue()
-        resolver.set_nodes_per_feature_group()
-        resolver.resolve_links()
-
-        link_trekker = resolver.resolver_links.get_link_trekker().data
-        recorded = set().union(*link_trekker.values())
-        assert recorded == {uuid_3}
+        assert self.recorded_link_consumers(graph) == {uuid_3}
 
     def test_consumer_reading_both_sides_directly_stays_recorded_when_one_is_the_others_ancestor(self) -> None:
         graph = Graph()
@@ -213,14 +215,4 @@ class TestResolveGraph:
         for parent, child in [(uuid_1, uuid_2), (uuid_1, uuid_3), (uuid_2, uuid_3)]:
             graph.add_edge(parent, child, edge)
 
-        link = Link.inner(
-            JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
-            JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
-        )
-        resolver = ResolveGraph(graph, {link})
-        resolver.create_initial_queue()
-        resolver.set_nodes_per_feature_group()
-        resolver.resolve_links()
-
-        link_trekker = resolver.resolver_links.get_link_trekker().data
-        assert set().union(*link_trekker.values()) == {uuid_3}
+        assert self.recorded_link_consumers(graph) == {uuid_3}

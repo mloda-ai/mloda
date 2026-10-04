@@ -537,9 +537,11 @@ class Engine:
         host.compute_frameworks = set(pin)
         existing = next((f for f in collection if f == host), None)
         if existing is None:
+            host.framework_pinned = True
             collection.add(host)
             return host
         self._merge_host_into(existing, host)
+        existing.framework_pinned = True
         return existing
 
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:

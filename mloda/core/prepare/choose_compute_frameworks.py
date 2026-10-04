@@ -3,6 +3,7 @@ Arc consistency prunes the domains, then branch and bound with forward checking 
 """
 
 import re
+import sys
 from collections.abc import Callable, Mapping
 from functools import partial
 from typing import NamedTuple
@@ -34,6 +35,16 @@ class _Rule(NamedTuple):
 
 
 _UNFLIPPABLE = (JoinType.RIGHT, JoinType.APPEND, JoinType.UNION)
+
+PINNED = "pinned"
+ONLY_ALLOWED = "only allowed framework"
+RULES = "rules exclude preferred frameworks"
+LIST_ORDER = "your list order"
+DEFAULT_ORDER = "default order"
+
+
+def saves_conversions(count: int) -> str:
+    return f"saves {count} conversion{'' if count == 1 else 's'}"
 
 
 def conversion_cost(from_framework: Framework, to_framework: Framework) -> int:
@@ -120,6 +131,7 @@ class ChooseComputeFrameworks:
         self.nodes = nodes_per_feature_group
         self.occurrences = link_occurrences
         self.ties = filter_ties
+        self.positions = positions
         self.rank = framework_rank_key(positions)
         self.transformer = ComputeFrameworkTransformer()
         self.paths: dict[tuple[Framework, Framework], bool] = {}
@@ -133,10 +145,13 @@ class ChooseComputeFrameworks:
         domains = self._prune(blocks, rules)
         for order in self._search_orders(len(blocks), rules, groups):
             members = set(order)
-            assignment = self._solve(blocks, order, [r for r in rules if r.blocks[0] in members], groups, domains)
+            local_rules = [r for r in rules if r.blocks[0] in members]
+            assignment, cost = self._solve(blocks, order, local_rules, groups, domains)
             for index, framework in assignment.items():
+                reason = self._reason(blocks, order, local_rules, groups, domains, assignment, cost, index)
                 for feature in blocks[index].features:
                     feature.chosen_compute_framework = framework
+                    feature.chosen_compute_framework_reason = reason
         self._require_all_chosen()
 
     def _require_all_chosen(self) -> None:
@@ -304,6 +319,48 @@ class ChooseComputeFrameworks:
             )
         return message + "."
 
+    def _order_reason(self, chosen: Framework, other: Framework) -> str:
+        unlisted = max(self.positions.values(), default=-1) + 1
+        return (
+            LIST_ORDER if self.positions.get(chosen, unlisted) != self.positions.get(other, unlisted) else DEFAULT_ORDER
+        )
+
+    def _reason(
+        self,
+        blocks: list[_Block],
+        order: list[int],
+        rules: list[_Rule],
+        groups: dict[tuple[int, type[FeatureGroup]], set[int]],
+        domains: list[list[Framework]],
+        assignment: dict[int, Framework],
+        cost: int,
+        index: int,
+    ) -> str:
+        """Why one block runs on its framework: pin, sole option, rules, order, or conversions saved."""
+        block = blocks[index]
+        chosen = assignment[index]
+        if any(feature.framework_pinned for feature in block.features):
+            return PINNED
+        if len(block.domain) == 1:
+            return ONLY_ALLOWED
+        chosen_rank = self.rank(chosen)
+        if not any(self.rank(fw) < chosen_rank for fw in block.domain):
+            later = [fw for fw in domains[index] if fw is not chosen] or [fw for fw in block.domain if fw is not chosen]
+            return self._order_reason(chosen, later[0])
+        earlier = [fw for fw in domains[index] if self.rank(fw) < chosen_rank]
+        if not earlier:
+            return RULES
+        restricted = list(domains)
+        restricted[index] = earlier
+        found, other_cost = self._search(order, rules, groups, restricted, cost, cost + 1)
+        if other_cost < 0:
+            found, other_cost = self._search(order, rules, groups, restricted, -2)
+        if other_cost < 0:
+            return RULES
+        if other_cost > cost:
+            return saves_conversions(other_cost - cost)
+        return self._order_reason(chosen, found[index])
+
     def _solve(
         self,
         blocks: list[_Block],
@@ -311,7 +368,22 @@ class ChooseComputeFrameworks:
         rules: list[_Rule],
         groups: dict[tuple[int, type[FeatureGroup]], set[int]],
         domains: list[list[Framework]],
-    ) -> dict[int, Framework]:
+    ) -> tuple[dict[int, Framework], int]:
+        best, best_cost = self._search(order, rules, groups, domains, -2)
+        if best_cost < 0:
+            raise ValueError(self._infeasible(blocks, order, rules))
+        return best, best_cost
+
+    def _search(
+        self,
+        order: list[int],
+        rules: list[_Rule],
+        groups: dict[tuple[int, type[FeatureGroup]], set[int]],
+        domains: list[list[Framework]],
+        stop_at: int,
+        limit: int = -1,
+    ) -> tuple[dict[int, Framework], int]:
+        """Branch and bound; returns the best assignment and its cost, cost -1 when infeasible. Stops at cost stop_at; a limit prunes dearer branches."""
         touching: dict[int, list[_Rule]] = {b: [] for b in order}
         for rule in rules:
             for b in self._rule_blocks(rule):
@@ -347,7 +419,14 @@ class ChooseComputeFrameworks:
                     narrowed[open_block] = kept
             return narrowed
 
+        def bound() -> int:
+            if best_cost[0] >= 0:
+                return best_cost[0]
+            return limit + 1 if limit >= 0 else sys.maxsize
+
         def descend(depth: int, current: dict[int, list[Framework]], cost: int) -> None:
+            if best_cost[0] == stop_at:
+                return
             if depth == len(order):
                 best.update(assigned)
                 best_cost[0] = cost
@@ -358,14 +437,12 @@ class ChooseComputeFrameworks:
                 assigned[index] = value
                 narrowed = narrow(index, current)
                 new_cost = cost + sum(step_cost(*step) for step in steps[index]) - before
-                if narrowed is not None and (best_cost[0] < 0 or new_cost < best_cost[0]):
+                if narrowed is not None and new_cost < bound():
                     descend(depth + 1, narrowed, new_cost)
                 del assigned[index]
 
         descend(0, {b: domains[b] for b in order}, 0)
-        if best_cost[0] < 0:
-            raise ValueError(self._infeasible(blocks, order, rules))
-        return best
+        return best, best_cost[0]
 
     @staticmethod
     def _infeasible(blocks: list[_Block], order: list[int], rules: list[_Rule]) -> str:

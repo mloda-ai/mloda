@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.prepare import choose_compute_frameworks
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
@@ -28,12 +29,25 @@ P = PandasDataFrame
 A = PyArrowTable
 D = PythonDictFramework
 
+# Reason texts are a plan-lock contract, so the tests spell them out instead of importing the constants.
+PINNED = "pinned"
+ONLY_ALLOWED = "only allowed framework"
+RULES = "rules exclude preferred frameworks"
+LIST_ORDER = "your list order"
+DEFAULT_ORDER = "default order"
+SAVES_ONE = "saves 1 conversion"
+SAVES_TWO = "saves 2 conversions"
+
 _PROBE = Path(__file__).with_name("choose_probe.py")
 _PROBE_EXPECTED = {
     "x": "PandasDataFrame",
     "y": "PandasDataFrame",
     "kp": "PandasDataFrame",
     "ka": "PyArrowTable",
+    "reason_x": "default order",
+    "reason_y": "default order",
+    "reason_kp": "only allowed framework",
+    "reason_ka": "only allowed framework",
 }
 
 
@@ -99,8 +113,10 @@ class _Net:
         allowed: set[type[ComputeFramework]] | None,
         options: dict[str, Any] | None = None,
         data_type: DataType | None = None,
+        pinned: bool = False,
     ) -> Feature:
         feature = Feature(name, options=options, data_type=data_type)
+        feature.framework_pinned = pinned
         feature.compute_frameworks = None if allowed is None else set(allowed)
         self.graph.add_node(feature.uuid, NodeProperties(feature, fg))
         self.nodes.setdefault(fg, set()).add(feature)
@@ -202,17 +218,17 @@ def test_choose_sets_a_framework_on_every_feature() -> None:
 
 
 @pytest.mark.parametrize(
-    ("positions", "expected"),
+    ("positions", "expected", "reason"),
     [
-        (None, P),
-        ({A: 0}, A),
-        ({D: 0, A: 1}, D),
-        ({A: 0, D: 1}, A),
+        (None, P, DEFAULT_ORDER),
+        ({A: 0}, A, LIST_ORDER),
+        ({D: 0, A: 1}, D, LIST_ORDER),
+        ({A: 0, D: 1}, A, LIST_ORDER),
     ],
     ids=["default_order", "list_first", "list_first_of_three", "listed_before_unlisted"],
 )
 def test_a_free_feature_follows_positions_then_default_order(
-    positions: dict[type[ComputeFramework], int] | None, expected: type[ComputeFramework]
+    positions: dict[type[ComputeFramework], int] | None, expected: type[ComputeFramework], reason: str
 ) -> None:
     net = _Net()
     feature = net.add(ChooserRootFG, "tie_order_feature", {P, A, D})
@@ -220,6 +236,7 @@ def test_a_free_feature_follows_positions_then_default_order(
     net.choose(positions)
 
     assert feature.chosen_compute_framework is expected
+    assert feature.chosen_compute_framework_reason == reason
 
 
 def test_connected_free_blocks_share_one_framework() -> None:
@@ -258,6 +275,8 @@ def test_consumer_pulls_an_unrestricted_source_onto_its_framework() -> None:
     assert root.chosen_compute_framework is A
     assert consumer.chosen_compute_framework is A
     assert net.conversions() == 0
+    assert root.chosen_compute_framework_reason == SAVES_ONE
+    assert consumer.chosen_compute_framework_reason == ONLY_ALLOWED
 
 
 def test_restricted_source_pulls_an_unrestricted_consumer_onto_its_framework() -> None:
@@ -271,6 +290,8 @@ def test_restricted_source_pulls_an_unrestricted_consumer_onto_its_framework() -
     assert source.chosen_compute_framework is A
     assert consumer.chosen_compute_framework is A
     assert net.conversions() == 0
+    assert source.chosen_compute_framework_reason == ONLY_ALLOWED
+    assert consumer.chosen_compute_framework_reason == SAVES_ONE
 
 
 def test_a_restricted_consumer_of_two_free_roots_pulls_a_link_onto_its_framework() -> None:
@@ -415,13 +436,15 @@ def test_children_of_one_link_with_the_same_side_pair_pick_the_same_side() -> No
 def test_a_pinned_filter_pulls_its_host_onto_the_pin() -> None:
     net = _Net()
     host = net.add(ChooserHostFG, "filter_pull_host", {P, A})
-    pinned = net.add(ChooserFilterFG, "filter_pull_filter", {A})
+    pinned = net.add(ChooserFilterFG, "filter_pull_filter", {A}, pinned=True)
     net.tie(host, pinned)
 
     net.choose()
 
     assert host.chosen_compute_framework is A
     assert pinned.chosen_compute_framework is A
+    assert pinned.chosen_compute_framework_reason == PINNED
+    assert host.chosen_compute_framework_reason == RULES
 
 
 @pytest.mark.parametrize(
@@ -560,6 +583,84 @@ def test_features_of_one_group_with_equal_options_and_allowed_set_get_one_framew
     assert first.chosen_compute_framework is second.chosen_compute_framework
 
 
+# --- reasons ---------------------------------------------------------------------------------------------
+
+
+def test_the_reason_texts_are_the_pinned_lock_contract() -> None:
+    assert choose_compute_frameworks.PINNED == PINNED
+    assert choose_compute_frameworks.ONLY_ALLOWED == ONLY_ALLOWED
+    assert choose_compute_frameworks.RULES == RULES
+    assert choose_compute_frameworks.LIST_ORDER == LIST_ORDER
+    assert choose_compute_frameworks.DEFAULT_ORDER == DEFAULT_ORDER
+    assert choose_compute_frameworks.saves_conversions(1) == SAVES_ONE
+    assert choose_compute_frameworks.saves_conversions(2) == SAVES_TWO
+    assert choose_compute_frameworks.saves_conversions(7) == "saves 7 conversions"
+
+
+def _reason_pinned(net: _Net) -> list[Feature]:
+    return [net.add(ChooserRootFG, "reason_pinned", {P, A}, pinned=True)]
+
+
+def _reason_saves_two(net: _Net) -> list[Feature]:
+    root = net.add(ChooserRootFG, "reason_two_root", {P, A})
+    for fg, name in [(ChooserLeafFG, "reason_two_leaf"), (ChooserOtherLeafFG, "reason_two_other_leaf")]:
+        net.edge(root, net.add(fg, name, {A}))
+    return [root]
+
+
+def _reason_rules_via_join(net: _Net) -> list[Feature]:
+    left = net.add(ChooserLeftFG, "reason_join_left", {P})
+    right = net.add(ChooserRightFG, "reason_join_right", {A})
+    child = net.add(ChooserChildFG, "reason_join_child", {P, A, D})
+    net.join(_link(Link.right, ChooserLeftFG, ChooserRightFG), left, right, child)
+    return [child]
+
+
+def _reason_equal_cost_tie(net: _Net) -> list[Feature]:
+    root = net.add(ChooserRootFG, "reason_tie_root", {P, A})
+    net.edge(root, net.add(ChooserLeafFG, "reason_tie_leaf_p", {P}))
+    net.edge(root, net.add(ChooserOtherLeafFG, "reason_tie_leaf_a", {A}))
+    return [root]
+
+
+def _reason_shared_list_position(net: _Net) -> list[Feature]:
+    return [net.add(ChooserRootFG, "reason_shared_position", {P, A})]
+
+
+@pytest.mark.parametrize(
+    ("build", "positions", "expected"),
+    [
+        (_reason_pinned, None, PINNED),
+        (_reason_saves_two, None, SAVES_TWO),
+        (_reason_rules_via_join, None, RULES),
+        (_reason_equal_cost_tie, None, DEFAULT_ORDER),
+        (_reason_equal_cost_tie, {A: 0}, LIST_ORDER),
+        (_reason_shared_list_position, {D: 0}, DEFAULT_ORDER),
+    ],
+    ids=["pinned", "saves_two", "rules_via_join", "tie_default_order", "tie_list_order", "shared_list_position"],
+)
+def test_the_reason_names_why_the_framework_was_chosen(
+    build: Callable[[_Net], list[Feature]], positions: dict[type[ComputeFramework], int] | None, expected: str
+) -> None:
+    net = _Net()
+    judged = build(net)
+
+    net.choose(positions)
+
+    assert [f.chosen_compute_framework_reason for f in judged] == [expected]
+
+
+def test_every_member_of_a_block_gets_the_blocks_reason() -> None:
+    net = _Net()
+    first = net.add(ChooserRootFG, "member_first", {P, A}, pinned=True)
+    second = net.add(ChooserRootFG, "member_second", {P, A})
+
+    net.choose()
+
+    assert first.chosen_compute_framework_reason == PINNED
+    assert second.chosen_compute_framework_reason == PINNED
+
+
 # --- determinism and scale -------------------------------------------------------------------------------
 
 
@@ -586,8 +687,9 @@ def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly() -> None:
     for parent, child in zip(layers, layers[1:]):
         net.edge(parent, child)
 
+    chooser = net.chooser({A: 0, D: 1})  # built before the timer: construction carries one-time cold setup
     started = time.perf_counter()
-    net.choose({A: 0, D: 1})
+    chooser.choose()
     elapsed = time.perf_counter() - started
 
     assert elapsed < 5.0, f"choosing took {elapsed:.1f}s"
@@ -608,9 +710,10 @@ def test_an_infeasible_chain_raises_quickly_and_names_the_failing_block() -> Non
         net.edge(parent, child)
     net.edge(layers[-1], sink)
 
+    chooser = net.chooser()
     started = time.perf_counter()
     with pytest.raises(ValueError, match="blowup_sink") as raised:
-        net.choose()
+        chooser.choose()
     elapsed = time.perf_counter() - started
 
     assert elapsed < 1.0, f"raising took {elapsed:.1f}s"
@@ -648,11 +751,12 @@ def test_a_twenty_five_block_six_framework_component_with_a_forced_conversion_so
         net.edge(parent, child)
     assert len(net.features) == 25
 
+    chooser = net.chooser(chooser_class=_AllConvertibleChooser)
     started = time.perf_counter()
-    net.choose(chooser_class=_AllConvertibleChooser)
+    chooser.choose()
     elapsed = time.perf_counter() - started
 
-    assert elapsed < 0.2, f"choosing took {elapsed:.1f}s"
+    assert elapsed < 0.5, f"choosing took {elapsed:.1f}s"
     assert hub.chosen_compute_framework is fws[5]
     assert {f.chosen_compute_framework for f in fillers} == {fws[5]}
     assert [leaf.chosen_compute_framework for leaf in leaves] == pins

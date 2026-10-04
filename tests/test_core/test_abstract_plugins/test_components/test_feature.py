@@ -381,3 +381,32 @@ def test_raising_data_access_identity_does_not_break_hash() -> None:
     f.input_data_match = (IdentityRaisingReader4412, "src")
 
     assert isinstance(hash(f), int)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "pinned"),
+    [
+        ({}, False),
+        ({"compute_framework": "PandasDataFrame"}, True),
+        ({"options": {"compute_framework": "PandasDataFrame"}}, True),
+    ],
+    ids=["unpinned", "keyword_pin", "option_pin"],
+)
+def test_framework_pinned_follows_the_pin(kwargs: dict[str, Any], pinned: bool) -> None:
+    feature = Feature("pin_flag_feature", **kwargs)
+
+    assert feature.framework_pinned is pinned
+    assert feature.chosen_compute_framework_reason is None
+
+
+def test_the_chosen_reason_and_pin_flag_stay_out_of_equality_and_survive_copy() -> None:
+    plain = Feature("reason_eq_feature")
+    marked = Feature("reason_eq_feature")
+    marked.framework_pinned = True
+    marked.chosen_compute_framework_reason = "pinned"
+
+    assert plain == marked
+    assert hash(plain) == hash(marked)
+    duplicate = copy.copy(marked)
+    assert duplicate.framework_pinned is True
+    assert duplicate.chosen_compute_framework_reason == "pinned"

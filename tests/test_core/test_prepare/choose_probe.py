@@ -1,4 +1,4 @@
-"""Prints one json line with the frameworks ChooseComputeFrameworks picks in a fresh interpreter.
+"""Prints one json line with the frameworks and reasons ChooseComputeFrameworks picks in a fresh interpreter.
 No test_ prefix, so pytest never collects it; the chooser determinism test runs it as a script.
 """
 
@@ -92,6 +92,7 @@ def collect_address_options() -> dict[str, str]:
     for name, (feature, _) in built.items():
         assert feature.chosen_compute_framework is not None
         result[name] = feature.chosen_compute_framework.get_class_name()
+        result[f"reason_{name}"] = str(feature.chosen_compute_framework_reason)
     return result
 
 
@@ -122,6 +123,7 @@ def collect() -> dict[str, str]:
     for name, (feature, _) in built.items():
         assert feature.chosen_compute_framework is not None
         result[name] = feature.chosen_compute_framework.get_class_name()
+        result[f"reason_{name}"] = str(feature.chosen_compute_framework_reason)
     return result
 
 

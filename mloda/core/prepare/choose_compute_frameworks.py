@@ -66,15 +66,16 @@ def stable_text(value: object) -> str:
         if value.propagate_context_keys:
             parts += f", propagate_context_keys={stable_text(value.propagate_context_keys)}"
         return f"Options({parts})"
-    if isinstance(value, dict):
-        return "{" + ", ".join(f"{k!r}: {stable_text(v)}" for k, v in value.items()) + "}"
-    if isinstance(value, list):
+    if type(value) is dict:
+        items = sorted((stable_text(k), stable_text(v)) for k, v in value.items())
+        return "{" + ", ".join(f"{k}: {v}" for k, v in items) + "}"
+    if type(value) is list:
         return "[" + ", ".join(stable_text(v) for v in value) + "]"
-    if isinstance(value, tuple):
+    if type(value) is tuple:
         return "(" + ", ".join(stable_text(v) for v in value) + ("," if len(value) == 1 else "") + ")"
-    if isinstance(value, (set, frozenset)):
+    if type(value) is set or type(value) is frozenset:
         return "{" + ", ".join(sorted(stable_text(v) for v in value)) + "}"
-    return _ADDRESS.sub("", str(value))
+    return _ADDRESS.sub("", repr(value))
 
 
 def _block_key(fg: type[FeatureGroup], features: tuple[Feature, ...]) -> tuple[object, ...]:
@@ -84,12 +85,18 @@ def _block_key(fg: type[FeatureGroup], features: tuple[Feature, ...]) -> tuple[o
     return (fg.__module__, fg.__qualname__, tuple(_names(features)), tuple(data_types), tuple(allowed), tuple(options))
 
 
-def _refine(keys: Sequence[tuple[object, ...]], neighbors: list[set[int]]) -> list[int]:
-    """Colour refinement: equal keys are told apart by the sorted classes of their neighbour blocks."""
+def _refine(
+    keys: Sequence[tuple[object, ...]], neighbors: list[set[int]], waiters: Sequence[set[int]] | None = None
+) -> list[int]:
+    """Colour refinement by neighbour classes; given waiters, neighbors are producers and direction counts."""
     key_rank = {key: rank for rank, key in enumerate(sorted(set(keys)))}
     classes = [key_rank[key] for key in keys]
     while True:
-        labels = [(classes[i], tuple(sorted(classes[n] for n in neighbors[i]))) for i in range(len(keys))]
+        labels: list[tuple[object, ...]] = [
+            (classes[i], tuple(sorted(classes[n] for n in neighbors[i])))
+            + (() if waiters is None else (tuple(sorted(classes[n] for n in waiters[i])),))
+            for i in range(len(keys))
+        ]
         label_rank = {label: rank for rank, label in enumerate(sorted(set(labels)))}
         refined = [label_rank[label] for label in labels]
         if len(set(refined)) == len(set(classes)):

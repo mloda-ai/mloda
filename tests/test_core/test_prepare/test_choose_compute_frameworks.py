@@ -983,6 +983,40 @@ def test_stable_text_keeps_a_reader_tuple_option_redacted() -> None:
     assert "dsn-marker-text" not in choose_compute_frameworks.stable_text(options)
 
 
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [("1", 1), (["None"], [None]), (["a, b"], ["a", "b"])],
+    ids=["str_vs_int", "none_text_vs_none", "joined_vs_split"],
+)
+def test_stable_text_keeps_distinct_values_distinct(a: Any, b: Any) -> None:
+    assert choose_compute_frameworks.stable_text(Options(group={"k": a})) != choose_compute_frameworks.stable_text(
+        Options(group={"k": b})
+    )
+
+
+def test_stable_text_strips_the_address_of_a_nested_dict_key() -> None:
+    class _Obj:
+        pass
+
+    one = choose_compute_frameworks.stable_text(Options(group={"k": {_Obj(): 1}}))
+    other = choose_compute_frameworks.stable_text(Options(group={"k": {_Obj(): 1}}))
+
+    assert one == other
+
+
+def test_stable_text_ignores_nested_dict_key_order() -> None:
+    one = choose_compute_frameworks.stable_text(Options(group={"k": {"a": 1, "b": 2}}))
+    other = choose_compute_frameworks.stable_text(Options(group={"k": {"b": 2, "a": 1}}))
+
+    assert one == other
+
+
+def test_stable_text_matches_str_for_plain_options() -> None:
+    options = Options(group={"a": "x", "b": 2, "c": [1, "y"]}, context={"d": 3})
+
+    assert choose_compute_frameworks.stable_text(options) == str(options)
+
+
 def _block_data_types(types: list[DataType]) -> list[str]:
     net = _Net()
     for data_type in types:

@@ -1912,6 +1912,41 @@ class TestRequestedAndInjectedForJoinPlans:
 # ---------------------------------------------------------------------------
 
 
+class _Stub:
+    def __init__(self, token: UUID, requires: set[UUID]) -> None:
+        self._token = token
+        self.required_uuids = requires
+
+    def get_uuids(self) -> set[UUID]:
+        return {self._token}
+
+
+def _compute(name: str) -> PlanStep:
+    return PlanStep("compute", (name,), FeatureGroup, PandasDataFrame, None, None)
+
+
+def _join(left: tuple[type[ComputeFramework], ...] = ()) -> PlanStep:
+    return PlanStep(
+        "join",
+        (),
+        FeatureGroup,
+        PandasDataFrame,
+        FeatureGroup,
+        PyArrowTable,
+        join_type="inner",
+        declared_left_frameworks=left,
+    )
+
+
+def _orders(nodes: dict[str, tuple[PlanStep, set[str]]], project: Callable[[PlanStep], Any]) -> set[tuple[Any, ...]]:
+    tokens = {name: uuid4() for name in nodes}
+    pairs = [(_Stub(tokens[n], {tokens[r] for r in reqs}), record) for n, (record, reqs) in nodes.items()]
+    return {
+        tuple(project(r) for r in _dependency_order([s for s, _ in perm], [r for _, r in perm]))
+        for perm in itertools.permutations(pairs)
+    }
+
+
 class TestBuildPlanStepsInputFeatureNames:
     """build_plan_steps reads a compute step's FeatureSet.declared_input_feature_names, sorted."""
 
@@ -1970,28 +2005,14 @@ class TestBuildPlanStepsInputFeatureNames:
         assert forward == backward
 
     def test_dependency_order_with_tied_content_is_independent_of_raw_order(self) -> None:
-        class _Stub:
-            def __init__(self, token: UUID, requires: set[UUID]) -> None:
-                self._token = token
-                self.required_uuids = requires
-
-            def get_uuids(self) -> set[UUID]:
-                return {self._token}
-
-        def compute(name: str) -> PlanStep:
-            return PlanStep("compute", (name,), FeatureGroup, PandasDataFrame, None, None)
-
-        def join() -> PlanStep:
-            return PlanStep("join", (), FeatureGroup, PandasDataFrame, FeatureGroup, PyArrowTable, join_type="inner")
-
         tokens = {name: uuid4() for name in ("r1", "r2", "j1", "j2", "w1", "w2")}
         pairs = [
-            (_Stub(tokens["r1"], set()), compute("r1")),
-            (_Stub(tokens["r2"], set()), compute("r2")),
-            (_Stub(tokens["j1"], {tokens["r1"]}), join()),
-            (_Stub(tokens["j2"], {tokens["r2"]}), join()),
-            (_Stub(tokens["w1"], {tokens["j1"]}), compute("w1")),
-            (_Stub(tokens["w2"], {tokens["j2"]}), compute("w2")),
+            (_Stub(tokens["r1"], set()), _compute("r1")),
+            (_Stub(tokens["r2"], set()), _compute("r2")),
+            (_Stub(tokens["j1"], {tokens["r1"]}), _join()),
+            (_Stub(tokens["j2"], {tokens["r2"]}), _join()),
+            (_Stub(tokens["w1"], {tokens["j1"]}), _compute("w1")),
+            (_Stub(tokens["w2"], {tokens["j2"]}), _compute("w2")),
         ]
 
         orders = set()
@@ -1999,6 +2020,33 @@ class TestBuildPlanStepsInputFeatureNames:
             raw_steps = [stub for stub, _ in permutation]
             plan = [record for _, record in permutation]
             orders.add(tuple((r.step_kind, r.feature_names) for r in _dependency_order(raw_steps, plan)))
+
+        assert len(orders) == 1
+
+    def test_tied_joins_differing_only_in_declared_frameworks_get_one_order(self) -> None:
+        nodes = {
+            "r": (_compute("r"), set()),
+            "j1": (_join((PandasDataFrame,)), {"r"}),
+            "j2": (_join((PyArrowTable,)), {"r"}),
+            "w1": (_compute("w"), {"j1"}),
+            "w2": (_compute("w"), {"j2"}),
+        }
+
+        orders = _orders(nodes, lambda r: (r.step_kind, r.feature_names, r.declared_left_frameworks))
+
+        assert len(orders) == 1
+
+    def test_edge_direction_separates_joins_with_mirrored_neighbours(self) -> None:
+        nodes = {
+            "x1": (_compute("x"), set()),
+            "y2": (_compute("y"), set()),
+            "a": (_join(), {"x1"}),
+            "b": (_join(), {"y2"}),
+            "y1": (_compute("y"), {"a"}),
+            "x2": (_compute("x"), {"b"}),
+        }
+
+        orders = _orders(nodes, lambda r: (r.step_kind, r.feature_names))
 
         assert len(orders) == 1
 

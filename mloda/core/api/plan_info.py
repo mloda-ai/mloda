@@ -278,6 +278,13 @@ def _content_key(record: PlanStep) -> tuple[str, ...]:
         record.join_destination_side or "",
         stable_text(record.feature_set_options),
         ",".join(record.input_feature_names),
+        ",".join(_class_path(cf) for cf in record.declared_left_frameworks),
+        ",".join(_class_path(cf) for cf in record.declared_right_frameworks),
+        ",".join(record.requested_feature_names),
+        ",".join(record.injected_feature_names),
+        ",".join(_class_path(fg) for fg in record.specialized_from),
+        record.compute_framework_reason or "",
+        _class_path(record.result_framework),
     )
 
 
@@ -292,8 +299,8 @@ def _dependency_order(raw_steps: list[Any], plan: list[PlanStep]) -> list[PlanSt
     for index, producers in enumerate(waits_for):
         for producer in producers:
             waiters.setdefault(producer, []).append(index)
-    neighbors = [producers | set(waiters.get(index, ())) for index, producers in enumerate(waits_for)]
-    classes = _refine([_content_key(record) for record in plan], neighbors)
+    waiter_sets = [set(waiters.get(index, ())) for index in range(len(plan))]
+    classes = _refine([_content_key(record) for record in plan], [set(p) for p in waits_for], waiter_sets)
     # raw index only separates steps that refinement cannot tell apart
     ready = [(classes[index], index) for index, producers in enumerate(waits_for) if not producers]
     heapq.heapify(ready)

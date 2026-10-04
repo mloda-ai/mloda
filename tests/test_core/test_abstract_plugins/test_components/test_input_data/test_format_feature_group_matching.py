@@ -1,13 +1,11 @@
 """FormatFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
 
-import copy
 from abc import abstractmethod
 from typing import ClassVar
 
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_types import EvaluationResult
@@ -83,16 +81,10 @@ class TestCheckedNames:
         assert result.identified == {}
         elimination = result.eliminations[ToyFormatFG]
         assert elimination.stage == "input_data"
-        assert "h1:toy" in elimination.reason or COL in elimination.reason
-
-    def test_foreign_source_declines(self) -> None:
-        assert not _claims(Feature(COL), foreign_dac(), ToyFormatFG)
+        assert "h1:toy" in elimination.reason
 
     def test_no_collection_declines(self) -> None:
         assert not _claims(Feature(COL), None, ToyFormatFG)
-
-    def test_class_name_shortcut_does_not_replace_the_checked_column(self) -> None:
-        assert not _claims(Feature("ToyFormatFG"), toy_dac(h1={COL: [1]}), ToyFormatFG)
 
 
 class TestDeclaredNames:
@@ -187,24 +179,6 @@ class TestAmbiguousSources:
         pair = feature.input_data_match
         assert pair is not None
         assert pair[1] == SourceMatch(source="h2:toy", access=None)
-
-
-class TestNoMutation:
-    def test_collection_and_options_unchanged_after_matching(self) -> None:
-        dac = toy_dac(h1={COL: [1]})
-        credentials_before = copy.deepcopy(dac.credentials)
-        options = Options({"keep": 1})
-        feature = Feature(COL, options)
-        group_before = copy.deepcopy(feature.options.group)
-        context_before = copy.deepcopy(feature.options.context)
-
-        _identify(feature, dac, ToyFormatFG)
-
-        assert dac.credentials == credentials_before
-        assert feature.options.group == group_before
-        assert feature.options.context == context_before
-        assert RESERVED_READER_OPTION_KEY not in feature.options.group
-        assert RESERVED_READER_OPTION_KEY not in feature.options.context
 
 
 class TestSubclassTakeover:

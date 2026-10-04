@@ -1,7 +1,7 @@
 """Shared contract tests for FormatFeatureGroup implementations.
 
 A concrete test class sets the class attributes and implements the two collection builders. Not collected on its
-own (no Test prefix); supersedes the cycle 1 foreign-source, no-mutation and class-name-shortcut matching tests.
+own (no Test prefix).
 """
 
 import copy
@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import FormatFeatureGroup, NamePolicy
-from mloda.user import Feature, PluginCollector, mloda
+from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
@@ -69,7 +69,7 @@ class FormatFeatureGroupTestMixin:
         dac = self.own_dac()
         credentials = copy.deepcopy(dac.credentials)
         files = copy.deepcopy(dac.files)
-        feature = Feature(self.present_column)
+        feature = Feature(self.present_column, Options({"unrelated_option": 1}))
         group = copy.deepcopy(feature.options.group)
         context = copy.deepcopy(feature.options.context)
 

@@ -184,6 +184,9 @@ class GlobalFilter:
             _filter.filter_feature.options.lock_own_keys()
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
 
+            if self.feature_group_scope(_filter, feature_group) is False:
+                self._record_near_miss(feature_group, _filter, "scope", "outside the requested feature group scope")
+                continue
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
             if not self.criteria(feature_group, _filter, data_access_collection):
                 continue
@@ -201,9 +204,6 @@ class GlobalFilter:
                 self._record_near_miss(
                     feature_group, _filter, "domain", self._domain_reason(_filter, feat, feature_group)
                 )
-                continue
-            if self.feature_group_scope(_filter, feature_group) is False:
-                self._record_near_miss(feature_group, _filter, "scope", "outside the requested feature group scope")
                 continue
             supported = self.capability(_filter, feat, feature_group)
             if supported is not None and not supported:

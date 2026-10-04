@@ -3610,13 +3610,13 @@ class TestMultipleSourceFixLine:
         assert "data_access_handle" in fix_lines[0]
         assert message.index("column_to_file") < message.index(TROUBLESHOOTING_LINE)
 
-    def test_a_single_captured_source_still_appends_the_fix_line(self) -> None:
+    def test_a_single_captured_source_appends_no_fix_line(self) -> None:
         message = render_resolution_failure(
             self._result({RendererSuccessFG791: "A: one"}), Feature(MULTIPLE_FEATURE_791)
         )
 
         assert message is not None
-        assert "column_to_file" in message
+        assert "column_to_file" not in message
 
     def test_no_captured_source_appends_no_fix_line(self) -> None:
         message = render_resolution_failure(self._result({}), Feature(MULTIPLE_FEATURE_791))

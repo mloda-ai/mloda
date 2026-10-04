@@ -344,7 +344,7 @@ class GlobalFilter:
         `filter` must be one of this GlobalFilter's declared filters or a per-match copy of one: the drop ledger
         keys on its uuid.
         """
-        with feature_group_scope(None):
+        with feature_group_scope(None, contain_aborts=True):
             probe = probe_match_criteria(
                 feature_group,
                 filter.filter_feature.name,

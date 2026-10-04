@@ -12,6 +12,7 @@ from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.provider import ClaimRoute, NamePolicy, SourceMatch
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     ToyDeclaredFG,
     ToyFormatBase,
@@ -42,22 +43,19 @@ def _claims(feature: Feature, dac: DataAccessCollection | None, group: type) -> 
 
 class TestClassDefinitionRule:
     def test_open_searched_route_raises(self) -> None:
-        with pytest.raises((TypeError, ValueError)):
+        with pytest.raises(TypeError):
 
             class _Bad(ToyFormatBase):
                 CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.OPEN, True),)
 
     def test_open_searched_route_among_valid_routes_raises(self) -> None:
-        with pytest.raises((TypeError, ValueError)):
+        with pytest.raises(TypeError):
 
             class _BadMixed(ToyFormatBase):
                 CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
                     ClaimRoute("toy", NamePolicy.CHECKED, True),
                     ClaimRoute("toy2", NamePolicy.OPEN, True),
                 )
-
-    def test_open_pointed_only_route_is_allowed(self) -> None:
-        assert ToyOpenFG.CLAIM_ROUTES == (ClaimRoute("toy", NamePolicy.OPEN, False),)
 
     def test_group_without_routes_never_claims(self) -> None:
         assert not _claims(Feature(COL), toy_dac(h1={COL: [1]}), ToyFormatBase)
@@ -109,9 +107,9 @@ class TestOpenNames:
         feature = Feature("toyfmt_any", Options({"ToyOpenFG": {COL: [1]}}))
         assert _claims(feature, None, ToyOpenFG)
 
-    def test_pointed_by_data_access_handle_option(self) -> None:
+    def test_data_access_handle_alone_does_not_unlock_open_names(self) -> None:
         feature = Feature("toyfmt_any", Options({"data_access_handle": "h1"}))
-        assert _claims(feature, toy_dac(h1={COL: [1]}), ToyOpenFG)
+        assert not _claims(feature, toy_dac(h1={COL: [1]}), ToyOpenFG)
 
     def test_pointed_by_feature_group_scope(self) -> None:
         feature = Feature("toyfmt_any", feature_group=ToyOpenFG)
@@ -146,11 +144,12 @@ class TestPointedButMissingAborts:
         assert COL in message
         assert "other" in message
 
-    def test_handle_pointing_at_a_source_lacking_the_column_raises(self) -> None:
+    def test_handle_alone_narrows_but_does_not_escalate_a_missing_column(self) -> None:
         feature = Feature(COL, Options({"data_access_handle": "h1"}))
         dac = toy_dac(h1={"other": [1]}, h2={COL: [1]})
-        with pytest.raises(ValueError, match="h1:toy"):
-            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, dac)
+        result = _identify(feature, dac, ToyFormatFG)
+        assert result.identified == {}
+        assert "h1:toy" in result.eliminations[ToyFormatFG].reason
 
     def test_abort_does_not_fall_through_to_the_other_candidate(self) -> None:
         feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
@@ -158,6 +157,27 @@ class TestPointedButMissingAborts:
         assert _claims(Feature(COL), dac, ToyOtherFormatFG)
         with pytest.raises(ValueError, match="ToyFormatFG"):
             evaluate_or_raise(feature, _plugins(ToyFormatFG, ToyOtherFormatFG), None, dac)
+
+
+class TestPointedMissingColumnText:
+    def test_fix_text_is_one_sentence_without_the_ambiguity_fix(self) -> None:
+        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+        message = str(exc_info.value)
+        assert "column_to_file" not in message
+        assert message.count(" or ") == 1
+
+    def test_long_column_list_is_truncated_to_twenty_names(self) -> None:
+        columns = {f"toyfmt_c{i:02d}": [i] for i in range(25)}
+        feature = Feature(COL, Options({"ToyFormatFG": columns}))
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+        message = str(exc_info.value)
+        assert "toyfmt_c00" in message
+        assert "toyfmt_c19" in message
+        assert "toyfmt_c20" not in message
+        assert "... and 5 more" in message
 
 
 class TestAmbiguousSources:
@@ -169,7 +189,7 @@ class TestAmbiguousSources:
         assert "ToyFormatFG" in message
         assert "h1:toy" in message
         assert "h2:toy" in message
-        assert "feature_group=" in message
+        assert "feature_group=" not in message
         assert "data_access_handle" in message
         assert "column_to_file" in message
 
@@ -271,3 +291,46 @@ class TestScopePointingRefinement:
         feature = Feature(COL, feature_group=_MidLacksColumn)
         with pytest.raises(ValueError, match="h1:toy"):
             evaluate_or_raise(feature, _plugins(_MidLacksColumn), None, toy_dac(h1={COL: [1]}))
+
+
+class TestPointingIsExplicitOnly:
+    """Group options reach derived features' inputs: only the class-name key and a feature_group= scope point."""
+
+    DERIVED = "toyfmt_col__sum_aggr"
+
+    @pytest.mark.parametrize("fg", [ToyFormatFG, ToyOpenFG])
+    def test_handle_on_a_derived_feature_resolves_to_the_aggregation(self, fg: type) -> None:
+        feature = Feature(self.DERIVED, Options(group={"data_access_handle": "h1"}))
+        result = evaluate_or_raise(
+            feature, _plugins(fg, PyArrowAggregatedFeatureGroup), None, toy_dac(h1={COL: [1, 2]})
+        )
+
+        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+
+    def test_required_option_route_does_not_escalate_a_missing_column(self) -> None:
+        feature = Feature(self.DERIVED, Options({"toyfmt_required": "yes"}))
+        result = evaluate_or_raise(
+            feature,
+            _plugins(ToyRequiredOptionFG, PyArrowAggregatedFeatureGroup),
+            None,
+            toy_dac(h1={COL: [1]}),
+        )
+
+        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+
+
+class TestPointedRoutesDeclineWithReason:
+    def test_pointed_route_without_a_source_records_an_input_data_rejection(self) -> None:
+        result = _identify(Feature(COL, feature_group=ToyFormatFG), None, ToyFormatFG)
+
+        assert result.identified == {}
+        assert result.eliminations[ToyFormatFG].stage == "input_data"
+
+    def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(self) -> None:
+        feature = Feature("toyfmt_undeclared", feature_group=ToyDeclaredFG)
+        result = _identify(feature, toy_dac(h1={"toyfmt_undeclared": [1]}), ToyDeclaredFG)
+
+        assert result.identified == {}
+        elimination = result.eliminations[ToyDeclaredFG]
+        assert elimination.stage == "input_data"
+        assert "toyfmt_undeclared" in elimination.reason

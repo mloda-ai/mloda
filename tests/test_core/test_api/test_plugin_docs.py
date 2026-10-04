@@ -965,16 +965,3 @@ class TestFeatureGroupInfoClaimRoutes:
 
         assert infos
         assert all(tuple(info.claim_routes) == () for info in infos)
-
-    def test_info_defaults_to_empty_claim_routes(self) -> None:
-        info = FeatureGroupInfo(
-            name="n",
-            description="d",
-            version="1",
-            module="m",
-            compute_frameworks=[],
-            supported_feature_names=set(),
-            prefix="p",
-        )
-
-        assert tuple(info.claim_routes) == ()

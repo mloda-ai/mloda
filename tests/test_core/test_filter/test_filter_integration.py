@@ -296,3 +296,35 @@ class TestGlobalFilterOnFormatGroupColumn:
         )
 
         assert len(matched) == 0
+
+    def test_class_name_key_carried_over_with_a_missing_filter_column_drops_the_filter(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_toy_missing", "equal", {"value": 1})
+        host = Feature("gf_toy_val", Options({"ToyFormatFG": {"gf_toy_val": [10]}}))
+
+        matched = global_filter.identify_matched_filters(ToyFormatFG, host, None)
+
+        assert len(matched) == 0
+        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
+            "input_data"
+        ]
+
+    def test_filter_column_in_two_sources_drops_the_filter_instead_of_raising(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+            ToyFormatFG,
+            toy_dac,
+        )
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_toy_val", "equal", {"value": 10})
+
+        matched = global_filter.identify_matched_filters(
+            ToyFormatFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10]}, h2={"gf_toy_val": [10]})
+        )
+
+        assert len(matched) == 0
+        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
+            "input_data"
+        ]

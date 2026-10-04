@@ -67,16 +67,14 @@ class FormatFeatureGroupTestMixin:
 
     def test_leaves_collection_and_options_unchanged(self) -> None:
         dac = self.own_dac()
-        credentials = copy.deepcopy(dac.credentials)
-        files = copy.deepcopy(dac.files)
+        state = copy.deepcopy(dac.__dict__)
         feature = Feature(self.present_column, Options({"unrelated_option": 1}))
         group = copy.deepcopy(feature.options.group)
         context = copy.deepcopy(feature.options.context)
 
         self._claims(feature, dac)
 
-        assert dac.credentials == credentials
-        assert dac.files == files
+        assert dac.__dict__ == state
         assert feature.options.group == group
         assert feature.options.context == context
         assert RESERVED_READER_OPTION_KEY not in feature.options.group
@@ -86,9 +84,10 @@ class FormatFeatureGroupTestMixin:
         if not any(r.names is NamePolicy.CHECKED for r in self.feature_group_class.CLAIM_ROUTES):
             pytest.skip("no checked route")
         assert not self._claims(Feature(self.missing_column), self.own_dac())
+        assert not self._claims(Feature(self.feature_group_class.get_class_name()), self.own_dac())
 
-    def test_no_route_is_open_and_searched(self) -> None:
-        assert not [r for r in self.feature_group_class.CLAIM_ROUTES if r.names is NamePolicy.OPEN and r.searched]
+    def test_an_arbitrary_name_does_not_claim_with_the_own_source_present(self) -> None:
+        assert not self._claims(Feature("mixin_arbitrary_undeclared_name"), self.own_dac())
 
     def test_declines_a_feature_named_after_the_group_without_a_source(self) -> None:
         name = self.feature_group_class.get_class_name()

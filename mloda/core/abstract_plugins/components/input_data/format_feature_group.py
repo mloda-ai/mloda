@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     ClaimRoute,
     NamePolicy,
     SourceMatch,
+    aborts_are_contained,
     current_feature_group_scope,
 )
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
@@ -24,7 +25,17 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_types import DataType
 
-_FIX = "pick one with feature_group=, a data_access_handle, or column_to_file"
+_MAX_LISTED_COLUMNS = 20
+
+
+def _listed(columns: Collection[str] | None) -> str:
+    if columns is None:
+        return "unknown"
+    names = sorted(columns)
+    text = ", ".join(names[:_MAX_LISTED_COLUMNS])
+    if len(names) > _MAX_LISTED_COLUMNS:
+        text += f", ... and {len(names) - _MAX_LISTED_COLUMNS} more"
+    return f"[{text}]"
 
 
 class FormatFeatureGroup(FeatureGroup):
@@ -51,7 +62,7 @@ class FormatFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None,
     ) -> list[SourceMatch]:
-        """Sources of the route's kind; must not mutate the collection or options."""
+        """Sources of the route's kind; must not mutate the collection or options. `source` is unique per access."""
 
     @classmethod
     @abstractmethod
@@ -75,12 +86,8 @@ class FormatFeatureGroup(FeatureGroup):
     def is_pointed(
         cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
     ) -> bool:
-        """True when the user pointed at this group: class-name key, data_access_handle or feature_group= scope."""
-        return (
-            cls._scope_points_here(current_feature_group_scope())
-            or cls.get_class_name() in options
-            or "data_access_handle" in options
-        )
+        """True when the user pointed at this group: class-name key or feature_group= scope."""
+        return cls._scope_points_here(current_feature_group_scope()) or cls.get_class_name() in options
 
     @classmethod
     def _scope_points_here(cls, scope: Any) -> bool:
@@ -109,10 +116,15 @@ class FormatFeatureGroup(FeatureGroup):
 
     @classmethod
     def _loader_for(cls, framework: type[ComputeFramework]) -> Callable[[SourceMatch, Any], Any] | None:
+        if not framework.is_available():
+            return None
         for klass in cls.__mro__:
-            loader: Callable[[SourceMatch, Any], Any] | None = klass.__dict__.get("_LOADERS", {}).get(framework)
-            if loader is not None and framework.is_available():
-                return loader
+            for framework_class in framework.__mro__:
+                loader: Callable[[SourceMatch, Any], Any] | None = klass.__dict__.get("_LOADERS", {}).get(
+                    framework_class
+                )
+                if loader is not None:
+                    return loader
         return None
 
     @classmethod
@@ -169,6 +181,14 @@ class FormatFeatureGroup(FeatureGroup):
         )
 
     @classmethod
+    def _abort(cls, error: ValueError) -> bool:
+        """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
+        if aborts_are_contained():
+            record_match_rejection(cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE)
+            return False
+        raise escalate_match_abort(error)
+
+    @classmethod
     def _matches_by_default_rules(
         cls,
         feature_name: FeatureName | str,
@@ -180,27 +200,28 @@ class FormatFeatureGroup(FeatureGroup):
         pointed = cls.is_pointed(name, options, data_access_collection)
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, tuple[SourceMatch, Collection[str] | None]] = {}
-        pointed_route = False
+        undeclared = False
         for route in cls.CLAIM_ROUTES:
             if not all(key in options for key in route.required_options):
                 continue
-            route_pointed = pointed or bool(route.required_options)
-            if not (route.searched or route_pointed):
+            unlocked = pointed or bool(route.required_options)
+            if not (route.searched or unlocked):
                 continue
             for match in cls.find_sources(route, name, options, data_access_collection):
                 if route.names is NamePolicy.CHECKED:
                     columns = cls.columns(match)
                     seen[match.source] = (match, columns)
-                    pointed_route = pointed_route or route_pointed
                     if columns is not None and base_name in columns:
                         fitting[match.source] = match
                 elif route.names is NamePolicy.OPEN or cls._declared_name(base_name):
                     fitting[match.source] = match
+                else:
+                    undeclared = True
         if len(fitting) > 1:
-            raise escalate_match_abort(
+            return cls._abort(
                 ValueError(
                     f"{cls.get_class_name()} found feature '{name}' in several sources: "
-                    f"{', '.join(sorted(fitting))}; {_FIX}."
+                    f"{', '.join(sorted(fitting))}; narrow with a data_access_handle or column_to_file."
                 )
             )
         if len(fitting) == 1:
@@ -208,11 +229,16 @@ class FormatFeatureGroup(FeatureGroup):
             return True
         if seen:
             described = "; ".join(
-                f"{source} has columns {sorted(columns) if columns is not None else 'unknown'}"
-                for source, (_, columns) in sorted(seen.items())
+                f"{source} has columns {_listed(columns)}" for source, (_, columns) in sorted(seen.items())
             )
             reason = f"column '{base_name}' is in none of the sources of {cls.get_class_name()}: {described}"
-            if pointed_route:
-                raise escalate_match_abort(ValueError(f"{reason}; {_FIX} or name a column the source has."))
+            if pointed:
+                return cls._abort(ValueError(f"{reason}; request a column a source has or point at another source."))
+            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+        elif pointed and undeclared:
+            reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"
+            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+        elif pointed:
+            reason = f"{cls.get_class_name()} was pointed at but found no source for '{name}'"
             record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
         return False

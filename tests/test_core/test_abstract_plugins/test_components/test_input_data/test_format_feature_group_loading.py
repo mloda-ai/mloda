@@ -56,7 +56,7 @@ class TestRegisterLoader:
         group = neutral_csv_group(tmp_path / "n.csv")
         group.register_loader(PythonDictFramework, _loader)
 
-        with pytest.raises(Exception, match="PythonDictFramework"):
+        with pytest.raises(ValueError, match="PythonDictFramework"):
             group.register_loader(PythonDictFramework, _loader)
 
     def test_same_framework_on_a_subclass_is_allowed_and_wins(self, tmp_path: Path) -> None:
@@ -93,6 +93,17 @@ class TestRegisterLoader:
         monkeypatch.setattr(PythonDictFramework, "is_available", staticmethod(lambda: False))
 
         assert column_values(session.run(), "toyfmt_ld") == [1, 2]
+
+
+class TestFrameworkSubclassLoader:
+    def test_loader_registered_for_a_framework_serves_its_subclass(self, tmp_path: Path) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        group.register_loader(PythonDictFramework, _loader)
+
+        class _SubDictFramework(PythonDictFramework):
+            pass
+
+        assert group._loader_for(_SubDictFramework) is _loader
 
 
 class TestNeutralFallback:

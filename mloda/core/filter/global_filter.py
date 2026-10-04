@@ -173,7 +173,8 @@ class GlobalFilter:
             -   we consult the capability hook over the frameworks the filter would ride (its pin, else the feature's),
             -   we do not check links, as this is done earlier already and not needed anymore.
 
-        Each gate records why it closed at its own `continue`, so the gate predicates stay pure for other callers.
+        The scope gate runs first and skips silently; every later gate records why it closed at its own
+        `continue`, so the gate predicates stay pure for other callers.
         """
 
         matched_filters: set[SingleFilter] = set()
@@ -184,8 +185,8 @@ class GlobalFilter:
             _filter.filter_feature.options.lock_own_keys()
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
 
+            # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
             if self.feature_group_scope(_filter, feature_group) is False:
-                self._record_near_miss(feature_group, _filter, "scope", "outside the requested feature group scope")
                 continue
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
             if not self.criteria(feature_group, _filter, data_access_collection):

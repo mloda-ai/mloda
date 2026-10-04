@@ -48,6 +48,8 @@ CAPABILITY_REJECT_CLASS_NAME = "FerCapabilityRejectFG"
 SCOPE_TIE_A_CLASS_NAME = "FerScopeTieAFG"
 SCOPE_TIE_B_CLASS_NAME = "FerScopeTieBFG"
 UNREADABLE_DOMAIN_CLASS_NAME = "FerUnreadableDomainFG"
+PLAIN_DECLINE_CLASS_NAME = "FerPlainDeclineFG"
+COUNTING_CLASS_NAME = "FerCountingFG"
 
 MISSING_SCOPE = "FerNoSuchScope"  # a scope string naming no accessible class
 SCOPE_REASON = "outside the requested feature group scope"
@@ -82,6 +84,10 @@ FEATURE_DOMAIN = "fer_feature_domain"  # carried by the resolved host feature
 OTHER_DOMAIN = "fer_other_domain"  # declared by the filter feature; matches neither
 SECOND_DOMAIN = "fer_second_domain"  # a second host domain, so two domain facts differ in their reason
 UNREADABLE_DOMAIN_FALLBACK = "<unreadable domain>"  # what a guarded read of a plugin's domain name degrades to
+DEFAULT_DOMAIN_NAME = "default_domain"  # what a group declaring no domain answers get_domain() with
+
+# The domain gate's own wording for an OTHER_DOMAIN filter against a domainless host on a default-domain group.
+DEFAULT_DOMAIN_REASON = f"the filter feature's domain '{OTHER_DOMAIN}' does not match '{DEFAULT_DOMAIN_NAME}'"
 
 MATCHER_ERROR_STAGE: EliminationStage = "matcher_error"
 VALUE_REJECTION_STAGE: EliminationStage = "value_rejection"
@@ -235,8 +241,8 @@ def _pin_losing_host() -> Feature:
 
 
 def _losing_pair() -> tuple[Feature, Feature]:
-    """Two filters on one name, one losing at the scope gate and one at the framework pin."""
-    return _filter_feature(scope=MISSING_SCOPE), _filter_feature(pin=PandasDataFrame)
+    """Two filters on one name, one losing at the domain gate and one at the framework pin."""
+    return _filter_feature(domain=OTHER_DOMAIN), _filter_feature(pin=PandasDataFrame)
 
 
 def _make_plain_fg() -> type[FeatureGroup]:
@@ -405,6 +411,28 @@ def _make_plain_decline_fg() -> type[FeatureGroup]:
             return str(feature_name) in cls.feature_names_supported()
 
     return FerPlainDeclineFG
+
+
+def _make_counting_fg(asked: list[str]) -> type[FeatureGroup]:
+    """A plain matcher appending every name its match hook is asked about to `asked`, which holds no class."""
+    gc.collect()
+
+    class FerCountingFG(FeatureGroup):
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            asked.append(str(feature_name))
+            return str(feature_name) in cls.feature_names_supported()
+
+    return FerCountingFG
 
 
 def _make_varying_defect_fg(reasons: Sequence[str]) -> type[FeatureGroup]:
@@ -794,7 +822,7 @@ def _losing_pair_messages() -> tuple[str, ...]:
     return tuple(
         sorted(
             f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{near_miss_text(PLAIN_CLASS_NAME, stage, reason)}"
-            for stage, reason in ((SCOPE_STAGE, SCOPE_REASON), (FRAMEWORK_PIN_STAGE, PIN_REASON))
+            for stage, reason in ((DOMAIN_STAGE, DEFAULT_DOMAIN_REASON), (FRAMEWORK_PIN_STAGE, PIN_REASON))
         )
     )
 
@@ -1010,16 +1038,6 @@ class TestEachGateRecordsItsOwnFact:
         assert OTHER_DOMAIN in reason, f"the reason must name the filter feature's declared domain: {reason}"
         assert compared in reason, f"the reason must name the domain it was compared against: {reason}"
 
-    def test_the_scope_gate_records_the_canonical_seams_own_string(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Byte-identical to the string the canonical seam records at its own scope gate."""
-        snapshot = _drive_matching([_make_plain_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE))
-
-        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
-        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
-        assert snapshot.rows == ((PLAIN_CLASS_NAME, FILTER_FEATURE, SCOPE_STAGE, SCOPE_REASON),), (
-            f"exactly one scope fact carrying the shared string, got: {snapshot.rows}"
-        )
-
     def test_the_capability_gate_mirrors_the_canonical_seams_wording(self, caplog: pytest.LogCaptureFixture) -> None:
         """The rejected frameworks are the ones the filter would ride, named as the canonical seam names them."""
         snapshot = _drive_matching(
@@ -1106,43 +1124,86 @@ class TestPrecedenceAmongFacts:
         assert RUNTIME_MESSAGE in reason, f"the defect's reason must survive the later gate: {reason}"
 
     def test_the_first_near_miss_wins_among_non_defects(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Scope loses the first pass, a typed decline the second: the first fact recorded keeps the key."""
+        """Domain loses the first pass, a typed decline the second: the first fact recorded keeps the key."""
         snapshot = _drive_matching(
-            [_make_match_then_decline_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE), calls=2
+            [_make_match_then_decline_fg], caplog, filter_feature=_filter_feature(domain=OTHER_DOMAIN), calls=2
         )
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
+        assert len(_carrying(snapshot.debugs, DECLINE_REASON)) == 1, (
+            f"the second pass must reach the hook's typed decline, got: {snapshot.debugs}"
+        )
         assert len(snapshot.rows) == 1, f"exactly one fact for the key, got: {snapshot.rows}"
         _, _, stage, reason = snapshot.rows[0]
-        assert stage == SCOPE_STAGE, f"the first near-miss keeps the key, got stage: {stage}"
-        assert reason == SCOPE_REASON, f"the later decline must not rewrite the reason: {reason}"
+        assert stage == DOMAIN_STAGE, f"the first near-miss keeps the key, got stage: {stage}"
+        assert reason == DEFAULT_DOMAIN_REASON, f"the later decline must not rewrite the reason: {reason}"
 
 
-class TestScopeGateRunsBeforeCriteria:
-    """Gate order is observable in the recorded stage: the scope gate decides before criteria is asked."""
+class TestAnOutOfScopeCandidateIsSkippedSilently:
+    """As in feature resolution: an out-of-scope candidate is never probed and records no fact."""
 
-    def test_a_scope_miss_records_scope_even_if_matcher_would_raise(self, caplog: pytest.LogCaptureFixture) -> None:
-        snapshot = _drive_matching(
-            [_make_matcher_error_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE)
-        )
-
-        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
-        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
-        assert len(snapshot.rows) == 1, f"exactly one fact, got: {snapshot.rows}"
-        assert snapshot.rows[0][2] == SCOPE_STAGE, f"scope gate runs before criteria, got stage: {snapshot.rows[0][2]}"
-
-    def test_a_probe_that_clears_criteria_records_scope_without_hook_noise(
-        self, caplog: pytest.LogCaptureFixture
+    @pytest.mark.parametrize(
+        ("scope", "expected_asks"),
+        [
+            pytest.param(MISSING_SCOPE, (), id="out_of_scope"),
+            pytest.param(COUNTING_CLASS_NAME, (FILTER_FEATURE,), id="in_scope_control"),
+        ],
+    )
+    def test_the_match_hook_is_asked_only_inside_the_scope(
+        self, scope: str, expected_asks: tuple[str, ...], caplog: pytest.LogCaptureFixture
     ) -> None:
-        snapshot = _drive_matching([_make_plain_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE))
+        asked: list[str] = []
+        snapshot = _drive_matching(
+            [partial(_make_counting_fg, asked)], caplog, filter_feature=_filter_feature(scope=scope)
+        )
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
-        assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
-        assert snapshot.rows == ((PLAIN_CLASS_NAME, FILTER_FEATURE, SCOPE_STAGE, SCOPE_REASON),), (
-            f"a cleared criteria gate must leave the scope fact alone in the ledger, got: {snapshot.rows}"
+        assert tuple(asked) == expected_asks, f"the scope gate must decide before the hook is asked, got: {asked}"
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            pytest.param(_make_plain_fg, id="name_would_match"),
+            pytest.param(_make_plain_decline_fg, id="name_would_never_match"),
+            pytest.param(_make_matcher_error_fg, id="matcher_would_raise"),
+        ],
+    )
+    def test_a_scope_miss_records_nothing(self, make: _Factory, caplog: pytest.LogCaptureFixture) -> None:
+        snapshot = _drive_matching(
+            [make], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE), warn_unmatched=True
         )
-        assert snapshot.warnings == (), f"a scope drop is no defect and must not warn, got: {snapshot.warnings}"
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"a scope naming no class must attach nothing, got: {snapshot.names}"
+        assert snapshot.rows == (), f"an out-of-scope candidate records no fact, got: {snapshot.rows}"
+        assert snapshot.unmatched == (BARE_MESSAGE,), (
+            f"with nothing captured, the message is the bare sentence, got: {snapshot.unmatched}"
+        )
+        assert snapshot.warnings == (BARE_MESSAGE,), f"a skipped candidate must not warn, got: {snapshot.warnings}"
+
+    def test_an_out_of_scope_group_is_never_the_nearest_miss(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The out-of-scope group sorts first and would never match the name; the in-scope domain miss is named."""
+        from mloda.core.prepare.resolution_failure_renderer import near_miss_text
+
+        snapshot = _drive_matching(
+            [_make_plain_decline_fg, _make_plain_fg],
+            caplog,
+            filter_feature=_filter_feature(domain=OTHER_DOMAIN, scope=PLAIN_CLASS_NAME),
+            warn_unmatched=True,
+        )
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.rows == ((PLAIN_CLASS_NAME, FILTER_FEATURE, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON),), (
+            f"only the in-scope group's real gate is a fact, got: {snapshot.rows}"
+        )
+        expected_bullet = near_miss_text(PLAIN_CLASS_NAME, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON)
+        assert snapshot.unmatched == (f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}",), (
+            f"the nearest miss must name the in-scope group's real gate, got: {snapshot.unmatched}"
+        )
+        assert PLAIN_DECLINE_CLASS_NAME not in snapshot.unmatched[0], (
+            f"an out-of-scope group must never be named: {snapshot.unmatched[0]}"
+        )
 
 
 class TestTheUnmatchedWarningNamesTheNearestMiss:
@@ -1158,20 +1219,25 @@ class TestTheUnmatchedWarningNamesTheNearestMiss:
         from mloda.core.prepare.resolution_failure_renderer import near_miss_text
 
         snapshot = _drive_matching(
-            [_make_plain_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE), warn_unmatched=True
+            [_make_plain_fg], caplog, filter_feature=_filter_feature(domain=OTHER_DOMAIN), warn_unmatched=True
         )
 
-        expected = f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{near_miss_text(PLAIN_CLASS_NAME, SCOPE_STAGE, SCOPE_REASON)}"
+        expected_bullet = near_miss_text(PLAIN_CLASS_NAME, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON)
+        expected = f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}"
         assert snapshot.unmatched == (expected,), f"the suffix must be the shared bullet, got: {snapshot.unmatched}"
 
     def test_the_label_comes_from_the_live_stage_table(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Never a second spelling of the label: the renderer's own table owns it."""
+        """Never a second spelling of the label: the pin's label differs from its stage token."""
         snapshot = _drive_matching(
-            [_make_plain_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE), warn_unmatched=True
+            [_make_plain_fg],
+            caplog,
+            filter_feature=_filter_feature(pin=PandasDataFrame),
+            make_host=partial(_host_feature, pin=PythonDictFramework),
+            warn_unmatched=True,
         )
 
         assert len(snapshot.unmatched) == 1, f"exactly one unmatched warning, got: {snapshot.unmatched}"
-        assert f"({_STAGE_LABELS[SCOPE_STAGE]}):" in snapshot.unmatched[0], (
+        assert f"({_STAGE_LABELS[FRAMEWORK_PIN_STAGE]}):" in snapshot.unmatched[0], (
             f"the label must come from the live table, got: {snapshot.unmatched[0]}"
         )
 
@@ -1216,11 +1282,11 @@ class TestTheUnmatchedWarningNamesTheNearestMiss:
         snapshot = _drive_matching(
             [_make_scope_tie_b_fg, _make_scope_tie_a_fg],
             caplog,
-            filter_feature=_filter_feature(scope=MISSING_SCOPE),
+            filter_feature=_filter_feature(domain=OTHER_DOMAIN),
             warn_unmatched=True,
         )
 
-        expected_bullet = near_miss_text(SCOPE_TIE_A_CLASS_NAME, SCOPE_STAGE, SCOPE_REASON)
+        expected_bullet = near_miss_text(SCOPE_TIE_A_CLASS_NAME, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON)
         assert snapshot.unmatched == (f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}",), (
             f"the tie must break by class name, got: {snapshot.unmatched}"
         )
@@ -1243,14 +1309,9 @@ class TestEveryMatchReportIsScopedToOneSetup:
             filter_feature=_filter_feature(domain=OTHER_DOMAIN),
         )
 
-        assert first.rows == (
-            (
-                PLAIN_CLASS_NAME,
-                FILTER_FEATURE,
-                DOMAIN_STAGE,
-                "the filter feature's domain 'fer_other_domain' does not match 'default_domain'",
-            ),
-        ), f"the first setup must capture its domain fact, got: {first.rows}"
+        assert first.rows == ((PLAIN_CLASS_NAME, FILTER_FEATURE, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON),), (
+            f"the first setup must capture its domain fact, got: {first.rows}"
+        )
         assert second.rows == (), f"the reset must clear the previous setup's facts, got: {second.rows}"
         assert second.unmatched == (BARE_MESSAGE,), (
             f"with nothing captured this setup, the message is the bare sentence, got: {second.unmatched}"
@@ -1263,13 +1324,14 @@ class TestEveryMatchReportIsScopedToOneSetup:
             [_make_plain_fg, _make_scope_tie_b_fg],
             [[0], [1]],
             caplog,
-            filter_feature=_filter_feature(scope=MISSING_SCOPE),
+            filter_feature=_filter_feature(domain=OTHER_DOMAIN),
         )
 
+        assert len(first.unmatched) == 1, f"exactly one unmatched warning, got: {first.unmatched}"
         assert _carrying(first.unmatched, PLAIN_CLASS_NAME) == first.unmatched, (
             f"the first setup must name the group it consulted, got: {first.unmatched}"
         )
-        expected_bullet = near_miss_text(SCOPE_TIE_B_CLASS_NAME, SCOPE_STAGE, SCOPE_REASON)
+        expected_bullet = near_miss_text(SCOPE_TIE_B_CLASS_NAME, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON)
         assert second.unmatched == (f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}",), (
             f"only a group this setup consulted may be named, got: {second.unmatched}"
         )
@@ -1317,14 +1379,14 @@ class TestTwoFiltersOnOneNameAreAttributedSeparately:
         )
 
     def test_each_filter_records_its_own_fact(self, caplog: pytest.LogCaptureFixture) -> None:
-        """One filter loses at scope and the other at the pin, against one feature group: two facts, not one."""
+        """One filter loses at domain and the other at the pin, against one feature group: two facts, not one."""
         snapshot = _drive_shared_name(caplog, _losing_pair())
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
         assert snapshot.names == (), f"neither filter may attach, got: {snapshot.names}"
         assert len(snapshot.rows) == 2, f"one fact per declared filter, got: {snapshot.rows}"
-        assert {row[2] for row in snapshot.rows} == {SCOPE_STAGE, FRAMEWORK_PIN_STAGE}, (
+        assert {row[2] for row in snapshot.rows} == {DOMAIN_STAGE, FRAMEWORK_PIN_STAGE}, (
             f"each filter must keep the gate it lost at, got: {snapshot.rows}"
         )
         assert {(row[0], row[1]) for row in snapshot.rows} == {(PLAIN_CLASS_NAME, FILTER_FEATURE)}, (
@@ -1341,9 +1403,10 @@ class TestTwoFiltersOnOneNameAreAttributedSeparately:
     def test_one_filter_on_that_name_still_names_its_nearest_miss(self, caplog: pytest.LogCaptureFixture) -> None:
         from mloda.core.prepare.resolution_failure_renderer import near_miss_text
 
-        snapshot = _drive_shared_name(caplog, (_filter_feature(scope=MISSING_SCOPE),))
+        snapshot = _drive_shared_name(caplog, (_filter_feature(domain=OTHER_DOMAIN),))
 
-        expected = f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{near_miss_text(PLAIN_CLASS_NAME, SCOPE_STAGE, SCOPE_REASON)}"
+        expected_bullet = near_miss_text(PLAIN_CLASS_NAME, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON)
+        expected = f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}"
         assert snapshot.unmatched == (expected,), f"one filter on the name keeps its suffix, got: {snapshot.unmatched}"
 
     def test_the_pair_renders_the_same_way_on_every_run(self, caplog: pytest.LogCaptureFixture) -> None:

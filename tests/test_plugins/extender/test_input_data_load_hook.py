@@ -43,6 +43,10 @@ from mloda_plugins.feature_group.input_data.read_file import ReadFile
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import TextFileReader
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    neutral_csv_group,
+    toy_dac,
+)
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 
 _MARKER = "inputload051"
@@ -1704,3 +1708,55 @@ class TestThreadHopInASpawnedWorkerReachesTheGate:
 
         assert result[0][_MP_HOP_COLUMN] == [1, 2, 3] or list(result[0][_MP_HOP_COLUMN]) == [[1, 2, 3]]
         assert output_path.read_text(encoding="utf-8").splitlines() == ["gate"]
+
+
+class TestInputDataLoadAuditForFormatGroups:
+    """A format group fires INPUT_DATA_LOAD naming itself, its source and the loader that ran."""
+
+    def _fire(self, group: type, framework: Any) -> HookContext:
+        extender = _InputDataLoadCapturingExtender()
+        mloda.run_all(
+            ["toyfmt_audit"],
+            compute_frameworks=[framework],
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            data_access_collection=toy_dac(h1={"toyfmt_audit": [1, 2]}),
+            function_extender={extender},
+        )
+        assert extender.captured is not None
+        return extender.captured
+
+    def test_neutral_load_is_audited(self, tmp_path: Path) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+
+        context = self._fire(group, PythonDictFramework)
+
+        assert context.data_access_format == group.get_class_name()
+        assert context.reader_class is group
+        assert context.data_access_identity == "h1:toy"
+        assert context.data_access_loader == "neutral"
+
+    def test_loader_load_names_the_framework_class(self, tmp_path: Path) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        group.register_loader(PythonDictFramework, lambda match, features: [{"toyfmt_audit": 1}])
+
+        context = self._fire(group, PythonDictFramework)
+
+        assert context.reader_class is group
+        assert context.data_access_identity == "h1:toy"
+        assert context.data_access_loader == "PythonDictFramework"
+
+    def test_readers_leave_the_loader_field_none(self, tmp_path: Path) -> None:
+        column = f"{_MARKER}_col_loader_none"
+        path = tmp_path / "data.csv"
+        _write_csv(path, column, [1])
+        extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            [column],
+            compute_frameworks=[PythonDictFramework],
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.data_access_loader is None

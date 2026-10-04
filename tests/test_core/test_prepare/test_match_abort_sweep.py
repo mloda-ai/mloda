@@ -106,6 +106,9 @@ _VALIDATE_PROPERTY_SPEC_RAISES = (
 _MERGED_DECLARATION_SWALLOWS_DIRECT = "name collision: dict.update inside merged_declaration, not a real swallow"
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
+        "real edge, collided verdict: the format group override of the default rules; its raises are marked aborts"
+    ),
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/options.py", "add_to_group"): _DECIDED_ABOVE_BY_READER_SELECTION,
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
@@ -141,6 +144,9 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
+        "real edge, collided verdict: the format group override of the default rules swallows nothing"
+    ),
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
         "it degrades one field in a rendering path, so swallowing a marked exception is its contract"

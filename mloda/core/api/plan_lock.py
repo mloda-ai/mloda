@@ -17,7 +17,7 @@ class PlanLockMismatchError(Exception):
     """The resolved plan differs from the lock file, or the lock file is missing."""
 
 
-def _class_path(cls: type | None) -> str | None:
+def _class_path(cls: Any) -> str | None:
     return None if cls is None else f"{cls.__module__}:{cls.__qualname__}"
 
 

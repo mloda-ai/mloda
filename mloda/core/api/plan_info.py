@@ -16,7 +16,7 @@ from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 if TYPE_CHECKING:
-    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+    from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader
     from mloda.core.abstract_plugins.compute_framework import ComputeFramework
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
     from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
@@ -98,7 +98,7 @@ class PlanStep:
     step_uuid: UUID | None = field(default=None, compare=False)
     input_feature_edges: Mapping[str, tuple[str, ...]] = field(default_factory=dict, hash=False)
     specialized_from: tuple[type["FeatureGroup"], ...] = ()
-    reader_data_access: tuple[type["BaseInputData"], Any] | None = field(default=None, compare=False)
+    reader_data_access: tuple["DataAccessReader", Any] | None = field(default=None, compare=False)
     compute_framework_reason: str | None = None
     result_framework: type["ComputeFramework"] | None = None
 

@@ -11,7 +11,7 @@ from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
 from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
 from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
 
-from tests.test_plugins.feature_group.input_data.test_read_files.column_discovery_contract_test_mixin import (
+from tests.mixins.reader_feature_groups.column_discovery_contract_test_mixin import (
     PHYSICAL_COLUMNS,
     ColumnDiscoveryContractTestMixin,
 )

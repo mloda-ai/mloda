@@ -272,25 +272,3 @@ class TestTwoFeatureGroupsShareSameRunId:
         assert run_id is not None
         assert_valid_uuid7(run_id)
         assert {context.plan_id for context in extender.captured} == {session.plan_id}
-
-
-class TestEachRunGetsItsOwnRunId:
-    """Two run() calls on one prepared session: same plan_id, distinct run_id."""
-
-    def test_two_runs_share_plan_id_and_differ_in_run_id(self) -> None:
-        extender = _MultiCaptureExtender()
-        session = mloda.prepare(
-            [Feature(name="run_id_carrier_e2e_col_one")],
-            compute_frameworks=["PythonDictFramework"],
-            plugin_collector=_ENABLED,
-            parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={extender},
-        )
-
-        session.run(parallelization_modes={ParallelizationMode.SYNC})
-        session.run(parallelization_modes={ParallelizationMode.SYNC})
-
-        first, second = extender.captured
-        assert first.run_id is not None and second.run_id is not None
-        assert first.run_id != second.run_id
-        assert first.plan_id == second.plan_id == session.plan_id

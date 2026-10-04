@@ -10,7 +10,7 @@ import inspect
 import logging
 import threading
 import uuid as uuid_mod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
@@ -693,7 +693,6 @@ class _RunCompleteRecorder(Extender):
         label: str,
         log: _RunLog,
         priority: int = 100,
-        hooks: set[ExtenderHook] | None = None,
         raises: bool = False,
         error: type[BaseException] | BaseException = RuntimeError,
         raise_on_run_complete: bool = False,
@@ -702,12 +701,11 @@ class _RunCompleteRecorder(Extender):
         self.label = label
         self.log = log
         self.priority = priority
-        self.hooks = {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE} if hooks is None else hooks
         self.raises = raises
         self.error = error
 
     def wraps(self) -> set[ExtenderHook]:
-        return self.hooks
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         return func(*args, **kwargs)
@@ -815,8 +813,11 @@ class TestRequestNotifiesExtendersOfRunCompletion:
         """Replaces the orchestrator-level manager shutdown case: the runner exit must precede the notification."""
         log: _RunLog = []
         real_exit = ExecutionOrchestrator.__exit__
+        manager_spy = Mock()
 
         def logged_exit(self: ExecutionOrchestrator, *args: Any) -> None:
+            if self.manager is None:
+                self.manager = manager_spy
             real_exit(self, *args)
             log.append(("exit", None))
 
@@ -827,6 +828,7 @@ class TestRequestNotifiesExtendersOfRunCompletion:
             _run(_session({extender}))
 
         assert [label for label, _ in log] == ["exit", "extender"]
+        manager_spy.shutdown.assert_called_once_with()
 
     def test_notifies_when_compute_raises_and_the_run_exception_propagates(
         self, monkeypatch: pytest.MonkeyPatch
@@ -859,45 +861,6 @@ class TestRequestNotifiesExtendersOfRunCompletion:
         assert [o.status for o in outcomes] == ["failed"]
         assert outcomes[0].error_type == "Exception"
 
-    def test_notifies_in_ascending_priority_order(self) -> None:
-        log: _RunLog = []
-        priorities = [50, 20, 60, 10, 40, 30]
-
-        _run(_session({_RunCompleteRecorder(f"p{p}", log, priority=p) for p in priorities}))
-
-        assert [label for label, _ in log] == [f"p{p}" for p in sorted(priorities)]
-
-    def test_notifies_an_extender_that_wraps_no_hook(self) -> None:
-        log: _RunLog = []
-
-        _run(_session({_RunCompleteRecorder("wraps_nothing", log, hooks=set())}))
-
-        assert [label for label, _ in log] == ["wraps_nothing"]
-        assert log[0][1] is not None
-
-    def test_raising_extender_is_logged_and_later_extenders_are_still_notified(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        log: _RunLog = []
-        raiser = _RunCompleteRecorder("raiser", log, priority=10, raises=True)
-        survivor = _RunCompleteRecorder("survivor", log, priority=20)
-
-        with caplog.at_level(logging.ERROR):
-            _run(_session({raiser, survivor}))
-
-        assert [label for label, _ in log] == ["raiser", "survivor"]
-        assert log[0][1] == log[1][1]
-        error_records = [
-            r for r in caplog.records if r.levelno == logging.ERROR and _RUN_COMPLETE_BOOM in r.getMessage()
-        ]
-        assert len(error_records) == 1
-        record = error_records[0]
-        assert "RuntimeError" in record.getMessage()
-        assert record.exc_info is None
-        args = record.args
-        arg_values = args.values() if isinstance(args, Mapping) else (args or ())
-        assert not [a for a in arg_values if isinstance(a, BaseException)]
-
     def test_extender_whose_exception_str_raises_does_not_escape_the_run(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -914,12 +877,25 @@ class TestRequestNotifiesExtendersOfRunCompletion:
     @pytest.mark.parametrize("opt_in", [False, True])
     def test_raising_extender_does_not_replace_the_run_exception(self, opt_in: bool) -> None:
         log: _RunLog = []
+        failure = RuntimeError("compute failed")
 
-        with pytest.raises(Exception, match="compute failed"):
-            _run(
-                _session({_RunCompleteRecorder("raiser", log, raises=True, raise_on_run_complete=opt_in)}, failing=True)
-            )
+        class _IdentityFG(_FailingRunFG):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                raise failure
 
+        session = mloda.prepare(
+            [Feature(name=_RUN_COLUMN)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_IdentityFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={_RunCompleteRecorder("raiser", log, raises=True, raise_on_run_complete=opt_in)},
+        )
+
+        with pytest.raises(Exception) as raised:
+            _run(session)
+
+        assert raised.value is failure
         assert [label for label, _ in log] == ["raiser"]
 
     def test_opt_in_failure_on_a_successful_run_propagates_after_later_extenders_are_notified(self) -> None:

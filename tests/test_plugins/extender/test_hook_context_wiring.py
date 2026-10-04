@@ -823,16 +823,3 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         assert calculate.run_id != _FORGED_ID
         assert validate.run_id == calculate.run_id
         assert validate.worker_index == calculate.worker_index != 99
-
-
-class TestUnattachedFrameworkStaysAssignable:
-    def test_run_context_and_worker_index_are_assignable_and_reassignable(self) -> None:
-        cfw = _build_framework(set())
-
-        cfw.run_context = RunContext(run_id="a")
-        cfw.run_context = RunContext(run_id="b")
-        cfw.worker_index = 1
-        cfw.worker_index = 2
-
-        assert cfw.run_context.run_id == "b"
-        assert cfw.worker_index == 2

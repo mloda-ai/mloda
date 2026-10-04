@@ -143,25 +143,21 @@ class TestRunContextCarrierReadOnly:
         with pytest.raises(TypeError):
             carrier.clear()
 
-    def test_read_only_after_replace_without_changes(self) -> None:
-        replaced = dataclasses.replace(RunContext(carrier={"k": "v"}))
-
-        self._assert_read_only(replaced.carrier)
-        assert replaced.carrier == {"k": "v"}
-
-    def test_read_only_after_replace_with_a_new_carrier(self) -> None:
-        replaced = dataclasses.replace(RunContext(), carrier={"k": "v"})
-
-        self._assert_read_only(replaced.carrier)
-
-    def test_read_only_after_pickle_round_trip(self) -> None:
-        ctx = RunContext(run_id="r", carrier={"k": "v"})
-
-        restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
-
-        self._assert_read_only(restored.carrier)
-        assert restored.carrier == {"k": "v"}
-        assert restored == ctx
+    @pytest.mark.parametrize("variant", ["replace_unchanged", "replace_new_carrier", "pickle"])
+    def test_read_only_after_replace_or_pickle(self, variant: str) -> None:
+        if variant == "replace_unchanged":
+            replaced = dataclasses.replace(RunContext(carrier={"k": "v"}))
+            self._assert_read_only(replaced.carrier)
+            assert replaced.carrier == {"k": "v"}
+        elif variant == "replace_new_carrier":
+            replaced = dataclasses.replace(RunContext(), carrier={"k": "v"})
+            self._assert_read_only(replaced.carrier)
+        else:
+            ctx = RunContext(run_id="r", carrier={"k": "v"})
+            restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
+            self._assert_read_only(restored.carrier)
+            assert restored.carrier == {"k": "v"}
+            assert restored == ctx
 
     def test_stays_a_dict_and_serializes_to_json(self) -> None:
         ctx = RunContext(carrier={"k": "v"})

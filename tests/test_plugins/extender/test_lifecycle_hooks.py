@@ -2,6 +2,7 @@
 
 import dataclasses
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 import pytest
@@ -244,6 +245,9 @@ class TestContainedHooksLogAndContinue:
         assert len(records) == 1
         assert "RuntimeError" in records[0].getMessage()
         assert records[0].exc_info is None
+        args = records[0].args
+        arg_values = args.values() if isinstance(args, Mapping) else (args or ())
+        assert not [a for a in arg_values if isinstance(a, BaseException)]
 
 
 class _BreakingRefuser(_Recorder):

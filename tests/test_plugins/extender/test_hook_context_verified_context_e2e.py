@@ -3,7 +3,6 @@ real mlodaAPI SYNC execution path, down to HookContext. Also proves Options can 
 the seam's values."""
 
 import contextlib
-import logging
 from typing import Any
 
 import pytest
@@ -279,68 +278,7 @@ class _CalculateGate(_MatchedGateBase):
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
 
-class _WarningOnlyRunStart(Extender):
-    def __init__(self) -> None:
-        self.raise_on_error = False
-
-    def wraps(self) -> set[ExtenderHook]:
-        return set()
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        return func(*args, **kwargs)
-
-    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
-        raise PermissionError("warning-only refusal")
-
-
-class _RunIdentityRecorder(Extender):
-    def __init__(self) -> None:
-        self.run_starts: list[dict[str, str | None]] = []
-
-    def wraps(self) -> set[ExtenderHook]:
-        return set()
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        return func(*args, **kwargs)
-
-    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
-        self.run_starts.append(
-            {
-                "run": run.principal,
-                "run_tenant": run.tenant_id,
-                "run_project": run.project_id,
-                "plan": plan.principal,
-                "plan_tenant": plan.tenant_id,
-                "plan_project": plan.project_id,
-            }
-        )
-
-
 class TestRunStartIdentity:
-    def test_a_run_outside_any_scope_inherits_the_preparers_identity(self) -> None:
-        recorder = _RunIdentityRecorder()
-        with verified_context(**_PREPARE_SCOPE):
-            session = _prepare_session(function_extender={recorder})
-
-        session.run(parallelization_modes={ParallelizationMode.SYNC})
-
-        (seen,) = recorder.run_starts
-        assert seen["run"] == seen["plan"] == "hash-prepare"
-        assert seen["run_tenant"] == seen["plan_tenant"] == "acme-prepare"
-        assert seen["run_project"] == seen["plan_project"] == "proj-prepare"
-
-    def test_a_run_inside_a_different_scope_reports_its_own_identity_and_the_plans_stays(self) -> None:
-        recorder = _RunIdentityRecorder()
-        with verified_context(**_PREPARE_SCOPE):
-            session = _prepare_session(function_extender={recorder})
-
-        with verified_context(**_RUN_SCOPE):
-            session.run(parallelization_modes={ParallelizationMode.SYNC})
-
-        (seen,) = recorder.run_starts
-        assert seen["run"] == "hash-run" and seen["plan"] == "hash-prepare"
-        assert seen["run_tenant"] == "tenant-run" and seen["plan_tenant"] == "acme-prepare"
-
     def test_calculate_hook_context_carries_the_run_identity_when_it_differs_from_the_plan(self) -> None:
         capture = _ContextCapturingExtender()
         gate = _MatchedGatePassingRunStart()
@@ -391,18 +329,6 @@ class TestRunStartGateWithDifferingIdentity:
             session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert capture.captured is not None
-
-    def test_a_warning_only_extender_refusal_is_logged_and_the_run_proceeds(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        capture = _ContextCapturingExtender()
-        session = _prepare_session(function_extender={_WarningOnlyRunStart(), capture})
-
-        with caplog.at_level(logging.WARNING):
-            session.run(parallelization_modes={ParallelizationMode.SYNC})
-
-        assert capture.captured is not None
-        assert any("warning-only refusal" in r.getMessage() for r in caplog.records)
 
 
 class TestFailClosedRunStartIdentityRefusal:

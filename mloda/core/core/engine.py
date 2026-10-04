@@ -505,9 +505,11 @@ class Engine:
                 # Intake may materialize declared defaults into the filter feature's options: group fills shift
                 # SingleFilter's hash, context fills shift its equality, so intake must run before it is stored.
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
-                declared = next(f for f in self.global_filter.filters if f.uuid == match.uuid)
+                declared = next((f for f in self.global_filter.filters if f.uuid == match.uuid), None)
+                if declared is None:
+                    raise ValueError(f"Matched filter on {feature.name} is not declared in the global filter.")
                 if declared.filter_feature.compute_frameworks:
-                    self._narrow_host_to_pin(feature_group_class, feature, match.filter_feature)
+                    feature = self._narrow_host_to_pin(feature_group_class, feature, match.filter_feature)
                 survivor = next(
                     f for f in self.feature_group_collection[feature_group_class] if f == match.filter_feature
                 )
@@ -523,17 +525,43 @@ class Engine:
 
     def _narrow_host_to_pin(
         self, feature_group_class: type[FeatureGroup], host: Feature, filter_feature: Feature
-    ) -> None:
-        """A pinned filter moves its host onto the pin; the host is rehashed so both group into one step."""
+    ) -> Feature:
+        """A pinned filter moves its host onto the pin; on a collision the host merges into the equal feature."""
         pin = filter_feature.compute_frameworks
         if not pin or host.compute_frameworks == pin:
-            return
+            return host
         collection = self.feature_group_collection[feature_group_class]
         if not any(f is host for f in collection):
-            return
+            return host
         collection.discard(host)
         host.compute_frameworks = set(pin)
-        collection.add(host)
+        existing = next((f for f in collection if f == host), None)
+        if existing is None:
+            collection.add(host)
+            return host
+        self._merge_host_into(existing, host)
+        return existing
+
+    def _merge_host_into(self, existing: Feature, host: Feature) -> None:
+        """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
+        existing.options.union_own_keys(host.options)
+        for name, keys in host.consumer_attributions:
+            existing.add_consumer_attribution(name, keys)
+        if host.initial_requested_data:
+            existing.initial_requested_data = True
+        merged = set(self.specialized_from.get(existing.uuid, ())) | set(self.specialized_from.pop(host.uuid, ()))
+        if merged:
+            self.specialized_from[existing.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
+        if host.uuid in self.resolved_input_feature_names:
+            self.resolved_input_feature_names.setdefault(existing.uuid, self.resolved_input_feature_names[host.uuid])
+            del self.resolved_input_feature_names[host.uuid]
+        self._declared_options_by_uuid.pop(host.uuid, None)
+        host_parents = self.feature_link_parents.pop(host.uuid, set())
+        self.feature_link_parents[existing.uuid] |= host_parents - {existing.uuid}
+        for parents in self.feature_link_parents.values():
+            if host.uuid in parents:
+                parents.discard(host.uuid)
+                parents.add(existing.uuid)
 
     def add_feature_link_to_links(self, feature: Feature) -> None:
         """With this functionality, we can add links with a feature instead via mloda API."""

@@ -3,6 +3,7 @@
 from typing import Any
 
 import pyarrow as pa
+import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -163,6 +164,49 @@ def test_a_filter_pinned_to_a_framework_moves_its_host_onto_the_pin() -> None:
 def test_a_pinned_filter_is_applied_on_the_pinned_host() -> None:
     result = mloda.run_all(
         ["pinhost_val"],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        global_filter=_pinned_filter(),
+        plugin_collector=_PIN_ENABLED,
+    )
+
+    assert [res.to_pydict()["pinhost_val"] for res in result] == [[2, 3]]
+
+
+def _pinned_self_filter() -> GlobalFilter:
+    global_filter = GlobalFilter()
+    global_filter.add_filter(Feature("pinhost_val", compute_framework="PyArrowTable"), "min", {"value": 2})
+    return global_filter
+
+
+def test_a_filter_pinned_on_the_requested_column_plans_and_applies() -> None:
+    frameworks: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+
+    result = mloda.run_all(
+        ["pinhost_val"],
+        compute_frameworks=frameworks,
+        global_filter=_pinned_self_filter(),
+        plugin_collector=_PIN_ENABLED,
+    )
+
+    assert [res.to_pydict()["pinhost_val"] for res in result] == [[2, 3]]
+
+
+def test_a_filter_pinned_on_the_requested_column_runs_its_host_on_the_pin() -> None:
+    steps = mloda.explain(
+        ["pinhost_val"],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        global_filter=_pinned_self_filter(),
+        plugin_collector=_PIN_ENABLED,
+    )
+
+    assert [s.compute_framework_name for s in steps if s.step_kind == "compute"] == ["PyArrowTable"]
+
+
+@pytest.mark.parametrize("pinned_first", [True, False], ids=["pinned_first", "plain_first"])
+def test_a_pinned_twin_of_a_requested_column_survives_a_pinned_filter(pinned_first: bool) -> None:
+    twins: list[Feature | str] = [Feature("pinhost_val", compute_framework="PyArrowTable"), Feature("pinhost_val")]
+    result = mloda.run_all(
+        twins if pinned_first else twins[::-1],
         compute_frameworks=[PandasDataFrame, PyArrowTable],
         global_filter=_pinned_filter(),
         plugin_collector=_PIN_ENABLED,

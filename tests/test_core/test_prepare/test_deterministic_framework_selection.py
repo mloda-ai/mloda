@@ -802,10 +802,29 @@ def test_p2_link_between_unrestricted_roots_joins_on_the_restricted_childs_frame
     assert _transforms(steps) == []
 
 
-def test_p4_unlinked_parents_test_still_exists() -> None:
-    module = importlib.import_module("tests.test_core.test_prepare.test_transform_hop_requires_explicit_link")
+# P4: two unlinked roots on one framework feed a consumer on another; nothing joins them.
+class P4RootA(_PlanRoot):
+    NAMES = ("p4_root_a",)
+    FW_NAME = "PandasDataFrame"
 
-    assert hasattr(module, "test_two_unlinked_source_framework_instances_raise_missing_links_error_at_prepare_time")
+
+class P4RootB(_PlanRoot):
+    NAMES = ("p4_root_b",)
+    FW_NAME = "PandasDataFrame"
+
+
+class P4Consumer(_PlanConsumer):
+    INPUTS = ("p4_root_a", "p4_root_b")
+    OUTPUT = "p4_out"
+    FW_NAME = "PyArrowTable"
+
+
+def test_p4_unlinked_parents_raise_the_missing_links_error() -> None:
+    with pytest.raises(ValueError, match="Link") as raised:
+        _plan(["p4_out"], {P4RootA, P4RootB, P4Consumer}, [PandasDataFrame, PyArrowTable], links=set())
+
+    assert "P4RootA" in str(raised.value)
+    assert "P4RootB" in str(raised.value)
 
 
 # A feature both requested and consumed keeps one read.

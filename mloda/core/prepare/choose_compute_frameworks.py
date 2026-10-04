@@ -1,7 +1,8 @@
 """Chooses one compute framework per block of features (one block is one plan step group) before links resolve.
-Exact branch and bound over hard rules (domain, join, side, filter, transform path), minimising conversions.
+Arc consistency prunes the domains, then branch and bound with forward checking minimises conversions.
 """
 
+import re
 from collections.abc import Callable, Mapping
 from functools import partial
 from typing import NamedTuple
@@ -10,6 +11,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.execution_plan import ExecutionPlan
@@ -39,13 +41,35 @@ def conversion_cost(from_framework: Framework, to_framework: Framework) -> int:
     return 1
 
 
+_ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
+
+
 def _names(features: tuple[Feature, ...]) -> list[str]:
     return sorted(str(feature.name) for feature in features)
 
 
+def _stable_text(value: object) -> str:
+    """Text of a value with object addresses removed, so it is equal across interpreters."""
+    return _ADDRESS.sub("", str(value))
+
+
 def _block_key(fg: type[FeatureGroup], features: tuple[Feature, ...]) -> tuple[object, ...]:
     allowed = sorted(f.get_class_name() for f in features[0].compute_frameworks or ())
-    return (fg.__module__, fg.__qualname__, _names(features), allowed, sorted(str(f.options) for f in features))
+    data_types = sorted(f.data_type.name if f.data_type else "" for f in features)
+    options = sorted(_stable_text(f.options) for f in features)
+    return (fg.__module__, fg.__qualname__, tuple(_names(features)), tuple(data_types), tuple(allowed), tuple(options))
+
+
+def _refine(keys: list[tuple[object, ...]], neighbors: list[set[int]]) -> list[int]:
+    """Colour refinement: equal keys are told apart by the sorted classes of their neighbour blocks."""
+    classes = [sorted(set(keys)).index(key) for key in keys]
+    while True:
+        labels = [(classes[i], tuple(sorted(classes[n] for n in neighbors[i]))) for i in range(len(keys))]
+        ordered = sorted(set(labels))
+        refined = [ordered.index(label) for label in labels]
+        if len(set(refined)) == len(set(classes)):
+            return classes
+        classes = refined
 
 
 def _join_allows(jointype: JoinType, values: Values) -> bool:
@@ -106,21 +130,49 @@ class ChooseComputeFrameworks:
         owner = {f.uuid: i for i, block in enumerate(blocks) for f in block.features}
         rules = self._rules(blocks, owner)
         groups = self._cost_groups(blocks, owner)
+        domains = self._prune(blocks, rules)
         for order in self._search_orders(len(blocks), rules, groups):
             members = set(order)
-            assignment = self._solve(blocks, order, [r for r in rules if r.blocks[0] in members], groups)
+            assignment = self._solve(blocks, order, [r for r in rules if r.blocks[0] in members], groups, domains)
             for index, framework in assignment.items():
                 for feature in blocks[index].features:
                     feature.chosen_compute_framework = framework
+        self._require_all_chosen()
+
+    def _require_all_chosen(self) -> None:
+        for node in self.graph.nodes:
+            feature = self.graph.nodes[node].feature
+            if feature.chosen_compute_framework is None:
+                raise ValueError(f"Feature {feature.name} ended without a chosen compute framework.")
 
     def _blocks(self) -> list[_Block]:
         keyed: list[tuple[tuple[object, ...], _Block]] = []
         for fg, features in self.nodes.items():
             for group in ExecutionPlan.group_features_by_compute_framework_and_options(set(features)).values():
-                members = tuple(sorted(group, key=lambda f: (str(f.name), str(f.options))))
+                members = tuple(sorted(group, key=lambda f: (str(f.name), _stable_text(f.options))))
                 domain = tuple(sorted(members[0].compute_frameworks or (), key=self.rank))
+                if not domain:
+                    FeatureValidator.validate_compute_frameworks_resolved(
+                        members[0].compute_frameworks, str(members[0].name)
+                    )
                 keyed.append((_block_key(fg, members), _Block(fg, members, domain)))
-        return [block for _, block in sorted(keyed, key=lambda pair: pair[0])]
+        keys = [key for key, _ in keyed]
+        classes = _refine(keys, self._block_neighbors(keyed))
+        order = sorted(range(len(keyed)), key=lambda i: (keys[i], classes[i], _names(keyed[i][1].features)))
+        return [keyed[i][1] for i in order]
+
+    def _block_neighbors(self, keyed: list[tuple[tuple[object, ...], _Block]]) -> list[set[int]]:
+        """Blocks adjacent through graph edges, links and filter ties, for telling equal-keyed blocks apart."""
+        owner = {f.uuid: i for i, (_, block) in enumerate(keyed) for f in block.features}
+        pairs = list(self.graph.edges) + list(self.ties)
+        pairs += [(left, child) for _, left, _, child in self.occurrences]
+        pairs += [(right, child) for _, _, right, child in self.occurrences]
+        neighbors: list[set[int]] = [set() for _ in keyed]
+        for one, other in pairs:
+            if one in owner and other in owner and owner[one] != owner[other]:
+                neighbors[owner[one]].add(owner[other])
+                neighbors[owner[other]].add(owner[one])
+        return neighbors
 
     def _convertible(self, source: Framework, target: Framework) -> bool:
         if source is target:
@@ -158,7 +210,8 @@ class ChooseComputeFrameworks:
             kinds = [
                 (
                     link.jointype,
-                    link.left_feature_group != link.right_feature_group and link.jointype not in _UNFLIPPABLE,
+                    link.left_feature_group != link.right_feature_group
+                    and link.jointype not in (JoinType.APPEND, JoinType.UNION),
                 )
                 for link, _ in occurrences
             ]
@@ -210,44 +263,106 @@ class ChooseComputeFrameworks:
             orders.append(order)
         return orders
 
+    @staticmethod
+    def _rule_blocks(rule: _Rule) -> list[int]:
+        return list(dict.fromkeys(rule.blocks))
+
+    @staticmethod
+    def _allows(rule: _Rule, values: Mapping[int, Framework]) -> bool:
+        return rule.allows(tuple(values[b] for b in rule.blocks))
+
+    def _prune(self, blocks: list[_Block], rules: list[_Rule]) -> list[list[Framework]]:
+        """Arc consistency over the rules that join two blocks; an emptied domain raises."""
+        domains = [list(block.domain) for block in blocks]
+        pairwise = [r for r in rules if len(self._rule_blocks(r)) == 2]
+        changed = True
+        while changed:
+            changed = False
+            for rule in pairwise:
+                for target in reversed(self._rule_blocks(rule)):
+                    other = next(b for b in self._rule_blocks(rule) if b != target)
+                    kept = [
+                        v
+                        for v in domains[target]
+                        if any(self._allows(rule, {target: v, other: w}) for w in domains[other])
+                    ]
+                    if not kept:
+                        raise ValueError(self._emptied(blocks[target], rule, blocks[other], domains[other]))
+                    if len(kept) != len(domains[target]):
+                        domains[target] = kept
+                        changed = True
+        return domains
+
+    @staticmethod
+    def _emptied(block: _Block, rule: _Rule, other: _Block, other_domain: list[Framework]) -> str:
+        """Names the emptied block and, when its partner is fixed to one framework, the partner too."""
+        message = f"No compute framework is left for features {', '.join(_names(block.features))}"
+        message += f" (allowed: {sorted(fw.get_class_name() for fw in block.domain)}): {rule.why}"
+        if len(other_domain) == 1:
+            message += (
+                f", with features {', '.join(_names(other.features))} fixed to {other_domain[0].get_class_name()}"
+            )
+        return message + "."
+
     def _solve(
         self,
         blocks: list[_Block],
         order: list[int],
         rules: list[_Rule],
         groups: dict[tuple[int, type[FeatureGroup]], set[int]],
+        domains: list[list[Framework]],
     ) -> dict[int, Framework]:
-        position = {b: k for k, b in enumerate(order)}
-        triggers: list[list[_Rule]] = [[] for _ in order]
+        touching: dict[int, list[_Rule]] = {b: [] for b in order}
         for rule in rules:
-            triggers[max(position[b] for b in rule.blocks)].append(rule)
-        local = [(parent, children) for (parent, _), children in groups.items() if parent in position]
+            for b in self._rule_blocks(rule):
+                touching[b].append(rule)
+        local = [(parent, children) for (parent, _), children in groups.items() if parent in touching]
+        steps: dict[int, list[tuple[int, set[int]]]] = {b: [] for b in order}
+        for parent, children in local:
+            for b in (parent, *children):
+                steps[b].append((parent, children))
         assigned: dict[int, Framework] = {}
         best: dict[int, Framework] = {}
         best_cost = [-1]
 
-        def cost() -> int:
-            total = 0
-            for parent, children in local:
-                if parent in assigned:
-                    moved = {assigned[c] for c in children if c in assigned and assigned[c] is not assigned[parent]}
-                    total += sum(conversion_cost(assigned[parent], target) for target in moved)
-            return total
+        def step_cost(parent: int, children: set[int]) -> int:
+            if parent not in assigned:
+                return 0
+            moved = {assigned[c] for c in children if c in assigned and assigned[c] is not assigned[parent]}
+            return sum(conversion_cost(assigned[parent], target) for target in moved)
 
-        def descend(depth: int) -> None:
+        def narrow(index: int, current: dict[int, list[Framework]]) -> dict[int, list[Framework]] | None:
+            """Forward check: values of the one block still open in a rule must be supported by the assignment."""
+            narrowed = dict(current)
+            for rule in touching[index]:
+                pending = [b for b in self._rule_blocks(rule) if b not in assigned]
+                if not pending:
+                    if not self._allows(rule, assigned):
+                        return None
+                elif len(pending) == 1:
+                    open_block = pending[0]
+                    kept = [v for v in narrowed[open_block] if self._allows(rule, {**assigned, open_block: v})]
+                    if not kept:
+                        return None
+                    narrowed[open_block] = kept
+            return narrowed
+
+        def descend(depth: int, current: dict[int, list[Framework]], cost: int) -> None:
             if depth == len(order):
                 best.update(assigned)
-                best_cost[0] = cost()
+                best_cost[0] = cost
                 return
             index = order[depth]
-            for value in blocks[index].domain:
+            before = sum(step_cost(*step) for step in steps[index])
+            for value in current[index]:
                 assigned[index] = value
-                holds = all(r.allows(tuple(assigned[b] for b in r.blocks)) for r in triggers[depth])
-                if holds and (best_cost[0] < 0 or cost() < best_cost[0]):
-                    descend(depth + 1)
+                narrowed = narrow(index, current)
+                new_cost = cost + sum(step_cost(*step) for step in steps[index]) - before
+                if narrowed is not None and (best_cost[0] < 0 or new_cost < best_cost[0]):
+                    descend(depth + 1, narrowed, new_cost)
                 del assigned[index]
 
-        descend(0)
+        descend(0, {b: domains[b] for b in order}, 0)
         if best_cost[0] < 0:
             raise ValueError(self._infeasible(blocks, order, rules))
         return best

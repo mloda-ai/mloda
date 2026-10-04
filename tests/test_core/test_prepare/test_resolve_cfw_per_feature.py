@@ -282,3 +282,29 @@ def test_resolution_is_deterministic_across_fresh_inputs() -> None:
         assert feature_both.get_compute_framework() is PyArrowTable
         assert feature_right.get_compute_framework() is PyArrowTable
         assert trekker not in link_trekker.data_ordered
+
+
+def test_members_on_both_sides_of_a_link_raise_the_both_sides_error() -> None:
+    left_only = _choose(Feature("both_sides_left"), PandasDataFrame)
+    right_only = _choose(Feature("both_sides_right"), PyArrowTable)
+    link_trekker, _ = _make_trekker({left_only.uuid, right_only.uuid})
+    planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {left_only, right_only})]
+
+    with pytest.raises(ValueError, match=r"run on both sides of link"):
+        ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
+
+
+class _DisagreeingResolve(ResolveComputeFrameworks):
+    """Hand-built state: the link resolves to a framework the member does not run on."""
+
+    def resolve_trekker(self, trekker: LinkFrameworkTrekker, members: list[Any]) -> type[ComputeFramework] | None:
+        return PyArrowTable
+
+
+def test_a_member_off_its_links_resolved_framework_raises() -> None:
+    member = _choose(Feature("off_resolved_member"), PandasDataFrame)
+    link_trekker, _ = _make_trekker({member.uuid})
+    planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {member})]
+
+    with pytest.raises(ValueError, match=r"off_resolved_member runs on PandasDataFrame, but its link .* PyArrowTable"):
+        _DisagreeingResolve(Graph()).links(planned_queue, link_trekker)

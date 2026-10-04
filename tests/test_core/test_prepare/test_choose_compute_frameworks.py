@@ -2,13 +2,16 @@
 Graphs are built by hand; no run or Engine is involved.
 """
 
+import itertools
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
 
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -93,11 +96,12 @@ class _Net:
         self,
         fg: type[FeatureGroup],
         name: str,
-        allowed: set[type[ComputeFramework]],
-        options: dict[str, int] | None = None,
+        allowed: set[type[ComputeFramework]] | None,
+        options: dict[str, Any] | None = None,
+        data_type: DataType | None = None,
     ) -> Feature:
-        feature = Feature(name, options=options)
-        feature.compute_frameworks = set(allowed)
+        feature = Feature(name, options=options, data_type=data_type)
+        feature.compute_frameworks = None if allowed is None else set(allowed)
         self.graph.add_node(feature.uuid, NodeProperties(feature, fg))
         self.nodes.setdefault(fg, set()).add(feature)
         self.fg_of[feature.uuid] = fg
@@ -117,11 +121,26 @@ class _Net:
     def tie(self, host: Feature, filter_feature: Feature) -> None:
         self.ties.append((host.uuid, filter_feature.uuid))
 
-    def choose(self, positions: Mapping[type[ComputeFramework], int] | None = None) -> None:
-        chooser = ChooseComputeFrameworks(
-            self.graph, self.nodes, self.occurrences, self.ties, dict(positions) if positions else {}
-        )
-        chooser.choose()
+    def orphan(self, fg: type[FeatureGroup], name: str, allowed: set[type[ComputeFramework]]) -> Feature:
+        """A graph node the FG buckets do not list."""
+        feature = Feature(name)
+        feature.compute_frameworks = set(allowed)
+        self.graph.add_node(feature.uuid, NodeProperties(feature, fg))
+        return feature
+
+    def chooser(
+        self,
+        positions: Mapping[type[ComputeFramework], int] | None = None,
+        chooser_class: type[ChooseComputeFrameworks] = ChooseComputeFrameworks,
+    ) -> ChooseComputeFrameworks:
+        return chooser_class(self.graph, self.nodes, self.occurrences, self.ties, dict(positions) if positions else {})
+
+    def choose(
+        self,
+        positions: Mapping[type[ComputeFramework], int] | None = None,
+        chooser_class: type[ChooseComputeFrameworks] = ChooseComputeFrameworks,
+    ) -> None:
+        self.chooser(positions, chooser_class).choose()
 
     def conversions(self) -> int:
         """Graph edges whose ends ended up on different frameworks."""
@@ -552,7 +571,9 @@ def test_fresh_interpreters_choose_the_same_frameworks() -> None:
 
     assert len(outputs) == len(seeds)
     for position, output in enumerate(outputs):
-        assert output == _PROBE_EXPECTED, f"probe {position} chose {output}, expected {_PROBE_EXPECTED}"
+        plain = {key: value for key, value in output.items() if not key.startswith("addr_")}
+        assert plain == _PROBE_EXPECTED, f"probe {position} chose {plain}, expected {_PROBE_EXPECTED}"
+    assert outputs[0] == outputs[1], "blocks equal but for an option object's address chose differently per process"
 
 
 def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly() -> None:
@@ -573,3 +594,184 @@ def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly() -> None:
     assert net.conversions() == 3
     for index, framework in pins.items():
         assert layers[index].chosen_compute_framework is framework
+
+
+# --- search scale (F2) -----------------------------------------------------------------------------------
+
+
+def test_an_infeasible_chain_raises_quickly_and_names_the_failing_block() -> None:
+    one, _two = _throwaway_pair(shared_expected=False)
+    net = _Net()
+    layers = [net.add(ChooserLayerFG, "blowup_layer", {P, A, D}, {"layer": index}) for index in range(16)]
+    sink = net.add(ChooserSinkFG, "blowup_sink", {one})
+    for parent, child in zip(layers, layers[1:]):
+        net.edge(parent, child)
+    net.edge(layers[-1], sink)
+
+    started = time.perf_counter()
+    with pytest.raises(ValueError, match="blowup_sink") as raised:
+        net.choose()
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 1.0, f"raising took {elapsed:.1f}s"
+    assert "blowup_layer" not in str(raised.value), "the message must name the emptied block, not the whole component"
+    assert "transform path" in str(raised.value)
+
+
+class _AllConvertibleChooser(ChooseComputeFrameworks):
+    """Every framework pair converts, so throwaway frameworks need no registered transformers."""
+
+    def _convertible(self, source: type[ComputeFramework], target: type[ComputeFramework]) -> bool:
+        return True
+
+
+def _six_frameworks() -> list[type[ComputeFramework]]:
+    def make(name: str) -> type[ComputeFramework]:
+        return type(name, (ComputeFramework,), {"is_available": staticmethod(lambda: False)})
+
+    return [make(f"ZzScale{letter}ThrowawayFramework") for letter in "ABCDEF"]
+
+
+def test_a_twenty_five_block_six_framework_component_with_a_forced_conversion_solves_quickly() -> None:
+    fws = _six_frameworks()
+    everything = set(fws)
+    pins = [fws[5]] * 5 + [fws[4]] * 2 + fws[:2]
+    net = _Net()
+    hub = net.add(ChooserHostFG, "scale_hub", everything)
+    leaves = []
+    for index, pin in enumerate(pins):
+        leaf_fg = type(f"ChooserScaleLeaf{index}FG", (FeatureGroup,), {})
+        leaves.append(net.add(leaf_fg, f"scale_leaf_{index}", {pin}))
+        net.edge(hub, leaves[-1])
+    fillers = [net.add(ChooserLayerFG, "scale_filler", everything, {"layer": index}) for index in range(15)]
+    for parent, child in zip([hub, *fillers], fillers):
+        net.edge(parent, child)
+    assert len(net.features) == 25
+
+    started = time.perf_counter()
+    net.choose(chooser_class=_AllConvertibleChooser)
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.2, f"choosing took {elapsed:.1f}s"
+    assert hub.chosen_compute_framework is fws[5]
+    assert {f.chosen_compute_framework for f in fillers} == {fws[5]}
+    assert [leaf.chosen_compute_framework for leaf in leaves] == pins
+    assert net.conversions() == 4
+
+
+# --- RIGHT self-merge guard (F4) -------------------------------------------------------------------------
+
+
+def test_a_right_link_whose_sides_share_a_framework_the_child_is_not_on_is_infeasible() -> None:
+    net = _Net()
+    left_one = net.add(ChooserLeftFG, "guard_left_one", {P})
+    right_one = net.add(ChooserRightFG, "guard_right_one", {A})
+    left_two = net.add(ChooserLeafFG, "guard_left_two", {D})
+    right_two = net.add(ChooserOtherLeafFG, "guard_right_two", {D})
+    child = net.add(ChooserChildFG, "guard_child", {P, A})
+    net.join(_link(Link.inner, ChooserLeftFG, ChooserRightFG), left_one, right_one, child)
+    net.join(_link(Link.right, ChooserLeafFG, ChooserOtherLeafFG), left_two, right_two, child)
+
+    with pytest.raises(ValueError, match="guard_child"):
+        net.choose()
+
+
+# --- block order determinism (F6) ------------------------------------------------------------------------
+
+
+class _AddressRepr:
+    """Option value whose repr carries a chosen address, as a default object repr does."""
+
+    def __init__(self, address: int) -> None:
+        self.address = address
+
+    def __repr__(self) -> str:
+        return f"<_AddressRepr object at 0x{self.address:x}>"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _AddressRepr) and other.address == self.address
+
+    def __hash__(self) -> int:
+        return hash(self.address)
+
+
+def _choose_with_addresses(addresses: tuple[int, ...]) -> list[str]:
+    everything = {P, A, D}
+    net = _Net()
+    objs = [net.add(ChooserLayerFG, "addr_o", everything, {"o": _AddressRepr(a)}) for a in addresses]
+    src = net.add(ChooserRootFG, "addr_src", {P})
+    snk = net.add(ChooserSinkFG, "addr_snk", {D})
+    leaf = net.add(ChooserLeafFG, "addr_leaf", {A})
+    for parent, child in [
+        (objs[0], objs[1]),
+        (objs[0], src),
+        (objs[0], leaf),
+        (objs[1], objs[2]),
+        (objs[1], snk),
+        (objs[2], snk),
+        (objs[2], leaf),
+    ]:
+        net.edge(parent, child)
+
+    net.choose()
+
+    return [f.get_class_name() for f in (c.chosen_compute_framework for c in net.features) if f is not None]
+
+
+def test_blocks_equal_but_for_an_address_in_an_option_repr_choose_the_same_whatever_the_addresses() -> None:
+    outcomes = {tuple(_choose_with_addresses(p)) for p in itertools.permutations((0x1000, 0x2000, 0x3000))}
+
+    assert len(outcomes) == 1, f"the address order changed the assignment: {outcomes}"
+
+
+def _block_data_types(types: list[DataType]) -> list[str]:
+    net = _Net()
+    for data_type in types:
+        net.add(ChooserRootFG, "typed", {P, A}, None, data_type)
+    return [block.features[0].data_type.value for block in net.chooser()._blocks() if block.features[0].data_type]
+
+
+def test_blocks_differing_only_in_data_type_are_ordered_by_data_type_name() -> None:
+    types = [DataType.STRING, DataType.INT32, DataType.DOUBLE, DataType.BOOLEAN, DataType.DATE, DataType.BINARY]
+
+    assert _block_data_types(types) == sorted(t.value for t in types)
+    assert _block_data_types(types[::-1]) == sorted(t.value for t in types)
+
+
+# --- empty domains (F7) ----------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("allowed", [set(), None], ids=["empty_set", "none"])
+def test_a_block_without_any_allowed_framework_raises_the_unresolved_frameworks_error(
+    allowed: set[type[ComputeFramework]] | None,
+) -> None:
+    net = _Net()
+    net.add(ChooserRootFG, "no_framework_feature", allowed)
+
+    with pytest.raises(ValueError, match="no_framework_feature does not have any compute framework"):
+        net.choose()
+
+
+# --- completeness guard (F8) -----------------------------------------------------------------------------
+
+
+def test_every_graph_node_ends_with_a_chosen_framework() -> None:
+    """Regression guard: holds today because every graph node is bucketed."""
+    net = _Net()
+    root = net.add(ChooserRootFG, "complete_root", {P, A})
+    leaf = net.add(ChooserLeafFG, "complete_leaf", {A})
+    net.edge(root, leaf)
+
+    net.choose()
+
+    for node in net.graph.nodes:
+        assert net.graph.nodes[node].feature.chosen_compute_framework is not None
+
+
+def test_a_graph_node_the_chooser_never_sees_raises() -> None:
+    net = _Net()
+    net.add(ChooserRootFG, "seen_root", {P})
+    net.orphan(ChooserLeafFG, "unseen_orphan", {P})
+
+    with pytest.raises(ValueError, match="unseen_orphan"):
+        net.choose()

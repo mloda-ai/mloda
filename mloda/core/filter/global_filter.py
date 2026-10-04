@@ -536,20 +536,16 @@ class GlobalFilter:
             filter.filter_feature.compute_frameworks = set(adopted) if adopted is not None else None
             return True
 
-        # case that the filter feature has an cf -> the feature framework must be one of the pinned ones.
-        # Cardinality is validated at add_filter, so membership degenerates to the single pin's equality.
-        if feat.get_compute_framework() in filter.filter_feature.compute_frameworks:
-            return True
-
-        return False
+        # A pinned filter must name one of the host's allowed frameworks.
+        pin = filter.filter_feature.get_compute_framework()
+        return pin in (feat.compute_frameworks or set())
 
     @staticmethod
     def _framework_pin_reason(filter: SingleFilter, feat: Feature) -> str:
-        """Name the filter's pinned framework and the one the feature resolved to."""
-        # The pin degenerates to one entry, validated at add_filter.
+        """Name the filter's pinned framework and the host's allowed set."""
         pinned = filter.filter_feature.get_compute_framework().get_class_name()
-        resolved = feat.get_compute_framework().get_class_name()
-        return f"pinned compute framework '{pinned}' is not the feature's resolved '{resolved}'"
+        allowed = sorted(cfw.get_class_name() for cfw in feat.compute_frameworks or ())
+        return f"pinned compute framework '{pinned}' is not in the feature's allowed set {allowed}"
 
     def add_time_and_time_travel_filters(
         self,

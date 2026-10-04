@@ -3,7 +3,9 @@ Set iteration over class objects is id-based, so the reduction ranks candidates 
 and breaks remaining ties by class name.
 """
 
+import copy
 import importlib
+import inspect
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,16 +16,17 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, DataCreator, FeatureSet
-from mloda.user import PluginCollector, mloda
+from mloda.user import Index, Options, PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_preference
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.api.plan_info import PlanStep
+from mloda.core.core.engine import Engine
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
-from mloda.core.prepare.graph.graph import Graph
-from mloda.core.prepare.identify_feature_group import FeatureResolutionError
-from mloda.core.prepare.resolve_links import ResolveLinks
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.helpers.probe_runner import run_probes
@@ -32,14 +35,6 @@ _PROBE = Path(__file__).with_name("determinism_probe.py")
 # Each probe is a fresh interpreter importing PyArrowTable, so the count is what the gate budget allows.
 _PROBE_PROCESSES = 5
 _PROBE_EXPECTED = {"feature": "PyArrowTable", "trekker_left": "PyArrowTable", "trekker_right": "PyArrowTable"}
-
-
-class DeterminismLeftFeatureGroup(FeatureGroup):
-    pass
-
-
-class DeterminismRightFeatureGroup(FeatureGroup):
-    pass
 
 
 def _throwaway_frameworks() -> tuple[type[ComputeFramework], ...]:
@@ -106,13 +101,6 @@ def _same_name_and_qualname_frameworks() -> tuple[type[ComputeFramework], type[C
     return make("zz_module_b"), make("zz_module_a")
 
 
-def _link() -> Link:
-    return Link.inner(
-        JoinSpec(DeterminismLeftFeatureGroup, "idx"),
-        JoinSpec(DeterminismRightFeatureGroup, "idx"),
-    )
-
-
 def test_select_deterministic_ignores_input_order() -> None:
     forward = ComputeFramework.select_deterministic([PandasDataFrame, PyArrowTable])
     backward = ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame])
@@ -171,18 +159,15 @@ def test_the_throwaway_frameworks_stay_out_of_plugin_discovery() -> None:
     assert leaked == [], f"test-only frameworks leaked into plugin discovery: {leaked}"
 
 
-def test_link_trekker_key_reduces_both_sides_to_the_expected_framework() -> None:
-    link = _link()
+def test_a_link_between_unrestricted_roots_joins_both_sides_on_the_expected_framework() -> None:
+    steps = _plan(["lku_out"], _LKU_GROUPS, [PandasDataFrame, PyArrowTable], links=_lku_links())
 
-    key = ResolveLinks(Graph()).create_link_trekker_key(
-        link, {PyArrowTable, PandasDataFrame}, {PyArrowTable, PandasDataFrame}
-    )
-
-    assert key == (link, PandasDataFrame, PandasDataFrame)
+    assert _compute_names(steps, LkuLeftRoot) == {"PandasDataFrame"}
+    assert _compute_names(steps, LkuRightRoot) == {"PandasDataFrame"}
+    assert [step.compute_framework_name for step in steps if step.step_kind == "join"] == ["PandasDataFrame"]
 
 
-def test_link_trekker_key_reduces_every_framework_pair_the_same_way() -> None:
-    resolver = ResolveLinks(Graph())
+def test_throwaway_framework_pairs_reduce_to_the_expected_framework() -> None:
     zulu, alfa, tango, bravo = _throwaway_frameworks()
     expectations: list[tuple[tuple[type[ComputeFramework], type[ComputeFramework]], str]] = [
         ((zulu, alfa), "ZzAlfaThrowawayFramework"),
@@ -191,53 +176,43 @@ def test_link_trekker_key_reduces_every_framework_pair_the_same_way() -> None:
     ]
 
     for (left, right), expected in expectations:
-        link = _link()
-        key = resolver.create_link_trekker_key(link, {left, right}, {left, right})
-
-        assert key[0] is link
-        assert key[1].get_class_name() == expected
-        assert key[2].get_class_name() == expected
+        assert ComputeFramework.select_deterministic({left, right}).get_class_name() == expected
+        assert ComputeFramework.select_deterministic([right, left], {}).get_class_name() == expected
 
 
-def test_link_trekker_key_follows_a_non_default_preference_on_both_sides() -> None:
-    link = _link()
+def test_a_link_between_unrestricted_roots_follows_a_non_default_preference() -> None:
+    steps = _plan(["lku_out"], _LKU_GROUPS, [PyArrowTable, PandasDataFrame], links=_lku_links())
 
-    with framework_preference({PyArrowTable: 0, PandasDataFrame: 1}):
-        key = ResolveLinks(Graph()).create_link_trekker_key(
-            link, {PyArrowTable, PandasDataFrame}, {PandasDataFrame, PyArrowTable}
-        )
-
-    assert key == (link, PyArrowTable, PyArrowTable)
+    assert _compute_names(steps, LkuLeftRoot) == {"PyArrowTable"}
+    assert _compute_names(steps, LkuRightRoot) == {"PyArrowTable"}
+    assert [step.compute_framework_name for step in steps if step.step_kind == "join"] == ["PyArrowTable"]
 
 
-def test_link_trekker_key_keeps_single_framework_sides() -> None:
-    link = _link()
+def test_a_link_keeps_single_framework_sides_declared() -> None:
+    steps = _plan(["lkm_out"], _LKM_GROUPS, [PandasDataFrame, PyArrowTable], links=_lkm_links())
 
-    key = ResolveLinks(Graph()).create_link_trekker_key(link, {PandasDataFrame}, {PyArrowTable})
+    (join,) = [step for step in steps if step.step_kind == "join"]
+    assert join.declared_left_framework_names == ("PandasDataFrame",)
+    assert join.declared_right_framework_names == ("PyArrowTable",)
 
-    assert key == (link, PandasDataFrame, PyArrowTable)
 
-
-def test_feature_compute_framework_is_the_expected_framework() -> None:
+def test_feature_compute_framework_raises_on_an_unchosen_multi_framework_set() -> None:
     feature = Feature("determinism_feature")
     feature.compute_frameworks = {PyArrowTable, PandasDataFrame}
 
-    assert feature.get_compute_framework() is PandasDataFrame
+    with pytest.raises(ValueError):
+        feature.get_compute_framework()
 
 
-def test_feature_compute_framework_is_the_expected_framework_for_every_pair() -> None:
+def test_feature_compute_framework_raises_on_every_unchosen_pair() -> None:
     zulu, alfa, tango, bravo = _throwaway_frameworks()
-    expectations: list[tuple[tuple[type[ComputeFramework], type[ComputeFramework]], str]] = [
-        ((zulu, alfa), "ZzAlfaThrowawayFramework"),
-        ((zulu, tango), "ZzTangoThrowawayFramework"),
-        ((tango, bravo), "ZzBravoThrowawayFramework"),
-    ]
 
-    for (left, right), expected in expectations:
+    for left, right in ((zulu, alfa), (zulu, tango), (tango, bravo)):
         feature = Feature("determinism_feature")
         feature.compute_frameworks = {left, right}
 
-        assert feature.get_compute_framework().get_class_name() == expected
+        with pytest.raises(ValueError):
+            feature.get_compute_framework()
 
 
 def test_feature_compute_framework_keeps_a_single_framework() -> None:
@@ -437,60 +412,38 @@ class PreferenceUnavailableRootFG(_ConnAwareRoot):
     NAME = "preference_unavailable_root"
 
 
-def _default_winner() -> str:
-    return ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]).get_class_name()
-
-
 def test_preference_first_listed_among_candidates_wins() -> None:
-    with framework_preference({PyArrowTable: 0, PandasDataFrame: 1}):
-        assert ComputeFramework.select_deterministic([PandasDataFrame, PyArrowTable]) is PyArrowTable
-    with framework_preference({PandasDataFrame: 0, PyArrowTable: 1}):
-        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PandasDataFrame
+    assert ComputeFramework.select_deterministic(
+        [PandasDataFrame, PyArrowTable], {PyArrowTable: 0, PandasDataFrame: 1}
+    ) is (PyArrowTable)
+    assert ComputeFramework.select_deterministic(
+        [PyArrowTable, PandasDataFrame], {PandasDataFrame: 0, PyArrowTable: 1}
+    ) is (PandasDataFrame)
 
 
 def test_preference_ranks_unlisted_candidates_after_listed_in_default_order() -> None:
     zulu, alfa, _, bravo = _throwaway_frameworks()
 
-    with framework_preference({zulu: 0}):
-        assert ComputeFramework.select_deterministic({alfa, zulu, bravo}) is zulu
-        assert ComputeFramework.select_deterministic({alfa, bravo, PandasDataFrame}) is PandasDataFrame
+    assert ComputeFramework.select_deterministic({alfa, zulu, bravo}, {zulu: 0}) is zulu
+    assert ComputeFramework.select_deterministic({alfa, bravo, PandasDataFrame}, {zulu: 0}) is PandasDataFrame
 
 
 def test_unlisted_candidates_rank_after_every_listed_one_when_positions_repeat() -> None:
     zulu, alfa, _, bravo = _throwaway_frameworks()
 
-    with framework_preference({zulu: 1, bravo: 1}):
-        assert ComputeFramework.select_deterministic({alfa, zulu, bravo}) is bravo
-        assert ComputeFramework.select_deterministic({alfa, zulu, PandasDataFrame}) is zulu
+    assert ComputeFramework.select_deterministic({alfa, zulu, bravo}, {zulu: 1, bravo: 1}) is bravo
+    assert ComputeFramework.select_deterministic({alfa, zulu, PandasDataFrame}, {zulu: 1, bravo: 1}) is zulu
 
 
 def test_a_shared_position_is_broken_by_the_module() -> None:
     module_b, module_a = _same_name_and_qualname_frameworks()
+    positions: dict[type[ComputeFramework], int] = {module_b: 0, module_a: 0, PandasDataFrame: 1}
 
-    with framework_preference({module_b: 0, module_a: 0, PandasDataFrame: 1}):
-        assert ComputeFramework.select_deterministic({module_b, module_a, PandasDataFrame}) is module_a
+    assert ComputeFramework.select_deterministic({module_b, module_a, PandasDataFrame}, positions) is module_a
 
 
 def test_no_preference_leaves_the_default_unchanged() -> None:
-    with framework_preference({}):
-        assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PandasDataFrame
-
-
-@pytest.mark.parametrize("body_raises", [False, True], ids=["exits_normally", "body_raises"])
-def test_preference_is_empty_again_after_the_context_manager_ends(body_raises: bool) -> None:
-    def run_body() -> None:
-        with framework_preference({PyArrowTable: 0}):
-            assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame]) is PyArrowTable
-            if body_raises:
-                raise RuntimeError("boom")
-
-    if body_raises:
-        with pytest.raises(RuntimeError, match="boom"):
-            run_body()
-    else:
-        run_body()
-
-    assert _default_winner() == "PandasDataFrame"
+    assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame], {}) is PandasDataFrame
 
 
 @pytest.mark.parametrize(
@@ -526,13 +479,6 @@ def test_unavailable_framework_listed_first_falls_back_to_the_next_listed() -> N
     assert names == ["PyArrowTable"]
 
 
-def test_preference_is_empty_again_after_a_planning_run_that_raises() -> None:
-    with pytest.raises(FeatureResolutionError):
-        _compute_framework_names("preference_no_such_feature", PreferencePandasPyArrowRootFG, [PyArrowTable])
-
-    assert _default_winner() == "PandasDataFrame"
-
-
 class PreferencePinnedPandasRootFG(_ConnAwareRoot):
     NAME = "preference_pinned_pandas_root"
 
@@ -552,3 +498,473 @@ def test_feature_pinned_to_pandas_still_runs_on_pandas_under_a_pyarrow_first_run
 
     assert len(result) == 1
     assert isinstance(result[0], pd.DataFrame)
+
+
+# --- central choice: Feature.chosen_compute_framework and explicit positions ----------------------
+
+
+def _two_framework_feature(name: str = "chosen_feature") -> Feature:
+    feature = Feature(name)
+    feature.compute_frameworks = {PyArrowTable, PandasDataFrame}
+    return feature
+
+
+def test_chosen_compute_framework_defaults_to_none() -> None:
+    assert _two_framework_feature().chosen_compute_framework is None
+
+
+def test_get_compute_framework_returns_the_chosen_one() -> None:
+    feature = _two_framework_feature()
+    feature.chosen_compute_framework = PyArrowTable
+
+    assert feature.get_compute_framework() is PyArrowTable
+
+
+def test_chosen_compute_framework_is_not_part_of_identity() -> None:
+    plain = _two_framework_feature()
+    chosen = _two_framework_feature()
+    chosen.chosen_compute_framework = PyArrowTable
+
+    assert plain == chosen
+    assert hash(plain) == hash(chosen)
+    assert plain.similarity_hash(frozenset()) == chosen.similarity_hash(frozenset())
+    assert plain.base_similarity_hash(frozenset()) == chosen.base_similarity_hash(frozenset())
+
+
+def test_copy_keeps_the_chosen_compute_framework() -> None:
+    feature = _two_framework_feature()
+    feature.chosen_compute_framework = PyArrowTable
+
+    assert copy.copy(feature).chosen_compute_framework is PyArrowTable
+
+
+@pytest.mark.parametrize(
+    ("positions", "candidates", "expected"),
+    [
+        ({PyArrowTable: 0, PandasDataFrame: 1}, [PandasDataFrame, PyArrowTable], PyArrowTable),
+        ({PandasDataFrame: 0, PyArrowTable: 1}, [PyArrowTable, PandasDataFrame], PandasDataFrame),
+        ({}, [PyArrowTable, PandasDataFrame], PandasDataFrame),
+        (None, [PyArrowTable, PandasDataFrame], PandasDataFrame),
+        ({PyArrowTable: 0}, [PandasDataFrame, PyArrowTable], PyArrowTable),
+    ],
+    ids=["pa_first", "pd_first", "empty", "none", "unlisted_after_listed"],
+)
+def test_select_deterministic_follows_explicit_positions(
+    positions: dict[type[ComputeFramework], int] | None,
+    candidates: list[type[ComputeFramework]],
+    expected: type[ComputeFramework],
+) -> None:
+    assert ComputeFramework.select_deterministic(candidates, positions) is expected
+
+
+def test_select_deterministic_positions_tie_breaks_by_module_after_name() -> None:
+    module_b, module_a = _same_name_and_qualname_frameworks()
+
+    assert ComputeFramework.select_deterministic({module_b, module_a}, {module_b: 0, module_a: 0}) is module_a
+
+
+def test_select_deterministic_positions_rank_connection_before_name() -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+
+    assert ComputeFramework.select_deterministic([sqlite_fw, PyArrowTable], {sqlite_fw: 0, PyArrowTable: 0}) is (
+        PyArrowTable
+    )
+
+
+def test_framework_rank_key_orders_by_position_then_default() -> None:
+    zulu, alfa, _, bravo = _throwaway_frameworks()
+    key = framework_rank_key({zulu: 0, bravo: 1})
+
+    candidates: list[type[ComputeFramework]] = [alfa, bravo, zulu, PandasDataFrame]
+
+    assert sorted(candidates, key=key) == [zulu, bravo, PandasDataFrame, alfa]
+
+
+def test_framework_rank_key_without_positions_is_the_default_order() -> None:
+    key = framework_rank_key({})
+
+    candidates: list[type[ComputeFramework]] = [PyArrowTable, PandasDataFrame]
+
+    assert sorted(candidates, key=key) == [PandasDataFrame, PyArrowTable]
+
+
+# --- the ContextVar is gone; the engine takes the preference ---------------------------------------
+
+
+def test_the_preference_contextvar_no_longer_exists() -> None:
+    module = importlib.import_module("mloda.core.abstract_plugins.compute_framework")
+
+    assert not hasattr(module, "framework_preference")
+    assert not hasattr(module, "_framework_position")
+
+
+def test_engine_takes_a_framework_preference_keyword() -> None:
+    assert "framework_preference" in inspect.signature(Engine.__init__).parameters
+
+
+# --- central choice wiring: plans through the public API ------------------------------------------
+
+
+class _PlanRoot(FeatureGroup):
+    """Data-creator root; FW_NAME restricts it, None leaves it unrestricted."""
+
+    NAMES: ClassVar[tuple[str, ...]] = ()
+    FW_NAME: ClassVar[str | None] = None
+    INDEXES: ClassVar[tuple[str, ...]] = ()
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(set(cls.NAMES))
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({name: [1, 2, 3] for name in cls.NAMES})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None if cls.FW_NAME is None else {_load_framework(_MODULE_OF[cls.FW_NAME], cls.FW_NAME)}
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [Index((name,)) for name in cls.INDEXES] or None
+
+
+class _PlanConsumer(FeatureGroup):
+    """Consumer of INPUTS producing OUTPUT; FW_NAME restricts it, None leaves it unrestricted."""
+
+    INPUTS: ClassVar[tuple[str, ...]] = ()
+    OUTPUT: ClassVar[str] = ""
+    FW_NAME: ClassVar[str | None] = None
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(name) for name in self.INPUTS}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None if cls.FW_NAME is None else {_load_framework(_MODULE_OF[cls.FW_NAME], cls.FW_NAME)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.OUTPUT} if cls.OUTPUT else set()
+
+
+def _target(name: str) -> type[ComputeFramework]:
+    if name.startswith("Polars"):
+        pytest.importorskip("polars")
+    return _load_framework(_MODULE_OF[name], name)
+
+
+_TARGETS = [
+    pytest.param("PyArrowTable", id="pyarrow"),
+    pytest.param("PolarsDataFrame", id="polars"),
+    pytest.param("PolarsLazyDataFrame", id="polars_lazy"),
+]
+
+
+def _plan(
+    features: list[Feature | str],
+    groups: set[type[FeatureGroup]],
+    frameworks: list[type[ComputeFramework]],
+    links: set[Link] | None = None,
+) -> list[PlanStep]:
+    return mloda.explain(
+        features,
+        compute_frameworks=frameworks,
+        links=links,
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
+
+
+def _compute_steps(steps: list[PlanStep], group: type[FeatureGroup]) -> list[PlanStep]:
+    return [step for step in steps if step.step_kind == "compute" and step.feature_group is group]
+
+
+def _compute_names(steps: list[PlanStep], group: type[FeatureGroup]) -> set[str | None]:
+    return {step.compute_framework_name for step in _compute_steps(steps, group)}
+
+
+def _transforms(steps: list[PlanStep]) -> list[PlanStep]:
+    return [step for step in steps if step.step_kind == "transform"]
+
+
+# P1: an unrestricted root feeds a consumer restricted to the target.
+class P1Root(_PlanRoot):
+    NAMES = ("p1_root",)
+
+
+class P1ConsumerPyArrowTable(_PlanConsumer):
+    INPUTS = ("p1_root",)
+    OUTPUT = "p1_out"
+    FW_NAME = "PyArrowTable"
+
+
+class P1ConsumerPolarsDataFrame(P1ConsumerPyArrowTable):
+    FW_NAME = "PolarsDataFrame"
+
+
+class P1ConsumerPolarsLazyDataFrame(P1ConsumerPyArrowTable):
+    FW_NAME = "PolarsLazyDataFrame"
+
+
+# P3: a source restricted to the target feeds an unrestricted consumer.
+class P3SourcePyArrowTable(_PlanRoot):
+    NAMES = ("p3_src",)
+    FW_NAME = "PyArrowTable"
+
+
+class P3SourcePolarsDataFrame(P3SourcePyArrowTable):
+    FW_NAME = "PolarsDataFrame"
+
+
+class P3SourcePolarsLazyDataFrame(P3SourcePyArrowTable):
+    FW_NAME = "PolarsLazyDataFrame"
+
+
+class P3Consumer(_PlanConsumer):
+    INPUTS = ("p3_src",)
+    OUTPUT = "p3_out"
+
+
+# P2: a link joins two unrestricted roots; the link child is restricted to the target.
+class P2RootA(_PlanRoot):
+    NAMES = ("p2_a",)
+
+
+class P2RootB(_PlanRoot):
+    NAMES = ("p2_b",)
+
+
+class P2ChildPyArrowTable(_PlanConsumer):
+    INPUTS = ("p2_a", "p2_b")
+    OUTPUT = "p2_out"
+    FW_NAME = "PyArrowTable"
+
+
+class P2ChildPolarsDataFrame(P2ChildPyArrowTable):
+    FW_NAME = "PolarsDataFrame"
+
+
+class P2ChildPolarsLazyDataFrame(P2ChildPyArrowTable):
+    FW_NAME = "PolarsLazyDataFrame"
+
+
+_P1_CONSUMERS: dict[str, type[FeatureGroup]] = {
+    "PyArrowTable": P1ConsumerPyArrowTable,
+    "PolarsDataFrame": P1ConsumerPolarsDataFrame,
+    "PolarsLazyDataFrame": P1ConsumerPolarsLazyDataFrame,
+}
+_P3_SOURCES: dict[str, type[FeatureGroup]] = {
+    "PyArrowTable": P3SourcePyArrowTable,
+    "PolarsDataFrame": P3SourcePolarsDataFrame,
+    "PolarsLazyDataFrame": P3SourcePolarsLazyDataFrame,
+}
+_P2_CHILDREN: dict[str, type[FeatureGroup]] = {
+    "PyArrowTable": P2ChildPyArrowTable,
+    "PolarsDataFrame": P2ChildPolarsDataFrame,
+    "PolarsLazyDataFrame": P2ChildPolarsLazyDataFrame,
+}
+
+
+@pytest.mark.parametrize("target", _TARGETS)
+def test_p1_unrestricted_root_moves_onto_the_restricted_consumers_framework(target: str) -> None:
+    framework = _target(target)
+
+    steps = _plan(["p1_out"], {P1Root, _P1_CONSUMERS[target]}, [PandasDataFrame, framework])
+
+    assert _compute_names(steps, P1Root) == {target}
+    assert _transforms(steps) == []
+
+
+@pytest.mark.parametrize("target", _TARGETS)
+def test_p3_unrestricted_consumer_moves_onto_the_restricted_sources_framework(target: str) -> None:
+    framework = _target(target)
+
+    steps = _plan(["p3_out"], {P3Consumer, _P3_SOURCES[target]}, [PandasDataFrame, framework])
+
+    assert _compute_names(steps, P3Consumer) == {target}
+    assert _transforms(steps) == []
+
+
+@pytest.mark.parametrize("target", _TARGETS)
+def test_p2_link_between_unrestricted_roots_joins_on_the_restricted_childs_framework(target: str) -> None:
+    framework = _target(target)
+    links = {Link.inner(JoinSpec(P2RootA, "p2_idx"), JoinSpec(P2RootB, "p2_idx"))}
+
+    steps = _plan(["p2_out"], {P2RootA, P2RootB, _P2_CHILDREN[target]}, [PandasDataFrame, framework], links=links)
+
+    assert [step.compute_framework_name for step in steps if step.step_kind == "join"] == [target]
+    assert _compute_names(steps, P2RootA) == {target}
+    assert _compute_names(steps, P2RootB) == {target}
+    assert _transforms(steps) == []
+
+
+# P4: two unlinked roots on one framework feed a consumer on another; nothing joins them.
+class P4RootA(_PlanRoot):
+    NAMES = ("p4_root_a",)
+    FW_NAME = "PandasDataFrame"
+
+
+class P4RootB(_PlanRoot):
+    NAMES = ("p4_root_b",)
+    FW_NAME = "PandasDataFrame"
+
+
+class P4Consumer(_PlanConsumer):
+    INPUTS = ("p4_root_a", "p4_root_b")
+    OUTPUT = "p4_out"
+    FW_NAME = "PyArrowTable"
+
+
+def test_p4_unlinked_parents_raise_the_missing_links_error() -> None:
+    with pytest.raises(ValueError, match="Link") as raised:
+        _plan(["p4_out"], {P4RootA, P4RootB, P4Consumer}, [PandasDataFrame, PyArrowTable], links=set())
+
+    assert "P4RootA" in str(raised.value)
+    assert "P4RootB" in str(raised.value)
+
+
+# A feature both requested and consumed keeps one read.
+class RcRoot(_PlanRoot):
+    NAMES = ("rc_root",)
+
+
+class RcConsumer(_PlanConsumer):
+    INPUTS = ("rc_root",)
+    OUTPUT = "rc_out"
+    FW_NAME = "PyArrowTable"
+
+
+def test_a_feature_requested_and_consumed_has_one_step_on_the_consumers_framework() -> None:
+    steps = _plan(["rc_root", "rc_out"], {RcRoot, RcConsumer}, [PandasDataFrame, PyArrowTable])
+
+    assert len(_compute_steps(steps, RcRoot)) == 1
+    assert _compute_names(steps, RcRoot) == {"PyArrowTable"}
+    assert _transforms(steps) == []
+
+
+# An unrelated consumer must not move a root.
+class UrRoot(_PlanRoot):
+    NAMES = ("ur_root",)
+
+
+class UrConsumer(_PlanConsumer):
+    INPUTS = ("ur_root",)
+    OUTPUT = "ur_out"
+
+
+class UrOtherSource(_PlanRoot):
+    NAMES = ("ur_other_src",)
+    FW_NAME = "PyArrowTable"
+
+
+class UrOtherConsumer(_PlanConsumer):
+    INPUTS = ("ur_other_src",)
+    OUTPUT = "ur_other_out"
+    FW_NAME = "PyArrowTable"
+
+
+def test_an_unrelated_consumer_does_not_change_the_roots_framework() -> None:
+    groups: set[type[FeatureGroup]] = {UrRoot, UrConsumer, UrOtherSource, UrOtherConsumer}
+    frameworks: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+
+    alone = _plan(["ur_out"], groups, frameworks)
+    together = _plan(["ur_out", "ur_other_out"], groups, frameworks)
+
+    assert _compute_names(alone, UrRoot) == {"PandasDataFrame"}
+    assert _compute_names(together, UrRoot) == _compute_names(alone, UrRoot)
+
+
+# Index feature requested explicitly on the host's own feature group.
+class IxLeft(_PlanRoot):
+    NAMES = ("ix_left_val", "ix_lidx")
+    INDEXES = ("ix_lidx",)
+
+
+class IxRight(_PlanRoot):
+    NAMES = ("ix_right_val", "ix_ridx")
+    INDEXES = ("ix_ridx",)
+
+
+class IxConsumer(_PlanConsumer):
+    INPUTS = ("ix_left_val", "ix_right_val")
+    OUTPUT = "ix_out"
+    FW_NAME = "PyArrowTable"
+
+
+_IX_GROUPS: set[type[FeatureGroup]] = {IxLeft, IxRight, IxConsumer}
+_IX_FEATURES: list[Feature | str] = ["ix_out", "ix_lidx", "ix_ridx"]
+
+
+def _ix_links() -> set[Link]:
+    return {Link.inner(JoinSpec(IxLeft, "ix_lidx"), JoinSpec(IxRight, "ix_ridx"))}
+
+
+def test_an_index_feature_requested_explicitly_shares_the_hosts_single_read() -> None:
+    steps = _plan(_IX_FEATURES, _IX_GROUPS, [PandasDataFrame, PyArrowTable], links=_ix_links())
+
+    for group in (IxLeft, IxRight):
+        assert len(_compute_steps(steps, group)) == 1
+        assert _compute_names(steps, group) == {"PyArrowTable"}
+    assert _transforms(steps) == []
+
+
+def test_every_feature_group_step_holds_one_chosen_framework() -> None:
+    session = mloda.prepare(
+        _IX_FEATURES,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        links=_ix_links(),
+        plugin_collector=PluginCollector.enabled_feature_groups(_IX_GROUPS),
+    )
+    assert session.engine is not None
+
+    steps = [step for step in session.engine.execution_planner if isinstance(step, FeatureGroupStep)]
+
+    assert len(steps) >= 3
+    for step in steps:
+        chosen = {feature.chosen_compute_framework for feature in step.features.features}
+        assert chosen == {step.compute_framework}, f"{step.feature_group.__name__}: {chosen}"
+
+
+# Link scenarios for the rewritten trekker-key intent tests.
+class LkuLeftRoot(_PlanRoot):
+    NAMES = ("lku_left",)
+
+
+class LkuRightRoot(_PlanRoot):
+    NAMES = ("lku_right",)
+
+
+class LkuChild(_PlanConsumer):
+    INPUTS = ("lku_left", "lku_right")
+    OUTPUT = "lku_out"
+
+
+class LkmLeftRoot(_PlanRoot):
+    NAMES = ("lkm_left",)
+    FW_NAME = "PandasDataFrame"
+
+
+class LkmRightRoot(_PlanRoot):
+    NAMES = ("lkm_right",)
+    FW_NAME = "PyArrowTable"
+
+
+class LkmChild(_PlanConsumer):
+    INPUTS = ("lkm_left", "lkm_right")
+    OUTPUT = "lkm_out"
+
+
+_LKU_GROUPS: set[type[FeatureGroup]] = {LkuLeftRoot, LkuRightRoot, LkuChild}
+_LKM_GROUPS: set[type[FeatureGroup]] = {LkmLeftRoot, LkmRightRoot, LkmChild}
+
+
+def _lku_links() -> set[Link]:
+    return {Link.inner(JoinSpec(LkuLeftRoot, "lku_idx"), JoinSpec(LkuRightRoot, "lku_idx"))}
+
+
+def _lkm_links() -> set[Link]:
+    return {Link.inner(JoinSpec(LkmLeftRoot, "lkm_idx"), JoinSpec(LkmRightRoot, "lkm_idx"))}

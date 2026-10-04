@@ -53,6 +53,8 @@ def _resolve_cross_group_scenario(reverse_groups: bool = False) -> tuple[Feature
     feature_b = Feature("cross_group_feature_b")
     feature_a.compute_frameworks = {PandasDataFrame, PyArrowTable}
     feature_b.compute_frameworks = {PyArrowTable}
+    feature_a.chosen_compute_framework = PyArrowTable
+    feature_b.chosen_compute_framework = PyArrowTable
 
     link_trekker, trekker = _make_trekker({feature_a.uuid, feature_b.uuid})
     planned_queue: list[Any] = [
@@ -85,11 +87,13 @@ def test_surviving_orientation_holds_every_trekked_uuid() -> None:
     assert link_trekker.data[surviving] == {feature_a.uuid, feature_b.uuid}
 
 
-def test_both_groups_are_rewritten_to_the_same_framework() -> None:
+def test_both_groups_run_on_the_same_framework_without_narrowing_the_allowed_sets() -> None:
     feature_a, feature_b, _, _ = _resolve_cross_group_scenario()
 
-    assert feature_a.compute_frameworks == feature_b.compute_frameworks
-    assert feature_a.compute_frameworks == {PyArrowTable}
+    assert feature_a.get_compute_framework() is feature_b.get_compute_framework()
+    assert feature_a.get_compute_framework() is PyArrowTable
+    assert feature_a.compute_frameworks == {PandasDataFrame, PyArrowTable}
+    assert feature_b.compute_frameworks == {PyArrowTable}
 
 
 def test_cross_group_disagreement_raises_at_planning_time() -> None:
@@ -97,6 +101,8 @@ def test_cross_group_disagreement_raises_at_planning_time() -> None:
     feature_right_only = Feature("cross_group_right_only")
     feature_left_only.compute_frameworks = {PandasDataFrame}
     feature_right_only.compute_frameworks = {PyArrowTable}
+    feature_left_only.chosen_compute_framework = PandasDataFrame
+    feature_right_only.chosen_compute_framework = PyArrowTable
 
     link_trekker, _ = _make_trekker({feature_left_only.uuid, feature_right_only.uuid})
     planned_queue: list[Any] = [
@@ -115,18 +121,22 @@ def test_group_order_does_not_change_the_outcome() -> None:
     orientations = _orientations_present(link_trekker, link)
     assert len(orientations) == 1
     assert link_trekker.data_ordered[orientations[0]] == {feature_a.uuid, feature_b.uuid}
-    assert feature_a.compute_frameworks == {PyArrowTable}
-    assert feature_b.compute_frameworks == {PyArrowTable}
+    assert feature_a.get_compute_framework() is PyArrowTable
+    assert feature_b.get_compute_framework() is PyArrowTable
 
 
-def test_untrekked_feature_rejecting_group_framework_raises() -> None:
+def test_untrekked_feature_keeps_its_own_framework() -> None:
     trekked = Feature("cross_group_trekked")
     untrekked = Feature("cross_group_untrekked")
     trekked.compute_frameworks = {PyArrowTable}
     untrekked.compute_frameworks = {PandasDataFrame}
+    trekked.chosen_compute_framework = PyArrowTable
+    untrekked.chosen_compute_framework = PandasDataFrame
 
     link_trekker, _ = _make_trekker({trekked.uuid})
     planned_queue: list[Any] = [(CrossGroupChildAFG, {trekked, untrekked})]
 
-    with pytest.raises(ValueError, match="does not support the compute framework"):
-        ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
+    ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
+
+    assert untrekked.compute_frameworks == {PandasDataFrame}
+    assert untrekked.get_compute_framework() is PandasDataFrame

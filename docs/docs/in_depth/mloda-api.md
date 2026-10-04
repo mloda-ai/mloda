@@ -25,7 +25,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 #### Configuration for mlodaAPI
 
 -   **requested_features**: Specify the features to process (as names, Feature objects, or a Features container).
--   **compute_frameworks** (optional): Limit the compute frameworks using an ordered list of framework types or names. When several can run a feature, the first listed wins. A set or an unknown name raises.
+-   **compute_frameworks** (optional): Limit the compute frameworks using an ordered list of framework types or names. When several can run a feature, the cheapest plan wins first, then list order. A set or an unknown name raises.
 -   **links** (optional): Define dataset merging links with Link objects.
 -   **data_access_collection** (optional): Provide data sources for feature identification.
 -   **function_extender** (optional): Add function extenders to customize computations. Session-level: accepted by every call that plans (the constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, `diagnose()`) and snapshotted then; not accepted by `run()`/`stream_run()`, so changing the set afterwards has no effect.

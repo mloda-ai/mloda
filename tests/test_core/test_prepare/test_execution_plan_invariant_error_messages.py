@@ -10,10 +10,14 @@ from uuid import uuid4
 
 import pytest
 
+from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 class MockComputeFramework(ComputeFramework):
@@ -54,3 +58,20 @@ class TestCheckPointerDiscriminatorErrors:
 
         with pytest.raises(ValueError, match=expected_match):
             ep.check_pointer(discriminator, link_fw, graph, uuid4())
+
+
+class _MixedStepFG(FeatureGroup):
+    pass
+
+
+def test_a_step_whose_features_hold_different_chosen_frameworks_raises() -> None:
+    first = Feature("mixed_step_first")
+    second = Feature("mixed_step_second")
+    for feature, chosen in ((first, PandasDataFrame), (second, PyArrowTable)):
+        feature.compute_frameworks = {PandasDataFrame, PyArrowTable}
+        feature.chosen_compute_framework = chosen
+
+    with pytest.raises(
+        ValueError, match=r"_MixedStepFG mixes compute frameworks \['PandasDataFrame', 'PyArrowTable'\]"
+    ):
+        ExecutionPlan().run_feature_group((_MixedStepFG, {first, second}), {}, set())

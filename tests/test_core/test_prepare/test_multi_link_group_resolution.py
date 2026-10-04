@@ -195,7 +195,7 @@ _ENABLED_SAME_FRAMEWORK = PluginCollector.enabled_feature_groups(
 
 
 def test_link_joining_in_a_framework_no_member_supports_raises() -> None:
-    """Both sides of the A-B join would resolve to the same input, so planning must stop."""
+    """Both sides of the A-B join would resolve to the same input, so the chooser finds no assignment."""
     links = {
         Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX)),
         Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootC, MLG_INDEX)),
@@ -211,8 +211,9 @@ def test_link_joining_in_a_framework_no_member_supports_raises() -> None:
         )
 
     message = str(excinfo.value)
-    assert f"joins in {PyArrowTable.__name__}" in message
-    assert "Both join sides would resolve to the same input" in message
+    assert "No compute framework assignment satisfies the hard rules" in message
+    assert MultiLinkChildSame.get_class_name() in message
+    assert "join inner" in message
 
 
 def test_link_joining_across_distinct_frameworks_delivers_every_parent_column() -> None:

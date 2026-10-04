@@ -10,7 +10,9 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -62,12 +64,19 @@ def _make_trekkers(*specs: _TrekkerSpec) -> tuple[LinkTrekker, list[LinkFramewor
     return link_trekker, trekkers
 
 
+def _choose(feature: Feature, framework: type[ComputeFramework]) -> Feature:
+    feature.chosen_compute_framework = framework
+    return feature
+
+
 def _resolve_two_feature_scenario() -> tuple[Feature, Feature, LinkTrekker, Any]:
-    """Both uuids trekked; feature_both holds both frameworks, feature_right only the right one."""
+    """Both uuids trekked; feature_both allows both frameworks, feature_right only the right one."""
     feature_both = Feature("feature_both")
     feature_right = Feature("feature_right")
     feature_both.compute_frameworks = {PandasDataFrame, PyArrowTable}
     feature_right.compute_frameworks = {PyArrowTable}
+    _choose(feature_both, PyArrowTable)
+    _choose(feature_right, PyArrowTable)
 
     link_trekker, trekker = _make_trekker({feature_both.uuid, feature_right.uuid})
     planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {feature_both, feature_right})]
@@ -79,8 +88,9 @@ def _resolve_two_feature_scenario() -> tuple[Feature, Feature, LinkTrekker, Any]
 def test_group_agrees_on_right_when_left_is_not_shared_by_all() -> None:
     feature_both, feature_right, _, _ = _resolve_two_feature_scenario()
 
-    assert feature_both.compute_frameworks == {PyArrowTable}
-    assert feature_right.compute_frameworks == {PyArrowTable}
+    assert feature_both.compute_frameworks == {PandasDataFrame, PyArrowTable}
+    assert feature_both.get_compute_framework() is PyArrowTable
+    assert feature_right.get_compute_framework() is PyArrowTable
 
 
 def test_inversion_is_all_or_nothing() -> None:
@@ -99,14 +109,17 @@ def test_group_agrees_on_left_when_all_support_left() -> None:
     feature_left = Feature("feature_left")
     feature_both.compute_frameworks = {PandasDataFrame, PyArrowTable}
     feature_left.compute_frameworks = {PandasDataFrame}
+    _choose(feature_both, PandasDataFrame)
+    _choose(feature_left, PandasDataFrame)
 
     link_trekker, trekker = _make_trekker({feature_both.uuid, feature_left.uuid})
     planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {feature_both, feature_left})]
 
     ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
 
-    assert feature_both.compute_frameworks == {PandasDataFrame}
-    assert feature_left.compute_frameworks == {PandasDataFrame}
+    assert feature_both.compute_frameworks == {PandasDataFrame, PyArrowTable}
+    assert feature_both.get_compute_framework() is PandasDataFrame
+    assert feature_left.get_compute_framework() is PandasDataFrame
 
     link = trekker[0]
     inverted = (link, PyArrowTable, PandasDataFrame)
@@ -114,9 +127,9 @@ def test_group_agrees_on_left_when_all_support_left() -> None:
     assert link_trekker.data_ordered[trekker] == {feature_both.uuid, feature_left.uuid}
 
 
-def test_untrekked_feature_follows_group_rewrite() -> None:
-    feature_trekked = Feature("feature_trekked")
-    feature_free = Feature("feature_free")
+def test_untrekked_feature_is_left_alone() -> None:
+    feature_trekked = _choose(Feature("feature_trekked"), PandasDataFrame)
+    feature_free = _choose(Feature("feature_free"), PandasDataFrame)
     feature_trekked.compute_frameworks = {PandasDataFrame}
     feature_free.compute_frameworks = {PandasDataFrame, PyArrowTable}
 
@@ -126,7 +139,8 @@ def test_untrekked_feature_follows_group_rewrite() -> None:
     ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
 
     assert feature_trekked.compute_frameworks == {PandasDataFrame}
-    assert feature_free.compute_frameworks == {PandasDataFrame}
+    assert feature_free.compute_frameworks == {PandasDataFrame, PyArrowTable}
+    assert feature_free.get_compute_framework() is PandasDataFrame
 
 
 def test_incompatible_members_raise_at_planning_time() -> None:
@@ -134,6 +148,8 @@ def test_incompatible_members_raise_at_planning_time() -> None:
     feature_right_only = Feature("feature_right_only")
     feature_left_only.compute_frameworks = {PandasDataFrame}
     feature_right_only.compute_frameworks = {PyArrowTable}
+    _choose(feature_left_only, PandasDataFrame)
+    _choose(feature_right_only, PyArrowTable)
 
     link_trekker, _ = _make_trekker({feature_left_only.uuid, feature_right_only.uuid})
     planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {feature_left_only, feature_right_only})]
@@ -142,28 +158,50 @@ def test_incompatible_members_raise_at_planning_time() -> None:
         ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
 
 
-def test_dropped_link_joining_in_one_unsupported_framework_raises() -> None:
-    """A dropped trekker with equal frameworks would send both join sides to the same input."""
-    feature_one = Feature("feature_one")
-    feature_two = Feature("feature_two")
-    feature_one.compute_frameworks = {PandasDataFrame}
-    feature_two.compute_frameworks = {PandasDataFrame}
+def test_dropped_link_joining_in_one_unsupported_framework_is_infeasible_for_the_chooser() -> None:
+    """A same-framework link no child runs on would send both join sides to the same input."""
+    one = Feature("feature_one")
+    two = Feature("feature_two")
+    one.compute_frameworks = {PandasDataFrame}
+    two.compute_frameworks = {PandasDataFrame}
+    left = Feature("feature_left")
+    right = Feature("feature_right")
+    left.compute_frameworks = {PandasDataFrame}
+    right.compute_frameworks = {PyArrowTable}
+    other_left = Feature("feature_other_left")
+    other_right = Feature("feature_other_right")
+    other_left.compute_frameworks = {PyArrowTable}
+    other_right.compute_frameworks = {PyArrowTable}
 
-    trekked = {feature_one.uuid, feature_two.uuid}
-    link_trekker, _ = _make_trekkers(
-        _TrekkerSpec("idx", (PandasDataFrame, PyArrowTable), trekked),
-        _TrekkerSpec("second_idx", (PyArrowTable, PyArrowTable), trekked),
-    )
-    planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {feature_one, feature_two})]
+    graph = Graph()
+    for feature, fg in (
+        (left, CfwPerFeatureLeftFG),
+        (right, CfwPerFeatureRightFG),
+        (other_left, CfwPerFeatureLeftFG),
+        (other_right, CfwPerFeatureRightFG),
+        (one, CfwPerFeatureLeftFG),
+        (two, CfwPerFeatureRightFG),
+    ):
+        graph.add_node(feature.uuid, NodeProperties(feature, fg))
+    for parent in (left, right, other_left, other_right):
+        for child in (one, two):
+            graph.add_edge(parent.uuid, child.uuid, EdgeProperties(CfwPerFeatureLeftFG, CfwPerFeatureRightFG))
 
-    with pytest.raises(ValueError) as excinfo:
-        ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
+    first = Link.inner(JoinSpec(CfwPerFeatureLeftFG, "idx"), JoinSpec(CfwPerFeatureRightFG, "idx"))
+    second = Link.inner(JoinSpec(CfwPerFeatureLeftFG, "second_idx"), JoinSpec(CfwPerFeatureRightFG, "second_idx"))
+    occurrences = [
+        (first, left.uuid, right.uuid, one.uuid),
+        (first, left.uuid, right.uuid, two.uuid),
+        (second, other_left.uuid, other_right.uuid, one.uuid),
+        (second, other_left.uuid, other_right.uuid, two.uuid),
+    ]
+    nodes: dict[type[FeatureGroup], set[Feature]] = {
+        CfwPerFeatureLeftFG: {left, other_left, one},
+        CfwPerFeatureRightFG: {right, other_right, two},
+    }
 
-    message = str(excinfo.value)
-    assert f"joins in {PyArrowTable.__name__}" in message
-    assert "Both join sides would resolve to the same input" in message
-    assert "feature_one" in message
-    assert "feature_two" in message
+    with pytest.raises(ValueError, match="No compute framework assignment"):
+        ChooseComputeFrameworks(graph, nodes, occurrences, [], {}).choose()
 
 
 def test_dropped_link_is_kept_when_a_child_ends_on_its_framework() -> None:
@@ -172,6 +210,8 @@ def test_dropped_link_is_kept_when_a_child_ends_on_its_framework() -> None:
     feature_two = Feature("feature_two")
     feature_one.compute_frameworks = {PandasDataFrame}
     feature_two.compute_frameworks = {PandasDataFrame, PyArrowTable}
+    _choose(feature_one, PandasDataFrame)
+    _choose(feature_two, PyArrowTable)
 
     link_trekker, (_, dropped, _) = _make_trekkers(
         _TrekkerSpec("idx", (PandasDataFrame, PyArrowTable), {feature_one.uuid}),
@@ -182,8 +222,9 @@ def test_dropped_link_is_kept_when_a_child_ends_on_its_framework() -> None:
 
     ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
 
-    assert feature_one.compute_frameworks == {PandasDataFrame}
-    assert feature_two.compute_frameworks == {PyArrowTable}
+    assert feature_one.get_compute_framework() is PandasDataFrame
+    assert feature_two.get_compute_framework() is PyArrowTable
+    assert feature_two.compute_frameworks == {PandasDataFrame, PyArrowTable}
     assert link_trekker.data[dropped] == {feature_one.uuid, feature_two.uuid}
 
 
@@ -196,6 +237,8 @@ def test_dropped_append_or_union_link_with_equal_frameworks_is_kept(
     feature_two = Feature("feature_two")
     feature_one.compute_frameworks = {PandasDataFrame}
     feature_two.compute_frameworks = {PandasDataFrame}
+    _choose(feature_one, PandasDataFrame)
+    _choose(feature_two, PandasDataFrame)
 
     trekked = {feature_one.uuid, feature_two.uuid}
     link_trekker, (_, dropped) = _make_trekkers(
@@ -216,6 +259,8 @@ def test_dropped_link_joining_across_distinct_frameworks_is_skipped_silently() -
     feature_two = Feature("feature_two")
     feature_one.compute_frameworks = {PandasDataFrame}
     feature_two.compute_frameworks = {PandasDataFrame}
+    _choose(feature_one, PandasDataFrame)
+    _choose(feature_two, PandasDataFrame)
 
     trekked = {feature_one.uuid, feature_two.uuid}
     link_trekker, (_, dropped) = _make_trekkers(
@@ -234,6 +279,32 @@ def test_dropped_link_joining_across_distinct_frameworks_is_skipped_silently() -
 def test_resolution_is_deterministic_across_fresh_inputs() -> None:
     for _ in range(20):
         feature_both, feature_right, link_trekker, trekker = _resolve_two_feature_scenario()
-        assert feature_both.compute_frameworks == {PyArrowTable}
-        assert feature_right.compute_frameworks == {PyArrowTable}
+        assert feature_both.get_compute_framework() is PyArrowTable
+        assert feature_right.get_compute_framework() is PyArrowTable
         assert trekker not in link_trekker.data_ordered
+
+
+def test_members_on_both_sides_of_a_link_raise_the_both_sides_error() -> None:
+    left_only = _choose(Feature("both_sides_left"), PandasDataFrame)
+    right_only = _choose(Feature("both_sides_right"), PyArrowTable)
+    link_trekker, _ = _make_trekker({left_only.uuid, right_only.uuid})
+    planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {left_only, right_only})]
+
+    with pytest.raises(ValueError, match=r"run on both sides of link"):
+        ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
+
+
+class _DisagreeingResolve(ResolveComputeFrameworks):
+    """Hand-built state: the link resolves to a framework the member does not run on."""
+
+    def resolve_trekker(self, trekker: LinkFrameworkTrekker, members: list[Any]) -> type[ComputeFramework] | None:
+        return PyArrowTable
+
+
+def test_a_member_off_its_links_resolved_framework_raises() -> None:
+    member = _choose(Feature("off_resolved_member"), PandasDataFrame)
+    link_trekker, _ = _make_trekker({member.uuid})
+    planned_queue: list[Any] = [(CfwPerFeatureLeftFG, {member})]
+
+    with pytest.raises(ValueError, match=r"off_resolved_member runs on PandasDataFrame, but its link .* PyArrowTable"):
+        _DisagreeingResolve(Graph()).links(planned_queue, link_trekker)

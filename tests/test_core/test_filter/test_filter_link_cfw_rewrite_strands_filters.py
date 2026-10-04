@@ -3,6 +3,7 @@
 from typing import Any
 
 import pyarrow as pa
+import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -17,7 +18,9 @@ from mloda.user import (
     Options,
     ParallelizationMode,
     PluginCollector,
+    mloda,
 )
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_tooling import MlodaTestRunner
 from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw
@@ -120,3 +123,93 @@ def test_link_cfw_rewrite_keeps_stored_filters_usable() -> None:
     assert candidate_sets == {frozenset({PyArrowTable, SecondCfw})}, (
         f"the planner must not narrow a stored filter feature: {candidate_sets!r}"
     )
+
+
+class PinHostFG(FeatureGroup):
+    """Unrestricted root hosting a filterable column."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"pinhost_val", "pinhost_ts"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"pinhost_val": [1, 2, 3], "pinhost_ts": [10, 20, 30]})
+
+
+_PIN_ENABLED = PluginCollector.enabled_feature_groups({PinHostFG})
+
+
+def _pinned_filter() -> GlobalFilter:
+    global_filter = GlobalFilter()
+    global_filter.add_filter(Feature("pinhost_ts", compute_framework="PyArrowTable"), "min", {"value": 15})
+    return global_filter
+
+
+def _host_frameworks(global_filter: GlobalFilter | None) -> list[str | None]:
+    steps = mloda.explain(
+        ["pinhost_val"],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        global_filter=global_filter,
+        plugin_collector=_PIN_ENABLED,
+    )
+    return [step.compute_framework_name for step in steps if step.step_kind == "compute"]
+
+
+def test_a_filter_pinned_to_a_framework_moves_its_host_onto_the_pin() -> None:
+    assert _host_frameworks(None) == ["PandasDataFrame"]
+    assert _host_frameworks(_pinned_filter()) == ["PyArrowTable"]
+
+
+def test_a_pinned_filter_is_applied_on_the_pinned_host() -> None:
+    result = mloda.run_all(
+        ["pinhost_val"],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        global_filter=_pinned_filter(),
+        plugin_collector=_PIN_ENABLED,
+    )
+
+    assert [res.to_pydict()["pinhost_val"] for res in result] == [[2, 3]]
+
+
+def _pinned_self_filter() -> GlobalFilter:
+    global_filter = GlobalFilter()
+    global_filter.add_filter(Feature("pinhost_val", compute_framework="PyArrowTable"), "min", {"value": 2})
+    return global_filter
+
+
+def test_a_filter_pinned_on_the_requested_column_plans_and_applies() -> None:
+    frameworks: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+
+    result = mloda.run_all(
+        ["pinhost_val"],
+        compute_frameworks=frameworks,
+        global_filter=_pinned_self_filter(),
+        plugin_collector=_PIN_ENABLED,
+    )
+
+    assert [res.to_pydict()["pinhost_val"] for res in result] == [[2, 3]]
+
+
+def test_a_filter_pinned_on_the_requested_column_runs_its_host_on_the_pin() -> None:
+    steps = mloda.explain(
+        ["pinhost_val"],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        global_filter=_pinned_self_filter(),
+        plugin_collector=_PIN_ENABLED,
+    )
+
+    assert [s.compute_framework_name for s in steps if s.step_kind == "compute"] == ["PyArrowTable"]
+
+
+@pytest.mark.parametrize("pinned_first", [True, False], ids=["pinned_first", "plain_first"])
+def test_a_pinned_twin_of_a_requested_column_survives_a_pinned_filter(pinned_first: bool) -> None:
+    twins: list[Feature | str] = [Feature("pinhost_val", compute_framework="PyArrowTable"), Feature("pinhost_val")]
+    result = mloda.run_all(
+        twins if pinned_first else twins[::-1],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        global_filter=_pinned_filter(),
+        plugin_collector=_PIN_ENABLED,
+    )
+
+    assert [res.to_pydict()["pinhost_val"] for res in result] == [[2, 3]]

@@ -275,19 +275,23 @@ class PandasMyFeatureGroup(MyFeatureGroup):
 
 ## Framework Selection Process
 
-When a feature is requested:
+mloda picks one compute framework per step group (the features of one FeatureGroup that run as one step) in one planning step, before link joins are resolved.
 
-1. The system identifies the appropriate feature group
-2. It checks which compute frameworks are supported by:
-   - The feature definition
-   - The feature group
-   - The mloda request
-3. It selects a compatible compute framework
-4. It uses the framework-specific implementation for calculations
+- **Allowed set**: the framework must fit the FeatureGroup (`compute_framework_rule`, `supports_compute_framework`), any pin via `Feature(compute_framework=...)`, and the run's enabled frameworks.
+- **Connection skip**: a `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with `compute_frameworks=[DuckDBFramework]`.
+- **Joins**: a link's child runs on one of its two sides. RIGHT joins run on the right side, APPEND and UNION on the left. Children of one link agree on the side.
+- **Filters**: a filter pinned to a framework moves its host feature onto that framework.
+- **Conversions**: a transformer chain must exist between every parent and child on different frameworks.
+- **Choice among valid plans**: lowest cost first (one point per conversion), then the order of the run's `compute_frameworks` list, then the default order. The default order puts Pandas, Polars, PyArrow before `SELF_MANAGED` frameworks (Spark, Iceberg), before `REQUIRED` ones (DuckDB, SQLite), then class name.
+- **Equal-cost plans**: blocks are settled in a fixed order (by FeatureGroup and feature names), each taking the most preferred framework still possible.
+- **Both ways**: a Polars-only consumer pulls its unrestricted source onto Polars, and a Polars-only source pulls its unrestricted consumers, so no transform step is needed.
+- **No valid plan**: planning raises an error naming the features and their allowed sets.
 
-When several frameworks fit, the order of the run's `compute_frameworks` list decides first: the first listed wins. Without a list, the default order applies (a list filters out every unlisted framework): frameworks that run on their own (Pandas, Polars, PyArrow) win over `SELF_MANAGED` ones (Spark, Iceberg), which win over `REQUIRED` ones (DuckDB, SQLite); ties break by class name. A `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. A connection alone does not select DuckDB or SQLite: pin every feature that should run there, restrict the run with `compute_frameworks=[DuckDBFramework]`, or list it first with a connection given. Listing a `REQUIRED` framework first does not override the connection skip.
+List order is a tie-break after cost, not "first listed wins". To force a framework, pin the feature or restrict the run's list.
 
-Framework authors declare this by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`).
+`Feature.get_compute_framework()` returns the chosen framework. On a feature that allows several frameworks and was never planned, it raises.
+
+Framework authors declare the connection rule by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`).
 
 ## Data Transformation
 

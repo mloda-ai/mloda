@@ -135,6 +135,7 @@ class Feature:
         self.compute_frameworks = {cf} if cf else None
 
         self.uuid = uuid4()
+        self.chosen_compute_framework: type[ComputeFramework] | None = None
 
         self.data_type = None
         if data_type is not None:
@@ -606,6 +607,13 @@ class Feature:
         return None
 
     def get_compute_framework(self) -> type[ComputeFramework]:
+        if self.chosen_compute_framework is not None:
+            return self.chosen_compute_framework
         FeatureValidator.validate_compute_frameworks_resolved(self.compute_frameworks, str(self.name))
         assert self.compute_frameworks is not None
-        return ComputeFramework.select_deterministic(self.compute_frameworks)
+        if len(self.compute_frameworks) != 1:
+            raise ValueError(
+                f"Feature {self.name} has no chosen compute framework and allows {len(self.compute_frameworks)}: "
+                f"{sorted(c.get_class_name() for c in self.compute_frameworks)}."
+            )
+        return next(iter(self.compute_frameworks))

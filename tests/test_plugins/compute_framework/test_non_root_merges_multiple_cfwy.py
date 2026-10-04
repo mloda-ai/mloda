@@ -132,7 +132,7 @@ class TestNonCfWRootMerge:
         result = mloda.run_all(
             [feature],
             links={link},
-            compute_frameworks=["PandasDataFrame", "PyArrowTable"],
+            compute_frameworks=["PyArrowTable", "PandasDataFrame"],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     NonCfwRootJoinTestFeature,
@@ -172,7 +172,7 @@ class TestNonCfWRootMerge:
         result = mloda.run_all(
             [feature],
             links=links,
-            compute_frameworks=["PandasDataFrame", "PyArrowTable"],
+            compute_frameworks=["PyArrowTable", "PandasDataFrame"],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {
                     NonCfwRootJoinTestFeature,

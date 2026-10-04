@@ -1407,12 +1407,13 @@ def test_a_real_engine_plan_carries_one_record_per_planned_join_step() -> None:
         assert record.destination_framework in record.destination.declared_frameworks
 
 
-def test_the_resolver_snapshots_the_frameworks_a_feature_declared_before_the_rewrite() -> None:
+def test_the_resolver_snapshots_the_frameworks_a_feature_declared_and_never_narrows_them() -> None:
     link = _pair_link()
     left = feature("resolved_join_snapshot_left", PyArrowTable, link.left_index)
     right = feature("resolved_join_snapshot_right", PandasDataFrame, link.right_index)
     child = Feature("resolved_join_snapshot_child")
     child.compute_frameworks = {PyArrowTable, PandasDataFrame}
+    child.chosen_compute_framework = PyArrowTable
 
     link_trekker = LinkTrekker()
     trekked = {child.uuid}
@@ -1428,7 +1429,7 @@ def test_the_resolver_snapshots_the_frameworks_a_feature_declared_before_the_rew
     resolver = ResolveComputeFrameworks(Graph())
     resolver.links(queue, link_trekker)
 
-    assert child.compute_frameworks == {PyArrowTable}, "the rewrite has to collapse the child for this to say anything"
+    assert child.compute_frameworks == {PyArrowTable, PandasDataFrame}, "resolution never narrows the allowed set"
     assert resolver.get_declared_frameworks()[child.uuid] == {PyArrowTable, PandasDataFrame}
     assert resolver.get_declared_frameworks()[left.uuid] == {PyArrowTable}
 

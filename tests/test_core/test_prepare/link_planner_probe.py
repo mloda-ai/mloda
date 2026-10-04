@@ -35,10 +35,13 @@ def collect() -> dict[str, str]:
     right_side: set[type[ComputeFramework]] = {PythonDictFramework, PyArrowTable}
 
     link = Link.inner(JoinSpec(LinkPlannerProbeLeft, "idx"), JoinSpec(LinkPlannerProbeRight, "idx"))
-    key = ResolveLinks(Graph()).create_link_trekker_key(link, left_side, right_side)
+    key = ResolveLinks(Graph()).create_link_trekker_key(
+        link, ComputeFramework.select_deterministic(left_side), ComputeFramework.select_deterministic(right_side)
+    )
 
     child = Feature("link_planner_probe_child")
     child.compute_frameworks = {PyArrowTable}
+    child.chosen_compute_framework = PyArrowTable
 
     trekker = LinkTrekker()
     trekked = {child.uuid}

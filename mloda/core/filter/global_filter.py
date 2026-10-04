@@ -1,32 +1,29 @@
+import logging
 from copy import copy, deepcopy
 from datetime import datetime, timezone
 from itertools import chain
 from typing import Any
 from uuid import UUID
 
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
-from mloda.core.abstract_plugins.components.property_spec import is_no_default
-from mloda.core.abstract_plugins.components.utils import as_str, safe_field
-from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import option_key_is_present
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
-from mloda.core.abstract_plugins.components.utils import contained_raise_reason
+from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
+from mloda.core.abstract_plugins.components.property_spec import is_no_default
+from mloda.core.abstract_plugins.components.utils import as_str, contained_raise_reason, safe_field
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.identify_feature_group import matches_feature_group_scope, validate_single_framework_pin
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key, near_miss_text
 from mloda.core.prepare.resolution_types import Elimination, EliminationStage, rejection_elimination_stage
-from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +180,9 @@ class GlobalFilter:
             _filter.filter_feature.options.lock_own_keys()
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
 
+            if self.feature_group_scope(_filter, feature_group) is False:
+                self._record_near_miss(feature_group, _filter, "scope", "outside the requested feature group scope")
+                continue
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
             if not self.criteria(feature_group, _filter, data_access_collection):
                 continue
@@ -190,9 +190,6 @@ class GlobalFilter:
                 self._record_near_miss(
                     feature_group, _filter, "domain", self._domain_reason(_filter, feat, feature_group)
                 )
-                continue
-            if self.feature_group_scope(_filter, feature_group) is False:
-                self._record_near_miss(feature_group, _filter, "scope", "outside the requested feature group scope")
                 continue
             supported = self.capability(_filter, feat, feature_group)
             if supported is not None and not supported:

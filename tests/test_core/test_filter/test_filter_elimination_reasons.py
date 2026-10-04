@@ -35,7 +35,6 @@ from mloda.user import Feature, FeatureName, FilterType, GlobalFilter, Options, 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
-
 GF_LOGGER_NAME = "mloda.core.filter.global_filter"
 
 HOST_FEATURE = "fer_host_feat"  # the resolved feature the filters are matched against
@@ -1091,14 +1090,14 @@ class TestPrecedenceAmongFacts:
         assert len(snapshot.warnings) == 1, f"the defect must warn exactly once, got: {snapshot.warnings}"
 
     def test_a_later_gate_never_displaces_a_stored_defect(self, caplog: pytest.LogCaptureFixture) -> None:
-        """The second pass clears criteria and loses at scope, which must not overwrite the recorded defect."""
+        """The second pass clears criteria and loses at domain, which must not overwrite the recorded defect."""
         snapshot = _drive_matching(
-            [_make_defect_then_match_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE), calls=2
+            [_make_defect_then_match_fg], caplog, filter_feature=_filter_feature(domain=OTHER_DOMAIN), calls=2
         )
 
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
-        assert snapshot.names == (), f"the scope still detaches the filter, got: {snapshot.names}"
+        assert snapshot.names == (), f"the domain still detaches the filter, got: {snapshot.names}"
         assert len(snapshot.rows) == 1, f"exactly one fact for the key, got: {snapshot.rows}"
         _, _, stage, reason = snapshot.rows[0]
         assert stage == MATCHER_ERROR_STAGE, f"a later gate must not displace the defect, got stage: {stage}"
@@ -1118,12 +1117,10 @@ class TestPrecedenceAmongFacts:
         assert reason == SCOPE_REASON, f"the later decline must not rewrite the reason: {reason}"
 
 
-class TestCriteriaRunsBeforeTheScopeGate:
-    """Gate order is observable in the recorded stage: criteria decides before the scope gate is asked."""
+class TestScopeGateRunsBeforeCriteria:
+    """Gate order is observable in the recorded stage: the scope gate decides before criteria is asked."""
 
-    def test_a_raising_matcher_records_matcher_error_even_when_the_scope_would_exclude_it_too(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_scope_miss_records_scope_even_if_matcher_would_raise(self, caplog: pytest.LogCaptureFixture) -> None:
         snapshot = _drive_matching(
             [_make_matcher_error_fg], caplog, filter_feature=_filter_feature(scope=MISSING_SCOPE)
         )
@@ -1131,9 +1128,7 @@ class TestCriteriaRunsBeforeTheScopeGate:
         assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
         assert snapshot.ledger_error is None, f"the stored fact must be readable: {snapshot.ledger_error}"
         assert len(snapshot.rows) == 1, f"exactly one fact, got: {snapshot.rows}"
-        assert snapshot.rows[0][2] == MATCHER_ERROR_STAGE, (
-            f"criteria runs before the scope gate, got stage: {snapshot.rows[0][2]}"
-        )
+        assert snapshot.rows[0][2] == SCOPE_STAGE, f"scope gate runs before criteria, got stage: {snapshot.rows[0][2]}"
 
     def test_a_probe_that_clears_criteria_records_scope_without_hook_noise(
         self, caplog: pytest.LogCaptureFixture
@@ -1243,12 +1238,17 @@ class TestEveryMatchReportIsScopedToOneSetup:
             [_make_plain_fg, _make_plain_decline_fg],
             [[0], [1]],
             caplog,
-            filter_feature=_filter_feature(scope=MISSING_SCOPE),
+            filter_feature=_filter_feature(domain=OTHER_DOMAIN),
         )
 
-        assert first.rows == ((PLAIN_CLASS_NAME, FILTER_FEATURE, SCOPE_STAGE, SCOPE_REASON),), (
-            f"the first setup must capture its scope fact, got: {first.rows}"
-        )
+        assert first.rows == (
+            (
+                PLAIN_CLASS_NAME,
+                FILTER_FEATURE,
+                DOMAIN_STAGE,
+                "the filter feature's domain 'fer_other_domain' does not match 'default_domain'",
+            ),
+        ), f"the first setup must capture its domain fact, got: {first.rows}"
         assert second.rows == (), f"the reset must clear the previous setup's facts, got: {second.rows}"
         assert second.unmatched == (BARE_MESSAGE,), (
             f"with nothing captured this setup, the message is the bare sentence, got: {second.unmatched}"

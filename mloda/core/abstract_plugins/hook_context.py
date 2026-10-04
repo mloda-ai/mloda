@@ -23,9 +23,7 @@ _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_h
 
 OutputSchema = tuple[tuple[str, str | None], ...]
 
-_WRITABLE_FIELDS = frozenset(
-    {"rows_out", "output_schema", "duration_seconds", "status", "feature_group_class", "specialized_from"}
-)
+_WRITABLE_FIELDS = frozenset({"rows_out", "output_schema", "duration_seconds", "status"})
 
 _gate_scopes = 0
 _gate_scopes_lock = threading.Lock()
@@ -50,13 +48,13 @@ def input_data_load_gate_scopes_active() -> int:
 
 
 def _read_only(self: Any, *args: Any, **kwargs: Any) -> Any:
-    raise TypeError("HookContext.carrier is read-only")
+    raise TypeError("read-only dict")
 
 
-class _ReadOnlyCarrier(dict[str, str]):
+class _ReadOnlyDict(dict[Any, Any]):
     """dict that rejects mutation and pickles/copies as a plain dict."""
 
-    __setitem__ = __delitem__ = update = pop = popitem = clear = setdefault = __ior__ = _read_only
+    __init__ = __setitem__ = __delitem__ = update = pop = popitem = clear = setdefault = __ior__ = _read_only
 
     def __new__(cls, *args: Any) -> Any:
         # Rebuilding via type(x)(items) (dataclasses.asdict) yields a plain dict; ingest uses _frozen_carrier.
@@ -66,10 +64,10 @@ class _ReadOnlyCarrier(dict[str, str]):
         return (dict, (dict(self),))
 
 
-def _frozen_carrier(source: dict[str, str]) -> dict[str, str]:
-    carrier = dict.__new__(_ReadOnlyCarrier)
-    dict.update(carrier, source)
-    return carrier
+def _frozen_dict(source: dict[Any, Any]) -> Any:
+    frozen = dict.__new__(_ReadOnlyDict)
+    dict.update(frozen, source)
+    return frozen
 
 
 @dataclass(kw_only=True)
@@ -110,18 +108,23 @@ class HookContext:
 
     def __post_init__(self) -> None:
         if self.declared_attributes is not None:
-            self.declared_attributes = dict(self.declared_attributes)
+            self.declared_attributes = _frozen_dict(self.declared_attributes)
         # Copy on ingest so a hook mutating the carrier or input_feature_edges never reaches the caller's dict.
         if self.carrier is not None:
-            self.carrier = _frozen_carrier(self.carrier)
+            self.carrier = _frozen_dict(self.carrier)
         if self.input_feature_edges is not None:
-            self.input_feature_edges = dict(self.input_feature_edges)
+            self.input_feature_edges = _frozen_dict(self.input_feature_edges)
         object.__setattr__(self, "_sealed", True)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if self.__dict__.get("_sealed") and name not in _WRITABLE_FIELDS:
             raise FrozenInstanceError(f"cannot assign to field {name!r}")
         object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if self.__dict__.get("_sealed"):
+            raise FrozenInstanceError(f"cannot delete field {name!r}")
+        object.__delattr__(self, name)
 
     @staticmethod
     def row_count(data: Any) -> int | None:

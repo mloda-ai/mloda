@@ -179,6 +179,15 @@ class TestFilterExtendersStrict:
         with pytest.raises(EnvironmentPreconditionError, match="_ExtStrictUnregisteredGate"):
             filter_extenders_by_strict_mode({_ExtStrictUnregisteredGate(), _ExtStrictUnregisteredA()}, collector)
 
+    def test_strict_two_unregistered_instances_of_one_gate_class_name_it_once(self) -> None:
+        from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, filter_extenders_by_strict_mode
+
+        collector = PluginCollector().set_strict_mode("strict")
+        with pytest.raises(EnvironmentPreconditionError) as excinfo:
+            filter_extenders_by_strict_mode({_ExtStrictUnregisteredGate(), _ExtStrictUnregisteredGate()}, collector)
+
+        assert str(excinfo.value).count("_ExtStrictUnregisteredGate") == 1
+
     def test_strict_registered_gate_is_kept(self) -> None:
         from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
 
@@ -295,6 +304,20 @@ class TestRequestWiring:
         assert recorder.received_extenders == {original}, (
             "the runner must reuse the engine's own snapshot, not the caller's mutable set object"
         )
+
+    def test_prepare_under_strict_mode_with_an_unregistered_gate_raises(self) -> None:
+        from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError
+
+        PluginLoader().load_matching("compute_framework", "*python_dict*")
+        register_plugin(_StrictWiringFeatureGroup)
+
+        with pytest.raises(EnvironmentPreconditionError, match="_ExtStrictUnregisteredGate"):
+            mlodaAPI.prepare(
+                [Feature(_STRICT_WIRING_FEAT)],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector().set_strict_mode("strict"),
+                function_extender={_ExtStrictUnregisteredGate()},
+            )
 
     def test_no_extenders_means_the_runner_receives_none_not_an_empty_set(self) -> None:
         PluginLoader().load_matching("compute_framework", "*python_dict*")

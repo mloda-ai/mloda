@@ -236,6 +236,7 @@ class TestCarrierIsCopiedOnIngestNotAliased:
         assert extender.captured is not None
         assert extender.captured.carrier == caller_carrier
         assert extender.captured.carrier is not caller_carrier
+        assert extender.captured.carrier is not _CARRIER
 
         # The ComputeFramework-owned copy is read-only, and the caller's dict stays untouched.
         assert extender.captured.carrier is not None

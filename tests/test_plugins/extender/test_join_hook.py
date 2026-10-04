@@ -182,6 +182,8 @@ class TestJoinHookCarrierIsNotAliasedAcrossTwoMergesOnSameComputeFramework:
         first_context, second_context = extender.captured
         assert first_context.carrier == second_context.carrier == carrier
         assert first_context.carrier is not second_context.carrier
+        assert first_context.carrier is not cfw.run_context.carrier
+        assert second_context.carrier is not cfw.run_context.carrier
 
     def test_mutating_one_carrier_does_not_leak_into_the_other_or_run_context(self) -> None:
         extender = _JoinListCapturingExtender()

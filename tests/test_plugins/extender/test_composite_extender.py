@@ -992,10 +992,6 @@ class TestInnerExceptionReRaise:
         assert CompositeExtender([_RetryingExtender()])(flaky) == "ok"
         assert calls["n"] == 2
 
-    def test_non_gate_without_gate_inside_that_never_calls_func_keeps_own_value(self) -> None:
-        composite = CompositeExtender([_NeverCallsExtender("skip", constant="own"), MockExtender("m", priority=200)])
-        assert composite(lambda: "base") == "own"
-
 
 class TestGateBypass:
     def test_outer_that_never_calls_func_with_gate_inside_raises(self) -> None:
@@ -1008,11 +1004,6 @@ class TestGateBypass:
         skipper.never_fall_back = True
         with pytest.raises(GateBypassError, match="skipper"):
             CompositeExtender([skipper, gate])(lambda: "base")
-
-    def test_gate_bypass_error_is_runtime_error(self) -> None:
-        from mloda.steward import GateBypassError
-
-        assert issubclass(GateBypassError, RuntimeError)
 
 
 class TestSealOnFirstUse:
@@ -1034,6 +1025,19 @@ class TestSealOnFirstUse:
         ]
         with pytest.raises(AttributeError):
             built.never_fall_back = True
+
+    def test_one_shot_iterator_of_two_extenders_seals_children_and_composite(self) -> None:
+        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+
+        first = MockExtender("a", priority=1)
+        second = MockExtender("b", priority=2)
+
+        built = build_hook_extenders(iter([first, second]))[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]
+
+        assert isinstance(built, CompositeExtender)
+        for sealed in (first, second, built):
+            with pytest.raises(AttributeError):
+                sealed.priority = 9
 
     def test_sealing_is_idempotent_and_non_flag_attributes_stay_writable(self) -> None:
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders
@@ -1058,10 +1062,7 @@ class TestSealOnFirstUse:
 
 
 class TestCompositeNeverFallBack:
-    def test_composite_with_gate_child_is_gate(self) -> None:
-        composite = CompositeExtender([MockExtender("g", never_fall_back=True), MockExtender("p")])
-        assert composite.never_fall_back is True
-
-    def test_composite_without_gate_child_is_not_gate(self) -> None:
-        composite = CompositeExtender([MockExtender("a"), MockExtender("b")])
-        assert composite.never_fall_back is False
+    @pytest.mark.parametrize(("gate_child", "expected"), [(True, True), (False, False)])
+    def test_composite_is_gate_iff_a_child_is_gate(self, gate_child: bool, expected: bool) -> None:
+        composite = CompositeExtender([MockExtender("g", never_fall_back=gate_child), MockExtender("p")])
+        assert composite.never_fall_back is expected

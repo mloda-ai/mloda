@@ -92,7 +92,7 @@ def filter_extenders_by_strict_mode(
         _warn_once_unregistered(unregistered_names, "Extenders")
         return extenders
 
-    gates = sorted(f"{type(e).__module__}:{type(e).__qualname__}" for e in unregistered if e.never_fall_back)
+    gates = sorted({f"{type(e).__module__}:{type(e).__qualname__}" for e in unregistered if e.never_fall_back})
     if gates:
         raise EnvironmentPreconditionError(
             f"Strict mode found unregistered gate Extenders: {', '.join(gates)}. Register them in the plugin registry."

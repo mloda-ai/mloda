@@ -86,8 +86,27 @@ class TestHookContextDeclaredAttributesAndReaderClassFields:
         assert context.declared_attributes == declared
         assert context.declared_attributes is not declared
         assert context.declared_attributes is not None
-        context.declared_attributes["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            context.declared_attributes["mutated"] = "yes"
         assert "mutated" not in declared
+        assert "mutated" not in context.declared_attributes
+
+    def test_declared_attributes_is_read_only_but_still_a_dict(self) -> None:
+        context = _make_context(declared_attributes={"unit": "m"})
+        attrs = context.declared_attributes
+
+        assert isinstance(attrs, dict)
+        assert attrs is not None
+        mutators: dict[str, Any] = {
+            "setitem": lambda d: d.__setitem__("x", "y"),
+            "update": lambda d: d.update({"x": "y"}),
+            "pop": lambda d: d.pop("unit"),
+            "clear": lambda d: d.clear(),
+        }
+        for name, mutate in mutators.items():
+            with pytest.raises(TypeError):
+                mutate(attrs)
+            assert attrs == {"unit": "m"}, name
 
     def test_declared_attributes_copy_is_taken_at_construction(self) -> None:
         declared = {"unit": "m"}
@@ -134,6 +153,7 @@ class TestHookContextCarrierField:
             "setdefault": lambda c: c.setdefault("x", "y"),
             "delitem": lambda c: c.__delitem__("traceparent"),
             "ior": lambda c: c.__ior__({"x": "y"}),
+            "reinit": lambda c: c.__init__({"x": "y"}),
         }
         for name, mutate in mutators.items():
             with pytest.raises(TypeError):
@@ -177,6 +197,8 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             ("carrier", {"forged": "yes"}),
             ("data_access_identity", "forged"),
             ("feature_names", ("forged",)),
+            ("feature_group_class", "pkg.Forged"),
+            ("specialized_from", ("pkg.Forged",)),
         ],
     )
     def test_assigning_a_frozen_field_raises(self, field: str, value: Any) -> None:
@@ -189,14 +211,27 @@ class TestHookContextIsFrozenExceptOutcomeFields:
         assert getattr(context, field) == before
 
     @pytest.mark.parametrize(
+        "field",
+        ["run_id", "tenant_id", "principal", "carrier", "data_access_identity", "feature_names", "feature_group_class"],
+    )
+    def test_deleting_a_frozen_field_raises_and_keeps_the_value(self, field: str) -> None:
+        context = _make_context(
+            run_id="real", tenant_id="t", principal="p", carrier={"a": "b"}, data_access_identity="d"
+        )
+        before = getattr(context, field)
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            delattr(context, field)
+
+        assert getattr(context, field) == before
+
+    @pytest.mark.parametrize(
         ("field", "value"),
         [
             ("rows_out", 7),
             ("output_schema", (("a", "int64"),)),
             ("duration_seconds", 0.5),
             ("status", "success"),
-            ("feature_group_class", "pkg.Other"),
-            ("specialized_from", ("pkg.Parent",)),
         ],
     )
     def test_writable_allowlist_stays_writable(self, field: str, value: Any) -> None:
@@ -240,9 +275,28 @@ class TestHookContextInputFeatureEdgesField:
         assert context.input_feature_edges is not edges
 
         assert context.input_feature_edges is not None
-        context.input_feature_edges["mutated"] = ("yes",)
+        with pytest.raises(TypeError):
+            context.input_feature_edges["mutated"] = ("yes",)
 
         assert "mutated" not in edges
+        assert "mutated" not in context.input_feature_edges
+
+    def test_input_feature_edges_is_read_only_but_still_a_dict(self) -> None:
+        context = _make_context(input_feature_edges={"a": ("src_a",)})
+        edges = context.input_feature_edges
+
+        assert isinstance(edges, dict)
+        assert edges is not None
+        mutators: dict[str, Any] = {
+            "setitem": lambda d: d.__setitem__("x", ("y",)),
+            "update": lambda d: d.update({"x": ("y",)}),
+            "pop": lambda d: d.pop("a"),
+            "clear": lambda d: d.clear(),
+        }
+        for name, mutate in mutators.items():
+            with pytest.raises(TypeError):
+                mutate(edges)
+            assert edges == {"a": ("src_a",)}, name
 
 
 class TestHookContextWorkerIndexField:

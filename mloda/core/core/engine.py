@@ -364,9 +364,12 @@ class Engine:
         def _resolve(*args: Any, **kwargs: Any) -> EvaluationResult:
             result = resolve_or_raise(*args, **kwargs)
             winner = next(iter(result.identified.items()))[0]
-            context.feature_group_class = f"{winner.__module__}.{winner.__qualname__}"
-            context.specialized_from = tuple(
-                sorted(f"{c.__module__}.{c.__qualname__}" for c in result.specialized_from)
+            # Sealed fields: the engine alone writes these post-hoc, bypassing the frozen guard.
+            object.__setattr__(context, "feature_group_class", f"{winner.__module__}.{winner.__qualname__}")
+            object.__setattr__(
+                context,
+                "specialized_from",
+                tuple(sorted(f"{c.__module__}.{c.__qualname__}" for c in result.specialized_from)),
             )
             return result
 

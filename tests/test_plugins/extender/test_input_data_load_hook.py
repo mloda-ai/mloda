@@ -979,56 +979,47 @@ class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
 
 
 class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
-    """Two INPUT_DATA_LOAD HookContexts built off the SAME ComputeFramework instance's
-    run_context.carrier must not share the dict object."""
+    """Two INPUT_DATA_LOAD HookContexts derived from ONE active calculate context's carrier
+    must not share the dict object with each other or with that source."""
 
-    def test_two_direct_load_calls_get_distinct_carrier_objects(self) -> None:
+    def _two_loads(self) -> tuple[HookContext, HookContext, HookContext]:
         extender = _InputDataLoadCapturingExtender()
         carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
         cfw = ComputeFramework(function_extender={extender})
-        cfw.run_context = RunContext(carrier=carrier)
+        cfw.run_context = RunContext()
         reader = _DirectLoadReader()
         features = FeatureSet()
+        calc_context = _build_calc_context(carrier=carrier)
 
-        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
+        with cfw.activate(), calc_context.activate():
             BaseInputData._load_data_via_hook(reader, "access-one", features)
-        first_context = extender.captured
-
-        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
+            first_context = extender.captured
             BaseInputData._load_data_via_hook(reader, "access-two", features)
-        second_context = extender.captured
+            second_context = extender.captured
 
         assert first_context is not None
         assert second_context is not None
-        assert first_context.carrier == second_context.carrier == carrier
+        return first_context, second_context, calc_context
+
+    def test_two_direct_load_calls_get_distinct_carrier_objects(self) -> None:
+        first_context, second_context, calc_context = self._two_loads()
+
+        assert first_context.carrier == second_context.carrier == calc_context.carrier
         assert first_context.carrier is not second_context.carrier
+        assert first_context.carrier is not calc_context.carrier
+        assert second_context.carrier is not calc_context.carrier
 
-    def test_mutating_one_carrier_does_not_leak_into_the_other_or_run_context(self) -> None:
-        extender = _InputDataLoadCapturingExtender()
-        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
-        cfw = ComputeFramework(function_extender={extender})
-        cfw.run_context = RunContext(carrier=carrier)
-        reader = _DirectLoadReader()
-        features = FeatureSet()
+    def test_mutating_one_carrier_does_not_leak_into_the_other_or_source(self) -> None:
+        first_context, second_context, calc_context = self._two_loads()
 
-        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
-            BaseInputData._load_data_via_hook(reader, "access-one", features)
-        first_context = extender.captured
-
-        with cfw.activate(), _build_calc_context(carrier=carrier).activate():
-            BaseInputData._load_data_via_hook(reader, "access-two", features)
-        second_context = extender.captured
-
-        assert first_context is not None
         assert first_context.carrier is not None
         with pytest.raises(TypeError):
             first_context.carrier["mutated"] = "yes"
 
-        assert second_context is not None
         assert second_context.carrier is not None
         assert "mutated" not in second_context.carrier
-        assert cfw.run_context.carrier is not None
-        assert "mutated" not in cfw.run_context.carrier
+        assert calc_context.carrier is not None
+        assert "mutated" not in calc_context.carrier
 
 
 class TestInputDataLoadHookCarriesInputFeatureEdges:

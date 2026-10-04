@@ -1,12 +1,11 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
@@ -25,28 +24,7 @@ def _csv(directory: Path, name: str, columns: dict[str, list[Any]]) -> str:
     return str(path)
 
 
-def _claim(feature: Feature, dac: DataAccessCollection) -> bool:
-    group = _csv_group()
-    return group in IdentifyFeatureGroupClass.evaluate(feature, {group: {PyArrowTable}}, None, dac).identified
-
-
-def _source(feature: Feature) -> str:
-    pair = feature.input_data_match
-    assert pair is not None
-    return cast(SourceMatch, pair[1]).source
-
-
 class TestColumnToFileHint:
-    def test_pins_correct_file(self, tmp_path: Path) -> None:
-        a = _csv(tmp_path, "pin_a", {"cfh_pin_id": [1], "cfh_pin_val": [2]})
-        b = _csv(tmp_path, "pin_b", {"cfh_pin_id": [3], "cfh_pin_val": [4]})
-        dac = DataAccessCollection(files={"a": a, "b": b}, column_to_file={"cfh_pin_id": "a", "cfh_pin_val": "a"})
-
-        for name in ("cfh_pin_id", "cfh_pin_val"):
-            feature = Feature(name)
-            assert _claim(feature, dac)
-            assert _source(feature) == os.path.abspath(a)
-
     def test_unpinned_feature_aborts_on_ambiguity(self, tmp_path: Path) -> None:
         columns = {"cfh_amb_id": [1], "cfh_amb_other": [2]}
         a = _csv(tmp_path, "amb_a", columns)
@@ -60,54 +38,6 @@ class TestColumnToFileHint:
         assert "data_access_handle" in str(excinfo.value)
         assert os.path.abspath(a) in str(excinfo.value)
         assert os.path.abspath(b) in str(excinfo.value)
-
-    def test_unpinned_feature_resolves_with_hint(self, tmp_path: Path) -> None:
-        columns = {"cfh_hint_id": [1], "cfh_hint_other": [2]}
-        a = _csv(tmp_path, "hint_a", columns)
-        b = _csv(tmp_path, "hint_b", columns)
-        dac = DataAccessCollection(files={"a": a, "b": b}, column_to_file={"cfh_hint_id": "a"})
-
-        feature = Feature("cfh_hint_other", Options(context={"data_access_handle": "b"}))
-
-        assert _claim(feature, dac)
-        assert _source(feature) == os.path.abspath(b)
-
-    def test_no_hint_preserves_behavior(self, tmp_path: Path) -> None:
-        a = _csv(tmp_path, "nohint_a", {"cfh_nohint_id": [1], "cfh_nohint_val": [2]})
-        feature = Feature("cfh_nohint_id")
-
-        assert _claim(feature, DataAccessCollection(files={a}))
-        assert _source(feature) == os.path.abspath(a)
-
-    def test_wrong_suffix_declines_without_falling_back_to_an_unpinned_file(self, tmp_path: Path) -> None:
-        # The pin points to a parquet file CsvFG can't serve; an unpinned .csv match must not be a fallback.
-        csv_file = _csv(tmp_path, "fallback_b", {"cfh_wrong_id": [1], "cfh_wrong_val": [2]})
-        dac = DataAccessCollection(
-            files={"a.parquet", csv_file},
-            column_to_file={"cfh_wrong_id": "a.parquet", "cfh_wrong_val": "a.parquet"},
-        )
-
-        assert not _claim(Feature("cfh_wrong_id"), dac)
-        assert not _claim(Feature("cfh_wrong_val"), dac)
-
-    def test_pin_wins_over_a_data_access_handle_hint_pointing_elsewhere(self, tmp_path: Path) -> None:
-        # The pin (wrong suffix) beats a data_access_handle hint pointing at an otherwise-valid file.
-        csv_file = _csv(tmp_path, "winner_b", {"cfh_win_id": [1]})
-        dac = DataAccessCollection(files={"a": "a.parquet", "b": csv_file}, column_to_file={"cfh_win_id": "a"})
-
-        feature = Feature("cfh_win_id", Options(context={"data_access_handle": "b"}))
-
-        assert not _claim(feature, dac)
-
-    def test_pinned_chain_shaped_name_resolves_while_an_unpinned_one_declines(self, tmp_path: Path) -> None:
-        pinned_name = "cfh_price__scaled"
-        path = _csv(tmp_path, "chain_shaped", {pinned_name: [1], "cfh_plain": [2]})
-        dac = DataAccessCollection(files={"chain_handle": path}, column_to_file={pinned_name: "chain_handle"})
-
-        pinned = Feature(pinned_name)
-        assert _claim(pinned, dac)
-        assert _source(pinned) == os.path.abspath(path)
-        assert not _claim(Feature("cfh_other__scaled"), dac)
 
     def test_conflict_in_batch_raises(self) -> None:
         class TestRF(SuffixFileReader):

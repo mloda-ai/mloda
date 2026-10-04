@@ -6,7 +6,6 @@ name carries a "chaindecline" marker to stay inert for other tests under pytest-
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +14,7 @@ import pytest
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import (
     BaseInputData,
     CHAIN_SEPARATOR,
@@ -29,7 +28,6 @@ from mloda.provider import (
 )
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
@@ -297,42 +295,6 @@ class TestBaseInputDataPinnedResolutionPropagation:
             ChainDeclineGenericAbortSuffixReader._matches_suffix("any.file")
 
         assert is_match_abort(excinfo.value)
-
-
-class TestCsvFGPinnedSeparatorName:
-    """A separator-shaped name that is a real column resolves through a pin; a pin to a file without it aborts."""
-
-    @staticmethod
-    def _csv(tmp_path: Path, header: str) -> str:
-        path = tmp_path / "chaindecline_csvfg.csv"
-        path.write_text(f"{header}\n1\n")
-        return str(path)
-
-    def test_pinned_chain_shaped_name_resolves_via_the_pin(self, tmp_path: Path) -> None:
-        name = f"chaindecline_csvfg_col{CHAIN_SEPARATOR}real"
-        path = self._csv(tmp_path, name)
-        dac = DataAccessCollection(
-            files={"chaindecline_csvfg_handle": path}, column_to_file={name: "chaindecline_csvfg_handle"}
-        )
-        feature = Feature(name)
-
-        result = IdentifyFeatureGroupClass.evaluate(feature, {CsvFG: {PandasDataFrame}}, None, dac)
-
-        assert result.identified == {CsvFG: {PandasDataFrame}}
-        assert feature.input_data_match is not None
-        assert feature.input_data_match[1].source == os.path.abspath(path)
-
-    def test_pin_to_a_file_without_the_chain_shaped_column_aborts(self, tmp_path: Path) -> None:
-        name = f"chaindecline_csvfg_other{CHAIN_SEPARATOR}missing"
-        path = self._csv(tmp_path, "chaindecline_csvfg_only_column")
-        dac = DataAccessCollection(
-            files={"chaindecline_csvfg_handle2": path}, column_to_file={name: "chaindecline_csvfg_handle2"}
-        )
-
-        with pytest.raises(ValueError) as excinfo:
-            resolve_or_raise(Feature(name), {CsvFG: {PandasDataFrame}}, None, dac)
-
-        assert os.path.abspath(path) in str(excinfo.value)
 
 
 class TestReadDbDeclinesChainSeparatedNames:

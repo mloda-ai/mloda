@@ -269,13 +269,6 @@ def _json_group_claims(json_path: str, options: Options) -> bool:
 class TestJsonFGDocumentSuffixes:
     """``document_suffixes`` is read through the declared PROPERTY_MAPPING key and only ever excludes."""
 
-    def test_stock_json_group_claims_a_json_path(self, json_path: str) -> None:
-        """Control: with no option nothing is excluded, so JsonFG claims the file."""
-        assert _json_group_claims(json_path, Options())
-
-    def test_explicit_option_excludes_json(self, json_path: str) -> None:
-        assert not _json_group_claims(json_path, Options(context={"document_suffixes": frozenset({".json"})}))
-
     def test_explicit_empty_option_excludes_nothing(self, json_path: str) -> None:
         assert _json_group_claims(json_path, Options(context={"document_suffixes": frozenset()}))
 

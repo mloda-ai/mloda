@@ -1,7 +1,7 @@
 """Shared contract tests for ReadFileFG implementations (one file format per group).
 
 A concrete test class sets the FormatFeatureGroup attributes plus ``write_file``. Not collected on its own.
-Every test-local subclass of the group is gated by an explicit plugin mapping (rule A7).
+Every test-local subclass of the group is gated by an explicit plugin mapping.
 """
 
 from __future__ import annotations
@@ -253,6 +253,41 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert not self._claims(Feature(self.present_column), dac)
         assert not [p for p in names + samples if p.endswith(FOREIGN_SUFFIX)]
 
+    def test_file_column_to_file_pin_to_a_foreign_suffix_never_falls_back_to_an_unpinned_own_file(self) -> None:
+        dac = DataAccessCollection(
+            files={"pin_own": str(self.own_path), "pin_foreign": str(self.foreign_path)},
+            column_to_file={self.present_column: "pin_foreign"},
+        )
+        assert not self._claims(Feature(self.present_column), dac)
+
+    def test_file_column_to_file_pin_wins_over_a_data_access_handle_pointing_elsewhere(self) -> None:
+        dac = DataAccessCollection(
+            files={"pin_foreign": str(self.foreign_path), "pin_own": str(self.own_path)},
+            column_to_file={self.present_column: "pin_foreign"},
+        )
+        feature = Feature(self.present_column, Options(context={HANDLE_OPTION: "pin_own"}))
+        assert not self._claims(feature, dac)
+
+    def test_file_column_to_file_pin_to_a_corrupt_file_aborts_despite_a_good_sibling(self) -> None:
+        corrupt = self.tmp_path / f"pin_corrupt{self._suffix()}"
+        self.write_corrupt_file(corrupt)
+        dac = DataAccessCollection(
+            files={"pin_corrupt": str(corrupt), "pin_sibling": str(self.own_path)},
+            column_to_file={self.present_column: "pin_corrupt"},
+        )
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(Feature(self.present_column), dac)
+        assert os.path.abspath(corrupt) in str(exc_info.value)
+
+    def test_file_pinned_chain_shaped_real_column_resolves_while_an_unpinned_chain_shaped_name_declines(self) -> None:
+        name = f"toyfmt_pinchain{CHAIN_SEPARATOR}real"
+        path = self._make("pin_chain", {name: [1], self.present_column: [2]})
+        pinned = DataAccessCollection(files={"pin_chain": str(path)}, column_to_file={name: "pin_chain"})
+        feature = Feature(name)
+        assert self._claims(feature, pinned)
+        assert self._matched_source(feature).source == os.path.abspath(path)
+        assert not self._claims(Feature(f"toyfmt_pinother{CHAIN_SEPARATOR}missing"), pinned)
+
     # data_access_handle
 
     def test_file_handle_names_one_file(self) -> None:
@@ -437,7 +472,9 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
         result = self._evaluate(Feature(self.present_column), DataAccessCollection(files={"corrupt": str(path)}))
         assert self.feature_group_class not in result.identified
-        assert os.path.abspath(path) in result.eliminations[self.feature_group_class].reason
+        reason = result.eliminations[self.feature_group_class].reason
+        assert os.path.abspath(path) in reason
+        assert "could not read" in reason
 
         pointed = Feature(self.present_column, Options({self._group_name(): str(path)}))
         with pytest.raises(ValueError) as exc_info:
@@ -446,11 +483,22 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     # names
 
-    def test_file_chain_and_column_separated_names_that_are_not_columns_decline(self) -> None:
+    def test_file_chain_and_column_separated_names_that_are_not_columns_decline(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
         chained = f"{self.present_column}{CHAIN_SEPARATOR}toyfmt_rebased"
         separated = f"{self.missing_column}{COLUMN_SEPARATOR}0"
         assert not self._claims(Feature(chained), self.own_dac())
+        options = Options()
+        assert not self.feature_group_class.match_feature_group_criteria(chained, options, self.own_dac())
+        reason = rejection_window[self._group_name()].reason
+        assert os.path.abspath(self.own_path) in reason
+        assert chained in reason
         assert not self._claims(Feature(separated), self.own_dac())
+
+    def test_file_a_nonexistent_file_handle_declines(self) -> None:
+        dac = DataAccessCollection(files={"gone_file": str(self.tmp_path / f"no_such_file{self._suffix()}")})
+        assert not self._claims(Feature(self.present_column), dac)
 
     # folders: FIFOs and symlinks
 
@@ -485,7 +533,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         parent_key = parent.__name__
 
         def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
-            # Only a pointer on the parent key lets this subclass claim, so it cannot leak into other tests (A7).
+            # Only a pointer on the parent key lets this subclass claim, so it cannot leak into other tests.
             if parent_key not in options:
                 return False
             return bool(

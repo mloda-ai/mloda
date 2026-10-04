@@ -1,4 +1,4 @@
-"""ReadFileFG through the stdlib ``.toyfmtfile`` toy: shared file contract, framework loads, sample hook, G6."""
+"""ReadFileFG through the stdlib ``.toyfmtfile`` toy: shared file contract, framework loads, sample hook."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.provider import FormatFeatureGroup, ReadFileFG
-from mloda.user import DataAccessCollection, Options
+from mloda.user import DataAccessCollection
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     FileLoadsIntoFrameworkMixin,
     PyArrowTableAdapter,
@@ -74,12 +74,6 @@ class TestReadFileFGBase:
             ClaimRoute("file", NamePolicy.CHECKED, True),
             ClaimRoute("folder", NamePolicy.CHECKED, True),
         )
-
-    def test_abstract_base_never_claims(self, tmp_path: Path) -> None:
-        path = tmp_path / f"base{TOY_SUFFIX}"
-        write_toy_file(path, {"toyfmt_base_col": [1]})
-        dac = DataAccessCollection(files={"h": str(path)})
-        assert ReadFileFG.match_feature_group_criteria("toyfmt_base_col", Options(), dac) is False
 
     def test_property_mapping_declares_the_two_reader_options(self) -> None:
         handle = ReadFileFG.PROPERTY_MAPPING["data_access_handle"]

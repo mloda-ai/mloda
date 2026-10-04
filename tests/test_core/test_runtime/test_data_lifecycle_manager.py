@@ -386,13 +386,18 @@ class TestDataLifecycleManagerOutputFramework:
 
         assert isinstance(result, pd.DataFrame)
 
-    def test_a_schema_less_result_is_returned_unchanged(self) -> None:
+    def test_a_schema_less_result_is_converted_to_the_output_framework(self) -> None:
         manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
+
+        result = manager.get_result_data(self._arrow_cfw(pa.table({})), [FeatureName("feature1")])
+
+        assert isinstance(result, pd.DataFrame)
+
+    def test_a_schema_less_result_without_an_output_framework_is_returned_unchanged(self) -> None:
+        manager = DataLifecycleManager()
         empty = pa.table({})
 
-        result = manager.get_result_data(self._arrow_cfw(empty), [FeatureName("feature1")])
-
-        assert result is empty
+        assert manager.get_result_data(self._arrow_cfw(empty), [FeatureName("feature1")]) is empty
 
 
 class TestDataLifecycleManagerGetResults:

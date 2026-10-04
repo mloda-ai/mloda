@@ -152,9 +152,13 @@ class _Net:
         chooser_class: type[ChooseComputeFrameworks] = ChooseComputeFrameworks,
         output_framework: type[ComputeFramework] | None = None,
     ) -> ChooseComputeFrameworks:
-        extra: dict[str, Any] = {} if output_framework is None else {"output_framework": output_framework}
         return chooser_class(
-            self.graph, self.nodes, self.occurrences, self.ties, dict(positions) if positions else {}, **extra
+            self.graph,
+            self.nodes,
+            self.occurrences,
+            self.ties,
+            dict(positions) if positions else {},
+            output_framework=output_framework,
         )
 
     def choose(
@@ -628,6 +632,15 @@ def test_a_requested_block_with_no_path_to_the_output_is_infeasible() -> None:
     net.add(ChooserRootFG, "output_infeasible_feature", {one}, requested=True)
 
     with pytest.raises(ValueError, match="output_infeasible_feature"):
+        net.choose(output_framework=two)
+
+
+def test_a_pinned_requested_block_with_no_path_to_the_output_is_infeasible() -> None:
+    one, two = _throwaway_pair(shared_expected=False)
+    net = _Net()
+    net.add(ChooserRootFG, "output_pinned_feature", {one}, pinned=True, requested=True)
+
+    with pytest.raises(ValueError, match="output_pinned_feature"):
         net.choose(output_framework=two)
 
 

@@ -16,7 +16,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, DataCreator, FeatureSet
-from mloda.user import Index, Options, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Index, Options, PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -24,12 +24,12 @@ from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
-from mloda.core.api.request import SetupConfigurationError
 from mloda.core.core.engine import Engine
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.probe_runner import run_probes
 
 _PROBE = Path(__file__).with_name("determinism_probe.py")
@@ -911,13 +911,38 @@ def test_stream_all_honors_output_framework() -> None:
 def test_a_required_connection_output_framework_without_a_connection_raises_at_prepare() -> None:
     sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
 
-    with pytest.raises((SetupConfigurationError, ValueError), match="SqliteFramework"):
+    with pytest.raises(ValueError, match="SqliteFramework"):
         mloda.prepare(
             ["rc_root"],
             compute_frameworks=_RC_FRAMEWORKS,
             plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
             output_framework=sqlite_fw,
         )
+
+
+def test_a_required_connection_output_framework_with_a_connection_prepares(sqlite_conn: sqlite3.Connection) -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+    access = DataAccessCollection(connections={sqlite_conn})
+
+    session = mloda.prepare(
+        ["rc_root"],
+        compute_frameworks=_RC_FRAMEWORKS,
+        data_access_collection=access,
+        plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+        output_framework=sqlite_fw,
+    )
+
+    assert session.engine is not None
+    assert session.engine.output_connection is sqlite_conn
+
+
+def test_an_output_framework_outside_the_run_list_still_converts() -> None:
+    expected = PythonDictFramework.expected_data_framework()
+
+    result = _run_rc(["rc_root"], "PythonDictFramework")
+
+    assert len(result) == 1
+    assert all(type(frame) is expected for frame in result)
 
 
 # An unrelated consumer must not move a root.

@@ -150,9 +150,9 @@ class DataLifecycleManager:
         # A result with no visible columns has already been judged by the empty-result guard in
         # run_validate_output_features: a truly column-less result raises there, so anything that
         # reaches here with no columns is a schema-less pass-through. Selecting named columns from
-        # a schema-less result is meaningless and must not raise; the caller receives it unchanged.
+        # a schema-less result is meaningless and must not raise; it skips selection but is still converted.
         if not cfw._extract_column_names(data):
-            return data
+            return self._to_output_framework(cfw, data)
 
         selected = cfw.select_data_by_column_names(
             data,

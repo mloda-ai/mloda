@@ -241,17 +241,16 @@ class TestRunContextGracefulShutdownTimeout:
 
 
 class TestRunContextIsInternal:
-    def test_docstring_states_the_class_is_internal_and_not_public_api(self) -> None:
+    def test_docstring_names_the_steward_export(self) -> None:
         assert RunContext.__doc__ is not None
-        assert "internal" in RunContext.__doc__.lower()
-        assert "not part of the public api" in RunContext.__doc__.lower()
+        assert "mloda.steward" in RunContext.__doc__
 
-    def test_not_exported_from_any_facade(self) -> None:
+    def test_only_exported_from_the_steward_facade(self) -> None:
         assert "RunContext" not in provider.__all__
         assert not hasattr(provider, "RunContext")
 
-        assert "RunContext" not in steward.__all__
-        assert not hasattr(steward, "RunContext")
+        assert "RunContext" in steward.__all__
+        assert steward.RunContext is RunContext
 
         assert "RunContext" not in user.__all__
         assert not hasattr(user, "RunContext")

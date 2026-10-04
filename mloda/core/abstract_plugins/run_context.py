@@ -5,9 +5,9 @@ from datetime import datetime
 
 @dataclass(frozen=True)
 class RunContext:
-    """Internal, not part of the public API.
+    """Per-run values every ComputeFramework carries into hooks and spawn workers; keep it picklable.
 
-    Per-run values every ComputeFramework carries into hooks and spawn workers; keep it picklable.
+    Exported from mloda.steward as the argument of on_run_start and on_run_complete; the other facades do not export it.
     """
 
     run_id: str | None = None

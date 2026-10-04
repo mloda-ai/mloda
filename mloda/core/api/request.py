@@ -32,7 +32,16 @@ from mloda.core.prepare.accessible_plugins import (
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.function_extender import (
+    Extender,
+    ExtenderHook,
+    GateBypassError,
+    LifecycleOutcome,
+    call_contained_hook,
+    call_run_complete_hook,
+    call_run_start_hook,
+    reject_old_run_complete_signature,
+)
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import current_verified_context
@@ -76,6 +85,60 @@ class mlodaAPI:
         function_extender: set[Extender] | None = None,
         output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
+        self.runner: None | ExecutionOrchestrator = None
+        self.engine: None | Engine = None
+        self.function_extender = function_extender
+        self.plugin_collector = plugin_collector
+        filtered = filter_extenders_by_strict_mode(function_extender, plugin_collector)
+        self._extenders: set[Extender] = set(filtered) if filtered is not None else set()
+        reject_old_run_complete_signature(self._extenders)
+        self._plan_steps: tuple[PlanStep, ...] | None = None
+        verified = current_verified_context()
+        self.plan_context = PlanContext(
+            plan_id=generate_run_id(),
+            tenant_id=verified.tenant_id if verified else None,
+            project_id=verified.project_id if verified else None,
+            principal=verified.principal if verified else None,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.plan_id = self.plan_context.plan_id
+
+        call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
+        plan_outcome = LifecycleOutcome("succeeded")
+        try:
+            self._plan(
+                requested_features,
+                compute_frameworks,
+                links,
+                data_access_collection,
+                global_filter,
+                api_data,
+                copy_features,
+                strict_type_enforcement,
+                column_ordering,
+                parallelization_modes,
+                output_framework,
+            )
+        except BaseException as error:
+            plan_outcome = LifecycleOutcome("failed", type(error).__name__)
+            raise
+        finally:
+            call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
+
+    def _plan(
+        self,
+        requested_features: Features | list[Feature | str],
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None,
+        global_filter: GlobalFilter | None,
+        api_data: dict[str, dict[str, Any]] | None,
+        copy_features: bool,
+        strict_type_enforcement: bool,
+        column_ordering: str | None,
+        parallelization_modes: set[ParallelizationMode] | None,
+        output_framework: str | type[ComputeFramework] | None,
+    ) -> None:
         # Setup boundary: any invalid request argument surfaces as the typed error before planning.
         try:
             if column_ordering is not None and column_ordering not in ("alphabetical", "request_order"):
@@ -117,25 +180,11 @@ class mlodaAPI:
             self.global_filter = global_filter
             self.api_input_data_collection = api_input_data_collection
             self.api_data = api_data
-            self.plugin_collector = plugin_collector
-            self.function_extender = function_extender
             self.output_framework = setup_compute_framework.output_framework
         except SetupConfigurationError:
             raise
         except ValueError as error:
             raise SetupConfigurationError(str(error)) from error
-
-        self.runner: None | ExecutionOrchestrator = None
-        self.engine: None | Engine = None
-        verified = current_verified_context()
-        self.plan_context = PlanContext(
-            plan_id=generate_run_id(),
-            tenant_id=verified.tenant_id if verified else None,
-            project_id=verified.project_id if verified else None,
-            principal=verified.principal if verified else None,
-            created_at=datetime.now(timezone.utc),
-        )
-        self.plan_id = self.plan_context.plan_id
 
         self.engine = self._create_engine()
 
@@ -594,9 +643,37 @@ class mlodaAPI:
         _api_data = api_data if api_data is not None else self.api_data
         runner = self._setup_engine_runner(parallelization_modes, flight_server)
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
-        return self._stream_run_results(
+        stream = self._stream_run_results(
             runner, parallelization_modes, _api_data, artifacts, run_context, with_step_uuids
         )
+        # Primes the generator so a refusal at run start raises here, not on first iteration.
+        next(stream)
+        return stream
+
+    def _start_run(self, run_context: RunContext) -> None:
+        """Refuse an unguarded identity change, then fire on_run_start."""
+        if not self._extenders:
+            return
+        plan = self.plan_context
+        identity_changed = (run_context.tenant_id, run_context.project_id, run_context.principal) != (
+            plan.tenant_id,
+            plan.project_id,
+            plan.principal,
+        )
+        matched_hook = self.engine.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED) if self.engine else None
+        if identity_changed and matched_hook is not None and matched_hook.never_fall_back:
+            gates = [e for e in self._extenders if e.never_fall_back]
+            if not any(type(gate).on_run_start is not Extender.on_run_start for gate in gates):
+                raise GateBypassError(
+                    "The run identity differs from the plan identity and no never_fall_back extender "
+                    "overrides on_run_start to check it."
+                )
+        if self._plan_steps is None:
+            self._plan_steps = tuple(self.resolved_plan())
+        call_run_start_hook(self._extenders, run_context, plan, self._plan_steps)
+
+    def _complete_run(self, run_context: RunContext, outcome: LifecycleOutcome) -> None:
+        call_run_complete_hook(self._extenders, run_context, outcome)
 
     def _stream_run_results(
         self,
@@ -607,26 +684,34 @@ class mlodaAPI:
         run_context: RunContext,
         with_step_uuids: bool,
     ) -> Generator[Any, None, None]:
-        """Deferred half of ``stream_run``: iterating this is what actually drives computation."""
-        # Assign self.runner before the yield loop so that get_result()/get_artifacts()
-        # remain accessible even when the consumer exits early (break / next()).
-        # Previously this line lived after the loop, which meant an early exit left
-        # self.runner unset and both methods raised "You need to run any run function
-        # beforehand." despite teardown having completed successfully in `finally`.
+        """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
+        # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
         self.runner = runner
+        outcome = LifecycleOutcome("succeeded")
         try:
-            self._enter_runner_context(
-                runner,
-                parallelization_modes,
-                api_data,
-                artifacts=artifacts,
-                run_context=run_context,
-            )
-            with contextlib.closing(runner.compute_stream()) as stream:
-                for step_uuid, result in stream:
-                    yield (step_uuid, result) if with_step_uuids else result
+            self._start_run(run_context)
+            yield None
+            try:
+                self._enter_runner_context(
+                    runner,
+                    parallelization_modes,
+                    api_data,
+                    artifacts=artifacts,
+                    run_context=run_context,
+                )
+                with contextlib.closing(runner.compute_stream()) as stream:
+                    for step_uuid, result in stream:
+                        yield (step_uuid, result) if with_step_uuids else result
+            finally:
+                self._exit_runner_context(runner)
+        except GeneratorExit:
+            outcome = LifecycleOutcome("cancelled")
+            raise
+        except BaseException as error:
+            outcome = LifecycleOutcome("failed", type(error).__name__)
+            raise
         finally:
-            self._exit_runner_context(runner)
+            self._complete_run(run_context, outcome)
 
     def _batch_run(
         self,
@@ -639,16 +724,26 @@ class mlodaAPI:
         """Sets up the engine runner and runs the engine computation."""
         # Use stored api_data if not explicitly provided
         _api_data = api_data if api_data is not None else self.api_data
-        runner = self._setup_engine_runner(parallelization_modes, flight_server)
-        self._run_engine_computation(
-            runner,
-            parallelization_modes,
-            _api_data,
-            artifacts=artifacts,
-            run_context=run_context,
-        )
-        self.runner = runner
-        return runner
+        if run_context is None:
+            run_context = self._build_run_context(None, None)
+        outcome = LifecycleOutcome("succeeded")
+        try:
+            self._start_run(run_context)
+            runner = self._setup_engine_runner(parallelization_modes, flight_server)
+            self._run_engine_computation(
+                runner,
+                parallelization_modes,
+                _api_data,
+                artifacts=artifacts,
+                run_context=run_context,
+            )
+            self.runner = runner
+            return runner
+        except BaseException as error:
+            outcome = LifecycleOutcome("failed", type(error).__name__)
+            raise
+        finally:
+            self._complete_run(run_context, outcome)
 
     def _run_engine_computation(
         self,
@@ -695,8 +790,6 @@ class mlodaAPI:
         runner.__exit__(None, None, None)
 
     def _create_engine(self) -> Engine:
-        filtered = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
-        function_extender = set(filtered) if filtered is not None else None
         engine = Engine(
             self.features,
             self.compute_framework,
@@ -706,7 +799,7 @@ class mlodaAPI:
             self.api_input_data_collection,
             self.plugin_collector,
             column_ordering=self.column_ordering,
-            function_extender=function_extender,
+            function_extender=self._extenders,
             plan_context=self.plan_context,
             framework_preference=self.framework_preference,
             output_framework=self.output_framework,

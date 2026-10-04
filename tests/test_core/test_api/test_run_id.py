@@ -1,7 +1,6 @@
 """Tests for mlodaAPI.plan_id/plan_context (minted once per session) and per-run run_id."""
 
 from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest

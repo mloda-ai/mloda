@@ -1,0 +1,327 @@
+"""Tests for the plan/run lifecycle hooks on Extender and the LifecycleOutcome they receive."""
+
+import dataclasses
+import logging
+from typing import Any
+
+import pytest
+
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.plan_context import PlanContext
+from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.steward import PlanStep
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+
+_COLUMN = "lifecycle_hooks_col"
+
+
+class _LifecycleFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_COLUMN})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_COLUMN: [1, 2, 3]}
+
+
+_ENABLED = PluginCollector.enabled_feature_groups({_LifecycleFeatureGroup})
+_SYNC = {ParallelizationMode.SYNC}
+
+
+def _prepare(extenders: set[Extender]) -> Any:
+    return mloda.prepare(
+        [Feature(name=_COLUMN)],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=_ENABLED,
+        parallelization_modes=_SYNC,
+        function_extender=extenders,
+    )
+
+
+class _Recorder(Extender):
+    def __init__(
+        self, label: str, log: list[tuple[Any, ...]], priority: int = 100, raises_in: str | None = None
+    ) -> None:
+        self.label = label
+        self.log = log
+        self.priority = priority
+        self.raises_in = raises_in
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_MATCHED}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        self.log.append((self.label, "matched"))
+        return func(*args, **kwargs)
+
+    def _record(self, hook: str, *payload: Any) -> None:
+        self.log.append((self.label, hook, *payload))
+        if self.raises_in == hook:
+            raise RuntimeError(f"{hook}-boom")
+
+    def on_plan_start(self, plan: Any) -> None:
+        self._record("plan_start", plan)
+
+    def on_plan_complete(self, plan: Any, outcome: Any) -> None:
+        self._record("plan_complete", plan, outcome)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self._record("run_start", run, plan, steps)
+
+    def on_run_complete(self, run: Any, outcome: Any) -> None:
+        self._record("run_complete", run, outcome)
+
+
+class _Minimal(Extender):
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class TestLifecycleOutcome:
+    def test_is_a_frozen_dataclass_with_status_and_error_type(self) -> None:
+        from mloda.steward import LifecycleOutcome
+
+        outcome = LifecycleOutcome(status="failed", error_type="ValueError")
+
+        assert (outcome.status, outcome.error_type) == ("failed", "ValueError")
+        assert outcome == LifecycleOutcome(status="failed", error_type="ValueError")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            outcome.status = "succeeded"  # type: ignore[misc]
+
+
+class TestBaseExtenderLifecycleDefaults:
+    def test_all_four_hooks_are_noops_on_a_minimal_extender(self) -> None:
+        from datetime import datetime, timezone
+
+        from mloda.steward import LifecycleOutcome
+
+        extender = _Minimal()
+        plan = PlanContext(
+            plan_id="p", tenant_id=None, project_id=None, principal=None, created_at=datetime.now(timezone.utc)
+        )
+        run = RunContext(run_id="r", plan_id="p")
+        outcome = LifecycleOutcome(status="succeeded", error_type=None)
+
+        extender.on_plan_start(plan)
+        extender.on_plan_complete(plan, outcome)
+        extender.on_run_start(run, plan, ())
+        extender.on_run_complete(run, outcome)
+
+
+class _OldSignatureExtender(_Minimal):
+    def on_run_complete(self, run_id: str | None) -> None:  # type: ignore[override]
+        pass
+
+
+class TestOldOneParameterOnRunCompleteIsRejectedAtSetup:
+    @pytest.mark.parametrize("entry", ["prepare", "run_all"])
+    def test_raises_type_error_naming_the_extender(self, entry: str) -> None:
+        with pytest.raises(TypeError, match="_OldSignatureExtender"):
+            if entry == "prepare":
+                _prepare({_OldSignatureExtender()})
+            else:
+                mloda.run_all(
+                    [Feature(name=_COLUMN)],
+                    compute_frameworks=["PythonDictFramework"],
+                    plugin_collector=_ENABLED,
+                    function_extender={_OldSignatureExtender()},
+                )
+
+    def test_error_names_on_run_complete(self) -> None:
+        with pytest.raises(TypeError, match="on_run_complete"):
+            _prepare({_OldSignatureExtender()})
+
+
+class TestHookArguments:
+    def test_plan_hooks_receive_the_plan_context_and_a_succeeded_outcome(self) -> None:
+        log: list[tuple[Any, ...]] = []
+
+        session = _prepare({_Recorder("r", log)})
+
+        starts = [e for e in log if e[1] == "plan_start"]
+        completes = [e for e in log if e[1] == "plan_complete"]
+        assert len(starts) == 1 and len(completes) == 1
+        plan = starts[0][2]
+        assert isinstance(plan, PlanContext)
+        assert plan == session.plan_context
+        assert completes[0][2] == plan
+        assert completes[0][3].status == "succeeded"
+        assert completes[0][3].error_type is None
+
+    def test_plan_start_fires_before_the_match_hook_and_plan_complete_after_it(self) -> None:
+        log: list[tuple[Any, ...]] = []
+
+        _prepare({_Recorder("r", log)})
+
+        assert [e[1] for e in log] == ["plan_start", "matched", "plan_complete"]
+
+    def test_run_start_receives_run_plan_and_a_tuple_of_plan_steps(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare({_Recorder("r", log)})
+
+        session.run(parallelization_modes=_SYNC)
+
+        (start,) = [e for e in log if e[1] == "run_start"]
+        _, _, run, plan, steps = start
+        assert isinstance(run, RunContext)
+        assert isinstance(plan, PlanContext)
+        assert run.plan_id == plan.plan_id == session.plan_id
+        assert isinstance(steps, tuple)
+        assert steps and all(isinstance(s, PlanStep) for s in steps)
+        assert steps == tuple(session.resolved_plan())
+
+    def test_run_complete_receives_the_same_run_and_a_succeeded_outcome(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare({_Recorder("r", log)})
+
+        session.run(parallelization_modes=_SYNC)
+
+        (start,) = [e for e in log if e[1] == "run_start"]
+        (complete,) = [e for e in log if e[1] == "run_complete"]
+        assert complete[2].run_id == start[2].run_id
+        assert complete[3].status == "succeeded"
+        assert complete[3].error_type is None
+
+
+class TestHooksRunInAscendingPriorityOrder:
+    @pytest.mark.parametrize("hook", ["plan_start", "plan_complete", "run_start", "run_complete"])
+    def test_every_hook_visits_extenders_by_priority(self, hook: str) -> None:
+        log: list[tuple[Any, ...]] = []
+        priorities = [50, 20, 60, 10, 40, 30]
+        session = _prepare({_Recorder(f"p{p}", log, priority=p) for p in priorities})
+        session.run(parallelization_modes=_SYNC)
+
+        order = [e[0] for e in log if e[1] == hook]
+
+        assert order == [f"p{p}" for p in sorted(priorities)]
+
+    def test_an_extender_wrapping_no_hook_still_gets_every_lifecycle_hook(self) -> None:
+        seen: list[str] = []
+
+        class _Silent(_Minimal):
+            def on_plan_start(self, plan: Any) -> None:
+                seen.append("plan_start")
+
+            def on_plan_complete(self, plan: Any, outcome: Any) -> None:
+                seen.append("plan_complete")
+
+            def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+                seen.append("run_start")
+
+            def on_run_complete(self, run: Any, outcome: Any) -> None:
+                seen.append("run_complete")
+
+        _prepare({_Silent()}).run(parallelization_modes=_SYNC)
+
+        assert seen == ["plan_start", "plan_complete", "run_start", "run_complete"]
+
+
+class TestContainedHooksLogAndContinue:
+    @pytest.mark.parametrize("hook", ["plan_start", "plan_complete", "run_complete"])
+    def test_a_raising_extender_is_logged_and_later_extenders_still_run(
+        self, hook: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        log: list[tuple[Any, ...]] = []
+        raiser = _Recorder("raiser", log, priority=10, raises_in=hook)
+        survivor = _Recorder("survivor", log, priority=20)
+
+        with caplog.at_level(logging.ERROR):
+            session = _prepare({raiser, survivor})
+            session.run(parallelization_modes=_SYNC)
+
+        assert [e[0] for e in log if e[1] == hook] == ["raiser", "survivor"]
+        records = [r for r in caplog.records if r.levelno == logging.ERROR and f"{hook}-boom" in r.getMessage()]
+        assert len(records) == 1
+        assert "RuntimeError" in records[0].getMessage()
+        assert records[0].exc_info is None
+
+
+class _BreakingRefuser(_Recorder):
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.log.append((self.label, "run_start"))
+        raise RuntimeError("refused-at-run-start")
+
+
+class _GateRefuser(_BreakingRefuser):
+    never_fall_back = True
+
+    def __init__(self, label: str, log: list[tuple[Any, ...]], priority: int = 100) -> None:
+        super().__init__(label, log, priority)
+        self.raise_on_error = False
+
+
+class _WarningOnlyRefuser(_BreakingRefuser):
+    def __init__(self, label: str, log: list[tuple[Any, ...]], priority: int = 100) -> None:
+        super().__init__(label, log, priority)
+        self.raise_on_error = False
+
+
+class TestOnRunStartRefusalSemantics:
+    @pytest.mark.parametrize("refuser_type", [_BreakingRefuser, _GateRefuser])
+    def test_raise_on_error_or_never_fall_back_propagates_and_the_run_is_refused(
+        self, refuser_type: type[_BreakingRefuser]
+    ) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare({refuser_type("refuser", log)})
+
+        with pytest.raises(RuntimeError, match="refused-at-run-start"):
+            session.run(parallelization_modes=_SYNC)
+
+        complete = [e for e in log if e[1] == "run_complete"]
+        assert [e[3].status for e in complete] == ["failed"]
+        assert complete[0][3].error_type == "RuntimeError"
+
+    def test_a_warning_only_extender_is_logged_and_the_run_proceeds(self, caplog: pytest.LogCaptureFixture) -> None:
+        log: list[tuple[Any, ...]] = []
+        calculated: list[str] = []
+        session = _prepare({_WarningOnlyRefuser("warner", log), _Calculated(calculated)})
+
+        with caplog.at_level(logging.WARNING):
+            result = session.run(parallelization_modes=_SYNC)
+
+        assert result and calculated == ["calculated"]
+        assert any("refused-at-run-start" in r.getMessage() for r in caplog.records)
+        assert [e[3].status for e in log if e[1] == "run_complete"] == ["succeeded"]
+
+    def test_a_refusal_stops_later_extenders_from_seeing_run_start_but_they_still_see_run_complete(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare({_BreakingRefuser("first", log, priority=10), _Recorder("later", log, priority=20)})
+
+        with pytest.raises(RuntimeError, match="refused-at-run-start"):
+            session.run(parallelization_modes=_SYNC)
+
+        later = [e[1] for e in log if e[0] == "later" and e[1].startswith("run_")]
+        assert later == ["run_complete"]
+
+    def test_a_refused_run_never_calculates(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        calculated: list[str] = []
+        session = _prepare({_BreakingRefuser("refuser", log, priority=10), _Calculated(calculated)})
+
+        with pytest.raises(RuntimeError, match="refused-at-run-start"):
+            session.run(parallelization_modes=_SYNC)
+
+        assert calculated == []
+
+
+class _Calculated(Extender):
+    def __init__(self, calculated: list[str]) -> None:
+        self.priority = 500
+        self.calculated = calculated
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        self.calculated.append("calculated")
+        return func(*args, **kwargs)

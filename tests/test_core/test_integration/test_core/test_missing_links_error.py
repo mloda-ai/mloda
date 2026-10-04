@@ -471,7 +471,7 @@ class TestMissingLinksError:
             mloda.prepare(
                 features=[Feature.int32_of("DtypeCombiner")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups({SplitSourceDtype, DtypeCombiner}),
             )
 
@@ -490,7 +490,7 @@ class TestMissingLinksError:
             mloda.prepare(
                 features=[Feature.int32_of("DirectSplitConsumer")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups({SplitMetricSource, DirectSplitConsumer}),
             )
 
@@ -508,7 +508,7 @@ class TestMissingLinksError:
             mloda.prepare(
                 features=[Feature.int32_of("NonRootSplitConsumer")],
                 links=set(),
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {SplitMetricSource, NonRootMetricRelay, NonRootSplitConsumer}
                 ),
@@ -530,7 +530,7 @@ class TestMissingLinksError:
         results = mloda.run_all(
             features=[Feature.int32_of("LinkedDirectConsumer")],
             links={link},
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             plugin_collector=PluginCollector.enabled_feature_groups({LinkedSplitSource, LinkedDirectConsumer}),
         )
 

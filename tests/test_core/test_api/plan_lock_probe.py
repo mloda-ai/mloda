@@ -88,7 +88,7 @@ def collect() -> dict[str, str]:
             Feature("lock_probe_any_value", compute_framework="PandasDataFrame"),
             Feature("lock_probe_any_value", compute_framework="PyArrowTable"),
         ],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         links={link},
         plugin_collector=plugins,
     )

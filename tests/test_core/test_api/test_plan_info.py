@@ -1359,7 +1359,7 @@ def _class_path(cls: type) -> str:
     return f"{cls.__module__}:{cls.__qualname__}"
 
 
-def _explain_any_framework(frameworks: set[type[ComputeFramework]]) -> list[PlanStep]:
+def _explain_any_framework(frameworks: list[type[ComputeFramework]]) -> list[PlanStep]:
     return mloda.explain(
         ["plan_info_any_framework_value"],
         compute_frameworks=frameworks,
@@ -1373,7 +1373,7 @@ def _explain_nested_options_twice() -> list[PlanStep]:
             Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}}),
             Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "mutated"}}),
         ],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_NESTED_OPTIONS_PLUGINS,
     )
 
@@ -1384,7 +1384,7 @@ def _explain_any_framework_twice() -> list[PlanStep]:
             Feature("plan_info_any_framework_value", compute_framework="PandasDataFrame"),
             Feature("plan_info_any_framework_value", compute_framework="PyArrowTable"),
         ],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=_ANY_FRAMEWORK_PLUGINS,
     )
 
@@ -1394,12 +1394,12 @@ class TestPlanLock:
         lock = tmp_path / "plan.lock"
         parent_only = mloda.explain(
             ["plan_info_specialized_value"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoParentSource}),
         )
         specialized = mloda.explain(
             ["plan_info_specialized_value"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_SPECIALIZED_PLUGINS,
         )
         write_plan_lock(parent_only, lock)
@@ -1417,9 +1417,9 @@ class TestPlanLock:
 
     def test_a_framework_tie_break_change_is_caught(self, tmp_path: Path) -> None:
         lock = tmp_path / "plan.lock"
-        write_plan_lock(_explain_any_framework({PyArrowTable}), lock)
+        write_plan_lock(_explain_any_framework([PyArrowTable]), lock)
 
-        both = _explain_any_framework({PandasDataFrame, PyArrowTable})
+        both = _explain_any_framework([PandasDataFrame, PyArrowTable])
         assert [step.compute_framework for step in both] == [PandasDataFrame], "the tie-break must pick pandas"
 
         with pytest.raises(PlanLockMismatchError, match="PandasDataFrame"):

@@ -338,7 +338,7 @@ class TestAggPandasIntegration:
                 # "sales__std_aggr",
                 # "sales__var_aggr",
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

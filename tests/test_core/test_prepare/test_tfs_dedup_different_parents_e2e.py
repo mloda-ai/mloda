@@ -80,7 +80,7 @@ def _prepare_session() -> mlodaAPI:
             Feature("dedup_result", options=Options({"dedup_variant": "x"})),
             Feature("dedup_result", options=Options({"dedup_variant": "y"})),
         ],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=_PLUGINS,
     )
 

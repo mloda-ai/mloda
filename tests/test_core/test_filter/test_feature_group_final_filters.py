@@ -524,7 +524,7 @@ class TestFeatureGroupFinalFilters:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
             global_filter=global_filter,
@@ -548,7 +548,7 @@ class TestFeatureGroupFinalFilters:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={case.compute_framework},
+            compute_frameworks=[case.compute_framework],
             parallelization_modes=modes,
             flight_server=flight_server,
             global_filter=global_filter,
@@ -590,7 +590,7 @@ class TestFeatureGroupFinalFilters:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
             global_filter=global_filter,
@@ -627,7 +627,7 @@ class TestFeatureGroupFinalFilters:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTableInlineEngine},
+            compute_frameworks=[PyArrowTableInlineEngine],
             parallelization_modes=modes,
             flight_server=flight_server,
             global_filter=global_filter,
@@ -662,7 +662,7 @@ class TestFeatureGroupFinalFilters:
 
         result = MlodaTestRunner.run_api(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             parallelization_modes=modes,
             flight_server=flight_server,
             global_filter=global_filter,
@@ -690,7 +690,7 @@ class TestFeatureGroupFinalFilters:
         with pytest.raises(Exception, match=case.match):
             MlodaTestRunner.run_api(
                 features,
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 parallelization_modes=modes,
                 flight_server=flight_server,
                 global_filter=global_filter,
@@ -715,7 +715,7 @@ class TestFeatureGroupFinalFilters:
         with pytest.raises(Exception, match="expects numeric comparison but column has type"):
             MlodaTestRunner.run_api(
                 features,
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 parallelization_modes=modes,
                 flight_server=flight_server,
                 global_filter=global_filter,

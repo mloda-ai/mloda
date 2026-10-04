@@ -109,7 +109,7 @@ def _link() -> Link:
 def _prepare_session() -> mlodaAPI:
     return mloda.prepare(
         ["HopIdC", Feature("hop_id_bjid", options=Options({"hop_id_variant": "other"}))],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         links={_link()},
         plugin_collector=_PLUGINS,
     )

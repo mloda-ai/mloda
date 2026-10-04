@@ -320,7 +320,7 @@ class TestPolarsLazyAggregationIntegration:
                 # "sales__std_aggr",
                 # "sales__var_aggr",
             ],
-            compute_frameworks={PolarsLazyDataFrame},
+            compute_frameworks=[PolarsLazyDataFrame],
             plugin_collector=plugin_collector,
         )
 

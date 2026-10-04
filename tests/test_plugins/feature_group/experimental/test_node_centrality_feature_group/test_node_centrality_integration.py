@@ -97,7 +97,7 @@ class TestNodeCentralityPandasIntegration:
                 "source__eigenvector_centrality",  # Eigenvector centrality
                 "source__pagerank_centrality",  # PageRank centrality
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -160,7 +160,7 @@ class TestNodeCentralityPandasIntegration:
                 degree_feature,
                 betweenness_feature,
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -210,7 +210,7 @@ class TestNodeCentralityPandasIntegration:
                 "target",  # Target node feature
                 degree_feature,
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -248,7 +248,7 @@ class TestNodeCentralityPandasIntegration:
         def run_centrality(context: dict[str, Any]) -> list[float]:
             result = mloda.run_all(
                 ["source", "target", "weight", Feature("placeholder1", Options(context=context))],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=plugin_collector,
             )
             for df in result:
@@ -304,7 +304,7 @@ class TestNodeCentralityPandasIntegration:
                 degree_undirected,
                 degree_directed,
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

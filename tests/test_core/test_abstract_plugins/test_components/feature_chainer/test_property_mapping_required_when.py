@@ -297,7 +297,7 @@ class TestRequiredWhenRunAll:
         )
         results = mloda.run_all(
             features=[feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         assert len(results) == 1
@@ -312,7 +312,7 @@ class TestRequiredWhenRunAll:
         )
         results = mloda.run_all(
             features=[feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         assert len(results) == 1
@@ -328,7 +328,7 @@ class TestRequiredWhenRunAll:
         with pytest.raises(ValueError, match="No feature groups found") as exc_info:
             mloda.run_all(
                 features=[feature],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=plugin_collector,
             )
         assert (

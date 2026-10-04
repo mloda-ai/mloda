@@ -83,7 +83,7 @@ def _observe(shared: Feature, twin: Feature, feature_group: type[FeatureGroup], 
     }
     results = mloda.run_all(
         [shared],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
         global_filter=global_filter,
         copy_features=False,
@@ -237,7 +237,7 @@ def _run_cached_input_feature() -> dict[str, Any]:
 
     mloda.run_all(
         [consumer],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         copy_features=False,
     )
@@ -253,7 +253,7 @@ def _run_cached_input_feature() -> dict[str, Any]:
     frames = list(
         mloda.run_all(
             [consumer],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
             copy_features=False,

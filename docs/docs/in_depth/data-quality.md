@@ -57,7 +57,7 @@ As we run it, it will return an error.
 
 ```text
 results = mloda.run_all(
-            ["DocSimpleValidateInputFeatures"], {PyArrowTable}
+            ["DocSimpleValidateInputFeatures"], [PyArrowTable]
         )
 ValueError: Data should have 3 elements
 ```
@@ -128,7 +128,7 @@ The validator should raise an error again.
 
 ```text
 results = mloda.run_all(
-            ["DocCustomValidateInputFeatures"], {PyArrowTable}
+            ["DocCustomValidateInputFeatures"], [PyArrowTable]
         )
 SchemaError: Column 'DocBaseValidateInputFeaturesBase' failed element-wise validator: in_range(1, 2)
 ```
@@ -158,7 +158,7 @@ class DokuValidateInputFeatureExtender(Extender):
 example_feature = Feature("DocCustomValidateInputFeatures", {"ValidationLevel": "warning"})
 
 results = mloda.run_all(
-            [example_feature], {PyArrowTable}, function_extender={DokuValidateInputFeatureExtender()}
+            [example_feature], [PyArrowTable], function_extender={DokuValidateInputFeatureExtender()}
         )
 ```
 This time it does not raise an error, we should see the following output:
@@ -202,7 +202,7 @@ class DocBaseValidateOutputFeaturesBase(FeatureGroup):
             raise ValueError("Data should have 3 elements")
 
 results = mloda.run_all(
-            ["DocBaseValidateOutputFeaturesBase"], {PyArrowTable}
+            ["DocBaseValidateOutputFeaturesBase"], [PyArrowTable]
         )
 results
 ```
@@ -231,7 +231,7 @@ This one should fail:
 
 ```text
 results = mloda.run_all(
-            ["DocBaseValidateOutputFeaturesBaseNegativePandera"], {PyArrowTable}
+            ["DocBaseValidateOutputFeaturesBaseNegativePandera"], [PyArrowTable]
         )
 SchemaError: Column 'DocBaseValidateOutputFeaturesBaseNegativePandera' failed element-wise validator: in_range(1, 2)
 ```
@@ -253,7 +253,7 @@ class ValidateOutputFeatureExtender(Extender):
         return result
 
 results = mloda.run_all(
-            ["DocBaseValidateOutputFeaturesBase"], {PyArrowTable},
+            ["DocBaseValidateOutputFeaturesBase"], [PyArrowTable],
             function_extender={ValidateOutputFeatureExtender()}
         )
 ```

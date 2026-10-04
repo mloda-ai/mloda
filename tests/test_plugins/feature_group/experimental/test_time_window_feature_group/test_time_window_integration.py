@@ -46,7 +46,7 @@ class TestTimeWindowPandasIntegration:
                 "pressure__min_2_day_window",  # 2-day minimum pressure
                 "wind_speed__sum_4_day_window",  # 4-day sum of wind speed
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -86,7 +86,7 @@ class TestTimeWindowPyArrowIntegration:
                 "pressure__min_2_day_window",  # 2-day minimum pressure
                 "wind_speed__sum_4_day_window",  # 4-day sum of wind speed
             ],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             plugin_collector=plugin_collector,
         )
 

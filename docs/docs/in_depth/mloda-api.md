@@ -25,7 +25,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 #### Configuration for mlodaAPI
 
 -   **requested_features**: Specify the features to process (as names, Feature objects, or a Features container).
--   **compute_frameworks** (optional): Limit the compute frameworks using framework types or names.
+-   **compute_frameworks** (optional): Limit the compute frameworks using an ordered list of framework types or names. When several can run a feature, the first listed wins. A set or an unknown name raises.
 -   **links** (optional): Define dataset merging links with Link objects.
 -   **data_access_collection** (optional): Provide data sources for feature identification.
 -   **function_extender** (optional): Add function extenders to customize computations. Session-level: accepted by every call that plans (the constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, `diagnose()`) and snapshotted then; not accepted by `run()`/`stream_run()`, so changing the set afterwards has no effect.
@@ -103,7 +103,7 @@ from mloda.steward import (
 
 ##### resolve_feature
 
-Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks`, and returns a `ResolvedFeature` (8 fields, including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
+Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks` (a set that only restricts candidates), and returns a `ResolvedFeature` (8 fields, including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
 
 ```python
 from mloda.steward import resolve_feature

@@ -776,7 +776,7 @@ def test_end2end_python_feature_abstract_family_base_scope_resolves_to_pandas_su
     results = list(
         mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {ScopePythonAggregationSource, PandasAggregatedFeatureGroup}
             ),
@@ -820,7 +820,7 @@ def test_end2end_one_declared_child_shared_by_two_consumers(path: str) -> None:
                 Feature(sum_name, Options(group=sum_group, context=context)),
                 Feature(max_name, Options(group=max_group, context=context)),
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
             ),

@@ -78,7 +78,7 @@ class ChangeCfwThird(FeatureGroup):
         return pc.multiply(data.column("ChangeCfw"), 2)
 
 
-COMPUTE_FRAMEWORKS: set[type[ComputeFramework]] = {PyArrowTable, SecondCfw, ThirdCfw}
+COMPUTE_FRAMEWORKS: list[type[ComputeFramework]] = [PyArrowTable, SecondCfw, ThirdCfw]
 
 
 @PARALLELIZATION_MODES_SYNC_THREADING

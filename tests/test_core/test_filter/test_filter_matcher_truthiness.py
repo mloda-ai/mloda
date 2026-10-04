@@ -633,7 +633,7 @@ def _run() -> tuple[dict[str, Any] | None, str | None]:
         partial(
             mloda.run_all,
             [Feature(E2E_MAIN)],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
         )
@@ -867,7 +867,7 @@ def _run_built(build: Callable[[], type[FeatureGroup]]) -> tuple[dict[str, Any] 
         partial(
             mloda.run_all,
             [Feature(E2E_MAIN)],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
         )

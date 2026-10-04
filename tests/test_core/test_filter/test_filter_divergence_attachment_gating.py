@@ -169,7 +169,7 @@ def _run(
     global_filter.add_filter(Feature(filter_target, filter_options), FilterType.EQUAL, {"value": 1})
     results = mloda.run_all(
         [Feature(FDG_HOST, host_options)],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )
@@ -242,7 +242,7 @@ def _run_reusing(
     collector = PluginCollector.enabled_feature_groups({_engine_probe(served, mapping)})
     results = mloda.run_all(
         [Feature(FDG_HOST, host_options or Options())],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )

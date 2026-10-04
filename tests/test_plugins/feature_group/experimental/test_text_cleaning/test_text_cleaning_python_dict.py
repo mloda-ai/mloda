@@ -326,7 +326,7 @@ class TestTextCleaningPythonDictIntegration:
         # Run the mloda with text cleaning features
         result = mloda.run_all(
             feature_list,  # type: ignore
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=plugin_collector,
         )
 

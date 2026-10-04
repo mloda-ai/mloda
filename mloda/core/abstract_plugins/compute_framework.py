@@ -1,7 +1,7 @@
 import contextlib
 import pickle  # nosec B403
 from abc import ABC
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextvars import ContextVar
 from typing import Any, final
 from uuid import UUID, uuid4
@@ -34,6 +34,18 @@ _PYARROW_REASON = "this operation"
 _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
 )
+
+_framework_position: ContextVar[dict[type["ComputeFramework"], int]] = ContextVar("_framework_position", default={})
+
+
+@contextlib.contextmanager
+def framework_preference(positions: Mapping[type["ComputeFramework"], int]) -> Generator[None, None, None]:
+    """Rank frameworks by their position for select_deterministic within the scope; equal positions tie."""
+    token = _framework_position.set(dict(positions))
+    try:
+        yield
+    finally:
+        _framework_position.reset(token)
 
 
 def _no_rows(data: Any) -> int | None:
@@ -744,14 +756,18 @@ class ComputeFramework(ABC):
     @staticmethod
     @final
     def select_deterministic(frameworks: Iterable[type["ComputeFramework"]]) -> type["ComputeFramework"]:
-        """Pick by connection requirement, then a total name key (set iteration over classes is id-based)."""
+        """Pick by the run's preference, connection requirement, then a total name key (set iteration is id-based)."""
         candidates = list(frameworks)
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
 
+        position = _framework_position.get()
+        unlisted = max(position.values(), default=-1) + 1
+
         # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
-        def key(framework: type["ComputeFramework"]) -> tuple[int, str, str, str]:
+        def key(framework: type["ComputeFramework"]) -> tuple[int, int, str, str, str]:
             return (
+                position.get(framework, unlisted),
                 _CONNECTION_RANK[framework.connection_requirement()],
                 framework.get_class_name(),
                 framework.__module__,

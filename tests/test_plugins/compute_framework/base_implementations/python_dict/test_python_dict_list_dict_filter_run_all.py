@@ -53,7 +53,7 @@ def test_list_dict_output_with_filter_run_all(flight_server: Any) -> None:
 
     result = MlodaTestRunner.run_api(
         features,
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         parallelization_modes={ParallelizationMode.SYNC},
         flight_server=flight_server,
         global_filter=global_filter,

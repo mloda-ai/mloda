@@ -61,7 +61,7 @@ class TestPrepareReturnsInstance:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
@@ -85,7 +85,7 @@ class TestRunReturnsResults:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
@@ -116,14 +116,14 @@ class TestRunMatchesRunAllOutput:
 
         run_all_result = mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
@@ -155,7 +155,7 @@ class TestMultipleSequentialRuns:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=initial_api_data,
             plugin_collector=_enabled,
         )
@@ -205,7 +205,7 @@ class TestStepStateDoesNotLeakBetweenRuns:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )

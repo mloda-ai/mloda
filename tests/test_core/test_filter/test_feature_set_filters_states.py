@@ -153,7 +153,7 @@ def _run(filter_on: str | None) -> dict[str, int]:
 
     results = mloda.run_all(
         [FSS_MATCHING, FSS_UNRELATED],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )
@@ -177,7 +177,7 @@ def _run_split() -> dict[str, int]:
             Feature(FSS_SPLIT_TENANT_X, Options(group={FSS_TENANT_KEY: "x"})),
             Feature(FSS_SPLIT_TENANT_Y, Options(group={FSS_TENANT_KEY: "y"})),
         ],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
         global_filter=global_filter,
     )
@@ -202,7 +202,7 @@ def _run_two_runs(share_global_filter: bool) -> dict[str, int]:
     first_collector = PluginCollector.enabled_feature_groups({matching})
     first = mloda.run_all(
         [FSS_MATCHING],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=first_collector,
         global_filter=first_filter,
     )
@@ -211,7 +211,7 @@ def _run_two_runs(share_global_filter: bool) -> dict[str, int]:
     second_collector = PluginCollector.enabled_feature_groups({unrelated})
     second = mloda.run_all(
         [FSS_UNRELATED],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=second_collector,
         global_filter=second_filter,
     )

@@ -40,7 +40,7 @@ class TestArtifactsRunGetArtifacts:
     """Test the constructor + run() + get_artifacts() pattern for saving artifacts."""
 
     def test_run_returns_artifacts(self) -> None:
-        api = mloda(["PublicApiArtifactFeature"], {PyArrowTable})
+        api = mloda(["PublicApiArtifactFeature"], [PyArrowTable])
         api.run()
         artifacts = api.get_artifacts()
 
@@ -53,6 +53,6 @@ class TestArtifactsRunAll:
     def test_run_all_loads_artifact_via_options(self) -> None:
         artifacts = {"PublicApiArtifactFeature": "TestPublicApiArtifact"}
         feat = Feature(name="PublicApiArtifactFeature", options=artifacts)
-        result = mloda.run_all([feat], {PyArrowTable})
+        result = mloda.run_all([feat], [PyArrowTable])
 
         assert len(result) == 1

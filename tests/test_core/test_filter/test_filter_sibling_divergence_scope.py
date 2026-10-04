@@ -227,7 +227,7 @@ def _run(
     with caplog.at_level(logging.WARNING, logger=EP_LOGGER_NAME):
         results = mloda.run_all(
             features,
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=collector,
             global_filter=global_filter,
         )
@@ -333,7 +333,7 @@ def _cross_run_modes(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ...],
         for mode in ("a", "b"):
             mloda.run_all(
                 [Feature(FSD_FRESH_HOST, Options(context={FSD_MODE_KEY: mode}))],
-                compute_frameworks={PythonDictFramework},
+                compute_frameworks=[PythonDictFramework],
                 plugin_collector=collector,
                 global_filter=global_filter,
             )

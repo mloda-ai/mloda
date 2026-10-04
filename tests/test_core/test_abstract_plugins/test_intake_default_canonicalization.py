@@ -266,7 +266,7 @@ def _run_twins(
     collector = PluginCollector.enabled_feature_groups({fg})
     results = mloda.run_all(
         [Feature(feature_name, options) for options in twin_options],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
     )
     return list(results)
@@ -288,7 +288,7 @@ def _run_parent_child(
     collector = PluginCollector.enabled_feature_groups({parent_fg, child_fg})
     results = mloda.run_all(
         [Feature(parent_name, options)],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
     )
     assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"
@@ -308,7 +308,7 @@ def _run_alias_probe() -> list[Any]:
     shared_options = Options()
     results = mloda.run_all(
         [Feature(IDC_ALIAS_NAME_A, shared_options), Feature(IDC_ALIAS_NAME_B, shared_options)],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
     )
     return list(results)
@@ -325,7 +325,7 @@ def _run_dup_parents() -> list[Any]:
     collector = PluginCollector.enabled_feature_groups({parent_fg, child_fg})
     results = mloda.run_all(
         [Feature(IDC_DUP_PARENT_A), Feature(IDC_DUP_PARENT_B)],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
     )
     return list(results)

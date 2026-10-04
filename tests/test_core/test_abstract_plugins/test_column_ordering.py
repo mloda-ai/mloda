@@ -167,7 +167,7 @@ class TestApiColumnOrderingParameter:
         plugin_collector = PluginCollector.enabled_feature_groups({SimpleTestFeature})
         result = mloda.run_all(
             [Feature(name="SimpleTestFeature")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             column_ordering="alphabetical",
         )
@@ -177,7 +177,7 @@ class TestApiColumnOrderingParameter:
         plugin_collector = PluginCollector.enabled_feature_groups({SimpleTestFeature})
         result = mloda.run_all(
             [Feature(name="SimpleTestFeature")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             column_ordering="request_order",
         )
@@ -188,7 +188,7 @@ class TestApiColumnOrderingParameter:
         with pytest.raises(ValueError):
             mloda.run_all(
                 [Feature(name="SimpleTestFeature")],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=plugin_collector,
                 column_ordering="invalid",
             )
@@ -197,7 +197,7 @@ class TestApiColumnOrderingParameter:
         plugin_collector = PluginCollector.enabled_feature_groups({SimpleTestFeature})
         api = mloda(
             [Feature(name="SimpleTestFeature")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             column_ordering="alphabetical",
         )
@@ -262,7 +262,7 @@ class TestColumnOrderingFullChain:
         plugin_collector = PluginCollector.enabled_feature_groups({SimpleTestFeature})
         api = mloda(
             [Feature(name="SimpleTestFeature")],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             column_ordering="alphabetical",
         )
@@ -384,7 +384,7 @@ class TestEndToEndColumnOrdering:
                 Feature(name="FeatureD"),
                 Feature(name="FeatureB"),
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             column_ordering="alphabetical",
         )
@@ -408,7 +408,7 @@ class TestEndToEndColumnOrdering:
                 Feature(name="FeatureD"),
                 Feature(name="FeatureB"),
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             column_ordering="request_order",
         )

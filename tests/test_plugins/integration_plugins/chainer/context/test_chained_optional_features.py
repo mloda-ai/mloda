@@ -81,7 +81,7 @@ class TestChainedFeatures:
                 feature1,
                 "Sales",
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         # Currently, we duplicate here the data. This can be changed in the future.
@@ -91,7 +91,7 @@ class TestChainedFeatures:
             [
                 feature4,
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         assert len(result) == 1

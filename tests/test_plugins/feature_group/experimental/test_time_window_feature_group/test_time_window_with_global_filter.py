@@ -101,7 +101,7 @@ class TestTimeWindowWithGlobalFilter:
                 "temperature__avg_2_day_window",  # 2-day average temperature
                 "humidity__max_3_day_window",  # 3-day maximum humidity
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             global_filter=global_filter,  # Pass the global filter to the mloda
         )
@@ -241,7 +241,7 @@ class TestTimeWindowWithGlobalFilter:
                 temperature,
                 avg_3_day_window_temperature,
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
             global_filter=global_filter,
         )

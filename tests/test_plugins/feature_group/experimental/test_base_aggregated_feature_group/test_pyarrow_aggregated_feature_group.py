@@ -448,7 +448,7 @@ class TestAggPyArrowIntegration:
                 # "sales__std_aggr",
                 # "sales__var_aggr",
             ],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             plugin_collector=plugin_collector,
         )
 

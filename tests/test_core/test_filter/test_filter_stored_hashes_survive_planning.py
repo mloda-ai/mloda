@@ -87,7 +87,7 @@ def test_a_renaming_run_keeps_every_probed_filter_findable() -> None:
 
     MlodaTestRunner.run_api(
         Features([Feature(SPHR_VALUE)]),
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         parallelization_modes={ParallelizationMode.SYNC},
         global_filter=global_filter,
         plugin_collector=_SPHR_ENABLED,
@@ -148,7 +148,7 @@ def _plan_two_hosts_sharing(key: str, shared: Feature, copy_features: bool = Tru
             Feature(SPHN_HOST_ONE, Options(group={key: shared, SPHN_VARIANT: 1})),
             Feature(SPHN_HOST_TWO, Options(group={key: shared, SPHN_VARIANT: 2})),
         ],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=_SPHN_ENABLED,
         global_filter=global_filter,
         copy_features=copy_features,

@@ -554,7 +554,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             flight_server=flight_server,
             parallelization_modes=modes,
             plugin_collector=plugin_collector,
-            compute_frameworks={IcebergFramework},
+            compute_frameworks=[IcebergFramework],
             global_filter=global_filter,
         )
 
@@ -574,7 +574,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
-            compute_frameworks={IcebergFramework},
+            compute_frameworks=[IcebergFramework],
             global_filter=global_filter,
         )
 
@@ -595,7 +595,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
-            compute_frameworks={IcebergFramework},
+            compute_frameworks=[IcebergFramework],
             global_filter=global_filter,
         )
         unfiltered_result = mloda.run_all(
@@ -603,7 +603,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
-            compute_frameworks={IcebergFramework},
+            compute_frameworks=[IcebergFramework],
         )
 
         filtered_data = next(iter(filtered_result))
@@ -628,7 +628,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
-            compute_frameworks={IcebergFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, IcebergFramework],
             links={link},
             global_filter=global_filter,
         )
@@ -663,7 +663,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
-            compute_frameworks={IcebergFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, IcebergFramework],
             links={link},
             global_filter=global_filter,
         )
@@ -703,7 +703,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             parallelization_modes=modes,
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
-            compute_frameworks={IcebergFramework},
+            compute_frameworks=[IcebergFramework],
         )
 
         # The result should be a PyArrow table (converted from Iceberg)
@@ -743,7 +743,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
-            compute_frameworks={IcebergFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, IcebergFramework],
         )
 
         # Verify results
@@ -781,7 +781,7 @@ class TestIcebergIntegrationWithMlodaAPI:
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=plugin_collector,
             data_access_collection=data_access_collection,
-            compute_frameworks={IcebergFramework},
+            compute_frameworks=[IcebergFramework],
         )
 
         # Verify results

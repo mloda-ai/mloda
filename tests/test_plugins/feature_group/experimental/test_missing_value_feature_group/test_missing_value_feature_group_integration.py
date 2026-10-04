@@ -61,7 +61,7 @@ class TestMissingValueFeatureGroupIntegration:
         # test with pre parsing the features
         results = mloda.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         assert len(results) == 1
@@ -85,7 +85,7 @@ class TestMissingValueFeatureGroupIntegration:
         # test with mloda parsing the features
         results2 = mloda.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -112,7 +112,7 @@ class TestMissingValueFeatureGroupIntegration:
         )
 
         # test with pre parsing the features
-        results = mloda.run_all([f1], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        results = mloda.run_all([f1], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
 
         assert len(results) == 1
 
@@ -130,7 +130,7 @@ class TestMissingValueFeatureGroupIntegration:
         assert imputed_df["category__constant_imputed"].iloc[4] == "Unknown"
 
         # test with mloda parsing the features
-        results2 = mloda.run_all([f1], compute_frameworks={PandasDataFrame}, plugin_collector=plugin_collector)
+        results2 = mloda.run_all([f1], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
 
         assert len(results2) == 1
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))

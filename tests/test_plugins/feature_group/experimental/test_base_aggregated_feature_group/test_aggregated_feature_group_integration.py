@@ -61,7 +61,7 @@ class TestAggregatedFeatureGroupIntegration:
         # test with pre parsing the features
         results = mloda.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -80,7 +80,7 @@ class TestAggregatedFeatureGroupIntegration:
         # test with mloda parsing the features
         results2 = mloda.run_all(
             [f1, f2],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

@@ -131,7 +131,7 @@ class TestInputDataLoadHookFiresAlongsideCalculateExtender:
 
         mloda.run_all(
             [column],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
             function_extender={calc_extender, fetch_extender},
         )
@@ -168,7 +168,7 @@ class TestInputDataLoadHookFiresWithOnlyFetchExtenderRegistered:
 
         mloda.run_all(
             [column],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
             function_extender={fetch_extender},
         )
@@ -195,7 +195,7 @@ class TestNoExtenderRegisteredBaselineRegressionGuard:
 
         result = mloda.run_all(
             [column],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
         )
 
@@ -214,7 +214,7 @@ class TestDenyBeforeLoad:
         with pytest.raises(RuntimeError, match="denied input data load"):
             mloda.run_all(
                 [column],
-                compute_frameworks={PythonDictFramework},
+                compute_frameworks=[PythonDictFramework],
                 data_access_collection=DataAccessCollection(files={str(path)}),
                 function_extender={extender},
             )
@@ -232,7 +232,7 @@ class TestDenyWithFallback:
         with caplog.at_level(logging.WARNING):
             result = mloda.run_all(
                 [column],
-                compute_frameworks={PythonDictFramework},
+                compute_frameworks=[PythonDictFramework],
                 data_access_collection=DataAccessCollection(files={str(path)}),
                 function_extender={extender},
             )
@@ -255,7 +255,7 @@ class TestExtenderCannotSubstituteTheLoadedData:
 
         result = mloda.run_all(
             [column],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
             function_extender={extender},
         )
@@ -284,7 +284,7 @@ class TestComputeFrameworkCurrentShortCircuit:
 
         mloda.run_all(
             [column],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
             function_extender={_NoOpValidateInputFeatureExtender()},
         )
@@ -345,7 +345,7 @@ class TestDataAccessIdentityHidesDictCredentialValues:
 
         mloda.run_all(
             ["name"],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             data_access_collection=DataAccessCollection(
                 credentials=[{SQLITEReader.db_path(): str(db_path), "user": "alice", "password": "hunter2"}]  # nosec B105
             ),
@@ -376,7 +376,7 @@ class TestDataAccessIdentityHidesDictCredentialValues:
 
         mloda.run_all(
             ["col_a", "col_b"],
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): str(db_path)}]),
             plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
             function_extender={extender},
@@ -961,7 +961,7 @@ class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
 
         mloda.run_all(
             [column],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
             function_extender={fetch_extender},
         )
@@ -1200,7 +1200,7 @@ class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
 
         mloda.run_all(
             [column],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
             function_extender={calc_extender, fetch_extender},
         )
@@ -1283,7 +1283,7 @@ class TestInputDataLoadCarriesSpecializedFrom:
 
         mloda.run_all(
             [_REPLACED_COLUMN],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {_ReplacedReadParentFeatureGroup, _ReplacingReadChildFeatureGroup}

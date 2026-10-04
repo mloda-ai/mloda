@@ -182,7 +182,7 @@ def _run_probe(
     collector = PluginCollector.enabled_feature_groups({fg})
     results = mloda.run_all(
         [Feature(feature_name, options if options is not None else Options())],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=collector,
     )
     assert len(results) == 1, f"expected exactly one result frame, got: {results!r}"

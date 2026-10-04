@@ -171,7 +171,7 @@ class TestForwardedNameMismatchStringChildEndToEnd:
         with pytest.raises(ValueError, match=OPERATION_KEY):
             mloda.run_all(
                 [consumer],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {NameMis579SourceGroup, NameMis579ChainedGroup, NameMis579StringConsumerGroup}
                 ),
@@ -186,7 +186,7 @@ class TestForwardedNameMismatchEndToEnd:
         with pytest.raises(ValueError, match=OPERATION_KEY):
             mloda.run_all(
                 [consumer],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {NameMis579SourceGroup, NameMis579ChainedGroup, NameMis579ConsumerGroup}
                 ),

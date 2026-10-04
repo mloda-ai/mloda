@@ -375,7 +375,7 @@ class TestEndToEndPythonDictCsv:
 
         result = mloda.run_all(
             ["a", "b", "c"],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
         )
 

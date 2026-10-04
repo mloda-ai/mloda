@@ -978,9 +978,9 @@ def test_stable_text_keeps_a_reader_tuple_option_redacted() -> None:
         def data_access_name(cls) -> str:
             return "reader"
 
-    options = Options(group={"access": (_Reader, {"password": "hunter2-secret"})})
+    options = Options(group={"access": (_Reader, {"dsn": "dsn-marker-text"})})
 
-    assert "hunter2-secret" not in choose_compute_frameworks.stable_text(options)
+    assert "dsn-marker-text" not in choose_compute_frameworks.stable_text(options)
 
 
 def _block_data_types(types: list[DataType]) -> list[str]:

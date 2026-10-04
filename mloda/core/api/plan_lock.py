@@ -9,7 +9,7 @@ from typing import Any
 
 from mloda.core.api.plan_info import PlanStep
 
-PLAN_LOCK_FORMAT = 1
+PLAN_LOCK_FORMAT = 2
 
 
 class PlanLockMismatchError(Exception):
@@ -38,6 +38,7 @@ def _lock_content(plan: Sequence[PlanStep]) -> dict[str, Any]:
                     "feature_names": sorted(step.feature_names),
                     "feature_group": _class_path(step.feature_group),
                     "compute_framework": _class_path(step.compute_framework),
+                    "compute_framework_reason": step.compute_framework_reason,
                     "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
                     "reader": None if access is None else _class_path(access[0]),
                 }

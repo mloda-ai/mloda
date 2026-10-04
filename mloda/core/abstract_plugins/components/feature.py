@@ -135,7 +135,9 @@ class Feature:
         self.compute_frameworks = {cf} if cf else None
 
         self.uuid = uuid4()
+        self.framework_pinned = cf is not None
         self.chosen_compute_framework: type[ComputeFramework] | None = None
+        self.chosen_compute_framework_reason: str | None = None
 
         self.data_type = None
         if data_type is not None:

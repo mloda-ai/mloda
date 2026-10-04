@@ -1,4 +1,5 @@
-"""Prints the plan-lock text a fresh interpreter produces, for the hash-seed stability test."""
+"""Prints the plan-lock text a fresh interpreter produces, for the hash-seed stability test.
+Also prints the explain order with framework names and reasons."""
 
 import json
 from typing import Any
@@ -92,7 +93,11 @@ def collect() -> dict[str, str]:
         links={link},
         plugin_collector=plugins,
     )
-    return {"lock": _lock_text(plan)}
+    order = [
+        [step.step_kind, step.feature_group_name, step.compute_framework_name, step.compute_framework_reason]
+        for step in plan
+    ]
+    return {"lock": _lock_text(plan), "order": json.dumps(order)}
 
 
 if __name__ == "__main__":

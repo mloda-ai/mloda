@@ -1,11 +1,13 @@
 """A link-driven framework rewrite rebinds queue Features, not the SingleFilters GlobalFilter stores."""
 
+from collections import defaultdict
 from typing import Any
 
 import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.core.engine import Engine
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import (
     Feature,
@@ -213,3 +215,46 @@ def test_a_pinned_twin_of_a_requested_column_survives_a_pinned_filter(pinned_fir
     )
 
     assert [res.to_pydict()["pinhost_val"] for res in result] == [[2, 3]]
+
+
+def _bare_engine() -> Engine:
+    engine = Engine.__new__(Engine)
+    engine.feature_group_collection = defaultdict(set)
+    engine.specialized_from = {}
+    engine.resolved_input_feature_names = {}
+    engine._declared_options_by_uuid = {}
+    engine.feature_link_parents = defaultdict(set)
+    return engine
+
+
+def _unpinned_host(name: str) -> Feature:
+    host = Feature(name)
+    host.compute_frameworks = {PandasDataFrame, PyArrowTable}
+    return host
+
+
+def test_narrowing_a_host_onto_a_pinned_filter_flags_it_pinned() -> None:
+    engine = _bare_engine()
+    host = _unpinned_host("narrow_flag_host")
+    engine.feature_group_collection[PinHostFG].add(host)
+    assert host.framework_pinned is False
+
+    returned = engine._narrow_host_to_pin(PinHostFG, host, Feature("narrow_flag_ts", compute_framework="PyArrowTable"))
+
+    assert returned is host
+    assert returned.compute_frameworks == {PyArrowTable}
+    assert returned.framework_pinned is True
+
+
+def test_merging_a_narrowed_host_into_its_twin_flags_the_survivor_pinned() -> None:
+    engine = _bare_engine()
+    host = _unpinned_host("narrow_merge_host")
+    twin = Feature("narrow_merge_host")
+    twin.compute_frameworks = {PyArrowTable}
+    engine.feature_group_collection[PinHostFG].update({host, twin})
+    assert twin.framework_pinned is False
+
+    returned = engine._narrow_host_to_pin(PinHostFG, host, Feature("narrow_merge_ts", compute_framework="PyArrowTable"))
+
+    assert returned is twin
+    assert returned.framework_pinned is True

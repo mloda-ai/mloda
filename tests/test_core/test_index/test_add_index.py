@@ -153,3 +153,12 @@ def test_create_index_feature_copies_input_data_match() -> None:
     index_feature = create_index_feature(Index(("id",)), FeatureGroup(), source)
 
     assert index_feature.input_data_match == (CsvReader, "add_index_match_access")
+
+
+def test_create_index_feature_copies_framework_pin() -> None:
+    source = Feature("add_index_pin_col", compute_framework="PyArrowTable")
+    source.framework_pinned = True
+
+    index_feature = create_index_feature(Index(("id",)), FeatureGroup(), source)
+
+    assert index_feature.framework_pinned is True

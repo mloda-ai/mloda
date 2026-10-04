@@ -283,6 +283,7 @@ mloda picks one compute framework per step group (the features of one FeatureGro
 - **Filters**: a filter pinned to a framework moves its host feature onto that framework.
 - **Conversions**: a transformer chain must exist between every parent and child on different frameworks.
 - **Choice among valid plans**: lowest cost first (one point per conversion), then the order of the run's `compute_frameworks` list, then the default order. The default order puts Pandas, Polars, PyArrow before `SELF_MANAGED` frameworks (Spark, Iceberg), before `REQUIRED` ones (DuckDB, SQLite), then class name.
+- **Reason**: each step records why it got its framework: `pinned`, `only allowed framework`, `rules exclude preferred frameworks`, `saves N conversion(s)`, `your list order` or `default order`. "saves N conversions" counts the conversions added by moving only that step to a preferred framework.
 - **Equal-cost plans**: blocks are settled in a fixed order (by FeatureGroup and feature names), each taking the most preferred framework still possible.
 - **Both ways**: a Polars-only consumer pulls its unrestricted source onto Polars, and a Polars-only source pulls its unrestricted consumers, so no transform step is needed.
 - **No valid plan**: planning raises an error naming the features and their allowed sets.

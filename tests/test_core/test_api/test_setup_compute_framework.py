@@ -161,14 +161,17 @@ class TestSetupComputeFramework:
         with pytest.raises(SetupConfigurationError, match="ordered list"):
             mloda.prepare(["some_feature"], compute_frameworks={"PandasDataFrame"})  # type: ignore[arg-type]
 
-    @pytest.mark.parametrize("output", ["PyArrowTable", PyArrowTable], ids=["name", "class"])
-    def test_output_framework_resolves_by_name_or_class(self, features: Features, output: Any) -> None:
+    @pytest.mark.parametrize(
+        ("output", "expected"),
+        [("PyArrowTable", PyArrowTable), (PyArrowTable, PyArrowTable), (None, None)],
+        ids=["name", "class", "none"],
+    )
+    def test_output_framework_resolves_by_name_or_class(
+        self, features: Features, output: Any, expected: type[ComputeFramework] | None
+    ) -> None:
         setup_compute_framework = SetupComputeFramework(["PandasDataFrame"], features, output_framework=output)
 
-        assert setup_compute_framework.output_framework is PyArrowTable
-
-    def test_output_framework_defaults_to_none(self, features: Features) -> None:
-        assert SetupComputeFramework(None, features).output_framework is None
+        assert setup_compute_framework.output_framework is expected
 
     def test_unknown_output_framework_raises(self, features: Features) -> None:
         with pytest.raises(ValueError, match="NoSuchFramework"):

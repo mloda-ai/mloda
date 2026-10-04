@@ -877,19 +877,21 @@ def test_output_framework_returns_every_frame_in_that_framework(output: Any, fea
         assert type(frame) is step.result_framework.expected_data_framework()
 
 
-@pytest.mark.parametrize("features", _RC_REQUESTS)
-def test_result_framework_names_the_type_each_frame_comes_back_in(features: list[Feature | str]) -> None:
+@pytest.mark.parametrize(
+    ("features", "expected_names"),
+    [(["rc_root"], None), (["rc_root", "rc_out"], {"PyArrowTable"})],
+    ids=["alone", "together"],
+)
+def test_result_framework_names_the_type_each_frame_comes_back_in(
+    features: list[Feature | str], expected_names: set[str] | None
+) -> None:
     result = _run_rc(features)
 
     for step, frame in result.frames():
         assert step.result_framework is not None
         assert type(frame) is step.result_framework.expected_data_framework()
-
-
-def test_requested_together_without_the_option_reports_pyarrow() -> None:
-    result = _run_rc(["rc_root", "rc_out"])
-
-    assert {step.result_framework_name for step, _ in result.frames()} == {"PyArrowTable"}
+    if expected_names is not None:
+        assert {step.result_framework_name for step, _ in result.frames()} == expected_names
 
 
 def test_stream_all_honors_output_framework() -> None:

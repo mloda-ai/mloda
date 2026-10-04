@@ -2176,19 +2176,6 @@ class TestPlanStepResultFramework:
             **options,
         )
 
-    def test_result_framework_defaults_to_none(self) -> None:
-        step = PlanStep(
-            step_kind="compute",
-            feature_names=(),
-            feature_group=None,
-            compute_framework=PandasDataFrame,
-            source_feature_group=None,
-            source_compute_framework=None,
-        )
-
-        assert step.result_framework is None
-        assert step.result_framework_name is None
-
     def test_result_framework_name_is_the_class_name(self) -> None:
         step = PlanStep(
             step_kind="compute",
@@ -2197,10 +2184,11 @@ class TestPlanStepResultFramework:
             compute_framework=PandasDataFrame,
             source_feature_group=None,
             source_compute_framework=None,
-            result_framework=PyArrowTable,
         )
+        assert step.result_framework is None
+        assert step.result_framework_name is None
 
-        assert step.result_framework_name == "PyArrowTable"
+        assert dataclasses.replace(step, result_framework=PyArrowTable).result_framework_name == "PyArrowTable"
 
     def test_without_the_option_a_requested_step_reports_its_own_framework(self) -> None:
         source, requested = [step for step in self._chained_plan() if step.step_kind == "compute"]
@@ -2208,10 +2196,19 @@ class TestPlanStepResultFramework:
         assert requested.result_framework is requested.compute_framework
         assert source.result_framework is None
 
-    def test_the_option_sets_result_framework_on_requested_steps_only(self) -> None:
-        source, requested = [
-            step for step in self._chained_plan(output_framework="PyArrowTable") if step.step_kind == "compute"
-        ]
+    @pytest.mark.parametrize("via", ["explain", "resolved_plan"])
+    def test_the_option_sets_result_framework_on_requested_steps_only(self, via: str) -> None:
+        if via == "explain":
+            plan = self._chained_plan(output_framework="PyArrowTable")
+        else:
+            session = mloda.prepare(
+                _CHAINED_FEATURES,
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=_AGGREGATION_PLUGINS,
+                output_framework="PyArrowTable",
+            )
+            plan = session.resolved_plan()
+        source, requested = [step for step in plan if step.step_kind == "compute"]
 
         assert requested.result_framework is PyArrowTable
         assert source.result_framework is None
@@ -2227,13 +2224,3 @@ class TestPlanStepResultFramework:
 
         assert {step.step_kind for step in plan} >= {"join", "compute"}
         assert all(step.result_framework is None for step in plan if step.step_kind != "compute")
-
-    def test_resolved_plan_carries_the_engines_output_framework(self) -> None:
-        session = mloda.prepare(
-            _CHAINED_FEATURES,
-            compute_frameworks=[PandasDataFrame, PyArrowTable],
-            plugin_collector=_AGGREGATION_PLUGINS,
-            output_framework="PyArrowTable",
-        )
-
-        assert [s.result_framework for s in session.resolved_plan() if s.requested_feature_names] == [PyArrowTable]

@@ -31,6 +31,9 @@ class _Rule(NamedTuple):
     why: str
 
 
+_UNFLIPPABLE = (JoinType.RIGHT, JoinType.APPEND, JoinType.UNION)
+
+
 def conversion_cost(from_framework: Framework, to_framework: Framework) -> int:
     """Cost of one transform step between two frameworks."""
     return 1
@@ -52,6 +55,23 @@ def _join_allows(jointype: JoinType, values: Values) -> bool:
     if jointype in (JoinType.APPEND, JoinType.UNION):
         return child is left
     return child is left or child is right
+
+
+def _any_join_allows(occurrences: list[tuple[JoinType, bool]], values: Values) -> bool:
+    """One link must be satisfied; a same-framework cross-group link may not be skipped (it would self-merge)."""
+    satisfied = [_join_allows(jt, values[3 * i : 3 * i + 3]) for i, (jt, _) in enumerate(occurrences)]
+    for i, (_, strict) in enumerate(occurrences):
+        if strict and values[3 * i] is values[3 * i + 1] and not satisfied[i]:
+            return False
+    return any(satisfied)
+
+
+def _swapped_pairs_differ(values: Values) -> bool:
+    """Children whose parents sit on swapped frameworks join apart, or their flipped keys would merge."""
+    left_a, right_a, child_a, left_b, right_b, child_b = values
+    if left_a is right_a or left_a is not right_b or right_a is not left_b:
+        return True
+    return child_a is not child_b
 
 
 def _same_side(values: Values) -> bool:
@@ -126,17 +146,35 @@ class ChooseComputeFrameworks:
             if host in owner and tied in owner:
                 rules.append(_Rule((owner[host], owner[tied]), lambda v: v[0] is v[1], "filter tied to its host"))
         by_link: dict[UUID, list[tuple[int, int, int]]] = {}
+        by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]] = {}
         for link, left_uuid, right_uuid, child_uuid in self.occurrences:
             joined = (owner[left_uuid], owner[right_uuid], owner[child_uuid])
             jointype = link.jointype
-            rules.append(_Rule(joined, partial(_join_allows, jointype), f"join {jointype.value}"))
-            if jointype not in (JoinType.RIGHT, JoinType.APPEND, JoinType.UNION):
+            by_child.setdefault(child_uuid, []).append((link, joined))
+            if jointype not in _UNFLIPPABLE:
                 by_link.setdefault(link.uuid, []).append(joined)
+        for occurrences in by_child.values():
+            jointypes = [link.jointype for link, _ in occurrences]
+            kinds = [
+                (
+                    link.jointype,
+                    link.left_feature_group != link.right_feature_group and link.jointype not in _UNFLIPPABLE,
+                )
+                for link, _ in occurrences
+            ]
+            rules.append(
+                _Rule(
+                    tuple(b for _, joined in occurrences for b in joined),
+                    partial(_any_join_allows, kinds),
+                    "join " + "/".join(sorted({j.value for j in jointypes})),
+                )
+            )
         for joins in by_link.values():
             for i, first in enumerate(joins):
                 for second in joins[i + 1 :]:
                     if first[2] != second[2]:
                         rules.append(_Rule(first + second, _same_side, "one side per link"))
+                        rules.append(_Rule(first + second, _swapped_pairs_differ, "swapped pairs join apart"))
         return rules
 
     def _cost_groups(

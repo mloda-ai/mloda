@@ -1,6 +1,9 @@
 import uuid
+
+import pytest
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
+from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -43,7 +46,7 @@ class TestResolveGraph:
         f3.compute_frameworks = {BaseTestComputeFramework1}
         f4 = Feature("GraphFeature4")
         f4.uuid = uuid_4
-        f4.compute_frameworks = {BaseTestComputeFramework2}
+        f4.compute_frameworks = {BaseTestComputeFramework1, BaseTestComputeFramework2}
         f5 = Feature("GraphFeature5")
         f5.uuid = uuid_5
         f5.compute_frameworks = {BaseTestComputeFramework3}
@@ -122,7 +125,9 @@ class TestResolveGraph:
         )
         return graph
 
-    def test_base_link(self) -> None:
+    def test_base_link(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The synthetic frameworks have no transformer; this test is about link keys, not conversion paths.
+        monkeypatch.setattr(ChooseComputeFrameworks, "_convertible", lambda self, source, target: True)
         links = {
             Link.inner(
                 JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),

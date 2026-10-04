@@ -461,12 +461,13 @@ def test_planner_follows_swapped_discriminators_without_complaint() -> None:
 
 
 @pytest.mark.parametrize("link_factory", STACK_FACTORIES)
-def test_a_pinned_consumer_inverts_the_stack_link_orientation(
+def test_a_pinned_consumer_does_not_invert_the_stack_link_orientation(
     link_factory: Callable[[JoinSpec, JoinSpec], Link],
 ) -> None:
+    """APPEND and UNION never flip, so the declared orientation survives a consumer on the right framework."""
     planned = _stack_scenario(link_factory, same_feature_group=False)
 
-    assert _orientations(planned) == [("PandasDataFrame", "PyArrowTable")]
+    assert _orientations(planned) == [("PyArrowTable", "PandasDataFrame")]
 
 
 @pytest.mark.parametrize("link_factory", STACK_FACTORIES)

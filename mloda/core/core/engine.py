@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
 import logging
@@ -71,7 +72,10 @@ class Engine:
         column_ordering: str | None = None,
         function_extender: set[Extender] | None = None,
         run_id: str | None = None,
+        framework_preference: Mapping[type[ComputeFramework], int] | None = None,
     ) -> None:
+        self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
+        self.filter_ties: list[tuple[UUID, UUID]] = []
         # setup variables which track the primary sources and the compute platforms
         self.function_extender = function_extender if function_extender is not None else set()
         self._hook_extenders = build_hook_extenders(self.function_extender)
@@ -176,7 +180,7 @@ class Engine:
         graph = graph_builder.graph
 
         # resolve graph into a queue
-        resolver = ResolveGraph(graph, self.links)
+        resolver = ResolveGraph(graph, self.links, self.filter_ties, self.framework_positions)
         resolver.create_initial_queue()
 
         resolver.set_nodes_per_feature_group()
@@ -501,6 +505,13 @@ class Engine:
                 # Intake may materialize declared defaults into the filter feature's options: group fills shift
                 # SingleFilter's hash, context fills shift its equality, so intake must run before it is stored.
                 self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
+                declared = next(f for f in self.global_filter.filters if f.uuid == match.uuid)
+                if declared.filter_feature.compute_frameworks:
+                    self._narrow_host_to_pin(feature_group_class, feature, match.filter_feature)
+                survivor = next(
+                    f for f in self.feature_group_collection[feature_group_class] if f == match.filter_feature
+                )
+                self.filter_ties.append((feature.uuid, survivor.uuid))
                 # The stored filter needs its own Feature: planner rewrites of the queue twin must not shift its hash.
                 # handle_filter_feature copies via Feature.__copy__, which owns the containers that decide the hash.
                 # The copy keeps the queue twin's uuid on purpose: nothing reads the stored filter feature's uuid.
@@ -509,6 +520,20 @@ class Engine:
 
             # After the loop, so the recorded filters are the renamed ones.
             self.global_filter.record_probe(feature_group_class, feature.name, feature.uuid, matched_filters)
+
+    def _narrow_host_to_pin(
+        self, feature_group_class: type[FeatureGroup], host: Feature, filter_feature: Feature
+    ) -> None:
+        """A pinned filter moves its host onto the pin; the host is rehashed so both group into one step."""
+        pin = filter_feature.compute_frameworks
+        if not pin or host.compute_frameworks == pin:
+            return
+        collection = self.feature_group_collection[feature_group_class]
+        if not any(f is host for f in collection):
+            return
+        collection.discard(host)
+        host.compute_frameworks = set(pin)
+        collection.add(host)
 
     def add_feature_link_to_links(self, feature: Feature) -> None:
         """With this functionality, we can add links with a feature instead via mloda API."""

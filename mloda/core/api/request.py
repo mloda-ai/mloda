@@ -30,7 +30,7 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.runtime.run import ExecutionOrchestrator
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_preference
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import current_verified_context
@@ -664,19 +664,19 @@ class mlodaAPI:
     def _create_engine(self) -> Engine:
         filtered = filter_extenders_by_strict_mode(self.function_extender, self.plugin_collector)
         function_extender = set(filtered) if filtered is not None else None
-        with framework_preference(self.framework_preference):
-            engine = Engine(
-                self.features,
-                self.compute_framework,
-                self.links,
-                self.data_access_collection,
-                self.global_filter,
-                self.api_input_data_collection,
-                self.plugin_collector,
-                column_ordering=self.column_ordering,
-                function_extender=function_extender,
-                run_id=self.run_id,
-            )
+        engine = Engine(
+            self.features,
+            self.compute_framework,
+            self.links,
+            self.data_access_collection,
+            self.global_filter,
+            self.api_input_data_collection,
+            self.plugin_collector,
+            column_ordering=self.column_ordering,
+            function_extender=function_extender,
+            run_id=self.run_id,
+            framework_preference=self.framework_preference,
+        )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")
         return engine

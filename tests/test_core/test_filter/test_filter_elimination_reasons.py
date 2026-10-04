@@ -99,10 +99,10 @@ NAME_ELIMINATION_STAGE: EliminationStage = "name"
 # The canonical seam's own wording over the one framework the filter would ride.
 CAPABILITY_REASON = f"supports_compute_framework rejected {[PythonDictFramework.__name__]}"
 
-# The pin gate's own wording over the filter's declared pin and the framework the host resolved to.
+# The pin gate's own wording over the filter's declared pin and the host's allowed set.
 PIN_REASON = (
     f"pinned compute framework '{PandasDataFrame.__name__}' "
-    f"is not the feature's resolved '{PythonDictFramework.__name__}'"
+    f"is not in the feature's allowed set ['{PythonDictFramework.__name__}']"
 )
 
 ABSENT_UUID = "<no uuid in the key>"  # what a ledger key carrying no filter identity reads as
@@ -1052,6 +1052,8 @@ class TestEachGateRecordsItsOwnFact:
         assert stage == FRAMEWORK_PIN_STAGE, f"the pin gate owns this drop, got stage: {stage}"
         assert PandasDataFrame.__name__ in reason, f"the reason must name the filter's pinned framework: {reason}"
         assert PythonDictFramework.__name__ in reason, f"the reason must name the feature's own framework: {reason}"
+        assert "resolved" not in reason, f"the host is no longer resolved at match time: {reason}"
+        assert reason == PIN_REASON, f"the reason must name the host's allowed set: {reason}"
 
 
 class TestAPlainNonMatchIsNotAFact:

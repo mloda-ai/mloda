@@ -46,10 +46,17 @@ def collect() -> dict[str, str]:
     link = Link.inner(
         JoinSpec(ResolvedJoinProbeLeft, PROBE_LEFT_INDEX), JoinSpec(ResolvedJoinProbeRight, PROBE_RIGHT_INDEX)
     )
-    left = _feature("resolved_join_probe_left_payload", {PandasDataFrame, PyArrowTable}, PROBE_LEFT_INDEX)
-    right = _feature("resolved_join_probe_right_payload", {PythonDictFramework, PyArrowTable}, PROBE_RIGHT_INDEX)
+    left_side: set[type[ComputeFramework]] = {PandasDataFrame, PyArrowTable}
+    right_side: set[type[ComputeFramework]] = {PythonDictFramework, PyArrowTable}
+    left = _feature("resolved_join_probe_left_payload", left_side, PROBE_LEFT_INDEX)
+    right = _feature("resolved_join_probe_right_payload", right_side, PROBE_RIGHT_INDEX)
     child = _feature("resolved_join_probe_child_payload", {PandasDataFrame})
-    key = ResolveLinks(Graph()).create_link_trekker_key(link, left.compute_frameworks, right.compute_frameworks)
+    left.chosen_compute_framework = ComputeFramework.select_deterministic(left_side)
+    right.chosen_compute_framework = ComputeFramework.select_deterministic(right_side)
+    child.chosen_compute_framework = PandasDataFrame
+    key = ResolveLinks(Graph()).create_link_trekker_key(
+        link, left.get_compute_framework(), right.get_compute_framework()
+    )
 
     graph = Graph()
     graph.add_node(left.uuid, NodeProperties(left, ResolvedJoinProbeLeft))

@@ -201,6 +201,7 @@ class ResolveLinks:
         self.graph = graph
         self.links = links
         self.link_trekker = LinkTrekker()
+        self.occurrences: list[tuple[Link, UUID, UUID, UUID]] = []
 
     def add_links_to_queue(self) -> list[UUID | LinkFrameworkTrekker]:
         queue = self.graph.queue
@@ -224,12 +225,23 @@ class ResolveLinks:
 
         return queue_with_link
 
-    def resolve_links(self) -> None:
+    def match_links(self) -> None:
         self.graph.set_direct_parents_for_each_child()
         self.graph.set_all_parents_for_each_child()
         self.graph.set_root_parents_by_direct_()
 
         self.go_through_each_child_and_its_parents_and_look_for_links()
+
+    def resolve_links(self) -> None:
+        """Build trekker keys from the chosen frameworks of each recorded occurrence."""
+        nodes = self.graph.get_nodes()
+        for link, left_uuid, right_uuid, child in self.occurrences:
+            key = self.create_link_trekker_key(
+                link,
+                nodes[left_uuid].feature.get_compute_framework(),
+                nodes[right_uuid].feature.get_compute_framework(),
+            )
+            self.set_link_trekker(key, child)
         ResolveLinkValidator.validate_no_conflicting_join_types(self.link_trekker.data)
 
     def get_link_trekker(self) -> LinkTrekker:
@@ -269,10 +281,7 @@ class ResolveLinks:
                     )
 
                     for matched_link in matched_links:
-                        key = self.create_link_trekker_key(
-                            matched_link, r_left.feature.compute_frameworks, r_right.feature.compute_frameworks
-                        )
-                        self.set_link_trekker(key, child)
+                        self.occurrences.append((matched_link, parent_in, parent_out, child))
 
     def _find_matching_links(
         self,
@@ -393,15 +402,8 @@ class ResolveLinks:
     def set_link_trekker(self, link_trekker_key: LinkFrameworkTrekker, uuid: UUID) -> None:
         self.link_trekker.update(link_trekker_key, uuid)
 
+    @staticmethod
     def create_link_trekker_key(
-        self,
-        link: Link,
-        left_frameworks: set[type[ComputeFramework]] | None = None,
-        right_frameworks: set[type[ComputeFramework]] | None = None,
+        link: Link, left_framework: type[ComputeFramework], right_framework: type[ComputeFramework]
     ) -> LinkFrameworkTrekker:
-        """Both sides reduce exactly like Feature.get_compute_framework; the join lookup compares the two."""
-        if left_frameworks is None or right_frameworks is None:
-            raise ValueError("Left or right frameworks are not set!")
-        left_framework = ComputeFramework.select_deterministic(left_frameworks)
-        right_framework = ComputeFramework.select_deterministic(right_frameworks)
         return (link, left_framework, right_framework)

@@ -611,4 +611,9 @@ class Feature:
             return self.chosen_compute_framework
         FeatureValidator.validate_compute_frameworks_resolved(self.compute_frameworks, str(self.name))
         assert self.compute_frameworks is not None
-        return ComputeFramework.select_deterministic(self.compute_frameworks)
+        if len(self.compute_frameworks) != 1:
+            raise ValueError(
+                f"Feature {self.name} has no chosen compute framework and allows {len(self.compute_frameworks)}: "
+                f"{sorted(c.get_class_name() for c in self.compute_frameworks)}."
+            )
+        return next(iter(self.compute_frameworks))

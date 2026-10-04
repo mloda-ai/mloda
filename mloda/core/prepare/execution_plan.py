@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from copy import copy, deepcopy
-from typing import Any, Generator, NamedTuple
+from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
@@ -18,7 +18,6 @@ from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.declared_sides import split_by_declared_side
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
-from mloda.core.prepare.resolve_graph import PlannedQueue
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
 from mloda.core.prepare.resolved_join import (
     DeclinedOrientation,
@@ -50,6 +49,9 @@ from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from collections import defaultdict
 import logging
+
+if TYPE_CHECKING:
+    from mloda.core.prepare.resolve_graph import PlannedQueue
 
 
 logger = logging.getLogger(__name__)
@@ -147,7 +149,7 @@ class ExecutionPlan:
 
     def create_execution_plan(
         self,
-        queue: PlannedQueue,
+        queue: "PlannedQueue",
         graph: Graph,
         link_trekker: LinkTrekker,
         declared_frameworks: DeclaredFrameworks | None = None,
@@ -195,7 +197,7 @@ class ExecutionPlan:
 
     def add_feature_group_step(
         self,
-        queue: PlannedQueue,
+        queue: "PlannedQueue",
         parent_to_children_mapping: dict[UUID, set[UUID]],
         child_links: dict[UUID, set[LinkFrameworkTrekker]],
     ) -> list[LinkFrameworkTrekker | FeatureGroupStep]:
@@ -1998,7 +2000,11 @@ Available join types:
                 )
                 pre_calculated.update(copy(pre_required_uuids))
 
-                cf = next(iter(sub_features)).get_compute_framework()
+                chosen = {f.get_compute_framework() for f in sub_features}
+                if len(chosen) != 1:
+                    names = sorted(c.get_class_name() for c in chosen)
+                    raise ValueError(f"Step of {feature_group.get_class_name()} mixes compute frameworks {names}.")
+                cf = next(iter(chosen))
 
                 children_if_root = set()
                 for feature in sub_features:

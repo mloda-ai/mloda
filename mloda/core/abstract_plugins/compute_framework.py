@@ -35,18 +35,6 @@ _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
     "_current_compute_framework", default=None
 )
 
-_framework_position: ContextVar[dict[type["ComputeFramework"], int]] = ContextVar("_framework_position", default={})
-
-
-@contextlib.contextmanager
-def framework_preference(positions: Mapping[type["ComputeFramework"], int]) -> Generator[None, None, None]:
-    """Rank frameworks by their position for select_deterministic within the scope; equal positions tie."""
-    token = _framework_position.set(dict(positions))
-    try:
-        yield
-    finally:
-        _framework_position.reset(token)
-
 
 def framework_rank_key(
     positions: Mapping[type["ComputeFramework"], int],
@@ -781,7 +769,7 @@ class ComputeFramework(ABC):
         candidates = list(frameworks)
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
-        return min(candidates, key=framework_rank_key(_framework_position.get() if positions is None else positions))
+        return min(candidates, key=framework_rank_key({} if positions is None else positions))
 
     @final
     def __eq__(self, other: object) -> bool:

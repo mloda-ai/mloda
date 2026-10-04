@@ -1,6 +1,6 @@
 from copy import deepcopy
 from typing import Any
-from collections import Counter, defaultdict
+from collections import defaultdict
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.graph.graph import Graph
@@ -20,36 +20,31 @@ class ResolveComputeFrameworks:
     def links(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
         groups = [p for p in planned_queue if isinstance(p, tuple) and not isinstance(p[0], Link)]
 
-        # Must precede rewrite_group_frameworks, which collapses compute_frameworks to the resolution.
         for p in groups:
             for f in p[1]:
                 self.declared_frameworks[f.uuid] = frozenset(f.compute_frameworks or ())
 
         trekker_members: dict[LinkFrameworkTrekker, list[Any]] = defaultdict(list)
-        feature_trekkers: dict[UUID, list[LinkFrameworkTrekker]] = defaultdict(list)
         for p in groups:
             for f in p[1]:
                 for trekker in self.access_link_by_child_uuid(f.uuid, link_trekker):
                     trekker_members[trekker].append(f)
-                    feature_trekkers[f.uuid].append(trekker)
 
         # Snapshot before resolving: invert_link mutates data_ordered while the loop runs.
         trekked_uuids = {trekker: set(uuids) for trekker, uuids in link_trekker.data_ordered.items()}
 
-        resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]] = {}
         for trekker, members in trekker_members.items():
             if trekker not in trekked_uuids:
                 raise ValueError(f"Trekker bookkeeping is inconsistent: no uuids recorded for link {trekker[0]}.")
             resolved_cfw = self.resolve_trekker(trekker, members)
-            if resolved_cfw is not None:
-                resolved[trekker] = resolved_cfw
+            for member in members:
+                if resolved_cfw is not None and member.get_compute_framework() is not resolved_cfw:
+                    raise ValueError(
+                        f"Feature {member.name} runs on {member.get_compute_framework().get_class_name()}, "
+                        f"but its link {trekker[0]} resolves to {resolved_cfw.get_class_name()}."
+                    )
             # Invert every uuid of the trekker at once, so a link keeps a single orientation across all groups.
             self.trekker_right_left_adjuster(link_trekker, trekked_uuids[trekker])
-
-        for p in groups:
-            self.rewrite_group_frameworks(p, resolved, feature_trekkers)
-
-        self.reject_self_merging_links(groups, link_trekker)
 
         new_planned_queue = list(planned_queue)
 
@@ -57,154 +52,6 @@ class ResolveComputeFrameworks:
 
         new_planned_queue = self.order_queue_by_trekker_order(new_planned_queue, link_trekker)
         return new_planned_queue
-
-    def reject_self_merging_links(self, groups: Any, link_trekker: LinkTrekker) -> None:
-        """Reject a scheduled link that joins in one framework none of its children run in.
-
-        Both join sides would then filter to the same uuids and the merge degenerates into a
-        self merge, dropping one parent's columns.
-        """
-        features_by_uuid = {f.uuid: f for p in groups for f in p[1]}
-
-        for (link, left_cfw, right_cfw), child_uuids in link_trekker.data.items():
-            if left_cfw != right_cfw:
-                continue
-
-            # A self join takes case_link_equal_feature_groups, which suppresses the join step.
-            if link.left_feature_group == link.right_feature_group:
-                continue
-
-            # APPEND and UNION pick one uuid per side by index and feature group, never by framework.
-            if link.jointype in (JoinType.APPEND, JoinType.UNION):
-                continue
-
-            children = [features_by_uuid[uuid] for uuid in child_uuids if uuid in features_by_uuid]
-            if not children:
-                continue
-
-            if any(child.compute_frameworks is None or left_cfw in child.compute_frameworks for child in children):
-                continue
-
-            cfw_name = left_cfw.__name__
-            left_name = link.left_feature_group.__name__
-            right_name = link.right_feature_group.__name__
-            names = sorted(str(child.name) for child in children)
-            raise ValueError(
-                f"Link {link.jointype.value} {left_name} {right_name} joins in {cfw_name}, "
-                f"which none of its children run in: {names}. "
-                "Both join sides would resolve to the same input. "
-                "Give the joined feature groups distinct compute frameworks, "
-                f"or bring the children of this link onto {cfw_name}."
-            )
-
-    def rewrite_group_frameworks(
-        self,
-        group: Any,
-        resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]],
-        feature_trekkers: dict[UUID, list[LinkFrameworkTrekker]],
-    ) -> None:
-        group_cfws = {
-            resolved[trekker] for f in group[1] for trekker in feature_trekkers.get(f.uuid, []) if trekker in resolved
-        }
-
-        any_rewritten = False
-        for f in group[1]:
-            if f.uuid not in feature_trekkers:
-                if group_cfws:
-                    supported = set(f.compute_frameworks) if f.compute_frameworks is not None else group_cfws
-                    unsupported = group_cfws - supported
-                    if unsupported:
-                        names = sorted(cfw.__name__ for cfw in unsupported)
-                        raise ValueError(
-                            f"Feature {f.name} does not support the compute framework(s) {names} chosen for its group."
-                        )
-                    f.compute_frameworks = set(group_cfws)
-                    any_rewritten = True
-                continue
-            new_cfws = {resolved[trekker] for trekker in feature_trekkers[f.uuid] if trekker in resolved}
-            if not new_cfws:
-                mismatches = sorted(
-                    f"{link}: neither {left.__name__} nor {right.__name__}"
-                    for link, left, right in feature_trekkers[f.uuid]
-                )
-                raise ValueError(
-                    f"No compute framework agreement for feature {f.name}. Unresolvable links: {mismatches}"
-                )
-            if len(new_cfws) > 1:
-                self.raise_on_link_disagreement(f, resolved, feature_trekkers[f.uuid])
-            self.raise_on_unsupported_resolution(f, new_cfws)
-            f.compute_frameworks = new_cfws
-            any_rewritten = True
-
-        if not any_rewritten:
-            return
-
-        # Rehash via list so hashes are recomputed (set(group[1]) reuses stale ones), keeping set and aliases valid.
-        members = list(group[1])
-        group[1].clear()
-        group[1].update(members)
-        if len(group[1]) != len(members):
-            names = sorted(name for name, count in Counter(str(member.name) for member in members).items() if count > 1)
-            raise ValueError(
-                "Compute framework rewrite collapsed features that were previously distinct "
-                f"only by compute_frameworks. Affected: {names}"
-            )
-
-    @staticmethod
-    def raise_on_link_disagreement(
-        feature: Any,
-        resolved: dict[LinkFrameworkTrekker, type[ComputeFramework]],
-        trekkers: list[LinkFrameworkTrekker],
-    ) -> None:
-        """A self-join records every ordered parent pair, so only distinct feature groups can disagree."""
-        cross_group = [
-            trekker
-            for trekker in trekkers
-            if trekker in resolved and trekker[0].left_feature_group != trekker[0].right_feature_group
-        ]
-        cfws = {resolved[trekker] for trekker in cross_group}
-        if len(cfws) < 2:
-            return
-
-        names = sorted(cfw.get_class_name() for cfw in cfws)
-        links = sorted(
-            {
-                f"{link} ({left.get_class_name()}, {right.get_class_name()}) -> "
-                f"{resolved[(link, left, right)].get_class_name()}"
-                for link, left, right in cross_group
-            }
-        )
-        raise ValueError(
-            f"Feature {feature.name} resolves to more than one compute framework {names}. Disagreeing links: {links}"
-        )
-
-    @staticmethod
-    def raise_on_unsupported_resolution(feature: Any, new_cfws: set[type[ComputeFramework]]) -> None:
-        """Reject a link resolution the feature does not declare, instead of rewriting it onto one.
-
-        The sibling branch for a feature with no trekker already refuses to move a feature onto a
-        framework outside its declared set. Without this the trekker branch disagreed: it overwrote
-        compute_frameworks with whatever the links resolved to, so a feature group could run in a
-        framework its own compute_framework_rule excludes, with no error and no warning.
-
-        ``compute_frameworks is None`` means the feature declared no restriction, so anything resolves.
-        """
-        if feature.compute_frameworks is None:
-            return
-
-        declared = set(feature.compute_frameworks)
-        unsupported = new_cfws - declared
-        if not unsupported:
-            return
-
-        resolved_names = sorted(cfw.get_class_name() for cfw in unsupported)
-        declared_names = sorted(cfw.get_class_name() for cfw in declared)
-        raise ValueError(
-            f"Feature {feature.name} declares the compute framework(s) {declared_names}, "
-            f"but its links resolve to {resolved_names}. "
-            "Give the feature group a compute_framework_rule that includes the resolved framework, "
-            "or bring the linked parents onto a framework it declares."
-        )
 
     def order_queue_by_trekker_order(self, planned_queue: Any, link_trekker: LinkTrekker) -> Any:
         orders = link_trekker.order
@@ -280,23 +127,27 @@ class ResolveComputeFrameworks:
         self.to_invert_trekker_collection = []
 
     def resolve_trekker(self, trekker: LinkFrameworkTrekker, members: list[Any]) -> type[ComputeFramework] | None:
+        """The framework the link joins in, or None when its members run on neither side (a chained hop)."""
         link, left_cfw, right_cfw = trekker
+        running = {m.get_compute_framework() for m in members}
 
-        left_in_all = all(left_cfw in m.compute_frameworks for m in members)
-        right_in_all = all(right_cfw in m.compute_frameworks for m in members)
+        if left_cfw is not right_cfw and {left_cfw, right_cfw} <= running:
+            names = sorted(str(m.name) for m in members)
+            raise ValueError(
+                f"No compute framework agreement for {names}: they run on both sides of link {link}, "
+                f"{left_cfw.get_class_name()} and {right_cfw.get_class_name()}."
+            )
 
         if link.jointype == JoinType.RIGHT:
-            if right_in_all:
-                return right_cfw
-            if left_in_all:
-                self.to_invert_trekker_collection.append(trekker)
-                return right_cfw
-            return None
+            return right_cfw if running == {right_cfw} else None
+
+        if link.jointype in (JoinType.APPEND, JoinType.UNION):
+            return left_cfw if running == {left_cfw} else None
 
         if link.jointype in JoinType:
-            if left_in_all:
+            if running == {left_cfw}:
                 return left_cfw
-            if right_in_all:
+            if running == {right_cfw}:
                 self.to_invert_trekker_collection.append(trekker)
                 return right_cfw
             return None

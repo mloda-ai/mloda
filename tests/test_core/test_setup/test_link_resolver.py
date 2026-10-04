@@ -22,6 +22,10 @@ class BaseLinkTestFeatureGroup1(BaseTestFeatureGroup1):
     pass
 
 
+class LinkChildFeatureGroup(FeatureGroup):
+    pass
+
+
 uuid_1, uuid_2, uuid_3, uuid_4, uuid_5, uuid_6, uuid_7 = (
     uuid.UUID(int=1),
     uuid.UUID(int=2),
@@ -152,11 +156,10 @@ class TestResolveGraph:
         assert child_roots[uuid_7] == {uuid_1, uuid_6}
 
         link_trekker = resolver.resolver_links.get_link_trekker().data
-        assert len(link_trekker) == 2
-
         result_link = links.pop()
         expected_link_tuple = (result_link, BaseTestComputeFramework1, BaseTestComputeFramework1)
-        assert link_trekker[expected_link_tuple] == {uuid_7, uuid_3, uuid_4}
+        assert len(link_trekker) == 1
+        assert link_trekker[expected_link_tuple] == {uuid_7}
 
         collector = []
         for e in queue_with_links_and_features:
@@ -171,3 +174,53 @@ class TestResolveGraph:
                         collector.append(feature.uuid)  # type: ignore
                 continue
             raise ValueError("Not a valid type")
+
+    @staticmethod
+    def node(graph: Graph, uid: uuid.UUID, name: str, fg: type[FeatureGroup]) -> None:
+        feature = Feature(name)
+        feature.uuid = uid
+        feature.compute_frameworks = {BaseTestComputeFramework1}
+        graph.add_node(uid, NodeProperties(feature, fg))
+
+    def test_link_child_recorded_but_not_its_grandchild(self) -> None:
+        graph = Graph()
+        self.node(graph, uuid_1, "LeftRoot", BaseLinkTestFeatureGroup1)
+        self.node(graph, uuid_2, "RightRoot", BaseTestGraphFeatureGroup3)
+        self.node(graph, uuid_3, "LinkChild", LinkChildFeatureGroup)
+        self.node(graph, uuid_4, "Grandchild", LinkChildFeatureGroup)
+        for parent, child in [(uuid_1, uuid_3), (uuid_2, uuid_3), (uuid_3, uuid_4)]:
+            graph.add_edge(parent, child, EdgeProperties(LinkChildFeatureGroup, LinkChildFeatureGroup))
+
+        link = Link.inner(
+            JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+            JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+        )
+        resolver = ResolveGraph(graph, {link})
+        resolver.create_initial_queue()
+        resolver.set_nodes_per_feature_group()
+        resolver.resolve_links()
+
+        link_trekker = resolver.resolver_links.get_link_trekker().data
+        recorded = set().union(*link_trekker.values())
+        assert recorded == {uuid_3}
+
+    def test_consumer_reading_both_sides_directly_stays_recorded_when_one_is_the_others_ancestor(self) -> None:
+        graph = Graph()
+        self.node(graph, uuid_1, "A", BaseLinkTestFeatureGroup1)
+        self.node(graph, uuid_2, "D", BaseTestGraphFeatureGroup3)
+        self.node(graph, uuid_3, "C", LinkChildFeatureGroup)
+        edge = EdgeProperties(LinkChildFeatureGroup, LinkChildFeatureGroup)
+        for parent, child in [(uuid_1, uuid_2), (uuid_1, uuid_3), (uuid_2, uuid_3)]:
+            graph.add_edge(parent, child, edge)
+
+        link = Link.inner(
+            JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+            JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+        )
+        resolver = ResolveGraph(graph, {link})
+        resolver.create_initial_queue()
+        resolver.set_nodes_per_feature_group()
+        resolver.resolve_links()
+
+        link_trekker = resolver.resolver_links.get_link_trekker().data
+        assert set().union(*link_trekker.values()) == {uuid_3}

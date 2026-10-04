@@ -3,7 +3,12 @@ frameworks and no child on that framework is rejected, the distinct-framework sh
 
 from typing import Any
 
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
+
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import (
@@ -272,3 +277,106 @@ def test_link_joining_a_shared_parent_twice_within_one_framework_must_not_raise(
 
     seen = {value for result in results for value in result[SameFrameworkConsumer.get_class_name()]}
     assert seen == {"sfw_d1|sfw_d2|sfw_p"}
+
+
+class DescLinkRootLeft(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"desc_l"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"desc_l": [1, 2, 3], "desc_idx": ["x", "y", "z"]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class DescLinkRootRight(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"desc_r"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"desc_r": [10, 20, 30], "desc_idx": ["x", "y", "z"]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class DescLinkChild(FeatureGroup):
+    """PyArrow consumer of both join sides."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("desc_l"), Feature("desc_r")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data.column("desc_l"), data.column("desc_r")))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class DescLinkGrandchild(FeatureGroup):
+    """Pandas-only consumer of the link child, further down than the join."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("DescLinkChild")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        assert not isinstance(data, pa.Table)
+        data[cls.get_class_name()] = data["DescLinkChild"] * 2
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+_ENABLED_DESC = PluginCollector.enabled_feature_groups(
+    {DescLinkRootLeft, DescLinkRootRight, DescLinkChild, DescLinkGrandchild}
+)
+
+
+def _desc_link() -> Link:
+    return Link.inner(
+        JoinSpec(DescLinkRootLeft, Index(("desc_idx",))), JoinSpec(DescLinkRootRight, Index(("desc_idx",)))
+    )
+
+
+def test_a_consumer_below_a_link_child_hops_once_from_the_link_childs_framework() -> None:
+    session = mloda.prepare(
+        [Feature(DescLinkGrandchild.get_class_name())],
+        links={_desc_link()},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=_ENABLED_DESC,
+    )
+
+    assert session.engine is not None
+    steps = list(session.engine.execution_planner)
+    hops = [step for step in steps if isinstance(step, TransformFrameworkStep)]
+    assert [(hop.from_framework, hop.to_framework) for hop in hops] == [(PyArrowTable, PandasDataFrame)]
+    grandchild_step = next(
+        step for step in steps if isinstance(step, FeatureGroupStep) and step.feature_group is DescLinkGrandchild
+    )
+    assert hops[0].uuid in grandchild_step.required_uuids
+
+
+def test_a_consumer_below_a_link_child_reads_the_joined_values() -> None:
+    results = mloda.run_all(
+        [Feature(DescLinkGrandchild.get_class_name())],
+        links={_desc_link()},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=_ENABLED_DESC,
+    )
+
+    values = [sorted(result[DescLinkGrandchild.get_class_name()]) for result in results]
+    assert values == [[22, 44, 66]]

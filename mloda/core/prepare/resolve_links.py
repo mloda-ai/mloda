@@ -261,9 +261,17 @@ class ResolveLinks:
                 if node.feature is not None and node.feature.link is not None:
                     pinned_links.append(node.feature.link)
 
+            direct_parents = self.graph.parents_by_direct_.get(child, set())
+            closures = [{d} | self.graph.parent_to_children_mapping.get(d, set()) for d in direct_parents]
+
             for parent_in in parents:
                 for parent_out in parents:
                     if parent_in == parent_out:
+                        continue
+
+                    # Only the feature that brings both join sides together is bound to the link.
+                    reads_both = parent_in in direct_parents and parent_out in direct_parents
+                    if not reads_both and any(parent_in in c and parent_out in c for c in closures):
                         continue
 
                     r_left = self.graph.get_nodes()[parent_in]

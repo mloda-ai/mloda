@@ -418,6 +418,12 @@ class Feature:
         )
 
     def __eq__(self, other: Any) -> bool:
+        return self._equals(other, True)
+
+    def equals_ignoring_compute_frameworks(self, other: Any) -> bool:
+        return self._equals(other, False)
+
+    def _equals(self, other: Any, include_compute_frameworks: bool) -> bool:
         if not isinstance(other, Feature):
             return False
         return (
@@ -426,15 +432,23 @@ class Feature:
             # __hash__ excludes context, so this probe meets cyclic contexts and needs the cycle-safe walk.
             and _deep_equal(self.options.context, other.options.context)
             and self.domain == other.domain
-            and self.compute_frameworks == other.compute_frameworks
+            and (not include_compute_frameworks or self.compute_frameworks == other.compute_frameworks)
             and self.data_type == other.data_type
             and self._child_options_key() == other._child_options_key()
             and self._input_data_match_key() == other._input_data_match_key()
         )
 
     def __hash__(self) -> int:
+        return self._hash(True)
+
+    def hash_ignoring_compute_frameworks(self) -> int:
+        return self._hash(False)
+
+    def _hash(self, include_compute_frameworks: bool) -> int:
         compute_frameworks_hashable = (
-            frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None
+            frozenset(self.compute_frameworks)
+            if include_compute_frameworks and self.compute_frameworks is not None
+            else None
         )
 
         return hash(

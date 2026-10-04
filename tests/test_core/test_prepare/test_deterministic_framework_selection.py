@@ -1067,3 +1067,73 @@ def _lku_links() -> set[Link]:
 
 def _lkm_links() -> set[Link]:
     return {Link.inner(JoinSpec(LkmLeftRoot, "lkm_idx"), JoinSpec(LkmRightRoot, "lkm_idx"))}
+
+
+# --- a pinned and an unpinned request of one feature share one read ------------------------------
+
+
+class PinnedUnpinnedSharedRootFG(_ConnAwareRoot):
+    NAME = "pinned_unpinned_shared_root"
+
+
+_SHARED_PLUGINS = PluginCollector.enabled_feature_groups({PinnedUnpinnedSharedRootFG})
+
+
+def _shared_root_steps(features: list[Feature | str]) -> tuple[Any, list[FeatureGroupStep]]:
+    session = mloda.prepare(
+        features, compute_frameworks=[PandasDataFrame, PyArrowTable], plugin_collector=_SHARED_PLUGINS
+    )
+    assert session.engine is not None
+    steps = [
+        step
+        for step in session.engine.execution_planner
+        if isinstance(step, FeatureGroupStep) and step.feature_group is PinnedUnpinnedSharedRootFG
+    ]
+    return session, steps
+
+
+@pytest.mark.parametrize("pinned_first", [True, False], ids=["pinned_first", "unpinned_first"])
+def test_pinned_and_unpinned_request_share_one_step_in_the_pinned_framework(pinned_first: bool) -> None:
+    pinned = Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable")
+    features: list[Feature | str] = [pinned, PinnedUnpinnedSharedRootFG.NAME]
+    if not pinned_first:
+        features.reverse()
+
+    _, steps = _shared_root_steps(features)
+
+    assert [step.compute_framework for step in steps] == [PyArrowTable]
+
+    result = mloda.run_all(
+        features,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=_SHARED_PLUGINS,
+    )
+
+    assert len(result) == 1
+    assert isinstance(result[0], pa.Table)
+    assert result[0].column_names == [PinnedUnpinnedSharedRootFG.NAME]
+    assert result[0][PinnedUnpinnedSharedRootFG.NAME].to_pylist() == [1, 2, 3]
+
+
+@pytest.mark.parametrize(
+    ("pins_first", "expected_steps"), [(True, 3), (False, 2)], ids=["pins_first", "unpinned_first"]
+)
+def test_two_differing_pins_plus_unpinned_merge_only_into_an_earlier_pin(pins_first: bool, expected_steps: int) -> None:
+    """Pins first is ambiguous so nothing merges (3 steps); unpinned first merges into the first pin (2 steps)."""
+    pins: list[Feature | str] = [
+        Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable"),
+        Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PandasDataFrame"),
+    ]
+    features = [*pins, PinnedUnpinnedSharedRootFG.NAME] if pins_first else [PinnedUnpinnedSharedRootFG.NAME, *pins]
+
+    _, steps = _shared_root_steps(features)
+
+    assert len(steps) == expected_steps
+
+
+def test_pinned_and_unpinned_request_with_differing_options_stay_two_steps() -> None:
+    pinned = Feature(PinnedUnpinnedSharedRootFG.NAME, options={"variant": "a"}, compute_framework="PyArrowTable")
+
+    _, steps = _shared_root_steps([pinned, PinnedUnpinnedSharedRootFG.NAME])
+
+    assert len(steps) == 2

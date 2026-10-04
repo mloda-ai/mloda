@@ -1956,6 +1956,17 @@ class TestBuildPlanStepsInputFeatureNames:
             assert build_plan_steps([step])[0].input_feature_names == ()
             assert build_plan_steps([step])[0].input_feature_edges == {}
 
+    def test_equal_content_steps_with_different_inputs_keep_one_order_whichever_raw_order(self) -> None:
+        first = self._source_compute_step()
+        second = self._source_compute_step()
+        first.features.declared_input_feature_names = frozenset({"x"})
+        second.features.declared_input_feature_names = frozenset({"y"})
+
+        forward = [step.step_uuid for step in build_plan_steps([first, second])]
+        backward = [step.step_uuid for step in build_plan_steps([second, first])]
+
+        assert forward == backward
+
 
 class TestBuildPlanStepsReason:
     """build_plan_steps joins a compute step's distinct feature reasons, sorted, with "; "."""

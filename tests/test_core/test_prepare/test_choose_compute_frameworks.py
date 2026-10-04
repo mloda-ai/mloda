@@ -650,6 +650,35 @@ def test_the_reason_names_why_the_framework_was_chosen(
     assert [f.chosen_compute_framework_reason for f in judged] == [expected]
 
 
+def test_a_child_on_the_swapped_side_of_one_inner_link_reports_rules() -> None:
+    link = _link(Link.inner, ChooserLeftFG, ChooserRightFG)
+    net = _Net()
+    children = []
+    for index, (left_fw, right_fw) in enumerate([(P, A), (A, P)]):
+        left = net.add(ChooserLeftFG, "swap_left", {left_fw}, {"n": index})
+        right = net.add(ChooserRightFG, "swap_right", {right_fw}, {"n": index})
+        children.append(net.add(ChooserChildFG, "swap_child", {P, A}, {"n": index}))
+        net.join(link, left, right, children[-1])
+
+    net.choose()
+
+    on_a = [child for child in children if child.chosen_compute_framework is A]
+    assert len(on_a) == 1
+    assert on_a[0].chosen_compute_framework_reason == RULES
+
+
+def test_a_host_tied_to_a_top_ranked_pinned_filter_reports_rules() -> None:
+    net = _Net()
+    host = net.add(ChooserHostFG, "top_pin_host", {P, A})
+    pinned = net.add(ChooserFilterFG, "top_pin_filter", {P}, pinned=True)
+    net.tie(host, pinned)
+
+    net.choose()
+
+    assert host.chosen_compute_framework is P
+    assert host.chosen_compute_framework_reason == RULES
+
+
 def test_every_member_of_a_block_gets_the_blocks_reason() -> None:
     net = _Net()
     first = net.add(ChooserRootFG, "member_first", {P, A}, pinned=True)
@@ -677,7 +706,10 @@ def test_fresh_interpreters_choose_the_same_frameworks() -> None:
     assert outputs[0] == outputs[1], "blocks equal but for an option object's address chose differently per process"
 
 
-def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly() -> None:
+@pytest.mark.parametrize("positions", [{A: 0, D: 1}, None], ids=["list_order", "no_positions"])
+def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly(
+    positions: dict[type[ComputeFramework], int] | None,
+) -> None:
     net = _Net()
     pins: dict[int, type[ComputeFramework]] = {0: A, 10: D, 20: A, 29: D}
     layers = [
@@ -687,7 +719,7 @@ def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly() -> None:
     for parent, child in zip(layers, layers[1:]):
         net.edge(parent, child)
 
-    chooser = net.chooser({A: 0, D: 1})  # built before the timer: construction carries one-time cold setup
+    chooser = net.chooser(positions)  # built before the timer: construction carries one-time cold setup
     started = time.perf_counter()
     chooser.choose()
     elapsed = time.perf_counter() - started
@@ -756,7 +788,7 @@ def test_a_twenty_five_block_six_framework_component_with_a_forced_conversion_so
     chooser.choose()
     elapsed = time.perf_counter() - started
 
-    assert elapsed < 0.5, f"choosing took {elapsed:.1f}s"
+    assert elapsed < 0.2, f"choosing took {elapsed:.1f}s"
     assert hub.chosen_compute_framework is fws[5]
     assert {f.chosen_compute_framework for f in fillers} == {fws[5]}
     assert [leaf.chosen_compute_framework for leaf in leaves] == pins

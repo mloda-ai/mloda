@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import (
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
-from mloda.core.prepare.choose_compute_frameworks import _stable_text
+from mloda.core.prepare.choose_compute_frameworks import stable_text
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
@@ -266,7 +266,8 @@ def _content_key(record: PlanStep) -> tuple[str, ...]:
         ",".join(sorted(record.feature_names)),
         record.join_type or "",
         record.join_destination_side or "",
-        _stable_text(record.feature_set_options),
+        stable_text(record.feature_set_options),
+        ",".join(record.input_feature_names),
     )
 
 

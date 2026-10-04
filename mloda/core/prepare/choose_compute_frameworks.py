@@ -3,7 +3,6 @@ Arc consistency prunes the domains, then branch and bound with forward checking 
 """
 
 import re
-import sys
 from collections.abc import Callable, Mapping
 from functools import partial
 from typing import NamedTuple
@@ -59,7 +58,7 @@ def _names(features: tuple[Feature, ...]) -> list[str]:
     return sorted(str(feature.name) for feature in features)
 
 
-def _stable_text(value: object) -> str:
+def stable_text(value: object) -> str:
     """Text of a value with object addresses removed, so it is equal across interpreters."""
     return _ADDRESS.sub("", str(value))
 
@@ -67,7 +66,7 @@ def _stable_text(value: object) -> str:
 def _block_key(fg: type[FeatureGroup], features: tuple[Feature, ...]) -> tuple[object, ...]:
     allowed = sorted(f.get_class_name() for f in features[0].compute_frameworks or ())
     data_types = sorted(f.data_type.name if f.data_type else "" for f in features)
-    options = sorted(_stable_text(f.options) for f in features)
+    options = sorted(stable_text(f.options) for f in features)
     return (fg.__module__, fg.__qualname__, tuple(_names(features)), tuple(data_types), tuple(allowed), tuple(options))
 
 
@@ -146,9 +145,9 @@ class ChooseComputeFrameworks:
         for order in self._search_orders(len(blocks), rules, groups):
             members = set(order)
             local_rules = [r for r in rules if r.blocks[0] in members]
-            assignment, cost = self._solve(blocks, order, local_rules, groups, domains)
+            assignment, _ = self._solve(blocks, order, local_rules, groups, domains)
             for index, framework in assignment.items():
-                reason = self._reason(blocks, order, local_rules, groups, domains, assignment, cost, index)
+                reason = self._reason(blocks, local_rules, groups, assignment, index)
                 for feature in blocks[index].features:
                     feature.chosen_compute_framework = framework
                     feature.chosen_compute_framework_reason = reason
@@ -164,7 +163,7 @@ class ChooseComputeFrameworks:
         keyed: list[tuple[tuple[object, ...], _Block]] = []
         for fg, features in self.nodes.items():
             for group in ExecutionPlan.group_features_by_compute_framework_and_options(set(features)).values():
-                members = tuple(sorted(group, key=lambda f: (str(f.name), _stable_text(f.options))))
+                members = tuple(sorted(group, key=lambda f: (str(f.name), stable_text(f.options))))
                 domain = tuple(sorted(members[0].compute_frameworks or (), key=self.rank))
                 if not domain:
                     FeatureValidator.validate_compute_frameworks_resolved(
@@ -328,12 +327,9 @@ class ChooseComputeFrameworks:
     def _reason(
         self,
         blocks: list[_Block],
-        order: list[int],
         rules: list[_Rule],
         groups: dict[tuple[int, type[FeatureGroup]], set[int]],
-        domains: list[list[Framework]],
         assignment: dict[int, Framework],
-        cost: int,
         index: int,
     ) -> str:
         """Why one block runs on its framework: pin, sole option, rules, order, or conversions saved."""
@@ -343,23 +339,32 @@ class ChooseComputeFrameworks:
             return PINNED
         if len(block.domain) == 1:
             return ONLY_ALLOWED
+        touching = [r for r in rules if index in r.blocks]
+        steps = [(parent, kids) for (parent, _), kids in groups.items() if index == parent or index in kids]
+
+        def feasible(framework: Framework) -> bool:
+            switched = {**assignment, index: framework}
+            return all(self._allows(rule, switched) for rule in touching)
+
+        def step_cost(values: Mapping[int, Framework]) -> int:
+            return sum(
+                conversion_cost(values[parent], target)
+                for parent, kids in steps
+                for target in {values[c] for c in kids if values[c] is not values[parent]}
+            )
+
+        alternatives = [fw for fw in block.domain if fw is not chosen and feasible(fw)]
+        if not alternatives:
+            return RULES
         chosen_rank = self.rank(chosen)
-        if not any(self.rank(fw) < chosen_rank for fw in block.domain):
-            later = [fw for fw in domains[index] if fw is not chosen] or [fw for fw in block.domain if fw is not chosen]
-            return self._order_reason(chosen, later[0])
-        earlier = [fw for fw in domains[index] if self.rank(fw) < chosen_rank]
+        earlier = [fw for fw in alternatives if self.rank(fw) < chosen_rank]
         if not earlier:
-            return RULES
-        restricted = list(domains)
-        restricted[index] = earlier
-        found, other_cost = self._search(order, rules, groups, restricted, cost, cost + 1)
-        if other_cost < 0:
-            found, other_cost = self._search(order, rules, groups, restricted, -2)
-        if other_cost < 0:
-            return RULES
-        if other_cost > cost:
-            return saves_conversions(other_cost - cost)
-        return self._order_reason(chosen, found[index])
+            return self._order_reason(chosen, alternatives[0])
+        base = step_cost(assignment)
+        delta = min(step_cost({**assignment, index: fw}) for fw in earlier) - base
+        if delta > 0:
+            return saves_conversions(delta)
+        return self._order_reason(chosen, earlier[0])
 
     def _solve(
         self,
@@ -369,21 +374,7 @@ class ChooseComputeFrameworks:
         groups: dict[tuple[int, type[FeatureGroup]], set[int]],
         domains: list[list[Framework]],
     ) -> tuple[dict[int, Framework], int]:
-        best, best_cost = self._search(order, rules, groups, domains, -2)
-        if best_cost < 0:
-            raise ValueError(self._infeasible(blocks, order, rules))
-        return best, best_cost
-
-    def _search(
-        self,
-        order: list[int],
-        rules: list[_Rule],
-        groups: dict[tuple[int, type[FeatureGroup]], set[int]],
-        domains: list[list[Framework]],
-        stop_at: int,
-        limit: int = -1,
-    ) -> tuple[dict[int, Framework], int]:
-        """Branch and bound; returns the best assignment and its cost, cost -1 when infeasible. Stops at cost stop_at; a limit prunes dearer branches."""
+        """Branch and bound; returns the best assignment and its cost, raising when no assignment is feasible."""
         touching: dict[int, list[_Rule]] = {b: [] for b in order}
         for rule in rules:
             for b in self._rule_blocks(rule):
@@ -419,14 +410,7 @@ class ChooseComputeFrameworks:
                     narrowed[open_block] = kept
             return narrowed
 
-        def bound() -> int:
-            if best_cost[0] >= 0:
-                return best_cost[0]
-            return limit + 1 if limit >= 0 else sys.maxsize
-
         def descend(depth: int, current: dict[int, list[Framework]], cost: int) -> None:
-            if best_cost[0] == stop_at:
-                return
             if depth == len(order):
                 best.update(assigned)
                 best_cost[0] = cost
@@ -437,11 +421,13 @@ class ChooseComputeFrameworks:
                 assigned[index] = value
                 narrowed = narrow(index, current)
                 new_cost = cost + sum(step_cost(*step) for step in steps[index]) - before
-                if narrowed is not None and new_cost < bound():
+                if narrowed is not None and (best_cost[0] < 0 or new_cost < best_cost[0]):
                     descend(depth + 1, narrowed, new_cost)
                 del assigned[index]
 
         descend(0, {b: domains[b] for b in order}, 0)
+        if best_cost[0] < 0:
+            raise ValueError(self._infeasible(blocks, order, rules))
         return best, best_cost[0]
 
     @staticmethod

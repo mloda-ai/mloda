@@ -25,6 +25,13 @@ class ExtenderHook(Enum):
     JOIN = "join"
 
 
+class GateBypassError(RuntimeError):
+    """Raised when an extender skips the wrapped call while a never_fall_back gate sits inside it."""
+
+
+_SEALED_ATTRS = frozenset({"never_fall_back", "raise_on_error", "priority", "_raise_on_error", "_priority"})
+
+
 class Extender(ABC):
     """
     - Automated Metadata harvester connector
@@ -44,6 +51,14 @@ class Extender(ABC):
     the wrapped result (mutating shared args in place still works). If it calls the wrapped
     function more than once, only the first successful call's result is used.
     """
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get("_sealed", False):
+            raise AttributeError(f"{type(self).__name__}.{name} cannot be changed after first use")
+        object.__setattr__(self, name, value)
+
+    def _seal(self) -> None:
+        object.__setattr__(self, "_sealed", True)
 
     @property
     def priority(self) -> int:
@@ -158,21 +173,30 @@ class Extender(ABC):
         return feature_set.options
 
 
-def extender_sort_key(extender: Extender) -> tuple[int, str, str]:
-    """Deterministic order: priority, then class module and qualified name."""
-    return (extender.priority, type(extender).__module__, type(extender).__qualname__)
+def extender_sort_key(extender: Extender) -> tuple[int, int, str, str]:
+    """Deterministic order: gates first, then priority, then class module and qualified name."""
+    return (
+        0 if extender.never_fall_back else 1,
+        extender.priority,
+        type(extender).__module__,
+        type(extender).__qualname__,
+    )
 
 
 def build_hook_extenders(function_extender: Iterable[Extender]) -> dict[ExtenderHook, Extender]:
     """Map each hook to its sole extender or a sorted CompositeExtender, reading wraps() once per extender."""
     grouped: dict[ExtenderHook, list[Extender]] = {}
-    for extender in sorted(function_extender, key=extender_sort_key):
+    extenders = sorted(function_extender, key=extender_sort_key)
+    for extender in extenders:
         hooks = extender.wraps()
         if not all(isinstance(hook, ExtenderHook) for hook in hooks):
             raise TypeError(f"{type(extender).__name__}.wraps() must return ExtenderHook members, got {hooks!r}")
         for hook in dict.fromkeys(hooks):
             grouped.setdefault(hook, []).append(extender)
-    return {hook: exts[0] if len(exts) == 1 else CompositeExtender(exts, hook) for hook, exts in grouped.items()}
+    built = {hook: exts[0] if len(exts) == 1 else CompositeExtender(exts, hook) for hook, exts in grouped.items()}
+    for extender in [*extenders, *built.values()]:
+        extender._seal()
+    return built
 
 
 def get_function_extender(function_extender: Iterable[Extender], hook: ExtenderHook) -> Extender | None:
@@ -189,6 +213,7 @@ class CompositeExtender(Extender):
     def __init__(self, extenders: list[Extender], function_type: ExtenderHook | None = None):
         self.extenders = sorted(extenders, key=extender_sort_key)
         self.function_type = function_type
+        self.never_fall_back = any(child.never_fall_back for child in extenders)
 
     def wraps(self) -> set[ExtenderHook]:
         if self.function_type:
@@ -199,44 +224,63 @@ class CompositeExtender(Extender):
         return result
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        def make_wrapper(ext: Extender, inner_func: Any) -> Any:
+        def make_wrapper(ext: Extender, inner_func: Any, gate_inside: bool) -> Any:
             @functools.wraps(inner_func)
             def wrapper(*a: Any, **kw: Any) -> Any:
-                return _invoke_extender(ext, inner_func, *a, **kw)
+                return _invoke_extender(ext, inner_func, *a, gate_inside=gate_inside, **kw)
 
             return wrapper
 
         wrapped_func = func
-        for extender in reversed(self.extenders):
-            wrapped_func = make_wrapper(extender, wrapped_func)
+        for index in range(len(self.extenders) - 1, -1, -1):
+            gate_inside = any(e.never_fall_back for e in self.extenders[index + 1 :])
+            wrapped_func = make_wrapper(self.extenders[index], wrapped_func, gate_inside)
         return wrapped_func(*args, **kwargs)
 
 
-def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) -> Any:
+def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, gate_inside: bool = False, **kwargs: Any) -> Any:
     """Invoke an extender around inner_func, scoping any warning-only fallback to the
     extender's OWN code so inner-function failures propagate and inner never re-runs."""
     # Guard inner_func so its result wins over ext.__call__'s return, and (warning-only
     # branch) so an inner exception can be told apart from the extender's own failure.
     sentinel = object()
-    state: dict[str, Any] = {"result": sentinel, "inner_raised": False}
+    state: dict[str, Any] = {"result": sentinel, "inner_raised": False, "inner_exc": None, "called": False}
 
     @functools.wraps(inner_func)
     def guarded_inner(*a: Any, **kw: Any) -> Any:
+        state["called"] = True
         try:
             result = inner_func(*a, **kw)
-        except BaseException:
+        except BaseException as exc:
             state["inner_raised"] = True
+            state["inner_exc"] = exc
             raise
         if state["result"] is sentinel:
             state["result"] = result
         return result
 
     def _settle(ext_return: Any) -> Any:
-        return state["result"] if state["result"] is not sentinel else ext_return
+        inner_exc = state["inner_exc"]
+        state["inner_exc"] = None
+        if state["result"] is not sentinel:
+            return state["result"]
+        if inner_exc is not None:
+            try:
+                raise inner_exc
+            finally:
+                del inner_exc
+        if gate_inside and not state["called"]:
+            raise GateBypassError(
+                f"{type(ext).__name__} {getattr(ext, 'name', '')} did not call the wrapped function while a gate is inside it"
+            )
+        return ext_return
 
     # Breaking (default) or never_fall_back: call directly, everything propagates.
     if ext.raise_on_error or ext.never_fall_back:
-        return _settle(ext.__call__(guarded_inner, *args, **kwargs))
+        try:
+            return _settle(ext.__call__(guarded_inner, *args, **kwargs))
+        finally:
+            state["inner_exc"] = None
 
     # Warning-only: guard ONLY the extender's own code.
     try:
@@ -256,3 +300,5 @@ def _invoke_extender(ext: Extender, inner_func: Any, *args: Any, **kwargs: Any) 
             return state["result"]
         # Extender failed before delegating; run inner exactly once as the fallback.
         return inner_func(*args, **kwargs)
+    finally:
+        state["inner_exc"] = None

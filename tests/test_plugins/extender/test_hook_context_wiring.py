@@ -683,6 +683,8 @@ class TestCarrierIsNotAliasedAcrossHooksSharingOneComputeFramework:
         assert output_context is not None
         assert input_context.carrier == output_context.carrier == carrier
         assert input_context.carrier is not output_context.carrier
+        assert input_context.carrier is not cfw.run_context.carrier
+        assert output_context.carrier is not cfw.run_context.carrier
 
     def test_mutating_one_carrier_does_not_leak_into_the_other_or_run_context(self) -> None:
         feature_set = _build_feature_set()
@@ -701,7 +703,8 @@ class TestCarrierIsNotAliasedAcrossHooksSharingOneComputeFramework:
         output_context = output_extender.captured
         assert input_context is not None
         assert input_context.carrier is not None
-        input_context.carrier["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            input_context.carrier["mutated"] = "yes"
 
         assert output_context is not None
         assert output_context.carrier is not None

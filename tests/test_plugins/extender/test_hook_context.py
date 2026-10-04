@@ -4,7 +4,10 @@ Pins construction, the ambient current()/activate() scope (including nested
 restore), row_count's __len__ gating, and instrument's timing/status bookkeeping.
 """
 
+import copy
 import dataclasses
+import json
+import pickle  # nosec B403
 from typing import Any
 
 import pytest
@@ -83,8 +86,27 @@ class TestHookContextDeclaredAttributesAndReaderClassFields:
         assert context.declared_attributes == declared
         assert context.declared_attributes is not declared
         assert context.declared_attributes is not None
-        context.declared_attributes["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            context.declared_attributes["mutated"] = "yes"
         assert "mutated" not in declared
+        assert "mutated" not in context.declared_attributes
+
+    def test_declared_attributes_is_read_only_but_still_a_dict(self) -> None:
+        context = _make_context(declared_attributes={"unit": "m"})
+        attrs = context.declared_attributes
+
+        assert isinstance(attrs, dict)
+        assert attrs is not None
+        mutators: dict[str, Any] = {
+            "setitem": lambda d: d.__setitem__("x", "y"),
+            "update": lambda d: d.update({"x": "y"}),
+            "pop": lambda d: d.pop("unit"),
+            "clear": lambda d: d.clear(),
+        }
+        for name, mutate in mutators.items():
+            with pytest.raises(TypeError):
+                mutate(attrs)
+            assert attrs == {"unit": "m"}, name
 
     def test_declared_attributes_copy_is_taken_at_construction(self) -> None:
         declared = {"unit": "m"}
@@ -110,7 +132,7 @@ class TestHookContextCarrierField:
 
         assert context.carrier == carrier
 
-    def test_carrier_is_copied_not_aliased_and_mutation_does_not_leak_into_original(self) -> None:
+    def test_carrier_is_copied_on_ingest_and_in_place_mutation_raises(self) -> None:
         carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 
         context = _make_context(carrier=carrier)
@@ -118,10 +140,117 @@ class TestHookContextCarrierField:
         assert context.carrier == carrier
         assert context.carrier is not carrier
 
+        carrier["late"] = "yes"
         assert context.carrier is not None
-        context.carrier["mutated"] = "yes"
+        assert "late" not in context.carrier
 
-        assert "mutated" not in carrier
+        mutators: dict[str, Any] = {
+            "setitem": lambda c: c.__setitem__("x", "y"),
+            "update": lambda c: c.update({"x": "y"}),
+            "pop": lambda c: c.pop("traceparent"),
+            "popitem": lambda c: c.popitem(),
+            "clear": lambda c: c.clear(),
+            "setdefault": lambda c: c.setdefault("x", "y"),
+            "delitem": lambda c: c.__delitem__("traceparent"),
+            "ior": lambda c: c.__ior__({"x": "y"}),
+            "reinit": lambda c: c.__init__({"x": "y"}),
+        }
+        for name, mutate in mutators.items():
+            with pytest.raises(TypeError):
+                mutate(context.carrier)
+            assert context.carrier == {"traceparent": carrier["traceparent"]}, name
+
+    def test_carrier_is_still_a_dict(self) -> None:
+        context = _make_context(carrier={"a": "b"})
+
+        assert isinstance(context.carrier, dict)
+
+    def test_carrier_serializes_and_copies_to_a_plain_equal_dict(self) -> None:
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+        context = _make_context(carrier=carrier)
+        assert context.carrier is not None
+
+        assert json.loads(json.dumps(context.carrier)) == carrier
+        as_dict = dataclasses.asdict(context)["carrier"]
+        assert as_dict == carrier
+        assert type(as_dict) is dict
+        for copied in (
+            copy.deepcopy(context.carrier),
+            copy.copy(context.carrier),
+            pickle.loads(pickle.dumps(context.carrier)),  # nosec B301
+        ):
+            assert copied == carrier
+            assert type(copied) is dict
+        assert copy.deepcopy(context).carrier == carrier
+        assert pickle.loads(pickle.dumps(context)).carrier == carrier  # nosec B301
+
+
+class TestHookContextIsFrozenExceptOutcomeFields:
+    """After construction every field is read-only except the engine and instrument outcome fields."""
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("run_id", "forged"),
+            ("tenant_id", "forged"),
+            ("principal", "forged"),
+            ("carrier", {"forged": "yes"}),
+            ("data_access_identity", "forged"),
+            ("feature_names", ("forged",)),
+            ("feature_group_class", "pkg.Forged"),
+            ("specialized_from", ("pkg.Forged",)),
+        ],
+    )
+    def test_assigning_a_frozen_field_raises(self, field: str, value: Any) -> None:
+        context = _make_context(run_id="real", tenant_id="t", principal="p", carrier={"a": "b"})
+        before = getattr(context, field)
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(context, field, value)
+
+        assert getattr(context, field) == before
+
+    @pytest.mark.parametrize(
+        "field",
+        ["run_id", "tenant_id", "principal", "carrier", "data_access_identity", "feature_names", "feature_group_class"],
+    )
+    def test_deleting_a_frozen_field_raises_and_keeps_the_value(self, field: str) -> None:
+        context = _make_context(
+            run_id="real", tenant_id="t", principal="p", carrier={"a": "b"}, data_access_identity="d"
+        )
+        before = getattr(context, field)
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            delattr(context, field)
+
+        assert getattr(context, field) == before
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("rows_out", 7),
+            ("output_schema", (("a", "int64"),)),
+            ("duration_seconds", 0.5),
+            ("status", "success"),
+        ],
+    )
+    def test_writable_allowlist_stays_writable(self, field: str, value: Any) -> None:
+        context = _make_context()
+
+        setattr(context, field, value)
+
+        assert getattr(context, field) == value
+
+    def test_replace_still_works_and_the_copy_is_frozen_too(self) -> None:
+        context = _make_context(run_id="real")
+
+        copy_ = dataclasses.replace(context, run_id="other")
+
+        assert copy_.run_id == "other"
+        assert context.run_id == "real"
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            copy_.run_id = "forged"
+        copy_.status = "success"
 
 
 class TestHookContextInputFeatureEdgesField:
@@ -146,9 +275,28 @@ class TestHookContextInputFeatureEdgesField:
         assert context.input_feature_edges is not edges
 
         assert context.input_feature_edges is not None
-        context.input_feature_edges["mutated"] = ("yes",)
+        with pytest.raises(TypeError):
+            context.input_feature_edges["mutated"] = ("yes",)
 
         assert "mutated" not in edges
+        assert "mutated" not in context.input_feature_edges
+
+    def test_input_feature_edges_is_read_only_but_still_a_dict(self) -> None:
+        context = _make_context(input_feature_edges={"a": ("src_a",)})
+        edges = context.input_feature_edges
+
+        assert isinstance(edges, dict)
+        assert edges is not None
+        mutators: dict[str, Any] = {
+            "setitem": lambda d: d.__setitem__("x", ("y",)),
+            "update": lambda d: d.update({"x": ("y",)}),
+            "pop": lambda d: d.pop("a"),
+            "clear": lambda d: d.clear(),
+        }
+        for name, mutate in mutators.items():
+            with pytest.raises(TypeError):
+                mutate(edges)
+            assert edges == {"a": ("src_a",)}, name
 
 
 class TestHookContextWorkerIndexField:

@@ -364,13 +364,16 @@ class TestInputFeatureEdgesPerOutputFeature:
             first = extender.captured[0]
             assert first.input_feature_edges == {"a": ("src_a",)}
             assert first.input_feature_edges is not None
-            first.input_feature_edges["mutated"] = ("x",)
+            with pytest.raises(TypeError):
+                first.input_feature_edges["mutated"] = ("x",)
 
             assert feature_set.declared_input_feature_edges == {"a": ("src_a",)}
+            assert first.input_feature_edges is not feature_set.declared_input_feature_edges
 
             cfw.run_calculate_feature(_MutationProbeFeatureGroup, feature_set)
             later = extender.captured[-1]
             assert later.input_feature_edges == {"a": ("src_a",)}
+            assert first.input_feature_edges is not later.input_feature_edges
         finally:
             del _MutationProbeFeatureGroup
             gc.collect()

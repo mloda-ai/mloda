@@ -5,6 +5,8 @@ data_access_identity/format/dataset_version), the no-extender baseline, deny-bef
 deny-with-fallback, and the "activate only when needed" short-circuit.
 """
 
+import concurrent.futures
+import contextvars
 import logging
 import sqlite3
 from pathlib import Path, PurePosixPath
@@ -20,6 +22,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import FeatureGroup
+from mloda.steward import GateBypassError
 from mloda.user import DataAccessCollection, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -293,17 +296,19 @@ class TestComputeFrameworkCurrentShortCircuit:
         assert observed[0] is None
 
 
-def _build_calc_context(compute_framework_name: str = "stub") -> HookContext:
+def _build_calc_context(compute_framework_name: str = "stub", **overrides: Any) -> HookContext:
     """A minimal calculate-phase HookContext to activate() around a direct _load_data_via_hook call."""
-    return HookContext(
-        hook=ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
-        feature_group_class="test.Fake",
-        feature_group_version="1",
-        plugin_version=None,
-        feature_names=("x",),
-        input_features=None,
-        compute_framework_name=compute_framework_name,
-    )
+    fields: dict[str, Any] = {
+        "hook": ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
+        "feature_group_class": "test.Fake",
+        "feature_group_version": "1",
+        "plugin_version": None,
+        "feature_names": ("x",),
+        "input_features": None,
+        "compute_framework_name": compute_framework_name,
+    }
+    fields.update(overrides)
+    return HookContext(**fields)
 
 
 class _DirectLoadReader(BaseInputData):
@@ -974,55 +979,47 @@ class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
 
 
 class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
-    """Two INPUT_DATA_LOAD HookContexts built off the SAME ComputeFramework instance's
-    run_context.carrier must not share the dict object."""
+    """Two INPUT_DATA_LOAD HookContexts derived from ONE active calculate context's carrier
+    must not share the dict object with each other or with that source."""
+
+    def _two_loads(self) -> tuple[HookContext, HookContext, HookContext]:
+        extender = _InputDataLoadCapturingExtender()
+        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+        cfw = ComputeFramework(function_extender={extender})
+        cfw.run_context = RunContext()
+        reader = _DirectLoadReader()
+        features = FeatureSet()
+        calc_context = _build_calc_context(carrier=carrier)
+
+        with cfw.activate(), calc_context.activate():
+            BaseInputData._load_data_via_hook(reader, "access-one", features)
+            first_context = extender.captured
+            BaseInputData._load_data_via_hook(reader, "access-two", features)
+            second_context = extender.captured
+
+        assert first_context is not None
+        assert second_context is not None
+        return first_context, second_context, calc_context
 
     def test_two_direct_load_calls_get_distinct_carrier_objects(self) -> None:
-        extender = _InputDataLoadCapturingExtender()
-        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
-        cfw = ComputeFramework(function_extender={extender})
-        cfw.run_context = RunContext(carrier=carrier)
-        reader = _DirectLoadReader()
-        features = FeatureSet()
+        first_context, second_context, calc_context = self._two_loads()
 
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, "access-one", features)
-        first_context = extender.captured
-
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, "access-two", features)
-        second_context = extender.captured
-
-        assert first_context is not None
-        assert second_context is not None
-        assert first_context.carrier == second_context.carrier == carrier
+        assert first_context.carrier == second_context.carrier == calc_context.carrier
         assert first_context.carrier is not second_context.carrier
+        assert first_context.carrier is not calc_context.carrier
+        assert second_context.carrier is not calc_context.carrier
 
-    def test_mutating_one_carrier_does_not_leak_into_the_other_or_run_context(self) -> None:
-        extender = _InputDataLoadCapturingExtender()
-        carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
-        cfw = ComputeFramework(function_extender={extender})
-        cfw.run_context = RunContext(carrier=carrier)
-        reader = _DirectLoadReader()
-        features = FeatureSet()
+    def test_mutating_one_carrier_does_not_leak_into_the_other_or_source(self) -> None:
+        first_context, second_context, calc_context = self._two_loads()
 
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, "access-one", features)
-        first_context = extender.captured
-
-        with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, "access-two", features)
-        second_context = extender.captured
-
-        assert first_context is not None
         assert first_context.carrier is not None
-        first_context.carrier["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            first_context.carrier["mutated"] = "yes"
 
-        assert second_context is not None
         assert second_context.carrier is not None
         assert "mutated" not in second_context.carrier
-        assert cfw.run_context.carrier is not None
-        assert "mutated" not in cfw.run_context.carrier
+        assert calc_context.carrier is not None
+        assert "mutated" not in calc_context.carrier
 
 
 class TestInputDataLoadHookCarriesInputFeatureEdges:
@@ -1033,8 +1030,7 @@ class TestInputDataLoadHookCarriesInputFeatureEdges:
         cfw = ComputeFramework(function_extender={extender})
         cfw.run_context = RunContext()
         reader = _DirectLoadReader()
-        calc_context = _build_calc_context()
-        calc_context.input_feature_edges = {"a": ("src_a",), "b": ("src_b",)}
+        calc_context = _build_calc_context(input_feature_edges={"a": ("src_a",), "b": ("src_b",)})
 
         with cfw.activate(), calc_context.activate():
             BaseInputData._load_data_via_hook(reader, "access", FeatureSet())
@@ -1053,6 +1049,160 @@ class TestInputDataLoadHookCarriesInputFeatureEdges:
 
         assert extender.captured is not None
         assert extender.captured.input_feature_edges is None
+
+
+class TestInputDataLoadIdentityComesFromTheCalcContext:
+    """A forged cfw.run_context cannot change the identity/run fields the INPUT_DATA_LOAD context carries."""
+
+    def test_forged_cfw_run_context_is_ignored(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+        calc_context = _build_calc_context(
+            run_id="real-run",
+            carrier={"traceparent": "real"},
+            tenant_id="real-tenant",
+            project_id="real-project",
+            principal="real-principal",
+            worker_index=5,
+        )
+        cfw.run_context = RunContext(
+            run_id="forged-run",
+            carrier={"traceparent": "forged"},
+            tenant_id="forged-tenant",
+            project_id="forged-project",
+            principal="forged-principal",
+        )
+        cfw.worker_index = 9
+
+        with cfw.activate(), calc_context.activate():
+            BaseInputData._load_data_via_hook(_DirectLoadReader(), "access", FeatureSet())
+
+        captured = extender.captured
+        assert captured is not None
+        assert captured.run_id == "real-run"
+        assert captured.carrier == {"traceparent": "real"}
+        assert captured.tenant_id == "real-tenant"
+        assert captured.project_id == "real-project"
+        assert captured.principal == "real-principal"
+        assert captured.worker_index == 5
+
+
+class _GateInputDataLoadExtender(_InputDataLoadCapturingExtender):
+    """A gate INPUT_DATA_LOAD extender that delegates and records its calls."""
+
+    never_fall_back = True
+
+
+class _CountingReader(_DirectLoadReader):
+    """Reader counting its load_data calls, for direct _load_data_via_hook calls."""
+
+    loads = 0
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        cls.loads += 1
+        return super().load_data(data_access, features)
+
+
+def _threaded_load_feature_group(mode: str) -> type[FeatureGroup]:
+    """A FeatureGroup whose calculate_feature loads the reader from a worker thread (mode: bare or copied)."""
+
+    class _ThreadedLoadFeatureGroup(FeatureGroup):
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            def load() -> Any:
+                return BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                if mode == "copied":
+                    return pool.submit(contextvars.copy_context().run, load).result()
+                return pool.submit(load).result()
+
+    return _ThreadedLoadFeatureGroup
+
+
+def _run_calculate(cfw: ComputeFramework, feature_group: type[FeatureGroup]) -> Any:
+    return cfw.run_calculate_feature(feature_group, FeatureSet())
+
+
+class TestGateRefusesAThreadHoppedReaderLoad:
+    """Under a gate INPUT_DATA_LOAD extender, a load whose ContextVar was lost is refused, not run ungated."""
+
+    def test_bare_thread_hop_raises_and_the_reader_never_loads(self) -> None:
+        gate = _GateInputDataLoadExtender()
+        cfw = PythonDictFramework(function_extender={gate})
+        _CountingReader.loads = 0
+
+        with pytest.raises(GateBypassError, match="copy_context"):
+            _run_calculate(cfw, _threaded_load_feature_group("bare"))
+
+        assert _CountingReader.loads == 0
+        assert len(gate.all_captured) == 0
+
+    def test_non_gate_extender_still_loads_across_a_thread_hop(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = PythonDictFramework(function_extender={extender})
+        _CountingReader.loads = 0
+
+        result = _run_calculate(cfw, _threaded_load_feature_group("bare"))
+
+        assert result == [1, 2, 3]
+        assert _CountingReader.loads == 1
+
+    def test_no_extender_still_loads_across_a_thread_hop(self) -> None:
+        cfw = PythonDictFramework()
+        _CountingReader.loads = 0
+
+        assert _run_calculate(cfw, _threaded_load_feature_group("bare")) == [1, 2, 3]
+        assert _CountingReader.loads == 1
+
+    def test_copy_context_thread_hop_reaches_the_gate(self) -> None:
+        gate = _GateInputDataLoadExtender()
+        cfw = PythonDictFramework(function_extender={gate})
+        _CountingReader.loads = 0
+
+        result = _run_calculate(cfw, _threaded_load_feature_group("copied"))
+
+        assert result == [1, 2, 3]
+        assert len(gate.all_captured) == 1
+        assert _CountingReader.loads == 1
+
+    def test_gate_active_cfw_without_calc_context_raises(self) -> None:
+        gate = _GateInputDataLoadExtender()
+        cfw = ComputeFramework(function_extender={gate})
+        _CountingReader.loads = 0
+
+        with cfw.activate(), pytest.raises(GateBypassError):
+            BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+
+        assert _CountingReader.loads == 0
+        assert len(gate.all_captured) == 0
+
+    def test_non_gate_extender_without_calc_context_calls_the_reader_directly(self) -> None:
+        extender = _InputDataLoadCapturingExtender()
+        cfw = ComputeFramework(function_extender={extender})
+
+        with cfw.activate():
+            result = BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+
+        assert result == [1, 2, 3]
+        assert extender.captured is None
+
+    def test_gate_scope_is_released_when_the_calculate_raises(self) -> None:
+        class _RaisingFeatureGroup(FeatureGroup):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                raise RuntimeError("calculate boom")
+
+        cfw = PythonDictFramework(function_extender={_GateInputDataLoadExtender()})
+        with pytest.raises(RuntimeError, match="calculate boom"):
+            _run_calculate(cfw, _RaisingFeatureGroup)
+
+        _CountingReader.loads = 0
+        result = BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+
+        assert result == [1, 2, 3]
+        assert _CountingReader.loads == 1
 
 
 class _DeclaringReader(_DirectLoadReader):

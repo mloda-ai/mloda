@@ -3,6 +3,8 @@ down to HookContext."""
 
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -235,9 +237,10 @@ class TestCarrierIsCopiedOnIngestNotAliased:
         assert extender.captured.carrier == caller_carrier
         assert extender.captured.carrier is not caller_carrier
 
-        # Mutating the ComputeFramework-owned copy must not leak back into the caller's dict.
+        # The ComputeFramework-owned copy is read-only, and the caller's dict stays untouched.
         assert extender.captured.carrier is not None
-        extender.captured.carrier["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            extender.captured.carrier["mutated"] = "yes"
         assert "mutated" not in caller_carrier
         assert caller_carrier == _CARRIER
 

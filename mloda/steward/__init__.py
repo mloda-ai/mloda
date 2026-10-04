@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
     CompositeExtender,
+    GateBypassError,
 )
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema
 from mloda.core.abstract_plugins.close_context import CloseContext
@@ -89,6 +90,7 @@ __all__ = [
     "HookContext",
     "OutputSchema",
     "CompositeExtender",
+    "GateBypassError",
     "CloseContext",
     # Server-verified tenant/project/principal context seam
     "verified_context",

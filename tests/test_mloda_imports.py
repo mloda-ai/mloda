@@ -272,6 +272,10 @@ def test_import_steward_governance() -> None:
     assert ExtenderHook is not None
     assert CloseContext is not None
     assert "CloseContext" in steward_module.__all__
+    assert "GateBypassError" in steward_module.__all__
+    from mloda.steward import GateBypassError
+
+    assert issubclass(GateBypassError, RuntimeError)
     # Optional-dependency import guards
     assert callable(traceback_blames_root)
     assert "traceback_blames_root" in steward_module.__all__

@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, instrument
+from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, input_data_load_gate_scope, instrument
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -705,7 +705,8 @@ class ComputeFramework(ABC):
             return method(self.data, features)
 
         context = self._build_hook_context(hook, feature_group, features)
-        with self.activate(), context.activate():
+        gated = fetch_extender is not None and fetch_extender.never_fall_back
+        with self.activate(), context.activate(), input_data_load_gate_scope() if gated else contextlib.nullcontext():
             if extender is None:
                 return method(self.data, features)
             return _invoke_extender(

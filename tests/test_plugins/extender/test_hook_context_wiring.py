@@ -701,7 +701,8 @@ class TestCarrierIsNotAliasedAcrossHooksSharingOneComputeFramework:
         output_context = output_extender.captured
         assert input_context is not None
         assert input_context.carrier is not None
-        input_context.carrier["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            input_context.carrier["mutated"] = "yes"
 
         assert output_context is not None
         assert output_context.carrier is not None

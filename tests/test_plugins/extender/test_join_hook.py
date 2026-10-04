@@ -199,7 +199,8 @@ class TestJoinHookCarrierIsNotAliasedAcrossTwoMergesOnSameComputeFramework:
         assert len(extender.captured) == 2
         first_context, second_context = extender.captured
         assert first_context.carrier is not None
-        first_context.carrier["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            first_context.carrier["mutated"] = "yes"
 
         assert second_context.carrier is not None
         assert "mutated" not in second_context.carrier

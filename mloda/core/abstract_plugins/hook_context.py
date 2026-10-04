@@ -6,10 +6,11 @@ and instrument's timing/status bookkeeping around a wrapped call.
 
 import contextlib
 import functools
+import threading
 import time
 from collections.abc import Callable, Generator
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.utils import safe_field
@@ -21,6 +22,54 @@ if TYPE_CHECKING:
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
 OutputSchema = tuple[tuple[str, str | None], ...]
+
+_WRITABLE_FIELDS = frozenset(
+    {"rows_out", "output_schema", "duration_seconds", "status", "feature_group_class", "specialized_from"}
+)
+
+_gate_scopes = 0
+_gate_scopes_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def input_data_load_gate_scope() -> Generator[None, None, None]:
+    """Count one active INPUT_DATA_LOAD gate calculation process-wide, exception-safe."""
+    global _gate_scopes
+    with _gate_scopes_lock:
+        _gate_scopes += 1
+    try:
+        yield
+    finally:
+        with _gate_scopes_lock:
+            _gate_scopes -= 1
+
+
+def input_data_load_gate_scopes_active() -> int:
+    with _gate_scopes_lock:
+        return _gate_scopes
+
+
+def _read_only(self: Any, *args: Any, **kwargs: Any) -> Any:
+    raise TypeError("HookContext.carrier is read-only")
+
+
+class _ReadOnlyCarrier(dict[str, str]):
+    """dict that rejects mutation and pickles/copies as a plain dict."""
+
+    __setitem__ = __delitem__ = update = pop = popitem = clear = setdefault = __ior__ = _read_only
+
+    def __new__(cls, *args: Any) -> Any:
+        # Rebuilding via type(x)(items) (dataclasses.asdict) yields a plain dict; ingest uses _frozen_carrier.
+        return dict(*args)
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return (dict, (dict(self),))
+
+
+def _frozen_carrier(source: dict[str, str]) -> dict[str, str]:
+    carrier = dict.__new__(_ReadOnlyCarrier)
+    dict.update(carrier, source)
+    return carrier
 
 
 @dataclass(kw_only=True)
@@ -64,9 +113,15 @@ class HookContext:
             self.declared_attributes = dict(self.declared_attributes)
         # Copy on ingest so a hook mutating the carrier or input_feature_edges never reaches the caller's dict.
         if self.carrier is not None:
-            self.carrier = dict(self.carrier)
+            self.carrier = _frozen_carrier(self.carrier)
         if self.input_feature_edges is not None:
             self.input_feature_edges = dict(self.input_feature_edges)
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if self.__dict__.get("_sealed") and name not in _WRITABLE_FIELDS:
+            raise FrozenInstanceError(f"cannot assign to field {name!r}")
+        object.__setattr__(self, name, value)
 
     @staticmethod
     def row_count(data: Any) -> int | None:

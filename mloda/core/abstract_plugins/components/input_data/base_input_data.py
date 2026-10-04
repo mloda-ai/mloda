@@ -15,8 +15,8 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 )
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
-from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.function_extender import ExtenderHook, GateBypassError, _invoke_extender
+from mloda.core.abstract_plugins.hook_context import HookContext, input_data_load_gate_scopes_active, instrument
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
@@ -603,6 +603,12 @@ class BaseInputData(ABC):
 
         cfw = ComputeFramework.current()
         if cfw is None:
+            if input_data_load_gate_scopes_active() > 0:
+                raise GateBypassError(
+                    f"{type(reader).__qualname__}.load_data ran outside the calculation context while an "
+                    "INPUT_DATA_LOAD gate is active (a thread hop lost it); run the thread's work with "
+                    "contextvars.copy_context().run."
+                )
             return reader.load_data(data_access, features)
 
         extender = cfw.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
@@ -611,6 +617,11 @@ class BaseInputData(ABC):
 
         calc_context = HookContext.current()
         if calc_context is None:
+            if extender.never_fall_back:
+                raise GateBypassError(
+                    f"{type(reader).__qualname__}.load_data ran without a calculate-phase HookContext under an "
+                    "INPUT_DATA_LOAD gate; run the thread's work with contextvars.copy_context().run."
+                )
             return reader.load_data(data_access, features)
 
         identity = reader.data_access_identity(data_access)
@@ -635,12 +646,12 @@ class BaseInputData(ABC):
             input_features=calc_context.input_features,
             input_feature_edges=calc_context.input_feature_edges,
             compute_framework_name=cfw.get_class_name(),
-            run_id=cfw.run_context.run_id,
-            carrier=cfw.run_context.carrier,
-            tenant_id=cfw.run_context.tenant_id,
-            project_id=cfw.run_context.project_id,
-            principal=cfw.run_context.principal,
-            worker_index=cfw.worker_index,
+            run_id=calc_context.run_id,
+            carrier=calc_context.carrier,
+            tenant_id=calc_context.tenant_id,
+            project_id=calc_context.project_id,
+            principal=calc_context.principal,
+            worker_index=calc_context.worker_index,
             data_access_identity=identity,
             data_access_identity_is_fallback=is_fallback,
             data_access_format=reader.data_access_name(),

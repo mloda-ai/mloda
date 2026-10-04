@@ -70,6 +70,18 @@ class _ExtStrictUnregisteredB(Extender):
         return func(*args, **kwargs)
 
 
+class _ExtStrictUnregisteredGate(Extender):
+    """Never-registered gate (never_fall_back)."""
+
+    never_fall_back = True
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
 class _ExtStrictInjectedOnly(Extender):
     """Local double registered ONLY in a fresh injected registry."""
 
@@ -159,6 +171,28 @@ class TestFilterExtendersStrict:
         assert _messages_naming(caplog, _ExtStrictUnregisteredA), (
             "strict mode must warn with the dropped classes as module:qualname"
         )
+
+    def test_strict_unregistered_gate_raises_naming_class(self) -> None:
+        from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, filter_extenders_by_strict_mode
+
+        collector = PluginCollector().set_strict_mode("strict")
+        with pytest.raises(EnvironmentPreconditionError, match="_ExtStrictUnregisteredGate"):
+            filter_extenders_by_strict_mode({_ExtStrictUnregisteredGate(), _ExtStrictUnregisteredA()}, collector)
+
+    def test_strict_registered_gate_is_kept(self) -> None:
+        from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
+
+        register_plugin(_ExtStrictUnregisteredGate)
+        gate = _ExtStrictUnregisteredGate()
+        collector = PluginCollector().set_strict_mode("strict")
+        assert filter_extenders_by_strict_mode({gate}, collector) == {gate}
+
+    def test_warn_keeps_unregistered_gate(self) -> None:
+        from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
+
+        gate = _ExtStrictUnregisteredGate()
+        collector = PluginCollector().set_strict_mode("warn")
+        assert filter_extenders_by_strict_mode({gate}, collector) == {gate}
 
     def test_strict_dropping_all_yields_empty_set_without_raising(self) -> None:
         from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode

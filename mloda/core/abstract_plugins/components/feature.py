@@ -7,7 +7,7 @@ from uuid import uuid4
 from mloda.core.abstract_plugins.components.data_types import DataType
 
 if TYPE_CHECKING:
-    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+    from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -181,7 +181,7 @@ class Feature:
         self.resolving_path: tuple[str, ...] = ()
 
         # (reader class, data access) the engine matched for this feature; credential-free key in equality/hash.
-        self.input_data_match: tuple[type[BaseInputData], Any] | None = None
+        self.input_data_match: tuple[DataAccessReader, Any] | None = None
 
         # Group keys forwarded onto this input feature, set by Features.merge_options; excluded
         # from equality and hash like link/index.
@@ -450,20 +450,20 @@ class Feature:
         )
 
     @property
-    def input_data_match(self) -> tuple[type[BaseInputData], Any] | None:
+    def input_data_match(self) -> tuple[DataAccessReader, Any] | None:
         return self._input_data_match
 
     @input_data_match.setter
-    def input_data_match(self, value: tuple[type[BaseInputData], Any] | None) -> None:
+    def input_data_match(self, value: tuple[DataAccessReader, Any] | None) -> None:
         self._input_data_match = value
-        self._input_data_match_cached_key: tuple[type[BaseInputData], str] | None = None
+        self._input_data_match_cached_key: tuple[DataAccessReader, str] | None = None
         if value is not None:
             reader, access = value
             fallback = type(access).__name__
             identity = safe_field(lambda: reader.data_access_identity(access), fallback)
             self._input_data_match_cached_key = (reader, identity)
 
-    def _input_data_match_key(self) -> tuple[type[BaseInputData], str] | None:
+    def _input_data_match_key(self) -> tuple[DataAccessReader, str] | None:
         return self._input_data_match_cached_key
 
     def __copy__(self) -> Feature:

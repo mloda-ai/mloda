@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
 
 if TYPE_CHECKING:
-    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+    from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader
 
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
@@ -98,13 +98,14 @@ class HookContext:
     worker_index: int | None = None
     data_access_format: str | None = None
     data_access_dataset_version: str | None = None
+    data_access_loader: str | None = None
     join_type: str | None = None
     join_keys: tuple[str, ...] | None = None
     plan_feature_count: int | None = None
     plan_node_count: int | None = None
     plan_depth: int | None = None
     declared_attributes: dict[str, str | int | float | bool] | None = None
-    reader_class: "type[BaseInputData] | None" = None
+    reader_class: "DataAccessReader | None" = None
 
     def __post_init__(self) -> None:
         if self.declared_attributes is not None:

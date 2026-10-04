@@ -2,9 +2,9 @@ import logging
 import os
 import weakref
 from abc import ABC
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import PurePath
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import _URI_PATTERN, _uri_projection
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -69,6 +69,89 @@ def _is_fallback_identity(data_access: Any, identity: str) -> bool:
     if identity == type(data_access).__name__:
         return True
     return isinstance(data_access, Mapping) and identity == _format_keys(str(key) for key in data_access)
+
+
+def dispatch_input_data_load(
+    owner: Any,
+    owner_type: Any,
+    load: Callable[[Any, FeatureSet], Any],
+    data_access: Any,
+    features: FeatureSet,
+    *,
+    identity: Callable[[], str],
+    data_access_format: Callable[[], str],
+    loader_name: str | None = None,
+) -> Any:
+    """Run load through the INPUT_DATA_LOAD extender when one is registered, instrumenting it with a HookContext
+    that inherits identity fields from the active calculate-phase HookContext."""
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+
+    cfw = ComputeFramework.current()
+    if cfw is None:
+        if input_data_load_gate_scopes_active() > 0:
+            raise GateBypassError(
+                f"{owner_type.__qualname__}.load_data ran outside the calculation context while an "
+                "INPUT_DATA_LOAD gate is active (a thread hop lost it); run the thread's work with "
+                "contextvars.copy_context().run."
+            )
+        return load(data_access, features)
+
+    extender = cfw.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
+    if extender is None:
+        return load(data_access, features)
+
+    calc_context = HookContext.current()
+    if calc_context is None:
+        if extender.never_fall_back:
+            raise GateBypassError(
+                f"{owner_type.__qualname__}.load_data ran without a calculate-phase HookContext under an "
+                "INPUT_DATA_LOAD gate; run the thread's work with contextvars.copy_context().run."
+            )
+        return load(data_access, features)
+
+    access_identity = identity()
+    is_fallback = _is_fallback_identity(data_access, access_identity)
+    if is_fallback and owner_type not in _fallback_identity_warned:
+        _fallback_identity_warned.add(owner_type)
+        logger.warning(
+            "%s.data_access_identity fell back to %r, which names no source, so INPUT_DATA_LOAD extenders "
+            "cannot tell its sources apart; override data_access_identity on %s.",
+            owner_type.__qualname__,
+            access_identity,
+            owner_type.__qualname__,
+        )
+
+    context = HookContext(
+        hook=ExtenderHook.INPUT_DATA_LOAD,
+        feature_group_class=calc_context.feature_group_class,
+        feature_group_version=calc_context.feature_group_version,
+        plugin_version=calc_context.plugin_version,
+        feature_names=calc_context.feature_names,
+        specialized_from=calc_context.specialized_from,
+        input_features=calc_context.input_features,
+        input_feature_edges=calc_context.input_feature_edges,
+        compute_framework_name=cfw.get_class_name(),
+        run_id=calc_context.run_id,
+        carrier=calc_context.carrier,
+        tenant_id=calc_context.tenant_id,
+        project_id=calc_context.project_id,
+        principal=calc_context.principal,
+        worker_index=calc_context.worker_index,
+        data_access_identity=access_identity,
+        data_access_identity_is_fallback=is_fallback,
+        data_access_format=data_access_format(),
+        data_access_dataset_version=None,
+        data_access_loader=loader_name,
+        declared_attributes=safe_field(
+            lambda: read_declared_attributes(owner, features),
+            None,
+            field=f"{owner_type.__qualname__}.declared_attributes",
+            warn_once_for=owner_type,
+        ),
+        reader_class=owner_type,
+    )
+    with context.activate():
+        return _invoke_extender(extender, instrument(context, load, row_count=cfw._row_count), data_access, features)
 
 
 class BaseInputData(ABC):
@@ -587,7 +670,7 @@ class BaseInputData(ABC):
                 "the reader match is set while the feature group is identified."
             )
 
-        reader, data_access = self.init_reader(match)
+        reader, data_access = self.init_reader(cast("tuple[type[BaseInputData], Any]", match))
         data = self._load_data_via_hook(reader, data_access, features)
 
         if data is None:
@@ -597,77 +680,16 @@ class BaseInputData(ABC):
 
     @staticmethod
     def _load_data_via_hook(reader: "BaseInputData", data_access: Any, features: FeatureSet) -> Any:
-        """Dispatch reader.load_data through the INPUT_DATA_LOAD extender when one is registered,
-        instrumenting the call with a HookContext that inherits identity fields from the active calculate-phase HookContext."""
-        from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-
-        cfw = ComputeFramework.current()
-        if cfw is None:
-            if input_data_load_gate_scopes_active() > 0:
-                raise GateBypassError(
-                    f"{type(reader).__qualname__}.load_data ran outside the calculation context while an "
-                    "INPUT_DATA_LOAD gate is active (a thread hop lost it); run the thread's work with "
-                    "contextvars.copy_context().run."
-                )
-            return reader.load_data(data_access, features)
-
-        extender = cfw.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
-        if extender is None:
-            return reader.load_data(data_access, features)
-
-        calc_context = HookContext.current()
-        if calc_context is None:
-            if extender.never_fall_back:
-                raise GateBypassError(
-                    f"{type(reader).__qualname__}.load_data ran without a calculate-phase HookContext under an "
-                    "INPUT_DATA_LOAD gate; run the thread's work with contextvars.copy_context().run."
-                )
-            return reader.load_data(data_access, features)
-
-        identity = reader.data_access_identity(data_access)
-        is_fallback = _is_fallback_identity(data_access, identity)
-        if is_fallback and type(reader) not in _fallback_identity_warned:
-            _fallback_identity_warned.add(type(reader))
-            logger.warning(
-                "%s.data_access_identity fell back to %r, which names no source, so INPUT_DATA_LOAD extenders "
-                "cannot tell its sources apart; override data_access_identity on %s.",
-                type(reader).__qualname__,
-                identity,
-                type(reader).__qualname__,
-            )
-
-        context = HookContext(
-            hook=ExtenderHook.INPUT_DATA_LOAD,
-            feature_group_class=calc_context.feature_group_class,
-            feature_group_version=calc_context.feature_group_version,
-            plugin_version=calc_context.plugin_version,
-            feature_names=calc_context.feature_names,
-            specialized_from=calc_context.specialized_from,
-            input_features=calc_context.input_features,
-            input_feature_edges=calc_context.input_feature_edges,
-            compute_framework_name=cfw.get_class_name(),
-            run_id=calc_context.run_id,
-            carrier=calc_context.carrier,
-            tenant_id=calc_context.tenant_id,
-            project_id=calc_context.project_id,
-            principal=calc_context.principal,
-            worker_index=calc_context.worker_index,
-            data_access_identity=identity,
-            data_access_identity_is_fallback=is_fallback,
-            data_access_format=reader.data_access_name(),
-            data_access_dataset_version=None,
-            declared_attributes=safe_field(
-                lambda: read_declared_attributes(reader, features),
-                None,
-                field=f"{type(reader).__qualname__}.declared_attributes",
-                warn_once_for=type(reader),
-            ),
-            reader_class=type(reader),
+        """Dispatch reader.load_data through the INPUT_DATA_LOAD extender when one is registered."""
+        return dispatch_input_data_load(
+            reader,
+            type(reader),
+            reader.load_data,
+            data_access,
+            features,
+            identity=lambda: reader.data_access_identity(data_access),
+            data_access_format=reader.data_access_name,
         )
-        with context.activate():
-            return _invoke_extender(
-                extender, instrument(context, reader.load_data, row_count=cfw._row_count), data_access, features
-            )
 
     @classmethod
     def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:

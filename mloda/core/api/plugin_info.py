@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute
+
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -24,6 +26,8 @@ class FeatureGroupInfo:
     subtype_support: dict[str, list[str]] = field(default_factory=dict)
     # Message when the capability declaration is invalid, None for a legitimately empty matrix.
     subtype_error: str | None = None
+    # ClaimRoutes of a FormatFeatureGroup; empty for every other group.
+    claim_routes: list[ClaimRoute] = field(default_factory=list)
 
 
 @dataclass

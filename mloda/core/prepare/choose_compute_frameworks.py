@@ -3,13 +3,14 @@ Arc consistency prunes the domains, then branch and bound with forward checking 
 """
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from functools import partial
 from typing import NamedTuple
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.options import Options, _str_option_dict
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
@@ -59,7 +60,20 @@ def _names(features: tuple[Feature, ...]) -> list[str]:
 
 
 def stable_text(value: object) -> str:
-    """Text of a value with object addresses removed, so it is equal across interpreters."""
+    """Text of a value with addresses removed and set elements sorted, so it is equal across interpreters."""
+    if isinstance(value, Options):
+        parts = f"group={stable_text(_str_option_dict(value.group))}, context={stable_text(_str_option_dict(value.context))}"
+        if value.propagate_context_keys:
+            parts += f", propagate_context_keys={stable_text(value.propagate_context_keys)}"
+        return f"Options({parts})"
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{k!r}: {stable_text(v)}" for k, v in value.items()) + "}"
+    if isinstance(value, list):
+        return "[" + ", ".join(stable_text(v) for v in value) + "]"
+    if isinstance(value, tuple):
+        return "(" + ", ".join(stable_text(v) for v in value) + ("," if len(value) == 1 else "") + ")"
+    if isinstance(value, (set, frozenset)):
+        return "{" + ", ".join(sorted(stable_text(v) for v in value)) + "}"
     return _ADDRESS.sub("", str(value))
 
 
@@ -70,13 +84,14 @@ def _block_key(fg: type[FeatureGroup], features: tuple[Feature, ...]) -> tuple[o
     return (fg.__module__, fg.__qualname__, tuple(_names(features)), tuple(data_types), tuple(allowed), tuple(options))
 
 
-def _refine(keys: list[tuple[object, ...]], neighbors: list[set[int]]) -> list[int]:
+def _refine(keys: Sequence[tuple[object, ...]], neighbors: list[set[int]]) -> list[int]:
     """Colour refinement: equal keys are told apart by the sorted classes of their neighbour blocks."""
-    classes = [sorted(set(keys)).index(key) for key in keys]
+    key_rank = {key: rank for rank, key in enumerate(sorted(set(keys)))}
+    classes = [key_rank[key] for key in keys]
     while True:
         labels = [(classes[i], tuple(sorted(classes[n] for n in neighbors[i]))) for i in range(len(keys))]
-        ordered = sorted(set(labels))
-        refined = [ordered.index(label) for label in labels]
+        label_rank = {label: rank for rank, label in enumerate(sorted(set(labels)))}
+        refined = [label_rank[label] for label in labels]
         if len(set(refined)) == len(set(classes)):
             return classes
         classes = refined

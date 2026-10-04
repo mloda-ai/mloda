@@ -54,12 +54,13 @@ claim is registry-wide, so generic names like ``sales`` would leak into every ot
 import ast
 import copy
 import dataclasses
+import itertools
 import json
 import sqlite3
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, get_args, get_origin
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import numpy as np
 import pandas as pd
@@ -72,7 +73,7 @@ import pytest
 # with the ``mloda`` mlodaAPI alias imported below.
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
-from mloda.core.api.plan_info import build_plan_steps
+from mloda.core.api.plan_info import _dependency_order, build_plan_steps
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -1967,6 +1968,39 @@ class TestBuildPlanStepsInputFeatureNames:
         backward = [step.step_uuid for step in build_plan_steps([second, first])]
 
         assert forward == backward
+
+    def test_dependency_order_with_tied_content_is_independent_of_raw_order(self) -> None:
+        class _Stub:
+            def __init__(self, token: UUID, requires: set[UUID]) -> None:
+                self._token = token
+                self.required_uuids = requires
+
+            def get_uuids(self) -> set[UUID]:
+                return {self._token}
+
+        def compute(name: str) -> PlanStep:
+            return PlanStep("compute", (name,), FeatureGroup, PandasDataFrame, None, None)
+
+        def join() -> PlanStep:
+            return PlanStep("join", (), FeatureGroup, PandasDataFrame, FeatureGroup, PyArrowTable, join_type="inner")
+
+        tokens = {name: uuid4() for name in ("r1", "r2", "j1", "j2", "w1", "w2")}
+        pairs = [
+            (_Stub(tokens["r1"], set()), compute("r1")),
+            (_Stub(tokens["r2"], set()), compute("r2")),
+            (_Stub(tokens["j1"], {tokens["r1"]}), join()),
+            (_Stub(tokens["j2"], {tokens["r2"]}), join()),
+            (_Stub(tokens["w1"], {tokens["j1"]}), compute("w1")),
+            (_Stub(tokens["w2"], {tokens["j2"]}), compute("w2")),
+        ]
+
+        orders = set()
+        for permutation in itertools.permutations(pairs):
+            raw_steps = [stub for stub, _ in permutation]
+            plan = [record for _, record in permutation]
+            orders.add(tuple((r.step_kind, r.feature_names) for r in _dependency_order(raw_steps, plan)))
+
+        assert len(orders) == 1
 
 
 class TestBuildPlanStepsReason:

@@ -13,6 +13,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -930,6 +931,56 @@ def test_blocks_equal_but_for_an_address_in_an_option_repr_choose_the_same_whate
     outcomes = {tuple(_choose_with_addresses(p)) for p in itertools.permutations((0x1000, 0x2000, 0x3000))}
 
     assert len(outcomes) == 1, f"the address order changed the assignment: {outcomes}"
+
+
+def _text_in_both_orders(build: Callable[[tuple[Any, Any]], Any], first: Any, second: Any) -> tuple[str, str]:
+    return (
+        choose_compute_frameworks.stable_text(build((first, second))),
+        choose_compute_frameworks.stable_text(build((second, first))),
+    )
+
+
+def test_set_iteration_differs_for_the_small_ints_used_below() -> None:
+    assert list({1, 9}) != list({9, 1})
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda v: Options(group={"k": set(v)}),
+        lambda v: Options(group={"k": frozenset(v)}),
+        lambda v: Options(group={"k": [{"inner": set(v)}]}),
+        lambda v: Options(group={"k": {"inner": [frozenset(v)]}}),
+    ],
+    ids=["set", "frozenset", "set_in_list_in_dict", "frozenset_in_dict_in_list"],
+)
+def test_stable_text_of_a_set_option_value_ignores_insertion_order(build: Callable[[tuple[Any, Any]], Any]) -> None:
+    one, other = _text_in_both_orders(build, 1, 9)
+
+    assert one == other
+
+
+def test_stable_text_of_propagate_context_keys_ignores_insertion_order() -> None:
+    names = [f"key_{i}" for i in range(200)]
+    first, second = next((a, b) for a in names for b in names if a < b and list({a, b}) != list({b, a}))
+
+    def build(pair: tuple[str, str]) -> Options:
+        return Options(context={first: 1, second: 2}, propagate_context_keys=frozenset(pair))
+
+    one, other = _text_in_both_orders(build, first, second)
+
+    assert one == other
+
+
+def test_stable_text_keeps_a_reader_tuple_option_redacted() -> None:
+    class _Reader:
+        @classmethod
+        def data_access_name(cls) -> str:
+            return "reader"
+
+    options = Options(group={"access": (_Reader, {"password": "hunter2-secret"})})
+
+    assert "hunter2-secret" not in choose_compute_frameworks.stable_text(options)
 
 
 def _block_data_types(types: list[DataType]) -> list[str]:

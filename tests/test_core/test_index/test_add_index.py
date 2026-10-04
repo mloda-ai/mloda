@@ -21,6 +21,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
+from mloda.core.abstract_plugins.components.index.add_index_feature import create_index_feature
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
@@ -143,3 +144,12 @@ class TestAddIndex:
         )
         res = result[0].to_pydict()
         assert res == {"TestAddIndexFeature": [6534.37, 2517.54]}
+
+
+def test_create_index_feature_copies_input_data_match() -> None:
+    source = Feature("add_index_match_col", compute_framework="PyArrowTable")
+    source.input_data_match = (CsvReader, "add_index_match_access")
+
+    index_feature = create_index_feature(Index(("id",)), FeatureGroup(), source)
+
+    assert index_feature.input_data_match == (CsvReader, "add_index_match_access")

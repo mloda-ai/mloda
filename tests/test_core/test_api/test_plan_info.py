@@ -31,9 +31,9 @@ Contract under test:
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * Compute steps carry ``feature_set_options`` (a deep-copied, group-only snapshot of the step's
     ``FeatureSet.options``) and ``step_uuid``; both stay out of equality.
-  * ``PlanStep.reader_data_access`` is a read-only property: the ``(ReaderClass, data_access)`` pair a
-    compute step resolved for reading its input file, or ``None`` for join/transform steps or a
-    compute step with no reader.
+  * ``PlanStep.reader_data_access`` is a dataclass field (``compare=False``, default ``None``): the
+    ``(ReaderClass, data_access)`` pair a compute step resolved for reading its input file, or ``None``
+    for join/transform steps or a compute step with no reader.
   * ``PlanStep.data_access_identity`` is a read-only ``str | None`` property: the reader's credential-free
     projection of ``reader_data_access``, ``None`` when there is none.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
@@ -565,6 +565,7 @@ class TestPlanStepDataclass:
             "step_uuid",
             "input_feature_edges",
             "specialized_from",
+            "reader_data_access",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -957,7 +958,7 @@ class TestPlanStepFeatureSetOptions:
 
 
 class TestPlanStepReaderDataAccess:
-    """reader_data_access is a read-only property, not a dataclass field."""
+    """reader_data_access is a compare=False dataclass field snapshotted from the step's FeatureSet match."""
 
     def test_compute_step_reading_a_file_reports_reader_and_data_access(self, tmp_path: Path) -> None:
         file_path = tmp_path / "plan_info_rows.parquet"
@@ -976,6 +977,8 @@ class TestPlanStepReaderDataAccess:
         step = compute_steps[0]
 
         assert step.reader_data_access == (ParquetReader, str(file_path))
+        assert step.feature_set_options is not None
+        assert "BaseInputData" not in step.feature_set_options.group
         assert step.data_access_identity == str(file_path)
         assert step.data_access_identity_is_fallback is False
 
@@ -983,8 +986,22 @@ class TestPlanStepReaderDataAccess:
         assert step.compute_framework is not None
         assert reader.count_rows(access, step.compute_framework) == 3
 
-    def test_reader_data_access_is_not_a_dataclass_field(self) -> None:
-        assert "reader_data_access" not in {field.name for field in dataclasses.fields(PlanStep)}
+    def test_reader_data_access_is_a_non_comparing_defaulted_field(self) -> None:
+        by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert by_name["reader_data_access"].compare is False
+        assert by_name["reader_data_access"].default is None
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales",),
+            feature_group=PlanInfoPandasSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+        assert step == dataclasses.replace(step, reader_data_access=(ParquetReader, "x"))
+        assert hash(step) == hash(dataclasses.replace(step, reader_data_access=(ParquetReader, "x")))
+
+    def test_identity_properties_are_not_dataclass_fields(self) -> None:
         assert "data_access_identity" not in {field.name for field in dataclasses.fields(PlanStep)}
         assert "data_access_identity_is_fallback" not in {field.name for field in dataclasses.fields(PlanStep)}
 
@@ -1031,7 +1048,8 @@ class TestPlanStepReaderDataAccess:
         assert step.data_access_identity == f"{db}::t"
         assert step.data_access_identity_is_fallback is False
 
-        safe = {f.name: getattr(step, f.name) for f in dataclasses.fields(step) if f.name != "feature_set_options"}
+        omitted = {"feature_set_options", "reader_data_access"}
+        safe = {f.name: getattr(step, f.name) for f in dataclasses.fields(step) if f.name not in omitted}
         safe["data_access_identity"] = step.data_access_identity
         assert "hunter2" not in json.dumps(safe, default=str)
 
@@ -1053,7 +1071,7 @@ class TestPlanStepReaderDataAccess:
             compute_framework=PandasDataFrame,
             source_feature_group=None,
             source_compute_framework=None,
-            feature_set_options=Options(group={"BaseInputData": (BaseInputData, 42)}),
+            reader_data_access=(BaseInputData, 42),
         )
         assert step.data_access_identity == "int"
         assert step.data_access_identity_is_fallback is True

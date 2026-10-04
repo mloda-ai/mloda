@@ -4,8 +4,8 @@ Pins the input-data reader SELECTION contract (issue #565).
 A feature selects a specific reader with an Option whose key equals the reader's
 class name (``BaseInputData.data_access_name()``, i.e. ``cls.__name__``). The key
 may also be the reader class itself. The matched ``(ReaderClass, data_access)``
-pair is stored under the reserved ``"BaseInputData"`` options key and consumed by
-``init_reader`` at load time. For non-file sources (e.g. HTTP), subclassing
+pair is written to the matcher's options fork under the reserved ``"BaseInputData"`` key, moved onto
+``Feature.input_data_match`` and consumed by ``init_reader`` at load time. For non-file sources (e.g. HTTP), subclassing
 ``ReadFile`` and overriding ``match_subclass_data_access`` plus ``load_data`` is
 the sanctioned pattern; ``suffix()`` is inert on that path.
 
@@ -342,19 +342,10 @@ class TestReservedBaseInputDataKey:
         with pytest.raises(ValueError, match="BaseInputData already set with different values"):
             BaseInputData.add_base_input_data_to_options(SiblingSel565ReaderB, _ACCESS_B, options)
 
-    def test_init_reader_consumes_stored_tuple(self) -> None:
-        options = Options(group={"BaseInputData": (SiblingSel565ReaderA, _ACCESS_A)})
-        reader, data_access = SiblingSel565ReaderA().init_reader(options)
+    def test_init_reader_consumes_the_pair(self) -> None:
+        reader, data_access = SiblingSel565ReaderA().init_reader((SiblingSel565ReaderA, _ACCESS_A))
         assert isinstance(reader, SiblingSel565ReaderA)
         assert data_access == _ACCESS_A
-
-    def test_init_reader_none_options_raises(self) -> None:
-        with pytest.raises(ValueError, match="Options were not set"):
-            SiblingSel565ReaderA().init_reader(None)
-
-    def test_init_reader_missing_base_input_data_key_raises(self) -> None:
-        with pytest.raises(ValueError, match="'BaseInputData' key is missing"):
-            SiblingSel565ReaderA().init_reader(Options())
 
 
 class TestUrlReaderRecipeEndToEnd:

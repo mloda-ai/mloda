@@ -394,7 +394,7 @@ class TestUngatedShapesKeepResolving:
 
         assert Vg954SiblingFG in result.identified
         assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Vg954CleanSiblingReader, VG954_CLEAN_ACCESS)
+        assert feature.input_data_match == (Vg954CleanSiblingReader, VG954_CLEAN_ACCESS)
 
     def test_an_unowned_global_content_decline_does_not_gate_the_name_rule(self, tmp_path: Path) -> None:
         """A content decline on the global probe, without the user addressing the reader, must not gate."""
@@ -462,7 +462,7 @@ class TestUngatedShapesKeepResolving:
 
         assert Vg954GatedFG in result.identified
         assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Vg954GateReader, VG954_GATE_ACCESS)
+        assert feature.input_data_match == (Vg954GateReader, VG954_GATE_ACCESS)
 
 
 class TestModuleLeakPolicy:

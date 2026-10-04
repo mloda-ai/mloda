@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
 SHARED_FEATURE = "shared_post_criteria_gate_feat_os061"
@@ -242,6 +243,7 @@ class _ResolvedOptions:
     context: dict[str, Any]
     non_forwarded: frozenset[str]
     own_group_keys: frozenset[str] = frozenset()
+    match: Any = None
 
 
 def _requested_own_keys() -> frozenset[str]:
@@ -260,6 +262,7 @@ def _resolve(candidates: list[type[FeatureGroup]], domain: str | None = None) ->
         context=dict(feature.options.context),
         non_forwarded=feature.options.non_forwarded_group_keys,
         own_group_keys=feature.options.own_group_keys,
+        match=feature.input_data_match,
     )
     del result
     gc.collect()
@@ -307,7 +310,8 @@ class TestWinnerOptionsAreOriginalPlusOwnWrites:
 
         assert resolved.escaped is None
         assert resolved.winners == ("SubFG_winner_iso",)
-        assert resolved.group[BaseInputData.__name__] == (ReaderSub_winner_iso, "sub_access")
+        assert BaseInputData.__name__ not in resolved.group
+        assert resolved.match == (ReaderSub_winner_iso, "sub_access")
 
 
 class TestEachCandidateSeesTheOriginalOptions:
@@ -327,7 +331,7 @@ class TestEachCandidateSeesTheOriginalOptions:
 
 
 class TestUnrelatedDifferentReadersStillConflict:
-    """Two unrelated survivors with different reader pairs keep raising the double-reader error."""
+    """Two unrelated survivors with different reader pairs are ambiguous, not a double-reader ValueError."""
 
     @pytest.mark.parametrize("one_first", [True, False])
     def test_unrelated_candidates_with_different_reader_pairs_raise(self, one_first: bool) -> None:
@@ -338,10 +342,21 @@ class TestUnrelatedDifferentReadersStillConflict:
         two = _make_candidate(
             "ReaderTwoFG_winner_iso", _Writes({}, {}, frozenset(), (ReaderSub_winner_iso, "two_access")), []
         )
+        plugins: FeatureGroupEnvironmentMapping = {c: {PostCriteriaGateFw_os061} for c in ([one, two])}
+        _, message = _capture(
+            partial(evaluate_or_raise, Feature(SHARED_FEATURE, options={ORIGINAL_KEY: "original"}), plugins)
+        )
+        assert message is not None
+        assert message.startswith("FeatureResolutionError")
+        assert "Multiple feature groups found" in message
+        assert "BaseInputData already set" not in message
+        assert "ReaderParent_winner_iso: str" in message
+        assert "ReaderSub_winner_iso: str" in message
+
         resolved = _resolve([one, two] if one_first else [two, one])
 
-        assert resolved.escaped is not None
-        assert "BaseInputData already set with different values" in resolved.escaped
+        assert resolved.escaped is None
+        assert resolved.match is None
         assert resolved.group == {ORIGINAL_KEY: "original"}
         assert resolved.context == {}
         assert BaseInputData.__name__ not in resolved.group
@@ -388,7 +403,8 @@ class TestReaderlessWinnerInheritsNearestAncestorReader:
 
         assert resolved.escaped is None
         assert resolved.winners == ("LeafFG_winner_iso",)
-        assert resolved.group[BaseInputData.__name__] == (ReaderParent_winner_iso, "b")
+        assert BaseInputData.__name__ not in resolved.group
+        assert resolved.match == (ReaderParent_winner_iso, "b")
 
 
 DROPPED_KEY = "dropped_own_key_winner_iso"

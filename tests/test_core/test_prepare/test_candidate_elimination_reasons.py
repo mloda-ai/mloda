@@ -188,6 +188,17 @@ class ElimScopeFG011(_ElimBaseFG):
 
     MATCHES = frozenset({SCOPE_FEATURE})
     FRAMEWORK_RULE = {ElimFwOne011}
+    MATCHER_CALLS: ClassVar[int] = 0
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        ElimScopeFG011.MATCHER_CALLS += 1
+        return str(feature_name) in cls.MATCHES
 
 
 class ElimCapabilityFG011(_ElimBaseFG):
@@ -581,14 +592,16 @@ class TestEliminationStages:
         assert f"  - ElimDomainFG011 (domain): {reason}" in str(err)
 
     def test_scope_stage(self) -> None:
+        """An out-of-scope candidate is never probed and never recorded; the callout still names the scope."""
+        ElimScopeFG011.MATCHER_CALLS = 0
         feature = Feature(SCOPE_FEATURE, feature_group=UNRELATED_SCOPE)
         plugins: FeatureGroupEnvironmentMapping = {ElimScopeFG011: {ElimFwOne011}}
 
         err = _fail(feature, plugins)
 
-        reason = "outside the requested feature group scope"
-        assert err.result.eliminations[ElimScopeFG011] == Elimination(stage="scope", reason=reason)
-        assert f"  - ElimScopeFG011 (scope): {reason}" in str(err)
+        assert ElimScopeFG011.MATCHER_CALLS == 0
+        assert ElimScopeFG011 not in err.result.eliminations
+        assert f"Scoped to feature group: '{UNRELATED_SCOPE}'." in str(err)
 
     def test_capability_stage(self) -> None:
         feature = Feature(CAPABILITY_FEATURE)

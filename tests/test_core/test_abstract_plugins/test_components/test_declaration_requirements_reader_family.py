@@ -371,14 +371,14 @@ class TestReaderFamilyResolution:
 
         evaluate_or_raise(feature, DEPTH_MAPPING, data_access_collection=DEPTH_DAC)
 
-        assert feature.options.get("BaseInputData") == (DeclScaledDepthReader1648, SCALED_ACCESS)
+        assert feature.input_data_match == (DeclScaledDepthReader1648, SCALED_ACCESS)
 
     def test_feature_scope_path_skips_the_reader_without_the_key(self) -> None:
         feature = _requiring(_scoped_depth())
 
         evaluate_or_raise(feature, DEPTH_MAPPING)
 
-        assert feature.options.get("BaseInputData") == (DeclScaledDepthReader1648, SCALED_ACCESS)
+        assert feature.input_data_match == (DeclScaledDepthReader1648, SCALED_ACCESS)
 
     def test_requiring_request_is_steered_while_plain_request_is_ambiguous(self) -> None:
         """The requiring request picks its reader; the plain one fails on several accepting readers."""
@@ -387,7 +387,7 @@ class TestReaderFamilyResolution:
 
         evaluate_or_raise(requiring, DEPTH_MAPPING, data_access_collection=DEPTH_DAC)
 
-        assert requiring.options.get("BaseInputData") == (DeclScaledDepthReader1648, SCALED_ACCESS)
+        assert requiring.input_data_match == (DeclScaledDepthReader1648, SCALED_ACCESS)
 
         result = IdentifyFeatureGroupClass.evaluate(plain, DEPTH_MAPPING, None, DEPTH_DAC)
 

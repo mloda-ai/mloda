@@ -8,7 +8,6 @@ import sqlite3
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.provider import FeatureSet
 from mloda.user import DataType
-from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
@@ -182,7 +181,7 @@ class SQLITEReader(ReadDB):
           arrive through reader auto-discovery cannot hit this, because
           ``check_feature_in_data_access`` has already matched the name against
           ``PRAGMA table_info``. It is reachable when the caller pre-sets
-          ``BaseInputData``/``table_name`` in Options and so skips that lookup.
+          ``Feature.input_data_match`` with a ``table_name`` and so skips that lookup.
         - A schema-qualified table name (``main.test_table``) is quoted as one identifier
           and will not resolve. Every table name produced by discovery is a bare name from
           ``sqlite_master``, so this only affects a caller passing a qualified name
@@ -191,24 +190,17 @@ class SQLITEReader(ReadDB):
         """
         query = "select "
 
-        options = None
         for feature in features.get_sorted_features():
             # Quote the column identifier so a crafted feature name cannot break out
             # of the identifier position and inject SQL (CWE-89). Consistent with the
             # quote_ident-based identifier handling in the SQL compute frameworks.
             query += f"{quote_ident(str(feature.name))}, "
-            options = feature.options
 
         query = query[:-2] + " "  # last comma is removed
 
         query += "from "
 
-        if options is None:
-            raise ValueError(
-                "Options were not set. Call this after adding a feature to ensure Options are initialized."
-            )
-
-        query += f"{quote_ident(str(cls.get_table(options)))};"
+        query += f"{quote_ident(str(cls.get_table(features)))};"
 
         if query is None:
             raise ValueError("query cannot be None")
@@ -289,10 +281,11 @@ class SQLITEReader(ReadDB):
         return RegisteredCredential({**matched, "table_name": table})
 
     @classmethod
-    def get_table(cls, options: Options | None) -> Any:
-        if options is None:
-            raise ValueError("Options were not set.")
-        return options.get("BaseInputData")[1]["table_name"]
+    def get_table(cls, features: FeatureSet) -> Any:
+        match = features.input_data_match
+        if match is None:
+            raise ValueError("No input_data_match was set on the feature set, so the table name is unknown.")
+        return match[1]["table_name"]
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:

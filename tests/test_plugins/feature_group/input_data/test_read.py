@@ -84,7 +84,8 @@ class TestTwoReader:
                 feature_list,  # type: ignore
                 compute_frameworks=["PyArrowTable"],
             )
-        assert "BaseInputData already set with different values" in str(excinfo.value)
+        assert "Multiple feature groups found" in str(excinfo.value)
+        assert "BaseInputData already set" not in str(excinfo.value)
 
     def test_load_data_access_collection_feature_scope_data_double_reader_fail(self) -> None:
         feature_list: list[Feature] = []
@@ -101,7 +102,8 @@ class TestTwoReader:
                 compute_frameworks=["PyArrowTable"],
                 data_access_collection=DataAccessCollection(files={self.file_path}),
             )
-        assert "BaseInputData already set with different values" in str(excinfo.value)
+        assert "Multiple feature groups found" in str(excinfo.value)
+        assert "BaseInputData already set" not in str(excinfo.value)
 
     def test_agg_feature(self) -> None:
         index = Index(("id",))

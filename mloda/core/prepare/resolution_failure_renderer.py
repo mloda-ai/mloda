@@ -107,6 +107,7 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     lines = "\n".join(
         f"  - {fg.__name__} ({fg.__module__})"
         + (f" [domain: {result.facts.domains[fg]}]" if fg in result.facts.domains else "")
+        + (f" [source: {result.facts.sources[fg]}]" if fg in result.facts.sources else "")
         for fg in sorted(result.identified, key=_candidate_sort_key)
     )
     scope_line = f"{callout}\n" if callout else ""
@@ -203,6 +204,9 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
         similar = get_close_matches(feature_name, known_names, n=MAX_SUGGESTIONS, cutoff=0.5)
         if similar:
             msg += f"\nDid you mean one of: {similar}?"
+
+    if result.facts.scope_suggestions:
+        msg += f"\nDid you mean one of: {list(result.facts.scope_suggestions)}?"
 
     skipped_block = _render_skipped_plugins_block(result.facts.skipped_plugins)
     if skipped_block is not None:

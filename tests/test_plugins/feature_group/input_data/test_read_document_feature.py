@@ -35,9 +35,10 @@ class TestReadDocumentFeatureInputData:
 
 class TestReadDocumentFeatureCalculate:
     def test_calculate_feature_delegates_to_reader(self) -> None:
-        options = Options(group={"BaseInputData": (ConcreteReadDocument, "/path/to/doc.json")})
         features = FeatureSet()
-        features.add(Feature("doc_key", options=options))
+        feature = Feature("doc_key")
+        feature.input_data_match = (ConcreteReadDocument, "/path/to/doc.json")
+        features.add(feature)
 
         result = ReadDocumentFeature.calculate_feature(None, features)
 

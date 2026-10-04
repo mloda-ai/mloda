@@ -1196,7 +1196,7 @@ class TestResolvedPlanForChainedFeature:
         assert all(i < consumer for i in sources)
         assert all(i < kinds.index("join") for i in sources)
 
-        def independent(first: str, second: str) -> list[tuple[str, str | None]]:
+        def independent(first: str, second: str) -> list[tuple[str | None, str | None]]:
             steps = mlodaAPI.explain(
                 [
                     Feature("plan_info_any_framework_value", compute_framework=first),

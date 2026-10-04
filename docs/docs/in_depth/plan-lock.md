@@ -26,7 +26,7 @@ write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMo
 
 ## What the file holds
 
-Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Format 2 adds the framework choice reason (for example `pinned`) to compute records. Duplicate steps keep one record each.
+Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`). Duplicate steps keep one record each.
 
 It never holds option values, `data_access_identity`, versions, per-run ids or the mloda version.
 

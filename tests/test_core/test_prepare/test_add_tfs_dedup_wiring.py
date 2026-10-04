@@ -329,13 +329,20 @@ def test_one_consumer_reading_one_name_in_two_unlinked_variants_raises(case: _Sa
     assert "missing Links" not in message
 
 
-def test_different_consumer_features_reading_differing_variants_stay_planned() -> None:
-    """Kept planning: consumers in one step may read variants whose options the source ignores (mixed string/config chainer)."""
+def test_different_consumer_features_reading_differing_variants_in_one_step_raise() -> None:
+    """Consumer features sharing one step must not read differing variants of one name (steps are split upstream)."""
     producers, dest_step, graph = _split_root_steps_scenario(
         "dedup_shared", "dedup_shared", options_a={"unit": "x"}, separate_consumers=True
     )
 
-    ExecutionPlan().add_tfs([*producers, dest_step], graph)
+    with pytest.raises(ValueError) as exc_info:
+        ExecutionPlan().add_tfs([*producers, dest_step], graph)
+
+    message = str(exc_info.value)
+    for fragment in ["DedupDestFG", "DedupUpstreamFG", "dedup_shared", "unit"]:
+        assert fragment in message
+    assert "Link.inner" not in message
+    assert "missing Links" not in message
 
 
 def test_one_consumer_reading_one_name_from_two_different_classes_raises_missing_links() -> None:

@@ -18,6 +18,7 @@ from typing import Any, cast
 import pyarrow.compute as pc
 import pytest
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.user import DataType
@@ -493,6 +494,59 @@ class SameNameDtypeConsumer(FeatureGroup):
         return {cls.get_class_name(): data.column("d_a")}
 
 
+class ScalingSource(FeatureGroup):
+    """Root feature group serving pm, scaled by 1000 when requested with option unit == 'x'."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"pm"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        scaled = any(feature.options.get("unit") == "x" for feature in features.features)
+        return {"id": [1, 2, 3], "pm": [1000, 2000, 3000] if scaled else [1, 2, 3]}
+
+
+class ScalingConsumer(FeatureGroup):
+    """cons_x reads the scaled variant of pm, cons_plain the plain one; both live in one feature group."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == "cons_x":
+            return {Feature.int64_of("pm", options={"unit": "x"})}
+        return {Feature.int64_of("pm")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(name): data.column("pm") for name in features.get_all_names()}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cons_x", "cons_plain"}
+
+
+class ScalingDownstream(FeatureGroup):
+    """Reads both ScalingConsumer features, which span two differing variants of ScalingSource."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int64_of("cons_x"), Feature.int64_of("cons_plain")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("cons_x"), data.column("cons_plain"))}
+
+
 class TestMissingLinksError:
     """Test suite for missing Links validation"""
 
@@ -783,3 +837,42 @@ class TestMissingLinksError:
             assert fragment in error_message
         assert "Link.inner" not in error_message
         assert "missing Links" not in error_message
+
+    def test_different_consumer_features_read_their_own_source_variant(self) -> None:
+        results = mloda.run_all(
+            features=[Feature.int64_of("cons_x"), Feature.int64_of("cons_plain")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({ScalingSource, ScalingConsumer}),
+        )
+
+        by_name = {name: table.column(name).to_pylist() for table in results for name in table.column_names}
+        assert by_name["cons_x"] == [1000, 2000, 3000]
+        assert by_name["cons_plain"] == [1, 2, 3]
+
+    def test_consumer_features_reading_differing_variants_plan_as_separate_steps(self) -> None:
+        session = mloda.prepare(
+            features=[Feature.int64_of("cons_x"), Feature.int64_of("cons_plain")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({ScalingSource, ScalingConsumer}),
+        )
+
+        plan = session.engine.execution_planner.execution_plan  # type: ignore[union-attr]
+        consumer_steps = [
+            step for step in plan if isinstance(step, FeatureGroupStep) and step.feature_group is ScalingConsumer
+        ]
+        assert len(consumer_steps) == 2
+
+    def test_downstream_reading_both_consumer_features_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int64_of("ScalingDownstream")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {ScalingSource, ScalingConsumer, ScalingDownstream}
+                ),
+            )
+
+        assert "ScalingConsumer" in str(exc_info.value)

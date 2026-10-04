@@ -18,6 +18,7 @@ from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.declared_sides import split_by_declared_side
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
 from mloda.core.prepare.resolved_join import (
     DeclinedOrientation,
@@ -165,7 +166,9 @@ class ExecutionPlan:
         self._option_split_keys = {}
 
         child_links = self.invert_link_trekker(link_trekker)
-        pre_execution_plan = self.add_feature_group_step(queue, graph.parent_to_children_mapping, child_links)
+        pre_execution_plan = self.add_feature_group_step(
+            queue, graph.parent_to_children_mapping, child_links, graph.get_nodes()
+        )
         fw_execution_plan = self.add_joinstep(pre_execution_plan, link_trekker, graph)
 
         # Run after add_joinstep, not inside add_feature_group_step: self.planned_records (which
@@ -200,6 +203,7 @@ class ExecutionPlan:
         queue: "PlannedQueue",
         parent_to_children_mapping: dict[UUID, set[UUID]],
         child_links: dict[UUID, set[LinkFrameworkTrekker]],
+        nodes: dict[UUID, NodeProperties] | None = None,
     ) -> list[LinkFrameworkTrekker | FeatureGroupStep]:
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep] = []
 
@@ -213,7 +217,9 @@ class ExecutionPlan:
                     raise ValueError(f"Element {element} is not a valid element.")
 
                 links_pre_calulated = self.retrieve_links_which_must_be_calculated_before(element[1], child_links)
-                feature_group_steps = self.run_feature_group(element, parent_to_children_mapping, links_pre_calulated)
+                feature_group_steps = self.run_feature_group(
+                    element, parent_to_children_mapping, links_pre_calulated, nodes
+                )
                 for fg_step in feature_group_steps.values():
                     pre_execution_plan.append(fg_step)
 
@@ -471,6 +477,58 @@ class ExecutionPlan:
                 return True
             visited |= frontier
         return False
+
+    def _variant_conflict(
+        self, feature_a: Feature, feature_b: Feature
+    ) -> tuple[Feature, Feature, frozenset[Any]] | None:
+        """Two same-name features differing in data type or options, else None."""
+        if feature_a.name != feature_b.name:
+            return None
+        split_keys = feature_a.options.inherited_context_keys | feature_b.options.inherited_context_keys
+        option_keys = self._differing_option_keys([feature_a, feature_b], split_keys)
+        if feature_a.data_type != feature_b.data_type or option_keys:
+            return feature_a, feature_b, option_keys
+        return None
+
+    def _split_by_variant_conflicts(
+        self,
+        features: set[Feature],
+        parent_to_children_mapping: dict[UUID, set[UUID]],
+        nodes: dict[UUID, NodeProperties],
+    ) -> list[set[Feature]]:
+        """Bucket members so none holds two that read one name from differing variants of one source class."""
+        producer_of: dict[UUID, int] = {}
+        for index, uuids in enumerate(self.feature_set_collections):
+            for uuid in uuids:
+                producer_of[uuid] = index
+
+        def direct_parents(feature: Feature) -> list[UUID]:
+            ancestors = parent_to_children_mapping.get(feature.uuid, set())
+            direct = ancestors - {p for a in ancestors for p in parent_to_children_mapping.get(a, set())}
+            return [uuid for uuid in direct if uuid in producer_of]
+
+        def conflicts(parents_a: list[UUID], parents_b: list[UUID]) -> bool:
+            for a in parents_a:
+                for b in parents_b:
+                    if (
+                        producer_of[a] == producer_of[b]
+                        or nodes[a].feature_group_class is not nodes[b].feature_group_class
+                    ):
+                        continue
+                    if self._variant_conflict(nodes[a].feature, nodes[b].feature) is not None:
+                        return True
+            return False
+
+        buckets: list[list[tuple[Feature, list[UUID]]]] = []
+        for feature in sorted(features, key=lambda f: (str(f.name), str(f.uuid))):
+            parents = direct_parents(feature)
+            for bucket in buckets:
+                if not any(conflicts(parents, other) for _, other in bucket):
+                    bucket.append((feature, parents))
+                    break
+            else:
+                buckets.append([(feature, parents)])
+        return [{feature for feature, _ in bucket} for bucket in buckets]
 
     @staticmethod
     def _conflicting_variants_error(
@@ -773,11 +831,9 @@ Available join types:
                     raise ValueError(f"Feature group {format_feature_group_class(ep.feature_group)} has no uuid.")
 
                 parents: set[UUID] = set()
-                direct_parents_by_member: list[set[UUID]] = []
                 for member_uuid in ep.get_uuids():
                     member_parents = graph.parent_to_children_mapping.get(member_uuid, set())
                     direct_parents = member_parents - self.get_parent_parents(member_parents, graph)
-                    direct_parents_by_member.append(direct_parents)
                     parents |= direct_parents
 
                 names_by_step: dict[UUID, set[str]] = defaultdict(set)
@@ -842,19 +898,9 @@ Available join types:
                 def _conflicting_variants(
                     parent_a: UUID, parent_b: UUID
                 ) -> tuple[Feature, Feature, frozenset[Any]] | None:
-                    """Two same-name direct parents of one consumer member differing in data type or options."""
-                    if not any(parent_a in direct and parent_b in direct for direct in direct_parents_by_member):
-                        return None
+                    """Two same-name parents of the step differing in data type or options."""
                     nodes = graph.get_nodes()
-                    feature_a = nodes[parent_a].feature
-                    feature_b = nodes[parent_b].feature
-                    if feature_a.name != feature_b.name:
-                        return None
-                    split_keys = feature_a.options.inherited_context_keys | feature_b.options.inherited_context_keys
-                    option_keys = self._differing_option_keys([feature_a, feature_b], split_keys)
-                    if feature_a.data_type != feature_b.data_type or option_keys:
-                        return feature_a, feature_b, option_keys
-                    return None
+                    return self._variant_conflict(nodes[parent_a].feature, nodes[parent_b].feature)
 
                 # Group entries by transitive linkage: same feature-group class (unless split across
                 # unrelated root steps), one entry's own class a subclass (or superclass) of the other's
@@ -2019,6 +2065,7 @@ Available join types:
         feature_group_features: tuple[type[FeatureGroup], set[Feature]],
         parent_to_children_mapping: dict[UUID, set[UUID]],
         pre_required_uuids: set[UUID],
+        nodes: dict[UUID, NodeProperties] | None = None,
     ) -> dict[Any, FeatureGroupStep]:
         feature_group, features = feature_group_features[0], feature_group_features[1]
         features_grouped_by_framework_and_options: dict[Any, set[Feature]] = (
@@ -2050,7 +2097,17 @@ Available join types:
 
         root_parent_children_mapping = self.get_parent_children_mapping(parent_to_children_mapping)
 
+        split_groups: list[tuple[Any, int, set[Feature]]] = []
         for f_hash, features in features_grouped_by_framework_and_options.items():
+            if nodes is None:
+                split_groups.append((f_hash, 0, features))
+                continue
+            for bucket_idx, members in enumerate(
+                self._split_by_variant_conflicts(features, parent_to_children_mapping, nodes)
+            ):
+                split_groups.append((f_hash, bucket_idx, members))
+
+        for f_hash, bucket_idx, features in split_groups:
             sub_groups = self._split_features_by_dependency_levels(features, parent_to_children_mapping)
 
             for level_idx, sub_features in enumerate(sub_groups):
@@ -2107,7 +2164,7 @@ Available join types:
                     self.prepare_api_input_data(feature_group, feature_set),
                 )
 
-                fg_steps[(f_hash, level_idx)] = feature_group_step
+                fg_steps[(f_hash, bucket_idx, level_idx)] = feature_group_step
         return fg_steps
 
     def prepare_api_input_data(self, feature_group: type[FeatureGroup], feature_set: FeatureSet) -> bool | BaseApiData:

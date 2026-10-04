@@ -1,8 +1,8 @@
 """Contract tests for the ``data_access_handle`` Options key flowing through
 the file, document, and DB consumers of ``DataAccessCollection``.
 
-In each case, multi-entry without a hint must raise ``ValueError`` listing the
-candidate handles, the hint must disambiguate, and single-entry behavior is
+In each case, multi-entry without a hint must raise ``ValueError`` naming the
+candidates, the hint must disambiguate, and single-entry behavior is
 preserved. See ``docs/docs/in_depth/named-data-access-handles.md``.
 """
 
@@ -17,12 +17,14 @@ import pytest
 
 from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.user import Options
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.provider import SourceMatch
+from mloda.user import Feature, Options
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 # ----------------------------------------------------------------------------
@@ -78,16 +80,6 @@ def two_sqlite_dbs(tmp_path: Path) -> tuple[Path, Path]:
 # ----------------------------------------------------------------------------
 
 
-class _CsvLikeReader(ReadFile):
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        return (".csv",)
-
-    @classmethod
-    def get_column_names(cls, file_name: str) -> list[str]:
-        raise NotImplementedError
-
-
 class _TxtDocReader(ReadDocument):
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
@@ -95,53 +87,72 @@ class _TxtDocReader(ReadDocument):
 
 
 # ----------------------------------------------------------------------------
-# ReadFile: multi-file ambiguity raises, data_access_handle disambiguates
+# CsvFG: multi-file ambiguity aborts, data_access_handle narrows
 # ----------------------------------------------------------------------------
 
+_CSV_PLUGINS: Any = {CsvFG: {PyArrowTable}}
 
-class TestReadFileHint:
+
+def _csv_source(feature: Feature, dac: DataAccessCollection) -> SourceMatch | None:
+    result = IdentifyFeatureGroupClass.evaluate(feature, _CSV_PLUGINS, None, dac)
+    if CsvFG not in result.identified:
+        return None
+    assert feature.input_data_match is not None
+    assert feature.input_data_match[0] is CsvFG
+    match = feature.input_data_match[1]
+    assert isinstance(match, SourceMatch)
+    return match
+
+
+class TestCsvFGHint:
     def test_multiple_files_without_hint_raises(self, two_csv_files: tuple[str, str]) -> None:
         path_a, path_b = two_csv_files
         dac = DataAccessCollection(files={"transactions": path_a, "users": path_b})
         with pytest.raises(ValueError) as excinfo:
-            _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=Options())
+            resolve_or_raise(Feature("id"), _CSV_PLUGINS, None, dac)
         msg = str(excinfo.value)
-        assert "transactions" in msg
-        assert "users" in msg
+        assert os.path.abspath(path_a) in msg
+        assert os.path.abspath(path_b) in msg
+        assert "data_access_handle" in msg
 
     def test_hint_disambiguates_to_named_file(self, two_csv_files: tuple[str, str]) -> None:
         path_a, path_b = two_csv_files
         dac = DataAccessCollection(files={"transactions": path_a, "users": path_b})
-        options = Options(context={"data_access_handle": "users"})
-        resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=options)
-        assert resolved == path_b
+        feature = Feature("id", Options(context={"data_access_handle": "users"}))
+        match = _csv_source(feature, dac)
+        assert match is not None
+        assert match.source == os.path.abspath(path_b)
 
     def test_single_file_no_hint_resolves(self, two_csv_files: tuple[str, str]) -> None:
         path_a, _ = two_csv_files
-        dac = DataAccessCollection(files={"transactions": path_a})
-        resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=Options())
-        assert resolved == path_a
+        match = _csv_source(Feature("id"), DataAccessCollection(files={"transactions": path_a}))
+        assert match is not None
+        assert match.source == os.path.abspath(path_a)
 
     def test_single_file_set_form_no_handle_needed(self, two_csv_files: tuple[str, str]) -> None:
         """Bare set form with a single file resolves cleanly without a hint."""
         path_a, _ = two_csv_files
-        dac = DataAccessCollection(files={path_a})
-        resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=Options())
-        assert resolved == path_a
+        match = _csv_source(Feature("id"), DataAccessCollection(files={path_a}))
+        assert match is not None
+        assert match.source == os.path.abspath(path_a)
 
     def test_hint_at_foreign_file_declines_instead_of_rescanning(self, csv_and_txt_files: tuple[str, str]) -> None:
-        """Issue #1170: a hint naming a "file" handle this reader's own predicate rejects
-        must make the reader decline (None), not fall back to an unhinted rescan that
-        silently binds a different file the caller never named.
-        """
+        """Issue #1170: a hint naming a file the group does not own declines, never rebinding the other file."""
         csv_path, txt_path = csv_and_txt_files
         dac = DataAccessCollection(files={"data": csv_path, "notes": txt_path})
-        options = Options(context={"data_access_handle": "notes"})
-        resolved = _CsvLikeReader.match_subclass_data_access(dac, feature_names=["id"], options=options)
-        # Crux of the bug: today this rescans the collection and wrongly returns csv_path
-        # (the OTHER file, which the caller never hinted at) instead of declining.
-        assert resolved != csv_path
-        assert resolved is None
+        feature = Feature("id", Options(context={"data_access_handle": "notes"}))
+        assert _csv_source(feature, dac) is None
+        assert feature.input_data_match is None
+
+    def test_unknown_handle_declines_with_a_rejection_naming_it(self, two_csv_files: tuple[str, str]) -> None:
+        path_a, path_b = two_csv_files
+        dac = DataAccessCollection(files={"transactions": path_a, "users": path_b})
+        feature = Feature("id", Options(context={"data_access_handle": "handle_missing_from_dac"}))
+        result = IdentifyFeatureGroupClass.evaluate(feature, _CSV_PLUGINS, None, dac)
+        assert CsvFG not in result.identified
+        reason = result.eliminations[CsvFG].reason
+        assert "handle_missing_from_dac" in reason
+        assert "Handle not found" not in reason
 
 
 # ----------------------------------------------------------------------------
@@ -372,8 +383,10 @@ class TestDataAccessHandleRejectsCollectionsOutright:
     def test_file_reader_rejects_a_list_handle_instead_of_crashing(self, two_csv_files: tuple[str, str]) -> None:
         path_a, path_b = two_csv_files
         dac = DataAccessCollection(files={"transactions": path_a, "users": path_b})
-        options = Options(context={"data_access_handle": ["users", "transactions"]})
-        assert CsvReader.match_data_access(["id"], dac, options=options) == (None, None)
+        feature = Feature("id", Options(context={"data_access_handle": ["users", "transactions"]}))
+        result = IdentifyFeatureGroupClass.evaluate(feature, _CSV_PLUGINS, None, dac)
+        assert CsvFG not in result.identified
+        assert "data_access_handle" in result.eliminations[CsvFG].reason
 
     def test_db_reader_rejects_a_list_handle_instead_of_crashing(self, two_sqlite_dbs: tuple[Path, Path]) -> None:
         db_a, db_b = two_sqlite_dbs

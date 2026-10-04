@@ -77,9 +77,16 @@ class ReadFileFG(FormatFeatureGroup):
     def ambiguity_fix(
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
     ) -> str:
+        sources = {match.source for match in matches}
+        handles = sorted(
+            handle
+            for handle, path in (data_access_collection.files.items() if data_access_collection else ())
+            if os.path.abspath(path) in sources
+        )
+        named = f" (file handles: {', '.join(repr(h) for h in handles)})" if handles else ""
         return (
             f"pin one source with a column_to_file entry, point {cls.get_class_name()} at one file with "
-            f"options={{{cls.get_class_name()!r}: <path>}}, or select one with data_access_handle."
+            f"options={{{cls.get_class_name()!r}: <path>}}, or select one with data_access_handle{named}."
         )
 
     @classmethod
@@ -141,6 +148,11 @@ class ReadFileFG(FormatFeatureGroup):
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
         return FileSource(path=match.access, format=cls.file_format(), columns=tuple(sorted(features.get_all_names())))
+
+    @classmethod
+    def _overrides_load_neutral(cls, base: type) -> bool:
+        """True when a class below ``base`` in the MRO defines its own load_neutral."""
+        return any("load_neutral" in klass.__dict__ for klass in cls.__mro__[: cls.__mro__.index(base)])
 
     @staticmethod
     def _source(path: str) -> SourceMatch:

@@ -11,6 +11,8 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.user import DataAccessCollection, PluginCollector, mloda
 
 
@@ -96,3 +98,44 @@ class FileLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
 
         assert len(result) == 1
         assert self.columns_of(result[0]) == set(self.columns[:2])
+
+
+class _LoadCapture(Extender):
+    def __init__(self) -> None:
+        self.priority = 100
+        self.contexts: list[HookContext] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        if context is not None:
+            self.contexts.append(context)
+        return result
+
+
+class FileLoaderNameMixin(FileLoadsIntoFrameworkMixin):
+    """Adds: the INPUT_DATA_LOAD hook names the loader the group used for the adapter's framework."""
+
+    expected_loader: str
+
+    def test_input_data_load_names_the_loader(self, tmp_path: Path) -> None:
+        framework = self.compute_framework()
+        path = tmp_path / f"loadername{self.file_group.suffixes()[0]}"
+        self.write_file(path, {name: [1, 2, 3] for name in self.columns})
+        capture = _LoadCapture()
+
+        mloda.run_all(
+            list(self.columns[:2]),
+            compute_frameworks=[framework],
+            plugin_collector=PluginCollector.enabled_feature_groups({self.file_group}),
+            data_access_collection=DataAccessCollection(files={"loadername_handle": os.fspath(path)}),
+            function_extender={capture},
+        )
+
+        assert len(capture.contexts) == 1
+        context = capture.contexts[0]
+        assert context.reader_class is self.file_group
+        assert context.data_access_loader == self.expected_loader

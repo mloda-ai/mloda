@@ -198,6 +198,10 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self._claims(feature, DataAccessCollection(folders={"mixed_handle": str(folder)}))
         assert self._matched_source(feature).source == os.path.abspath(fitting)
 
+    def test_file_a_nonexistent_folder_handle_declines_without_raising(self) -> None:
+        dac = DataAccessCollection(folders={"gone_dir": str(self.tmp_path / "no_such_folder")})
+        assert not self._claims(Feature(self.present_column), dac)
+
     def test_file_same_file_as_handle_and_in_a_folder_is_one_source(self) -> None:
         folder = self.tmp_path / "dup_folder"
         path = self._make("dup", {self.present_column: [1]}, folder)
@@ -478,10 +482,21 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     def test_file_a_subclass_takes_over_a_pointer_keyed_on_its_parent(self) -> None:
         parent = self.feature_group_class
-        sub = type(f"{parent.__name__}ToyfmtTakeover", (parent,), {})
+        parent_key = parent.__name__
+
+        def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
+            # Only a pointer on the parent key lets this subclass claim, so it cannot leak into other tests (A7).
+            if parent_key not in options:
+                return False
+            return bool(
+                getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
+            )
+
+        sub = type(f"{parent.__name__}ToyfmtTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
         mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
-        feature = Feature(self.present_column, Options({parent.__name__: str(self.own_path)}))
+        feature = Feature(self.present_column, Options({parent_key: str(self.own_path)}))
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert sub in result.identified
-        del sub, mapping, result
+        # Drop every reference (the feature's input_data_match pins the class) so the subclass can be collected.
+        del sub, mapping, result, feature, gated
         gc.collect()

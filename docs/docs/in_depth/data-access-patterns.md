@@ -113,7 +113,7 @@ The reader class itself is also accepted as the key, e.g. `Feature("value", opti
 
 The matched `(ReaderClass, data_access)` pair lives on `Feature.input_data_match`, never in the options, and `load` hands it to `init_reader(reader_data_access)` at load time; `PlanStep.reader_data_access` exposes the same pair on a resolved plan. `data_access` may hold credentials, so use `PlanStep.data_access_identity` (or `reader.data_access_identity(data_access)` outside a plan) for display and logs. If a reader's own error text may carry a credential, scrub it with `mloda.provider.scrub_credentials` before logging.
 
-For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
+For non-file sources such as HTTP endpoints, subclassing `BaseInputData` readers and overriding `match_subclass_data_access` plus `load_data` is a supported pattern. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 
 ### Reader selection vs feature-group resolution
 
@@ -130,43 +130,34 @@ Reader selection answers "which plugin handles this input" the way [feature-grou
 
 ### Declining with an attributable reason
 
-A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom reader owns its own suffix and overrides `load_data` wholesale; its own decline points sit beyond the automatic column validation, for example a required schema marker in the header:
+A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom file format group owns its own suffix and lists its columns; a `ValueError` from `column_names` declines the file with a recorded reason, for example a required schema marker in the header:
 
 ```python
 from typing import Any
 
-from mloda.provider import INPUT_DATA_STAGE, FeatureSet, record_match_rejection
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import FeatureSet, ReadFileFG
 
-class SensorCsvReader(ReadFile):
+class SensorCsvFG(ReadFileFG):
     @classmethod
-    def suffix(cls) -> tuple[str, ...]:
+    def suffixes(cls) -> tuple[str, ...]:
         return (".sensorcsv",)
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any: ...
-
-    @classmethod
-    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
-        if super().validate_columns(file_name, feature_names) is False:
-            return False
-        with open(file_name, encoding="utf-8") as handle:
+    def column_names(cls, path: str) -> list[str]:
+        with open(path, encoding="utf-8") as handle:
             header = handle.readline()
         if "#sensor-schema" not in header:
-            record_match_rejection(
-                cls.get_class_name(),
-                f"{cls.get_class_name()} matched the suffix of {file_name} "
-                f"but its header lacks the #sensor-schema marker",
-                stage=INPUT_DATA_STAGE,
-            )
-            return False
-        return True
+            raise ValueError("its header lacks the #sensor-schema marker")
+        return header.replace("#sensor-schema", "").strip().split(",")
+
+    @classmethod
+    def load_neutral(cls, match: Any, features: FeatureSet) -> Any: ...
 ```
 
 The recorded decline renders as a near-miss line of the resolution failure:
 
 ```
-  - SensorFeatureGroup (input data): SensorCsvReader matched the suffix of /data/run1.sensorcsv but its header lacks the #sensor-schema marker
+  - SensorFeatureGroup (input data): SensorCsvFG matched /data/run1.sensorcsv but could not read its columns: its header lacks the #sensor-schema marker
 ```
 
 Rules for reader authors:

@@ -20,7 +20,7 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
 )
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 class TestDynamicFeatureGroupFactory:
@@ -234,11 +234,7 @@ class TestDynamicFeatureGroupFactory:
         options = Options(
             {
                 DefaultOptionKeys.in_features: frozenset(
-                    [
-                        SourceTuple(
-                            feature_name="source_feature_1", source_class=ReadFileFeature, source_value="test.csv"
-                        )
-                    ]
+                    [SourceTuple(feature_name="source_feature_1", source_class=CsvFG, source_value="test.csv")]
                 )
             }
         )
@@ -250,7 +246,7 @@ class TestDynamicFeatureGroupFactory:
 
         feature = next(iter(input_features))
         assert feature.name == "source_feature_1"
-        assert feature.options.get("ReadFileFeature") == "test.csv"
+        assert feature.options.get("CsvFG") == "test.csv"
 
         assert issubclass(ConcreteFeatureGroup, FeatureGroup)
         assert issubclass(ConcreteFeatureGroup, SourceInputFeature)

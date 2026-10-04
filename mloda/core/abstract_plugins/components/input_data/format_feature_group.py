@@ -248,6 +248,8 @@ class FormatFeatureGroup(FeatureGroup):
                 else:
                     undeclared = True
         if len(fitting) > 1:
+            if not cls._passes_option_declarations(options):
+                return False
             return cls._abort(
                 ValueError(
                     f"{cls.get_class_name()} found feature '{name}' in several sources: "

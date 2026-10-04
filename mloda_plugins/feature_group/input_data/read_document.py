@@ -21,13 +21,13 @@ class ReadDocument(BaseInputData):
     _auto_load_group triggers lazy plugin discovery when no ReadDocument subclasses
     are found in the process. Only the read_files subdirectory is loaded.
 
-    By default, ReadDocument skips file types owned by ReadFile (CSV, JSON,
+    By default, ReadDocument skips file types owned by the file format groups (CSV, JSON,
     Parquet, etc.) to avoid conflicts. To read a structured file type as a
     document, set the ``document_suffixes`` option on the Feature:
 
         Feature("content", options={"document_suffixes": frozenset({".json"})})
 
-    This tells ReadDocument to include .json files and ReadFile to
+    This tells ReadDocument to include .json files and the file format groups to
     auto-exclude them for that feature.
 
     load_data is a template method exposing an opt-in lifecycle seam: a new
@@ -44,7 +44,7 @@ class ReadDocument(BaseInputData):
 
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
         "document_suffixes": PropertySpec(
-            "Structured suffixes this document reader claims instead of leaving them to ReadFile.",
+            "Structured suffixes this document reader claims instead of leaving them to the file format groups.",
             default=frozenset(),
         ),
         "data_access_handle": PropertySpec(

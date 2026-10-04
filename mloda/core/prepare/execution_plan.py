@@ -1929,12 +1929,12 @@ Available join types:
         else:
             raise ValueError(
                 "Multiple same-class FeatureGroup nodes found with no discriminator set. "
-                "When linking two nodes of the same FeatureGroup class (e.g. the same ReadFileFeature "
+                "When linking two nodes of the same FeatureGroup class (e.g. the same CsvFG "
                 "loading different files), use left_discriminator and right_discriminator on your Link "
                 "to identify which node is left and which is right. "
                 "Example: Link.inner(JoinSpec(MyFG, 'id'), JoinSpec(MyFG, 'id'), "
-                "left_discriminator={'CsvReader': 'file_a.csv'}, "
-                "right_discriminator={'CsvReader': 'file_b.csv'}). "
+                "left_discriminator={'CsvFG': 'file_a.csv'}, "
+                "right_discriminator={'CsvFG': 'file_b.csv'}). "
                 "The discriminator values must match the corresponding feature's options."
             )
 

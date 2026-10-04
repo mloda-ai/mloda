@@ -1,9 +1,12 @@
-"""Shared describe_columns/get_column_names/count_rows contract for pyarrow-backed ReadFile readers.
+"""Shared column_names/describe_columns/count_rows contract for pyarrow-backed file format groups.
 
-Without its pyarrow submodule, a reader raises ImportError naming mloda[pyarrow] from
-get_column_names, describe_columns, load_data, and count_rows. Unprefixed so pytest skips it standalone.
+Without its pyarrow submodule a group raises ImportError naming mloda[pyarrow] from column_names,
+describe_columns, load_neutral and count_rows, and declines at match time with a rejection naming it.
+Unprefixed so pytest skips it standalone.
 """
 
+import gc
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -11,141 +14,144 @@ from typing import Any, cast
 
 import pytest
 
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
-from mloda.provider import CHAIN_SEPARATOR, FeatureSet
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.provider import CHAIN_SEPARATOR, FeatureSet, ReadFileFG
 from mloda.user import DataAccessCollection, DataType, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 PHYSICAL_COLUMNS = ["c1", "a1", "b1"]
 
 
-class ColumnDiscoveryContractTestMixin:
-    """Shared get_column_names/describe_columns/count_rows contract for one ReadFile reader."""
+def match_of(path: str | Path) -> SourceMatch:
+    return SourceMatch(source=os.path.abspath(path), access=str(path))
 
-    reader_cls: type[ReadFile]
+
+class ColumnDiscoveryContractTestMixin:
+    """Shared column_names/describe_columns/count_rows contract for one pyarrow-backed file format group."""
+
+    group_cls: type[ReadFileFG]
     dependency_module: str
     expected_row_count: int | None = 3
     row_count_module: str | None = None
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:
-        """Return a file path with columns c1, a1, b1 (all INT64). Override per reader."""
+        """Return a file path with columns c1, a1, b1 (all INT64). Override per format."""
         raise NotImplementedError
 
+    def column_names(self, path: str) -> Any:
+        return self.group_cls.column_names(path)
+
+    def describe_columns(self, match: SourceMatch) -> dict[str, DataType | None]:
+        return self.group_cls.describe_columns(match)
+
+    def count_rows(self, match: SourceMatch, compute_framework: type[ComputeFramework]) -> int | None:
+        return self.group_cls.count_rows(match, compute_framework)
+
     def test_describe_columns_returns_real_types(self, data_file: str) -> None:
-        described = self.reader_cls.describe_columns(data_file)
+        described = self.describe_columns(match_of(data_file))
         assert described == {name: DataType.INT64 for name in PHYSICAL_COLUMNS}
 
-    def test_get_column_names_matches_describe_columns_keys(self, data_file: str) -> None:
-        names = self.reader_cls.get_column_names(data_file)
-        described = self.reader_cls.describe_columns(data_file)
+    def test_column_names_match_describe_columns_keys(self, data_file: str) -> None:
+        names = self.column_names(data_file)
+        described = self.describe_columns(match_of(data_file))
         assert set(names) == set(described.keys())
-
-    def test_describe_columns_accepts_path(self, data_file: str) -> None:
-        from_str = self.reader_cls.describe_columns(data_file)
-        from_path = self.reader_cls.describe_columns(Path(data_file))
-        assert from_path == from_str
-
-    def test_describe_columns_rejects_non_path_data_access(self) -> None:
-        with pytest.raises(ValueError):
-            self.reader_cls.describe_columns(DataAccessCollection(files={"dummy.csv"}))
 
     def test_raises_import_error_without_optional_dependency(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Guard fires before any filesystem access, so a nonexistent path also raises."""
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), self.dependency_module, None)
-        absent = str(tmp_path / "absent")
+        absent = str(tmp_path / f"absent{self.group_cls.suffixes()[0]}")
         features = FeatureSet()
         features.add(Feature("a1"))
 
         with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
-            self.reader_cls.get_column_names(absent)
+            self.column_names(absent)
         with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
-            self.reader_cls.describe_columns(absent)
+            self.describe_columns(match_of(absent))
         with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
-            self.reader_cls.load_data(absent, features)
+            self.group_cls.load_neutral(match_of(absent), features)
 
-    def test_declines_chain_separated_name_without_optional_dependency(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rejection_window: dict[str, MatchRejection]
+    def test_declines_with_a_rejection_naming_the_install_hint_without_optional_dependency(
+        self, monkeypatch: pytest.MonkeyPatch, data_file: str, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """Without the optional dependency, a plain name still matches; a chain-separated name declines."""
+        """Without the dependency even a plain name declines, recording why and how to fix it."""
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), self.dependency_module, None)
-        absent = str(tmp_path / f"absent{self.reader_cls.suffix()[0]}")
+        dac = DataAccessCollection(files={"nodep_handle": data_file})
 
-        assert self.reader_cls.match_read_file_data_access([absent], ["a1"]) == absent
+        assert not self.group_cls.match_feature_group_criteria("a1", Options(), dac)
 
+        stored = rejection_window[self.group_cls.get_class_name()]
+        assert "mloda[pyarrow]" in stored.reason
+        assert os.path.abspath(data_file) in stored.reason
+
+    def test_declines_a_chain_separated_name_without_optional_dependency(
+        self, monkeypatch: pytest.MonkeyPatch, data_file: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        monkeypatch.setitem(cast(dict[str, Any], sys.modules), self.dependency_module, None)
+        dac = DataAccessCollection(files={"nodep_chain_handle": data_file})
         chained = f"a1{CHAIN_SEPARATOR}b1"
-        result = self.reader_cls.match_read_file_data_access([absent], [chained])
 
-        assert result is None
-        stored = rejection_window[self.reader_cls.get_class_name()]
-        assert "cannot enumerate" in stored.reason
-        assert "get_column_names" in stored.reason
-        assert chained in stored.reason
+        assert not self.group_cls.match_feature_group_criteria(chained, Options(), dac)
+
+        assert "mloda[pyarrow]" in rejection_window[self.group_cls.get_class_name()].reason
 
     @pytest.mark.parametrize("compute_framework", [PythonDictFramework, PyArrowTable])
     def test_count_rows_matches_expected_row_count(
         self, data_file: str, compute_framework: type[ComputeFramework]
     ) -> None:
-        for candidate in (data_file, Path(data_file)):
-            assert self.reader_cls.count_rows(candidate, compute_framework) == self.expected_row_count
-
-    def test_count_rows_rejects_non_path_data_access(self) -> None:
-        non_path = DataAccessCollection(files={"dummy.csv"})
-        if self.expected_row_count is None:
-            assert self.reader_cls.count_rows(non_path, PyArrowTable) is None
-            return
-        with pytest.raises(ValueError):
-            self.reader_cls.count_rows(non_path, PyArrowTable)
+        assert self.count_rows(match_of(data_file), compute_framework) == self.expected_row_count
 
     def test_count_rows_raises_oserror_for_absent_file(self, tmp_path: Path) -> None:
-        absent = str(tmp_path / "absent")
+        absent = match_of(tmp_path / f"absent{self.group_cls.suffixes()[0]}")
         if self.expected_row_count is None:
-            assert self.reader_cls.count_rows(absent, PyArrowTable) is None
+            assert self.count_rows(absent, PyArrowTable) is None
             return
         with pytest.raises(OSError):
-            self.reader_cls.count_rows(absent, PyArrowTable)
+            self.count_rows(absent, PyArrowTable)
 
     def test_count_rows_without_optional_dependency(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Guard fires before any filesystem access, so a nonexistent path also raises."""
         module = self.row_count_module or self.dependency_module
         monkeypatch.setitem(cast(dict[str, Any], sys.modules), module, None)
-        absent = str(tmp_path / "absent")
+        absent = match_of(tmp_path / f"absent{self.group_cls.suffixes()[0]}")
 
         if self.expected_row_count is None:
-            assert self.reader_cls.count_rows(absent, PyArrowTable) is None
+            assert self.count_rows(absent, PyArrowTable) is None
             return
         with pytest.raises(ImportError, match=r"mloda\[pyarrow\]"):
-            self.reader_cls.count_rows(absent, PyArrowTable)
+            self.count_rows(absent, PyArrowTable)
 
-    def test_count_rows_raises_oserror_for_a_directory_data_access(self, data_file: str, tmp_path: Path) -> None:
-        """A directory is not this reader's file; it must not be silently summed as a dataset."""
-        directory = tmp_path / f"dir{self.reader_cls.suffix()[0]}"
+    def test_count_rows_raises_oserror_for_a_directory_access(self, data_file: str, tmp_path: Path) -> None:
+        """A directory is not this group's file; it must not be silently summed as a dataset."""
+        directory = tmp_path / f"dir{self.group_cls.suffixes()[0]}"
         directory.mkdir()
         shutil.copyfile(data_file, directory / "inner.arrow")
 
         if self.expected_row_count is None:
-            assert self.reader_cls.count_rows(str(directory), PyArrowTable) is None
+            assert self.count_rows(match_of(directory), PyArrowTable) is None
             return
         with pytest.raises(OSError):
-            self.reader_cls.count_rows(str(directory), PyArrowTable)
+            self.count_rows(match_of(directory), PyArrowTable)
 
-    def test_count_rows_reports_none_for_a_load_data_overriding_subclass(self, data_file: str) -> None:
-        base = self.reader_cls
+    def test_count_rows_reports_none_for_a_load_neutral_overriding_subclass(self, data_file: str) -> None:
+        base = self.group_cls
 
-        class _CountRowsProbeReader(base):  # type: ignore[misc,valid-type]
+        class _CountRowsProbeFG(base):  # type: ignore[misc,valid-type]
             @classmethod
-            def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-                return super().load_data(data_access, features)
+            def match_feature_group_criteria(cls, *args: Any, **kwargs: Any) -> bool:
+                return False
 
             @classmethod
-            def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
-                return None
+            def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+                return super().load_neutral(match, features)
 
-        assert _CountRowsProbeReader.count_rows(data_file, PyArrowTable) is None
+        assert _CountRowsProbeFG.count_rows(match_of(data_file), PyArrowTable) is None
+        del _CountRowsProbeFG
+        gc.collect()

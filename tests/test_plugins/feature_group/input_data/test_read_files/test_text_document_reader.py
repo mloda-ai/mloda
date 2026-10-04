@@ -18,7 +18,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader, TextFileReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import ReadFileFG
 
 
 class MockFeatureSet:
@@ -35,12 +35,11 @@ class TestTextFileReaderInheritance:
     """Tests for TextFileReader class hierarchy after migration."""
 
     def test_text_file_reader_inherits_from_read_document(self) -> None:
-        """TextFileReader should inherit from ReadDocument, not ReadFile."""
+        """TextFileReader should inherit from ReadDocument, not ReadFileFG."""
         assert issubclass(TextFileReader, ReadDocument)
 
-    def test_text_file_reader_not_inherits_from_read_file(self) -> None:
-        """TextFileReader should no longer inherit from ReadFile."""
-        assert not issubclass(TextFileReader, ReadFile)
+    def test_text_file_reader_not_inherits_from_read_file_fg(self) -> None:
+        assert not issubclass(TextFileReader, ReadFileFG)
 
     def test_text_file_reader_suffix(self) -> None:
         """TextFileReader claims .text first (file_type source), then .txt and .TXT."""

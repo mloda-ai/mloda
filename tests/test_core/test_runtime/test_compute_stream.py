@@ -8,6 +8,7 @@ as results become available, instead of accumulating them internally.
 
 from __future__ import annotations
 
+import logging
 import types
 from typing import Any, Generator, Iterator
 from unittest.mock import Mock, MagicMock
@@ -380,15 +381,19 @@ class TestComputeStreamNotifiesExtenders:
         assert raised.value is failure
         assert probe.run_ids
 
-    def test_early_closed_api_stream_does_not_raise_the_opt_in_extender_failure(self) -> None:
+    def test_early_closed_api_stream_does_not_raise_the_opt_in_extender_failure(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         probe = _RunCompleteProbe(error=RuntimeError("opt-in boom"), raise_on_run_complete=True)
         session = _early_close_session(probe)
 
-        stream = session.stream_run()
-        next(stream)
-        stream.close()
+        with caplog.at_level(logging.ERROR):
+            stream = session.stream_run()
+            next(stream)
+            stream.close()
 
         assert probe.run_ids
+        assert [r for r in caplog.records if r.levelno == logging.ERROR]
 
     def test_sync_run_all_raises_the_opt_in_extender_failure(self) -> None:
         failure = RuntimeError("opt-in boom")

@@ -90,7 +90,7 @@ class Extender(ABC):
     # For gates: True makes a failure always propagate, never falling back to the wrapped call.
     never_fall_back: bool = False
 
-    # For gates: True makes an Exception from on_run_complete fail a run that otherwise succeeded.
+    # Opt-in: True makes an Exception from on_run_complete fail a run that otherwise succeeded.
     raise_on_run_complete: bool = False
 
     @abstractmethod

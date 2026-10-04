@@ -686,7 +686,7 @@ class _RunCompleteRecorder(Extender):
         priority: int = 100,
         hooks: set[ExtenderHook] | None = None,
         raises: bool = False,
-        error: type[BaseException] = RuntimeError,
+        error: type[BaseException] | BaseException = RuntimeError,
         raise_on_run_complete: bool = False,
     ) -> None:
         self.raise_on_run_complete = raise_on_run_complete
@@ -706,6 +706,8 @@ class _RunCompleteRecorder(Extender):
     def on_run_complete(self, run_id: str | None) -> None:
         self.log.append((self.label, run_id))
         if self.raises:
+            if isinstance(self.error, BaseException):
+                raise self.error
             raise self.error(_RUN_COMPLETE_BOOM)
 
 
@@ -897,18 +899,19 @@ class TestExitNotifiesExtendersOfRunCompletion:
 
     def test_opt_in_failure_on_a_successful_run_propagates_after_later_extenders_are_notified(self) -> None:
         log: _RunLog = []
-        raiser = _RunCompleteRecorder("raiser", log, priority=10, raises=True, raise_on_run_complete=True)
+        failure = RuntimeError("opt-in boom")
+        raiser = _RunCompleteRecorder(
+            "raiser", log, priority=10, raises=True, error=failure, raise_on_run_complete=True
+        )
         survivor = _RunCompleteRecorder("survivor", log, priority=20)
         orchestrator = _entered_orchestrator({raiser, survivor}, empty_plan=True)
-        failure = RuntimeError("opt-in boom")
-        raiser.on_run_complete = Mock(side_effect=failure)  # type: ignore[method-assign]
 
         orchestrator.compute()
         with pytest.raises(RuntimeError) as raised:
             orchestrator.__exit__(None, None, None)
 
         assert raised.value is failure
-        assert log == [("survivor", "run-1")]
+        assert log == [("raiser", "run-1"), ("survivor", "run-1")]
 
     @pytest.mark.parametrize(
         "first_error, first_opt_in, second_error, second_opt_in",

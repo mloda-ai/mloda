@@ -82,6 +82,18 @@ class _ExtStrictUnregisteredGate(Extender):
         return func(*args, **kwargs)
 
 
+class _ExtStrictUnregisteredRunCompleteGate(Extender):
+    """Never-registered gate (raise_on_run_complete only)."""
+
+    raise_on_run_complete = True
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
 class _ExtStrictInjectedOnly(Extender):
     """Local double registered ONLY in a fresh injected registry."""
 
@@ -172,12 +184,13 @@ class TestFilterExtendersStrict:
             "strict mode must warn with the dropped classes as module:qualname"
         )
 
-    def test_strict_unregistered_gate_raises_naming_class(self) -> None:
+    @pytest.mark.parametrize("gate_cls", [_ExtStrictUnregisteredGate, _ExtStrictUnregisteredRunCompleteGate])
+    def test_strict_unregistered_gate_raises_naming_class(self, gate_cls: type[Extender]) -> None:
         from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, filter_extenders_by_strict_mode
 
         collector = PluginCollector().set_strict_mode("strict")
-        with pytest.raises(EnvironmentPreconditionError, match="_ExtStrictUnregisteredGate"):
-            filter_extenders_by_strict_mode({_ExtStrictUnregisteredGate(), _ExtStrictUnregisteredA()}, collector)
+        with pytest.raises(EnvironmentPreconditionError, match=gate_cls.__name__):
+            filter_extenders_by_strict_mode({gate_cls(), _ExtStrictUnregisteredA()}, collector)
 
     def test_strict_two_unregistered_instances_of_one_gate_class_name_it_once(self) -> None:
         from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, filter_extenders_by_strict_mode
@@ -196,10 +209,11 @@ class TestFilterExtendersStrict:
         collector = PluginCollector().set_strict_mode("strict")
         assert filter_extenders_by_strict_mode({gate}, collector) == {gate}
 
-    def test_warn_keeps_unregistered_gate(self) -> None:
+    @pytest.mark.parametrize("gate_cls", [_ExtStrictUnregisteredGate, _ExtStrictUnregisteredRunCompleteGate])
+    def test_warn_keeps_unregistered_gate(self, gate_cls: type[Extender]) -> None:
         from mloda.core.prepare.accessible_plugins import filter_extenders_by_strict_mode
 
-        gate = _ExtStrictUnregisteredGate()
+        gate = gate_cls()
         collector = PluginCollector().set_strict_mode("warn")
         assert filter_extenders_by_strict_mode({gate}, collector) == {gate}
 

@@ -463,6 +463,36 @@ class LinkedDirectConsumer(FeatureGroup):
         return {cls.get_class_name(): pc.add(data.column("l_a"), data.column("l_b"))}
 
 
+class SameNameOptionConsumer(FeatureGroup):
+    """Reads metric_a twice, with and without a group option, from SplitMetricSource."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("metric_a", options={"unit": "x"}), Feature.int32_of("metric_a")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("metric_a")}
+
+
+class SameNameDtypeConsumer(FeatureGroup):
+    """Reads d_a twice, as int32 and as int64, from SplitSourceDtype."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("d_a"), Feature.int64_of("d_a")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("d_a")}
+
+
 class TestMissingLinksError:
     """Test suite for missing Links validation"""
 
@@ -729,3 +759,27 @@ class TestMissingLinksError:
             )
 
         assert "CombMixedKeys" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "consumer, source, fragments",
+        [
+            (SameNameOptionConsumer, SplitMetricSource, ["metric_a", "unit"]),
+            (SameNameDtypeConsumer, SplitSourceDtype, ["d_a", "INT32", "INT64"]),
+        ],
+    )
+    def test_same_name_variants_read_by_one_consumer_raise_at_plan_time(
+        self, consumer: type[FeatureGroup], source: type[FeatureGroup], fragments: list[str]
+    ) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of(consumer.get_class_name())],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({source, consumer}),
+            )
+
+        error_message = str(exc_info.value)
+        for fragment in [consumer.get_class_name(), source.get_class_name(), *fragments]:
+            assert fragment in error_message
+        assert "Link.inner" not in error_message
+        assert "missing Links" not in error_message

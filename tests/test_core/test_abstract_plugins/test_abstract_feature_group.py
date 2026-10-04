@@ -37,7 +37,7 @@ class BaseTestFeatureGroup2(FeatureGroup):
         """This function should return the input features for the feature group
         if this feature is dependent on other features.
         Else, return None"""
-        return {Feature.str_of("BaseTestFeature1"), Feature.int32_of("BaseTestFeature1")}
+        return {Feature.str_of("BaseTestFeature1")}
 
     @classmethod
     def return_data_type_rule(cls, feature: Feature) -> DataType | None:

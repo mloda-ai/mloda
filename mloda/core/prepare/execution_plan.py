@@ -471,6 +471,27 @@ class ExecutionPlan:
         return False
 
     @staticmethod
+    def _conflicting_variants_error(
+        ep: FeatureGroupStep,
+        source: type[FeatureGroup],
+        feature_a: Feature,
+        feature_b: Feature,
+        option_keys: frozenset[Any],
+    ) -> str:
+        """One consumer reads one name from two unbound variants of the same source feature group."""
+        differences = []
+        if option_keys:
+            differences.append(f"options {sorted(str(key) for key in option_keys)}")
+        if feature_a.data_type != feature_b.data_type:
+            differences.append(f"data types {sorted([str(feature_a.data_type), str(feature_b.data_type)])}")
+        return (
+            f"'{format_feature_group_class(ep.feature_group)}' reads feature '{feature_a.name}' from two steps of "
+            f"'{format_feature_group_class(source)}' that differ in {' and '.join(differences)}. "
+            "Only one of the two steps can be bound, so one variant's values would be read for both. "
+            "Request the input once with the same options and data type."
+        )
+
+    @staticmethod
     def _conflicting_transform_hops_error(
         ep: FeatureGroupStep,
         first_hop: TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent,
@@ -750,9 +771,12 @@ Available join types:
                     raise ValueError(f"Feature group {format_feature_group_class(ep.feature_group)} has no uuid.")
 
                 parents: set[UUID] = set()
+                direct_parents_by_member: list[set[UUID]] = []
                 for member_uuid in ep.get_uuids():
                     member_parents = graph.parent_to_children_mapping.get(member_uuid, set())
-                    parents |= member_parents - self.get_parent_parents(member_parents, graph)
+                    direct_parents = member_parents - self.get_parent_parents(member_parents, graph)
+                    direct_parents_by_member.append(direct_parents)
+                    parents |= direct_parents
 
                 names_by_step: dict[UUID, set[str]] = defaultdict(set)
                 for parent in parents:
@@ -813,6 +837,23 @@ Available join types:
                     else:
                         same_framework_entries.append((parent_node_property.feature_group_class, parent))
 
+                def _conflicting_variants(
+                    parent_a: UUID, parent_b: UUID
+                ) -> tuple[Feature, Feature, frozenset[Any]] | None:
+                    """Two same-name direct parents of one consumer member differing in data type or options."""
+                    if not any(parent_a in direct and parent_b in direct for direct in direct_parents_by_member):
+                        return None
+                    nodes = graph.get_nodes()
+                    feature_a = nodes[parent_a].feature
+                    feature_b = nodes[parent_b].feature
+                    if feature_a.name != feature_b.name:
+                        return None
+                    split_keys = feature_a.options.inherited_context_keys | feature_b.options.inherited_context_keys
+                    option_keys = self._differing_option_keys([feature_a, feature_b], split_keys)
+                    if feature_a.data_type != feature_b.data_type or option_keys:
+                        return feature_a, feature_b, option_keys
+                    return None
+
                 # Group entries by transitive linkage: same feature-group class (unless split across
                 # unrelated root steps), one entry's own class a subclass (or superclass) of the other's
                 # (catches a case-override hop whose parent lost the JoinStep's own uuid to a same-role sibling,
@@ -829,14 +870,15 @@ Available join types:
                     hop_b, parent_b = entry_b
                     if hop_a.from_feature_group is hop_b.from_feature_group:
                         # Steps match by column name only, a heuristic: same names means either step
-                        # supplies every column.
+                        # supplies every column, except a conflicting variant pair read by one consumer feature.
+                        if root_steps_of(parent_a) & root_steps_of(parent_b):
+                            return True
                         step_a = owning_step_of.get(parent_a, parent_a)
                         step_b = owning_step_of.get(parent_b, parent_b)
-                        split_root_steps = (
-                            not (root_steps_of(parent_a) & root_steps_of(parent_b))
-                            and consumed_names_by_step[step_a] != consumed_names_by_step[step_b]
-                        )
-                        if not split_root_steps:
+                        if (
+                            consumed_names_by_step[step_a] == consumed_names_by_step[step_b]
+                            and _conflicting_variants(parent_a, parent_b) is None
+                        ):
                             return True
                     if isinstance(hop_a, _SameFrameworkParent) or isinstance(hop_b, _SameFrameworkParent):
                         closure_a = {parent_a} | graph.parent_to_children_mapping.get(parent_a, set())
@@ -922,6 +964,23 @@ Available join types:
                                 tfs.required_uuids = shared_required_uuids - tfs.get_uuids()
 
                 if len(hop_groups) > 1:
+                    variant_errors: list[tuple[str, str, str]] = []
+                    for index, group_a in enumerate(hop_groups):
+                        for group_b in hop_groups[index + 1 :]:
+                            for hop_a, parent_a in group_a:
+                                for hop_b, parent_b in group_b:
+                                    if hop_a.from_feature_group is not hop_b.from_feature_group:
+                                        continue
+                                    conflict = _conflicting_variants(parent_a, parent_b)
+                                    if conflict is not None:
+                                        message = self._conflicting_variants_error(
+                                            ep, hop_a.from_feature_group, conflict[0], conflict[1], conflict[2]
+                                        )
+                                        variant_errors.append(
+                                            (hop_a.from_feature_group.get_class_name(), str(conflict[0].name), message)
+                                        )
+                    if variant_errors:
+                        raise ValueError(min(variant_errors)[2])
                     # Set iteration order of parents varies with the hash seed, so name groups in a stable order.
                     reps = sorted(
                         (group[0][0] for group in hop_groups),

@@ -230,8 +230,13 @@ class mlodaAPI:
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
         )
+        plan = session.resolved_plan()
         result_items = session.runner.get_result_items() if session.runner is not None else None
-        return RunResult(results, session.resolved_plan(), result_items)
+        if result_items is not None:
+            position = {step.step_uuid: index for index, step in enumerate(plan)}
+            result_items = sorted(result_items, key=lambda item: position.get(item[0], len(position)))
+            results = [result for _, result in result_items]
+        return RunResult(results, plan, result_items)
 
     @classmethod
     def stream_all(
@@ -442,7 +447,8 @@ class mlodaAPI:
     def resolved_plan(self) -> list[PlanStep]:
         """Return the resolved execution plan of this session as ``PlanStep`` records.
 
-        Available after ``prepare()`` and unchanged by ``run()``.
+        Available after ``prepare()`` and unchanged by ``run()``. Steps are in dependency order,
+        independent ones sorted by content.
         """
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")

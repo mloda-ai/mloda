@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from mloda.core.api.plan_lock import _lock_text
+from mloda.core.api.plan_lock import PLAN_LOCK_FORMAT, _lock_text
 from mloda.steward import PlanLockMismatchError, PlanStep, check_plan_lock, write_plan_lock
 from mloda.provider import FeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -90,13 +90,14 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == 1
+    assert content["format"] == PLAN_LOCK_FORMAT == 2
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
         "feature_names",
         "feature_group",
         "compute_framework",
+        "compute_framework_reason",
         "specialized_from",
         "reader",
     }
@@ -113,12 +114,21 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     check_plan_lock(plan, lock)
 
 
+def test_the_compute_reason_is_recorded_and_a_changed_reason_fails_check(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    write_plan_lock([_compute_step(compute_framework_reason="pinned")], lock)
+
+    assert json.loads(lock.read_text(encoding="utf-8"))["compute"][0]["compute_framework_reason"] == "pinned"
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock([_compute_step(compute_framework_reason="default order")], lock)
+
+
 def test_a_lock_with_an_edited_format_version_fails_check(tmp_path: Path) -> None:
     lock = tmp_path / "plan.lock"
     plan = _plan()
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
-    content["format"] = 2
+    content["format"] = PLAN_LOCK_FORMAT + 1
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
     with pytest.raises(PlanLockMismatchError, match="format"):

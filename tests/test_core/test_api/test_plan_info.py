@@ -37,7 +37,7 @@ Contract under test:
   * ``PlanStep.data_access_identity`` is a read-only ``str | None`` property: the reader's credential-free
     projection of ``reader_data_access``, ``None`` when there is none.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
-    and after ``run()``, in execution-plan order, and matches the plan that actually executed.
+    and after ``run()``, in dependency order (independent steps sorted by content), and matches the plan that actually executed.
   * ``mlodaAPI.explain(features, ...)`` mirrors the ``prepare`` parameter shape with keyword-only
     parameters after ``features``, prepares without executing and returns the same records as
     ``prepare(...).resolved_plan()``.
@@ -56,7 +56,6 @@ import copy
 import dataclasses
 import json
 import sqlite3
-from collections import Counter
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, get_args, get_origin
@@ -512,8 +511,8 @@ def _raw_steps_by_kind(session: mlodaAPI) -> dict[str, list[Any]]:
     raw_steps: list[Any] = list(session.engine.execution_planner)
 
     grouped: dict[str, list[Any]] = {"compute": [], "join": [], "transform": []}
-    for raw_step, record in zip(raw_steps, build_plan_steps(raw_steps)):
-        grouped[record.step_kind].append(raw_step)
+    for raw_step in raw_steps:
+        grouped[build_plan_steps([raw_step])[0].step_kind].append(raw_step)
     return grouped
 
 
@@ -566,6 +565,7 @@ class TestPlanStepDataclass:
             "input_feature_edges",
             "specialized_from",
             "reader_data_access",
+            "compute_framework_reason",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -1168,12 +1168,46 @@ class TestResolvedPlanForChainedFeature:
         assert names == ("plan_info_price", "plan_info_sales")
         assert list(names) == sorted(names)
 
-    def test_plan_is_in_execution_order(self) -> None:
-        """The source must be planned before the aggregation that consumes it."""
+    def test_plan_is_in_dependency_order(self) -> None:
+        """Every step comes after the steps it needs; independent steps are sorted by content."""
         plan = _prepare_chained_session().resolved_plan()
 
         groups = [step.feature_group for step in plan if step.step_kind == "compute"]
         assert groups.index(PlanInfoPandasSource) < groups.index(PandasAggregatedFeatureGroup)
+
+        cross = mlodaAPI.explain(
+            ["PlanInfoCrossConsumer"],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            links={_cross_link()},
+            plugin_collector=_CROSS_JOIN_PLUGINS,
+        )
+        kinds = [step.step_kind for step in cross]
+        consumer = max(i for i, step in enumerate(cross) if step.feature_group is PlanInfoCrossConsumer)
+        sources = [
+            i
+            for i, step in enumerate(cross)
+            if step.feature_group in (PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow) and step.step_kind == "compute"
+        ]
+        assert len(sources) == 2
+        for i, kind in enumerate(kinds):
+            if kind in ("join", "transform"):
+                assert i > min(sources)
+                assert i < consumer
+        assert all(i < consumer for i in sources)
+        assert all(i < kinds.index("join") for i in sources)
+
+        def independent(first: str, second: str) -> list[tuple[str, str | None]]:
+            steps = mlodaAPI.explain(
+                [
+                    Feature("plan_info_any_framework_value", compute_framework=first),
+                    Feature("plan_info_any_framework_value", compute_framework=second),
+                ],
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+            )
+            return [(step.compute_framework_name, step.compute_framework_reason) for step in steps]
+
+        assert independent("PandasDataFrame", "PyArrowTable") == independent("PyArrowTable", "PandasDataFrame")
 
 
 # ---------------------------------------------------------------------------
@@ -1249,8 +1283,7 @@ class TestExplain:
         assert explained == prepared
 
     def test_explain_matches_prepare_resolved_plan_for_a_join_request(self) -> None:
-        """The join token is fresh per planning run and plan order across sessions is not pinned, so this
-        compares multisets rather than requiring the two resolutions to match exactly."""
+        """The order is dependency order with independent steps sorted by content, so two sessions match."""
         explained = mlodaAPI.explain(
             ["PlanInfoCrossConsumer"],
             compute_frameworks=[PandasDataFrame, PyArrowTable],
@@ -1260,7 +1293,22 @@ class TestExplain:
         prepared = _prepare_cross_framework_join_session().resolved_plan()
 
         assert [step for step in explained if step.step_kind == "join"], "the fixture must plan a join"
-        assert Counter(explained) == Counter(prepared)
+        assert explained == prepared
+
+    def test_pinned_steps_report_pinned_and_free_steps_report_a_reason(self) -> None:
+        pinned = mlodaAPI.explain(
+            [Feature("plan_info_any_framework_value", compute_framework="PyArrowTable")],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+        )
+        assert [step.compute_framework_reason for step in pinned] == ["pinned"]
+
+        free = mlodaAPI.explain(
+            ["plan_info_any_framework_value"],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+        )
+        assert [step.compute_framework_reason for step in free] == ["your list order"]
 
     def test_explain_returns_plan_steps(self) -> None:
         explained = mlodaAPI.explain(
@@ -1479,6 +1527,14 @@ class TestPlanLock:
 
         assert len(outputs) == 3
         assert outputs[0] == outputs[1] == outputs[2]
+
+        order = json.loads(outputs[0]["order"])
+        assert [row[3] for row in order if row[0] == "compute" and row[2] in ("PandasDataFrame", "PyArrowTable")]
+        assert all(row[3] is not None for row in order if row[0] == "compute")
+        assert [row for row in order if row[1] == "LockProbeAnyFramework"] == sorted(
+            row for row in order if row[1] == "LockProbeAnyFramework"
+        )
+        assert {row[3] for row in order if row[1] == "LockProbeAnyFramework"} == {"pinned"}
 
         content = json.loads(outputs[0]["lock"])
         assert len(content["compute"]) > 1
@@ -1860,6 +1916,34 @@ class TestBuildPlanStepsInputFeatureNames:
         """The root source's raw FeatureGroupStep, from a session nobody else shares."""
         compute_steps = _raw_steps_by_kind(_prepare_chained_session())["compute"]
         return next(step for step in compute_steps if step.feature_group is PlanInfoPandasSource)
+
+    def test_a_single_reason_is_reported(self) -> None:
+        step = self._source_compute_step()
+        for feature in step.features.features:
+            feature.chosen_compute_framework = step.compute_framework
+            feature.chosen_compute_framework_reason = "default order"
+
+        assert build_plan_steps([step])[0].compute_framework_reason == "default order"
+
+    def test_different_reasons_are_sorted_and_joined(self) -> None:
+        step = self._source_compute_step()
+        first = next(iter(step.features.features))
+        second = Feature("plan_info_price")
+        step.features.features = {first, second}
+        for feature, reason in ((first, "saves 1 conversion"), (second, "pinned")):
+            feature.chosen_compute_framework = step.compute_framework
+            feature.chosen_compute_framework_reason = reason
+
+        assert build_plan_steps([step])[0].compute_framework_reason == "pinned; saves 1 conversion"
+
+    def test_no_reasons_yield_none_and_join_steps_carry_none(self) -> None:
+        step = self._source_compute_step()
+        for feature in step.features.features:
+            feature.chosen_compute_framework_reason = None
+
+        assert build_plan_steps([step])[0].compute_framework_reason is None
+        for raw in _raw_steps_by_kind(_prepare_cross_framework_join_session())["join"]:
+            assert build_plan_steps([raw])[0].compute_framework_reason is None
 
     def test_declared_input_names_are_reported_sorted(self) -> None:
         step = self._source_compute_step()

@@ -119,7 +119,7 @@ See [Discover Plugins](discover-plugins.md#resolving-feature-names) for the full
 
 ##### explain and resolved_plan
 
-The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in execution-plan order. Every `explain` parameter after `features` is keyword-only.
+The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in dependency order (independent steps sorted by content, so every process reports the same order). Every `explain` parameter after `features` is keyword-only.
 
 `explain` re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior `run_all` execution. For the plan of a run that actually happened, use the return value directly: `run_all` returns a `RunResult` (a `list` with a read-only `plan` property) and `stream_all` returns a `ResultStream` (generator-compatible, `plan` available before consuming). One planning pass serves both the results and the plan, unlike `explain`, which re-resolves.
 
@@ -165,6 +165,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **join_token** (`UUID | None`): the join's completion token, the uuid the scheduler tracks, for a join step; None otherwise. Excluded from equality (fresh per planning run).
 - **declared_left_frameworks** / **declared_right_frameworks** (`tuple[type[ComputeFramework], ...]`): the compute frameworks each declared side's parent features declared as candidates, sorted by class name, for a join step; empty otherwise, and empty when the plan recorded no candidates for the side. APPEND/UNION sides carry only the index-bearing parent.
 - **feature_set_options** (`Options | None`): a group-only, deep-copied snapshot of a compute step's `FeatureSet.options`, without the reader pair; None otherwise. Excluded from equality.
+- **compute_framework_reason** (`str | None`): why the central choice put a compute step on its framework (for example `pinned` or `saves 1 conversion`); None for join and transform steps.
 - **reader_data_access** (`tuple[type[BaseInputData], Any] | None`, field, excluded from equality): the `(ReaderClass, data_access)` pair a compute step resolved for reading its input data; None otherwise.
 - **data_access_identity** (`str | None`, property): the reader's `data_access_identity(data_access)` for a compute step's reader pair, None otherwise, the same value `HookContext.data_access_identity` carries. Core readers keep credentials out of it; a reader whose paths carry tokens must override `data_access_identity` (see [Extenders](../chapter1/extender.md)).
 - **data_access_identity_is_fallback** (`bool | None`, property): True when that identity is a fallback (the type name or bare key names) that names no source, False otherwise, None without a reader pair.

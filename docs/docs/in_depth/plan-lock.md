@@ -26,7 +26,7 @@ write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMo
 
 ## What the file holds
 
-Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Duplicate steps keep one record each.
+Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Format 2 adds the framework choice reason (for example `pinned`) to compute records. Duplicate steps keep one record each.
 
 It never holds option values, `data_access_identity`, versions, per-run ids or the mloda version.
 
@@ -38,6 +38,7 @@ It never holds option values, `data_access_identity`, versions, per-run ids or t
 
 ## Churn sources
 
+- A reason can change without a framework change, for example `saves 1 conversion` to `saves 2 conversions`.
 - Moving a class to another module changes its path.
 - Classes created at runtime (for example via `DynamicFeatureGroupCreator`) get a module path that does not say where they came from (`abc:<ClassName>`), so two with the same class name share one path.
 - Classes defined in `__main__` are refused by `write_plan_lock`.

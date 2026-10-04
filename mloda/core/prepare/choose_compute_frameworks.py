@@ -204,7 +204,6 @@ class ChooseComputeFrameworks:
         return any(feature.initial_requested_data for feature in block.features)
 
     def _final_cost(self, block: _Block, framework: Framework) -> int:
-        """Cost of converting a requested block's result to the output framework at the end of the run."""
         output = self.output_framework
         if output is None or not self._requested(block) or framework is output:
             return 0

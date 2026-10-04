@@ -55,7 +55,6 @@ class SetupComputeFramework:
 
     @staticmethod
     def _resolve_output_framework(output: str | type[ComputeFramework] | None) -> type[ComputeFramework] | None:
-        """Match a name or class against every available framework, not only the run's list."""
         if output is None:
             return None
         available = PreFilterPlugins.get_cfw_subclasses()

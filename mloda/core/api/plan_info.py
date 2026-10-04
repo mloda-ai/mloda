@@ -71,8 +71,8 @@ class PlanStep:
     ``compute_framework_reason`` is why the central choice put a compute step on its framework: the distinct
     reasons of its features, sorted and joined with "; ", or None (join/transform steps, or no recorded reason).
 
-    ``result_framework`` is the framework a compute step's requested features come back in: the
-    ``output_framework`` option if set, else ``compute_framework``; None without requested features and for join/transform steps.
+    ``result_framework`` is the framework a step's requested features come back in: the ``output_framework``
+    option if set, else ``compute_framework``; None otherwise.
 
     ``reader_data_access`` is the (reader class, data access) pair of ``FeatureSet.input_data_match``, excluded from equality.
     ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for that

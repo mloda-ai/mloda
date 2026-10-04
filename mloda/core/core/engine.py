@@ -133,7 +133,6 @@ class Engine:
         return versions or None
 
     def _resolve_output_connection(self) -> Any:
-        """Picks the output framework's connection from the data access collection; REQUIRED ones must find one."""
         if self.output_framework is None:
             return None
         connection = self.output_framework.pick_connection_from_dac(self.data_access_collection)

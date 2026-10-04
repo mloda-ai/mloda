@@ -168,7 +168,7 @@ class mlodaAPI:
 
         Args:
             features: Features to compute.
-            compute_frameworks: Ordered list of compute frameworks to use; the first listed is preferred.
+            compute_frameworks: Ordered list of compute frameworks to use; cheapest plan first, then list order.
             links: Links between feature groups.
             data_access_collection: Data access configuration.
             parallelization_modes: Parallelization modes.

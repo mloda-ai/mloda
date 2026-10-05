@@ -78,6 +78,11 @@ def _describe_step(step: Any) -> str:
     return f"{type(step).__name__} {getattr(step, 'uuid', None)}"
 
 
+def _wait_uuids(step: Any) -> set[UUID]:
+    """Required tokens plus a hop's order-only ones; works for steps that only expose required_uuids."""
+    return set(step.required_uuids) | getattr(step, "order_after_uuids", set())
+
+
 class ExecutionOrchestrator:
     """
     Orchestrates the execution of an mloda based on a given execution plan.
@@ -210,7 +215,7 @@ class ExecutionOrchestrator:
                 continue
 
             if not self._can_run_step(
-                step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps, step, made_progress
+                _wait_uuids(step), step.get_uuids(), finished_ids, currently_running_steps, step, made_progress
             ):
                 continue
             self._execute_step(step)
@@ -235,7 +240,7 @@ class ExecutionOrchestrator:
         for step in self.execution_planner:
             producible.update(step.get_uuids())
             if not self._is_step_done(step.get_uuids(), finished_ids):
-                unfinished.append((step, step.required_uuids - finished_ids))
+                unfinished.append((step, _wait_uuids(step) - finished_ids))
 
         never_produced: set[UUID] = set()
         for _, missing in unfinished:

@@ -51,6 +51,12 @@ class TransformFrameworkStep(Step):
         # set post-construction by ExecutionPlan.add_tfs.
         self.owed_tokens: frozenset[UUID] = frozenset()
 
+        # Tokens the hop only waits for; unlike required_uuids they never pick its source frame.
+        self.order_after_uuids: set[UUID] = set()
+
+    def get_wait_uuids(self) -> set[UUID]:
+        return self.required_uuids | self.order_after_uuids
+
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, TransformFrameworkStep):
             return False

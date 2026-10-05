@@ -29,6 +29,10 @@ class Step(ABC):
         """Return result uuids of this step"""
         return set()
 
+    def get_wait_uuids(self) -> set[UUID]:
+        """Tokens that must finish before this step runs."""
+        return set(self.required_uuids)
+
     def get_parallelization_mode(self) -> set[ParallelizationMode]:
         return {ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING}
 

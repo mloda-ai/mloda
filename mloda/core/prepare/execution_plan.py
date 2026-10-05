@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from copy import copy, deepcopy
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
@@ -716,6 +716,100 @@ Available join types:
 - Link.inner_on(left, right) - Shorthand using index_columns() definitions
 """.strip()
 
+    def _order_hop_after_same_framework_parent(
+        self,
+        consumer: FeatureGroupStep,
+        hop: TransformFrameworkStep,
+        parent: UUID,
+        plan: Sequence[Step],
+        steps_by_uuid: Mapping[UUID, Step],
+        owning_step_of: dict[UUID, UUID],
+        graph: Graph,
+        memo: _LineageMemo,
+        reject_unorderable: bool,
+    ) -> str | None:
+        """Make the upstream hop that copies the frame `parent` writes into wait for `parent`; an error text if none can."""
+        nodes = graph.get_nodes()
+        consumer_name = format_feature_group_class(consumer.feature_group)
+        parent_name = format_feature_group_class(nodes[parent].feature_group_class)
+        hop_name = format_feature_group_class(hop.from_feature_group)
+
+        def error(cause: str) -> str:
+            return (
+                f"'{consumer_name}' reads '{parent_name}' on {consumer.compute_framework.get_class_name()} and "
+                f"'{hop_name}' through a hop from {hop.from_framework.get_class_name()}, but {cause} "
+                "Compute the inputs on one compute framework."
+            )
+
+        parent_owners = {owning_step_of.get(u, u) for u in self._same_framework_lineage(parent, graph, memo)}
+        targets: list[TransformFrameworkStep] = []
+        seen: set[UUID] = set()
+        frontier = [hop]
+        while frontier:
+            current = frontier.pop()
+            source = steps_by_uuid.get(current.source_step_uuid) if current.source_step_uuid else None
+            if not isinstance(source, FeatureGroupStep):
+                continue
+            for hop_uuid in source.tfs_ids:
+                upstream = steps_by_uuid.get(hop_uuid)
+                if not isinstance(upstream, TransformFrameworkStep) or upstream.link_id is not None:
+                    continue
+                if upstream.uuid in seen:
+                    continue
+                seen.add(upstream.uuid)
+                lineage_owners = {
+                    owning_step_of.get(u, u)
+                    for req in upstream.required_uuids
+                    for u in self._same_framework_lineage(req, graph, memo)
+                }
+                if upstream.from_framework == consumer.compute_framework and lineage_owners & parent_owners:
+                    targets.append(upstream)
+                else:
+                    frontier.append(upstream)
+
+        if not targets and not reject_unorderable:
+            return None
+        if not targets:
+            return error(
+                f"'{parent_name}' and the hopped frame live in two separate {consumer.compute_framework.get_class_name()} "
+                "frames that nothing merges."
+            )
+
+        producer_of = {token: step.uuid for step in plan for token in step.get_uuids()}
+
+        def waits_for(start: UUID, goal: UUID) -> bool:
+            stack, visited = [start], {start}
+            while stack:
+                step = steps_by_uuid[stack.pop()]
+                if step.uuid == goal:
+                    return True
+                for token in step.get_wait_uuids():
+                    owner = producer_of.get(token)
+                    if owner is not None and owner not in visited:
+                        visited.add(owner)
+                        stack.append(owner)
+            return False
+
+        parent_step = owning_step_of.get(parent, parent)
+        for target in targets:
+            if waits_for(parent_step, target.uuid):
+                return error(f"'{parent_name}' itself depends on that hop, so it cannot be ordered before it.")
+        for target in targets:
+            target.order_after_uuids.add(parent)
+        return None
+
+    @staticmethod
+    def _read_through_own_input_error(
+        ep: FeatureGroupStep, declared: type[FeatureGroup], via: type[FeatureGroup]
+    ) -> str:
+        """A consumer reads a feature that its same-framework input already consumed through a hop."""
+        consumer = format_feature_group_class(ep.feature_group)
+        return (
+            f"'{consumer}' reads '{format_feature_group_class(declared)}' and also '{format_feature_group_class(via)}', "
+            f"which already consumed it through a compute-framework hop. The second read would need a frame that "
+            "nothing merges. Read only the feature derived from it, or compute both on one compute framework."
+        )
+
     def raise_on_step_cycle(self, steps: Sequence[Step]) -> None:
         """Required tokens order the steps of the finished plan against each other, and a cycle would never run."""
         producer_of: dict[UUID, UUID] = {}
@@ -727,7 +821,7 @@ Available join types:
 
         # A token no step produces is not a cycle; the runtime reports it as a missing producer.
         pending = {
-            step.uuid: {producer_of[token] for token in step.required_uuids if token in producer_of} for step in steps
+            step.uuid: {producer_of[token] for token in step.get_wait_uuids() if token in producer_of} for step in steps
         }
 
         while True:
@@ -847,6 +941,8 @@ Available join types:
             return {owning_step_of.get(uuid, uuid) for uuid in closure} & root_steps
 
         memo = _LineageMemo()
+        # (consumer step, its hop, same-framework parent) triples, resolved once the plan list is complete.
+        hop_same_framework_pairs: list[tuple[FeatureGroupStep, TransformFrameworkStep, UUID]] = []
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
@@ -1048,6 +1144,30 @@ Available join types:
                 for same_feature_group, same_parent in same_framework_entries:
                     _add_to_groups(hop_groups, (_SameFrameworkParent(same_feature_group), same_parent))
 
+                edge_parents = memo.edge_parents(graph)
+                nodes = graph.get_nodes()
+                cycle_errors = [
+                    self._read_through_own_input_error(
+                        ep, nodes[declared].feature_group_class, nodes[via].feature_group_class
+                    )
+                    for member_uuid in ep.get_uuids()
+                    for via in edge_parents.get(member_uuid, set())
+                    if nodes[via].feature.get_compute_framework() == ep.compute_framework
+                    for declared in edge_parents.get(member_uuid, set()) & edge_parents.get(via, set())
+                    if nodes[declared].feature.get_compute_framework() != ep.compute_framework
+                ]
+                if cycle_errors:
+                    raise ValueError(min(cycle_errors))
+
+                for group in hop_groups:
+                    for same_hop, same_parent_uuid in group:
+                        if isinstance(same_hop, _SameFrameworkParent):
+                            hop_same_framework_pairs.extend(
+                                (ep, hop, same_parent_uuid)
+                                for hop, _hop_parent in group
+                                if isinstance(hop, TransformFrameworkStep)
+                            )
+
                 # Two distinct hops linked only because one's from_feature_group subclasses the other's
                 # read the same physical source cfw instance at runtime, but each
                 # only ever waited on its own parent; whichever a later runtime lookup happens to pick
@@ -1133,6 +1253,27 @@ Available join types:
             else:
                 raise ValueError(f"Element {ep} is not a valid element.")
             new_execution_plan.append(ep)
+
+        pair_errors: list[str] = []
+        steps_by_uuid = {step.uuid: step for step in new_execution_plan}
+        for pair_consumer, pair_hop, pair_parent in hop_same_framework_pairs:
+            pair_error = self._order_hop_after_same_framework_parent(
+                pair_consumer,
+                pair_hop,
+                pair_parent,
+                new_execution_plan,
+                steps_by_uuid,
+                owning_step_of,
+                graph,
+                memo,
+                reject_unorderable=not left_join_frameworks,
+            )
+            if pair_error is not None:
+                pair_errors.append(pair_error)
+            else:
+                need_to_upload_collector.add(pair_parent)
+        if pair_errors:
+            raise ValueError(min(pair_errors))
 
         # We define that every parent of a transform framework step needs to be uploaded.
         # This step is only relevant for multi processing.

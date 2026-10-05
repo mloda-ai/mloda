@@ -16,8 +16,7 @@ from mloda.user import (
     mloda,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 class TestJoinSpecWithoutIndexColumns:
@@ -28,7 +27,7 @@ class TestJoinSpecWithoutIndexColumns:
     def test_joinspec_injects_join_column_when_no_index_columns(self) -> None:
         """When FeatureGroupA has no index_columns(), the JoinSpec 'id' column must still be loaded for the merge."""
 
-        class FeatureGroupA(ReadFileFeature):
+        class FeatureGroupA(CsvFG):
             """Reads 'Amount' from CSV. Does NOT override index_columns(), so it returns None."""
 
             @classmethod
@@ -47,12 +46,9 @@ class TestJoinSpecWithoutIndexColumns:
                 if feature_name != "Amount":
                     return False
 
-                if cls().is_root(options, feature_name):
-                    input_data_class = cls.input_data()
-                    return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
-                return False
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
-        class FeatureGroupB(ReadFileFeature):
+        class FeatureGroupB(CsvFG):
             """Reads 'Class' from CSV. Defines index_columns() returning [Index(('id',))]."""
 
             @classmethod
@@ -75,10 +71,7 @@ class TestJoinSpecWithoutIndexColumns:
                 if feature_name != "Class":
                     return False
 
-                if cls().is_root(options, feature_name):
-                    input_data_class = cls.input_data()
-                    return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
-                return False
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
         class FeatureGroupC(FeatureGroup):
             """Derived feature group that combines Amount from A and Class from B."""
@@ -114,7 +107,6 @@ class TestJoinSpecWithoutIndexColumns:
         f = Feature(
             name="JoinSpecNoIndexResult",
             options={
-                CsvReader.__name__: self.file_path,
                 "test_joinspec_no_index": True,
             },
         )
@@ -123,6 +115,7 @@ class TestJoinSpecWithoutIndexColumns:
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
+            data_access_collection=DataAccessCollection(files={self.file_path}),
             plugin_collector=PluginCollector.disabled_feature_groups(set()),
         )
 

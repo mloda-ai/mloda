@@ -76,7 +76,7 @@ import mloda.user as mloda_user
 from mloda.core.api.plan_info import _dependency_order, build_plan_steps
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, SourceMatch
 from mloda.steward import (
     Extender,
     ExtenderHook,
@@ -107,8 +107,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
+from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 
 # ---------------------------------------------------------------------------
 # Test feature groups
@@ -982,7 +981,7 @@ class TestPlanStepReaderDataAccess:
         assert len(compute_steps) == 1
         step = compute_steps[0]
 
-        assert step.reader_data_access == (ParquetReader, str(file_path))
+        assert step.reader_data_access == (ParquetFG, SourceMatch(source=str(file_path), access=str(file_path)))
         assert step.feature_set_options is not None
         assert "BaseInputData" not in step.feature_set_options.group
         assert step.data_access_identity == str(file_path)
@@ -1004,8 +1003,10 @@ class TestPlanStepReaderDataAccess:
             source_feature_group=None,
             source_compute_framework=None,
         )
-        assert step == dataclasses.replace(step, reader_data_access=(ParquetReader, "x"))
-        assert hash(step) == hash(dataclasses.replace(step, reader_data_access=(ParquetReader, "x")))
+        assert step == dataclasses.replace(step, reader_data_access=(ParquetFG, SourceMatch(source="x", access="x")))
+        assert hash(step) == hash(
+            dataclasses.replace(step, reader_data_access=(ParquetFG, SourceMatch(source="x", access="x")))
+        )
 
     def test_identity_properties_are_not_dataclass_fields(self) -> None:
         assert "data_access_identity" not in {field.name for field in dataclasses.fields(PlanStep)}

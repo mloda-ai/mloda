@@ -9,6 +9,7 @@ import concurrent.futures
 import contextvars
 import copy
 import logging
+import os
 import pickle  # nosec B403
 import sqlite3
 import threading
@@ -24,7 +25,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import DataCreator, FeatureGroup, FileSource, InputDataDescriptor
+from mloda.provider import DataCreator, FeatureGroup, FileSource, InputDataDescriptor, SourceMatch
 from mloda.steward import GateBypassError
 from mloda.user import (
     DataAccessCollection,
@@ -37,11 +38,9 @@ from mloda.user import (
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import TextFileReader
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     neutral_csv_group,
@@ -50,7 +49,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 
 _MARKER = "inputload051"
-_EXPECTED_FEATURE_GROUP_CLASS = f"{ReadFileFeature.__module__}.{ReadFileFeature.__qualname__}"
+_EXPECTED_FEATURE_GROUP_CLASS = f"{CsvFG.__module__}.{CsvFG.__qualname__}"
 
 
 class _CalcContextCapturingExtender(Extender):
@@ -303,13 +302,13 @@ class TestComputeFrameworkCurrentShortCircuit:
         _write_csv(path, column, [1, 2])
 
         observed: list[Any] = []
-        original_load_data = CsvReader.__dict__["load_data"].__func__
+        original_load_neutral = CsvFG.load_neutral.__func__  # type: ignore[attr-defined]
 
-        def _probe_load_data(cls: type, data_access: Any, features: Any) -> Any:
+        def _probe_load_neutral(cls: type, match: Any, features: Any) -> Any:
             observed.append(ComputeFramework.current())
-            return original_load_data(cls, data_access, features)
+            return original_load_neutral(cls, match, features)
 
-        monkeypatch.setattr(CsvReader, "load_data", classmethod(_probe_load_data))
+        monkeypatch.setattr(CsvFG, "load_neutral", classmethod(_probe_load_neutral))
 
         mloda.run_all(
             [column],
@@ -954,7 +953,7 @@ class TestDataAccessIdentityOfExistingLocalPaths:
 class TestDataAccessIdentityRegressionGuardForReportedLeak:
     """A credential-shaped value must never come back verbatim from any reader family's data_access_identity."""
 
-    @pytest.mark.parametrize("reader", [CsvReader, TextFileReader, ReadFile, ReadDocument])
+    @pytest.mark.parametrize("reader", [TextFileReader, ReadDocument])
     @pytest.mark.parametrize(
         ("value", "secret"),
         [
@@ -969,6 +968,18 @@ class TestDataAccessIdentityRegressionGuardForReportedLeak:
         identity = reader.data_access_identity(value)
         assert identity == type(value).__name__
         assert secret not in identity
+
+
+class TestFormatGroupIdentityNeverEchoesTheAccess:
+    """A format group publishes the match's source, never a credential-shaped access value."""
+
+    def test_identity_is_the_source_not_the_access(self) -> None:
+        match = SourceMatch(source="/data/key.csv", access=PurePosixPath("s3://alice:hunter2@bucket/key.csv"))
+
+        identity = CsvFG.data_access_identity(match)
+
+        assert identity == "/data/key.csv"
+        assert "hunter2" not in identity
 
 
 class TestDataAccessIdentityWiring:
@@ -1533,21 +1544,13 @@ class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
         assert context.reader_class is _RaisingDeclarationReader
         assert context.declared_attributes is None
 
-    def test_end_to_end_load_uses_reader_declarations_and_calculate_uses_group_declarations(
+    def test_end_to_end_format_group_declarations_reach_both_load_and_calculate(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         column = f"{_MARKER}_col_decl"
         path = tmp_path / "data.csv"
         _write_csv(path, column, [1, 2])
-        monkeypatch.setattr(
-            CsvReader, "declared_attributes", classmethod(lambda cls, features: {"origin": "reader"}), raising=False
-        )
-        monkeypatch.setattr(
-            ReadFileFeature,
-            "declared_attributes",
-            classmethod(lambda cls, features: {"origin": "group"}),
-            raising=False,
-        )
+        monkeypatch.setattr(CsvFG, "declared_attributes", classmethod(lambda cls, features: {"origin": "format"}))
         calc_extender = _CalcContextCapturingExtender()
         fetch_extender = _InputDataLoadCapturingExtender()
 
@@ -1559,11 +1562,11 @@ class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
         )
 
         assert fetch_extender.captured is not None
-        assert fetch_extender.captured.reader_class is CsvReader
-        assert fetch_extender.captured.declared_attributes == {"origin": "reader"}
+        assert fetch_extender.captured.reader_class is CsvFG
+        assert fetch_extender.captured.declared_attributes == {"origin": "format"}
         assert calc_extender.captured is not None
         assert calc_extender.captured.reader_class is None
-        assert calc_extender.captured.declared_attributes == {"origin": "group"}
+        assert calc_extender.captured.declared_attributes == {"origin": "format"}
 
 
 _ROW_COUNT_SENTINEL = 424242
@@ -1599,8 +1602,8 @@ class TestInputDataLoadHookUsesFrameworkRowCountNotDefaultLen:
 _REPLACED_COLUMN = f"{_MARKER}_replaced_col"
 
 
-class _ReplacedReadParentFeatureGroup(FeatureGroup):
-    """Reader feature group replaced by its subclass; matches only its own column so other tests are unaffected."""
+class _ReplacedReadParentFeatureGroup(CsvFG):
+    """CsvFG subclass replaced by its own subclass; gated to its own column so other tests are unaffected."""
 
     @classmethod
     def match_feature_group_criteria(
@@ -1609,17 +1612,9 @@ class _ReplacedReadParentFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        return str(feature_name) == _REPLACED_COLUMN and ReadFileFeature.match_feature_group_criteria(
+        return str(feature_name) == _REPLACED_COLUMN and super().match_feature_group_criteria(
             feature_name, options, data_access_collection
         )
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return ReadFile()
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return ReadFileFeature.calculate_feature.__func__(cls, data, features)  # type: ignore[attr-defined]
 
 
 class _ReplacingReadChildFeatureGroup(_ReplacedReadParentFeatureGroup):
@@ -1745,8 +1740,11 @@ class TestInputDataLoadAuditForFormatGroups:
         assert context.data_access_identity == "h1:toy"
         assert context.data_access_loader == "PythonDictFramework"
 
-    def test_readers_leave_the_loader_field_none(self, tmp_path: Path) -> None:
-        column = f"{_MARKER}_col_loader_none"
+    def test_readers_leave_the_loader_field_none(self) -> None:
+        assert _direct_load_context(_DirectLoadReader).data_access_loader is None
+
+    def test_stock_csv_group_audits_itself_with_the_neutral_loader(self, tmp_path: Path) -> None:
+        column = f"{_MARKER}_col_csv_audit"
         path = tmp_path / "data.csv"
         _write_csv(path, column, [1])
         extender = _InputDataLoadCapturingExtender()
@@ -1758,5 +1756,10 @@ class TestInputDataLoadAuditForFormatGroups:
             function_extender={extender},
         )
 
-        assert extender.captured is not None
-        assert extender.captured.data_access_loader is None
+        context = extender.captured
+        assert context is not None
+        assert context.reader_class is CsvFG
+        assert context.feature_group_class == _EXPECTED_FEATURE_GROUP_CLASS
+        assert context.data_access_format == "CsvFG"
+        assert context.data_access_identity == os.path.abspath(path)
+        assert context.data_access_loader == "neutral"

@@ -5,7 +5,7 @@ import tempfile
 import sqlite3
 from mloda.user import FeatureName
 from mloda.user import Options
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 import pytest
 import pyarrow as pa
 
@@ -17,7 +17,6 @@ from mloda.user import Link, JoinSpec
 from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
     DBInputDataTestFeatureGroup,
 )
@@ -57,13 +56,13 @@ class TestTwoReader:
             )
             feature_list.append(f)
             # add csv reader feature
-            f = Feature(name=feature, options={CsvReader.__name__: self.file_path})
+            f = Feature(name=feature, options={CsvFG.get_class_name(): self.file_path})
             feature_list.append(f)
 
         result = mloda.run_all(
             feature_list,  # type: ignore
             compute_frameworks=["PyArrowTable"],
-            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, CsvFG}),
         )
         assert result[0].to_pydict()["id"] != result[1].to_pydict()["id"]
 
@@ -74,7 +73,6 @@ class TestTwoReader:
                 name=feature,
                 options={
                     SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
-                    CsvReader.__name__: self.file_path,
                 },
             )
             feature_list.append(f)
@@ -108,7 +106,7 @@ class TestTwoReader:
     def test_agg_feature(self) -> None:
         index = Index(("id",))
 
-        class ReadFileFeatureWithIndex(ReadFileFeature):
+        class CsvFGWithIndex(CsvFG):
             @classmethod
             def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
@@ -124,13 +122,7 @@ class TestTwoReader:
                 if options.get("test_agg_feature") is None:
                     return False
 
-                if isinstance(feature_name, FeatureName):
-                    feature_name = str(feature_name)
-
-                if cls().is_root(options, feature_name):
-                    input_data_class = cls.input_data()
-                    return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
-                return False
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
@@ -160,14 +152,13 @@ class TestTwoReader:
         link = Link(
             jointype="inner",
             left=JoinSpec(DBInputDataTestFeatureGroupWithIndex, index),
-            right=JoinSpec(ReadFileFeatureWithIndex, index),
+            right=JoinSpec(CsvFGWithIndex, index),
         )
         f = Feature(
             name="sum_of_",
             options={
                 "sum": ("any_num", "Amount"),
                 SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
-                CsvReader.__name__: self.file_path,
                 "test_agg_feature": True,
             },
         )
@@ -176,8 +167,9 @@ class TestTwoReader:
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
+            data_access_collection=DataAccessCollection(files={self.file_path}),
             plugin_collector=PluginCollector.enabled_feature_groups(
-                {ReadFileFeatureWithIndex, DBInputDataTestFeatureGroupWithIndex, SumFeature}
+                {CsvFGWithIndex, DBInputDataTestFeatureGroupWithIndex, SumFeature}
             ),
         )
         assert result[0].to_pydict()["SumFeature_any_numAmount"] == [9051.91, 9051.91]
@@ -187,7 +179,6 @@ class TestTwoReader:
                 [f],
                 compute_frameworks=["PyArrowTable"],
                 links={link},
-                plugin_collector=PluginCollector.enabled_feature_groups(
-                    {ReadFileFeature, DBInputDataTestFeatureGroupWithIndex}
-                ),
+                data_access_collection=DataAccessCollection(files={self.file_path}),
+                plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, DBInputDataTestFeatureGroupWithIndex}),
             )

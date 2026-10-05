@@ -1,3 +1,4 @@
+import inspect
 import logging
 import os
 import weakref
@@ -618,6 +619,13 @@ class BaseInputData(ABC):
         if len(pinned_paths) != 1:
             return
         pinned_path = next(iter(pinned_paths))
+        from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+
+        if any(
+            not inspect.isabstract(group) and pinned_path.endswith(group.suffixes())
+            for group in get_all_subclasses(ReadFileFG)
+        ):
+            return
         if any(cls._reader_owns_suffix(reader, pinned_path) for reader in cls._all_loadable_readers()):
             return
         record_match_rejection(
@@ -631,8 +639,7 @@ class BaseInputData(ABC):
         """Forces every already-visible family's own auto-load group once before collecting, since
         get_all_filtered_subclasses only auto-loads a family whose OWN filtered list is currently empty;
         a family with even one final reader already defined (e.g. a user's own custom subclass) would
-        otherwise never load its siblings (the stock CsvReader alongside a user's own ReadFile subclass,
-        say).
+        otherwise never load its siblings (the stock document readers, say).
         """
         from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 

@@ -18,8 +18,9 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeatureComposite,
     SourceTuple,
 )
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_document import ReadDocument
+from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 class TestDynamicFeatureGroupFactory:
@@ -61,8 +62,8 @@ class TestDynamicFeatureGroupFactory:
         # Test that the created class is a subclass of FeatureGroup
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
 
-    def test_dynamic_feature_group_creator_with_readfile_feature(self) -> None:
-        class MockReadFile(ReadFile):
+    def test_dynamic_feature_group_creator_with_input_data_feature_group(self) -> None:
+        class MockReadFile(ReadDocument):
             @classmethod
             def suffix(cls) -> tuple[str, ...]:
                 return (".mock",)
@@ -82,7 +83,7 @@ class TestDynamicFeatureGroupFactory:
 
         # Create a dynamic feature group
         DynamicTestFeatureGroup = DynamicFeatureGroupCreator.create(
-            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=ReadFileFeature
+            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=ReadDocumentFeature
         )
 
         # Test match criteria
@@ -102,7 +103,7 @@ class TestDynamicFeatureGroupFactory:
 
         # Test that the created class is a subclass of FeatureGroup
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
-        assert issubclass(DynamicTestFeatureGroup, ReadFileFeature)
+        assert issubclass(DynamicTestFeatureGroup, ReadDocumentFeature)
 
     def test_dynamic_feature_group_creator_with_complex_logic(self) -> None:
         def custom_set_feature_name(self: Any, config: Options, feature_name: FeatureName) -> FeatureName:
@@ -233,11 +234,7 @@ class TestDynamicFeatureGroupFactory:
         options = Options(
             {
                 DefaultOptionKeys.in_features: frozenset(
-                    [
-                        SourceTuple(
-                            feature_name="source_feature_1", source_class=ReadFileFeature, source_value="test.csv"
-                        )
-                    ]
+                    [SourceTuple(feature_name="source_feature_1", source_class=CsvFG, source_value="test.csv")]
                 )
             }
         )
@@ -249,7 +246,7 @@ class TestDynamicFeatureGroupFactory:
 
         feature = next(iter(input_features))
         assert feature.name == "source_feature_1"
-        assert feature.options.get("ReadFileFeature") == "test.csv"
+        assert feature.options.get("CsvFG") == "test.csv"
 
         assert issubclass(ConcreteFeatureGroup, FeatureGroup)
         assert issubclass(ConcreteFeatureGroup, SourceInputFeature)

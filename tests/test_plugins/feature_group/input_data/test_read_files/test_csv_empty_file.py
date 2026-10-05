@@ -2,29 +2,31 @@
 
 Contract:
 
-  * ``CsvReader.get_column_names(<zero-byte file>)`` returns ``[]`` instead of raising
-    (there is simply no header to read).
+  * ``CsvFG.column_names(<zero-byte file>)`` returns ``[]`` instead of raising (there is no header to read).
   * A whitespace/newline-only file returns without raising.
-  * File matching over several candidates skips an empty CSV (its ``validate_columns``
-    returns ``False``) and resolves to the valid CSV, instead of the empty file poisoning
-    discovery with an exception.
+  * A folder holding an empty CSV next to a valid CSV still resolves to the valid CSV.
 """
 
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.user import DataAccessCollection, Feature
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 
 
-class TestGetColumnNamesEmptyFile:
+class TestColumnNamesEmptyFile:
     def test_zero_byte_file_returns_empty_list(self, tmp_path: Path) -> None:
         """A zero-byte CSV has no header: return ``[]``."""
         empty = tmp_path / "empty.csv"
         empty.write_bytes(b"")
 
-        assert list(CsvReader.get_column_names(str(empty))) == []
+        assert list(load_group("csv_fg", "CsvFG").column_names(str(empty))) == []
 
     def test_whitespace_only_file_does_not_raise(self, tmp_path: Path) -> None:
         """A newline-only file must be handled without raising."""
@@ -32,26 +34,31 @@ class TestGetColumnNamesEmptyFile:
         blank.write_text("\n", encoding="utf-8")
 
         # Must not raise; the exact value is unimportant, only that discovery survives.
-        CsvReader.get_column_names(str(blank))
+        load_group("csv_fg", "CsvFG").column_names(str(blank))
 
 
 class TestEmptyFileDoesNotPoisonMatching:
-    def test_matching_skips_empty_csv_and_resolves_valid_file(self, tmp_path: Path) -> None:
-        """An empty CSV visited before the valid CSV does not abort matching.
-
-        The empty file is listed FIRST so it is definitely inspected first. ``validate_columns``
-        on the empty file returns ``False`` (its columns are ``[]``) and matching continues to
-        the valid CSV.
-        """
-        empty = tmp_path / "empty.csv"
-        empty.write_bytes(b"")
-
-        valid = tmp_path / "data.csv"
+    def test_a_folder_with_an_empty_csv_and_a_valid_csv_resolves_the_valid_one(self, tmp_path: Path) -> None:
+        """The empty file sorts first and has no columns; matching goes on to the valid CSV."""
+        csv_group = load_group("csv_fg", "CsvFG")
+        folder = tmp_path / "empty_and_valid"
+        folder.mkdir()
+        (folder / "a_empty.csv").write_bytes(b"")
+        valid = folder / "b_data.csv"
         with open(valid, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["a", "b"])
+            writer.writerow(["emptyfile_a", "emptyfile_b"])
             writer.writerow(["1", "2"])
 
-        matched = CsvReader.match_read_file_data_access([str(empty), str(valid)], ["a", "b"])
+        feature = Feature("emptyfile_a")
+        result = IdentifyFeatureGroupClass.evaluate(
+            feature, {csv_group: {PyArrowTable}}, None, DataAccessCollection(folders={"emptyfile_dir": str(folder)})
+        )
 
-        assert matched == str(valid)
+        assert csv_group in result.identified
+        pair = feature.input_data_match
+        assert pair is not None
+        assert pair[0] is csv_group
+        match = pair[1]
+        assert isinstance(match, SourceMatch)
+        assert match.source == os.path.abspath(valid)

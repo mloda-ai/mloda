@@ -1493,22 +1493,41 @@ class TestExecutorSealsTheAttachedFramework:
         assert cfw.run_context.run_id == "run-1"
         assert cfw.run_context.carrier == {"k": "v"}
 
-    @pytest.mark.parametrize("name,value", [("run_context", RunContext(run_id="forged")), ("worker_index", 5)])
+    @pytest.mark.parametrize(
+        "name,value",
+        [
+            ("run_context", RunContext(run_id="forged")),
+            ("worker_index", 5),
+            ("function_extender", set()),
+            ("_hook_extenders", {}),
+        ],
+    )
     def test_attached_framework_rejects_assignment(self, name: str, value: Any) -> None:
         cfw = self._attached()
+        cfw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        function_extender = cfw.function_extender
+        hook_extenders = cfw._hook_extenders
 
         with pytest.raises(AttributeError):
             setattr(cfw, name, value)
 
         assert cfw.run_context.run_id == "run-1"
         assert cfw.worker_index is None
+        assert cfw.function_extender is function_extender
+        assert cfw._hook_extenders is hook_extenders
 
-    @pytest.mark.parametrize("name", ["run_context", "worker_index", "_run_context_sealed"])
+    @pytest.mark.parametrize(
+        "name", ["run_context", "worker_index", "_run_context_sealed", "function_extender", "_hook_extenders"]
+    )
     def test_attached_framework_rejects_deletion(self, name: str) -> None:
         cfw = self._attached()
+        cfw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
 
         with pytest.raises(AttributeError):
             delattr(cfw, name)
+
+        assert "function_extender" in cfw.__dict__
+        assert "_hook_extenders" in cfw.__dict__
 
         assert cfw.run_context.run_id == "run-1"
         assert cfw.worker_index is None
@@ -1516,7 +1535,15 @@ class TestExecutorSealsTheAttachedFramework:
         with pytest.raises(AttributeError):
             cfw.run_context = RunContext(run_id="forged")
 
-    @pytest.mark.parametrize("name,value", [("run_context", RunContext(run_id="forged")), ("worker_index", 5)])
+    @pytest.mark.parametrize(
+        "name,value",
+        [
+            ("run_context", RunContext(run_id="forged")),
+            ("worker_index", 5),
+            ("function_extender", set()),
+            ("_hook_extenders", {}),
+        ],
+    )
     def test_sealed_framework_stays_sealed_after_pickle_round_trip(self, name: str, value: Any) -> None:
         restored = pickle.loads(pickle.dumps(self._attached()))  # nosec B301
 

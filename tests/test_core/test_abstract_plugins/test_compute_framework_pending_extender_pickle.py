@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.function_extender import (
     CompositeExtender,
     Extender,
@@ -65,13 +66,16 @@ class TestPendingExtenderPayloadDefaultsAndConstruction:
 
 
 class TestPendingExtenderPayloadMaterializesOnUnpickle:
-    def test_unpickling_materializes_function_extender_and_clears_the_pending_payload(self) -> None:
+    @pytest.mark.parametrize("sealed", [False, True])
+    def test_unpickling_materializes_function_extender_and_clears_the_pending_payload(self, sealed: bool) -> None:
         _MaterializationCountingExtender.materializations = 0
         ext = _MaterializationCountingExtender()
         payload = pickle.dumps(({ext}, build_hook_extenders({ext})))
 
         fw = InitDefaultsFramework()
         fw._pending_extender_payload = payload
+        if sealed:
+            fw.run_context = RunContext(run_id="run-1")
 
         restored = pickle.loads(pickle.dumps(fw))  # nosec B301
 
@@ -79,6 +83,9 @@ class TestPendingExtenderPayloadMaterializesOnUnpickle:
         assert len(restored.function_extender) == 1
         restored_extender = next(iter(restored.function_extender))
         assert isinstance(restored_extender, _MaterializationCountingExtender)
+        if sealed:
+            with pytest.raises(AttributeError):
+                restored.function_extender = set()
 
     def test_materialization_happens_exactly_once_not_on_every_subsequent_round_trip(self) -> None:
         _MaterializationCountingExtender.materializations = 0

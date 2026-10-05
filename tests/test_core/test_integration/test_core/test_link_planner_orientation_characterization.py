@@ -325,19 +325,12 @@ def test_left_join_inverted_orientation_keeps_every_left_row(
 
 
 @MODES_WITH_MULTIPROCESSING
-def test_right_join_rejects_a_child_declaring_only_the_left_framework(
+def test_right_join_runs_a_child_declaring_only_the_left_framework_on_the_left_framework(
     modes: set[ParallelizationMode], flight_server: Any
 ) -> None:
-    """The planner used to rewrite the child off its declared PyArrowTable without asking whether it
-    supported the resolved one, so it came back as a pandas DataFrame with no error and no warning.
-    """
-    with pytest.raises(ValueError) as excinfo:
-        _run_pair_results(PAIR_B, "right", OrientCharArrowChild, modes, flight_server)
+    rows = _run_pair(PAIR_B, "right", OrientCharArrowChild, modes, flight_server)
 
-    message = str(excinfo.value)
-    assert OrientCharArrowChild.get_class_name() in message
-    assert PyArrowTable.get_class_name() in message
-    assert PandasDataFrame.get_class_name() in message
+    assert sorted(rows) == sorted(RIGHT_JOIN_ROWS)
 
 
 @MODES_WITH_MULTIPROCESSING

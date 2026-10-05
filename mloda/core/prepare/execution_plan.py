@@ -1748,6 +1748,13 @@ Available join types:
 
         children_uuids.update(link_trekker.data.get(link_fw, set()))
 
+        if link.jointype == JoinType.RIGHT and link_fw[1] != link_fw[2] and children_uuids:
+            child_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in children_uuids}
+            if child_frameworks == {link_fw[1]}:
+                # Consumers sit on the left side's framework only: the join runs there, like INNER.
+                destination_framework = link_fw[1]
+                source_framework = link_fw[2]
+
         swap_merge_sides = False
 
         if len(children_uuids) == 0:

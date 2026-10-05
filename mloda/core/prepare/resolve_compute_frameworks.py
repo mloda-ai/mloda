@@ -135,11 +135,14 @@ class ResolveComputeFrameworks:
             names = sorted(str(m.name) for m in members)
             raise ValueError(
                 f"No compute framework agreement for {names}: they run on both sides of link {link}, "
-                f"{left_cfw.get_class_name()} and {right_cfw.get_class_name()}."
+                f"{left_cfw.get_class_name()} and {right_cfw.get_class_name()}. "
+                "Request them separately or restrict their compute frameworks to one side of the link."
             )
 
         if link.jointype == JoinType.RIGHT:
-            return right_cfw if running == {right_cfw} else None
+            if running == {right_cfw}:
+                return right_cfw
+            return left_cfw if running == {left_cfw} else None
 
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             return left_cfw if running == {left_cfw} else None

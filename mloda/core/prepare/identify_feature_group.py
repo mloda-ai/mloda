@@ -41,6 +41,8 @@ from mloda.core.abstract_plugins.components.match_hook import probe_match_criter
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
+    escalate_match_abort,
+    is_deferred_match_abort,
     is_match_abort,
     contained_raise_reason,
     safe_exc_str,
@@ -134,6 +136,7 @@ class IdentifyFeatureGroupClass:
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
     _matched_options: dict[type[FeatureGroup], Options]
+    _deferred_aborts: dict[type[FeatureGroup], Exception]
     _input_data_matches: dict[type[FeatureGroup], tuple[DataAccessReader, Any]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
@@ -153,6 +156,7 @@ class IdentifyFeatureGroupClass:
         self._declarations = {}
         self._replaced = set()
         self._matched_options = {}
+        self._deferred_aborts = {}
         self._input_data_matches = {}
         self._data_access_collection = data_access_collection
 
@@ -200,6 +204,7 @@ class IdentifyFeatureGroupClass:
             self._domain_outcomes.clear()
             self._links_outcomes.clear()
             self._matched_options.clear()
+            self._deferred_aborts.clear()
             self._input_data_matches.clear()
         return result
 
@@ -527,6 +532,9 @@ class IdentifyFeatureGroupClass:
                     raise
                 if not self._filter_feature_group_by_domain(feature_group, feature):
                     self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
+                elif is_deferred_match_abort(exc):
+                    self._deferred_aborts[feature_group] = exc
+                    self._record_elimination(feature_group, "input_data", safe_exc_str(exc))
                 else:
                     raise
                 continue
@@ -614,6 +622,7 @@ class IdentifyFeatureGroupClass:
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         self._replaced = candidates - set(_identified_feature_groups)
+        self._raise_unmasked_deferred_abort(feature, _identified_feature_groups)
         if len(_identified_feature_groups) == 1:
             winner = next(iter(_identified_feature_groups))
             winner_options = self._matched_options[winner]
@@ -632,6 +641,30 @@ class IdentifyFeatureGroupClass:
             survivors = {fg: self._matched_options[fg] for fg in _identified_feature_groups}
             self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
+
+    def _raise_unmasked_deferred_abort(self, feature: Feature, identified: FeatureGroupEnvironmentMapping) -> None:
+        """Re-raise a pointed group's deferred abort unless another candidate computes the feature."""
+        if not self._deferred_aborts:
+            return
+        # is_root treats an input_features that raises as non-root.
+        # Computed looks at every criteria match (a later-eliminated computing group still masks the abort);
+        # a reading survivor looks only at survivors, because it is the one that would win.
+        computed = any(
+            not fg().is_root(self._matched_options[fg], feature.name) for fg in self._criteria_matched_feature_groups
+        )
+        remaining = {
+            fg: exc
+            for fg, exc in self._deferred_aborts.items()
+            if not any(issubclass(survivor, fg) and survivor is not fg for survivor in identified)
+        }
+        reading_survivor = any(
+            fg().is_root(self._matched_options[fg], feature.name)
+            for fg in identified
+            if not any(issubclass(fg, deferring) for deferring in self._deferred_aborts)
+        )
+        if remaining and (not computed or reading_survivor):
+            first = min(remaining, key=_candidate_sort_key)
+            raise escalate_match_abort(remaining[first])
 
     @staticmethod
     def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:

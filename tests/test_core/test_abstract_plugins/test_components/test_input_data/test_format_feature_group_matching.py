@@ -8,10 +8,11 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -250,6 +251,32 @@ class TestPlanIdentity:
         assert steps[0].data_access_identity == "h1:toy"
 
 
+class _ToyUnservedFramework(ComputeFramework):
+    """Uniquely named framework no candidate serves, so a pin on it eliminates every candidate."""
+
+
+class _TakeoverChildFG(ToyFormatFG):
+    """Reads its source through the parent's pointer key and finds the column that source lacks."""
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        for key in cls.pointer_keys():
+            scoped = options.get(key)
+            if scoped is not None:
+                return [SourceMatch(source="scoped:toy", access=scoped)]
+        return []
+
+    @classmethod
+    def has_column(cls, match: SourceMatch, column: str) -> bool | None:
+        return column == COL
+
+
 class _AbstractToyMid(ToyFormatBase):
     """Abstract shared base: naming it as a scope must not point at its subclasses."""
 
@@ -321,6 +348,53 @@ class TestPointingIsExplicitOnly:
         )
 
         assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+
+
+class TestPointedGroupDefersToAComputingCandidate:
+    DERIVED = "toyfmt_col__sum_aggr"
+
+    @pytest.mark.parametrize("fg", [ToyFormatFG, ToyRequiredOptionFG])
+    def test_class_name_key_on_a_derived_feature_resolves_to_the_aggregation(self, fg: type) -> None:
+        feature = Feature(self.DERIVED, Options({fg.__name__: {COL: [1, 2]}, "toyfmt_required": "yes"}))
+        result = evaluate_or_raise(feature, _plugins(fg, PyArrowAggregatedFeatureGroup), None, None)
+
+        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+        elimination = result.eliminations[fg]
+        assert elimination.stage == "input_data"
+        assert "is in none of the sources" in elimination.reason
+
+    def test_pointed_reader_with_no_other_claimant_still_aborts(self) -> None:
+        feature = Feature("toyfmt_unclaimed", Options({"ToyFormatFG": {COL: [1]}}))
+        with pytest.raises(ValueError, match="is in none of the sources"):
+            evaluate_or_raise(feature, _plugins(ToyFormatFG, PyArrowAggregatedFeatureGroup), None, None)
+
+    def test_pointed_reader_aborts_when_another_reader_survives(self) -> None:
+        feature = Feature(self.DERIVED, Options({"ToyFormatFG": {COL: [1]}}))
+        dac = toy_dac(h1={self.DERIVED: [1]})
+        with pytest.raises(ValueError, match="is in none of the sources"):
+            evaluate_or_raise(
+                feature, _plugins(ToyFormatFG, ToyOtherFormatFG, PyArrowAggregatedFeatureGroup), None, dac
+            )
+
+    def test_computing_candidate_eliminated_later_still_counts_as_computed(self) -> None:
+        feature = Feature(
+            self.DERIVED,
+            Options({"ToyFormatFG": {COL: [1, 2]}}),
+            compute_framework=_ToyUnservedFramework.get_class_name(),
+        )
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(feature, _plugins(ToyFormatFG, PyArrowAggregatedFeatureGroup), None, None)
+
+        result = exc_info.value.result
+        assert result.identified == {}
+        assert result.eliminations[PyArrowAggregatedFeatureGroup].stage == "framework_pin"
+
+    def test_pointed_parent_defers_to_its_surviving_subclass(self) -> None:
+        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        result = evaluate_or_raise(feature, _plugins(ToyFormatFG, _TakeoverChildFG), None, None)
+
+        assert set(result.identified) == {_TakeoverChildFG}
+        assert result.eliminations[ToyFormatFG].stage == "input_data"
 
 
 class TestPointedRoutesDeclineWithReason:

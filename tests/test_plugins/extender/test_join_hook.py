@@ -148,12 +148,15 @@ class TestJoinHookFiresWithCorrectContext:
         assert context.tenant_id == "acme"
         assert context.project_id == "proj1"
         assert context.principal == "hash123"
+        assert context.asof_config is None
+        assert context.feature_group_class is None
+        assert context.feature_group_version is None
 
 
-def _build_direct_join_step() -> JoinStep:
+def _build_direct_join_step(link: Link | None = None) -> JoinStep:
     """A JoinStep usable for direct _merge_data calls, bypassing DAG execution entirely."""
     return JoinStep(
-        link=_join_hook_link(),
+        link=link if link is not None else _join_hook_link(),
         destination_framework=PythonDictFramework,
         source_framework=PythonDictFramework,
         required_uuids=set(),
@@ -210,6 +213,40 @@ class TestJoinHookCarrierIsNotAliasedAcrossTwoMergesOnSameComputeFramework:
         assert "mutated" not in second_context.carrier
         assert cfw.run_context.carrier is not None
         assert "mutated" not in cfw.run_context.carrier
+
+
+class TestJoinHookCarriesAsofConfig:
+    def test_asof_link_exposes_asof_config_and_type_on_context(self) -> None:
+        extender = _JoinListCapturingExtender()
+        link = Link.asof(
+            JoinSpec(_JoinHookLeftFeatureGroup, Index((f"{_MARKER}_left_id",))),
+            JoinSpec(_JoinHookRightFeatureGroup, Index((f"{_MARKER}_right_id",))),
+            left_time_column=f"{_MARKER}_left_ts",
+            right_time_column=f"{_MARKER}_right_ts",
+            direction="forward",
+            allow_exact_matches=False,
+        )
+        step = _build_direct_join_step(link)
+        cfw = PythonDictFramework(function_extender={extender})
+        cfw.run_context = RunContext()
+        cfw.data = {
+            f"{_MARKER}_left_id": [1, 2, 3],
+            f"{_MARKER}_left_ts": [10, 20, 30],
+            f"{_MARKER}_left_value": ["a", "b", "c"],
+        }
+        from_cfw_data = {
+            f"{_MARKER}_right_id": [1, 2, 3],
+            f"{_MARKER}_right_ts": [11, 21, 31],
+            f"{_MARKER}_right_value": [10, 20, 30],
+        }
+
+        step._merge_data(cfw, from_cfw_data)
+
+        assert len(extender.captured) == 1
+        context = extender.captured[0]
+        assert context.join_type == "asof"
+        assert link.asof_config is not None
+        assert context.asof_config == link.asof_config
 
 
 class TestNoJoinExtenderRegisteredBaselineRegressionGuard:

@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.function_extender import ExtenderHook
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+    from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
@@ -53,14 +54,14 @@ class HookContext:
     """Ambient, per-call context describing an Extender hook invocation."""
 
     hook: ExtenderHook
-    feature_group_class: str
-    feature_group_version: str
+    feature_group_class: str | None
+    feature_group_version: str | None
     plugin_version: str | None = None
     feature_names: tuple[str, ...] = ()
     specialized_from: tuple[str, ...] = ()
     input_features: frozenset[str] | None = None
     input_feature_edges: dict[str, tuple[str, ...]] | None = None
-    compute_framework_name: str
+    compute_framework_name: str | None
     rows_in: int | None = None
     rows_out: int | None = None
     output_schema: OutputSchema | None = None
@@ -79,6 +80,7 @@ class HookContext:
     data_access_dataset_version: str | None = None
     join_type: str | None = None
     join_keys: tuple[str, ...] | None = None
+    asof_config: "AsOfJoinConfig | None" = None
     plan_feature_count: int | None = None
     plan_node_count: int | None = None
     plan_depth: int | None = None
@@ -141,6 +143,11 @@ class HookContext:
 
 def _no_schema(data: Any) -> OutputSchema | None:
     """output_schema stand-in for hooks whose return value carries no schema semantics."""
+    return None
+
+
+def _no_rows(data: Any) -> int | None:
+    """row_count stand-in for hooks whose return value carries no row semantics."""
     return None
 
 

@@ -408,13 +408,13 @@ class PlanInfoCalculateHookRecorder(Extender):
         self.captured.append(context)
         return result
 
-    def input_features_by_step(self) -> dict[tuple[str, tuple[str, ...]], frozenset[str]]:
+    def input_features_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], frozenset[str]]:
         return {
             (context.feature_group_class, context.feature_names): context.input_features or frozenset()
             for context in self.captured
         }
 
-    def input_feature_edges_by_step(self) -> dict[tuple[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
+    def input_feature_edges_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], dict[str, tuple[str, ...]]]:
         return {
             (context.feature_group_class, context.feature_names): dict(context.input_feature_edges or {})
             for context in self.captured

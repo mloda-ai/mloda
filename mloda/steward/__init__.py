@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema
 from mloda.core.abstract_plugins.close_context import CloseContext
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 
 # Server-verified tenant/project/principal context seam
 from mloda.core.abstract_plugins.verified_context import verified_context
@@ -98,6 +99,7 @@ __all__ = [
     "PlanContext",
     "RunContext",
     "CloseContext",
+    "AsOfJoinConfig",
     # Server-verified tenant/project/principal context seam
     "verified_context",
     # Plugin registry administration

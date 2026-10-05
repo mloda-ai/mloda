@@ -11,6 +11,14 @@ except ImportError:
 SUPPORTED_FORMATS = ("csv", "parquet", "json", "feather", "orc")
 
 
+def unsupported_format_error(transformer: str, file_format: str) -> ValueError:
+    return ValueError(
+        f"{transformer} cannot read format {file_format!r}; supported: {', '.join(SUPPORTED_FORMATS)}. "
+        "Fix: override file_format() if the suffix is a supported format under another name, "
+        "register a loader for the framework with register_loader, or override load_neutral."
+    )
+
+
 class FileSourcePyArrowTransformer(BaseTransformer):
     """Materialize a ``FileSource`` descriptor into a ``pa.Table`` using PyArrow readers."""
 
@@ -62,7 +70,4 @@ class FileSourcePyArrowTransformer(BaseTransformer):
         if data.format == "orc":
             pyarrow_orc = require("pyarrow.orc", "reading ORC files")
             return pyarrow_orc.read_table(source=data.path, columns=columns).select(columns)
-        raise ValueError(
-            f"FileSourcePyArrowTransformer cannot read format {data.format!r}; supported: {', '.join(SUPPORTED_FORMATS)}. "
-            "Register a loader for the framework with register_loader, or override load_neutral."
-        )
+        raise unsupported_format_error("FileSourcePyArrowTransformer", data.format)

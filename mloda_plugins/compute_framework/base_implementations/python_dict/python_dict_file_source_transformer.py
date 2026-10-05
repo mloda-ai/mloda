@@ -126,14 +126,11 @@ class FileSourceDictTransformer(BaseTransformer):
             from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
                 SUPPORTED_FORMATS,
                 FileSourcePyArrowTransformer,
+                unsupported_format_error,
             )
 
             if data.format not in SUPPORTED_FORMATS:
-                raise ValueError(
-                    f"FileSourceDictTransformer cannot read format {data.format!r}; "
-                    f"supported: {', '.join(SUPPORTED_FORMATS)}. "
-                    "Register a loader for the framework with register_loader, or override load_neutral."
-                )
+                raise unsupported_format_error("FileSourceDictTransformer", data.format)
             return FileSourcePyArrowTransformer.transform_fw_to_other_fw(data).to_pydict()
 
         with open(data.path, newline="", encoding="utf-8-sig") as f:

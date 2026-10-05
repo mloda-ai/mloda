@@ -97,6 +97,7 @@ class TestFileSourcePyArrowTransformerContract:
             )
         message = str(excinfo.value)
         assert "xlsx" in message
+        assert "file_format" in message
         assert "register_loader" in message
         assert "load_neutral" in message
 
@@ -109,11 +110,11 @@ class TestFileSourcePyArrowTransformerContract:
         writer(path, {"A": [1, 2], "B": [3, 4], "C": [5, 6]})
 
         table = FileSourcePyArrowTransformer.transform_fw_to_other_fw(
-            FileSource(path=str(path), format=fmt, columns=("A", "B"))
+            FileSource(path=str(path), format=fmt, columns=("C", "A"))
         )
 
-        assert table.column_names == ["A", "B"]
-        assert table.to_pydict() == {"A": [1, 2], "B": [3, 4]}
+        assert table.column_names == ["C", "A"]
+        assert table.to_pydict() == {"C": [5, 6], "A": [1, 2]}
 
     def test_reverse_direction_raises_not_implemented(self) -> None:
         """pa.Table -> FileSource makes no sense; the reverse direction must raise."""

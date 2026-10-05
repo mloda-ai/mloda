@@ -262,6 +262,7 @@ class TestEncodingAndFormat:
             )
         message = str(excinfo.value)
         assert "xlsx" in message
+        assert "file_format" in message
         assert "register_loader" in message
         assert "load_neutral" in message
 

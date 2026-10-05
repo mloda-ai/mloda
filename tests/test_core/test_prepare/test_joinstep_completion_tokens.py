@@ -37,7 +37,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
-from tests.test_core.test_prepare.join_plan_helpers import feature, trek
+from tests.test_core.test_prepare.join_plan_helpers import feature, join_tokens, trek
 
 
 TOKEN_LEFT_INDEX = Index(("token_left_key",))
@@ -593,7 +593,9 @@ def test_cross_framework_join_hop_owed_tokens_equal_its_destination_consumers_ow
 
     plan = _create_execution_plan(planned)
 
-    hop = next(step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id == link.uuid)
+    hop = next(
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
+    )
 
     assert hop.owed_tokens == branch.consumer.get_uuids()
 
@@ -606,7 +608,9 @@ def test_cross_framework_append_join_hop_owed_tokens_stay_empty() -> None:
 
     plan = _create_execution_plan(planned)
 
-    hop = next(step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id == link.uuid)
+    hop = next(
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
+    )
 
     assert hop.owed_tokens == frozenset()
 

@@ -289,7 +289,7 @@ class ComputeFrameworkExecutor:
         elif isinstance(step, JoinStep):
             # Both join sides are destination-framework cfws, whose modes kept this join in the
             # parent, so neither can be worker-owned.
-            from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.destination_framework.get_class_name(), step.link.uuid)
+            from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.destination_framework.get_class_name(), step.uuid)
 
             if from_cfw_uuid is None:
                 from_cfw_uuid = self.cfw_register.get_cfw_uuid(
@@ -298,7 +298,8 @@ class ComputeFrameworkExecutor:
 
             if from_cfw_uuid is None:
                 raise ValueError(
-                    f"from_cfw_uuid should not be none: {step.destination_framework.get_class_name()}, {step.link.uuid}"
+                    f"from_cfw_uuid should not be none: {step.destination_framework.get_class_name()}, "
+                    f"join token {step.uuid}"
                 )
 
             from_cfw = self.cfw_collection[from_cfw_uuid]

@@ -98,6 +98,23 @@ class _JoinServedParent(NamedTuple):
     from_feature_group: type[FeatureGroup]
 
 
+class _LineageMemo:
+    """Per-add_tfs memo of same-framework lineages and the graph's reverse edges, the latter built on first use."""
+
+    def __init__(self) -> None:
+        self.lineages: dict[UUID, set[UUID]] = {}
+        self._edge_parents: dict[UUID, set[UUID]] | None = None
+
+    def edge_parents(self, graph: Graph) -> dict[UUID, set[UUID]]:
+        if self._edge_parents is None:
+            parents: dict[UUID, set[UUID]] = defaultdict(set)
+            for parent, children in graph.adjacency_list.items():
+                for child in children:
+                    parents[child].add(parent)
+            self._edge_parents = parents
+        return self._edge_parents
+
+
 class _SameFrameworkParent(NamedTuple):
     """Stand-in for a parent already in the step's framework, so unlinked ones are still detected."""
 
@@ -371,9 +388,7 @@ class ExecutionPlan:
 
         for pex in pre_execution_plan:
             if isinstance(pex, tuple):
-                js = self.run_link(pex, link_trekker, graph, pre_execution_plan)
-                if js is not None:
-                    fw_execution_plan.append(js)
+                fw_execution_plan.extend(self.run_link(pex, link_trekker, graph, pre_execution_plan))
             else:
                 fw_execution_plan.append(pex)
 
@@ -440,22 +455,15 @@ class ExecutionPlan:
         return bool(closure_a & closure_b)
 
     @staticmethod
-    def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep], graph: Graph) -> bool:
-        """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides
-        (not ``required_uuids``, which unions all of a join's consumers' parents, not just its own two).
-
-        Each side is widened to its own graph ancestors before the join-adjacency walk: a case-override
-        hop's parent (e.g. a derived feature) never sits on a JoinStep's side itself, only its own
-        upstream dependency does, so the bridge must be found through that dependency, not through
-        whichever sibling request happens to have pulled the join's index feature into its own parents
-        (an accident of feature-intake order, not a meaningful distinction).
-
-        This ancestor walk and the subclass check in `_entries_linked` (see add_tfs) are independent
-        mechanisms that can both decide two hops are linked. A join-served subclass pairing stays
-        linked unconditionally, since the join machinery already resolves it; every other subclass
-        pairing is additionally gated on `_shares_graph_ancestor`, confirming shared physical lineage
-        rather than independent roots that merely subclass for code reuse, with this walk as the
-        fallback for a subclass pair whose bridge has no shared ancestor of its own."""
+    def _parents_linked_by_join(
+        uuid_a: UUID,
+        uuid_b: UUID,
+        join_steps: set[JoinStep],
+        graph: Graph,
+        memo: _LineageMemo | None = None,
+    ) -> bool:
+        """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides, in either order.
+        Sides widen only through same-framework ancestors."""
         if uuid_a == uuid_b:
             return True
 
@@ -466,17 +474,53 @@ class ExecutionPlan:
             for src_uuid in js.source_framework_uuids:
                 adjacency[src_uuid].update(js.destination_framework_uuids)
 
-        starts = {uuid_a} | graph.parent_to_children_mapping.get(uuid_a, set())
-        targets = {uuid_b} | graph.parent_to_children_mapping.get(uuid_b, set())
+        starts = ExecutionPlan._same_framework_lineage(uuid_a, graph, memo)
+        targets = ExecutionPlan._same_framework_lineage(uuid_b, graph, memo)
 
+        # Test join neighbours before dropping visited ones, so a target that is also a start still counts.
         visited = set(starts)
         frontier = set(starts)
         while frontier:
-            frontier = set().union(*(adjacency[node] for node in frontier)) - visited
-            if frontier & targets:
+            reached = set().union(*(adjacency[node] for node in frontier))
+            if reached & targets:
                 return True
+            frontier = reached - visited
             visited |= frontier
         return False
+
+    @staticmethod
+    def _same_framework_lineage(
+        uuid: UUID,
+        graph: Graph,
+        memo: _LineageMemo | None = None,
+    ) -> set[UUID]:
+        """`uuid` plus its ancestors reachable without crossing a compute-framework change."""
+        if memo is not None and uuid in memo.lineages:
+            return memo.lineages[uuid]
+        nodes = graph.get_nodes()
+
+        def framework(node: UUID) -> Any:
+            props = nodes.get(node)
+            return props.feature.get_compute_framework() if props is not None else None
+
+        ancestors = graph.parent_to_children_mapping
+        edge_parents = (memo or _LineageMemo()).edge_parents(graph)
+
+        def direct_parents(node: UUID) -> set[UUID]:
+            above = ancestors.get(node, set())
+            return edge_parents.get(node, set()) | (above - set().union(*(ancestors.get(a, set()) for a in above)))
+
+        own_framework = framework(uuid)
+        lineage = {uuid}
+        stack = [uuid]
+        while stack:
+            for parent in direct_parents(stack.pop()) - lineage:
+                if framework(parent) == own_framework:
+                    lineage.add(parent)
+                    stack.append(parent)
+        if memo is not None:
+            memo.lineages[uuid] = lineage
+        return lineage
 
     def _variant_conflict(
         self, feature_a: Feature, feature_b: Feature
@@ -661,7 +705,8 @@ Feature group '{feature_name}' depends on parents from {len(hops)} unlinked sour
 {split_text}{repeated_paragraph}
 When a feature depends on multiple input features from different sources, you must provide explicit
 Links to specify how to merge them. Without Links, the framework cannot determine how to combine the
-data, and only one of the sources would ever be read.
+data, and only one of the sources would ever be read. A parent counts as reaching a join side only
+through ancestors on its own compute framework, not through a compute-framework hop.
 {link_options}
 Available join types:
 - Link.inner(left, right)    - Keep only matching rows from both sides
@@ -765,7 +810,7 @@ Available join types:
             required_uuids=deepcopy(ep.required_uuids),
             from_feature_group=from_feature_group,
             to_feature_group=to_feature_group,
-            link_id=ep.link.uuid,
+            link_id=ep.uuid,
             source_framework_uuids=ep.source_framework_uuids,
         )
 
@@ -801,20 +846,17 @@ Available join types:
             closure = {parent} | graph.parent_to_children_mapping.get(parent, set())
             return {owning_step_of.get(uuid, uuid) for uuid in closure} & root_steps
 
+        memo = _LineageMemo()
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
                     new_tfs = self.fill_tfs_by_joinstep(ep)
 
-                    # Safe to reuse the canonical hop here: link_id is part of its identity, so both joins
-                    # of this link re-find the hopped framework by link.uuid.
-                    canonical_tfs = self.tfs_collection.get(new_tfs)
-                    if canonical_tfs is None:
-                        self.tfs_collection[new_tfs] = new_tfs
-                        new_execution_plan.append(new_tfs)
-                        canonical_tfs = new_tfs
-                    ep.required_uuids.add(canonical_tfs.uuid)
-                    hop_serves[canonical_tfs.uuid].add(ep.uuid)
+                    # link_id is the join token, so each join owns its hop and re-finds its hopped cfw by it.
+                    self.tfs_collection[new_tfs] = new_tfs
+                    new_execution_plan.append(new_tfs)
+                    ep.required_uuids.add(new_tfs.uuid)
+                    hop_serves[new_tfs.uuid].add(ep.uuid)
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -831,15 +873,15 @@ Available join types:
                             # 1) We do 1 here:
                             for uuid in inner_ep.get_uuids():
                                 if uuid in ep.source_framework_uuids:
-                                    # add the link uuid to the children_if_root of the source feature group
-                                    inner_ep.add_value_to_children_if_root(ep.link.uuid)
+                                    # add the JoinStep token to the children_if_root of the source feature group
+                                    inner_ep.add_value_to_children_if_root(ep.uuid)
 
                                     # add to upload as this source feature group gets accessed in mp by other process
                                     need_to_upload_collector.update(ep.source_framework_uuids)
                                     break
 
                                 if uuid in ep.destination_framework_uuids:
-                                    # add the link uuid to the children_if_root of the destination feature group
+                                    # remember the destination feature group's uuid for the JoinStep token
 
                                     store_val = uuid
 
@@ -975,7 +1017,7 @@ Available join types:
                         join_adjacent = isinstance(hop_a, _JoinServedParent) or isinstance(hop_b, _JoinServedParent)
                         if join_adjacent or self._shares_graph_ancestor(parent_a, parent_b, graph):
                             return True
-                    return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph)
+                    return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph, memo)
 
                 def _add_to_groups(
                     groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID]]],
@@ -1059,7 +1101,7 @@ Available join types:
                                 other is not bh
                                 and other.from_feature_group is not bh.from_feature_group
                                 and other.from_framework == bh.from_framework
-                                and self._parents_linked_by_join(bp, other_parent, left_join_frameworks, graph)
+                                and self._parents_linked_by_join(bp, other_parent, left_join_frameworks, graph, memo)
                             ):
                                 bh.required_uuids |= snapshot[id(other)] - bh.get_uuids()
 
@@ -1431,7 +1473,7 @@ Available join types:
         link_trekker: LinkTrekker,
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
-    ) -> JoinStep | None:
+    ) -> list[JoinStep]:
         link = link_fw[0]
         destination_framework = link_fw[1]
         source_framework = link_fw[2]
@@ -1462,6 +1504,71 @@ Available join types:
                 raise ValueError(f"Link {link} has no matching uuids.")
 
         children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
+
+        join_steps: list[JoinStep] = []
+        for component in self._independent_link_children(link, children_uuids, graph):
+            js = self._plan_link_join(
+                link_fw,
+                link_trekker,
+                graph,
+                pre_execution_plan,
+                component,
+                destination_framework,
+                source_framework,
+                swap_merge_sides,
+                attempted_key,
+            )
+            if js is not None:
+                join_steps.append(js)
+        return join_steps
+
+    def _independent_link_children(self, link: Link, children_uuids: set[UUID], graph: Graph) -> list[set[UUID]]:
+        """Children reading disjoint steps on the link's declared sides (e.g. option variants) each get a join."""
+        step_of = {uuid: index for index, uuids in enumerate(self.feature_set_collections) for uuid in uuids}
+        components: list[tuple[set[UUID], set[int]]] = []
+        side_steps: dict[UUID, tuple[frozenset[int], frozenset[int]]] = {}
+        for child in sorted(children_uuids):
+            split = split_by_declared_side(link, set(graph.parent_to_children_mapping[child]), graph)
+            left = frozenset(step_of[uuid] for uuid in split.left_uuids_any_distance if uuid in step_of)
+            right = frozenset(step_of[uuid] for uuid in split.right_uuids_any_distance if uuid in step_of)
+            steps = set(left | right)
+            if not steps:
+                return [children_uuids]
+            side_steps[child] = (left, right)
+            linked = [component for component in components if component[1] & steps]
+            merged = (
+                {child}.union(*(component[0] for component in linked)),
+                steps.union(*(component[1] for component in linked)),
+            )
+            components = [component for component in components if component not in linked] + [merged]
+        nodes = graph.get_nodes()
+        for members, _ in components:
+            by_variant: dict[tuple[type[FeatureGroup], str], list[UUID]] = {}
+            for member in sorted(members):
+                key = (nodes[member].feature_group_class, str(nodes[member].name))
+                by_variant.setdefault(key, []).append(member)
+            for (group, _name), variants in by_variant.items():
+                if len({side_steps[v][0] for v in variants}) > 1 or len({side_steps[v][1] for v in variants}) > 1:
+                    raise ValueError(
+                        f"Feature group '{format_feature_group_class(group)}' has option variants that read differing "
+                        "variants of one join side but share the other, so one Link cannot join them separately. "
+                        "Align the options or request the variants in separate runs."
+                    )
+        return [component[0] for component in components]
+
+    def _plan_link_join(
+        self,
+        link_fw: LinkFrameworkTrekker,
+        link_trekker: LinkTrekker,
+        graph: Graph,
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+        children_uuids: set[UUID],
+        destination_framework: type[ComputeFramework],
+        source_framework: type[ComputeFramework],
+        swap_merge_sides: bool,
+        attempted_key: LinkFrameworkTrekker,
+    ) -> JoinStep | None:
+        link = link_fw[0]
 
         # This gets the parent ids of the joinstep, which needs to be calculated before the link.
         required_uuids: set[UUID] = set()
@@ -1523,7 +1630,8 @@ Available join types:
             # result = True
             result = self.is_valid_join_step(link_fw, children_fw, children_uuid, graph)
             if result is False:
-                self.declined_orientations.append(attempted_key)
+                if attempted_key not in self.declined_orientations:
+                    self.declined_orientations.append(attempted_key)
                 return None
             elif result is True:
                 pass

@@ -381,6 +381,64 @@ def test_a_child_outside_both_join_sides_is_infeasible() -> None:
         net.choose()
 
 
+def _side_path_net(mid_allowed: set[type[ComputeFramework]]) -> tuple[_Net, Feature, Feature]:
+    net = _Net()
+    left = net.add(ChooserLeftFG, "side_path_left", {A})
+    right = net.add(ChooserRightFG, "side_path_right", {A})
+    mid = net.add(ChooserLayerFG, "side_path_mid", mid_allowed)
+    child = net.add(ChooserChildFG, "side_path_child", {A})
+    net.join(_link(Link.inner, ChooserLeftFG, ChooserRightFG), left, right, child)
+    net.edge(left, mid)
+    net.edge(mid, child)
+    return net, left, mid
+
+
+def test_a_mid_pinned_off_a_link_sides_framework_is_infeasible() -> None:
+    net, _, _ = _side_path_net({P})
+
+    with pytest.raises(ValueError, match="ChooserLayerFG") as error:
+        net.choose()
+
+    assert "ChooserLeftFG" in str(error.value)
+    assert "must run on" in str(error.value)
+
+
+def test_a_free_mid_between_a_link_side_and_its_consumer_runs_on_the_sides_framework() -> None:
+    net, left, mid = _side_path_net({P, A})
+
+    net.choose({P: 0, A: 1})
+
+    assert left.chosen_compute_framework is A
+    assert mid.chosen_compute_framework is A
+
+
+def test_a_link_side_derived_from_the_other_side_keeps_its_own_framework() -> None:
+    net = _Net()
+    left = net.add(ChooserLeftFG, "derived_side_left", {P})
+    right = net.add(ChooserRightFG, "derived_side_right", {A})
+    child = net.add(ChooserChildFG, "derived_side_child", {P, A})
+    net.edge(left, right)
+    net.join(_link(Link.inner, ChooserLeftFG, ChooserRightFG), left, right, child)
+
+    net.choose()
+
+    assert left.chosen_compute_framework is P
+    assert right.chosen_compute_framework is A
+
+
+def test_a_deep_chain_with_a_link_is_chosen_without_recursion_errors() -> None:
+    net = _Net()
+    chain = [net.add(ChooserLayerFG, "deep_layer", {A}, {"layer": index}) for index in range(2000)]
+    for parent, child in reversed(list(zip(chain, chain[1:]))):
+        net.edge(parent, child)
+    link = _link(Link.inner, ChooserLayerFG, ChooserLayerFG)
+    net.occurrences.append((link, chain[0].uuid, chain[1].uuid, chain[-1].uuid))
+
+    net.choose()
+
+    assert chain[-1].chosen_compute_framework is A
+
+
 @pytest.mark.parametrize(
     ("factory", "child_allowed"),
     [(Link.right, {P}), (Link.append, {A}), (Link.union, {A})],

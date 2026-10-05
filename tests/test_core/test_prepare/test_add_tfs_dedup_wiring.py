@@ -1,6 +1,6 @@
-"""Regression coverage for add_tfs: a deduped TransformFrameworkStep must still wire its uuid
-into every consuming step, not just the one that first created it (Scenario A), and that two
-same-shaped hops from genuinely different parents must not dedup into one (Scenario B).
+"""Regression coverage for add_tfs: each JoinStep of one link owns its own hop, keyed by the join
+token (Scenario A), and two same-shaped hops from genuinely different parents must not dedup
+into one (Scenario B).
 """
 
 from typing import Any, NamedTuple
@@ -74,7 +74,7 @@ def _feature(name: str, cfw: type[ComputeFramework]) -> Feature:
 # ---------------------------------------------------------------------------
 
 
-class JoinStepDedupScenario(NamedTuple):
+class JoinStepsOfOneLink(NamedTuple):
     js1: JoinStep
     js2: JoinStep
     graph: Graph
@@ -91,31 +91,28 @@ def _join_step(link: Link, source_framework_uuid: UUID, destination_framework_uu
     )
 
 
-def _join_step_dedup_scenario() -> JoinStepDedupScenario:
+def _two_join_steps_of_one_link() -> JoinStepsOfOneLink:
     """Two JoinSteps over the same link, frameworks, and orientation, so ``fill_tfs_by_joinstep``
-    builds two equal ``TransformFrameworkStep``s. Each carries its own distinct, non-empty
+    would build two equal hops, but each join owns its own. Each carries its own distinct, non-empty
     source/destination framework uuids, as real JoinSteps do."""
     link = Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id"))
     js1 = _join_step(link, uuid4(), uuid4())
     js2 = _join_step(link, uuid4(), uuid4())
-    return JoinStepDedupScenario(js1, js2, Graph())
+    return JoinStepsOfOneLink(js1, js2, Graph())
 
 
-def test_both_joinsteps_of_a_deduped_hop_depend_on_the_surviving_transform_step() -> None:
-    scenario = _join_step_dedup_scenario()
+def test_each_joinstep_of_one_link_owns_its_own_transform_hop() -> None:
+    scenario = _two_join_steps_of_one_link()
 
     new_plan = ExecutionPlan().add_tfs([scenario.js1, scenario.js2], scenario.graph)
 
     tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
-    assert len(tfs_steps) == 1, f"expected the two equal hops to dedup into one, got: {tfs_steps}"
-    tfs_uuid = tfs_steps[0].uuid
+    assert len(tfs_steps) == 2, f"expected one hop per join, got: {tfs_steps}"
 
-    assert tfs_uuid in scenario.js1.required_uuids
-    assert tfs_uuid in scenario.js2.required_uuids
-
-    # Pins current dedup behavior: the survivor is js1's hop verbatim (first-inserted wins),
-    # not a blend of both JoinSteps' source_framework_uuids.
-    assert tfs_steps[0].source_framework_uuid == next(iter(scenario.js1.source_framework_uuids))
+    for join_step in (scenario.js1, scenario.js2):
+        hop = next(step for step in tfs_steps if step.link_id == join_step.uuid)
+        assert join_step.required_uuids == {hop.uuid}
+        assert hop.source_framework_uuid == next(iter(join_step.source_framework_uuids))
 
 
 # ---------------------------------------------------------------------------
@@ -411,14 +408,14 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     )
 
     graph = Graph()
-    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is False
-    assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}, graph) is True
+    _assert_linked_both_orders(a, b, join_step, graph, expected=False)
+    _assert_linked_both_orders(dest, src, join_step, graph, expected=True)
 
     # (a) A derived feature's own ancestor is a genuine join side (src); widening must bridge it
     # to the join's other genuine side (dest) through that ancestor, not just through its own uuid.
     derived = uuid4()
     graph.parent_to_children_mapping[derived] = {src}
-    assert ExecutionPlan._parents_linked_by_join(derived, dest, {join_step}, graph) is True
+    _assert_linked_both_orders(derived, dest, join_step, graph, expected=True)
 
     # (b) Both sides have a populated, but genuinely unrelated, ancestor set: widening must not
     # over-widen a link out of thin air.
@@ -426,7 +423,76 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     unrelated_b, unrelated_b_ancestor = uuid4(), uuid4()
     graph.parent_to_children_mapping[unrelated_a] = {unrelated_a_ancestor}
     graph.parent_to_children_mapping[unrelated_b] = {unrelated_b_ancestor}
-    assert ExecutionPlan._parents_linked_by_join(unrelated_a, unrelated_b, {join_step}, graph) is False
+    _assert_linked_both_orders(unrelated_a, unrelated_b, join_step, graph, expected=False)
+
+
+def _assert_linked_both_orders(a: UUID, b: UUID, join_step: JoinStep, graph: Graph, expected: bool) -> None:
+    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is expected
+    assert ExecutionPlan._parents_linked_by_join(b, a, {join_step}, graph) is expected
+
+
+def _framework_graph(*nodes: tuple[UUID, str, type[ComputeFramework]]) -> Graph:
+    graph = Graph()
+    for uuid, name, cfw in nodes:
+        graph.add_node(uuid, NodeProperties(_feature(name, cfw), DedupUpstreamFG))
+    return graph
+
+
+def _pandas_join(dest: UUID, src: UUID) -> JoinStep:
+    return JoinStep(
+        link=Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id")),
+        destination_framework=PandasDataFrame,
+        source_framework=PandasDataFrame,
+        required_uuids={dest, src},
+        destination_framework_uuids={dest},
+        source_framework_uuids={src},
+    )
+
+
+def test_parent_reaching_a_join_side_only_through_a_framework_hop_is_not_linked() -> None:
+    """A hop reads its parent into a new frame, so lineage behind it is not join-bridged."""
+    dest, src, hop, same_frame = uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "fh_dest", PandasDataFrame),
+        (src, "fh_src", PandasDataFrame),
+        (hop, "fh_hop", PyArrowTable),
+        (same_frame, "fh_same", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[hop] = {src}
+    graph.parent_to_children_mapping[same_frame] = {dest}
+
+    _assert_linked_both_orders(hop, same_frame, _pandas_join(dest, src), graph, expected=False)
+
+
+def test_parents_sharing_an_ancestor_without_a_join_path_are_not_linked() -> None:
+    """Sharing an ancestor is not a join bridge."""
+    dest, src, shared, a, b = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "so_dest", PandasDataFrame),
+        (src, "so_src", PandasDataFrame),
+        (shared, "so_shared", PandasDataFrame),
+        (a, "so_a", PandasDataFrame),
+        (b, "so_b", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[a] = {shared}
+    graph.parent_to_children_mapping[b] = {shared}
+
+    _assert_linked_both_orders(a, b, _pandas_join(dest, src), graph, expected=False)
+
+
+def test_linked_answer_does_not_depend_on_which_side_already_holds_a_join_side() -> None:
+    """One lineage holds both join sides, the other only one: the join between them still links both ways."""
+    dest, src, both, only_src = uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "as_dest", PandasDataFrame),
+        (src, "as_src", PandasDataFrame),
+        (both, "as_both", PandasDataFrame),
+        (only_src, "as_only_src", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[both] = {dest, src}
+    graph.parent_to_children_mapping[only_src] = {src}
+
+    _assert_linked_both_orders(both, only_src, _pandas_join(dest, src), graph, expected=True)
 
 
 # ---------------------------------------------------------------------------

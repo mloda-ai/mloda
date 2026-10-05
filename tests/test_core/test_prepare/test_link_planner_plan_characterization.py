@@ -30,6 +30,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.helpers.probe_runner import run_probes
+from tests.test_core.test_prepare.join_plan_helpers import single_join_step
 
 
 SHARED_LEFT_KEY = "link_plan_shared_left_key"
@@ -288,7 +289,7 @@ def _trek(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[Co
 
 def _run(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework]) -> JoinStep | None:
     link_fw: LinkFrameworkTrekker = (planned.link, left_cfw, right_cfw)
-    return planned.plan.run_link(link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
+    return single_join_step(planned.plan, link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
 
 
 def _pair_scenario(

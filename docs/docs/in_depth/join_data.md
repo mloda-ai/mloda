@@ -337,6 +337,8 @@ mloda.run_all(
 
 mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed.
 
+A feature between a join side and the feature consuming the join runs on that side's compute framework; pinning it elsewhere fails at plan time. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join.
+
 In the following section, we will see how this can look like.
 
 #### Merging Data in the Compute Framework

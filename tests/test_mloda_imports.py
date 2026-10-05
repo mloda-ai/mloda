@@ -259,6 +259,7 @@ def test_import_steward_governance() -> None:
         LifecycleOutcome,
         PlanContext,
         RunContext,
+        AsOfJoinConfig,
     )
 
     # Plugin inspection
@@ -301,6 +302,11 @@ def test_import_steward_governance() -> None:
     ):
         assert lifecycle_type is not None
         assert lifecycle_name in steward_module.__all__
+    # JOIN hook as-of configuration
+    from mloda.core.abstract_plugins.components.link import AsOfJoinConfig as CoreAsOfJoinConfig
+
+    assert AsOfJoinConfig is CoreAsOfJoinConfig
+    assert "AsOfJoinConfig" in steward_module.__all__
 
 
 # =============================================================================

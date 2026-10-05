@@ -16,7 +16,6 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.core.step.join_step import JoinStep
-from mloda.core.abstract_plugins.components.link import AsOfJoinConfig as CoreAsOfJoinConfig
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -248,11 +247,6 @@ class TestJoinHookCarriesAsofConfig:
         assert context.join_type == "asof"
         assert link.asof_config is not None
         assert context.asof_config == link.asof_config
-
-    def test_asof_join_config_is_exported_from_steward(self) -> None:
-        from mloda.steward import AsOfJoinConfig
-
-        assert AsOfJoinConfig is CoreAsOfJoinConfig
 
 
 class TestNoJoinExtenderRegisteredBaselineRegressionGuard:

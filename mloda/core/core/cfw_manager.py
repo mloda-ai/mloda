@@ -139,7 +139,7 @@ class CfwManager:
         identical children_if_root, returns None rather than picking a winner by iteration order):
         a same-framework JoinStep's source side can span more than one FeatureGroupStep (a
         subclass-clustered case-override hop), and add_tfs's same-framework JoinStep branch tags
-        EVERY matching FeatureGroupStep's own children_if_root with the join's link uuid, not just
+        EVERY matching FeatureGroupStep's own children_if_root with the JoinStep token, not just
         one, so this lookup can face the same multi-match shape `get_cfw_uuid` does.
         """
         best_match: UUID | None = None

@@ -3,7 +3,7 @@ Arc consistency prunes the domains, then branch and bound with forward checking 
 """
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from functools import partial
 from typing import NamedTuple
 from uuid import UUID
@@ -292,39 +292,33 @@ class ChooseComputeFrameworks:
                         rules.append(_Rule(first + second, _swapped_pairs_differ, "swapped pairs join apart"))
         return rules
 
-    def _ancestors(self) -> dict[UUID, set[UUID]]:
-        """All graph ancestors per feature, from the edges."""
-        parents: dict[UUID, set[UUID]] = {}
-        for parent, child in self.graph.edges:
-            parents.setdefault(child, set()).add(parent)
-        closure: dict[UUID, set[UUID]] = {}
-
-        def visit(node: UUID) -> set[UUID]:
-            if node not in closure:
-                closure[node] = set()
-                found: set[UUID] = set()
-                for parent in parents.get(node, ()):
-                    found.add(parent)
-                    found |= visit(parent)
-                closure[node] = found
-            return closure[node]
-
-        for node in list(parents):
-            visit(node)
-        return closure
+    def _reach(self, start: UUID, neighbours: Mapping[UUID, set[UUID]]) -> set[UUID]:
+        """Nodes reachable from `start` over the given edge map, iteratively."""
+        found: set[UUID] = set()
+        stack = [start]
+        while stack:
+            for node in neighbours.get(stack.pop(), ()):
+                if node not in found:
+                    found.add(node)
+                    stack.append(node)
+        return found
 
     def _side_path_rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
         """A feature between a link side and its join consumer must share the side's framework."""
         if not self.occurrences:
             return []
-        ancestors = self._ancestors()
+        parents: dict[UUID, set[UUID]] = {}
+        children: dict[UUID, set[UUID]] = {}
+        for parent, child in self.graph.edges:
+            parents.setdefault(child, set()).add(parent)
+            children.setdefault(parent, set()).add(child)
         pairs: set[tuple[int, int]] = set()
         for _, left_uuid, right_uuid, child_uuid in self.occurrences:
+            above_child = self._reach(child_uuid, parents)
             for side in (left_uuid, right_uuid):
-                for mid in ancestors.get(child_uuid, set()):
-                    if side in ancestors.get(mid, set()) and side in owner and mid in owner:
-                        if owner[side] != owner[mid]:
-                            pairs.add((owner[side], owner[mid]))
+                for mid in (above_child & self._reach(side, children)) - {left_uuid, right_uuid}:
+                    if side in owner and mid in owner and owner[side] != owner[mid]:
+                        pairs.add((owner[side], owner[mid]))
         return [
             _Rule(
                 (side, mid),
@@ -506,23 +500,36 @@ class ChooseComputeFrameworks:
                     narrowed[open_block] = kept
             return narrowed
 
-        def descend(depth: int, current: dict[int, list[Framework]], cost: int) -> None:
+        def open_frame(
+            depth: int, current: dict[int, list[Framework]], cost: int
+        ) -> tuple[int, int, Iterator[Framework], dict[int, list[Framework]], int] | None:
             if depth == len(order):
                 best.update(assigned)
                 best_cost[0] = cost
-                return
+                return None
             index = order[depth]
             before = sum(step_cost(*step) for step in steps[index])
-            for value in current[index]:
-                assigned[index] = value
-                narrowed = narrow(index, current)
-                new_cost = cost + sum(step_cost(*step) for step in steps[index]) - before
-                new_cost += self._final_cost(blocks[index], value)
-                if narrowed is not None and (best_cost[0] < 0 or new_cost < best_cost[0]):
-                    descend(depth + 1, narrowed, new_cost)
-                del assigned[index]
+            return index, before, iter(current[index]), current, cost
 
-        descend(0, {b: domains[b] for b in order}, 0)
+        frames = []
+        root = open_frame(0, {b: domains[b] for b in order}, 0)
+        if root is not None:
+            frames.append(root)
+        while frames:
+            index, before, values, current, cost = frames[-1]
+            assigned.pop(index, None)
+            value = next(values, None)
+            if value is None:
+                frames.pop()
+                continue
+            assigned[index] = value
+            narrowed = narrow(index, current)
+            new_cost = cost + sum(step_cost(*step) for step in steps[index]) - before
+            new_cost += self._final_cost(blocks[index], value)
+            if narrowed is not None and (best_cost[0] < 0 or new_cost < best_cost[0]):
+                frame = open_frame(len(frames), narrowed, new_cost)
+                if frame is not None:
+                    frames.append(frame)
         if best_cost[0] < 0:
             raise ValueError(self._infeasible(blocks, order, rules))
         return best, best_cost[0]

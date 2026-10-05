@@ -396,34 +396,43 @@ def _pair_with_declined_orientation() -> Built:
     return _finish(planned, link, Sides(left.uuid, right.uuid, kept.uuid))
 
 
-def _link_with_a_third_parent_it_never_mentions() -> ThirdParent:
-    """A right join whose child also has a third parent, descending from the left side, that the link never mentions."""
+def _third_parent_the_link_never_mentions(third_cfw: type[ComputeFramework], descends_from_right: bool) -> ThirdParent:
+    """A right join whose child also has a same-framework third parent, descending from one side, the link never mentions."""
     planned = _planned()
     link = _pair_link(Link.right)
 
     left = feature("resolved_join_unlinked_left", PyArrowTable, link.left_index)
     right = feature("resolved_join_unlinked_right", PandasDataFrame, link.right_index)
-    unlinked = feature("resolved_join_unlinked_third", PyArrowTable)
+    unlinked = feature("resolved_join_unlinked_third", third_cfw)
     child = feature("resolved_join_unlinked_child", PandasDataFrame)
+    ancestor = right if descends_from_right else left
 
     _add_parents(planned, link, left, right)
     planned.graph.add_node(unlinked.uuid, NodeProperties(unlinked, ResolvedJoinUnlinked))
     planned.queue.append((ResolvedJoinUnlinked, {unlinked}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
-    # The third parent descends from the left side on the same framework, so lineage counts through it.
-    planned.graph.adjacency_list[left.uuid].append(unlinked.uuid)
+    # The third parent descends from a side on the same framework, so lineage counts through it.
+    planned.graph.adjacency_list[ancestor.uuid].append(unlinked.uuid)
     planned.graph.adjacency_list[unlinked.uuid] = []
-    planned.graph.parent_to_children_mapping[unlinked.uuid] = {left.uuid}
+    planned.graph.parent_to_children_mapping[unlinked.uuid] = {ancestor.uuid}
     _add_child(planned, child, left, right, unlinked)
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
     declared: DeclaredFrameworks = {
         left.uuid: frozenset({PyArrowTable}),
         right.uuid: frozenset({PandasDataFrame}),
-        unlinked.uuid: frozenset({PyArrowTable, PythonDictFramework}),
+        unlinked.uuid: frozenset({third_cfw, PythonDictFramework}),
     }
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared)
     return ThirdParent(planned.plan, link, left.uuid, right.uuid, unlinked.uuid)
+
+
+def _link_with_a_third_parent_it_never_mentions() -> ThirdParent:
+    return _third_parent_the_link_never_mentions(PyArrowTable, descends_from_right=False)
+
+
+def _link_with_a_pandas_third_parent_descending_from_the_right_side() -> ThirdParent:
+    return _third_parent_the_link_never_mentions(PandasDataFrame, descends_from_right=True)
 
 
 def _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent() -> FrameworkCollision:
@@ -983,8 +992,15 @@ def test_a_right_joins_destination_stays_right_when_declared_right_is_the_only_p
     assert record.destination_side is JoinSide.RIGHT
 
 
-def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> None:
-    unlinked = _link_with_a_third_parent_it_never_mentions()
+_THIRD_PARENT_BUILDERS = [
+    pytest.param(_link_with_a_third_parent_it_never_mentions, id="pyarrow_from_left"),
+    pytest.param(_link_with_a_pandas_third_parent_descending_from_the_right_side, id="pandas_from_right"),
+]
+
+
+@pytest.mark.parametrize("build", _THIRD_PARENT_BUILDERS)
+def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides(build: Callable[[], ThirdParent]) -> None:
+    unlinked = build()
 
     record = _one_record(unlinked.plan, unlinked.link)
 
@@ -995,8 +1011,9 @@ def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> N
     assert record.source_uuids == {unlinked.left_uuid}
 
 
-def test_a_declared_side_keeps_only_the_frameworks_its_own_parents_declared() -> None:
-    unlinked = _link_with_a_third_parent_it_never_mentions()
+@pytest.mark.parametrize("build", _THIRD_PARENT_BUILDERS)
+def test_a_declared_side_keeps_only_the_frameworks_its_own_parents_declared(build: Callable[[], ThirdParent]) -> None:
+    unlinked = build()
 
     record = _one_record(unlinked.plan, unlinked.link)
 
@@ -1126,6 +1143,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _append_pair,
         _two_links,
         _link_with_a_third_parent_it_never_mentions,
+        _link_with_a_pandas_third_parent_descending_from_the_right_side,
         _case_override_inverted,
         _case_override_beats_nearer_wrong_framework_left,
         _case_override_disagrees_with_the_nearest_split,
@@ -1144,6 +1162,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         "append",
         "two_links",
         "unlinked_third_parent",
+        "unlinked_pandas_third_parent_from_right",
         "case_override_inverted",
         "case_override_beats_nearer_wrong_framework_left",
         "case_override_disagrees_with_nearest_split",

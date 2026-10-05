@@ -98,6 +98,23 @@ class _JoinServedParent(NamedTuple):
     from_feature_group: type[FeatureGroup]
 
 
+class _LineageMemo:
+    """Per-add_tfs memo of same-framework lineages and the graph's reverse edges, the latter built on first use."""
+
+    def __init__(self) -> None:
+        self.lineages: dict[UUID, set[UUID]] = {}
+        self._edge_parents: dict[UUID, set[UUID]] | None = None
+
+    def edge_parents(self, graph: Graph) -> dict[UUID, set[UUID]]:
+        if self._edge_parents is None:
+            parents: dict[UUID, set[UUID]] = defaultdict(set)
+            for parent, children in graph.adjacency_list.items():
+                for child in children:
+                    parents[child].add(parent)
+            self._edge_parents = parents
+        return self._edge_parents
+
+
 class _SameFrameworkParent(NamedTuple):
     """Stand-in for a parent already in the step's framework, so unlinked ones are still detected."""
 
@@ -438,7 +455,13 @@ class ExecutionPlan:
         return bool(closure_a & closure_b)
 
     @staticmethod
-    def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep], graph: Graph) -> bool:
+    def _parents_linked_by_join(
+        uuid_a: UUID,
+        uuid_b: UUID,
+        join_steps: set[JoinStep],
+        graph: Graph,
+        memo: _LineageMemo | None = None,
+    ) -> bool:
         """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides, in either order.
         Sides widen only through same-framework ancestors."""
         if uuid_a == uuid_b:
@@ -451,8 +474,8 @@ class ExecutionPlan:
             for src_uuid in js.source_framework_uuids:
                 adjacency[src_uuid].update(js.destination_framework_uuids)
 
-        starts = ExecutionPlan._same_framework_lineage(uuid_a, graph)
-        targets = ExecutionPlan._same_framework_lineage(uuid_b, graph)
+        starts = ExecutionPlan._same_framework_lineage(uuid_a, graph, memo)
+        targets = ExecutionPlan._same_framework_lineage(uuid_b, graph, memo)
 
         # Test join neighbours before dropping visited ones, so a target that is also a start still counts.
         visited = set(starts)
@@ -466,20 +489,26 @@ class ExecutionPlan:
         return False
 
     @staticmethod
-    def _same_framework_lineage(uuid: UUID, graph: Graph) -> set[UUID]:
+    def _same_framework_lineage(
+        uuid: UUID,
+        graph: Graph,
+        memo: _LineageMemo | None = None,
+    ) -> set[UUID]:
         """`uuid` plus its ancestors reachable without crossing a compute-framework change."""
-        all_ancestors = graph.parent_to_children_mapping
+        if memo is not None and uuid in memo.lineages:
+            return memo.lineages[uuid]
         nodes = graph.get_nodes()
 
         def framework(node: UUID) -> Any:
             props = nodes.get(node)
             return props.feature.get_compute_framework() if props is not None else None
 
+        ancestors = graph.parent_to_children_mapping
+        edge_parents = (memo or _LineageMemo()).edge_parents(graph)
+
         def direct_parents(node: UUID) -> set[UUID]:
-            if graph.parents_by_direct_:
-                return graph.parents_by_direct_.get(node, set())
-            ancestors = all_ancestors.get(node, set())
-            return ancestors - set().union(*(all_ancestors.get(a, set()) for a in ancestors))
+            above = ancestors.get(node, set())
+            return edge_parents.get(node, set()) | (above - set().union(*(ancestors.get(a, set()) for a in above)))
 
         own_framework = framework(uuid)
         lineage = {uuid}
@@ -489,6 +518,8 @@ class ExecutionPlan:
                 if framework(parent) == own_framework:
                     lineage.add(parent)
                     stack.append(parent)
+        if memo is not None:
+            memo.lineages[uuid] = lineage
         return lineage
 
     def _variant_conflict(
@@ -815,6 +846,7 @@ Available join types:
             closure = {parent} | graph.parent_to_children_mapping.get(parent, set())
             return {owning_step_of.get(uuid, uuid) for uuid in closure} & root_steps
 
+        memo = _LineageMemo()
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
@@ -841,7 +873,7 @@ Available join types:
                             # 1) We do 1 here:
                             for uuid in inner_ep.get_uuids():
                                 if uuid in ep.source_framework_uuids:
-                                    # add the link uuid to the children_if_root of the source feature group
+                                    # add the JoinStep token to the children_if_root of the source feature group
                                     inner_ep.add_value_to_children_if_root(ep.uuid)
 
                                     # add to upload as this source feature group gets accessed in mp by other process
@@ -849,7 +881,7 @@ Available join types:
                                     break
 
                                 if uuid in ep.destination_framework_uuids:
-                                    # add the link uuid to the children_if_root of the destination feature group
+                                    # remember the destination feature group's uuid for the JoinStep token
 
                                     store_val = uuid
 
@@ -985,7 +1017,7 @@ Available join types:
                         join_adjacent = isinstance(hop_a, _JoinServedParent) or isinstance(hop_b, _JoinServedParent)
                         if join_adjacent or self._shares_graph_ancestor(parent_a, parent_b, graph):
                             return True
-                    return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph)
+                    return self._parents_linked_by_join(parent_a, parent_b, left_join_frameworks, graph, memo)
 
                 def _add_to_groups(
                     groups: list[list[tuple[TransformFrameworkStep | _JoinServedParent | _SameFrameworkParent, UUID]]],
@@ -1069,7 +1101,7 @@ Available join types:
                                 other is not bh
                                 and other.from_feature_group is not bh.from_feature_group
                                 and other.from_framework == bh.from_framework
-                                and self._parents_linked_by_join(bp, other_parent, left_join_frameworks, graph)
+                                and self._parents_linked_by_join(bp, other_parent, left_join_frameworks, graph, memo)
                             ):
                                 bh.required_uuids |= snapshot[id(other)] - bh.get_uuids()
 
@@ -1494,18 +1526,34 @@ Available join types:
         """Children reading disjoint steps on the link's declared sides (e.g. option variants) each get a join."""
         step_of = {uuid: index for index, uuids in enumerate(self.feature_set_collections) for uuid in uuids}
         components: list[tuple[set[UUID], set[int]]] = []
+        side_steps: dict[UUID, tuple[frozenset[int], frozenset[int]]] = {}
         for child in sorted(children_uuids):
             split = split_by_declared_side(link, set(graph.parent_to_children_mapping[child]), graph)
-            sides = split.left_uuids_any_distance | split.right_uuids_any_distance
-            steps = {step_of[uuid] for uuid in sides if uuid in step_of}
+            left = frozenset(step_of[uuid] for uuid in split.left_uuids_any_distance if uuid in step_of)
+            right = frozenset(step_of[uuid] for uuid in split.right_uuids_any_distance if uuid in step_of)
+            steps = set(left | right)
             if not steps:
                 return [children_uuids]
+            side_steps[child] = (left, right)
             linked = [component for component in components if component[1] & steps]
             merged = (
                 {child}.union(*(component[0] for component in linked)),
                 steps.union(*(component[1] for component in linked)),
             )
             components = [component for component in components if component not in linked] + [merged]
+        nodes = graph.get_nodes()
+        for members, _ in components:
+            by_variant: dict[tuple[type[FeatureGroup], str], list[UUID]] = {}
+            for member in sorted(members):
+                key = (nodes[member].feature_group_class, str(nodes[member].name))
+                by_variant.setdefault(key, []).append(member)
+            for (group, _name), variants in by_variant.items():
+                if len({side_steps[v][0] for v in variants}) > 1 or len({side_steps[v][1] for v in variants}) > 1:
+                    raise ValueError(
+                        f"Feature group '{format_feature_group_class(group)}' has option variants that read differing "
+                        "variants of one join side but share the other, so one Link cannot join them separately. "
+                        "Align the options or request the variants in separate runs."
+                    )
         return [component[0] for component in components]
 
     def _plan_link_join(

@@ -74,7 +74,7 @@ def _feature(name: str, cfw: type[ComputeFramework]) -> Feature:
 # ---------------------------------------------------------------------------
 
 
-class JoinStepDedupScenario(NamedTuple):
+class JoinStepsOfOneLink(NamedTuple):
     js1: JoinStep
     js2: JoinStep
     graph: Graph
@@ -91,18 +91,18 @@ def _join_step(link: Link, source_framework_uuid: UUID, destination_framework_uu
     )
 
 
-def _join_step_dedup_scenario() -> JoinStepDedupScenario:
+def _two_join_steps_of_one_link() -> JoinStepsOfOneLink:
     """Two JoinSteps over the same link, frameworks, and orientation, so ``fill_tfs_by_joinstep``
-    builds two equal ``TransformFrameworkStep``s. Each carries its own distinct, non-empty
+    would build two equal hops, but each join owns its own. Each carries its own distinct, non-empty
     source/destination framework uuids, as real JoinSteps do."""
     link = Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id"))
     js1 = _join_step(link, uuid4(), uuid4())
     js2 = _join_step(link, uuid4(), uuid4())
-    return JoinStepDedupScenario(js1, js2, Graph())
+    return JoinStepsOfOneLink(js1, js2, Graph())
 
 
 def test_each_joinstep_of_one_link_owns_its_own_transform_hop() -> None:
-    scenario = _join_step_dedup_scenario()
+    scenario = _two_join_steps_of_one_link()
 
     new_plan = ExecutionPlan().add_tfs([scenario.js1, scenario.js2], scenario.graph)
 

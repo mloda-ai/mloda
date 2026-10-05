@@ -1557,5 +1557,7 @@ class TestExecutorSealsTheAttachedFramework:
         restored = pickle.loads(pickle.dumps(cfw))  # nosec B301
         restored.run_context = RunContext(run_id="free")
         restored.worker_index = 1
+        restored.function_extender = set()
 
+        assert restored.function_extender == set()
         assert restored.run_context.run_id == "free"

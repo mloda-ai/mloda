@@ -86,6 +86,8 @@ class TestPendingExtenderPayloadMaterializesOnUnpickle:
         if sealed:
             with pytest.raises(AttributeError):
                 restored.function_extender = set()
+            with pytest.raises(AttributeError):
+                restored._hook_extenders = {}
 
     def test_materialization_happens_exactly_once_not_on_every_subsequent_round_trip(self) -> None:
         _MaterializationCountingExtender.materializations = 0

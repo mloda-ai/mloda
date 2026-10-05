@@ -629,6 +629,20 @@ class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
         assert orchestrator.data_lifecycle_manager.track_data_to_drop[cfw.uuid] == set(cfw.children_if_root)
 
 
+class TestAddUuidFlywayDatasetsAccumulates:
+    """Registering readers for one frame twice unions them; a narrower later set must not drop earlier readers."""
+
+    def test_second_registration_unions_with_first(self) -> None:
+        manager = CfwManager({ParallelizationMode.SYNC})
+        cf_uuid = uuid_mod.uuid4()
+        a, b, c, d = (uuid_mod.uuid4() for _ in range(4))
+
+        manager.add_uuid_flyway_datasets(cf_uuid, {a, b, c})
+        manager.add_uuid_flyway_datasets(cf_uuid, {b, d})
+
+        assert manager.get_uuid_flyway_datasets(cf_uuid) == {a, b, c, d}
+
+
 class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
     """_drop_cfw_data_routed must only queue the drop command; it never reads the worker's result queue."""
 

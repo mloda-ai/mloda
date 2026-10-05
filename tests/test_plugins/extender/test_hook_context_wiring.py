@@ -773,8 +773,16 @@ class _ForgingFeatureGroup(FeatureGroup):
         def forge_worker_index() -> None:
             cfw.worker_index = 99
 
+        def forge_function_extender() -> None:
+            cfw.function_extender = set()
+
+        def forge_hook_extenders() -> None:
+            cfw._hook_extenders = {}
+
         _attempt("run_context", forge_run_context)
         _attempt("worker_index", forge_worker_index)
+        _attempt("function_extender", forge_function_extender)
+        _attempt("_hook_extenders", forge_hook_extenders)
         return {"sealed_forge_col": [1, 2, 3]}
 
 
@@ -809,10 +817,15 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         )
         return extender
 
-    def test_feature_group_cannot_reassign_run_context_or_worker_index(self) -> None:
+    def test_feature_group_cannot_reassign_sealed_attributes(self) -> None:
         self._run()
 
-        assert _forge_outcomes == {"run_context": AttributeError, "worker_index": AttributeError}
+        assert _forge_outcomes == {
+            "run_context": AttributeError,
+            "worker_index": AttributeError,
+            "function_extender": AttributeError,
+            "_hook_extenders": AttributeError,
+        }
 
     def test_later_hooks_keep_the_real_identity(self) -> None:
         extender = self._run()

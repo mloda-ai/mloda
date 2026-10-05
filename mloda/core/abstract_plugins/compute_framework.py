@@ -76,7 +76,7 @@ def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
 
 
 _SEAL_FLAG = "_run_context_sealed"
-_SEALED_ATTRS = frozenset({"run_context", "worker_index", _SEAL_FLAG})
+_SEALED_ATTRS = frozenset({"run_context", "worker_index", "function_extender", "_hook_extenders", _SEAL_FLAG})
 
 
 class EmptyResultError(ValueError):
@@ -173,7 +173,9 @@ class ComputeFramework(ABC):
         if restored is not None and restored.run_id:
             object.__setattr__(self, _SEAL_FLAG, True)
         if self._pending_extender_payload is not None:
-            self.function_extender, self._hook_extenders = pickle.loads(self._pending_extender_payload)  # nosec B301
+            extender, hooks = pickle.loads(self._pending_extender_payload)  # nosec B301
+            object.__setattr__(self, "function_extender", extender)
+            object.__setattr__(self, "_hook_extenders", hooks)
             self._pending_extender_payload = None
 
     @classmethod
@@ -868,9 +870,11 @@ class ComputeFramework(ABC):
     @final
     def get_function_extender(self, wrapper_function_enum: ExtenderHook) -> Extender | None:
         # Built once on first lookup (or attached by the executor); not rebuilt if function_extender is reassigned.
-        if self._hook_extenders is None:
-            self._hook_extenders = build_hook_extenders(self.function_extender)
-        return self._hook_extenders.get(wrapper_function_enum)
+        hooks = self._hook_extenders
+        if hooks is None:
+            hooks = build_hook_extenders(self.function_extender)
+            object.__setattr__(self, "_hook_extenders", hooks)
+        return hooks.get(wrapper_function_enum)
 
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:

@@ -794,6 +794,21 @@ def _tie_expected(tags: list[str]) -> list[list[int]]:
     return sorted([101 * TIE_SCALE[tag], 202 * TIE_SCALE[tag], 303 * TIE_SCALE[tag]] for tag in tags)
 
 
+def _assert_consumers_wait_only_on_their_joins(session: Any, consumer_types: tuple[type[FeatureGroup], ...]) -> None:
+    """Each consumer step waits on exactly the JoinSteps whose resolved record lists it as a consumer."""
+    planner = session.engine.execution_planner
+    steps = list(planner)
+    join_uuids = {step.uuid for step in steps if isinstance(step, JoinStep)}
+    consumer_steps = [
+        s for s in steps if isinstance(s, FeatureGroupStep) and issubclass(s.feature_group, consumer_types)
+    ]
+    assert consumer_steps
+    for step in consumer_steps:
+        own = {r.token for r in planner.resolved_join_plan.records if r.consumers & step.get_uuids()}
+        assert own, "the consumer must be recorded by a join"
+        assert step.required_uuids & join_uuids == own
+
+
 @pytest.mark.parametrize("left, right, consumer", _TIE_FRAMEWORK_MIXES)
 def test_one_consumer_requested_with_two_option_variants_over_one_link_joins_each_variant(
     left: str, right: str, consumer: str
@@ -806,6 +821,7 @@ def test_one_consumer_requested_with_two_option_variants_over_one_link_joins_eac
     assert session.engine is not None
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
     assert len(join_steps) == 2
+    _assert_consumers_wait_only_on_their_joins(session, (_TieConsumer,))
     assert _tie_values(session.run(), consumer) == _tie_expected(["a", "b"])
 
 
@@ -840,13 +856,19 @@ def test_two_option_variants_over_one_link_join_each_variant_with_multiprocessin
 
 
 class TieOneSidedConsumer(FeatureGroup):
-    """PyArrow consumer reading a fixed left variant and a right variant chosen by its tie_tag."""
+    """PyArrow consumer reading a fixed variant on one join side and a variant chosen by tie_tag on the other."""
+
+    VARY: ClassVar[str] = "right"
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        right_tag = options.get("tie_tag")
+        tag = options.get("tie_tag")
+        fixed = {"tie_tag": "a"}
+        shared, varying = (
+            ("tie_left_val", "tie_right_val") if self.VARY == "right" else ("tie_right_val", "tie_left_val")
+        )
         return {
-            Feature("tie_left_val", options={"tie_tag": "a"}, forward_group_exclude=frozenset({"tie_tag"})),
-            Feature("tie_right_val", options={"tie_tag": right_tag}),
+            Feature(shared, options=fixed, forward_group_exclude=frozenset({"tie_tag"})),
+            Feature(varying, options={"tie_tag": tag}),
         }
 
     @classmethod
@@ -858,16 +880,56 @@ class TieOneSidedConsumer(FeatureGroup):
         return {PyArrowTable}
 
 
-def _tie_one_sided_run(tags: list[str]) -> list[list[int]]:
-    name = TieOneSidedConsumer.get_class_name()
+class TieOneSidedLeftConsumer(TieOneSidedConsumer):
+    """Same consumer with the left side varying and the right side shared."""
+
+    VARY: ClassVar[str] = "left"
+
+
+_TIE_ONE_SIDED_SHAPES = [
+    pytest.param(TieOneSidedConsumer, "pa", "pa", id="same_framework_right_varies"),
+    pytest.param(TieOneSidedLeftConsumer, "pa", "pa", id="same_framework_left_varies"),
+    pytest.param(TieOneSidedConsumer, "pd", "pa", id="varying_side_on_consumer_framework"),
+    pytest.param(TieOneSidedConsumer, "pa", "pd", id="shared_side_on_consumer_framework"),
+]
+
+
+def _tie_one_sided_expected(consumer: type[FeatureGroup], tag: str) -> list[int]:
+    left_scale, right_scale = (1, TIE_SCALE[tag]) if consumer is TieOneSidedConsumer else (TIE_SCALE[tag], 1)
+    return [i * left_scale + 100 * i * right_scale for i in (1, 2, 3)]
+
+
+def _tie_one_sided_kwargs(consumer: type[FeatureGroup], left: str, right: str, join_type: str) -> dict[str, Any]:
+    left_group, right_group = _TIE_LEFT[left], _TIE_RIGHT[right]
+    make = Link.inner if join_type == "inner" else Link.left
+    return {
+        "links": {make(JoinSpec(left_group, "tie_jid"), JoinSpec(right_group, "tie_jid"))},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "plugin_collector": PluginCollector.enabled_feature_groups({left_group, right_group, consumer}),
+    }
+
+
+def _tie_one_sided_features(consumer: type[FeatureGroup], tags: list[str]) -> list[Feature | str]:
+    return [Feature(consumer.get_class_name(), options={"tie_tag": tag}) for tag in tags]
+
+
+def _column_values(results: list[Any], name: str) -> list[list[int]]:
+    found = [r[name] for r in results if name in (r.columns if hasattr(r, "iloc") else r.column_names)]
+    return sorted(sorted(int(v) for v in (c.tolist() if hasattr(c, "iloc") else c.to_pylist())) for c in found)
+
+
+def _tie_one_sided_run(
+    tags: list[str],
+    consumer: type[FeatureGroup] = TieOneSidedConsumer,
+    left: str = "pa",
+    right: str = "pa",
+    join_type: str = "inner",
+) -> list[list[int]]:
+    kwargs = _tie_one_sided_kwargs(consumer, left, right, join_type)
     results = mloda.run_all(
-        [Feature(name, options={"tie_tag": tag}) for tag in tags],
-        links={Link.inner(JoinSpec(TieLeftPa, "tie_jid"), JoinSpec(TieRightPa, "tie_jid"))},
-        compute_frameworks=[PandasDataFrame, PyArrowTable],
-        parallelization_modes={ParallelizationMode.SYNC},
-        plugin_collector=PluginCollector.enabled_feature_groups({TieLeftPa, TieRightPa, TieOneSidedConsumer}),
+        _tie_one_sided_features(consumer, tags), parallelization_modes={ParallelizationMode.SYNC}, **kwargs
     )
-    return sorted(sorted(result[name].to_pylist()) for result in results)
+    return _column_values(results, consumer.get_class_name())
 
 
 @pytest.mark.parametrize(("tag", "expected"), [("a", [101, 202, 303]), ("b", [1001, 2002, 3003])])
@@ -875,9 +937,57 @@ def test_one_sided_option_variant_requested_alone_over_one_link_joins_it(tag: st
     assert _tie_one_sided_run([tag]) == [expected]
 
 
-def test_option_variants_reading_one_join_side_alike_and_the_other_differently_raise_at_plan_time() -> None:
-    with pytest.raises(ValueError, match="TieOneSidedConsumer") as error:
-        _tie_one_sided_run(["a", "b"])
+@pytest.mark.parametrize("join_type", ["inner", "left"])
+@pytest.mark.parametrize("consumer, left, right", _TIE_ONE_SIDED_SHAPES)
+def test_option_variants_reading_one_join_side_alike_and_the_other_differently_join_each_variant(
+    consumer: type[FeatureGroup], left: str, right: str, join_type: str
+) -> None:
+    kwargs = _tie_one_sided_kwargs(consumer, left, right, join_type)
+    kwargs["parallelization_modes"] = {ParallelizationMode.SYNC}
 
-    assert "variant" in str(error.value)
-    assert "unlinked sources" not in str(error.value)
+    session = mloda.prepare(_tie_one_sided_features(consumer, ["a", "b"]), **kwargs)
+
+    assert session.engine is not None
+    join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
+    assert len(join_steps) == 2
+    _assert_consumers_wait_only_on_their_joins(session, (TieOneSidedConsumer,))
+    assert _column_values(session.run(), consumer.get_class_name()) == sorted(
+        _tie_one_sided_expected(consumer, tag) for tag in ("a", "b")
+    )
+
+
+def test_one_sided_variants_requested_next_to_their_shared_side_feature_return_both() -> None:
+    consumer = TieOneSidedConsumer
+    kwargs = _tie_one_sided_kwargs(consumer, "pa", "pa", "inner")
+    shared = Feature("tie_left_val", options={"tie_tag": "a"})
+
+    results = mloda.run_all(
+        [*_tie_one_sided_features(consumer, ["a", "b"]), shared],
+        parallelization_modes={ParallelizationMode.SYNC},
+        **kwargs,
+    )
+
+    assert _column_values(results, consumer.get_class_name()) == [[101, 202, 303], [1001, 2002, 3003]]
+    assert [1, 2, 3] in _column_values(results, "tie_left_val")
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("mode", [ParallelizationMode.MULTIPROCESSING, ParallelizationMode.THREADING])
+@pytest.mark.parametrize(
+    "consumer, left, right",
+    [_TIE_ONE_SIDED_SHAPES[0], _TIE_ONE_SIDED_SHAPES[1], _TIE_ONE_SIDED_SHAPES[3]],
+)
+def test_one_sided_option_variants_over_one_link_join_each_variant_in_parallel_modes(
+    flight_server: Any, mode: ParallelizationMode, consumer: type[FeatureGroup], left: str, right: str
+) -> None:
+    kwargs = _tie_one_sided_kwargs(consumer, left, right, "inner")
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+
+    results = mloda.run_all(
+        _tie_one_sided_features(consumer, ["a", "b"]), parallelization_modes={mode}, flight_server=server, **kwargs
+    )
+
+    assert _column_values(results, consumer.get_class_name()) == sorted(
+        _tie_one_sided_expected(consumer, tag) for tag in ("a", "b")
+    )

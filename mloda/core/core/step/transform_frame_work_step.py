@@ -25,7 +25,10 @@ class TransformFrameworkStep(Step):
         link_id: UUID | None = None,
         source_framework_uuids: set[UUID] | None = None,
         source_step_uuid: UUID | None = None,
+        private_copy: bool = False,
     ) -> None:
+        # A same-framework copy only its own consumers find, by the hop uuid; it must not shadow its source cfw.
+        self.private_copy = private_copy
         if source_framework_uuids is None:
             source_framework_uuids = set()
         self.from_framework = from_framework
@@ -70,6 +73,7 @@ class TransformFrameworkStep(Step):
             and self.to_feature_group == other.to_feature_group
             and self.link_id == other.link_id
             and self.source_step_uuid == other.source_step_uuid
+            and self.private_copy == other.private_copy
         )
 
     def __hash__(self) -> int:
@@ -81,6 +85,7 @@ class TransformFrameworkStep(Step):
                 self.to_feature_group,
                 self.link_id,
                 self.source_step_uuid,
+                self.private_copy,
             )
         )
 

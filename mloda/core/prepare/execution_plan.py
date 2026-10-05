@@ -401,7 +401,8 @@ class ExecutionPlan:
     def expand_link_tokens(
         self, fw_execution_plan: list[JoinStep | FeatureGroupStep], link_trekker: LinkTrekker
     ) -> None:
-        """Replace every waited-on link uuid with the uuids of the JoinSteps planned for that link."""
+        """Replace each waited-on link uuid with its JoinSteps; a consumer step keeps only the joins recording it."""
+        consumers_by_token: dict[UUID, frozenset[UUID]] = {r.token: r.consumers for r in self.planned_records}
         links_by_uuid: dict[UUID, Link] = {trekker[0].uuid: trekker[0] for trekker in link_trekker.data}
 
         joinstep_uuids: dict[UUID, set[UUID]] = defaultdict(set)
@@ -424,7 +425,12 @@ class ExecutionPlan:
                 produced = joinstep_uuids.get(link_uuid)
                 if not produced:
                     raise ValueError(self._no_joinstep_for_link_error(links_by_uuid.get(link_uuid, link_uuid)))
-                expanded.update(produced)
+                own = (
+                    {t for t in produced if consumers_by_token.get(t, frozenset()) & step.get_uuids()}
+                    if isinstance(step, FeatureGroupStep)
+                    else set()
+                )
+                expanded.update(own or produced)
 
             # A step must never wait for a token it produces itself.
             expansions.append((step, required_links, expanded - step.get_uuids()))
@@ -914,11 +920,12 @@ Available join types:
 
     @staticmethod
     def _destination_hop(ep: JoinStep, graph: Graph, owning_step_of: Mapping[UUID, UUID]) -> TransformFrameworkStep:
-        """The hop that copies the carriers' frame into the join's destination framework, where the join merges into it."""
+        """The hop that copies the carriers' (or the shared destination side's) frame for the join to merge into."""
         nodes = graph.get_nodes()
-        carrier = min(ep.carriers)
-        if len({owning_step_of.get(c, c) for c in ep.carriers}) > 1:
-            names = sorted(format_feature_group_class(nodes[c].feature_group_class) for c in ep.carriers)
+        members = ep.carriers or ep.destination_framework_uuids
+        carrier = min(members)
+        if len({owning_step_of.get(c, c) for c in members}) > 1:
+            names = sorted(format_feature_group_class(nodes[c].feature_group_class) for c in members)
             raise ValueError(
                 f"The consumers of {ep.link} read one link side through several steps on another compute framework "
                 f"({', '.join(names)}), which the join cannot read through one hop. "
@@ -928,10 +935,11 @@ Available join types:
         return TransformFrameworkStep(
             from_framework=nodes[carrier].feature.get_compute_framework(),
             to_framework=ep.destination_framework,
-            required_uuids=set(ep.carriers),
+            required_uuids=set(members),
             from_feature_group=nodes[carrier].feature_group_class,
             to_feature_group=destination_group,
             source_step_uuid=owning_step_of.get(carrier, carrier),
+            private_copy=not ep.carriers,
         )
 
     def _join_carriers(
@@ -1013,6 +1021,21 @@ Available join types:
                     new_execution_plan.append(new_tfs)
                     ep.required_uuids.add(new_tfs.uuid)
                     hop_serves[new_tfs.uuid].add(ep.uuid)
+
+                    if ep.shared_destination:
+                        destination_hop = self._destination_hop(ep, graph, owning_step_of)
+                        new_execution_plan.append(destination_hop)
+                        ep.required_uuids.add(destination_hop.uuid)
+                        ep.destination_hop_uuid = destination_hop.uuid
+                        need_to_upload_collector.update(ep.destination_framework_uuids)
+                        for inner_ep in execution_plan:
+                            if (
+                                isinstance(inner_ep, FeatureGroupStep)
+                                and inner_ep.compute_framework == ep.destination_framework
+                                and ep.consumers_read_both_sides(inner_ep.required_uuids)
+                            ):
+                                inner_ep.tfs_ids = {destination_hop.uuid}
+                                inner_ep.features.any_uuid = destination_hop.uuid
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -1722,7 +1745,7 @@ Available join types:
         children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
 
         join_steps: list[JoinStep] = []
-        for component in self._independent_link_children(link, children_uuids, graph):
+        for component, varying_side in self._independent_link_children(link, children_uuids, graph):
             js = self._plan_link_join(
                 link_fw,
                 link_trekker,
@@ -1733,13 +1756,19 @@ Available join types:
                 source_framework,
                 swap_merge_sides,
                 attempted_key,
+                varying_side,
             )
             if js is not None:
                 join_steps.append(js)
         return join_steps
 
-    def _independent_link_children(self, link: Link, children_uuids: set[UUID], graph: Graph) -> list[set[UUID]]:
-        """Children reading disjoint steps on the link's declared sides (e.g. option variants) each get a join."""
+    def _independent_link_children(
+        self, link: Link, children_uuids: set[UUID], graph: Graph
+    ) -> list[tuple[set[UUID], JoinSide | None]]:
+        """Children reading disjoint steps on the link's declared sides (e.g. option variants) each get a join.
+
+        Variants sharing one side and differing on the other are split by the differing side, which is returned
+        with them: that side is the one each join must merge into."""
         step_of = {uuid: index for index, uuids in enumerate(self.feature_set_collections) for uuid in uuids}
         components: list[tuple[set[UUID], set[int]]] = []
         side_steps: dict[UUID, tuple[frozenset[int], frozenset[int]]] = {}
@@ -1749,7 +1778,7 @@ Available join types:
             right = frozenset(step_of[uuid] for uuid in split.right_uuids_any_distance if uuid in step_of)
             steps = set(left | right)
             if not steps:
-                return [children_uuids]
+                return [(children_uuids, None)]
             side_steps[child] = (left, right)
             linked = [component for component in components if component[1] & steps]
             merged = (
@@ -1758,19 +1787,47 @@ Available join types:
             )
             components = [component for component in components if component not in linked] + [merged]
         nodes = graph.get_nodes()
+        result: list[tuple[set[UUID], JoinSide | None]] = []
         for members, _ in components:
+            conflicting: type[FeatureGroup] | None = None
             by_variant: dict[tuple[type[FeatureGroup], str], list[UUID]] = {}
             for member in sorted(members):
                 key = (nodes[member].feature_group_class, str(nodes[member].name))
                 by_variant.setdefault(key, []).append(member)
             for (group, _name), variants in by_variant.items():
                 if len({side_steps[v][0] for v in variants}) > 1 or len({side_steps[v][1] for v in variants}) > 1:
-                    raise ValueError(
-                        f"Feature group '{format_feature_group_class(group)}' has option variants that read differing "
-                        "variants of one join side but share the other, so one Link cannot join them separately. "
-                        "Align the options or request the variants in separate runs."
-                    )
-        return [component[0] for component in components]
+                    conflicting = group
+            if conflicting is None:
+                result.append((members, None))
+                continue
+            fan_out = self._split_by_varying_side(members, side_steps)
+            if fan_out is None:
+                raise ValueError(
+                    f"Feature group '{format_feature_group_class(conflicting)}' has option variants that read "
+                    "differing variants of both join sides, so one Link cannot join them separately. "
+                    "Align the options or request the variants in separate runs."
+                )
+            result.extend(fan_out)
+        return result
+
+    @staticmethod
+    def _split_by_varying_side(
+        members: set[UUID], side_steps: dict[UUID, tuple[frozenset[int], frozenset[int]]]
+    ) -> list[tuple[set[UUID], JoinSide]] | None:
+        """One part per group of members sharing a varying-side step; None when both sides vary."""
+        if len({side_steps[m][0] for m in members}) == 1:
+            index, varying = 1, JoinSide.RIGHT
+        elif len({side_steps[m][1] for m in members}) == 1:
+            index, varying = 0, JoinSide.LEFT
+        else:
+            return None
+        parts: list[tuple[set[UUID], set[int]]] = []
+        for member in sorted(members):
+            steps = set(side_steps[member][index])
+            linked = [part for part in parts if part[1] & steps]
+            merged = ({member}.union(*(p[0] for p in linked)), steps.union(*(p[1] for p in linked)))
+            parts = [part for part in parts if part not in linked] + [merged]
+        return [(part[0], varying) for part in parts]
 
     def _plan_link_join(
         self,
@@ -1783,6 +1840,7 @@ Available join types:
         source_framework: type[ComputeFramework],
         swap_merge_sides: bool,
         attempted_key: LinkFrameworkTrekker,
+        varying_side: JoinSide | None = None,
     ) -> JoinStep | None:
         link = link_fw[0]
 
@@ -1873,6 +1931,8 @@ Available join types:
 
         join_step_required_uuids: set[UUID]
         carriers: frozenset[UUID] = frozenset()
+        shared_source = False
+        shared_destination = False
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             sides = self.resolve_append_or_union_sides(link, link_fw, required_uuids, graph, pre_execution_plan)
             destination_framework = sides.destination_framework
@@ -1928,6 +1988,19 @@ Available join types:
                     destination_framework_uuids,
                 )
 
+            # Joins fanned out over one shared side must not all merge into that side's frame.
+            if varying_side is not None and not carriers and side is not varying_side:
+                if destination_framework == source_framework:
+                    side = varying_side
+                    swap_sides = side is JoinSide.RIGHT
+                    destination_framework_uuids, source_framework_uuids = (
+                        source_framework_uuids,
+                        destination_framework_uuids,
+                    )
+                else:
+                    shared_destination = True
+            shared_source = varying_side is not None and destination_framework == source_framework
+
             # destination_uuids/source_uuids must only ever name genuine declared-side members, regardless
             # of which branch above ran; any-distance widening keeps a nearer wrong-framework sibling from
             # hiding a farther, correct one.
@@ -1968,6 +2041,8 @@ Available join types:
             swap_merge_sides=record.inverted,
             token=record.token,
             carriers=carriers,
+            shared_source=shared_source,
+            shared_destination=shared_destination,
         )
         self.planned_records.append(record)
 

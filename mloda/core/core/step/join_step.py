@@ -26,7 +26,13 @@ class JoinStep(Step):
         swap_merge_sides: bool = False,
         token: UUID | None = None,
         carriers: frozenset[UUID] = frozenset(),
+        shared_source: bool = False,
+        shared_destination: bool = False,
     ) -> None:
+        # Sibling joins merge into the same destination side, so each merges into its own copy of it.
+        self.shared_destination = shared_destination
+        # The source frame is also read by sibling joins, so it must not be redirected to this join's result.
+        self.shared_source = shared_source
         self.link = link
         # Consumer parents on another framework that descend from the destination side; the join reads them through
         # the hop whose cfw uuid is destination_hop_uuid.
@@ -119,7 +125,8 @@ class JoinStep(Step):
 
         self._merge_data(cfw, from_cfw_data)
 
-        cfw_register.add_to_merge_relation(cfw.uuid, from_cfw_uuid, cls_name=cfw.get_class_name())
+        if not self.shared_source:
+            cfw_register.add_to_merge_relation(cfw.uuid, from_cfw_uuid, cls_name=cfw.get_class_name())
 
         self._upload_data_if_needed(cfw, cfw_register)
 
@@ -147,6 +154,8 @@ class JoinStep(Step):
         return bool(required_uuids & self.destination_framework_uuids) and bool(
             required_uuids & self.source_framework_uuids
         )
+
+    consumers_read_both_sides = reads_join_frame
 
     def matched(
         self, other_framework: type[ComputeFramework], uuid: UUID, required_uuids: set[UUID] | None = None

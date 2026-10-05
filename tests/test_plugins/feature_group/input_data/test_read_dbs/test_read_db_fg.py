@@ -5,6 +5,7 @@ The groups below read the credential key ``toyfmt_basedb`` only, so they stay in
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 from collections import OrderedDict
 from collections.abc import Collection, Mapping
@@ -18,8 +19,10 @@ import mloda.provider as provider
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
-from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, MatchRejection
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import FormatFeatureGroup, ReadDBFG
 from mloda.user import Credential, DataAccessCollection, Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -399,6 +402,74 @@ class TestCatalogFailures:
         with pytest.raises(ValueError, match="could not read its tables") as excinfo:
             resolve_or_raise(pointed, {ToyBaseDB: {PythonDictFramework}}, None, None)
         assert secret not in str(excinfo.value)
+
+
+class ToyQueryDB(ToyBaseDB):
+    """Opts into the query route."""
+
+    CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)
+
+
+class TestQueryRoute:
+    def test_the_query_route_is_an_open_pointed_only_route_unlocked_by_query_text_and_not_a_default(self) -> None:
+        assert ReadDBFG.QUERY_ROUTE == ClaimRoute("credentials", NamePolicy.OPEN, False, ("query_text",))
+        assert ReadDBFG.QUERY_ROUTE not in ReadDBFG.CLAIM_ROUTES
+        assert ReadDBFG.QUERY_ROUTE not in ToyBaseDB.CLAIM_ROUTES
+
+    def test_a_group_without_the_route_ignores_query_text_and_claims_by_table(self) -> None:
+        feature = Feature("toy_a", options={"ToyBaseDB": {KEY: "a"}, "query_text": "SELECT 1"})
+        result = IdentifyFeatureGroupClass.evaluate(feature, {ToyBaseDB: {PythonDictFramework}}, None, None)
+        assert ToyBaseDB in result.identified
+        assert feature.input_data_match is not None
+        assert feature.input_data_match[1].source == "toyfmt-db:a::toy_table"
+
+    def test_the_default_produce_query_rows_raises_naming_the_group(self) -> None:
+        with pytest.raises(NotImplementedError, match="ToyBaseDB"):
+            ToyBaseDB.produce_query_rows(FakeConnection(), "SELECT 1", object())
+
+    def test_the_query_source_hashes_the_query_and_holds_no_credential_value(self) -> None:
+        secret = "toyfmt-query-secret"  # nosec B105
+        feature = Feature("anything", options={"ToyQueryDB": {KEY: "a", "password": secret}, "query_text": "SELECT 1"})
+        result = IdentifyFeatureGroupClass.evaluate(feature, {ToyQueryDB: {PythonDictFramework}}, None, None)
+        assert ToyQueryDB in result.identified
+        assert feature.input_data_match is not None
+        source = feature.input_data_match[1].source
+        assert source == f"toyfmt-db:a::query:{hashlib.sha256(b'SELECT 1').hexdigest()[:16]}"
+        assert secret not in repr(feature.input_data_match[1])
+        assert ToyBaseDB.list_calls == []
+        assert ToyBaseDB.created == []
+
+    def test_query_text_suppresses_the_table_route_with_an_attributable_rejection(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options({"query_text": "SELECT 1"})
+        assert ToyQueryDB.find_sources(ToyQueryDB.CLAIM_ROUTES[0], "toy_a", options, None) == []
+        rejection = rejection_window[ToyQueryDB.get_class_name()]
+        assert rejection.stage == INPUT_DATA_STAGE
+        assert "query_text" in rejection.reason
+
+    @pytest.mark.parametrize("query", [5, "", None, ["SELECT 1"]], ids=["int", "empty", "none", "list"])
+    def test_a_non_str_or_empty_query_text_declines_with_a_rejection(self, query: Any) -> None:
+        feature = Feature("toy_a", options={"ToyQueryDB": {KEY: "a"}, "query_text": query})
+        result = IdentifyFeatureGroupClass.evaluate(feature, {ToyQueryDB: {PythonDictFramework}}, None, None)
+        assert ToyQueryDB not in result.identified
+        assert "query_text" in result.eliminations[ToyQueryDB].reason
+
+    def test_load_neutral_runs_produce_query_rows_for_a_query_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[Any, str, Any]] = []
+
+        def produce(connection: Any, query_text: str, features: Any) -> Any:
+            calls.append((connection, query_text, features))
+            return {"toy_a": [7]}
+
+        monkeypatch.setattr(ToyQueryDB, "produce_query_rows", produce)
+        credentials = {KEY: "a"}
+        match = SourceMatch("toyfmt-db:a::query:x", DBQuery(credentials, "SELECT 1"))
+        features = object()
+        assert ToyQueryDB.load_neutral(match, features) == {"toy_a": [7]}
+        assert calls == [(ToyBaseDB.created[0], "SELECT 1", features)]
+        assert ToyBaseDB.created[0].close_count == 1
+        assert ToyBaseDB.row_calls == []
 
 
 class TestEndToEndOnAThirdPartyGroup:

@@ -221,8 +221,7 @@ class TestTwoReader:
             },
         )
 
-        # Which input aborts first varies with PYTHONHASHSEED (set ordering), so either missing input may be named.
-        with pytest.raises(ValueError, match=r"column '(any_num|Amount)' is in none of the sources"):
+        with pytest.raises(ValueError, match=r"column 'Amount' is in none of the sources"):
             mloda.run_all(
                 [f],
                 compute_frameworks=["PyArrowTable"],

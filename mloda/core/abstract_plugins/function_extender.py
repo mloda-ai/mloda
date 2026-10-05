@@ -85,6 +85,13 @@ class Extender(ABC):
         object.__delattr__(self, name)
 
     def _seal(self) -> None:
+        if self.__dict__.get("_sealed"):
+            return
+        # Class-level flag values would otherwise stay mutable through the class after sealing.
+        object.__setattr__(self, "never_fall_back", self.never_fall_back)
+        object.__setattr__(self, "raise_on_run_complete", self.raise_on_run_complete)
+        object.__setattr__(self, "_priority", self.priority)
+        object.__setattr__(self, "_raise_on_error", self.raise_on_error)
         object.__setattr__(self, "_sealed", True)
 
     @property

@@ -85,6 +85,7 @@ class Engine:
         self.run_context = RunContext(plan_id=plan_context.plan_id if plan_context else None)
         # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
+        self._frameworks_free_index: dict[type[FeatureGroup], dict[int, list[Feature]]] = defaultdict(dict)
 
         # use global filters
         self.global_filter = global_filter
@@ -619,8 +620,13 @@ class Engine:
             self._intake_options_memo[memo_key] = entry
         feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]
+        index = self._frameworks_free_index[feature_group_class]
 
         if feature not in feature_collection:
+            self._merge_pinned_and_unpinned(feature, feature_collection, index)
+
+        if feature not in feature_collection:
+            index.setdefault(feature.hash_ignoring_compute_frameworks(), []).append(feature)
             self.add_feature_link_to_links(feature)
 
             self.feature_link_parents[feature.uuid] = set()
@@ -648,6 +654,35 @@ class Engine:
                 self._update_feature_link_parents(child_uuid, feature.uuid, existing_feature.uuid, if_index_feature)
 
         return False
+
+    @staticmethod
+    def _merge_pinned_and_unpinned(
+        feature: Feature, feature_collection: set[Feature], index: dict[int, list[Feature]]
+    ) -> None:
+        """A pinned and an unpinned request of one feature share the pinned read: narrow to the nested set."""
+        mine = feature.compute_frameworks
+        if mine is None:
+            return
+        bucket = index.get(feature.hash_ignoring_compute_frameworks(), [])
+        candidates = [
+            f
+            for f in bucket
+            if f.compute_frameworks is not None
+            and f.equals_ignoring_compute_frameworks(feature)
+            and (f.compute_frameworks < mine or mine < f.compute_frameworks)
+        ]
+        if len(candidates) != 1:
+            return
+        other = candidates[0]
+        assert other.compute_frameworks is not None
+        if other.compute_frameworks < mine:
+            feature.compute_frameworks = set(other.compute_frameworks)
+            return
+        feature_collection.remove(other)
+        bucket.remove(other)
+        other.compute_frameworks = set(mine)
+        feature_collection.add(other)
+        bucket.append(other)
 
     def _warn_on_default_equivalent_merge(
         self, feature: Feature, declared_options: Options, existing_feature: Feature

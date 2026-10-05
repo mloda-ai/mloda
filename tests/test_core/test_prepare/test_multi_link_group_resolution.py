@@ -3,7 +3,12 @@ frameworks and no child on that framework is rejected, the distinct-framework sh
 
 from typing import Any
 
+import pyarrow as pa
+import pyarrow.compute as pc
 import pytest
+
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import (
@@ -272,3 +277,143 @@ def test_link_joining_a_shared_parent_twice_within_one_framework_must_not_raise(
 
     seen = {value for result in results for value in result[SameFrameworkConsumer.get_class_name()]}
     assert seen == {"sfw_d1|sfw_d2|sfw_p"}
+
+
+class DescLinkChild(FeatureGroup):
+    """PyArrow consumer of both join sides (roots A and BSame)."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a"), Feature("mlg_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data.column("mlg_a"), data.column("mlg_b")))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class DescLinkGrandchild(FeatureGroup):
+    """Pandas-only consumer of the link child, further down than the join."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("DescLinkChild")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        assert not isinstance(data, pa.Table)
+        data[cls.get_class_name()] = data["DescLinkChild"] * 2
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+_ENABLED_DESC = PluginCollector.enabled_feature_groups(
+    {MultiLinkRootA, MultiLinkRootBSame, DescLinkChild, DescLinkGrandchild}
+)
+
+
+def _desc_args() -> dict[str, Any]:
+    return {
+        "links": {Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX))},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "parallelization_modes": {ParallelizationMode.SYNC},
+        "plugin_collector": _ENABLED_DESC,
+    }
+
+
+def test_a_consumer_below_a_link_child_hops_once_from_the_link_childs_framework() -> None:
+    session = mloda.prepare([Feature(DescLinkGrandchild.get_class_name())], **_desc_args())
+
+    assert session.engine is not None
+    steps = list(session.engine.execution_planner)
+    hops = [step for step in steps if isinstance(step, TransformFrameworkStep)]
+    assert [(hop.from_framework, hop.to_framework) for hop in hops] == [(PyArrowTable, PandasDataFrame)]
+    grandchild_step = next(
+        step for step in steps if isinstance(step, FeatureGroupStep) and step.feature_group is DescLinkGrandchild
+    )
+    assert hops[0].uuid in grandchild_step.required_uuids
+
+
+def test_a_consumer_below_a_link_child_reads_the_joined_values() -> None:
+    results = mloda.run_all([Feature(DescLinkGrandchild.get_class_name())], **_desc_args())
+
+    values = [sorted(result[DescLinkGrandchild.get_class_name()]) for result in results]
+    assert values == [[22, 44, 66]]
+
+
+class TwoPathP(FeatureGroup):
+    """PyArrow consumer of root A only."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.multiply(data.column("mlg_a"), 100))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TwoPathQ(FeatureGroup):
+    """PyArrow link child of roots A and B."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a"), Feature("mlg_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data.column("mlg_a"), data.column("mlg_b")))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TwoPathC(FeatureGroup):
+    """Pandas-only consumer reaching A through P and through the A-B link child Q."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("TwoPathP"), Feature("TwoPathQ")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["TwoPathP"] + data["TwoPathQ"]
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+@pytest.mark.parametrize("extra_request", [[], ["mlg_a"]])
+@pytest.mark.parametrize("swap_link_sides", [False, True])
+def test_a_consumer_reaching_a_link_root_by_two_paths_is_correct_or_rejected_at_plan_time(
+    extra_request: list[str], swap_link_sides: bool
+) -> None:
+    """Guard: outcome depends on set order, so only plan-time ValueError or correct values are accepted."""
+    left, right = (MultiLinkRootBSame, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBSame)
+    kwargs: dict[str, Any] = {
+        "links": {Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "parallelization_modes": {ParallelizationMode.SYNC},
+        "plugin_collector": PluginCollector.enabled_feature_groups(
+            {MultiLinkRootA, MultiLinkRootBSame, TwoPathP, TwoPathQ, TwoPathC}
+        ),
+    }
+    features: list[Feature | str] = [Feature(TwoPathC.get_class_name()), *extra_request]
+
+    try:
+        session = mloda.prepare(features, **kwargs)
+    except ValueError:
+        return
+
+    results = session.run()
+
+    values = [sorted(result[TwoPathC.get_class_name()]) for result in results if TwoPathC.get_class_name() in result]
+    assert values == [[111, 222, 333]]

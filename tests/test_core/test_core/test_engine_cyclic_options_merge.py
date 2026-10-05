@@ -40,6 +40,7 @@ def _intake_engine() -> Engine:
     engine.feature_link_parents = defaultdict(set)
     engine._intake_options_memo = {}
     engine._declared_options_by_uuid = {}
+    engine._frameworks_free_index = defaultdict(dict)
     engine.links = None
     return engine
 

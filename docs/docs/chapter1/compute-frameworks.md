@@ -78,6 +78,7 @@ pyarrow.Table
 id: int64
 id: [[0,1,2,3,...]]
 ```
+If the same feature is requested once pinned and once unpinned, both requests share one read in the pinned framework when the unpinned one can run there.
 ##### Defining the Compute Framework in a Feature Group
 In this example, we define a compute framework rule inside the feature group. This ensures that the feature group can only run on a **PyArrowTable**. We also specify that the input feature should use **PandasDataFrame**, allowing automatic conversion from **PandasDataFrame** to **PyArrowTable** behind the scenes.
 

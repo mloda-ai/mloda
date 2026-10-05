@@ -216,10 +216,10 @@ class ResolveLinks:
                 if link in already_joined:
                     continue
 
-                for link_id in link_uuids:
-                    if uuid == link_id:
-                        queue_with_link.append(link)
-                        already_joined.add(link)
+                # Schedule before the first consumer or descendant of one, so a hop binding is not overwritten later.
+                if uuid in link_uuids or self.graph.parent_to_children_mapping.get(uuid, set()) & set(link_uuids):
+                    queue_with_link.append(link)
+                    already_joined.add(link)
 
             queue_with_link.append(uuid)
 
@@ -261,9 +261,17 @@ class ResolveLinks:
                 if node.feature is not None and node.feature.link is not None:
                     pinned_links.append(node.feature.link)
 
+            direct_parents = self.graph.parents_by_direct_.get(child, set())
+            closures = [{d} | self.graph.parent_to_children_mapping.get(d, set()) for d in direct_parents]
+
             for parent_in in parents:
                 for parent_out in parents:
                     if parent_in == parent_out:
+                        continue
+
+                    # Only the feature that brings both join sides together is bound to the link.
+                    reads_both = parent_in in direct_parents and parent_out in direct_parents
+                    if not reads_both and any(parent_in in c and parent_out in c for c in closures):
                         continue
 
                     r_left = self.graph.get_nodes()[parent_in]

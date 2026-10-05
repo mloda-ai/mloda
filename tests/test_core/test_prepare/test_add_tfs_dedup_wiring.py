@@ -310,6 +310,9 @@ _SAME_NAME_RAISE_CASES = {
     "conflict_plus_different_name_split": _SameNameCase(
         {"options_a": {"unit": "x"}, "extra_name": "dedup_shared_other"}, ["unit"]
     ),
+    "separate_consumers_option_differs": _SameNameCase(
+        {"options_a": {"unit": "x"}, "separate_consumers": True}, ["unit"]
+    ),
 }
 
 
@@ -327,15 +330,6 @@ def test_one_consumer_reading_one_name_in_two_unlinked_variants_raises(case: _Sa
         assert fragment in message
     assert "Link.inner" not in message
     assert "missing Links" not in message
-
-
-def test_different_consumer_features_reading_differing_variants_stay_planned() -> None:
-    """Kept planning: consumers in one step may read variants whose options the source ignores (mixed string/config chainer)."""
-    producers, dest_step, graph = _split_root_steps_scenario(
-        "dedup_shared", "dedup_shared", options_a={"unit": "x"}, separate_consumers=True
-    )
-
-    ExecutionPlan().add_tfs([*producers, dest_step], graph)
 
 
 def test_one_consumer_reading_one_name_from_two_different_classes_raises_missing_links() -> None:

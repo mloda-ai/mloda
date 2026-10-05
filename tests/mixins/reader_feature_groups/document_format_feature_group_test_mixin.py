@@ -6,12 +6,11 @@ Every test-local subclass of the group is gated by an explicit pointer on its pa
 
 from __future__ import annotations
 
-import copy
 import gc
 import itertools
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -19,8 +18,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
-from mloda.core.prepare.resolution_types import EvaluationResult
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -48,7 +46,8 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     sample_text: str = "document body\n"
     expected_content: str | None = None
     handed_over: bool = False
-    context_options: ClassVar[dict[str, Any]] = {}
+    load_framework = PythonDictFramework
+    load_loader_names = ("neutral", "PythonDictFramework")
     tmp_path: Path
 
     @pytest.fixture(autouse=True)
@@ -58,6 +57,23 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         self.foreign_path = tmp_path / f"foreign_file{FOREIGN_SUFFIX}"
         self.foreign_path.write_text(self.sample_text, encoding="utf-8")
         self.expected_source = os.path.abspath(self.own_path)
+
+    def own_pointer(self) -> Any:
+        return str(self.own_path)
+
+    def other_pointer(self) -> tuple[Any, str]:
+        other = self._make("other")
+        return str(other), os.path.abspath(other)
+
+    def foreign_handle_dac(self) -> tuple[DataAccessCollection, str]:
+        dac = DataAccessCollection(files={"own_handle": str(self.own_path)}, credentials={"cred_h": {"k": "v"}})
+        return dac, "cred_h"
+
+    def known_handles_dac(self) -> tuple[DataAccessCollection, list[str]]:
+        dac = DataAccessCollection(
+            files={"known_file_handle": str(self.own_path)}, folders={"known_folder_handle": str(self.tmp_path)}
+        )
+        return dac, ["known_file_handle", "known_folder_handle"]
 
     def own_dac(self) -> DataAccessCollection:
         return DataAccessCollection(files={"own_handle": str(self.own_path)})
@@ -77,40 +93,12 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         path.write_text(self.sample_text, encoding="utf-8")
         return path
 
-    def _group_name(self) -> str:
-        return self.feature_group_class.get_class_name()
-
     def _declared(self) -> list[str]:
         name = self._group_name()
         return [name, f"{name}{SOURCE}", f"{name}{FILE_TYPE}"]
 
     def _content(self) -> str:
         return self.sample_text if self.expected_content is None else self.expected_content
-
-    def _options(self, group: dict[str, Any] | None = None, context: dict[str, Any] | None = None) -> Options:
-        return Options(group, context={**self.context_options, **(context or {})})
-
-    def _feature(self, name: str, group: dict[str, Any] | None = None, **kwargs: Any) -> Feature:
-        return Feature(name, self._options(group), **kwargs)
-
-    def _with_context(self, feature: Feature) -> Feature:
-        if all(feature.options.context.get(key) == value for key, value in self.context_options.items()):
-            return feature
-        clone = copy.copy(feature)
-        clone.options = Options(
-            dict(feature.options.group), context={**feature.options.context, **self.context_options}
-        )
-        return clone
-
-    def _claims(self, feature: Feature, dac: DataAccessCollection | None) -> bool:
-        return super()._claims(self._with_context(feature), dac)
-
-    def _evaluate(self, feature: Feature, dac: DataAccessCollection | None) -> EvaluationResult:
-        return IdentifyFeatureGroupClass.evaluate(self._with_context(feature), self._plugins(), None, dac)
-
-    def _resolve(self, feature: Feature, dac: DataAccessCollection | None) -> EvaluationResult:
-        """Like _evaluate but raises the typed error (a ValueError) on an abort or failure."""
-        return resolve_or_raise(self._with_context(feature), self._plugins(), None, dac)
 
     def _matched_source(self, name: str, dac: DataAccessCollection | None, group: dict[str, Any] | None = None) -> Any:
         feature = self._feature(name, group)
@@ -196,22 +184,6 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         path = self._make("entry", folder)
         match = self._matched_source(self._group_name(), None, {self._group_name(): str(folder)})
         assert match.source == os.path.abspath(path)
-
-    def test_doc_claims_via_feature_group_scope(self) -> None:
-        feature = self._feature(self._group_name(), feature_group=self.feature_group_class)
-        assert self._claims(feature, self.own_dac())
-
-    def test_doc_pointer_value_is_used_alone_and_ignores_the_collection(self) -> None:
-        other = self._make("other")
-        dac = DataAccessCollection(files={"h_a": str(self.own_path), "h_b": str(other)})
-        match = self._matched_source(self._group_name(), dac, {self._group_name(): str(other)})
-        assert match.source == os.path.abspath(other)
-
-    def test_doc_a_non_path_pointer_declines_naming_its_type_and_never_searches_the_collection(self) -> None:
-        feature = self._feature(self._group_name(), {self._group_name(): 5})
-        result = self._evaluate(feature, self.own_dac())
-        assert self.feature_group_class not in result.identified
-        assert "int" in result.eliminations[self.feature_group_class].reason
 
     def test_doc_a_pointer_to_a_foreign_suffix_never_claims(self) -> None:
         feature = self._feature(self._group_name(), {self._group_name(): str(self.foreign_path)})
@@ -303,24 +275,6 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self._claims(feature, dac)
         assert cast(SourceMatch, feature.input_data_match[1]).source == os.path.abspath(second)  # type: ignore[index]
 
-    def test_doc_handle_of_another_kind_yields_no_sources(self) -> None:
-        dac = DataAccessCollection(files={"own_handle": str(self.own_path)}, credentials={"cred_h": {"k": "v"}})
-        feature = Feature(self._group_name(), Options(context={**self.context_options, HANDLE_OPTION: "cred_h"}))
-        assert not self._claims(feature, dac)
-
-    def test_doc_unknown_handle_records_a_rejection_listing_file_and_folder_handles(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        dac = DataAccessCollection(
-            files={"known_file_handle": str(self.own_path)}, folders={"known_folder_handle": str(self.tmp_path)}
-        )
-        options = Options(context={**self.context_options, HANDLE_OPTION: "docfmt_missing_handle"})
-        assert not self.feature_group_class.match_feature_group_criteria(self._group_name(), options, dac)
-        reason = rejection_window[self._group_name()].reason
-        assert "docfmt_missing_handle" in reason
-        assert "known_file_handle" in reason
-        assert "known_folder_handle" in reason
-
     # exact names
 
     def _undeclared_names(self) -> list[str]:
@@ -395,18 +349,6 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         result = self._run(self._declared(), None, {self._group_name(): str(other)})
         assert result == [self._record(other)]
 
-    def test_fires_input_data_load_naming_group_source_format_and_loader(self) -> None:
-        capture = _LoadCapture()
-
-        self._run([self._group_name()], self.own_dac(), extender=capture)
-
-        assert len(capture.contexts) == 1
-        context = capture.contexts[0]
-        assert context.data_access_format == self._group_name()
-        assert context.reader_class is self.feature_group_class
-        assert context.data_access_identity == self.expected_source
-        assert context.data_access_loader in ("neutral", "PythonDictFramework")
-
     # document_suffixes handover
 
     def test_doc_handover_default_matches_the_group_kind(self) -> None:
@@ -425,26 +367,25 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         result = IdentifyFeatureGroupClass.evaluate(feature, self._plugins(), None, self.own_dac())
         assert (self.feature_group_class in result.identified) is (not self.handed_over)
 
+    # opt-outs of shared contract cases that need a column listing
+
+    def test_pointed_with_a_missing_column_aborts_naming_source_and_columns(self) -> None:
+        pytest.skip("document names are declared, so an undeclared name declines even when pointed")
+
+    def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
+        pytest.skip("document names are declared, so an undeclared name has no column listing to cite")
+
+    def test_chain_and_column_separated_names_that_are_not_columns_decline(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        pytest.skip("undeclared document names decline without a column listing; the undeclared-name tests cover them")
+
     # subclass takeover
 
-    def _gated_subclass(self) -> Any:
-        parent = self.feature_group_class
-        parent_key = parent.__name__
-
-        def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
-            # Only a pointer on the parent key lets this subclass claim, so it cannot leak into other tests.
-            if parent_key not in options:
-                return False
-            return bool(
-                getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
-            )
-
-        return type(f"{parent.__name__}DocfmtTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
-
-    def test_doc_a_subclass_takes_over_every_declared_name_keyed_on_its_parent(self) -> None:
+    def test_doc_a_subclass_takes_over_the_other_declared_names_keyed_on_its_parent(self) -> None:
         sub = self._gated_subclass()
         mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
-        for name in self._declared():
+        for name in self._declared()[1:]:
             feature = self._feature(name, {self._group_name(): str(self.own_path)})
             result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
             assert sub in result.identified, name

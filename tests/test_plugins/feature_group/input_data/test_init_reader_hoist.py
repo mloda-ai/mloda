@@ -1,6 +1,6 @@
 """Pins init_reader as the single concrete implementation on BaseInputData.
 
-Contract: init_reader(self, reader_data_access) takes the (ReaderClass, data_access) pair and
+Contract: init_reader(self, match) takes the (ReaderClass, data_access) pair and
 returns (reader instance, data_access); load(features) takes the pair from features.input_data_match
 and raises ValueError when it is None. Subclasses are module-level and never final readers.
 """

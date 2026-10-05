@@ -7,10 +7,9 @@ collected on its own. Every test-local subclass of the group is gated by an expl
 from __future__ import annotations
 
 import copy
-import gc
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -21,10 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ma
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
-from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
-from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, FormatFeatureGroup
+from mloda.provider import CHAIN_SEPARATOR
 from mloda.user import Credential, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
@@ -82,6 +78,25 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         self.own_path = self._make("own_db", {OWN_TABLE: {self.present_column: [1, 2]}})
         self.expected_source = f"{self.identity_of(self.own_path)}::{OWN_TABLE}"
 
+    def own_pointer(self) -> Any:
+        return self.make_credential(self.own_path)
+
+    def other_pointer(self) -> tuple[Any, str]:
+        other = self._make("other_db", {"other_table": {self.present_column: [9]}})
+        return self.make_credential(other), self._source_of(other, "other_table")
+
+    def foreign_handle_dac(self) -> tuple[DataAccessCollection, str]:
+        file_path = self.tmp_path / "plain_file.txt"
+        file_path.write_text("x")
+        dac = DataAccessCollection(
+            credentials={"own_handle": self.make_credential(self.own_path)}, files={"file_h": str(file_path)}
+        )
+        return dac, "file_h"
+
+    def known_handles_dac(self) -> tuple[DataAccessCollection, list[str]]:
+        dac = DataAccessCollection(credentials={"known_credential_handle": self.make_credential(self.own_path)})
+        return dac, ["known_credential_handle"]
+
     def own_dac(self) -> DataAccessCollection:
         return DataAccessCollection(credentials={"own_handle": self.make_credential(self.own_path)})
 
@@ -95,24 +110,8 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         self.write_database(path, tables)
         return path
 
-    def _group_name(self) -> str:
-        return self.feature_group_class.get_class_name()
-
     def _source_of(self, path: Path, table: str) -> str:
         return f"{self.identity_of(path)}::{table}"
-
-    def _evaluate(self, feature: Feature, dac: DataAccessCollection | None) -> EvaluationResult:
-        return IdentifyFeatureGroupClass.evaluate(feature, self._plugins(), None, dac)
-
-    def _resolve(self, feature: Feature, dac: DataAccessCollection | None) -> EvaluationResult:
-        """Like _evaluate but raises the typed error (a ValueError) on an abort or failure."""
-        return resolve_or_raise(feature, self._plugins(), None, dac)
-
-    def _matched_source(self, feature: Feature) -> SourceMatch:
-        pair = feature.input_data_match
-        assert pair is not None
-        assert pair[0] is self.feature_group_class
-        return cast(SourceMatch, pair[1])
 
     def _dac_of(self, *paths: Path, **extra: Any) -> DataAccessCollection:
         return DataAccessCollection(
@@ -159,7 +158,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     def test_db_claims_via_a_credentials_handle_with_a_credential_free_source(self) -> None:
         feature = Feature(self.present_column)
         assert self._claims(feature, self.own_dac())
-        match = self._matched_source(feature)
+        match = self._claimed_match(feature)
         assert match.source == self._source_of(self.own_path, OWN_TABLE)
         assert isinstance(match.access, DBTable)
         assert match.access.table == OWN_TABLE
@@ -179,25 +178,9 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         before = copy.deepcopy(value.data if isinstance(value, Credential) else dict(value))
         feature = self._pointed(self.present_column, value)
         assert self._claims(feature, None)
-        assert self._matched_source(feature).source == self.expected_source
+        assert self._claimed_match(feature).source == self.expected_source
         assert (value.data if isinstance(value, Credential) else dict(value)) == before
         assert mapping == self.make_credential(self.own_path)
-
-    def test_db_claims_via_feature_group_scope(self) -> None:
-        feature = Feature(self.present_column, feature_group=self.feature_group_class)
-        assert self._claims(feature, self.own_dac())
-
-    def test_db_pointer_value_is_used_alone_and_ignores_the_collection(self) -> None:
-        other = self._make("other_db", {"other_table": {self.present_column: [9]}})
-        dac = self._dac_of(self.own_path)
-        feature = self._pointed(self.present_column, self.make_credential(other))
-        assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self._source_of(other, "other_table")
-
-    def test_db_a_non_mapping_pointer_declines_naming_its_type_and_never_searches_the_collection(self) -> None:
-        result = self._evaluate(self._pointed(self.present_column, 5), self.own_dac())
-        assert self.feature_group_class not in result.identified
-        assert "int" in result.eliminations[self.feature_group_class].reason
 
     def test_db_an_invalid_pointer_credential_declines_with_a_rejection_and_never_searches_the_collection(self) -> None:
         result = self._evaluate(self._pointed(self.present_column, {"toyfmt_foreign_key": 1}), self.own_dac())
@@ -212,21 +195,6 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self._group_name() not in rejection_window
 
     # missing columns, tables and ambiguity
-
-    def test_db_pointed_with_a_missing_column_aborts_naming_source_and_columns(self) -> None:
-        feature = self._pointed(self.missing_column, self.make_credential(self.own_path))
-        with pytest.raises(ValueError) as exc_info:
-            self._resolve(feature, None)
-        message = str(exc_info.value)
-        assert self.expected_source in message
-        assert self.present_column in message
-
-    def test_db_unpointed_missing_column_declines_with_a_rejection(self) -> None:
-        result = self._evaluate(Feature(self.missing_column), self.own_dac())
-        assert self.feature_group_class not in result.identified
-        reason = result.eliminations[self.feature_group_class].reason
-        assert self.expected_source in reason
-        assert self.missing_column in reason
 
     def test_db_two_tables_with_the_column_abort_naming_both_and_the_fix_without_any_secret(self) -> None:
         path = self._make("two_tables", {"table_a": {self.present_column: [1]}, "table_b": {self.present_column: [2]}})
@@ -265,7 +233,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(credentials={"preset_handle": self.make_credential(path, table_name="table_b")})
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self._source_of(path, "table_b")
+        assert self._claimed_match(feature).source == self._source_of(path, "table_b")
 
     def test_db_a_preset_table_name_without_the_column_declines_and_aborts_when_pointed(self) -> None:
         path = self._make("preset_lacks", {"table_a": {"toyfmt_other_a": [1]}, "table_b": {self.present_column: [2]}})
@@ -296,13 +264,13 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         )
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self.expected_source
+        assert self._claimed_match(feature).source == self.expected_source
 
     def test_db_only_tables_with_the_column_are_considered(self) -> None:
         path = self._make("mixed", {"fits": {self.present_column: [1]}, "other": {"toyfmt_unrelated_column": [1]}})
         feature = Feature(self.present_column)
         assert self._claims(feature, self._dac_of(path))
-        assert self._matched_source(feature).source == self._source_of(path, "fits")
+        assert self._claimed_match(feature).source == self._source_of(path, "fits")
 
     # data_access_handle
 
@@ -313,7 +281,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         )
         feature = Feature(self.present_column, Options(context={HANDLE_OPTION: "hand_b"}))
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self._source_of(other, "handle_table")
+        assert self._claimed_match(feature).source == self._source_of(other, "handle_table")
 
     def test_db_a_foreign_credential_next_to_an_own_one_is_not_ambiguous(self) -> None:
         dac = DataAccessCollection(
@@ -324,7 +292,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         )
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self.expected_source
+        assert self._claimed_match(feature).source == self.expected_source
 
     def test_db_a_handle_naming_a_foreign_credential_declines_instead_of_rescanning(self) -> None:
         dac = DataAccessCollection(
@@ -340,30 +308,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(credentials=Credential(self.make_credential(self.own_path)))
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self.expected_source
-
-    def test_db_handle_of_another_kind_yields_no_sources(self) -> None:
-        file_path = self.tmp_path / "plain_file.txt"
-        file_path.write_text("x")
-        dac = DataAccessCollection(
-            credentials={"own_handle": self.make_credential(self.own_path)}, files={"file_h": str(file_path)}
-        )
-        feature = Feature(self.present_column, Options(context={HANDLE_OPTION: "file_h"}))
-        assert not self._claims(feature, dac)
-
-    def test_db_unknown_handle_records_a_rejection_listing_the_credential_handles(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        dac = DataAccessCollection(credentials={"known_credential_handle": self.make_credential(self.own_path)})
-        options = Options(context={HANDLE_OPTION: "toyfmt_missing_handle"})
-        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, dac)
-        reason = rejection_window[self._group_name()].reason
-        assert "toyfmt_missing_handle" in reason
-        assert "known_credential_handle" in reason
-
-    def test_db_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
-        feature = Feature(self.present_column, Options(context={HANDLE_OPTION: ["own_handle"]}))
-        assert not self._claims(feature, self.own_dac())
+        assert self._claimed_match(feature).source == self.expected_source
 
     # per-run cache
 
@@ -494,7 +439,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = self._dac_of(corrupt, self.own_path)
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self.expected_source
+        assert self._claimed_match(feature).source == self.expected_source
 
     # secrets
 
@@ -504,7 +449,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         credential = self.make_credential(self.own_path, password=SECRET)
         feature = self._pointed(self.present_column, credential)
         assert self._claims(feature, None)
-        assert SECRET not in repr(self._matched_source(feature))
+        assert SECRET not in repr(self._claimed_match(feature))
 
         missing = Feature(self.missing_column, Options(context={HANDLE_OPTION: "toyfmt_unknown_handle"}))
         dac = DataAccessCollection(credentials={"secret_handle": credential})
@@ -512,18 +457,6 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert SECRET not in "".join(entry.reason for entry in rejection_window.values())
 
     # names
-
-    def test_db_chain_and_column_separated_names_that_are_not_columns_decline(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        chained = f"{self.present_column}{CHAIN_SEPARATOR}toyfmt_rebased"
-        separated = f"{self.missing_column}{COLUMN_SEPARATOR}0"
-        assert not self._claims(Feature(chained), self.own_dac())
-        assert not self.feature_group_class.match_feature_group_criteria(chained, Options(), self.own_dac())
-        reason = rejection_window[self._group_name()].reason
-        assert self.expected_source in reason
-        assert chained in reason
-        assert not self._claims(Feature(separated), self.own_dac())
 
     def test_db_a_chain_shaped_name_resolves_to_the_aggregation_only(self) -> None:
         column = f"{self.present_column}_agg"
@@ -593,24 +526,3 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert SECRET not in str(identity)
 
     # subclass takeover
-
-    def test_db_a_subclass_takes_over_a_pointer_keyed_on_its_parent(self) -> None:
-        parent = self.feature_group_class
-        parent_key = parent.__name__
-
-        def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
-            # Only a pointer on the parent key lets this subclass claim, so it cannot leak into other tests.
-            if parent_key not in options:
-                return False
-            return bool(
-                getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
-            )
-
-        sub = type(f"{parent.__name__}ToyfmtTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
-        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
-        feature = Feature(self.present_column, Options({parent_key: self.make_credential(self.own_path)}))
-        result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
-        assert sub in result.identified
-        # Drop every reference (the feature's input_data_match pins the class) so the subclass can be collected.
-        del sub, mapping, result, feature, gated
-        gc.collect()

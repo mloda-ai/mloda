@@ -145,7 +145,7 @@ class RoeStrictValuesReader(_RoeMarkedReader):
 
 
 class RoeScalarOnlyReader(_RoeMarkedReader):
-    """Reader whose key rejects a list/tuple/set/frozenset value outright, never unpacked (#1154)."""
+    """Reader whose key rejects a list/tuple/set/frozenset value outright, never unpacked."""
 
     ROE_ACCESS = ROE_SCALAR_ACCESS
 

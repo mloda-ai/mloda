@@ -20,10 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
-from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
-from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, FormatFeatureGroup
+from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
@@ -58,6 +55,23 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         self.foreign_path.write_text(f"{self.present_column}\n1\n2\n")
         self.expected_source = os.path.abspath(self.own_path)
 
+    def own_pointer(self) -> Any:
+        return str(self.own_path)
+
+    def other_pointer(self) -> tuple[Any, str]:
+        other = self._make("other", {self.present_column: [9]})
+        return str(other), os.path.abspath(other)
+
+    def foreign_handle_dac(self) -> tuple[DataAccessCollection, str]:
+        dac = DataAccessCollection(files={"own_handle": str(self.own_path)}, credentials={"cred_h": {"k": "v"}})
+        return dac, "cred_h"
+
+    def known_handles_dac(self) -> tuple[DataAccessCollection, list[str]]:
+        dac = DataAccessCollection(
+            files={"known_file_handle": str(self.own_path)}, folders={"known_folder_handle": str(self.tmp_path)}
+        )
+        return dac, ["known_file_handle", "known_folder_handle"]
+
     def own_dac(self) -> DataAccessCollection:
         return DataAccessCollection(files={"own_handle": str(self.own_path)})
 
@@ -75,22 +89,6 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         path = parent / f"{name}{self._suffix()}"
         self.write_file(path, columns)
         return path
-
-    def _group_name(self) -> str:
-        return self.feature_group_class.get_class_name()
-
-    def _evaluate(self, feature: Feature, dac: DataAccessCollection | None) -> EvaluationResult:
-        return IdentifyFeatureGroupClass.evaluate(feature, self._plugins(), None, dac)
-
-    def _resolve(self, feature: Feature, dac: DataAccessCollection | None) -> EvaluationResult:
-        """Like _evaluate but raises the typed error (a ValueError) on an abort or failure."""
-        return resolve_or_raise(feature, self._plugins(), None, dac)
-
-    def _matched_source(self, feature: Feature) -> SourceMatch:
-        pair = feature.input_data_match
-        assert pair is not None
-        assert pair[0] is self.feature_group_class
-        return cast(SourceMatch, pair[1])
 
     def _spy_reads(self, monkeypatch: pytest.MonkeyPatch) -> tuple[list[str], list[str]]:
         """(full listing paths, sample listing paths) recorded from now on; the real listings still run."""
@@ -123,7 +121,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     def test_file_claims_via_file_handle_with_an_absolute_source(self) -> None:
         feature = Feature(self.present_column)
         assert self._claims(feature, self.own_dac())
-        match = self._matched_source(feature)
+        match = self._claimed_match(feature)
         assert match.source == os.path.abspath(self.own_path)
         assert match.access == str(self.own_path)
 
@@ -132,48 +130,22 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         path = self._make("entry", {self.present_column: [1]}, folder)
         feature = Feature(self.present_column)
         assert self._claims(feature, DataAccessCollection(folders={"folder_handle": str(folder)}))
-        assert self._matched_source(feature).source == os.path.abspath(path)
+        assert self._claimed_match(feature).source == os.path.abspath(path)
 
     def test_file_claims_via_a_pointer_to_a_file_as_str_and_path(self) -> None:
         for value in (str(self.own_path), self.own_path):
             feature = Feature(self.present_column, Options({self._group_name(): value}))
             assert self._claims(feature, None)
-            assert self._matched_source(feature).source == os.path.abspath(self.own_path)
+            assert self._claimed_match(feature).source == os.path.abspath(self.own_path)
 
     def test_file_claims_via_a_pointer_to_a_folder(self) -> None:
         folder = self.tmp_path / "pointer_folder"
         path = self._make("entry", {self.present_column: [1]}, folder)
         feature = Feature(self.present_column, Options({self._group_name(): str(folder)}))
         assert self._claims(feature, None)
-        assert self._matched_source(feature).source == os.path.abspath(path)
-
-    def test_file_claims_via_feature_group_scope(self) -> None:
-        feature = Feature(self.present_column, feature_group=self.feature_group_class)
-        assert self._claims(feature, self.own_dac())
-
-    def test_file_pointer_value_is_used_alone_and_ignores_the_collection(self) -> None:
-        other = self._make("other", {self.present_column: [9]})
-        dac = DataAccessCollection(files={"h_a": str(self.own_path), "h_b": str(other)})
-        feature = Feature(self.present_column, Options({self._group_name(): str(other)}))
-        assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == os.path.abspath(other)
+        assert self._claimed_match(feature).source == os.path.abspath(path)
 
     # missing columns and ambiguity
-
-    def test_file_pointed_with_a_missing_column_aborts_naming_path_and_columns(self) -> None:
-        feature = Feature(self.missing_column, Options({self._group_name(): str(self.own_path)}))
-        with pytest.raises(ValueError) as exc_info:
-            self._resolve(feature, None)
-        message = str(exc_info.value)
-        assert os.path.abspath(self.own_path) in message
-        assert self.present_column in message
-
-    def test_file_unpointed_missing_column_declines_with_a_rejection(self) -> None:
-        result = self._evaluate(Feature(self.missing_column), self.own_dac())
-        assert self.feature_group_class not in result.identified
-        reason = result.eliminations[self.feature_group_class].reason
-        assert os.path.abspath(self.own_path) in reason
-        assert self.missing_column in reason
 
     def test_file_folder_with_two_fitting_files_aborts_naming_both_and_the_fix(self) -> None:
         folder = self._make_ambiguous_folder()
@@ -199,7 +171,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         self._make("other", {"toyfmt_unrelated_column": [1]}, folder)
         feature = Feature(self.present_column)
         assert self._claims(feature, DataAccessCollection(folders={"mixed_handle": str(folder)}))
-        assert self._matched_source(feature).source == os.path.abspath(fitting)
+        assert self._claimed_match(feature).source == os.path.abspath(fitting)
 
     def test_file_a_nonexistent_folder_handle_declines_without_raising(self) -> None:
         dac = DataAccessCollection(folders={"gone_dir": str(self.tmp_path / "no_such_folder")})
@@ -211,7 +183,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(files={"dup_file": str(path)}, folders={"dup_dir": str(folder)})
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == os.path.abspath(path)
+        assert self._claimed_match(feature).source == os.path.abspath(path)
 
     def test_file_relative_file_handle_and_absolute_folder_are_not_ambiguous(
         self, monkeypatch: pytest.MonkeyPatch
@@ -224,7 +196,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(files={"rel_file": relative}, folders={"rel_dir": str(folder)})
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == os.path.abspath(path)
+        assert self._claimed_match(feature).source == os.path.abspath(path)
 
     # column_to_file pins
 
@@ -235,7 +207,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         )
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == os.path.abspath(other)
+        assert self._claimed_match(feature).source == os.path.abspath(other)
 
     def test_file_column_to_file_pin_to_a_file_without_the_column_aborts(self) -> None:
         lacking = self._make("pin_lacking", {"toyfmt_unrelated_column": [1]})
@@ -289,7 +261,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         pinned = DataAccessCollection(files={"pin_chain": str(path)}, column_to_file={name: "pin_chain"})
         feature = Feature(name)
         assert self._claims(feature, pinned)
-        assert self._matched_source(feature).source == os.path.abspath(path)
+        assert self._claimed_match(feature).source == os.path.abspath(path)
         assert not self._claims(Feature(f"toyfmt_pinother{CHAIN_SEPARATOR}missing"), pinned)
 
     # data_access_handle
@@ -299,7 +271,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(files={"hand_a": str(self.own_path), "hand_b": str(other)})
         feature = Feature(self.present_column, Options(context={HANDLE_OPTION: "hand_b"}))
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == os.path.abspath(other)
+        assert self._claimed_match(feature).source == os.path.abspath(other)
 
     def test_file_handle_names_one_folder(self) -> None:
         first = self._make("entry", {self.present_column: [1]}, self.tmp_path / "dir_one")
@@ -307,27 +279,9 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(folders={"dir_a": str(first.parent), "dir_b": str(second.parent)})
         feature = Feature(self.present_column, Options(context={HANDLE_OPTION: "dir_b"}))
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == os.path.abspath(second)
+        assert self._claimed_match(feature).source == os.path.abspath(second)
 
-    def test_file_handle_of_another_kind_yields_no_sources(self) -> None:
-        dac = DataAccessCollection(files={"own_handle": str(self.own_path)}, credentials={"cred_h": {"k": "v"}})
-        feature = Feature(self.present_column, Options(context={HANDLE_OPTION: "cred_h"}))
-        assert not self._claims(feature, dac)
-
-    def test_file_unknown_handle_records_a_rejection_listing_file_and_folder_handles(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        dac = DataAccessCollection(
-            files={"known_file_handle": str(self.own_path)}, folders={"known_folder_handle": str(self.tmp_path)}
-        )
-        options = Options(context={HANDLE_OPTION: "toyfmt_missing_handle"})
-        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, dac)
-        reason = rejection_window[self._group_name()].reason
-        assert "toyfmt_missing_handle" in reason
-        assert "known_file_handle" in reason
-        assert "known_folder_handle" in reason
-
-    def test_file_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
+    def test_file_a_non_str_handle_is_no_narrowing_of_the_file_sources(self) -> None:
         cls = self.feature_group_class
         route = ClaimRoute("file", NamePolicy.CHECKED, True)
         dac = self.own_dac()
@@ -335,9 +289,6 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         listed = cls.find_sources(route, self.present_column, Options(context={HANDLE_OPTION: ["own_handle"]}), dac)
         assert plain
         assert [m.source for m in listed] == [m.source for m in plain]
-
-        feature = Feature(self.present_column, Options(context={HANDLE_OPTION: ["own_handle"]}))
-        assert not self._claims(feature, dac)
 
     # document_suffixes and foreign files
 
@@ -497,12 +448,6 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     # pointer of the wrong type
 
-    def test_file_a_non_path_pointer_declines_naming_its_type_and_never_searches_the_collection(self) -> None:
-        feature = Feature(self.present_column, Options({self._group_name(): 5}))
-        result = self._evaluate(feature, self.own_dac())
-        assert self.feature_group_class not in result.identified
-        assert "int" in result.eliminations[self.feature_group_class].reason
-
     # loader versus a load_neutral override
 
     def _load_through_gated_subclass(self, loader_value: int | None, neutral_value: int) -> Any:
@@ -546,19 +491,6 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     # names
 
-    def test_file_chain_and_column_separated_names_that_are_not_columns_decline(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        chained = f"{self.present_column}{CHAIN_SEPARATOR}toyfmt_rebased"
-        separated = f"{self.missing_column}{COLUMN_SEPARATOR}0"
-        assert not self._claims(Feature(chained), self.own_dac())
-        options = Options()
-        assert not self.feature_group_class.match_feature_group_criteria(chained, options, self.own_dac())
-        reason = rejection_window[self._group_name()].reason
-        assert os.path.abspath(self.own_path) in reason
-        assert chained in reason
-        assert not self._claims(Feature(separated), self.own_dac())
-
     def test_file_a_nonexistent_file_handle_declines(self) -> None:
         dac = DataAccessCollection(files={"gone_file": str(self.tmp_path / f"no_such_file{self._suffix()}")})
         assert not self._claims(Feature(self.present_column), dac)
@@ -575,7 +507,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         regular = self._make("b_regular", {self.present_column: [1]}, folder)
         feature = Feature(self.present_column)
         assert self._claims(feature, DataAccessCollection(folders={"fifo_dir": str(folder)}))
-        assert self._matched_source(feature).source == os.path.abspath(regular)
+        assert self._claimed_match(feature).source == os.path.abspath(regular)
         assert str(fifo) not in names + samples
 
     @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
@@ -587,27 +519,6 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         os.symlink(real, link)
         feature = Feature(self.present_column)
         assert self._claims(feature, DataAccessCollection(folders={"link_dir": str(folder)}))
-        assert os.path.basename(self._matched_source(feature).source) == link.name
+        assert os.path.basename(self._claimed_match(feature).source) == link.name
 
     # subclass takeover
-
-    def test_file_a_subclass_takes_over_a_pointer_keyed_on_its_parent(self) -> None:
-        parent = self.feature_group_class
-        parent_key = parent.__name__
-
-        def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
-            # Only a pointer on the parent key lets this subclass claim, so it cannot leak into other tests.
-            if parent_key not in options:
-                return False
-            return bool(
-                getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
-            )
-
-        sub = type(f"{parent.__name__}ToyfmtTakeover", (parent,), {"match_feature_group_criteria": classmethod(gated)})
-        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
-        feature = Feature(self.present_column, Options({parent_key: str(self.own_path)}))
-        result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
-        assert sub in result.identified
-        # Drop every reference (the feature's input_data_match pins the class) so the subclass can be collected.
-        del sub, mapping, result, feature, gated
-        gc.collect()

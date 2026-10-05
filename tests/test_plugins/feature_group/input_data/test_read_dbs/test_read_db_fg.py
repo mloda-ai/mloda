@@ -91,6 +91,14 @@ class ToyCustomCloseDB(ToyBaseDB):
         cls.closed.append(connection)
 
 
+class ToyStaticRowsDB(ToyBaseDB):
+    """Defines produce_rows as a staticmethod."""
+
+    @staticmethod
+    def produce_rows(connection: Any, table: str, features: Any) -> Any:
+        return {"toy_a": [table]}
+
+
 class ToyPartialDB(ReadDBFG):
     """Leaves produce_rows abstract."""
 
@@ -237,6 +245,12 @@ class TestCloseSemantics:
         assert passed is features
         assert connection is ToyBaseDB.created[0]
         assert connection.close_count == 1
+
+    def test_a_staticmethod_produce_rows_runs_end_to_end_and_the_connection_closes(self) -> None:
+        result = ToyStaticRowsDB.load_neutral(_match({KEY: "a"}), object())
+
+        assert result == {"toy_a": ["toy_table"]}
+        assert ToyBaseDB.created[0].close_count == 1
 
     def test_the_connection_is_closed_when_produce_rows_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         original = ToyBaseDB.connect

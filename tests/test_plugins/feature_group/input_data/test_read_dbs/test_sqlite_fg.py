@@ -64,7 +64,7 @@ class TestSqliteFGContract(DatabaseFormatFeatureGroupTestMixin):
         )
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
-        assert self._matched_source(feature).source == self.expected_source
+        assert self._claimed_match(feature).source == self.expected_source
 
 
 class TestSqliteLoadsIntoPyArrowTable(PyArrowTableAdapter, DatabaseLoadsIntoFrameworkMixin):
@@ -377,20 +377,6 @@ class TestSqliteFGRunAll:
         )
         assert result[0].to_pydict() == {"name": ["Alice", "Bob", "Charlie"], "id": [1, 2, 3]}
 
-    def test_a_column_found_in_two_tables_aborts_instead_of_taking_the_first(self, people_db: str) -> None:
-        connection = sqlite3.connect(people_db)
-        connection.execute("CREATE TABLE test_table_2 (id INTEGER PRIMARY KEY, name TEXT)")
-        connection.commit()
-        connection.close()
-
-        with pytest.raises(ValueError, match="test_table_2"):
-            mloda.run_all(
-                ["name"],
-                compute_frameworks=["PyArrowTable"],
-                data_access_collection=DataAccessCollection(credentials=[{KEY: people_db}]),
-                plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
-            )
-
     def test_an_aggregation_over_a_collection_credential(self, people_db: str) -> None:
         feature = Feature(name="sum_of_", options={"sum": ("id", "id")})
 
@@ -402,29 +388,6 @@ class TestSqliteFGRunAll:
         )
 
         assert "SumFeature_idid" in result[0].to_pydict()
-
-    def test_run_all_closes_every_sqlite_connection(self, people_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
-        opened: list[sqlite3.Connection] = []
-        original_connect = SqliteFG.connect
-
-        def tracking_connect(credentials: Any) -> Any:
-            connection = original_connect(credentials)
-            opened.append(connection)
-            return connection
-
-        monkeypatch.setattr(SqliteFG, "connect", tracking_connect)
-
-        mloda.run_all(
-            ["name", "id"],
-            compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(credentials=[{KEY: people_db}]),
-            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
-        )
-
-        assert opened, "expected SqliteFG.connect to be invoked at least once"
-        for connection in opened:
-            with pytest.raises(sqlite3.ProgrammingError):
-                connection.execute("SELECT 1")
 
 
 class TestSqliteFGMultiprocessing:

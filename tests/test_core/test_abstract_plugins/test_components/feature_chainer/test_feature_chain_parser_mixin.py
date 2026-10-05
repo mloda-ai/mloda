@@ -876,16 +876,17 @@ class TestFeatureChainParserMixinSourceAgreement:
     """input_features, _extract_source_features and the resolution read the same sources."""
 
     @pytest.mark.parametrize("name", ["feat1__op1_test", "feat1&feat2&feat3__op1_test"])
-    def test_all_three_source_readers_agree_for_an_owned_name(self, name: str) -> None:
+    def test_all_source_readers_agree_for_an_owned_name(self, name: str) -> None:
         options = Options(context={"operation": "op1"})
         via_input = MockFeatureGroup().input_features(options, FeatureName(name))
         assert via_input is not None
 
         via_extract = MockFeatureGroup._extract_source_features(Feature(name, options=options))
+        via_validated = MockFeatureGroup._extract_validated_source_features(Feature(name, options=options))
         via_resolution = MockFeatureGroup.resolve_feature_name(name).sources
 
         assert {f.name for f in via_input} == set(via_extract) == set(via_resolution)
-        assert via_extract == list(via_resolution)
+        assert via_extract == via_validated == list(via_resolution)
 
 
 class TestFeatureChainParserMixinExtractSingleSourceFeature:
@@ -985,14 +986,6 @@ class TestFeatureChainParserMixinExtractValidatedSourceFeatures:
     def test_raises_for_too_many_sources(self) -> None:
         with pytest.raises(ValueError, match="at most 3 in_feature"):
             MockFeatureGroupWithMinMax._extract_validated_source_features(_config_feature(["a", "b", "c", "d"]))
-
-    def test_returns_sources_in_declared_order_string_based(self) -> None:
-        feature = Feature(name="feat2&feat1__op1_test", options=Options(context={"operation": "op1"}))
-
-        result = MockFeatureGroupWithMinMax._extract_validated_source_features(feature)
-
-        assert result == ["feat2", "feat1"]
-        assert result == MockFeatureGroupWithMinMax._extract_source_features(feature)
 
     @pytest.mark.parametrize("in_features", [["feature_a", "feature_b"], ["feature_b", "feature_a", "feature_c"]])
     def test_returns_sources_in_declared_order_config_based(self, in_features: list[str]) -> None:

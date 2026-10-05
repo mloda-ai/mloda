@@ -503,29 +503,21 @@ def test_long_alphanumeric_run_scrubs_fast() -> None:
     assert result == text
 
 
-def test_long_run_after_bearer_scheme_scrubs_fast() -> None:
-    text = "Bearer " + "a" * 50_000
+@pytest.mark.parametrize(
+    ("text", "leaked"),
+    [
+        pytest.param("Bearer " + "a" * 50_000, "a" * 100, id="long_run_after_bearer"),
+        pytest.param("Authorization: " + "a" * 50_000, None, id="long_run_after_authorization"),
+        pytest.param("Bearer " * 20_000, None, id="repeated_bearer_prefix"),
+    ],
+)
+def test_bearer_and_authorization_inputs_scrub_fast(text: str, leaked: str | None) -> None:
     start = time.perf_counter()
     result = scrub_credentials(text)
     elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long run after Bearer"
-    assert "a" * 100 not in result
-
-
-def test_long_run_after_authorization_key_scrubs_fast() -> None:
-    text = "Authorization: " + "a" * 50_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long run after Authorization:"
-
-
-def test_repeated_bearer_prefix_scrubs_fast() -> None:
-    text = "Bearer " * 20_000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated Bearer prefix"
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s"
+    if leaked is not None:
+        assert leaked not in result
 
 
 def test_long_alphanumeric_run_followed_by_url_scrubs_fast() -> None:

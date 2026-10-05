@@ -19,7 +19,10 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity
 
 
 class SqliteFG(ReadDBFG):
-    """Reads SQLite files from ``Credential(sqlite=<path>)``; ``table_name`` restricts the lookup to one table."""
+    """Reads SQLite files from ``Credential(sqlite=<path>)``; ``table_name`` restricts the lookup to one table.
+
+    The value is a plain file path, opened read-only; ``file:`` URIs and ``:memory:`` are not supported.
+    """
 
     CREDENTIAL_KEY: ClassVar[str] = "sqlite"
     CATALOG_ERRORS: ClassVar[tuple[type[BaseException], ...]] = (*ReadDBFG.CATALOG_ERRORS, sqlite3.Error)

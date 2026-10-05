@@ -9,6 +9,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, cast
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
@@ -49,7 +50,7 @@ class ReadDBFG(FormatFeatureGroup):
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {HANDLE_OPTION: HANDLE_SPEC}
     TABLE_KEY: ClassVar[str] = "table_name"
-    CATALOG_ERRORS: ClassVar[tuple[type[BaseException], ...]] = (OSError, ValueError)
+    CATALOG_ERRORS: ClassVar[tuple[type[BaseException], ...]] = (OSError, ValueError, ImportError)
     CREDENTIAL_KEY: ClassVar[str] = "<credential key>"
 
     @classmethod
@@ -91,8 +92,8 @@ class ReadDBFG(FormatFeatureGroup):
         """A redacting RegisteredCredential copy of a mapping or Credential, None for anything else."""
         if isinstance(value, RegisteredCredential):
             return value
-        if isinstance(value, dict):
-            return RegisteredCredential(value)
+        if isinstance(value, Mapping):
+            return RegisteredCredential(dict(value))
         if isinstance(value, Credential):
             return RegisteredCredential(value.data)
         return None
@@ -138,11 +139,12 @@ class ReadDBFG(FormatFeatureGroup):
             return []
         else:
             candidates = cls._handle_credentials(options, data_access_collection)
-        databases: dict[str, Any] = {}
+        sources: dict[str, SourceMatch] = {}
         for credentials in candidates:
             if cls.is_valid_credentials(credentials):
-                databases.setdefault(cls.database_identity(credentials), credentials)
-        return [match for identity, credentials in databases.items() for match in cls._tables(identity, credentials)]
+                for match in cls._tables(cls.database_identity(credentials), credentials):
+                    sources.setdefault(match.source, match)
+        return list(sources.values())
 
     @classmethod
     def _handle_credentials(cls, options: Options, dac: DataAccessCollection) -> list[Any]:
@@ -184,7 +186,13 @@ class ReadDBFG(FormatFeatureGroup):
         except cls.CATALOG_ERRORS as exc:
             if is_match_abort(exc):
                 raise
-            return None, f"could not read its tables: {exc}"
+            text = str(exc)
+            if isinstance(credentials, Mapping):
+                for secret in sorted(
+                    (v for v in credentials.values() if isinstance(v, str) and v), key=len, reverse=True
+                ):
+                    text = text.replace(secret, "***")
+            return None, f"could not read its tables: {scrub_credentials(text)}"
         return catalog, None
 
     @classmethod

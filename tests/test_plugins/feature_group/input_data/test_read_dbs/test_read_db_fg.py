@@ -8,6 +8,8 @@ from __future__ import annotations
 import inspect
 from collections import OrderedDict
 from collections.abc import Collection, Mapping
+from pathlib import Path
+from types import MappingProxyType
 from typing import Any, ClassVar
 
 import pytest
@@ -17,12 +19,13 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.provider import FormatFeatureGroup, ReadDBFG
 from mloda.user import Credential, DataAccessCollection, Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 KEY = "toyfmt_basedb"
 
@@ -308,6 +311,16 @@ class TestWrapFeatureScopedAccess:
         credential = RegisteredCredential({KEY: "a"})
         assert ToyBaseDB.wrap_feature_scoped_access(credential) is credential
 
+    def test_any_mapping_is_wrapped_in_a_registered_credential_copy(self) -> None:
+        wrapped = ToyBaseDB.wrap_feature_scoped_access(MappingProxyType({KEY: "a"}))
+        assert type(wrapped) is RegisteredCredential
+        assert wrapped == {KEY: "a"}
+
+    def test_a_pointer_given_as_a_non_dict_mapping_claims(self) -> None:
+        feature = Feature("toy_a", options={"ToyBaseDB": MappingProxyType({KEY: "a"})})
+        result = IdentifyFeatureGroupClass.evaluate(feature, {ToyBaseDB: {PythonDictFramework}}, None, None)
+        assert ToyBaseDB in result.identified
+
     @pytest.mark.parametrize("value", ["a path", 5, None, ["a"]])
     def test_anything_else_is_none(self, value: Any) -> None:
         assert ToyBaseDB.wrap_feature_scoped_access(value) is None
@@ -343,6 +356,49 @@ class TestCatalogCache:
         ToyBaseDB.columns(match)
         ToyBaseDB.columns(match)
         assert len(ToyBaseDB.list_calls) == 2
+
+
+class TestCatalogFailures:
+    def test_a_missing_driver_declines_and_a_sibling_group_still_resolves(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def missing_driver(credentials: Any) -> Any:
+            raise ImportError("toyfmt driver is not installed")
+
+        monkeypatch.setattr(ToyBaseDB, "connect", missing_driver)
+        csv_path = tmp_path / "sibling.csv"
+        csv_path.write_text("toyfmt_csv_col\n1\n2\n", encoding="utf-8")
+        dac = DataAccessCollection(credentials={"toy_handle": {KEY: "a"}}, files={"csv_handle": str(csv_path)})
+
+        declined = IdentifyFeatureGroupClass.evaluate(Feature("toy_a"), {ToyBaseDB: {PythonDictFramework}}, None, dac)
+        assert ToyBaseDB not in declined.identified
+        assert "could not read its tables" in declined.eliminations[ToyBaseDB].reason
+
+        result = mloda.run_all(
+            ["toyfmt_csv_col"],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyBaseDB, CsvFG}),
+            data_access_collection=dac,
+        )
+        assert result[0] == {"toyfmt_csv_col": [1, 2]}
+
+    def test_a_credential_value_in_the_driver_error_is_masked(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        secret = "toyfmt-dsn-secret"  # nosec B105
+
+        def leaking(credentials: Any) -> Any:
+            raise OSError(f"cannot connect with password {secret}")
+
+        monkeypatch.setattr(ToyBaseDB, "connect", leaking)
+        dac = DataAccessCollection(credentials={"toy_handle": {KEY: "a", "password": secret}})
+        result = IdentifyFeatureGroupClass.evaluate(Feature("toy_a"), {ToyBaseDB: {PythonDictFramework}}, None, dac)
+        reason = result.eliminations[ToyBaseDB].reason
+        assert "could not read its tables" in reason
+        assert secret not in reason
+
+        pointed = Feature("toy_a", options={"ToyBaseDB": {KEY: "a", "password": secret}})
+        with pytest.raises(ValueError, match="could not read its tables") as excinfo:
+            resolve_or_raise(pointed, {ToyBaseDB: {PythonDictFramework}}, None, None)
+        assert secret not in str(excinfo.value)
 
 
 class TestEndToEndOnAThirdPartyGroup:

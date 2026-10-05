@@ -1,4 +1,4 @@
-"""Test-local BaseInputData file reader family that drives the suffix, column and pin matching machinery.
+"""Test-local BaseInputData file reader that drives the suffix, column and pin matching machinery.
 
 A subclass owns unique suffixes, so it never claims data in other tests. It stays non-final until a
 subclass overrides ``load_data``. A reader matches only itself, so a root FeatureGroup returns the concrete reader.

@@ -246,7 +246,7 @@ class TestReservedFrameworkKey:
         assert specs["BaseInputData"].framework_set is True
 
     def test_the_declaring_reader_family_marks_no_further_framework_keys(self) -> None:
-        """A reader family inherits the one framework-written key and adds no second one.
+        """A BaseInputData reader inherits the one framework-written key and adds no second one.
 
         The flag marks keys USERS never set, so a reader declaring its own user-facing keys must
         leave them ``framework_set=False``; otherwise the invariant above stops describing writes.

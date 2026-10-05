@@ -84,7 +84,7 @@ Output
 
 For unstructured files, mloda ships one group per format: `TextFG` (`.text`/`.txt`/`.TXT`), `PyFG` (`.py`),
 `MarkdownFG` (`.md`), `YamlFG` (`.yaml`/`.yml`) and `JsonDocumentFG` (`.json`). Each answers three names:
-`TextFG` (the content), `TextFG~source` (the path) and `TextFG~file_type` (the suffix without the dot).
+`TextFG` (the content), `TextFG~source` (the path) and `TextFG~file_type` (the file's actual suffix, lowercased, without the dot).
 A request reads one file; with several matching files, pick one with a `data_access_handle`, a
 `column_to_file` entry or `options={"TextFG": path}`.
 

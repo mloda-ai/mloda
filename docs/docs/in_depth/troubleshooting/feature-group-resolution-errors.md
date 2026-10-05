@@ -231,7 +231,7 @@ Fix it with one of:
 - `column_to_file` in the `DataAccessCollection`, pinning the column to one file handle.
 - A pointer: `options={"CsvFG": "/data/bureau.csv"}`.
 - `data_access_handle` naming one file or credential handle.
-- For a database group, a credential `table_name` (for example `Credential(sqlite="/x.db", table_name="bureau")`) or a handle that names one database. The message names the credential key of the group, and lists at most a few sources, summarizing the rest as "and N more".
+- For a database group, a credential `table_name` (for example `Credential(sqlite="/x.db", table_name="bureau")`) or a handle that names one database. The message names the credential key of the group, and lists every source (only the credential-handle hint is capped, summarizing the rest as "and N more").
 
 ### Column missing from every source
 

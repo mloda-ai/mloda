@@ -1155,18 +1155,20 @@ def test_declared_swallowing_helpers_outside_the_path_are_still_called() -> None
 
 
 def test_the_swallowing_closure_is_transitive() -> None:
-    """One wrapper that swallows nothing itself must not hide the swallow two calls below it."""
-    loader = "mloda/core/abstract_plugins/plugin_loader/plugin_loader.py"
-    definitions = [definition for definition in _index().functions.get("all", []) if definition.module == loader]
+    """One wrapper that swallows nothing itself must not hide the swallow one call below it."""
+    utils = "mloda/core/abstract_plugins/components/utils.py"
+    definitions = [
+        definition for definition in _index().functions.get("contained_raise_reason", []) if definition.module == utils
+    ]
 
     assert definitions and not any(_swallows(definition.node) for definition in definitions), (
-        "PluginLoader.all now swallows in its own body; pick another transitive-only entry of that chain"
+        "contained_raise_reason now swallows in its own body; pick another transitive-only entry"
     )
 
     pairs = {(call.module, call.function) for call in sweep().swallowing_external}
 
-    assert (loader, "all") in pairs, (
-        "all reaches load_group, then _load_plugin, whose handler swallows. A depth-1 swallow check sees none "
+    assert (utils, "contained_raise_reason") in pairs, (
+        "contained_raise_reason calls safe_exc_str, whose handler swallows. A depth-0 swallow check sees none "
         f"of it. Seen instead: {sorted(pairs)}"
     )
 
@@ -2581,7 +2583,7 @@ _READER_MATCH_MODULES = [
 
 @pytest.mark.parametrize("module", _READER_MATCH_MODULES)
 def test_reader_match_handlers_escalate_or_declare_a_swallow(module: str) -> None:
-    """Each reader family's match helpers are plugin code, outside the walked graph, so they get a direct check."""
+    """Each reader module's match helpers are plugin code, outside the walked graph, so they get a direct check."""
     source = (_REPO_ROOT / module).read_text(encoding="utf-8")
 
     handlers = classify_handlers(source, module, functions=None)

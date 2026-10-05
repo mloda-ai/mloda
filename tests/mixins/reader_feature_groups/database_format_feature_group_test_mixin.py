@@ -266,6 +266,19 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self._claims(feature, dac)
         assert self._claimed_match(feature).source == self.expected_source
 
+    def test_db_two_handles_on_one_database_with_different_table_presets_keep_both_tables(self) -> None:
+        path = self._make("presets", {"table_a": {self.present_column: [1]}, "table_b": {"toyfmt_b_only": [2]}})
+        dac = DataAccessCollection(
+            credentials={
+                "handle_a": self.make_credential(path, table_name="table_a"),
+                "handle_b": self.make_credential(path, table_name="table_b"),
+            }
+        )
+        feature = Feature("toyfmt_b_only")
+        assert self._claims(feature, dac)
+        assert self._claimed_match(feature).source == self._source_of(path, "table_b")
+        assert self._claims(Feature(self.present_column), dac)
+
     def test_db_only_tables_with_the_column_are_considered(self) -> None:
         path = self._make("mixed", {"fits": {self.present_column: [1]}, "other": {"toyfmt_unrelated_column": [1]}})
         feature = Feature(self.present_column)
@@ -374,6 +387,35 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         match = self._own_match()
         assert self.feature_group_class.columns(match) is None
         assert str(error) in (self.feature_group_class.unknown_columns_reason(match) or "")
+
+    def test_db_a_missing_driver_declines_unpointed_and_aborts_pointed_with_a_reason(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def missing_driver(klass: Any, credentials: Any) -> Any:
+            raise ImportError("toyfmt driver is not installed")
+
+        monkeypatch.setattr(self.feature_group_class, "connect", classmethod(missing_driver))
+        result = self._evaluate(Feature(self.present_column), self.own_dac())
+        assert self.feature_group_class not in result.identified
+        assert "could not read its tables" in result.eliminations[self.feature_group_class].reason
+        with pytest.raises(ValueError, match="could not read its tables"):
+            self._resolve(self._pointed(self.present_column, self.own_pointer()), None)
+
+    def test_db_a_listing_failure_masks_credential_values_in_its_reason(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        credential = self.make_credential(self.own_path, password=SECRET)
+
+        def leaking(klass: Any, connection: Any) -> Any:
+            raise OSError(f"cannot connect with password {SECRET}")
+
+        monkeypatch.setattr(self.feature_group_class, "list_tables", classmethod(leaking))
+        dac = DataAccessCollection(credentials={"secret_handle": credential})
+        result = self._evaluate(Feature(self.present_column), dac)
+        reason = result.eliminations[self.feature_group_class].reason
+        assert "could not read its tables" in reason
+        assert SECRET not in reason
+        with pytest.raises(ValueError, match="could not read its tables") as exc_info:
+            self._resolve(self._pointed(self.present_column, credential), None)
+        assert SECRET not in str(exc_info.value)
 
     def test_db_a_type_error_from_list_tables_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def defect(klass: Any, connection: Any) -> Any:

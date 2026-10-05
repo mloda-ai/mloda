@@ -930,7 +930,7 @@ class TestDataAccessIdentityOfExistingLocalPaths:
 
 
 class TestDataAccessIdentityRegressionGuardForReportedLeak:
-    """A credential-shaped value must never come back verbatim from any reader family's data_access_identity."""
+    """A credential-shaped value must never come back verbatim from any reader's data_access_identity."""
 
     @pytest.mark.parametrize("reader", [BaseInputData, _DirectLoadReader])
     @pytest.mark.parametrize(

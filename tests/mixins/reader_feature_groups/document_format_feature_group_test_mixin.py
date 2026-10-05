@@ -200,6 +200,29 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(folders={"gone_dir": str(self.tmp_path / "no_such_folder")})
         assert not self._claims(self._feature(self._group_name()), dac)
 
+    def test_doc_a_missing_file_declines_unpointed_with_a_reason_and_aborts_when_pointed(self) -> None:
+        gone = str(self.tmp_path / f"gone{self._suffix()}")
+        name = self._group_name()
+        for dac in (DataAccessCollection(files={"gone_file": gone}), None):
+            group = None if dac is not None else {name: gone}
+            result = self._evaluate(self._feature(name, group), dac)
+            assert self.feature_group_class not in result.identified
+            if dac is not None:
+                assert "not a regular file" in result.eliminations[self.feature_group_class].reason
+        with pytest.raises(ValueError, match="not a regular file"):
+            self._resolve(self._feature(name, {name: gone}), None)
+
+    def test_doc_a_pointer_to_a_handed_over_suffix_names_document_suffixes(self) -> None:
+        sub = self._gated_subclass()
+        sub.handover_suffixes = classmethod(lambda cls: cls.suffixes())
+        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
+        feature = Feature(self._group_name(), Options({self._group_name(): str(self.own_path)}))
+        result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
+        assert sub not in result.identified
+        assert DOCUMENT_SUFFIXES_OPTION in result.eliminations[sub].reason, result.eliminations[sub]
+        del sub, mapping, result, feature
+        gc.collect()
+
     def test_doc_a_folder_with_one_fitting_and_one_other_file_resolves(self) -> None:
         folder = self.tmp_path / "mixed_folder"
         fitting = self._make("fits", folder)
@@ -284,6 +307,7 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             f"{name}__x",
             f"{name}{CHAIN_SEPARATOR}sum_aggr",
             f"{name}~other",
+            f"{name}~0",
             f"{name}{SOURCE}~file_type",
             f"{name}{SOURCE}_x",
             f"prefix_{name}",

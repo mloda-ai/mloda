@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
@@ -198,7 +199,12 @@ def build_plan_steps(
                     input_feature_names=input_feature_names,
                     feature_set_options=(
                         Options(
-                            group={key: _safe_deepcopy(value, {}) for key, value in step.features.options.group.items()}
+                            group={
+                                key: redact_option_value(value)
+                                if isinstance(value, Mapping)
+                                else _safe_deepcopy(value, {})
+                                for key, value in step.features.options.group.items()
+                            }
                         )
                         if step.features.options is not None
                         else None

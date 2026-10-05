@@ -60,9 +60,6 @@ Subclass the base that fits your source and write only what it asks for. The bas
 - **ReadDocumentFG**: implement `suffixes()`; optionally `read_text` and `handover_suffixes`. It inherits the three names `<Group>`, `<Group>~source` and `<Group>~file_type`.
 - **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns` and `produce_rows`. `is_valid_credentials` must never raise. `database_identity` must not contain credential values. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
 
-
-- **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns`, and `produce_rows`. `is_valid_credentials` must never raise. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
-
     ```python
     from typing import Any
 
@@ -102,7 +99,7 @@ The stdlib reader does not yet cover pyarrow's full surface. Where they differ, 
 - `options={"SqliteFG": Credential(sqlite="/x.db")}` points a database group at one database. Prefer `Credential` for secrets: a plain-dict pointer shows its values in `str(options)`.
 - `Feature(..., feature_group=CsvFG)` scopes resolution to that group (and its subclasses) without choosing a source.
 - `data_access_handle` only narrows: it picks one of the sources the `DataAccessCollection` holds and never points a group at a source the collection lacks.
-- `column_to_file` pins columns to files in the `DataAccessCollection`; a pinned file that cannot serve the request declines instead of falling back (see [access-feature-data](access-feature-data.md)).
+- `column_to_file` pins columns to files in the `DataAccessCollection`; a pinned file that cannot serve the request aborts instead of falling back (see [access-feature-data](access-feature-data.md)).
 
 The matched pair lives on `Feature.input_data_match`, never in the options, and is handed to the loader at load time. The source may hold credentials, so use `PlanStep.data_access_identity` (or `Group.data_access_identity(match)` outside a plan) for display and logs. If your own error text may carry a credential, scrub it with `mloda.provider.scrub_credentials` before logging.
 
@@ -138,12 +135,6 @@ class SensorCsvFG(ReadFileFG):
 
     @classmethod
     def load_neutral(cls, match: Any, features: FeatureSet) -> Any: ...
-```
-
-The recorded decline renders as a near-miss line of the resolution failure:
-
-```
-  - SensorCsvFG (input data): SensorCsvFG matched /data/run1.sensorcsv but could not read its columns: its header lacks the #sensor-schema marker
 ```
 
 The recorded decline renders as a near-miss line of the resolution failure:

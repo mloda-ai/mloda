@@ -82,7 +82,7 @@ class DynamicFeatureGroupCreator:
     ### Dynamic Feature Group Over a Document Format Group
 
     ```python
-    from mloda import Feature
+    from mloda.user import Feature
 
     properties = {
         "input_features": lambda cls, options, feature_name: {Feature("PyFG")},

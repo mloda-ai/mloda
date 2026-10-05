@@ -438,7 +438,7 @@ def test_declared_union_recognizes_reader_declarations(key: str) -> None:
 
 @pytest.mark.parametrize("key", sorted(READER_ONLY_KEYS))
 def test_reader_keys_are_attributable_to_the_reader_surface_alone(key: str) -> None:
-    """No PROPERTY_MAPPING outside the file and database format groups and no framework-reserved key covers these."""
+    """No PROPERTY_MAPPING outside the file, database and document format groups covers these, nor a framework key."""
     assert key not in reader_surface_probe_union()
     assert key not in FRAMEWORK_KEYS
 

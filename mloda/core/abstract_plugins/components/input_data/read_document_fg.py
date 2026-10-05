@@ -8,9 +8,12 @@ import os
 from collections.abc import Collection
 from typing import Any, ClassVar
 
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 SOURCE_SUFFIX = "~source"
@@ -52,6 +55,39 @@ class ReadDocumentFG(ReadFileFG):
     @classmethod
     def _declared_name(cls, base_name: str) -> bool:
         return base_name in cls.declared_names()
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        if feature_name not in cls.declared_names():
+            return []
+        name = cls.get_class_name()
+        found = super().find_sources(route, feature_name, options, data_access_collection)
+        if route.source_kind == "file":
+            cls._record_handed_over(feature_name, options, data_access_collection)
+        gone = [match for match in found if not os.path.isfile(match.access)]
+        if gone:
+            reason = f"{name} matched {os.path.abspath(gone[0].access)} but it is not a regular file"
+            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
+        return [match for match in found if match not in gone]
+
+    @classmethod
+    def _record_handed_over(
+        cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
+    ) -> None:
+        path = cls._pointer_value(options) or cls._pinned_path(feature_name, data_access_collection)
+        excluded = cls._document_suffixes(options)
+        if path is not None and path.endswith(cls.suffixes()) and not cls._owns(path, excluded):
+            record_match_rejection(
+                cls.get_class_name(),
+                f"{path} is handed over to another reader; list its suffix in document_suffixes to read it here",
+                stage=INPUT_DATA_STAGE,
+            )
 
     @classmethod
     def _owns(cls, path: str, document_suffixes: tuple[str, ...]) -> bool:

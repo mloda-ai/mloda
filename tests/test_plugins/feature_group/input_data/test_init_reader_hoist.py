@@ -25,7 +25,7 @@ class HoistSentinelReader(BaseInputData):
 
 
 class TestInitReaderIsHoistedToBase:
-    """After the hoist, the reader families no longer override init_reader."""
+    """After the hoist, the BaseInputData readers no longer override init_reader."""
 
     @pytest.mark.parametrize("family", [SuffixFileReader])
     def test_family_does_not_override_init_reader(self, family: type[BaseInputData]) -> None:

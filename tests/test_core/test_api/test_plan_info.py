@@ -1098,6 +1098,28 @@ class TestPlanStepDataAccessIdentity:
         assert [record["feature_group"] for record in records] == [f"{SqliteFG.__module__}:{SqliteFG.__qualname__}"]
         assert all("reader" not in record for record in records)
 
+    def test_a_plain_dict_pointer_secret_stays_out_of_the_plan_step(self, tmp_path: Path) -> None:
+        db = str(tmp_path / "pointer.db")
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE t (plan_info_pointer_col INTEGER)")
+        conn.commit()
+        conn.close()
+        secret = "plan-info-pointer-secret"  # nosec B105
+        pointer = {"sqlite": db, "password": secret}
+        feature = Feature("plan_info_pointer_col", options={"SqliteFG": pointer})
+
+        explained = mloda.explain(
+            [feature],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        )
+
+        step = next(s for s in explained if s.step_kind == "compute")
+        assert step.feature_group is SqliteFG
+        for text in (str(step), repr(step), str(step.feature_set_options), repr(dataclasses.asdict(step))):
+            assert secret not in text
+        assert pointer == {"sqlite": db, "password": secret}
+
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
         explained = mloda.explain(
             [Feature("plan_info_int_access", options={PlanInfoIntAccessReader.__name__: 424242})],

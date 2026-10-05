@@ -412,3 +412,130 @@ def test_a_consumer_reaching_a_link_root_by_two_paths_is_correct(
 
     values = [sorted(result[TwoPathC.get_class_name()]) for result in results if TwoPathC.get_class_name() in result]
     assert values == [[111, 222, 333]]
+
+
+_SIDE_PATH_P_NAMES = ("SidePathPandasP", "SidePathArrowP", "SidePathFreeP")
+
+
+def _side_path_p_column(data: Any) -> str:
+    return next(name for name in _SIDE_PATH_P_NAMES if name in data.column_names)
+
+
+def _side_path_p(data: Any, name: str) -> Any:
+    if isinstance(data, pa.Table):
+        return data.append_column(name, pc.multiply(data.column("mlg_a"), 100))
+    data[name] = data["mlg_a"] * 100
+    return data
+
+
+class SidePathPandasP(FeatureGroup):
+    """Pandas-only reader of root A."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return _side_path_p(data, cls.get_class_name())
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class SidePathArrowP(FeatureGroup):
+    """PyArrow-only reader of root A."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return _side_path_p(data, cls.get_class_name())
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class SidePathFreeP(FeatureGroup):
+    """Reader of root A that runs on either framework."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return _side_path_p(data, cls.get_class_name())
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame, PyArrowTable}
+
+
+class SidePathQ(FeatureGroup):
+    """PyArrow link child reading P (named by option), root B, and root A (directly when asked)."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        direct = {Feature("mlg_a")} if options.get("sp_direct") else set()
+        return {Feature(options.get("sp_p")), Feature("mlg_b"), *direct}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.add(data.column(_side_path_p_column(data)), data.column("mlg_b"))
+        return data.append_column(cls.get_class_name(), pc.add(total, data.column("mlg_a")))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class SidePathC(FeatureGroup):
+    """PyArrow consumer of P and Q."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        q_options = {"sp_p": options.get("sp_p"), "sp_direct": options.get("sp_direct")}
+        return {Feature(options.get("sp_p")), Feature("SidePathQ", options=q_options)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.add(data.column(_side_path_p_column(data)), data.column("SidePathQ"))
+        return data.append_column(cls.get_class_name(), total)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+def _side_path_prepare(p_group: type[FeatureGroup], direct: bool) -> Any:
+    options = {"sp_p": p_group.get_class_name(), "sp_direct": direct}
+    return mloda.prepare(
+        [Feature(SidePathC.get_class_name(), options=options)],
+        links={Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX))},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {MultiLinkRootA, MultiLinkRootBSame, p_group, SidePathQ, SidePathC}
+        ),
+    )
+
+
+def test_a_pinned_framework_mid_between_a_link_side_and_its_consumer_raises_at_plan_time() -> None:
+    with pytest.raises(ValueError, match="SidePathPandasP.*must run on"):
+        _side_path_prepare(SidePathPandasP, direct=False)
+
+
+def test_a_pinned_framework_mid_next_to_a_direct_side_read_raises_at_plan_time() -> None:
+    with pytest.raises(ValueError, match="SidePathPandasP.*must run on"):
+        _side_path_prepare(SidePathPandasP, direct=True)
+
+
+@pytest.mark.parametrize("p_group", [SidePathArrowP, SidePathFreeP], ids=["pyarrow_mid", "free_mid"])
+def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_correct(
+    p_group: type[FeatureGroup],
+) -> None:
+    results = _side_path_prepare(p_group, direct=False).run()
+
+    c_name = SidePathC.get_class_name()
+    values = [sorted(result[c_name].to_pylist()) for result in results if c_name in result.column_names]
+    assert values == [[211, 422, 633]]

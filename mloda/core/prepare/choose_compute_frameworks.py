@@ -258,6 +258,7 @@ class ChooseComputeFrameworks:
         for host, tied in self.ties:
             if host in owner and tied in owner:
                 rules.append(_Rule((owner[host], owner[tied]), lambda v: v[0] is v[1], "filter tied to its host"))
+        rules += self._side_path_rules(blocks, owner)
         by_link: dict[UUID, list[tuple[int, int, int]]] = {}
         by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]] = {}
         for link, left_uuid, right_uuid, child_uuid in self.occurrences:
@@ -290,6 +291,49 @@ class ChooseComputeFrameworks:
                         rules.append(_Rule(first + second, _same_side, "one side per link"))
                         rules.append(_Rule(first + second, _swapped_pairs_differ, "swapped pairs join apart"))
         return rules
+
+    def _ancestors(self) -> dict[UUID, set[UUID]]:
+        """All graph ancestors per feature, from the edges."""
+        parents: dict[UUID, set[UUID]] = {}
+        for parent, child in self.graph.edges:
+            parents.setdefault(child, set()).add(parent)
+        closure: dict[UUID, set[UUID]] = {}
+
+        def visit(node: UUID) -> set[UUID]:
+            if node not in closure:
+                closure[node] = set()
+                found: set[UUID] = set()
+                for parent in parents.get(node, ()):
+                    found.add(parent)
+                    found |= visit(parent)
+                closure[node] = found
+            return closure[node]
+
+        for node in list(parents):
+            visit(node)
+        return closure
+
+    def _side_path_rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
+        """A join merges into its side's framework lineage, so a feature between a side and its consumer must share it."""
+        if not self.occurrences:
+            return []
+        ancestors = self._ancestors()
+        pairs: set[tuple[int, int]] = set()
+        for _, left_uuid, right_uuid, child_uuid in self.occurrences:
+            for side in (left_uuid, right_uuid):
+                for mid in ancestors.get(child_uuid, set()):
+                    if side in ancestors.get(mid, set()) and side in owner and mid in owner:
+                        if owner[side] != owner[mid]:
+                            pairs.add((owner[side], owner[mid]))
+        return [
+            _Rule(
+                (side, mid),
+                lambda v: v[0] is v[1],
+                f"{blocks[mid].fg.__name__} carries link side {blocks[side].fg.__name__} to its join consumer, "
+                "so it must run on the same framework",
+            )
+            for side, mid in sorted(pairs)
+        ]
 
     def _cost_groups(
         self, blocks: list[_Block], owner: dict[UUID, int]

@@ -138,6 +138,7 @@ class TestFormatGroupsReadLikePyArrow:
         whole_file = class_name in ("CsvFG", "JsonFG")
         assert result.to_pydict() == self._expected(reader, path, whole_file)
 
+    # CsvFG is left out: it keeps ReadFileFG's default load_neutral, which uses cls.file_format().
     @pytest.mark.parametrize(
         "module_name,class_name,suffix,writer,reader",
         [f for f in _FORMATS if f[1] != "CsvFG"],

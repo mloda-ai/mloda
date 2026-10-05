@@ -145,14 +145,17 @@ class ReadDBFG(FormatFeatureGroup):
                 )
                 return []
         elif cls.QUERY_ROUTE in cls.CLAIM_ROUTES and QUERY_OPTION in options:
+            record_match_rejection(
+                cls.get_class_name(), f"{QUERY_OPTION} is set, so the table route is not used", stage=INPUT_DATA_STAGE
+            )
             return []
+        digest = sha256(query_text.encode()).hexdigest()[:16] if query else ""
         candidates = cls._candidates(options, data_access_collection)
         sources: dict[str, SourceMatch] = {}
         for credentials in candidates:
             if cls.is_valid_credentials(credentials):
                 identity = cls.database_identity(credentials)
                 if query:
-                    digest = sha256(query_text.encode()).hexdigest()[:12]
                     match = SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))
                     sources.setdefault(match.source, match)
                 else:
@@ -264,15 +267,19 @@ class ReadDBFG(FormatFeatureGroup):
             )
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
             return f"select one database with data_access_handle{hint}, or point {name} at one credential."
-        access = matches[0].access
-        if isinstance(access, DBQuery):
-            return f"point {name} at one credential, or select one with data_access_handle."
-        table = access.table
+        table = cast(DBTable, matches[0].access).table
         return (
             f"point {name} at one table with options={{{name!r}: "
             f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}={table!r})}}, "
             f"or set {cls.TABLE_KEY} on the credential."
         )
+
+    @classmethod
+    def _loader_for_match(cls, framework: Any, match: SourceMatch) -> Any:
+        """No registered loader for a query match: it loads through the neutral path."""
+        if isinstance(match.access, DBQuery):
+            return None
+        return super()._loader_for_match(framework, match)
 
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:

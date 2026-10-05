@@ -21,6 +21,8 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, MatchRejection
+from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import FormatFeatureGroup, ReadDBFG
 from mloda.user import Credential, DataAccessCollection, Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -432,10 +434,19 @@ class TestQueryRoute:
         assert ToyQueryDB in result.identified
         assert feature.input_data_match is not None
         source = feature.input_data_match[1].source
-        assert source == f"toyfmt-db:a::query:{hashlib.sha256(b'SELECT 1').hexdigest()[:12]}"
+        assert source == f"toyfmt-db:a::query:{hashlib.sha256(b'SELECT 1').hexdigest()[:16]}"
         assert secret not in repr(feature.input_data_match[1])
         assert ToyBaseDB.list_calls == []
         assert ToyBaseDB.created == []
+
+    def test_query_text_suppresses_the_table_route_with_an_attributable_rejection(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options({"query_text": "SELECT 1"})
+        assert ToyQueryDB.find_sources(ToyQueryDB.CLAIM_ROUTES[0], "toy_a", options, None) == []
+        rejection = rejection_window[ToyQueryDB.get_class_name()]
+        assert rejection.stage == INPUT_DATA_STAGE
+        assert "query_text" in rejection.reason
 
     @pytest.mark.parametrize("query", [5, "", None, ["SELECT 1"]], ids=["int", "empty", "none", "list"])
     def test_a_non_str_or_empty_query_text_declines_with_a_rejection(self, query: Any) -> None:

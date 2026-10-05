@@ -582,7 +582,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             pytest.skip(f"{self._group_name()} has no query route")
 
     def _query_source(self, path: Path, query: str) -> str:
-        return f"{self.identity_of(path)}::query:{hashlib.sha256(query.encode()).hexdigest()[:12]}"
+        return f"{self.identity_of(path)}::query:{hashlib.sha256(query.encode()).hexdigest()[:16]}"
 
     def _query_feature(self, name: str, query: str, pointer: Any = None) -> Feature:
         group: dict[str, Any] = {QUERY_OPTION: query}
@@ -607,19 +607,29 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert SECRET not in match.source
         assert SECRET not in repr(match)
 
-        capture = _LoadCapture()
-        result = mloda.run_all(
-            [self._query_feature(name, query, credential) for name in ("toyfmt_qa", "toyfmt_qc")],
-            compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
-            function_extender={capture},
+        with pytest.raises(NotImplementedError):
+            self.feature_group_class.describe_columns(match)
+
+        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+            PythonDictFramework,
         )
-        assert len(result) == 1
-        assert result[0].to_pydict() == {"toyfmt_qa": [0, 10], "toyfmt_qc": [2, 12]}
-        assert len(capture.contexts) == 1
-        identity = capture.contexts[0].data_access_identity
-        assert identity == self._query_source(path, query)
-        assert SECRET not in str(identity)
+
+        expected = {"toyfmt_qa": [0, 10], "toyfmt_qc": [2, 12]}
+        for framework in (PyArrowTable, PythonDictFramework):
+            capture = _LoadCapture()
+            result = mloda.run_all(
+                [self._query_feature(name, query, credential) for name in ("toyfmt_qa", "toyfmt_qc")],
+                compute_frameworks=[framework],
+                plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
+                function_extender={capture},
+            )
+            assert len(result) == 1
+            loaded = result[0].to_pydict() if framework is PyArrowTable else result[0]
+            assert loaded == expected, framework.__name__
+            assert len(capture.contexts) == 1
+            identity = capture.contexts[0].data_access_identity
+            assert identity == self._query_source(path, query)
+            assert SECRET not in str(identity)
 
     def test_db_query_with_two_credentials_aborts_naming_both_query_sources_and_a_fix_without_any_secret(self) -> None:
         self._require_query_route()

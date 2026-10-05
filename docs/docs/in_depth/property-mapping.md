@@ -119,7 +119,7 @@ matcher therefore keeps the contract, whether the override delegates or not.
 The last four rows are the whole reader surface, and the match-time ones sit outside the ordered
 sequence above: a user-facing `READER_OPTIONS` key is consumed during reader selection, and no other
 moment fires for it. The reserved `"BaseInputData"` key is the exception, written transiently while matching and
-moved onto `Feature.input_data_match`; `BaseInputData.load` and `SQLITEReader.get_table` read `FeatureSet.input_data_match` at load time.
+moved onto `Feature.input_data_match`; `BaseInputData.load` reads `FeatureSet.input_data_match` at load time.
 See [One spec type, two surfaces](#one-spec-type-two-surfaces).
 
 ## One spec type, two surfaces
@@ -143,9 +143,8 @@ consequences keep the shared type honest on this surface:
   canonicalization, downstream visibility); a reader default is only returned by
   `reader_option(key, options)` and never enters `Options`. Presence follows the
   [#768 matrix](#applying-declared-defaults); a `NO_DEFAULT` key is required at selection, and
-  `reader_option` raises for it. The declaration is load-bearing: `ReadFile` and `ReadDocument`
-  resolve `document_suffixes` this way (for `ReadDocument` only in its `DataAccessCollection`
-  branch; the bare str/Path branch passes no `document_suffixes`).
+  `reader_option` raises for it. The declaration is load-bearing: `ReadFileFG` and the
+  document groups resolve `document_suffixes` this way.
 - **Fields with no reader meaning are rejected where they are written.** `match_guard`,
   `deferred_binding=True` and `context=False` describe name matching and value placement, which a
   reader does not have, so `BaseInputData.__init_subclass__` rejects them instead of leaving them

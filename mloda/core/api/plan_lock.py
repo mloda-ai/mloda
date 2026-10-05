@@ -14,9 +14,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_NAME
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.choose_compute_frameworks import stable_text
 
-_SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
-
-PLAN_LOCK_FORMAT = 5
+PLAN_LOCK_FORMAT = 4
 
 
 class PlanLockMismatchError(Exception):
@@ -55,24 +53,16 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
     for step in plan:
         if step.step_kind == "compute":
             requested.update(step.requested_feature_names)
-            access = step.reader_data_access
-            record = {
-                "feature_names": sorted(step.feature_names),
-                "feature_group": _class_path(step.feature_group),
-                "compute_framework": _class_path(step.compute_framework),
-                "compute_framework_reason": step.compute_framework_reason,
-                "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
-                "reader": None if access is None else _class_path(access[0]),
-                "result_framework": _class_path(step.result_framework),
-                "input_feature_edges": {name: sorted(inputs) for name, inputs in step.input_feature_edges.items()},
-            }
-            lock["compute"].append(record)
-            wide_record: dict[str, Any] = {
-                key: value for key, value in record.items() if key != "compute_framework_reason"
-            }
-            options = step.feature_set_options
-            wide_record["options"] = None if options is None else stable_text(_mask_secret_keys(options.group))
-            wide["compute"].append(wide_record)
+            compute.append(
+                {
+                    "feature_names": sorted(step.feature_names),
+                    "feature_group": _class_path(step.feature_group),
+                    "compute_framework": _class_path(step.compute_framework),
+                    "compute_framework_reason": step.compute_framework_reason,
+                    "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
+                    "result_framework": _class_path(step.result_framework),
+                }
+            )
         elif step.step_kind == "join":
             record = {
                 "left_feature_group": _class_path(step.feature_group),
@@ -133,7 +123,7 @@ def plan_content_hash(plan: Sequence[PlanStep]) -> str:
 
 
 _PATH_FIELDS = {
-    "compute": ("feature_group", "compute_framework", "reader", "result_framework"),
+    "compute": ("feature_group", "compute_framework", "result_framework"),
     "joins": ("left_feature_group", "right_feature_group", "compute_framework", "source_compute_framework"),
     "transforms": ("feature_group", "from_compute_framework", "to_compute_framework"),
 }

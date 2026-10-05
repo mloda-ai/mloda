@@ -1,30 +1,38 @@
-"""Tests for suffix ownership: the file format groups own structured suffixes, ReadDocument skips them by default.
+"""Suffix ownership: JsonFG owns .json by default, JsonDocumentFG only when the feature lists it in document_suffixes."""
 
-The ``document_suffixes`` per-feature option overrides this default, letting ReadDocument
-claim specific structured suffixes while the format groups auto-exclude them.
-"""
+from __future__ import annotations
 
-import ast
 import importlib
-import inspect
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from mloda.user import DataAccessCollection, Options
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_files.json_document_reader import JsonDocumentReader
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.user import DataAccessCollection, Feature, Options
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_json
-from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group, load_group
 
 SUFFIX_COLUMN = "suffixown_id"
+DOCUMENT_NAME = "JsonDocumentFG"
+
+
+def _listed() -> Options:
+    return Options(context={"document_suffixes": frozenset({".json"})})
 
 
 def _json_group() -> Any:
     return load_group("json_fg", "JsonFG")
+
+
+def _json_document_group() -> Any:
+    return load_document_group("json_document_fg", "JsonDocumentFG")
+
+
+def _document_options(*suffixes: str, pointer: str | None = None) -> Options:
+    group = {DOCUMENT_NAME: pointer} if pointer is not None else None
+    return Options(group, context={"document_suffixes": frozenset(suffixes)} if suffixes else None)
 
 
 @pytest.fixture
@@ -34,220 +42,86 @@ def json_file(tmp_path: Path) -> str:
     return str(path)
 
 
-class StubJsonDocReader(ReadDocument):
-    """ReadDocument subclass that handles .json files as documents."""
-
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        return (".json", ".JSON")
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: Any) -> Any:
-        return None
-
-
 class TestDefaultSuffixOwnership:
-    """Without document_suffixes option, JsonFG owns .json, ReadDocument skips it."""
+    """Without document_suffixes, JsonFG owns .json and JsonDocumentFG declines it."""
 
     def test_json_fg_matches_json_by_default(self, json_file: str) -> None:
         dac = DataAccessCollection(files={json_file})
         assert _json_group().match_feature_group_criteria(SUFFIX_COLUMN, Options(), dac)
 
-    def test_readdocument_skips_json_by_default(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
-        options = Options()
-        result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
-        assert result is None
+    def test_json_document_fg_declines_json_by_default(self, json_file: str) -> None:
+        dac = DataAccessCollection(files={json_file})
+        assert not _json_document_group().match_feature_group_criteria(DOCUMENT_NAME, Options(), dac)
 
-    def test_readdocument_matches_non_structured_suffix(self) -> None:
-        """ReadDocument should still match suffixes not in STRUCTURED_SUFFIXES."""
+    def test_json_document_fg_declines_a_json_in_a_folder_by_default(self, tmp_path: Path) -> None:
+        write_json(tmp_path / "data.json", {SUFFIX_COLUMN: [1]})
+        dac = DataAccessCollection(folders={str(tmp_path)})
+        assert not _json_document_group().match_feature_group_criteria(DOCUMENT_NAME, Options(), dac)
 
-        class StubMdReader(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".md",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
-        dac = DataAccessCollection(files={"readme.md"})
-        options = Options()
-        result = StubMdReader.match_subclass_data_access(dac, ["content"], options=options)
-        assert result == "readme.md"
+    def test_both_groups_read_the_one_shared_json_suffix_constant(self) -> None:
+        suffixes = importlib.import_module("mloda_plugins.feature_group.input_data.file_suffixes")
+        assert _json_document_group().suffixes() == _json_group().suffixes() == suffixes.JSON_SUFFIXES
 
 
 class TestDocumentSuffixesOverride:
-    """With document_suffixes option, ReadDocument claims the suffix, the format group auto-excludes."""
+    """With .json listed, JsonDocumentFG claims it and JsonFG auto-excludes it."""
 
-    def test_readdocument_matches_json_with_override(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
-        options = Options({"document_suffixes": frozenset({".json"})})
-        result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
-        assert result == "data.json"
-
-    def test_json_fg_excludes_json_with_override(self, json_file: str) -> None:
+    def test_json_document_fg_matches_json_with_the_override(self, json_file: str) -> None:
         dac = DataAccessCollection(files={json_file})
-        options = Options({"document_suffixes": frozenset({".json"})})
-        assert not _json_group().match_feature_group_criteria(SUFFIX_COLUMN, options, dac)
+        assert _json_document_group().match_feature_group_criteria(DOCUMENT_NAME, _listed(), dac)
 
-    def test_a_json_handed_to_document_readers_is_declined_by_json_fg_and_claimed_by_the_json_document_reader(
-        self, json_file: str
-    ) -> None:
+    def test_json_document_fg_matches_a_json_in_a_folder_with_the_override(self, tmp_path: Path) -> None:
+        write_json(tmp_path / "data.json", {SUFFIX_COLUMN: [1]})
+        dac = DataAccessCollection(folders={str(tmp_path)})
+        assert _json_document_group().match_feature_group_criteria(DOCUMENT_NAME, _listed(), dac)
+
+    def test_json_document_fg_matches_a_pointer_with_the_override(self, json_file: str) -> None:
+        options = _document_options(".json", pointer=json_file)
+        assert _json_document_group().match_feature_group_criteria(DOCUMENT_NAME, options, None)
+
+    def test_json_fg_excludes_json_with_the_override(self, json_file: str) -> None:
         dac = DataAccessCollection(files={json_file})
-        options = Options({"document_suffixes": frozenset({".json"})})
+        assert not _json_group().match_feature_group_criteria(SUFFIX_COLUMN, _listed(), dac)
 
-        assert not _json_group().match_feature_group_criteria(SUFFIX_COLUMN, options, dac)
-        assert JsonDocumentReader.match_subclass_data_access(dac, ["content"], options=options) == json_file
-
-    def test_override_is_suffix_specific(self, tmp_path: Path) -> None:
-        """Overriding .json does not affect .csv ownership."""
+    def test_the_override_is_suffix_specific(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "data.csv"
         write_csv(csv_path, {"suffixown_csv_col": [1]})
         dac = DataAccessCollection(files={str(csv_path)})
-        options = Options({"document_suffixes": frozenset({".json"})})
 
-        assert load_group("csv_fg", "CsvFG").match_feature_group_criteria("suffixown_csv_col", options, dac)
+        assert load_group("csv_fg", "CsvFG").match_feature_group_criteria("suffixown_csv_col", _listed(), dac)
 
 
-class TestFeatureScopeUnaffected:
-    """Feature scope (string path) should not be affected by suffix filtering."""
+class TestAJsonRequestNeverMatchesBothGroups:
+    """A JSON file holding a column named JsonDocumentFG is claimed by exactly one of the two groups."""
 
-    def test_readdocument_string_path_still_works(self) -> None:
-        result = StubJsonDocReader.match_subclass_data_access("doc.json", ["content"], options=Options({}))
-        assert result == "doc.json"
+    @pytest.mark.parametrize("file_suffix", [".json", ".JSON"])
+    @pytest.mark.parametrize("listed", [(), (".json",), (".JSON",), (".json", ".JSON")])
+    def test_exactly_one_group_claims_whatever_the_listing(
+        self, tmp_path: Path, file_suffix: str, listed: tuple[str, ...]
+    ) -> None:
+        path = tmp_path / f"collide{file_suffix}"
+        write_json(path, {DOCUMENT_NAME: [1, 2]})
+        mapping: Any = {_json_group(): {PyArrowTable}, _json_document_group(): {PyArrowTable}}
+        feature = Feature(DOCUMENT_NAME, _document_options(*listed))
 
+        result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, DataAccessCollection(files={str(path)}))
+
+        expected = _json_document_group() if file_suffix in listed else _json_group()
+        assert set(result.identified) == {expected}
+
+    def test_a_pointer_to_the_file_is_claimed_by_one_group_only(self, tmp_path: Path) -> None:
+        path = tmp_path / "pointed.json"
+        write_json(path, {DOCUMENT_NAME: [1]})
+        mapping: Any = {_json_group(): {PyArrowTable}, _json_document_group(): {PyArrowTable}}
+        for listed, expected in (((), _json_group()), ((".json",), _json_document_group())):
+            options = Options(
+                {"JsonFG": str(path), DOCUMENT_NAME: str(path)}, context=_document_options(*listed).context
+            )
+            result = IdentifyFeatureGroupClass.evaluate(Feature(DOCUMENT_NAME, options), mapping, None, None)
+            assert set(result.identified) == {expected}
+
+
+class TestPointersUnaffected:
     def test_json_fg_pointer_path_still_works(self, json_file: str) -> None:
         options = Options({"JsonFG": json_file})
         assert _json_group().match_feature_group_criteria(SUFFIX_COLUMN, options, None)
-
-
-class TestNoOptionsBackwardCompatible:
-    """Calling without options (as existing tests do) should preserve old behavior."""
-
-    def test_json_fg_no_options(self, json_file: str) -> None:
-        dac = DataAccessCollection(files={json_file})
-        assert _json_group().match_feature_group_criteria(SUFFIX_COLUMN, Options({}), dac)
-
-    def test_readdocument_no_options(self) -> None:
-        dac = DataAccessCollection(files={"data.json"})
-        result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=Options({}))
-        assert result is None
-
-
-class TestFolderTraversal:
-    """Suffix ownership applies to files discovered inside folders too."""
-
-    def test_readdocument_skips_structured_in_folder(self) -> None:
-        tmp_dir = tempfile.mkdtemp()
-        json_path = os.path.join(tmp_dir, "data.json")
-        with open(json_path, "w") as f:
-            f.write("{}")
-
-        try:
-            dac = DataAccessCollection(folders={tmp_dir})
-            options = Options()
-            result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
-            assert result is None
-        finally:
-            os.remove(json_path)
-            os.rmdir(tmp_dir)
-
-    def test_readdocument_matches_in_folder_with_override(self) -> None:
-        tmp_dir = tempfile.mkdtemp()
-        json_path = os.path.join(tmp_dir, "data.json")
-        with open(json_path, "w") as f:
-            f.write("{}")
-
-        try:
-            dac = DataAccessCollection(folders={tmp_dir})
-            options = Options({"document_suffixes": frozenset({".json"})})
-            result = StubJsonDocReader.match_subclass_data_access(dac, ["content"], options=options)
-            assert result == json_path
-        finally:
-            os.remove(json_path)
-            os.rmdir(tmp_dir)
-
-
-def _suffixes() -> Any:
-    """Imported lazily so a missing module fails these tests, not the collection of the whole file."""
-    return importlib.import_module("mloda_plugins.feature_group.input_data.file_suffixes")
-
-
-class TestStructuredSuffixesAttribute:
-    """Verify STRUCTURED_SUFFIXES contains all expected extensions."""
-
-    def test_csv_in_structured(self) -> None:
-        assert ".csv" in _suffixes().STRUCTURED_SUFFIXES
-
-    def test_json_in_structured(self) -> None:
-        assert ".json" in _suffixes().STRUCTURED_SUFFIXES
-
-    def test_parquet_in_structured(self) -> None:
-        assert ".parquet" in _suffixes().STRUCTURED_SUFFIXES
-
-    def test_orc_in_structured(self) -> None:
-        assert ".orc" in _suffixes().STRUCTURED_SUFFIXES
-
-    def test_feather_in_structured(self) -> None:
-        assert ".feather" in _suffixes().STRUCTURED_SUFFIXES
-
-    def test_md_not_in_structured(self) -> None:
-        assert ".md" not in _suffixes().STRUCTURED_SUFFIXES
-
-    def test_text_not_in_structured(self) -> None:
-        assert ".text" not in _suffixes().STRUCTURED_SUFFIXES
-
-
-class TestSharedSuffixConstants:
-    """file_suffixes holds the single definition of each format's suffixes and their union."""
-
-    def test_per_format_constants(self) -> None:
-        assert _suffixes().CSV_SUFFIXES == (".csv", ".CSV")
-        assert _suffixes().PARQUET_SUFFIXES == (".parquet", ".PARQUET", ".pqt", ".PQT")
-        assert _suffixes().JSON_SUFFIXES == (".json", ".JSON")
-        assert _suffixes().FEATHER_SUFFIXES == (".feather",)
-        assert _suffixes().ORC_SUFFIXES == (".orc", ".ORC")
-
-    def test_structured_suffixes_is_the_union_of_the_formats(self) -> None:
-        union = frozenset(
-            _suffixes().CSV_SUFFIXES
-            + _suffixes().PARQUET_SUFFIXES
-            + _suffixes().JSON_SUFFIXES
-            + _suffixes().FEATHER_SUFFIXES
-            + _suffixes().ORC_SUFFIXES
-        )
-        assert isinstance(_suffixes().STRUCTURED_SUFFIXES, frozenset)
-        assert _suffixes().STRUCTURED_SUFFIXES == union
-
-    def test_structured_suffixes_equals_the_union_of_the_five_groups_suffixes(self) -> None:
-        groups = [
-            load_group("csv_fg", "CsvFG"),
-            load_group("parquet_fg", "ParquetFG"),
-            load_group("json_fg", "JsonFG"),
-            load_group("feather_fg", "FeatherFG"),
-            load_group("orc_fg", "OrcFG"),
-        ]
-        assert frozenset(suffix for group in groups for suffix in group.suffixes()) == _suffixes().STRUCTURED_SUFFIXES
-
-
-class TestReadDocumentIndependentOfReadFile:
-    """ReadDocument reads the shared constant and does not import the old ReadFile module."""
-
-    def test_read_document_source_does_not_import_read_file(self) -> None:
-        tree = ast.parse(inspect.getsource(importlib.import_module(ReadDocument.__module__)))
-        imported: list[str] = []
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module is not None:
-                imported.append(node.module)
-                imported.extend(f"{node.module}.{alias.name}" for alias in node.names)
-            elif isinstance(node, ast.Import):
-                imported.extend(alias.name for alias in node.names)
-
-        assert not [name for name in imported if name.split(".")[-1] == "read_file"]
-        assert "ReadFile" not in {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
-
-    def test_read_document_skips_every_structured_suffix(self) -> None:
-        for suffix in sorted(_suffixes().STRUCTURED_SUFFIXES):
-            assert ReadDocument._is_structured_suffix(f"data{suffix}", frozenset()) is True
-            assert ReadDocument._is_structured_suffix(f"data{suffix}", frozenset({suffix})) is False

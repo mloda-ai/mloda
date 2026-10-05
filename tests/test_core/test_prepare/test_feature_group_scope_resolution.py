@@ -42,7 +42,7 @@ from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.provider import BaseInputData, DataCreator, FeatureSet, SourceMatch
 from mloda.user import Credential, DataAccessCollection, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -1067,13 +1067,13 @@ def test_multiple_message_never_contains_a_credential_secret(tmp_path: Path) -> 
             [Feature(READER_COL)],
             compute_frameworks=[PyArrowTable],
             data_access_collection=dac,
-            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, ReadDBFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, SqliteFG}),
         )
 
     message = str(exc_info.value)
     assert "CsvFG" in message
-    assert "ReadDBFeature" in message
-    assert f"SQLITEReader: {db_path}::scope_reader_table" in message
+    assert "SqliteFG" in message
+    assert f"SqliteFG: {db_path}::scope_reader_table" in message
     assert secret not in message
 
 

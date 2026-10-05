@@ -475,3 +475,32 @@ class FanInConsumer(_Consumer):
 def test_same_class_fan_in_in_one_framework_plans_and_runs() -> None:
     results = _run("fan_result", {FanInRoot, FanInConsumer}, [PyArrowTable])
     assert _column_values(results, "fan_result") == [11, 22, 33]
+
+
+# A parent that reaches a join side only through a compute-framework hop is not join-bridged, so the
+# consumer must hit the plan-time missing-Links error under every hash seed, never a runtime crash.
+_LINK_SIDE_PATHS_PROBE = Path(__file__).with_name("link_side_paths_probe.py")
+_LINK_SIDE_PATHS_SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+
+@pytest.mark.timeout(60)
+def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed() -> None:
+    outputs = run_probes(_LINK_SIDE_PATHS_PROBE, len(_LINK_SIDE_PATHS_SEEDS), seeds=_LINK_SIDE_PATHS_SEEDS)
+
+    assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
+    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):
+        assert output["hop_parent_outcome"] == "rejected", f"PYTHONHASHSEED={seed}: {output}"
+        assert "depends on parents from 2 unlinked sources" in output["hop_parent_error"], (
+            f"PYTHONHASHSEED={seed} should hit the plan-time rejection: {output}"
+        )
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("shape", ["twin_sibling", "twin_chain"])
+def test_consumers_of_a_join_side_plan_and_run_correctly_under_every_hash_seed(shape: str) -> None:
+    outputs = run_probes(_LINK_SIDE_PATHS_PROBE, len(_LINK_SIDE_PATHS_SEEDS), seeds=_LINK_SIDE_PATHS_SEEDS)
+
+    assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
+    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):
+        assert output[f"{shape}_outcome"] == "accepted", f"PYTHONHASHSEED={seed}: {output}"
+        assert output.get(f"{shape}_values") == "[[21, 42, 63]]", f"PYTHONHASHSEED={seed}: {output}"

@@ -393,10 +393,10 @@ class TwoPathC(FeatureGroup):
 
 @pytest.mark.parametrize("extra_request", [[], ["mlg_a"]])
 @pytest.mark.parametrize("swap_link_sides", [False, True])
-def test_a_consumer_reaching_a_link_root_by_two_paths_is_correct_or_rejected_at_plan_time(
+def test_a_consumer_reaching_a_link_root_by_two_paths_is_correct(
     extra_request: list[str], swap_link_sides: bool
 ) -> None:
-    """Guard: outcome depends on set order, so only plan-time ValueError or correct values are accepted."""
+    """The outcome must not depend on set order, so the values are always right."""
     left, right = (MultiLinkRootBSame, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBSame)
     kwargs: dict[str, Any] = {
         "links": {Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
@@ -408,12 +408,7 @@ def test_a_consumer_reaching_a_link_root_by_two_paths_is_correct_or_rejected_at_
     }
     features: list[Feature | str] = [Feature(TwoPathC.get_class_name()), *extra_request]
 
-    try:
-        session = mloda.prepare(features, **kwargs)
-    except ValueError:
-        return
-
-    results = session.run()
+    results = mloda.prepare(features, **kwargs).run()
 
     values = [sorted(result[TwoPathC.get_class_name()]) for result in results if TwoPathC.get_class_name() in result]
     assert values == [[111, 222, 333]]

@@ -692,8 +692,9 @@ class Engine:
             if feature.initial_requested_data and not existing_feature.initial_requested_data:
                 existing_feature.initial_requested_data = True
 
-            if child_uuid:
-                self._update_feature_link_parents(child_uuid, feature.uuid, existing_feature.uuid, if_index_feature)
+            # An index twin is never a graph parent: wiring only repeat intakes made its position order-dependent.
+            if child_uuid and not if_index_feature:
+                self._update_feature_link_parents(child_uuid, feature.uuid, existing_feature.uuid)
 
         return False
 
@@ -713,16 +714,10 @@ class Engine:
             f"Deduplicate the request; dependency declaration follows the first-listed request."
         )
 
-    def _update_feature_link_parents(
-        self, child_uuid: UUID, original_uuid: UUID, wanted_uuid: UUID, if_index_feature: bool
-    ) -> None:
-        """Updates the feature link parents based on whether it's an index feature or not."""
-        if not if_index_feature:
-            if original_uuid in self.feature_link_parents[child_uuid]:
-                self.feature_link_parents[child_uuid].remove(original_uuid)
-            self.feature_link_parents[child_uuid].add(wanted_uuid)
-        else:
-            self.feature_link_parents[child_uuid].add(wanted_uuid)
+    def _update_feature_link_parents(self, child_uuid: UUID, original_uuid: UUID, wanted_uuid: UUID) -> None:
+        """Points the child at the surviving feature instead of its merged duplicate."""
+        self.feature_link_parents[child_uuid].discard(original_uuid)
+        self.feature_link_parents[child_uuid].add(wanted_uuid)
 
     def _handle_input_features_recursion(
         self,

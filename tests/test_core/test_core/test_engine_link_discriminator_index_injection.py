@@ -328,3 +328,110 @@ def test_valid_feature_link_still_registers_in_engine_links() -> None:
 
     assert engine.links is not None
     assert link in engine.links
+
+
+class TwinRootA(FeatureGroup):
+    """Root on the left side of a link joining on twin_rid."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"twin_a", "twin_rid"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {name: [1, 2, 3] for name in features.get_all_names()}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TwinRootB(TwinRootA):
+    """Root on the right side of the same link."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"twin_b", "twin_rid"})
+
+
+def _twin_reader(name: str, inputs: list[str]) -> type[FeatureGroup]:
+    class _Reader(FeatureGroup):
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return [Feature(input_name) for input_name in inputs]  # type: ignore[return-value]
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return data
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {PyArrowTable}
+
+    _Reader.__name__ = name
+    _Reader.__qualname__ = name
+    return _Reader
+
+
+TwinY = _twin_reader("TwinY", ["twin_a"])
+TwinZ = _twin_reader("TwinZ", ["twin_a", "twin_b"])
+TwinCForward = _twin_reader("TwinCForward", ["TwinY", "TwinZ"])
+TwinCReversed = _twin_reader("TwinCReversed", ["TwinZ", "TwinY"])
+
+
+def _all_link_parents(engine: Engine) -> set[Any]:
+    return {parent for parents in engine.feature_link_parents.values() for parent in parents}
+
+
+@pytest.mark.parametrize("consumer", [TwinCForward, TwinCReversed])
+def test_a_join_sides_index_twin_is_never_a_graph_parent_whatever_the_sibling_order(
+    consumer: type[FeatureGroup],
+) -> None:
+    link = Link.inner(JoinSpec(TwinRootA, "twin_rid"), JoinSpec(TwinRootB, "twin_rid"))
+    enabled: set[type[FeatureGroup]] = {TwinRootA, TwinRootB, TwinY, TwinZ, consumer}
+    engine = _build_engine(Features([Feature(consumer.get_class_name())]), {link}, enabled)
+
+    twins = {
+        feature.uuid
+        for group in (TwinRootA, TwinRootB)
+        for feature in engine.feature_group_collection[group]
+        if str(feature.name) == "twin_rid"
+    }
+
+    assert len(twins) == 2
+    assert not twins & _all_link_parents(engine)
+
+
+class SclkElectionReaderFG(FeatureGroup):
+    """Reads only the election side of the same-class link."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("sclk_votes", options={"sclk_source": "election"})}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class SclkSecondElectionReaderFG(SclkElectionReaderFG):
+    """A second reader of the same election side."""
+
+
+@pytest.mark.parametrize("reversed_order", [False, True])
+def test_a_self_joins_index_twin_is_never_a_graph_parent_of_two_readers_of_one_side(reversed_order: bool) -> None:
+    readers: list[type[FeatureGroup]] = [SclkElectionReaderFG, SclkSecondElectionReaderFG]
+    if reversed_order:
+        readers.reverse()
+    features = Features([Feature(reader.get_class_name()) for reader in readers])
+    enabled: set[type[FeatureGroup]] = {SclkSourceFG, SclkElectionReaderFG, SclkSecondElectionReaderFG}
+    engine = _build_engine(features, {_link_a()}, enabled)
+
+    twins = {
+        feature.uuid for feature in engine.feature_group_collection[SclkSourceFG] if str(feature.name) == "sclk_nr"
+    }
+
+    assert len(twins) == 1
+    assert not twins & _all_link_parents(engine)

@@ -4,19 +4,20 @@ from collections.abc import Collection
 from typing import Any
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, ReadFileFG
 from mloda.user import DataType
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
+    FileSourcePyArrowTransformer,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_suffixes import FEATHER_SUFFIXES
 
 
 def _read(match: SourceMatch, features: Any) -> Any:
-    pyarrow_ipc = require("pyarrow.ipc", "reading Feather files")
-    columns = list(features.get_all_names())
-    # Feather V2 is the Arrow IPC file format; ipc.open_file avoids the deprecated pyarrow.feather.read_table.
-    with pyarrow_ipc.open_file(match.access) as reader:
-        return reader.read_all().select(columns)
+    source = FileSource(path=match.access, format="feather", columns=tuple(sorted(features.get_all_names())))
+    return FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
 
 
 class FeatherFG(ReadFileFG):

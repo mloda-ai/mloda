@@ -6,7 +6,8 @@
   ``FileSource -> pa.Table -> pandas`` chain (FileSource is a descriptor, so multi-hop
   is allowed for it; a plain dict is NOT rerouted, see test_native_dict_ingestion.py).
 * ``PythonDictFramework`` -> ``dict`` via the direct stdlib ``(FileSource, dict)`` transformer.
-* ``FileSourcePyArrowTransformer`` rejects non-csv formats with ``ValueError`` and the
+* ``FileSourcePyArrowTransformer`` reads csv, parquet, json, feather and orc, rejects other
+  formats with ``ValueError`` naming the fixes, and the
   reverse direction (pa.Table -> FileSource) with ``NotImplementedError``.
 """
 
@@ -16,6 +17,8 @@ import csv
 import os
 import tempfile
 from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pyarrow as pa
@@ -30,6 +33,12 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_s
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
+)
+from tests.mixins.reader_feature_groups.format_file_writers import (
+    write_feather,
+    write_json,
+    write_orc,
+    write_parquet,
 )
 
 
@@ -81,12 +90,30 @@ class TestFileSourcePyArrowTransformerContract:
         assert set(table.column_names) == {"A", "B"}
         assert table.column("A").to_pylist() == [1, 2]
 
-    def test_non_csv_format_raises_valueerror(self) -> None:
+    def test_unknown_format_raises_valueerror_naming_the_fixes(self) -> None:
         with pytest.raises(ValueError) as excinfo:
             FileSourcePyArrowTransformer.transform_fw_to_other_fw(
-                FileSource(path="/nonexistent.parquet", format="parquet", columns=("A",))
+                FileSource(path="/nonexistent.xlsx", format="xlsx", columns=("A",))
             )
-        assert "parquet" in str(excinfo.value)
+        message = str(excinfo.value)
+        assert "xlsx" in message
+        assert "register_loader" in message
+        assert "load_neutral" in message
+
+    @pytest.mark.parametrize(
+        "fmt,writer",
+        [("parquet", write_parquet), ("json", write_json), ("feather", write_feather), ("orc", write_orc)],
+    )
+    def test_non_csv_formats_read_the_requested_columns(self, tmp_path: Path, fmt: str, writer: Any) -> None:
+        path = tmp_path / f"data.{fmt}"
+        writer(path, {"A": [1, 2], "B": [3, 4], "C": [5, 6]})
+
+        table = FileSourcePyArrowTransformer.transform_fw_to_other_fw(
+            FileSource(path=str(path), format=fmt, columns=("A", "B"))
+        )
+
+        assert table.column_names == ["A", "B"]
+        assert table.to_pydict() == {"A": [1, 2], "B": [3, 4]}
 
     def test_reverse_direction_raises_not_implemented(self) -> None:
         """pa.Table -> FileSource makes no sense; the reverse direction must raise."""

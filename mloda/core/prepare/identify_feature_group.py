@@ -51,6 +51,7 @@ from mloda.core.abstract_plugins.components.utils import (
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
@@ -644,27 +645,39 @@ class IdentifyFeatureGroupClass:
 
     def _raise_unmasked_deferred_abort(self, feature: Feature, identified: FeatureGroupEnvironmentMapping) -> None:
         """Re-raise a pointed group's deferred abort unless another candidate computes the feature."""
-        if not self._deferred_aborts:
+        # A deferring group with a surviving strict subclass is subclass takeover: its abort is dropped.
+        remaining = [
+            fg
+            for fg in sorted(self._deferred_aborts, key=_candidate_sort_key)
+            if not any(survivor is not fg and issubclass(survivor, fg) for survivor in identified)
+        ]
+        if not remaining:
             return
-        # is_root treats an input_features that raises as non-root.
-        # Computed looks at every criteria match (a later-eliminated computing group still masks the abort);
-        # a reading survivor looks only at survivors, because it is the one that would win.
-        computed = any(
-            not fg().is_root(self._matched_options[fg], feature.name) for fg in self._criteria_matched_feature_groups
+        # Every criteria match counts as computing, so a computing group eliminated later still masks the abort;
+        # only survivors count as reading, because one of them would win.
+        computing = any(
+            self._computes(fg, feature) for fg in sorted(self._criteria_matched_feature_groups, key=_candidate_sort_key)
         )
-        remaining = {
-            fg: exc
-            for fg, exc in self._deferred_aborts.items()
-            if not any(issubclass(survivor, fg) and survivor is not fg for survivor in identified)
-        }
-        reading_survivor = any(
-            fg().is_root(self._matched_options[fg], feature.name)
-            for fg in identified
-            if not any(issubclass(fg, deferring) for deferring in self._deferred_aborts)
-        )
-        if remaining and (not computed or reading_survivor):
-            first = min(remaining, key=_candidate_sort_key)
-            raise escalate_match_abort(remaining[first])
+        reading = [
+            fg
+            for fg in sorted(identified, key=_candidate_sort_key)
+            if fg().is_root(self._matched_options[fg], feature.name)
+        ]
+        for fg in remaining:
+            if not computing or any(not issubclass(survivor, fg) for survivor in reading):
+                raise escalate_match_abort(self._deferred_aborts[fg])
+
+    def _computes(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """True when input_features returned a value; a raise is not computing, a marked abort still propagates."""
+        try:
+            return (
+                feature_group().input_features(self._matched_options[feature_group], FeatureName(feature.name))
+                is not None
+            )
+        except Exception as exc:  # noqa: BLE001  (an unmarked raise only says this candidate does not compute)
+            if is_match_abort(exc):
+                raise
+            return False
 
     @staticmethod
     def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:

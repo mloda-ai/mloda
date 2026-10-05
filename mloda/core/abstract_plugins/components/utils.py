@@ -56,10 +56,7 @@ def is_match_abort(exc: BaseException) -> bool:
 def defer_match_abort(exc: E) -> E:
     """Mark a match abort the resolver may drop when another candidate computes the feature."""
     escalate_match_abort(exc)
-    try:
-        exc.__dict__[DEFERRED_MATCH_ABORT_FLAG] = True
-    except Exception:  # noqa: BLE001  (marking is never worth losing the original raise)
-        logger.debug("Could not mark %s as a deferred match abort.", type(exc).__name__)
+    exc.__dict__[DEFERRED_MATCH_ABORT_FLAG] = True
     return exc
 
 

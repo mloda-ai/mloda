@@ -14,7 +14,8 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import featur
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
-from mloda.user import Feature, Options, PluginCollector, mloda
+from mloda.provider import FeatureGroup, FeatureSet
+from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
@@ -277,6 +278,40 @@ class _TakeoverChildFG(ToyFormatFG):
         return column == COL
 
 
+class _RaisingInputsFG(FeatureGroup):
+    """Criteria-matches one name but its input_features raises."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return str(feature_name) == "toyfmt_typo_probe"
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        raise ValueError("input_features failed")
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
+class _ComputingColFG(FeatureGroup):
+    """Computing (non-root) candidate for COL."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return str(feature_name) == COL
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("toyfmt_input")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
 class _AbstractToyMid(ToyFormatBase):
     """Abstract shared base: naming it as a scope must not point at its subclasses."""
 
@@ -393,6 +428,23 @@ class TestPointedGroupDefersToAComputingCandidate:
         result = exc_info.value.result
         assert result.identified == {}
         assert result.eliminations[PyArrowAggregatedFeatureGroup].stage == "framework_pin"
+
+    def test_pointed_reader_aborts_when_the_other_claimant_input_features_raises(self) -> None:
+        feature = Feature("toyfmt_typo_probe", Options({"ToyFormatFG": {COL: [1]}}))
+        with pytest.raises(ValueError, match="column 'toyfmt_typo_probe' is in none of the sources of ToyFormatFG"):
+            evaluate_or_raise(feature, _plugins(ToyFormatFG, _RaisingInputsFG), None, None)
+
+    def test_strictness_holds_per_deferring_group_despite_another_groups_takeover(self) -> None:
+        options = Options({"ToyFormatFG": {"other": [1]}, "ToyOtherFormatFG": {"other": [1]}})
+        feature = Feature(COL, options, compute_framework=PyArrowTable.get_class_name())
+        plugins: FeatureGroupEnvironmentMapping = {
+            ToyFormatFG: {PyArrowTable},
+            ToyOtherFormatFG: {PyArrowTable},
+            _TakeoverChildFG: {PyArrowTable},
+            _ComputingColFG: {_ToyUnservedFramework},
+        }
+        with pytest.raises(ValueError, match="is in none of the sources of ToyOtherFormatFG"):
+            evaluate_or_raise(feature, plugins, None, None)
 
     def test_pointed_parent_defers_to_its_surviving_subclass(self) -> None:
         feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))

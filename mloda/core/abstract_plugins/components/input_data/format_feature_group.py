@@ -1,5 +1,6 @@
 """Shared base of one-FeatureGroup-per-format: claim routes decide matching, hooks discover and load sources."""
 
+import functools
 import inspect
 from abc import abstractmethod
 from collections.abc import Callable, Collection
@@ -54,7 +55,7 @@ class FormatFeatureGroup(FeatureGroup):
     """A FeatureGroup that claims features of one source format through its CLAIM_ROUTES."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = ()
-    _LOADERS: ClassVar[dict[type[ComputeFramework], Callable[[SourceMatch, Any], Any]]]
+    _LOADERS: ClassVar[dict[type[ComputeFramework], Callable[[Any, SourceMatch, Any], Any]]]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -147,8 +148,8 @@ class FormatFeatureGroup(FeatureGroup):
         return False
 
     @classmethod
-    def register_loader(cls, framework: type[ComputeFramework], loader: Callable[[SourceMatch, Any], Any]) -> None:
-        """Register loader(match, features) for framework on this class only."""
+    def register_loader(cls, framework: type[ComputeFramework], loader: Callable[[Any, SourceMatch, Any], Any]) -> None:
+        """Register loader(group, match, features) for framework on this class only; group is the serving class."""
         loaders = cls.__dict__.get("_LOADERS")
         if loaders is None:
             loaders = {}
@@ -158,12 +159,12 @@ class FormatFeatureGroup(FeatureGroup):
         loaders[framework] = loader
 
     @classmethod
-    def _loader_for(cls, framework: type[ComputeFramework]) -> Callable[[SourceMatch, Any], Any] | None:
+    def _loader_for(cls, framework: type[ComputeFramework]) -> Callable[[Any, SourceMatch, Any], Any] | None:
         if not framework.is_available():
             return None
         for klass in cls.__mro__:
             for framework_class in framework.__mro__:
-                loader: Callable[[SourceMatch, Any], Any] | None = klass.__dict__.get("_LOADERS", {}).get(
+                loader: Callable[[Any, SourceMatch, Any], Any] | None = klass.__dict__.get("_LOADERS", {}).get(
                     framework_class
                 )
                 if loader is not None:
@@ -175,7 +176,7 @@ class FormatFeatureGroup(FeatureGroup):
     @classmethod
     def _loader_for_match(
         cls, framework: type[ComputeFramework], match: SourceMatch
-    ) -> Callable[[SourceMatch, Any], Any] | None:
+    ) -> Callable[[Any, SourceMatch, Any], Any] | None:
         """The loader for this match; a subclass returns None to force the neutral path."""
         return cls._loader_for(framework)
 
@@ -188,7 +189,9 @@ class FormatFeatureGroup(FeatureGroup):
         source = match[1]
         framework = features.get_sorted_features()[0].get_compute_framework()
         loader = cls._loader_for_match(framework, source)
-        load = loader if loader is not None else cls.load_neutral
+        load: Callable[[SourceMatch, Any], Any] = (
+            functools.partial(loader, cls) if loader is not None else cls.load_neutral
+        )
         loader_name = framework.__name__ if loader is not None else "neutral"
         return dispatch_input_data_load(
             cls,

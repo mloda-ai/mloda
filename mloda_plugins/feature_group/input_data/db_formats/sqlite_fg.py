@@ -100,13 +100,13 @@ class SqliteFG(ReadDBFG):
         return None
 
 
-def _load_dict(match: SourceMatch, features: Any) -> dict[str, list[Any]]:
+def _load_dict(group: Any, match: SourceMatch, features: Any) -> dict[str, list[Any]]:
     access = cast(DBTable, match.access)
-    connection = SqliteFG.get_connection(access.credentials)
+    connection = group.get_connection(access.credentials)
     try:
-        column_names, rows = SqliteFG._select(connection, cast(str, access.table), features)
+        column_names, rows = group._select(connection, cast(str, access.table), features)
     finally:
-        SqliteFG.close_connection(connection)
+        group.close_connection(connection)
     return {name: [row[index] for row in rows] for index, name in enumerate(column_names)}
 
 

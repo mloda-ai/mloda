@@ -294,7 +294,7 @@ class TestCsvFGCountRows:
             def match_feature_group_criteria(cls, *args: Any, **kwargs: Any) -> bool:
                 return False
 
-        _CsvCountRowsLoaderProbeFG.register_loader(PythonDictFramework, lambda match, features: {})
+        _CsvCountRowsLoaderProbeFG.register_loader(PythonDictFramework, lambda group, match, features: {})
 
         match = _match(csv_path_with_blanks_and_embedded_newline)
         assert _CsvCountRowsLoaderProbeFG.count_rows(match, PythonDictFramework) is None

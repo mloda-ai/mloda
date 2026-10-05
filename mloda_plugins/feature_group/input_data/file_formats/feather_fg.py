@@ -36,7 +36,7 @@ class FeatherFG(ReadFileFG):
 
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-        return _read(match, features)
+        return _read(cls, match, features)
 
     @classmethod
     def count_rows(cls, match: SourceMatch, compute_framework: type[ComputeFramework]) -> int | None:

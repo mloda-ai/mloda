@@ -60,7 +60,7 @@ class JsonFG(ReadFileFG):
 
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-        return _read(match, features)
+        return _read(cls, match, features)
 
 
 JsonFG.register_loader(PyArrowTable, _read)

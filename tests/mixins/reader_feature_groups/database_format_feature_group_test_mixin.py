@@ -526,18 +526,34 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     ) -> None:
         path = self._make("load_db", {"load_table": {"toyfmt_a": [1, 2], "toyfmt_b": [3, 4], "toyfmt_c": [5, 6]}})
         spy = self._spy(monkeypatch)
-
-        result = mloda.run_all(
-            ["toyfmt_a", "toyfmt_c"],
-            compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
-            data_access_collection=self._dac_of(path),
+        group = self.feature_group_class
+        registered = {f for klass in group.__mro__ for f in klass.__dict__.get("_LOADERS", {})}
+        extra = sorted(
+            (f for f in registered if f is not PyArrowTable and group._loader_for(f) is not None),
+            key=lambda f: f.__name__,
         )
+        frameworks = [PyArrowTable, *extra]
+        for framework in frameworks:
+            name = framework.__name__
+            opened_before, closed_before = len(spy.opened), len(spy.closed)
+            result = mloda.run_all(
+                ["toyfmt_a", "toyfmt_c"],
+                compute_frameworks=[framework],
+                plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
+                data_access_collection=self._dac_of(path),
+            )
 
-        assert len(result) == 1
-        assert result[0].to_pydict() == {"toyfmt_a": [1, 2], "toyfmt_c": [5, 6]}
-        assert len(spy.opened) >= 2
-        assert spy.all_closed()
+            assert len(result) == 1, name
+            loaded = result[0]
+            if hasattr(loaded, "to_pydict"):
+                loaded = loaded.to_pydict()
+            elif not isinstance(loaded, dict):
+                pytest.fail(f"{name}: unexpected result type {type(loaded).__name__}")
+            assert loaded == {"toyfmt_a": [1, 2], "toyfmt_c": [5, 6]}, name
+            opened = spy.opened[opened_before:]
+            closed = spy.closed[closed_before:]
+            assert len(opened) >= 2, name
+            assert all(any(c is d for d in closed) for c in opened), name
 
     @pytest.mark.parametrize("batches", [[["toyfmt_left", "toyfmt_right"]], [["toyfmt_left"], ["toyfmt_right"]]])
     def test_db_tables_per_match_leave_the_shared_credential_untouched(self, batches: list[list[str]]) -> None:

@@ -1730,7 +1730,7 @@ class TestInputDataLoadAuditForFormatGroups:
 
     def test_loader_load_names_the_framework_class(self, tmp_path: Path) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        group.register_loader(PythonDictFramework, lambda match, features: [{"toyfmt_audit": 1}])
+        group.register_loader(PythonDictFramework, lambda group, match, features: [{"toyfmt_audit": 1}])
 
         context = self._fire(group, PythonDictFramework)
 

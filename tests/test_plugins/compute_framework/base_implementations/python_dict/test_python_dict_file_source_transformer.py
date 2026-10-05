@@ -20,7 +20,8 @@ column semantics pyarrow's CSV reader gives, without pyarrow):
       when a duplicated column is requested, matching pyarrow's refusal.
   (h) A requested column missing from the header raises a clear ``ValueError`` naming it.
   (i) A UTF-8 BOM at the start of the file is tolerated (``utf-8-sig``).
-  (j) A non-csv ``FileSource.format`` raises ``ValueError``; the reverse direction
+  (j) parquet, json, feather and orc go through the pyarrow transformer (same dict as the
+      pyarrow hop); any other ``FileSource.format`` raises ``ValueError``; the reverse direction
       (dict -> FileSource) raises ``NotImplementedError``.
   (k) Null tokens (pyarrow's default ``ConvertOptions.null_values``) become ``None`` in an
       int / float / bool column, stay literal strings in a STRING column
@@ -39,17 +40,16 @@ from typing import Any
 
 import pytest
 
+import mloda_plugins.feature_group.input_data.file_formats.stock_formats  # noqa: F401
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
-from mloda.user import DataAccessCollection
-from mloda.user import mloda
+from mloda.user import DataAccessCollection, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_file_source_transformer import (
     FileSourceDictTransformer,
 )
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
-import mloda_plugins.feature_group.input_data.file_formats.stock_formats  # noqa: F401
-
+from tests.mixins.reader_feature_groups.format_file_writers import write_parquet
 
 #: pyarrow's default ``ConvertOptions().null_values`` minus ``""``, pinned literally so a pyarrow
 #: default change surfaces as a test failure.
@@ -254,13 +254,37 @@ class TestEncodingAndFormat:
         assert result["a"] == [1, 2]
         assert result["b"] == ["x", "y"]
 
-    def test_non_csv_format_raises_valueerror(self, tmp_path: Path) -> None:
-        """(j) The stdlib transformer only materializes the 'csv' format."""
+    def test_unknown_format_raises_valueerror_naming_the_fixes(self, tmp_path: Path) -> None:
+        """(j) A format neither the stdlib reader nor the pyarrow transformer reads raises ValueError."""
         with pytest.raises(ValueError) as excinfo:
             FileSourceDictTransformer.transform_fw_to_other_fw(
-                FileSource(path=str(tmp_path / "data.parquet"), format="parquet", columns=("a",))
+                FileSource(path=str(tmp_path / "data.xlsx"), format="xlsx", columns=("a",))
             )
-        assert "parquet" in str(excinfo.value)
+        message = str(excinfo.value)
+        assert "xlsx" in message
+        assert "file_format" in message
+        assert "register_loader" in message
+        assert "load_neutral" in message
+
+    def test_non_csv_formats_match_the_pyarrow_hop(self, tmp_path: Path) -> None:
+        """(j) A parquet file equals the pyarrow read converted by the pa.Table -> dict transformer."""
+        pytest.importorskip("pyarrow")
+        from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
+            FileSourcePyArrowTransformer,
+        )
+        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_pyarrow_transformer import (
+            PythonDictPyArrowTransformer,
+        )
+
+        path = tmp_path / "data.parquet"
+        write_parquet(path, {"a": [1, 2], "b": ["x", "y"], "c": [5, 6]})
+        source = FileSource(path=str(path), format="parquet", columns=("a", "b"))
+
+        expected = PythonDictPyArrowTransformer.transform_other_fw_to_fw(
+            FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
+        )
+
+        assert FileSourceDictTransformer.transform_fw_to_other_fw(source) == expected
 
     def test_reverse_direction_raises_not_implemented(self) -> None:
         """(j) dict -> FileSource makes no sense; the reverse direction must raise."""

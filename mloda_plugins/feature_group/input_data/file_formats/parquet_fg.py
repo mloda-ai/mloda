@@ -4,16 +4,20 @@ from collections.abc import Collection
 from typing import Any
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, ReadFileFG
 from mloda.user import DataType
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
+    FileSourcePyArrowTransformer,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_suffixes import PARQUET_SUFFIXES
 
 
 def _read(match: SourceMatch, features: Any) -> Any:
-    pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
-    return pyarrow_parquet.read_table(match.access, columns=list(features.get_all_names()))
+    source = FileSource(path=match.access, format="parquet", columns=tuple(sorted(features.get_all_names())))
+    return FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
 
 
 class ParquetFG(ReadFileFG):

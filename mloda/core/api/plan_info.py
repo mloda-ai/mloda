@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import (
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
-from mloda.core.prepare.choose_compute_frameworks import stable_text
+from mloda.core.prepare.choose_compute_frameworks import _refine, stable_text
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
@@ -278,11 +278,18 @@ def _content_key(record: PlanStep) -> tuple[str, ...]:
         record.join_destination_side or "",
         stable_text(record.feature_set_options),
         ",".join(record.input_feature_names),
+        ",".join(_class_path(cf) for cf in record.declared_left_frameworks),
+        ",".join(_class_path(cf) for cf in record.declared_right_frameworks),
+        ",".join(record.requested_feature_names),
+        ",".join(record.injected_feature_names),
+        ",".join(_class_path(fg) for fg in record.specialized_from),
+        record.compute_framework_reason or "",
+        _class_path(record.result_framework),
     )
 
 
 def _dependency_order(raw_steps: list[Any], plan: list[PlanStep]) -> list[PlanStep]:
-    """Topological order over step tokens; the smallest content key among ready steps goes first."""
+    """Topological order over step tokens; ready steps go by content, ties by the content of their neighbours."""
     producer_of = {token: index for index, step in enumerate(raw_steps) for token in step.get_uuids()}
     waits_for = [
         {producer_of[token] for token in step.required_uuids if token in producer_of} - {index}
@@ -292,8 +299,10 @@ def _dependency_order(raw_steps: list[Any], plan: list[PlanStep]) -> list[PlanSt
     for index, producers in enumerate(waits_for):
         for producer in producers:
             waiters.setdefault(producer, []).append(index)
-    keys = [_content_key(record) for record in plan]
-    ready = [(keys[index], index) for index, producers in enumerate(waits_for) if not producers]
+    waiter_sets = [set(waiters.get(index, ())) for index in range(len(plan))]
+    classes = _refine([_content_key(record) for record in plan], [set(p) for p in waits_for], waiter_sets)
+    # raw index only separates steps that refinement cannot tell apart
+    ready = [(classes[index], index) for index, producers in enumerate(waits_for) if not producers]
     heapq.heapify(ready)
     ordered: list[PlanStep] = []
     while ready:
@@ -302,7 +311,7 @@ def _dependency_order(raw_steps: list[Any], plan: list[PlanStep]) -> list[PlanSt
         for waiter in waiters.get(index, ()):
             waits_for[waiter].discard(index)
             if not waits_for[waiter]:
-                heapq.heappush(ready, (keys[waiter], waiter))
+                heapq.heappush(ready, (classes[waiter], waiter))
     if len(ordered) != len(plan):
         raise ValueError(
             internal_invariant_error(

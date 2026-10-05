@@ -572,46 +572,45 @@ class Engine:
         """Folds each feature into its unique minimal narrower-framework twin; decided from a snapshot, order-free."""
         folds: list[tuple[type[FeatureGroup], Feature, Feature]] = []
         for group_class, collection in self.feature_group_collection.items():
-            members = [f for f in collection if f.compute_frameworks is not None]
-            buckets: dict[int, list[Feature]] = defaultdict(list)
-            for member in members:
-                buckets[member.hash_ignoring_compute_frameworks()].append(member)
+            buckets: dict[int, list[tuple[Feature, frozenset[type[ComputeFramework]]]]] = defaultdict(list)
+            for member in collection:
+                if member.compute_frameworks is not None:
+                    buckets[member.hash_ignoring_compute_frameworks()].append(
+                        (member, frozenset(member.compute_frameworks))
+                    )
             for bucket in buckets.values():
-                for host in bucket:
-                    host_cf = host.compute_frameworks
-                    assert host_cf is not None
+                for host, host_cf in bucket:
                     narrower = [
-                        t
-                        for t in bucket
-                        if t is not host
-                        and t.compute_frameworks is not None
-                        and t.compute_frameworks < host_cf
-                        and t.equals_ignoring_compute_frameworks(host)
+                        (t, t_cf)
+                        for t, t_cf in bucket
+                        if t is not host and t_cf < host_cf and t.equals_ignoring_compute_frameworks(host)
                     ]
-                    minimal = [
-                        t
-                        for t in narrower
-                        if not any(o.compute_frameworks < t.compute_frameworks for o in narrower)  # type: ignore[operator]
-                    ]
+                    minimal = [t for t, t_cf in narrower if not any(o_cf < t_cf for _, o_cf in narrower)]
                     if len(minimal) == 1 and self._same_matched_filters(host, minimal[0], group_class):
                         folds.append((group_class, host, minimal[0]))
         if not folds:
             return
+        folds.sort(
+            key=lambda fold: (
+                fold[0].__module__,
+                fold[0].__qualname__,
+                str(fold[1].name),
+                sorted(cf.__qualname__ for cf in fold[1].compute_frameworks or ()),
+            )
+        )
         fold_map = {host.uuid: survivor.uuid for _, host, survivor in folds}
         for group_class, host, survivor in folds:
             collection = self.feature_group_collection[group_class]
-            collection = {f for f in collection if f is not host}
-            collection = {f for f in collection if f is not survivor}
-            self.feature_group_collection[group_class] = collection
+            self.feature_group_collection[group_class] = {f for f in collection if f is not host}
             self._merge_host_into(survivor, host)
             survivor.framework_pinned = survivor.framework_pinned or host.framework_pinned
-            collection.add(survivor)
             if self.global_filter is not None:
                 self.global_filter.probes.pop((group_class, host.name, host.uuid), None)
         ties = [(fold_map.get(a, a), fold_map.get(b, b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
     def _same_matched_filters(self, host: Feature, target: Feature, group_class: type[FeatureGroup]) -> bool:
+        """True when host and target matched the same global filters."""
         if self.global_filter is None:
             return True
         probes = self.global_filter.probes

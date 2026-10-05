@@ -16,7 +16,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, DataCreator, FeatureSet
-from mloda.user import DataAccessCollection, Index, Options, PluginCollector, mloda
+from mloda.user import DataAccessCollection, GlobalFilter, Index, Options, PluginCollector, mloda
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -1081,13 +1081,16 @@ _SHARED_PLUGINS = PluginCollector.enabled_feature_groups({PinnedUnpinnedSharedRo
 
 def _shared_root_steps(
     features: list[Feature | str],
-    compute_frameworks: list[type[ComputeFramework]] | None = None,
     plugins: PluginCollector = _SHARED_PLUGINS,
+    global_filter: GlobalFilter | None = None,
+    links: set[Link] | None = None,
 ) -> tuple[Any, list[FeatureGroupStep]]:
     session = mloda.prepare(
         features,
-        compute_frameworks=compute_frameworks or [PandasDataFrame, PyArrowTable],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=plugins,
+        global_filter=global_filter,
+        links=links,
     )
     assert session.engine is not None
     steps = [
@@ -1120,6 +1123,70 @@ def test_pinned_and_unpinned_request_share_one_step_in_the_pinned_framework(pinn
     assert isinstance(result[0], pa.Table)
     assert result[0].column_names == [PinnedUnpinnedSharedRootFG.NAME]
     assert result[0][PinnedUnpinnedSharedRootFG.NAME].to_pylist() == [1, 2, 3]
+
+
+def _shared_pair(pinned_first: bool) -> list[Feature | str]:
+    features: list[Feature | str] = [
+        Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable"),
+        PinnedUnpinnedSharedRootFG.NAME,
+    ]
+    return features if pinned_first else features[::-1]
+
+
+@pytest.mark.parametrize("pinned_first", [True, False], ids=["pinned_first", "unpinned_first"])
+def test_pinned_and_unpinned_request_share_one_filtered_step(pinned_first: bool) -> None:
+    global_filter = GlobalFilter()
+    global_filter.add_filter(PinnedUnpinnedSharedRootFG.NAME, "equal", {"value": 2})
+    features = _shared_pair(pinned_first)
+
+    _, steps = _shared_root_steps(features, global_filter=global_filter)
+
+    assert [step.compute_framework for step in steps] == [PyArrowTable]
+
+    result = mloda.run_all(
+        features,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=_SHARED_PLUGINS,
+        global_filter=global_filter,
+    )
+
+    assert len(result) == 1
+    assert result[0][PinnedUnpinnedSharedRootFG.NAME].to_pylist() == [2]
+
+
+class PinnedUnpinnedSharedOtherRootFG(_ConnAwareRoot):
+    NAME = "pinned_unpinned_shared_other"
+
+
+_SHARED_LINK_PLUGINS = PluginCollector.enabled_feature_groups(
+    {PinnedUnpinnedSharedRootFG, PinnedUnpinnedSharedOtherRootFG}
+)
+
+
+@pytest.mark.parametrize("pinned_first", [True, False], ids=["pinned_first", "unpinned_first"])
+def test_pinned_and_unpinned_request_share_one_step_with_a_link(pinned_first: bool) -> None:
+    links = {Link.inner(JoinSpec(PinnedUnpinnedSharedRootFG, "idx"), JoinSpec(PinnedUnpinnedSharedOtherRootFG, "idx"))}
+    features = [*_shared_pair(pinned_first), PinnedUnpinnedSharedOtherRootFG.NAME]
+
+    _, steps = _shared_root_steps(features, plugins=_SHARED_LINK_PLUGINS, links=links)
+
+    assert [step.compute_framework for step in steps] == [PyArrowTable]
+
+
+def _filter_pinned_to_pandas() -> GlobalFilter:
+    global_filter = GlobalFilter()
+    pandas_pin = Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PandasDataFrame")
+    global_filter.add_filter(pandas_pin, "equal", {"value": 2})
+    return global_filter
+
+
+def test_a_filter_pinned_to_another_framework_plans_alike_in_both_orders() -> None:
+    shapes = []
+    for pinned_first in (True, False):
+        _, steps = _shared_root_steps(_shared_pair(pinned_first), global_filter=_filter_pinned_to_pandas())
+        shapes.append((len(steps), {step.compute_framework for step in steps}))
+
+    assert shapes[0] == shapes[1]
 
 
 _UNPINNED_SLOT = "unpinned"
@@ -1175,6 +1242,9 @@ def test_pinned_and_unpinned_consumer_inputs_share_one_read() -> None:
     )
 
     assert len(result) == 1
+    assert isinstance(result[0], pa.Table)
+    assert result[0].column_names == [out]
+    assert result[0][out].to_pylist() == [1, 2, 3]
 
 
 def test_pinned_and_unpinned_request_with_differing_options_stay_two_steps() -> None:

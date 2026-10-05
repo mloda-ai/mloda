@@ -187,7 +187,8 @@ class ComputeFramework(ABC):
     @final
     def _seal_extenders(self) -> None:
         """Seal on read-only copies, so neither the session's set nor the shared hook table is aliased."""
-        object.__setattr__(self, "function_extender", frozenset(self.__dict__.get("function_extender") or ()))
+        if "function_extender" in self.__dict__:
+            object.__setattr__(self, "function_extender", frozenset(self.__dict__["function_extender"] or ()))
         hooks = self.__dict__.get("_hook_extenders")
         if hooks is not None:
             object.__setattr__(self, "_hook_extenders", _frozen_dict(hooks))

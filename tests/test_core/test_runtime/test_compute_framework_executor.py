@@ -1479,11 +1479,19 @@ class TestMultiExecuteStep:
         assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid)
 
 
+class _DropsFunctionExtenderFramework(PythonDictFramework):
+    def __getstate__(self) -> dict[str, Any]:
+        state = dict(self.__dict__)
+        state.pop("function_extender", None)
+        return state
+
+
 class TestExecutorSealsTheAttachedFramework:
     def _attached(
         self,
         function_extender: set[Extender] | None = None,
         hook_extenders: dict[ExtenderHook, Extender] | None = None,
+        framework_class: type[ComputeFramework] = PythonDictFramework,
     ) -> ComputeFramework:
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_run_context.return_value = RunContext(run_id="run-1", carrier={"k": "v"})
@@ -1493,8 +1501,14 @@ class TestExecutorSealsTheAttachedFramework:
             function_extender=function_extender,
             hook_extenders=hook_extenders,
         )
-        cfw_uuid = executor.init_compute_framework(PythonDictFramework, ParallelizationMode.SYNC, set())
+        cfw_uuid = executor.init_compute_framework(framework_class, ParallelizationMode.SYNC, set())
         return executor.cfw_collection[cfw_uuid]
+
+    def test_unpickled_framework_without_function_extender_state_does_not_invent_one(self) -> None:
+        restored = pickle.loads(pickle.dumps(self._attached(framework_class=_DropsFunctionExtenderFramework)))  # nosec B301
+
+        with pytest.raises(AttributeError):
+            restored.function_extender
 
     def test_attached_framework_has_the_run_context(self) -> None:
         cfw = self._attached()

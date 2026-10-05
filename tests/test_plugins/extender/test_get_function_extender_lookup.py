@@ -87,7 +87,7 @@ class TestDeterministicTieOrder:
         result = get_function_extender(ordered, ExtenderHook.JOIN)
 
         assert isinstance(result, CompositeExtender)
-        assert result.extenders == [alpha, beta]
+        assert result.extenders == (alpha, beta)
 
 
 class TestBuildHookExtenders:
@@ -145,4 +145,4 @@ class TestGetFunctionExtenderLookup:
         result = get_function_extender({high, low, mid}, ExtenderHook.JOIN)
 
         assert isinstance(result, CompositeExtender)
-        assert result.extenders == [low, mid, high]
+        assert result.extenders == (low, mid, high)

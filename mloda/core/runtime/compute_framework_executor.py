@@ -49,13 +49,13 @@ class ComputeFrameworkExecutor:
                 framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
                 Engine builds this once from the DataAccessCollection at setup; the
                 executor only does a dict lookup per TFS step on the run path.
-            function_extender: The caller's own extenders, used for a framework staying resident
-                in this process.
+            function_extender: The caller's extenders; a resident framework gets a read-only
+                copy at attach time.
             worker_extender_payload: Pickled (extenders, hook table) snapshot for a framework dispatched
                 to a spawned worker. Never unpickled here; attached to the new instance as
                 `_pending_extender_payload` and materialized by `ComputeFramework.__setstate__`
                 only once the instance is actually unpickled in the worker.
-            hook_extenders: The run's hook table, shared with parent-resident frameworks.
+            hook_extenders: The run's hook table; a resident framework gets a read-only copy at attach time.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
@@ -93,7 +93,7 @@ class ComputeFrameworkExecutor:
             # below, after construction, as the still-pickled _pending_extender_payload.
             function_extender = None
         else:
-            # Framework stays resident in this process: use the caller's own extenders directly.
+            # Framework stays resident in this process: it receives read-only copies at attach time.
             function_extender = self.function_extender
 
         # init framework

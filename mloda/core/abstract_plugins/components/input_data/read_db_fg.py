@@ -4,11 +4,10 @@ A subclass writes ``is_valid_credentials``, ``database_identity``, ``connect``, 
 and ``produce_rows``; the opt-in ``QUERY_ROUTE`` adds ``produce_query_rows``.
 """
 
-from hashlib import sha256
-
 from abc import abstractmethod
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
+from hashlib import sha256
 from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -54,8 +53,8 @@ def _capped(names: list[str]) -> str:
 class ReadDBFG(FormatFeatureGroup):
     """Abstract database format group: claims features found as columns of tables in matching credentials.
 
-    The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should reuse the contract mixin
-    database_format_feature_group_test_mixin from tests/mixins/reader_feature_groups in mloda's repository.
+    The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should reuse the contract
+    mixin database_format_feature_group_test_mixin from tests/mixins/reader_feature_groups in mloda's repository.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
@@ -97,7 +96,7 @@ class ReadDBFG(FormatFeatureGroup):
 
     @classmethod
     def produce_query_rows(cls, connection: Any, query_text: str, features: Any) -> Any:
-        """The requested columns of the query result in a neutral form; opt in with QUERY_ROUTE."""
+        """The requested columns of the query result in a neutral form."""
         raise NotImplementedError(f"{cls.get_class_name()} lists QUERY_ROUTE but does not implement produce_query_rows")
 
     @classmethod

@@ -1,6 +1,8 @@
 """Abstract base of one-FeatureGroup-per-file-format: finds files and folders, lists columns, caches per run.
 
 A subclass declares ``suffixes()`` and ``column_names(path)``; the base claims a feature when a file has the column.
+Third-party groups should run the contract mixins in mloda's ``tests/mixins/reader_feature_groups/``
+(``file_format_feature_group_test_mixin``).
 """
 
 import inspect

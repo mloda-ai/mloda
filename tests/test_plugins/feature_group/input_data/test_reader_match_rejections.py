@@ -40,12 +40,8 @@ FILE_SUFFIX_REJ727 = ".rej727csv"
 NIE_SUFFIX_REJ727 = ".rej727nie"
 
 
-class Rej727ReaderFamily(SuffixFileReader):
-    """Family base of this module's readers; it overrides nothing, so it never classifies as final."""
-
-
-class Rej727CsvHeaderReader(Rej727ReaderFamily):
-    """Final reader owning the unique .rej727csv suffix; introspects the comma-separated header line."""
+class Rej727CsvHeaderReader(SuffixFileReader):
+    """Reader owning the unique .rej727csv suffix; introspects the comma-separated header line."""
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
@@ -61,8 +57,8 @@ class Rej727CsvHeaderReader(Rej727ReaderFamily):
         return {FEATURE_NAME_REJ727: [1]}
 
 
-class Rej727NoIntrospectionReader(Rej727ReaderFamily):
-    """Final reader owning the unique .rej727nie suffix; get_column_names stays NotImplementedError."""
+class Rej727NoIntrospectionReader(SuffixFileReader):
+    """Reader owning the unique .rej727nie suffix; get_column_names stays NotImplementedError."""
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
@@ -74,11 +70,11 @@ class Rej727NoIntrospectionReader(Rej727ReaderFamily):
 
 
 class Rej727FileFG(FeatureGroup):
-    """Root feature group matching ONLY via its reader family: no name rule claims rej727_column."""
+    """Root feature group matching ONLY via its reader: no name rule claims rej727_column."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return Rej727ReaderFamily()
+        return Rej727CsvHeaderReader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -183,30 +179,6 @@ class TestReadFileMatchRejections:
 
         assert Rej727NoIntrospectionReader.validate_columns(file_path, [FEATURE_NAME_REJ727]) is True
         assert rejection_window == {}
-
-
-class TestPinnedFileMatchRejection:
-    """The pinned-file path (_resolve_pinned_file) also judges content only after ownership is established."""
-
-    def test_pinned_file_missing_column_records_attributable_reason(
-        self, tmp_path: Path, rejection_window: dict[str, Any]
-    ) -> None:
-        """A pin routes the feature to one suffix-owned file; that file lacking the column is an input_data decline."""
-        file_path = _write_csv(tmp_path / f"pinned{FILE_SUFFIX_REJ727}", "other_a,other_b")
-        dac = DataAccessCollection(
-            files={"rej727_pin_handle": file_path},
-            column_to_file={FEATURE_NAME_REJ727: "rej727_pin_handle"},
-        )
-
-        matched = Rej727CsvHeaderReader.match_subclass_data_access(dac, [FEATURE_NAME_REJ727], Options())
-
-        assert matched is None
-        assert list(rejection_window) == [Rej727CsvHeaderReader.get_class_name()]
-        stored = rejection_window[Rej727CsvHeaderReader.get_class_name()]
-        assert stored.stage == "input_data"
-        assert Rej727CsvHeaderReader.get_class_name() in stored.reason
-        assert file_path in stored.reason
-        assert FEATURE_NAME_REJ727 in stored.reason
 
 
 class TestEngineHarvestsReaderRejection:

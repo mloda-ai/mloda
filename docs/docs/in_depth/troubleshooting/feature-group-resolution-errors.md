@@ -139,7 +139,7 @@ This error occurs when multiple distinct feature groups claim they can handle th
 
 When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent.
 
-If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, it points to a real conflict between two distinct classes (different `(module, qualname)`).
+If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, two distinct classes (different `(module, qualname)`) both claim the name. For source-backed features this usually means two format groups found the column, for example `CsvFG` in a file and `SqliteFG` in a database. Fix it with `feature_group=` (see below), a pointer such as `options={"CsvFG": path}`, or a `data_access_handle` that names one source.
 
 ### Solutions
 
@@ -213,6 +213,51 @@ Caveats:
 - Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific implementation, name that implementation.
 - The root `FeatureGroup` base is rejected in either form: it names no family.
 - The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
+
+## Format group source errors
+
+A format group (`CsvFG`, `SqliteFG`, `TextFG`, ...) claims a feature when one of its sources has the column. Two errors come from inside one group, before any feature-group ambiguity.
+
+### Several sources in one group
+
+The group found the column in more than one source and will not guess:
+
+```text
+ValueError: CsvFG found feature 'id' in several sources: /data/application_train.csv, /data/bureau.csv; pin one source with a column_to_file entry, point CsvFG at one file with options={'CsvFG': <path>}, or select one with data_access_handle (file handles: 'application', 'bureau').
+```
+
+Fix it with one of:
+
+- `column_to_file` in the `DataAccessCollection`, pinning the column to one file handle.
+- A pointer: `options={"CsvFG": "/data/bureau.csv"}`.
+- `data_access_handle` naming one file or credential handle.
+- For a database group, a credential `table_name` (for example `Credential(sqlite="/x.db", table_name="bureau")`) or a handle that names one database. The message names the credential key of the group, and lists at most a few sources, summarizing the rest as "and N more".
+
+### Column missing from every source
+
+The group owns sources but none has the column. Unpointed, this is a decline recorded in the near-miss block; once the feature is pointed at the group (by a pointer or `feature_group=`), it aborts:
+
+```text
+ValueError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; request a column a source has or point at another source.
+```
+
+Check the spelling, request a column a source has, or point at the source that has it. A source whose columns cannot be read is listed as `unknown (could not read its columns: ...)`.
+
+### Pointers on derived features
+
+A class-name pointer on a derived feature reaches its inputs, because group options forward to input features. A consumer whose inputs come from several sources must put each pointer on its input feature (or use the `DataAccessCollection`): a forwarded pointer to a source without the column aborts with the missing-column error above.
+
+```py
+# in the consumer's input_features: each input carries its own pointer, the consumer's own options carry none
+return {
+    Feature("amount", options={"CsvFG": "/data/orders.csv"}),
+    Feature("rate", options={"SqliteFG": Credential(sqlite="/data/rates.db")}),
+}
+```
+
+### Global filters on a pointed-only group
+
+A group with an open, pointed-only route claims any name once it is pointed at. A global filter on such a group is dropped when the feature was pointed only by `feature_group=`: filter probes run unscoped, so the group does not see itself pointed. Point the group with a class-name pointer in the feature's options as well.
 
 ## FeatureGroup Redefinition Errors
 

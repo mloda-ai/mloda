@@ -1,4 +1,4 @@
-"""Unvalidated readers (a suffix file reader family) must decline chain/column-separated names.
+"""Unvalidated suffix file readers must decline chain/column-separated names.
 
 Database and document groups: their contract mixins.
 
@@ -11,15 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pytest
-
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import (
     BaseInputData,
     CHAIN_SEPARATOR,
-    COLUMN_SEPARATOR,
     DefaultOptionKeys,
     FeatureChainParserMixin,
     FeatureGroup,
@@ -36,15 +32,10 @@ from tests.mixins.reader_feature_groups.lazy_format_group import load_document_g
 CHAINDECLINE_FILE_SUFFIX = ".chaindeclinecsv"
 CHAINDECLINE_PLAIN_FEATURE = "chaindecline_plain_column"
 CHAINDECLINE_CHAIN_FEATURE = f"{CHAINDECLINE_PLAIN_FEATURE}{CHAIN_SEPARATOR}rebased_chaindeclinechain"
-CHAINDECLINE_MULTI_OUTPUT_FEATURE = f"{CHAINDECLINE_PLAIN_FEATURE}{COLUMN_SEPARATOR}0"
-
-CHAINDECLINE_ABORT_PLAIN_FEATURE = "chaindecline_abort_plain_column"
-
-CHAINDECLINE_GENERIC_SUFFIX = ".chaindeclinegeneric"
 
 
 class ChainDeclineUnvalidatedReader(SuffixFileReader):
-    """Final reader owning CHAINDECLINE_FILE_SUFFIX; never overrides get_column_names."""
+    """Reader owning CHAINDECLINE_FILE_SUFFIX; never overrides get_column_names."""
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
@@ -53,44 +44,6 @@ class ChainDeclineUnvalidatedReader(SuffixFileReader):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return {CHAINDECLINE_PLAIN_FEATURE: [1]}
-
-
-class ChainDeclineGenericPinReader(BaseInputData):
-    """Never a final reader; routes a pinned request through BaseInputData._resolve_pinned_file only."""
-
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        return (CHAINDECLINE_GENERIC_SUFFIX,)
-
-    @classmethod
-    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
-        if isinstance(data_access, DataAccessCollection) and cls._pin_applies(data_access, feature_names):
-            return cls._resolve_pinned_file(data_access, feature_names)
-        return None
-
-
-class ChainDeclineGenericAbortReader(ChainDeclineGenericPinReader):
-    """Never a final reader; validate_columns raises a marked NotImplementedError."""
-
-    @classmethod
-    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
-        raise escalate_match_abort(NotImplementedError("chaindecline generic marked abort"))
-
-
-class ChainDeclineGenericTypeErrorReader(ChainDeclineGenericPinReader):
-    """Never a final reader; validate_columns raises a plain TypeError."""
-
-    @classmethod
-    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
-        raise TypeError("chaindecline generic code defect")
-
-
-class ChainDeclineGenericAbortSuffixReader(ChainDeclineGenericPinReader):
-    """Never a final reader; suffix() raises a marked NotImplementedError."""
-
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        raise escalate_match_abort(NotImplementedError("chaindecline generic suffix abort"))
 
 
 class ChainDeclineRootFG(FeatureGroup):
@@ -132,66 +85,6 @@ class ChainDeclineNamedRootFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {CHAINDECLINE_CHAIN_FEATURE}
-
-
-class TestFirstSeparatorName:
-    """BaseInputData._first_separator_name finds the first chain/column-separated name, else None."""
-
-    @pytest.mark.parametrize(
-        ("feature_names", "expected"),
-        [
-            ([CHAINDECLINE_PLAIN_FEATURE, CHAINDECLINE_CHAIN_FEATURE], CHAINDECLINE_CHAIN_FEATURE),
-            ([CHAINDECLINE_PLAIN_FEATURE, CHAINDECLINE_MULTI_OUTPUT_FEATURE], CHAINDECLINE_MULTI_OUTPUT_FEATURE),
-            ([CHAINDECLINE_PLAIN_FEATURE, "chaindecline_other_column"], None),
-            ([], None),
-            ([CHAINDECLINE_CHAIN_FEATURE, CHAINDECLINE_MULTI_OUTPUT_FEATURE], CHAINDECLINE_CHAIN_FEATURE),
-            ([CHAINDECLINE_MULTI_OUTPUT_FEATURE, CHAINDECLINE_CHAIN_FEATURE], CHAINDECLINE_MULTI_OUTPUT_FEATURE),
-        ],
-        ids=["chain", "column", "plain_names", "empty", "chain_before_column", "column_before_chain"],
-    )
-    def test_returns_first_offending_name_or_none(self, feature_names: list[str], expected: str | None) -> None:
-        assert BaseInputData._first_separator_name(feature_names) == expected
-
-
-class TestBaseInputDataPinnedResolutionPropagation:
-    """BaseInputData's pinned resolution exempts separator names and never contains marked aborts or defects."""
-
-    def test_pinned_chain_shaped_name_resolves_via_the_pin(self) -> None:
-        path = f"pinned{CHAINDECLINE_GENERIC_SUFFIX}"
-        dac = DataAccessCollection(
-            files={"chaindecline_generic_handle": path},
-            column_to_file={CHAINDECLINE_CHAIN_FEATURE: "chaindecline_generic_handle"},
-        )
-
-        assert ChainDeclineGenericPinReader._resolve_pinned_file(dac, [CHAINDECLINE_CHAIN_FEATURE]) == path
-        matched = ChainDeclineGenericPinReader.match_subclass_data_access(dac, [CHAINDECLINE_CHAIN_FEATURE], Options())
-        assert matched == path
-
-    def test_marked_abort_from_validate_columns_reraises_on_the_pinned_path(self) -> None:
-        dac = DataAccessCollection(
-            files={"chaindecline_generic_abort_handle": f"pinned{CHAINDECLINE_GENERIC_SUFFIX}"},
-            column_to_file={CHAINDECLINE_ABORT_PLAIN_FEATURE: "chaindecline_generic_abort_handle"},
-        )
-
-        with pytest.raises(NotImplementedError) as excinfo:
-            ChainDeclineGenericAbortReader._resolve_pinned_file(dac, [CHAINDECLINE_ABORT_PLAIN_FEATURE])
-
-        assert is_match_abort(excinfo.value)
-
-    def test_type_error_from_validate_columns_reraises_on_the_pinned_path(self) -> None:
-        dac = DataAccessCollection(
-            files={"chaindecline_generic_type_handle": f"pinned{CHAINDECLINE_GENERIC_SUFFIX}"},
-            column_to_file={CHAINDECLINE_ABORT_PLAIN_FEATURE: "chaindecline_generic_type_handle"},
-        )
-
-        with pytest.raises(TypeError):
-            ChainDeclineGenericTypeErrorReader._resolve_pinned_file(dac, [CHAINDECLINE_ABORT_PLAIN_FEATURE])
-
-    def test_marked_abort_from_suffix_reraises_instead_of_reading_as_no_suffix(self) -> None:
-        with pytest.raises(NotImplementedError) as excinfo:
-            ChainDeclineGenericAbortSuffixReader._matches_suffix("any.file")
-
-        assert is_match_abort(excinfo.value)
 
 
 class TestChainedFeatureResolvesToSingleFeatureGroup:

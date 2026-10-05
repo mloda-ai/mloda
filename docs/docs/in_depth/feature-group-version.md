@@ -59,7 +59,7 @@ class DependencyAgnostic(FeatureGroup):
 - mloda itself, beyond the version prefix. Edits to an editable mloda install do not change it.
 - Code reached only through runtime values:
     - registries filled elsewhere (`REGISTRY["k"] = f`, `REGISTRY.update(...)`),
-    - classes discovered by reflection, such as the file readers `ReadFileFeature` finds through `__subclasses__()` (see below),
+    - classes discovered by reflection, such as plugins found through `__subclasses__()` (see below),
     - imports by a computed name (`importlib.import_module(name)`),
     - attributes assigned outside the class body,
     - `getattr` on objects that are not modules,

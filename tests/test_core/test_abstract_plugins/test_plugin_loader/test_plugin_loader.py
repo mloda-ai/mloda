@@ -1,4 +1,3 @@
-import gc
 import importlib
 import logging
 import subprocess  # nosec B404
@@ -11,11 +10,6 @@ import pytest
 from conftest import _write_broken_optional_root_package
 
 import mloda.core.abstract_plugins.plugin_loader.plugin_loader as plugin_loader_module
-from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    BaseInputData,
-    _collect_filtered_subclasses,  # noqa: F401
-    get_all_filtered_subclasses,
-)
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import OPTIONAL_PLUGIN_DEPENDENCIES
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.user import PluginLoader
@@ -92,29 +86,6 @@ class TestPluginLoader:
         assert "mloda_plugins.compute_framework.base_implementations.pandas.dataframe -> []" in result
         for res in result:
             assert "feature_group" not in res
-
-    def test_auto_load_triggers_when_subclasses_empty(self) -> None:
-        """Auto-load fires load_group when _collect_filtered_subclasses returns empty."""
-        from unittest.mock import MagicMock
-
-        class AutoLoadFamily(BaseInputData):
-            _auto_load_group = "feature_group/input_data/document_formats"
-
-        mock_load = MagicMock()
-
-        with patch(
-            "mloda.core.abstract_plugins.components.input_data.base_input_data._collect_filtered_subclasses",
-            return_value=[],
-        ):
-            with patch(
-                "mloda.core.abstract_plugins.plugin_loader.plugin_loader.PluginLoader.load_group",
-                mock_load,
-            ):
-                get_all_filtered_subclasses(AutoLoadFamily, AutoLoadFamily)
-
-        mock_load.assert_called_once_with("feature_group/input_data/document_formats")
-        del AutoLoadFamily
-        gc.collect()
 
     def test_load_nested_group_builds_correct_module_path(self) -> None:
         """Nested group paths like 'feature_group/input_data/file_formats' produce correct module names."""

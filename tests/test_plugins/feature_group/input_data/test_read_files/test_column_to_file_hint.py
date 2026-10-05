@@ -5,10 +5,9 @@ from typing import Any
 import pytest
 
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
-from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.helpers.suffix_file_reader import SuffixFileReader
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv
 from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group, load_group
 
@@ -37,42 +36,6 @@ class TestColumnToFileHint:
         assert "data_access_handle" in str(excinfo.value)
         assert os.path.abspath(a) in str(excinfo.value)
         assert os.path.abspath(b) in str(excinfo.value)
-
-    def test_conflict_in_batch_raises(self) -> None:
-        class TestRF(SuffixFileReader):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "val"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        dac = DataAccessCollection(
-            files={"a.csv", "b.csv"},
-            column_to_file={"id": "a.csv", "val": "b.csv"},
-        )
-        with pytest.raises(ValueError) as excinfo:
-            TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
-        assert "pinned to different files" in str(excinfo.value)
-
-    def test_mixed_batch_raises(self) -> None:
-        class TestRF(SuffixFileReader):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "unpinned_col"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        dac = DataAccessCollection(
-            files={"a.csv", "b.csv"},
-            column_to_file={"id": "a.csv"},
-        )
-        with pytest.raises(ValueError) as excinfo:
-            TestRF.match_subclass_data_access(dac, ["id", "unpinned_col"], options=Options({}))
-        assert "Mixed batch" in str(excinfo.value)
 
     def test_construction_rejects_unknown_file(self) -> None:
         with pytest.raises(ValueError):

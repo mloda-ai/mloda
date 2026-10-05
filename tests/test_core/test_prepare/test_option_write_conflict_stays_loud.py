@@ -112,11 +112,7 @@ def _make_match_data_rival_fg() -> type[FeatureGroup]:
     return OptionWriteMatchDataRivalFG932
 
 
-class OptionWriteReaderFamily932(BaseInputData):
-    """Family base of the test reader; never final itself, so only its child is discovered."""
-
-
-class OptionWriteReader932(OptionWriteReaderFamily932):
+class OptionWriteReader932(BaseInputData):
     """Matches only its own marker value, so process-wide discovery cannot collide."""
 
     @classmethod
@@ -143,7 +139,7 @@ def _make_reader_fg() -> type[FeatureGroup]:
     class OptionWriteReaderFG932(FeatureGroup):
         @classmethod
         def input_data(cls) -> BaseInputData | None:
-            return OptionWriteReaderFamily932()
+            return OptionWriteReader932()
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:

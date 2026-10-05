@@ -1283,20 +1283,12 @@ class TestCacheAttributeAssignmentIsRejected:
 
 
 class TestDeclarationsDoNotAffectDiscovery:
-    """The synthetic declaring classes stay invisible to reader selection."""
+    """The synthetic declaring classes override no load_data."""
 
-    def test_synthetic_declaring_classes_are_not_final_readers(self) -> None:
-        """No ``load_data`` override means ``get_all_filtered_subclasses`` never collects them."""
-        parent, child, override = _decl_family()
-
-        assert parent.is_final_reader() is False
-        assert child.is_final_reader() is False
-        assert override.is_final_reader() is False
-
-    def test_no_reader_this_module_leaks_is_a_final_reader(self) -> None:
+    def test_no_reader_this_module_leaks_overrides_load_data(self) -> None:
         """The module's leak policy, machine-checked over every reader of this module still reachable."""
         _decl_family()
         local = [cls for cls in get_all_subclasses(BaseInputData) if cls.__module__ == __name__]
 
         assert local, "expected this module's throwaway readers to be reachable through __subclasses__()"
-        assert [cls.__name__ for cls in local if cls.is_final_reader()] == []
+        assert [cls.__name__ for cls in local if "load_data" in vars(cls)] == []

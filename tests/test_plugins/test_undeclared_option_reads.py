@@ -121,8 +121,7 @@ def _load_all_plugins() -> Iterator[None]:
 def _make_leaked_reader_probe() -> type[BaseInputData]:
     """A throwaway reader declaring one distinctive key, built here so it stays collectable.
 
-    It deliberately does not override ``load_data`` and declares no ``_final_reader_requires``, so
-    ``is_final_reader()`` is False and reader discovery never collects it.
+    It deliberately does not override ``load_data``, so no feature group ever returns it.
     """
 
     class UorLeakedTestTreeReaderProbe(BaseInputData):

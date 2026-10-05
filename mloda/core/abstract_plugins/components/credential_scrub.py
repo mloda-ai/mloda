@@ -49,8 +49,22 @@ _KEYWORD_PATTERN = re.compile(
 # Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
 _QUOTED_KEY_PATTERN = re.compile(
     r"(?P<lead>[{,][ \t]*)(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
-    r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\"|\[[^\]\n]*\]?|\{[^}\n]*\}?|[^,}\s]*)",
+    r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\"|\[[^\]\n]*\]?|\{[^}\n]*\}?|\([^)\n]*\)?"
+    r"|frozenset\(\{[^}\n]*\}\)?|[^,}\s]*)",
     re.IGNORECASE,
+)
+
+# token68 that looks like a token, not prose: a digit, uppercase or one of -_~+/, or a `.` followed by a token char, or 20+ token chars.
+# Scheme words are matched with a scoped (?i:...) so this uppercase check stays case-sensitive.
+_TOKEN68 = r"[A-Za-z0-9\-._~+/]"
+_TOKEN_SHAPE = rf"(?={_TOKEN68}{{20}}|{_TOKEN68}*(?:[0-9A-Z\-_~+/]|\.{_TOKEN68}))"
+_BEARER_PATTERN = re.compile(rf"(?<![\w-])(?P<scheme>(?i:bearer))[ \t]+{_TOKEN_SHAPE}{_TOKEN68}+=*")
+
+# Run before _KEYWORD_PATTERN so `access_token=Bearer abc` does not leak abc.
+_AUTHORIZATION_PATTERN = re.compile(
+    r"(?P<head>(?<![\w-])(?i:(?:proxy-)?authorization)['\"]?[ \t]*[:=][ \t]*['\"]?)"
+    r"(?:(?P<scheme>(?i:bearer|basic|token|digest|apikey|negotiate))[ \t]+[^\s'\",;]+"
+    rf"|{_TOKEN_SHAPE}{_TOKEN68}+=*)"
 )
 
 # Oracle-style slash DSN: user/password@host, distinguished from a lookalike path by the trailing
@@ -99,9 +113,11 @@ def _drop_free_text_userinfo(text: str) -> str:
 
 
 def scrub_credentials(text: str) -> str:
-    """Mask URI user info, key=value secrets, quoted-key secrets and user/password@host DSNs. Idempotent."""
+    """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs."""
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
+    text = _AUTHORIZATION_PATTERN.sub(lambda m: m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***"), text)
+    text = _BEARER_PATTERN.sub(r"\g<scheme> ***", text)
     text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
     text = _QUOTED_KEY_PATTERN.sub(r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>", text)
     text = _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)

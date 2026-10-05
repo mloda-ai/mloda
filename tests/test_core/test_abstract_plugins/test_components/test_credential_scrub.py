@@ -252,6 +252,84 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["hunter2z9"],
         ['"a": 1'],
     ),
+    (
+        "bearer_dotted_token_in_prose",
+        "401 with Bearer abc.def.ghi rejected",
+        ["abc.def.ghi"],
+        ["401 with Bearer *** rejected"],
+    ),
+    (
+        "bearer_lowercase_scheme_digit_token",
+        "sent bearer hunter2z9 to host",
+        ["hunter2z9"],
+        ["bearer ***"],
+    ),
+    (
+        "bearer_uppercase_scheme_jwt_like",
+        "BEARER eyJhbGciOi.hunter2z9.sig",
+        ["hunter2z9", "eyJhbGciOi"],
+        ["BEARER ***"],
+    ),
+    (
+        "bearer_base64_padding",
+        "Bearer YWJjZGVm+hunter2z9==",
+        ["hunter2z9"],
+        ["Bearer ***"],
+    ),
+    (
+        "authorization_basic_header",
+        "Authorization: Basic dXNlcjpwYXNz",
+        ["dXNlcjpwYXNz"],
+        ["Authorization: Basic ***"],
+    ),
+    (
+        "authorization_bearer_header",
+        "Authorization: Bearer abc.def.ghi",
+        ["abc.def.ghi"],
+        ["Authorization: Bearer ***"],
+    ),
+    (
+        "authorization_quoted_dict_bearer_plain_word",
+        "{'Authorization': 'Bearer abc'}",
+        ["'Bearer abc'"],
+        ["{'Authorization': 'Bearer ***"],
+    ),
+    (
+        "authorization_double_quoted_lowercase_key",
+        '{"authorization": "Bearer hunter2z9", "host": "h"}',
+        ["hunter2z9"],
+        ['"authorization": "Bearer ***', '"host": "h"'],
+    ),
+    (
+        "proxy_authorization_basic",
+        "Proxy-Authorization: Basic hunter2z9",
+        ["hunter2z9"],
+        ["Proxy-Authorization: Basic ***"],
+    ),
+    (
+        "authorization_token_scheme_plain_word",
+        "Authorization: Token abcdefgh",
+        ["abcdefgh"],
+        ["Authorization: Token ***"],
+    ),
+    (
+        "authorization_digest_scheme_lowercase",
+        "authorization: digest hunterz",
+        ["hunterz"],
+        ["authorization: digest ***"],
+    ),
+    (
+        "authorization_equals_no_scheme_token_shaped",
+        "authorization=eyJhbGciOi.x.y",
+        ["eyJhbGciOi"],
+        ["authorization="],
+    ),
+    (
+        "access_token_with_bearer_value",
+        "access_token=Bearer abc123",
+        ["abc123"],
+        ["access_token="],
+    ),
 ]
 
 
@@ -269,6 +347,14 @@ def test_scrub_credentials_drops_secrets_and_keeps_context(
 DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
     ("dict_repr_password", "{'password': 'hunter2z9'}", "{'password': '***'}"),
     ("dict_repr_numeric_password", "{'db_password': 123456789}", "{'db_password': '***'}"),
+    ("dict_repr_password_tuple", "{'password': ('a', 'hunter2z9')}", "{'password': '***'}"),
+    ("dict_repr_password_set", "{'password': {'a', 'hunter2z9'}}", "{'password': '***'}"),
+    ("dict_repr_token_frozenset", "{'token': frozenset({'a', 'hunter2z9'})}", "{'token': '***'}"),
+    (
+        "dict_repr_password_tuple_keeps_siblings",
+        "{'password': ('a', 'hunter2z9'), 'host': 'h'}",
+        "{'password': '***', 'host': 'h'}",
+    ),
 ]
 
 
@@ -330,6 +416,12 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "http://localhost:8080/models@v:2",
     "Invalid option 'api_key': expected str, got int",
     "option 'token': must be a str",
+    "Missing bearer token",
+    "invalid bearer token.",
+    "the bearer of bad news",
+    "Bearer token required",
+    "authorization: denied for role x",
+    "authorization failed",
 ]
 
 
@@ -388,6 +480,12 @@ def test_text_without_url_is_unchanged() -> None:
         "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=abc+/hunter2z9==;EndpointSuffix=core.windows.net",
         "{'password': 'hunter2z9'}",
         "scott/hunter2z9@host:1521/service",
+        "Authorization: Bearer abc.def.ghi",
+        "{'Authorization': 'Bearer abc'}",
+        "Authorization: Basic dXNlcjpwYXNz",
+        "authorization=eyJhbGciOi.x.y",
+        "Bearer abc.def.ghi",
+        "{'password': ('a', 'hunter2z9')}",
     ],
 )
 def test_scrub_credentials_is_idempotent(text: str) -> None:
@@ -403,6 +501,31 @@ def test_long_alphanumeric_run_scrubs_fast() -> None:
     elapsed = time.perf_counter() - start
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long alphanumeric run"
     assert result == text
+
+
+def test_long_run_after_bearer_scheme_scrubs_fast() -> None:
+    text = "Bearer " + "a" * 50_000
+    start = time.perf_counter()
+    result = scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long run after Bearer"
+    assert "a" * 100 not in result
+
+
+def test_long_run_after_authorization_key_scrubs_fast() -> None:
+    text = "Authorization: " + "a" * 50_000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long run after Authorization:"
+
+
+def test_repeated_bearer_prefix_scrubs_fast() -> None:
+    text = "Bearer " * 20_000
+    start = time.perf_counter()
+    scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated Bearer prefix"
 
 
 def test_long_alphanumeric_run_followed_by_url_scrubs_fast() -> None:

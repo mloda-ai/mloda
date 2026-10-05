@@ -844,6 +844,8 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         assert calculate.run_id != _FORGED_ID
         assert validate.run_id == calculate.run_id
         assert validate.worker_index == calculate.worker_index != 99
+        assert calculate.step_uuid is not None
+        assert validate.step_uuid == calculate.step_uuid
 
     def test_prepared_session_keeps_its_extenders_across_runs(self) -> None:
         extender = _MultiHookCapturingExtender()

@@ -414,6 +414,9 @@ class PlanInfoCalculateHookRecorder(Extender):
             for context in self.captured
         }
 
+    def step_uuid_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], UUID | None]:
+        return {(context.feature_group_class, context.feature_names): context.step_uuid for context in self.captured}
+
     def input_feature_edges_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], dict[str, tuple[str, ...]]]:
         return {
             (context.feature_group_class, context.feature_names): dict(context.input_feature_edges or {})
@@ -2179,6 +2182,48 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
             assert key in hook_inputs, f"no calculate hook captured for {key}"
             assert frozenset(step.input_feature_names) == hook_inputs[key]
             assert dict(step.input_feature_edges) == hook_edges[key]
+
+    def test_every_compute_step_uuid_matches_its_calculate_hook_context(self) -> None:
+        recorder = PlanInfoCalculateHookRecorder()
+        session = _prepare_chained_session_with(recorder)
+
+        session.run()
+
+        compute_steps = [step for step in session.resolved_plan() if step.step_kind == "compute"]
+        assert len(compute_steps) == 2
+        hook_uuids = recorder.step_uuid_by_step()
+        assert len(hook_uuids) == len(compute_steps)
+
+        for step in compute_steps:
+            assert step.feature_group is not None
+            key = (f"{step.feature_group.__module__}.{step.feature_group.__qualname__}", step.feature_names)
+            assert step.step_uuid is not None
+            assert hook_uuids[key] is not None
+            assert hook_uuids[key] == step.step_uuid
+
+    def test_nested_options_steps_get_distinct_uuids_mapping_one_to_one_onto_the_plan(self) -> None:
+        recorder = PlanInfoCalculateHookRecorder()
+        session = mloda.prepare(
+            [
+                Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}}),
+                Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "mutated"}}),
+            ],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_NESTED_OPTIONS_PLUGINS,
+            function_extender={recorder},
+        )
+
+        session.run()
+
+        compute_steps = [step for step in session.resolved_plan() if step.step_kind == "compute"]
+        assert len(compute_steps) == 2
+        plan_uuids = [step.step_uuid for step in compute_steps]
+        hook_uuids = [context.step_uuid for context in recorder.captured]
+        assert len(hook_uuids) == 2
+        assert all(u is not None for u in plan_uuids)
+        assert all(u is not None for u in hook_uuids)
+        assert len(set(hook_uuids)) == 2
+        assert set(hook_uuids) == set(plan_uuids)
 
 
 class TestInputFeatureEdgesExcludeInjectedFeatures:

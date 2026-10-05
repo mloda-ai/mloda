@@ -659,7 +659,15 @@ class SidePathTwoConsumerArrow(FeatureGroup):
         return {PyArrowTable}
 
 
-def test_two_consumers_of_one_link_reading_a_side_through_different_mids_raise_at_plan_time() -> None:
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize(
+    "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
+)
+def test_two_consumers_of_one_link_reading_a_side_through_different_mids_join_each_side_frame(
+    flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool
+) -> None:
     groups: set[type[FeatureGroup]] = {
         MultiLinkRootA,
         MultiLinkRootBSame,
@@ -668,22 +676,42 @@ def test_two_consumers_of_one_link_reading_a_side_through_different_mids_raise_a
         SidePathTwoConsumerPandas,
         SidePathTwoConsumerArrow,
     }
+    left, right = (MultiLinkRootBSame, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBSame)
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
 
-    with pytest.raises(ValueError) as error:
-        mloda.prepare(
-            ["SidePathTwoConsumerPandas", "SidePathTwoConsumerArrow"],
-            links={Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX))},
-            compute_frameworks=[PandasDataFrame, PyArrowTable],
-            parallelization_modes={ParallelizationMode.SYNC},
-            plugin_collector=PluginCollector.enabled_feature_groups(groups),
-        )
+    session = mloda.prepare(
+        ["SidePathTwoConsumerPandas", "SidePathTwoConsumerArrow"],
+        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={mode},
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
 
-    message = str(error.value)
-    assert "SidePathTwoConsumerPandas" in message
-    assert "SidePathTwoConsumerArrow" in message
-    assert "different frames" in message
-    assert "missing Links" not in message
-    assert "unlinked sources" not in message
+    assert session.engine is not None
+    steps = list(session.engine.execution_planner)
+    join_steps = [step for step in steps if isinstance(step, JoinStep)]
+    assert len(join_steps) == 2
+    pandas_mid_uuids = {
+        uuid
+        for step in steps
+        if isinstance(step, FeatureGroupStep) and issubclass(step.feature_group, SidePathPandasP)
+        for uuid in step.get_uuids()
+    }
+    carried = [step for step in join_steps if step.carriers]
+    direct = [step for step in join_steps if not step.carriers]
+    assert len(carried) == 1
+    assert len(direct) == 1
+    assert carried[0].carriers & pandas_mid_uuids
+    # The direct join must not merge into the frame the carried join shares.
+    assert direct[0].shared_destination
+    assert direct[0].destination_hop_uuid is not None
+    _assert_consumers_wait_only_on_their_joins(session, (SidePathTwoConsumerPandas, SidePathTwoConsumerArrow))
+
+    results = session.run(parallelization_modes={mode}, flight_server=server)
+
+    for consumer in (SidePathTwoConsumerPandas, SidePathTwoConsumerArrow):
+        name = consumer.get_class_name()
+        assert [sorted(r[name].to_pylist()) for r in results if name in r.column_names] == [[110, 220, 330]]
 
 
 class DownstreamHopQ(FeatureGroup):

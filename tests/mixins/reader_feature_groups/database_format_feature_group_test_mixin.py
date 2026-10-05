@@ -535,7 +535,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         frameworks = [PyArrowTable, *extra]
         for framework in frameworks:
             name = framework.__name__
-            opened_before, closed_before = len(spy.opened), len(spy.closed)
+            opened_before = len(spy.opened)
             result = mloda.run_all(
                 ["toyfmt_a", "toyfmt_c"],
                 compute_frameworks=[framework],
@@ -550,10 +550,8 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             elif not isinstance(loaded, dict):
                 pytest.fail(f"{name}: unexpected result type {type(loaded).__name__}")
             assert loaded == {"toyfmt_a": [1, 2], "toyfmt_c": [5, 6]}, name
-            opened = spy.opened[opened_before:]
-            closed = spy.closed[closed_before:]
-            assert len(opened) >= 2, name
-            assert all(any(c is d for d in closed) for c in opened), name
+            assert len(spy.opened) - opened_before >= 2, name
+            assert spy.all_closed(), name
 
     @pytest.mark.parametrize("batches", [[["toyfmt_left", "toyfmt_right"]], [["toyfmt_left"], ["toyfmt_right"]]])
     def test_db_tables_per_match_leave_the_shared_credential_untouched(self, batches: list[list[str]]) -> None:

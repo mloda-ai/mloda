@@ -100,7 +100,7 @@ class SqliteFG(ReadDBFG):
         return None
 
 
-def _load_dict(group: Any, match: SourceMatch, features: Any) -> dict[str, list[Any]]:
+def _load_dict(group: type[SqliteFG], match: SourceMatch, features: Any) -> dict[str, list[Any]]:
     access = cast(DBTable, match.access)
     connection = group.get_connection(access.credentials)
     try:

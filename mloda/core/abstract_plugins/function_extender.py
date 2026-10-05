@@ -42,7 +42,15 @@ class GateBypassError(RuntimeError):
 
 
 _SEALED_ATTRS = frozenset(
-    {"never_fall_back", "raise_on_run_complete", "raise_on_error", "priority", "_raise_on_error", "_priority"}
+    {
+        "never_fall_back",
+        "raise_on_run_complete",
+        "raise_on_error",
+        "priority",
+        "_raise_on_error",
+        "_priority",
+        "_sealed",
+    }
 )
 
 
@@ -71,7 +79,19 @@ class Extender(ABC):
             raise AttributeError(f"{type(self).__name__}.{name} cannot be changed after first use")
         object.__setattr__(self, name, value)
 
+    def __delattr__(self, name: str) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get("_sealed", False):
+            raise AttributeError(f"{type(self).__name__}.{name} cannot be changed after first use")
+        object.__delattr__(self, name)
+
     def _seal(self) -> None:
+        if self.__dict__.get("_sealed"):
+            return
+        # Class-level flag values would otherwise stay mutable through the class after sealing.
+        object.__setattr__(self, "never_fall_back", self.never_fall_back)
+        object.__setattr__(self, "raise_on_run_complete", self.raise_on_run_complete)
+        object.__setattr__(self, "_priority", self.priority)
+        object.__setattr__(self, "_raise_on_error", self.raise_on_error)
         object.__setattr__(self, "_sealed", True)
 
     @property
@@ -294,6 +314,11 @@ class CompositeExtender(Extender):
         if name in ("extenders", "function_type") and self.__dict__.get("_sealed"):
             raise AttributeError(f"CompositeExtender.{name} is read-only once sealed")
         super().__setattr__(name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name in ("extenders", "function_type") and self.__dict__.get("_sealed"):
+            raise AttributeError(f"CompositeExtender.{name} is read-only once sealed")
+        super().__delattr__(name)
 
     def wraps(self) -> set[ExtenderHook]:
         if self.function_type:

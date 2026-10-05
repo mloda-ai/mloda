@@ -1006,10 +1006,38 @@ class TestGateBypass:
             CompositeExtender([skipper, gate])(lambda: "base")
 
 
+class _ClassBodyGate(Extender):
+    never_fall_back = True
+    raise_on_run_complete = True
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
 class TestSealOnFirstUse:
+    @pytest.mark.parametrize("attr", ["never_fall_back", "raise_on_run_complete"])
+    def test_class_flag_reassignment_does_not_change_sealed_instance(self, attr: str, monkeypatch: Any) -> None:
+        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+
+        ext = _ClassBodyGate()
+        build_hook_extenders([ext])
+
+        monkeypatch.setattr(_ClassBodyGate, attr, False)
+
+        assert getattr(ext, attr) is True
+
     @pytest.mark.parametrize(
         "attr, value",
-        [("raise_on_error", False), ("priority", 1), ("never_fall_back", True), ("raise_on_run_complete", True)],
+        [
+            ("raise_on_error", False),
+            ("priority", 1),
+            ("never_fall_back", True),
+            ("raise_on_run_complete", True),
+            ("_sealed", False),
+        ],
     )
     def test_flags_cannot_be_set_after_build_hook_extenders(self, attr: str, value: Any) -> None:
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders
@@ -1021,6 +1049,20 @@ class TestSealOnFirstUse:
             setattr(ext, attr, value)
 
     @pytest.mark.parametrize(
+        "attr, expected",
+        [("_sealed", True), ("never_fall_back", True), ("_priority", 7), ("_raise_on_error", True)],
+    )
+    def test_flags_cannot_be_deleted_after_build_hook_extenders(self, attr: str, expected: Any) -> None:
+        from mloda.core.abstract_plugins.function_extender import build_hook_extenders
+
+        ext = MockExtender("sealed", priority=7, never_fall_back=True)
+        build_hook_extenders([ext])
+
+        with pytest.raises(AttributeError):
+            delattr(ext, attr)
+        assert getattr(ext, attr) == expected
+
+    @pytest.mark.parametrize(
         "forge",
         [
             lambda c: setattr(c, "never_fall_back", True),
@@ -1028,8 +1070,18 @@ class TestSealOnFirstUse:
             lambda c: setattr(c, "function_type", None),
             lambda c: c.extenders.clear(),
             lambda c: c.extenders.append(MockExtender("x")),
+            lambda c: setattr(c, "_sealed", False),
+            lambda c: delattr(c, "extenders"),
         ],
-        ids=["never_fall_back", "assign_extenders", "assign_function_type", "clear", "append"],
+        ids=[
+            "never_fall_back",
+            "assign_extenders",
+            "assign_function_type",
+            "clear",
+            "append",
+            "unseal",
+            "del_extenders",
+        ],
     )
     def test_composite_built_by_build_hook_extenders_is_sealed(self, forge: Any) -> None:
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders

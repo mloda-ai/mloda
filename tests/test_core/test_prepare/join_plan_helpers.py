@@ -3,7 +3,10 @@
 from typing import Any
 from uuid import UUID
 
-from mloda.core.prepare.resolve_links import LinkTrekker
+from mloda.core.core.step.join_step import JoinStep
+from mloda.core.prepare.execution_plan import ExecutionPlan
+from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
 from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.user import Index
@@ -35,3 +38,19 @@ def trek(
         link_trekker.data[key] = trekked
         link_trekker.data_ordered[key] = trekked
     trekked.add(uuid)
+
+
+def join_tokens(plan: Any, link: Link) -> set[UUID]:
+    return {step.uuid for step in plan if isinstance(step, JoinStep) and step.link.uuid == link.uuid}
+
+
+def single_join_step(
+    plan: ExecutionPlan,
+    link_fw: LinkFrameworkTrekker,
+    link_trekker: LinkTrekker,
+    graph: Graph,
+    pre_execution_plan: list[Any],
+) -> JoinStep | None:
+    join_steps = plan.run_link(link_fw, link_trekker, graph, pre_execution_plan)
+    assert len(join_steps) <= 1
+    return join_steps[0] if join_steps else None

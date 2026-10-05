@@ -483,9 +483,16 @@ _LINK_SIDE_PATHS_PROBE = Path(__file__).with_name("link_side_paths_probe.py")
 _LINK_SIDE_PATHS_SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
+@pytest.fixture(scope="module")
+def link_side_paths_outputs() -> list[dict[str, str]]:
+    return run_probes(_LINK_SIDE_PATHS_PROBE, len(_LINK_SIDE_PATHS_SEEDS), seeds=_LINK_SIDE_PATHS_SEEDS)
+
+
 @pytest.mark.timeout(60)
-def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed() -> None:
-    outputs = run_probes(_LINK_SIDE_PATHS_PROBE, len(_LINK_SIDE_PATHS_SEEDS), seeds=_LINK_SIDE_PATHS_SEEDS)
+def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed(
+    link_side_paths_outputs: list[dict[str, str]],
+) -> None:
+    outputs = link_side_paths_outputs
 
     assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
     for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):
@@ -497,8 +504,10 @@ def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed()
 
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize("shape", ["twin_sibling", "twin_chain"])
-def test_consumers_of_a_join_side_plan_and_run_correctly_under_every_hash_seed(shape: str) -> None:
-    outputs = run_probes(_LINK_SIDE_PATHS_PROBE, len(_LINK_SIDE_PATHS_SEEDS), seeds=_LINK_SIDE_PATHS_SEEDS)
+def test_consumers_of_a_join_side_plan_and_run_correctly_under_every_hash_seed(
+    shape: str, link_side_paths_outputs: list[dict[str, str]]
+) -> None:
+    outputs = link_side_paths_outputs
 
     assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
     for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):

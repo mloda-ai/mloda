@@ -34,7 +34,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.probe_runner import run_probes
-from tests.test_core.test_prepare.join_plan_helpers import feature, trek
+from tests.test_core.test_prepare.join_plan_helpers import feature, join_tokens, trek
 
 
 PAIR_LEFT_INDEX = Index(("resolved_join_pair_left_key",))
@@ -800,12 +800,8 @@ def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
 
 def _transform_steps(plan: ExecutionPlan, link: Link) -> list[TransformFrameworkStep]:
     return [
-        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in _join_tokens(plan, link)
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
     ]
-
-
-def _join_tokens(plan: ExecutionPlan, link: Link) -> set[UUID]:
-    return {step.uuid for step in _join_steps(plan) if step.link.uuid == link.uuid}
 
 
 def _records(plan: ExecutionPlan, link: Link) -> tuple[ResolvedJoin, ...]:

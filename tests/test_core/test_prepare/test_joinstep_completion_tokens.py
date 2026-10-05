@@ -37,7 +37,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
-from tests.test_core.test_prepare.join_plan_helpers import feature, trek
+from tests.test_core.test_prepare.join_plan_helpers import feature, join_tokens, trek
 
 
 TOKEN_LEFT_INDEX = Index(("token_left_key",))
@@ -594,7 +594,7 @@ def test_cross_framework_join_hop_owed_tokens_equal_its_destination_consumers_ow
     plan = _create_execution_plan(planned)
 
     hop = next(
-        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in _join_tokens(plan, link)
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
     )
 
     assert hop.owed_tokens == branch.consumer.get_uuids()
@@ -609,7 +609,7 @@ def test_cross_framework_append_join_hop_owed_tokens_stay_empty() -> None:
     plan = _create_execution_plan(planned)
 
     hop = next(
-        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in _join_tokens(plan, link)
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
     )
 
     assert hop.owed_tokens == frozenset()
@@ -1008,7 +1008,3 @@ def test_plain_hop_whose_source_framework_class_is_shared_but_data_is_disjoint_g
         f"the hop's source data is disjoint from the unrelated join's own source/destination, so it "
         f"must be credited; got owed_tokens={plain_hop.owed_tokens}"
     )
-
-
-def _join_tokens(plan: Any, link: Link) -> set[UUID]:
-    return {step.uuid for step in plan if isinstance(step, JoinStep) and step.link.uuid == link.uuid}

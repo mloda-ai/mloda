@@ -20,6 +20,7 @@ from mloda.user import JoinSpec
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_core.test_prepare.join_plan_helpers import join_tokens
 
 
 UPLOAD_MARK_KEY = "upload_mark_key"
@@ -139,4 +140,4 @@ def test_the_join_hop_names_the_declared_right_group_as_its_source() -> None:
 
     assert tfs.from_feature_group is link.right_feature_group
     assert tfs.to_feature_group is link.left_feature_group
-    assert tfs.link_id in {step.uuid for step in new_plan if isinstance(step, JoinStep)}
+    assert tfs.link_id in join_tokens(new_plan, link)

@@ -22,6 +22,7 @@ from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_core.test_prepare.join_plan_helpers import single_join_step
 
 
 LEFT_INDEX = Index(("stack_left_key",))
@@ -110,9 +111,9 @@ def _plan_link(
 
 
 def _run(planned: Planned) -> JoinStep | None:
-    join_steps = planned.plan.run_link(planned.link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
-    assert len(join_steps) <= 1
-    return join_steps[0] if join_steps else None
+    return single_join_step(
+        planned.plan, planned.link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan
+    )
 
 
 def _assert_is_orientation_configuration_error(message: str, link: Link) -> None:

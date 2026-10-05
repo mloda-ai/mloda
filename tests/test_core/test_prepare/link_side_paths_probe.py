@@ -4,7 +4,7 @@ No test_ prefix, so pytest never collects it; add a shape by extending SHAPES.
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -62,51 +62,40 @@ class LsRootW(FeatureGroup):
         return [Index(("ls_xid",))]
 
 
-class LsD(FeatureGroup):
+class _SumGroup(FeatureGroup):
+    """Reads INPUTS and sums them into OUTPUT; FRAMEWORK None keeps the default framework rule."""
+
+    INPUTS: ClassVar[tuple[str, ...]] = ()
+    OUTPUT: ClassVar[str] = ""
+    FRAMEWORK: ClassVar[type[ComputeFramework] | None] = None
+
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_x")}
+        return {Feature(name) for name in self.INPUTS}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_d", ["ls_x"])
+        return _sum_columns(data, cls.OUTPUT, list(cls.INPUTS))
 
     @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_d"}
-
-
-class LsE(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_x"), Feature("ls_w")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_e", ["ls_x", "ls_w"])
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {cls.FRAMEWORK} if cls.FRAMEWORK else None
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return {"ls_e"}
+        return {cls.OUTPUT} if cls.OUTPUT else set()
 
 
-class LsYf(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_c1")}
+def _sum_group(
+    name: str, inputs: tuple[str, ...], output: str, framework: type[ComputeFramework] | None
+) -> type[_SumGroup]:
+    return type(
+        name, (_SumGroup,), {"INPUTS": inputs, "OUTPUT": output, "FRAMEWORK": framework, "__module__": __name__}
+    )
 
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_yf", ["ls_c1"])
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_yf"}
+LsD = _sum_group("LsD", ("ls_x",), "ls_d", PyArrowTable)
+LsE = _sum_group("LsE", ("ls_x", "ls_w"), "ls_e", None)
+LsYf = _sum_group("LsYf", ("ls_c1",), "ls_yf", PyArrowTable)
 
 
 class LsC(FeatureGroup):
@@ -132,106 +121,12 @@ class LsC(FeatureGroup):
         return {"ls_c1", "ls_c2"}
 
 
-class LsY(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_x")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_y", ["ls_x"])
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_y"}
-
-
-class LsZ(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_x"), Feature("ls_w")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_z", ["ls_x", "ls_w"])
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_z"}
-
-
-class LsYzC(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_y"), Feature("ls_z")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_yzc", ["ls_y", "ls_z"])
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_yzc"}
-
-
-class LsP(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_x")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_p", ["ls_x"])
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_p"}
-
-
-class LsQ(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_p"), Feature("ls_w")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_q", ["ls_p", "ls_w"])
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_q"}
-
-
-class LsPqC(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("ls_p"), Feature("ls_q")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _sum_columns(data, "ls_pqc", ["ls_p", "ls_q"])
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"ls_pqc"}
+LsY = _sum_group("LsY", ("ls_x",), "ls_y", PyArrowTable)
+LsZ = _sum_group("LsZ", ("ls_x", "ls_w"), "ls_z", PyArrowTable)
+LsYzC = _sum_group("LsYzC", ("ls_y", "ls_z"), "ls_yzc", PandasDataFrame)
+LsP = _sum_group("LsP", ("ls_x",), "ls_p", PyArrowTable)
+LsQ = _sum_group("LsQ", ("ls_p", "ls_w"), "ls_q", PyArrowTable)
+LsPqC = _sum_group("LsPqC", ("ls_p", "ls_q"), "ls_pqc", PandasDataFrame)
 
 
 def _run(

@@ -1,7 +1,7 @@
 """Groups whose trekked links resolve to different compute frameworks: a link with equal
 frameworks and no child on that framework is rejected, the distinct-framework shape here still runs."""
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pandas as pd
 import pyarrow as pa
@@ -430,8 +430,10 @@ def _side_path_p(data: Any, name: str) -> Any:
     return data
 
 
-class SidePathPandasP(FeatureGroup):
-    """Pandas-only reader of root A."""
+class _SidePathP(FeatureGroup):
+    """Reader of root A on the frameworks in FRAMEWORKS."""
+
+    FRAMEWORKS: ClassVar[set[type[ComputeFramework]]] = set()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("mlg_a")}
@@ -442,37 +444,16 @@ class SidePathPandasP(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
+        return cls.FRAMEWORKS
 
 
-class SidePathArrowP(FeatureGroup):
-    """PyArrow-only reader of root A."""
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("mlg_a")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _side_path_p(data, cls.get_class_name())
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+def _side_path_group(name: str, frameworks: set[type[ComputeFramework]]) -> type[FeatureGroup]:
+    return type(name, (_SidePathP,), {"FRAMEWORKS": frameworks, "__module__": __name__})
 
 
-class SidePathFreeP(FeatureGroup):
-    """Reader of root A that runs on either framework."""
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("mlg_a")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return _side_path_p(data, cls.get_class_name())
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame, PyArrowTable}
+SidePathPandasP = _side_path_group("SidePathPandasP", {PandasDataFrame})
+SidePathArrowP = _side_path_group("SidePathArrowP", {PyArrowTable})
+SidePathFreeP = _side_path_group("SidePathFreeP", {PandasDataFrame, PyArrowTable})
 
 
 class SidePathQ(FeatureGroup):
@@ -552,84 +533,39 @@ def _tie_root_data(features: FeatureSet, name: str, base: list[int]) -> dict[str
     return {"tie_jid": [1, 2, 3], name: [value * scale for value in base]}
 
 
-class TieLeftPd(FeatureGroup):
-    """Pandas root whose values depend on the tie_tag option."""
+class _TieRoot(FeatureGroup):
+    """Root whose values depend on the tie_tag option, built in FRAMEWORK's native type."""
+
+    COLUMN: ClassVar[str] = ""
+    BASE: ClassVar[list[int]] = []
+    FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"tie_left_val"})
+        return DataCreator({cls.COLUMN})
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pd.DataFrame(_tie_root_data(features, "tie_left_val", [1, 2, 3]))
+        built = _tie_root_data(features, cls.COLUMN, cls.BASE)
+        return pd.DataFrame(built) if cls.FRAMEWORK is PandasDataFrame else pa.table(built)
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
+        return {cls.FRAMEWORK}
 
     @classmethod
     def index_columns(cls) -> list[Index] | None:
         return [TIE_INDEX]
 
 
-class TieLeftPa(FeatureGroup):
-    """PyArrow root whose values depend on the tie_tag option."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"tie_left_val"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pa.table(_tie_root_data(features, "tie_left_val", [1, 2, 3]))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def index_columns(cls) -> list[Index] | None:
-        return [TIE_INDEX]
+def _tie_root(name: str, column: str, base: list[int], framework: type[ComputeFramework]) -> type[FeatureGroup]:
+    return type(name, (_TieRoot,), {"COLUMN": column, "BASE": base, "FRAMEWORK": framework, "__module__": __name__})
 
 
-class TieRightPd(FeatureGroup):
-    """Pandas root whose values depend on the tie_tag option."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"tie_right_val"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pd.DataFrame(_tie_root_data(features, "tie_right_val", [100, 200, 300]))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-    @classmethod
-    def index_columns(cls) -> list[Index] | None:
-        return [TIE_INDEX]
-
-
-class TieRightPa(FeatureGroup):
-    """PyArrow root whose values depend on the tie_tag option."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"tie_right_val"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pa.table(_tie_root_data(features, "tie_right_val", [100, 200, 300]))
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
-
-    @classmethod
-    def index_columns(cls) -> list[Index] | None:
-        return [TIE_INDEX]
+TieLeftPd = _tie_root("TieLeftPd", "tie_left_val", [1, 2, 3], PandasDataFrame)
+TieLeftPa = _tie_root("TieLeftPa", "tie_left_val", [1, 2, 3], PyArrowTable)
+TieRightPd = _tie_root("TieRightPd", "tie_right_val", [100, 200, 300], PandasDataFrame)
+TieRightPa = _tie_root("TieRightPa", "tie_right_val", [100, 200, 300], PyArrowTable)
 
 
 def _tie_parents(options: Options) -> set[Feature]:
@@ -637,35 +573,32 @@ def _tie_parents(options: Options) -> set[Feature]:
     return {Feature("tie_left_val", options={"tie_tag": tag}), Feature("tie_right_val", options={"tie_tag": tag})}
 
 
-class TieConsumerPd(FeatureGroup):
-    """Pandas consumer pulling both roots with its own tie_tag."""
+class _TieConsumer(FeatureGroup):
+    """Consumer pulling both roots with its own tie_tag, computed in FRAMEWORK's native type."""
+
+    FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _tie_parents(options)
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        data[cls.get_class_name()] = data["tie_left_val"] + data["tie_right_val"]
-        return data
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-
-class TieConsumerPa(FeatureGroup):
-    """PyArrow consumer pulling both roots with its own tie_tag."""
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return _tie_parents(options)
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if cls.FRAMEWORK is PandasDataFrame:
+            data[cls.get_class_name()] = data["tie_left_val"] + data["tie_right_val"]
+            return data
         return data.append_column(cls.get_class_name(), pc.add(data["tie_left_val"], data["tie_right_val"]))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+        return {cls.FRAMEWORK}
+
+
+def _tie_consumer(name: str, framework: type[ComputeFramework]) -> type[FeatureGroup]:
+    return type(name, (_TieConsumer,), {"FRAMEWORK": framework, "__module__": __name__})
+
+
+TieConsumerPd = _tie_consumer("TieConsumerPd", PandasDataFrame)
+TieConsumerPa = _tie_consumer("TieConsumerPa", PyArrowTable)
 
 
 _TIE_LEFT: dict[str, type[FeatureGroup]] = {"pd": TieLeftPd, "pa": TieLeftPa}
@@ -713,23 +646,12 @@ def test_one_consumer_requested_with_two_option_variants_over_one_link_joins_eac
     kwargs = _tie_args(left, right, consumer)
     kwargs["parallelization_modes"] = {ParallelizationMode.SYNC}
 
-    results = mloda.run_all(_tie_features(consumer, ["a", "b"]), **kwargs)
-
-    assert _tie_values(results, consumer) == _tie_expected(["a", "b"])
-
-
-@pytest.mark.parametrize("left, right, consumer", _TIE_FRAMEWORK_MIXES)
-def test_one_consumer_requested_with_two_option_variants_over_one_link_plans_one_join_per_variant(
-    left: str, right: str, consumer: str
-) -> None:
-    kwargs = _tie_args(left, right, consumer)
-    kwargs["parallelization_modes"] = {ParallelizationMode.SYNC}
-
     session = mloda.prepare(_tie_features(consumer, ["a", "b"]), **kwargs)
 
     assert session.engine is not None
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
     assert len(join_steps) == 2
+    assert _tie_values(session.run(), consumer) == _tie_expected(["a", "b"])
 
 
 @pytest.mark.parametrize("left, right, consumer", _TIE_FRAMEWORK_MIXES)

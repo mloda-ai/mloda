@@ -20,12 +20,24 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
 )
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_types import DataType
 
 _MAX_LISTED_COLUMNS = 20
+
+HANDLE_OPTION = "data_access_handle"
+HANDLE_SPEC = PropertySpec(
+    "Name of the DataAccessCollection handle to read from.",
+    default=None,
+    strict_validation=True,
+    context=True,
+    element_validator=lambda value: isinstance(value, str),
+    match_guard=lambda value: isinstance(value, str),
+    expected="a str handle name",
+)
 
 
 def _listed(columns: Collection[str] | None) -> str:

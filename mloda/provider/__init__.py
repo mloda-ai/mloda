@@ -45,6 +45,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import ReadDBFG
 from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
@@ -165,6 +166,7 @@ __all__ = [
     "NamePolicy",
     "SourceMatch",
     "FormatFeatureGroup",
+    "ReadDBFG",
     "ReadFileFG",
     "InputDataDescriptor",
     "ApiInputData",

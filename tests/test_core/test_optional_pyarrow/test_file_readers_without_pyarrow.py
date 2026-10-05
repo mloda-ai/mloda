@@ -281,3 +281,60 @@ def test_yaml_document_reader_imports_without_yaml_and_load_raises() -> None:
     assert "mloda[yaml]" in result.stdout, (
         f"Expected mloda[yaml] install hint. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
     )
+
+
+# ---------------------------------------------------------------------------
+# SQLite: the database group imports and loads into PythonDictFramework without pyarrow
+# ---------------------------------------------------------------------------
+_BODY_SQLITE_IMPORT_AND_LOAD: str = """
+import json
+import os
+import sqlite3
+import sys
+import tempfile
+
+try:
+    from mloda.user import DataAccessCollection, PluginCollector, mloda
+    from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+        PythonDictFramework,
+    )
+    from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+    print("IMPORTED")
+except Exception as e:
+    print("IMPORT_FAILED:" + type(e).__name__ + ":" + str(e))
+    sys.exit(0)
+
+fd, path = tempfile.mkstemp(suffix=".sqlite")
+os.close(fd)
+connection = sqlite3.connect(path)
+connection.execute("CREATE TABLE sb_table (sb_a INTEGER, sb_b TEXT, sb_c REAL)")
+connection.execute("INSERT INTO sb_table VALUES (1, 'x', 1.5)")
+connection.execute("INSERT INTO sb_table VALUES (2, 'y', 2.5)")
+connection.commit()
+connection.close()
+
+try:
+    result = mloda.run_all(
+        ["sb_a", "sb_b"],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        data_access_collection=DataAccessCollection(credentials=[{"sqlite": path}]),
+    )
+    print("RESULT:" + json.dumps(result[0], sort_keys=True))
+except Exception as e:
+    print("RUN_FAILED:" + type(e).__name__ + ":" + str(e))
+finally:
+    os.remove(path)
+"""
+
+
+@pytest.mark.timeout(30)
+def test_sqlite_fg_imports_and_loads_into_python_dict_without_pyarrow() -> None:
+    result = run_blocked(_BODY_SQLITE_IMPORT_AND_LOAD)
+    assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
+    assert "IMPORTED" in result.stdout, (
+        f"Expected IMPORTED sentinel after blocking pyarrow. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
+    )
+    assert 'RESULT:{"sb_a": [1, 2], "sb_b": ["x", "y"]}' in result.stdout, (
+        f"Expected the two requested columns. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
+    )

@@ -104,8 +104,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
-from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader  # noqa: F401
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 
 # ---------------------------------------------------------------------------
@@ -1038,7 +1037,7 @@ class TestPlanStepReaderDataAccess:
             ["plan_info_db_col"],
             compute_frameworks=[PythonDictFramework],
             data_access_collection=dac,
-            plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
         )
         return db, explained
 
@@ -1047,7 +1046,8 @@ class TestPlanStepReaderDataAccess:
 
         step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
         assert step.reader_data_access is not None
-        assert "hunter2" in json.dumps(dict(step.reader_data_access[1]))
+        assert step.reader_data_access[0] is SqliteFG
+        assert "hunter2" not in repr(step)
         assert step.data_access_identity == f"{db}::t"
         assert step.data_access_identity_is_fallback is False
 
@@ -1064,7 +1064,7 @@ class TestPlanStepReaderDataAccess:
         assert "hunter2" not in text
         assert db not in text
         records = json.loads(text)["compute"]
-        assert [record["reader"] for record in records] == [f"{SQLITEReader.__module__}:{SQLITEReader.__qualname__}"]
+        assert [record["reader"] for record in records] == [f"{SqliteFG.__module__}:{SqliteFG.__qualname__}"]
 
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
         step = PlanStep(

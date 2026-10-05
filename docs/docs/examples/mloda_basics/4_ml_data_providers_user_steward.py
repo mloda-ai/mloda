@@ -59,7 +59,6 @@ def _():
     import os
     from mloda.user import mloda
     from mloda.user import Feature, DataAccessCollection, PluginLoader
-    from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
     from mloda.user.pyarrow import PyArrowTable
 
     plugin_loader = PluginLoader.all()
@@ -77,7 +76,7 @@ def _():
     data_access_collection.add_folder(base_data_path)
 
     # As a db cannot work with a folder, we need to add a connection for the db.
-    data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")})
+    data_access_collection.add_credentials({"sqlite": os.path.join(base_data_path, "example.sqlite")})
 
     order_features: list[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
     payment_features: list[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]

@@ -22,20 +22,22 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.provider import FeatureGroup, SourceMatch
 from mloda.steward import GateBypassError
 from mloda.user import DataAccessCollection, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import TextFileReader
+from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     neutral_csv_group,
     toy_dac,
 )
-from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 
 _MARKER = "inputload051"
 _EXPECTED_FEATURE_GROUP_CLASS = f"{CsvFG.__module__}.{CsvFG.__qualname__}"
@@ -355,9 +357,9 @@ class TestDataAccessIdentityHidesDictCredentialValues:
             ["name"],
             compute_frameworks=[PyArrowTable],
             data_access_collection=DataAccessCollection(
-                credentials=[{SQLITEReader.db_path(): str(db_path), "user": "alice", "password": "hunter2"}]  # nosec B105
+                credentials=[{"sqlite": str(db_path), "user": "alice", "password": "hunter2"}]  # nosec B105
             ),
-            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
             function_extender={fetch_extender},
         )
 
@@ -385,8 +387,8 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         mloda.run_all(
             ["col_a", "col_b"],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): str(db_path)}]),
-            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            data_access_collection=DataAccessCollection(credentials=[{"sqlite": str(db_path)}]),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
             function_extender={extender},
         )
 
@@ -394,48 +396,49 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identities == {f"{db_path}::table_a", f"{db_path}::table_b"}
 
 
-class TestSQLiteReaderDataAccessIdentity:
-    """SQLITEReader falls back to key names unless the sqlite value is a str naming an existing file."""
+class TestSqliteFGSources:
+    """SqliteFG sources carry the credential-free identity: the absolute path, plus ``::table`` per table."""
 
-    @pytest.mark.parametrize("kind", ["missing_file", "directory", "path_object", "missing_key"])
-    def test_falls_back_to_key_names(self, tmp_path: Path, kind: str) -> None:
-        existing = tmp_path / "x.db"
-        existing.write_bytes(b"")
-        cases: dict[str, dict[str, Any]] = {
-            "missing_file": {"sqlite": str(tmp_path / "missing.db")},
-            "directory": {"sqlite": str(tmp_path)},
-            "path_object": {"sqlite": existing},
-            "missing_key": {"user": "alice"},
-        }
-        access = cases[kind]
-        assert SQLITEReader.data_access_identity(access) == ("{user}" if kind == "missing_key" else "{sqlite}")
+    _ROUTE = ClaimRoute("credentials", NamePolicy.CHECKED, True)
+
+    def _sources(self, credential: dict[str, Any]) -> list[SourceMatch]:
+        dac = DataAccessCollection(credentials={"identity_handle": credential})
+        return SqliteFG.find_sources(self._ROUTE, "identity_col", Options(), dac)
+
+    @pytest.mark.parametrize("kind", ["missing_file", "directory"])
+    def test_an_unreadable_database_is_one_source_named_by_its_path_alone(self, tmp_path: Path, kind: str) -> None:
+        target = tmp_path / "missing.db" if kind == "missing_file" else tmp_path
+        sources = self._sources({"sqlite": str(target)})
+        assert [match.source for match in sources] == [os.path.abspath(target)]
+        assert isinstance(sources[0].access, DBTable)
+        assert sources[0].access.table is None
+        assert SqliteFG.data_access_identity(sources[0]) == os.path.abspath(target)
+
+    @pytest.mark.parametrize("kind", ["path_object", "missing_key"])
+    def test_an_invalid_credential_yields_no_source(self, tmp_path: Path, kind: str) -> None:
+        credential = {"sqlite": tmp_path / "x.db"} if kind == "path_object" else {"user": "alice"}
+        assert self._sources(credential) == []
 
     def test_path_and_table_name_join_with_double_colon(self, tmp_path: Path) -> None:
         db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        access = {"sqlite": str(db), "table_name": "orders"}
-        assert SQLITEReader.data_access_identity(access) == f"{db}::orders"
+        write_sqlite(db, {"orders": {"identity_col": [1]}})
+        assert [match.source for match in self._sources({"sqlite": str(db)})] == [f"{db}::orders"]
 
-    def test_path_without_table_name_stays_the_path(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("table_name", ["", None])
+    def test_an_empty_table_name_is_no_preset(self, tmp_path: Path, table_name: Any) -> None:
         db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        assert SQLITEReader.data_access_identity({"sqlite": str(db)}) == str(db)
+        write_sqlite(db, {"orders": {"identity_col": [1]}, "items": {"identity_col": [2]}})
+        sources = self._sources({"sqlite": str(db), "table_name": table_name})
+        assert sorted(match.source for match in sources) == [f"{db}::items", f"{db}::orders"]
 
-    @pytest.mark.parametrize("table_name", ["", 5, None, b"orders"])
-    def test_non_str_or_empty_table_name_stays_the_path(self, tmp_path: Path, table_name: Any) -> None:
+    def test_password_is_not_leaked_into_the_source_or_its_repr(self, tmp_path: Path) -> None:
         db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        access = {"sqlite": str(db), "table_name": table_name}
-        assert SQLITEReader.data_access_identity(access) == str(db)
-
-    def test_password_is_not_leaked_alongside_table_name(self, tmp_path: Path) -> None:
-        db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        access = {"sqlite": str(db), "user": "alice", "password": "hunter2", "table_name": "orders"}  # nosec B105
-        identity = SQLITEReader.data_access_identity(access)
-        assert identity == f"{db}::orders"
-        assert "hunter2" not in identity
-        assert "alice" not in identity
+        write_sqlite(db, {"orders": {"identity_col": [1]}})
+        credential = {"sqlite": str(db), "user": "alice", "password": "hunter2", "table_name": "orders"}  # nosec B105
+        sources = self._sources(credential)
+        assert [match.source for match in sources] == [f"{db}::orders"]
+        assert "hunter2" not in repr(sources[0])
+        assert "alice" not in repr(sources[0])
 
 
 class TestDataAccessIdentityOfUriStrings:

@@ -50,13 +50,13 @@ class ReadFileFeature(FeatureGroup):
 - **ReadDocument**: For unstructured document loading (Markdown `.md`, YAML `.yaml`/`.yml`, text `.text`/`.txt`/`.TXT`). Skips file types owned by ReadFile by default.
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
-- **ReadDB**: For database-backed loading
+- **ReadDBFG**: For database-backed loading, one FeatureGroup per database kind (`SqliteFG` ships)
 
 ### Writing an input-data reader
 
 Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
 
-- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials`, `build_query`, and `claims_feature_name` (a name-only check that runs before any credential probe). To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
+- **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns`, and `produce_rows`. `is_valid_credentials` must never raise. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
 
     ```python
     from typing import Any
@@ -87,7 +87,7 @@ CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib 
 
 The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (`" 1 "`), `inf`/`infinity`, uppercase `NAN` (the float value, not the `NaN` null token), hex literals (`0x1f`), and a `true`/`1` mix (pyarrow reads `1`/`0` as bools too).
 
-Readers are classified structurally; no reader code is executed for classification. `is_final_reader()` is True when a class overrides `load_data` wholesale, or when it overrides all hooks named by its family's `_final_reader_requires()` (for example `("produce_rows", "connect")` for ReadDB). Family bases (ReadDB, ReadDocument, ReadFile) are never discovered as final readers themselves.
+Readers are classified structurally; no reader code is executed for classification. `is_final_reader()` is True when a class overrides `load_data` wholesale, or when it overrides all hooks named by its family's `_final_reader_requires()` (for example `("produce_rows", "connect")` for a database reader). Family bases (ReadDocument, ReadFile) are never discovered as final readers themselves.
 
 **Warning**: classification is structural (declared is overridden), so an intermediate base that re-declares a hook or `load_data` with a bare `raise NotImplementedError` body is classified as a final reader and enters discovery. Intermediate bases must not re-declare bare hooks; re-anchor the family by declaring `_final_reader_requires` instead.
 
@@ -95,7 +95,7 @@ Readers are classified structurally; no reader code is executed for classificati
 
 ### Column discovery
 
-`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown). It raises `NotImplementedError` when a reader can't enumerate columns, and `ImportError` when a backend it needs is missing; a missing or unreadable source raises `OSError` or `ValueError`. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types and accepting a `str` or `Path` data access (anything else raises `ValueError`); `ParquetReader`, `FeatherReader`, and `OrcReader` override it to report the types stored in the file's own schema, and `JsonReader` the types pyarrow infers while parsing. `SQLITEReader` overrides it too, from SQLite's declared (unenforced) column types; it needs `data_access["table_name"]` already set, e.g. `{"sqlite": path, "table_name": "customers"}`; matching sets it on a copy, not on the registered credential.
+`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown). It raises `NotImplementedError` when a reader can't enumerate columns, and `ImportError` when a backend it needs is missing; a missing or unreadable source raises `OSError` or `ValueError`. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types and accepting a `str` or `Path` data access (anything else raises `ValueError`); `ParquetReader`, `FeatherReader`, and `OrcReader` override it to report the types stored in the file's own schema, and `JsonReader` the types pyarrow infers while parsing. `SqliteFG` overrides it too, from SQLite's declared (unenforced) column types; it takes the matched source, whose table comes from the match.
 
 ### Row counts
 
@@ -168,10 +168,10 @@ Rules for reader authors:
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
 - Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
 - Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden `data_access_name()` included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.
-- A `ReadFile` subclass that cannot enumerate columns (no `get_column_names` override, or one raising `NotImplementedError` or `ImportError`), and a `ReadDB` subclass that does not override `check_feature_in_data_access`, decline a chain- or column-separated feature name while matching. A `ReadDocument` subclass declines such a name on a `DataAccessCollection` (not on a `str` or `Path` access), since a document reader has no columns to confirm such a name. An explicit `column_to_file` pin is exempt; for `ReadDB`, overriding the hook opts out.
+- A `ReadFile` subclass that cannot enumerate columns (no `get_column_names` override, or one raising `NotImplementedError` or `ImportError`), decline a chain- or column-separated feature name while matching. A `ReadDocument` subclass declines such a name on a `DataAccessCollection` (not on a `str` or `Path` access), since a document reader has no columns to confirm such a name. An explicit `column_to_file` pin is exempt.
 - In `ReadFile` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file reader needs the file to be readable when features resolve. A pinned file that cannot be read raises instead of falling back to another file. Any other exception from `get_column_names` ends reader selection for that feature group candidate, so no sibling reader is tried (the engine contains it as a non-match for that candidate); a raise marked with `escalate_match_abort` propagates out of matching.
 
-`ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
+`ReadFile` column validation and the `ReadDBFG` catalog check already record automatically; a custom reader only needs this for its own decline points.
 
 A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's `data_access_name()`) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in `init_reader`. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. A pinned reader is final: when it declines, neither a sibling reader nor the DataAccessCollection serves the feature. When several readers of the probed family are pinned on one feature, pinned readers are probed in name order, a subclass replaces its parent for an equal access, and two remaining acceptors raise, naming both pins. When exactly one pin accepts, the declining pins' vetoes are dropped. Since group options forward to input features, a pin on a derived feature binds its inputs too. A pinned reader that matches nothing without a recorded reason is reported under its own name. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.
 

@@ -11,8 +11,7 @@
 - A required name missing on the anchor raises ValueError naming the hook and the anchor.
 - Classification is purely structural: it never executes load_data or any hook.
 
-ReadDB requires ("produce_rows", "connect") and ReadDocument requires
-("produce_document", "suffix"); both declare a template load_data that probes
+ReadDocument requires ("produce_document", "suffix") and declares a template load_data that probes
 this classification before any lifecycle work.
 
 The synthetic families below are built directly on BaseInputData and expose no
@@ -29,8 +28,6 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.input_data.read_db import ReadDB
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader, TextFileReader
 
@@ -222,9 +219,6 @@ class TestOldNameRemoved:
     def test_supports_scoped_data_access_is_gone_from_base(self) -> None:
         assert not hasattr(BaseInputData, "supports_scoped_data_access")
 
-    def test_supports_scoped_data_access_is_gone_from_read_db(self) -> None:
-        assert not hasattr(ReadDB, "supports_scoped_data_access")
-
 
 class TestDefaultFamilyClassification:
     def test_base_default_requires_is_empty(self) -> None:
@@ -278,7 +272,7 @@ class TestAnchorRedeclaration:
 
 
 class TestAnchorResolution:
-    """final_reader_anchor() is the public seam ReadDB and ReadDocument build their hook seams on."""
+    """final_reader_anchor() is the public seam ReadDocument builds their hook seams on."""
 
     def test_base_is_its_own_anchor(self) -> None:
         assert _final_reader_anchor(BaseInputData) is BaseInputData
@@ -301,7 +295,6 @@ class TestAnchorResolution:
         assert _final_reader_anchor(_SubFamilyWholesale) is _SubFamilyBase
 
     def test_real_readers_anchor_to_their_family(self) -> None:
-        assert _final_reader_anchor(SQLITEReader) is ReadDB
         assert _final_reader_anchor(TextFileReader) is ReadDocument
         assert _final_reader_anchor(PyFileReader) is ReadDocument
 
@@ -335,25 +328,22 @@ class TestLoudValidation:
 
 
 class TestFamilyDeclarations:
-    """ReadDB and ReadDocument declare hook seams."""
+    """ReadDocument declares a hook seam."""
 
     def test_family_requires_tuples(self) -> None:
-        assert _final_reader_requires(ReadDB) == ("produce_rows", "connect")
         assert _final_reader_requires(ReadDocument) == ("produce_document", "suffix")
 
     def test_families_declare_the_anchor_marker_locally(self) -> None:
-        for family in (ReadDB, ReadDocument):
+        for family in (ReadDocument,):
             assert "_final_reader_requires" in family.__dict__
 
-    def test_read_db_and_read_document_declare_template_load_data(self) -> None:
-        """The families own a template load_data yet still classify as non-final anchors."""
-        assert "load_data" in ReadDB.__dict__
+    def test_read_document_declares_template_load_data(self) -> None:
+        """The family owns a template load_data yet still classifies as a non-final anchor."""
         assert "load_data" in ReadDocument.__dict__
-        assert _is_final_reader(ReadDB) is False
         assert _is_final_reader(ReadDocument) is False
 
     def test_families_do_not_define_classification_locally(self) -> None:
-        for family in (ReadDB, ReadDocument):
+        for family in (ReadDocument,):
             assert "supports_scoped_data_access" not in family.__dict__
             assert "is_final_reader" not in family.__dict__
             assert "final_reader_anchor" not in family.__dict__
@@ -361,10 +351,8 @@ class TestFamilyDeclarations:
 
 class TestRealFamilyClassification:
     def test_concrete_readers_are_final(self) -> None:
-        assert _is_final_reader(SQLITEReader) is True
         assert _is_final_reader(TextFileReader) is True
         assert _is_final_reader(PyFileReader) is True
 
     def test_family_bases_are_not_final(self) -> None:
-        assert _is_final_reader(ReadDB) is False
         assert _is_final_reader(ReadDocument) is False

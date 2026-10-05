@@ -41,7 +41,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda.provider import DefaultOptionKeys, ReadFileFG
+from mloda.provider import DefaultOptionKeys, ReadDBFG, ReadFileFG
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
@@ -390,14 +390,14 @@ def property_mapping_declared_union() -> frozenset[str]:
 
 
 def reader_surface_probe_union() -> frozenset[str]:
-    """The PROPERTY_MAPPING union without the file format groups, which declare the two reader keys too.
+    """The PROPERTY_MAPPING union without the file and database format groups, which declare the two reader keys too.
 
-    ``ReadFileFG`` declares ``document_suffixes`` and ``data_access_handle`` in its PROPERTY_MAPPING, so the full
+    ``ReadFileFG`` and ``ReadDBFG`` declare ``data_access_handle`` (``ReadFileFG`` also ``document_suffixes``) in their PROPERTY_MAPPING, so the full
     union no longer tells the reader surface apart; this one does.
     """
     keys: set[str] = set()
     for cls in get_all_subclasses(FeatureGroup):
-        if cls.__module__.startswith("mloda_plugins") and not issubclass(cls, ReadFileFG):
+        if cls.__module__.startswith("mloda_plugins") and not issubclass(cls, (ReadFileFG, ReadDBFG)):
             keys |= set(cls.declared_option_keys())
     return frozenset(keys)
 
@@ -479,7 +479,7 @@ def test_declared_union_recognizes_reader_declarations(key: str) -> None:
 
 @pytest.mark.parametrize("key", sorted(READER_ONLY_KEYS))
 def test_reader_keys_are_attributable_to_the_reader_surface_alone(key: str) -> None:
-    """No PROPERTY_MAPPING outside the file format groups and no framework-reserved key covers these."""
+    """No PROPERTY_MAPPING outside the file and database format groups and no framework-reserved key covers these."""
     assert key not in reader_surface_probe_union()
     assert key not in FRAMEWORK_KEYS
 

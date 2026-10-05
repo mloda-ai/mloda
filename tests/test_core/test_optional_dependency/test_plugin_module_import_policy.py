@@ -115,7 +115,7 @@ MODULE_EXTRA: dict[str, str] = {
     f"{_INPUT_DATA}.file_formats.orc_fg": "pyarrow",
     f"{_INPUT_DATA}.file_formats.parquet_fg": "pyarrow",
     f"{_INPUT_DATA}.file_formats.stock_formats": "pyarrow",
-    f"{_INPUT_DATA}.read_dbs.sqlite": "sqlite",
+    f"{_INPUT_DATA}.db_formats.sqlite_fg": "sqlite",
     f"{_INPUT_DATA}.read_files.yaml_document_reader": "yaml",
 }
 
@@ -144,7 +144,6 @@ EAGER_MODULES: frozenset[str] = frozenset(
         "mloda_plugins.feature_group.experimental.time_window.pyarrow",
         "mloda_plugins.feature_group.experimental.geo_distance.pandas",
         "mloda_plugins.feature_group.experimental.time_window.pandas",
-        "mloda_plugins.feature_group.input_data.read_dbs.sqlite",
     }
 )
 

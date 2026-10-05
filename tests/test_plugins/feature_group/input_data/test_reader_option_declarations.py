@@ -14,12 +14,11 @@ import pytest
 
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.provider import ReadFileFG
+from mloda.provider import ReadDBFG, ReadFileFG
 from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
-from mloda_plugins.feature_group.input_data.read_db import ReadDB
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_files.markdown_document_reader import MarkdownDocumentReader
 
@@ -124,27 +123,26 @@ class TestReadDocumentDeclarations:
         assert MarkdownDocumentReader.reader_option_default("document_suffixes") == frozenset()
 
 
-class TestReadDBDeclarations:
-    """ReadDB reads only the handle hint, so it declares only that key."""
+class TestReadDBFGDeclarations:
+    """ReadDBFG reads only the handle hint, so it declares only that key, and its formats inherit it."""
 
     def test_declares_exactly_its_match_time_keys(self) -> None:
-        assert ReadDB.declared_reader_option_keys() == {"data_access_handle", _RESERVED_KEY}
+        assert ReadDBFG.declared_option_keys() == {"data_access_handle"}
 
     def test_declared_values_are_property_specs(self) -> None:
-        assert all(isinstance(spec, PropertySpec) for spec in ReadDB.reader_option_specs().values())
+        assert ReadDBFG.PROPERTY_MAPPING is not None
+        assert all(isinstance(spec, PropertySpec) for spec in ReadDBFG.PROPERTY_MAPPING.values())
 
     def test_declared_default(self) -> None:
-        assert ReadDB.reader_option_specs()["data_access_handle"].default is None
-        assert ReadDB.reader_option_default("data_access_handle") is None
+        assert ReadDBFG.PROPERTY_MAPPING is not None
+        assert ReadDBFG.PROPERTY_MAPPING["data_access_handle"].default is None
 
     def test_document_suffixes_is_not_a_read_db_key(self) -> None:
-        with pytest.raises(ValueError, match="document_suffixes"):
-            ReadDB.reader_option_default("document_suffixes")
+        assert "document_suffixes" not in ReadDBFG.declared_option_keys()
 
-    def test_sqlite_reader_inherits_without_redeclaring(self) -> None:
-        assert "READER_OPTIONS" not in SQLITEReader.__dict__
-        assert SQLITEReader.declared_reader_option_keys() == ReadDB.declared_reader_option_keys()
-        assert SQLITEReader.reader_option_default("data_access_handle") is None
+    def test_sqlite_group_inherits_without_redeclaring(self) -> None:
+        assert "PROPERTY_MAPPING" not in SqliteFG.__dict__
+        assert SqliteFG.declared_option_keys() == ReadDBFG.declared_option_keys()
 
 
 class TestEveryOptionKeyReadIsDeclared:
@@ -167,13 +165,14 @@ class TestEveryOptionKeyReadIsDeclared:
         assert set(options.read_keys) == {"document_suffixes", "data_access_handle"}
         assert set(options.read_keys) <= ReadDocument.declared_reader_option_keys()
 
-    def test_read_db_reads_only_declared_keys(self, tmp_path: Path) -> None:
+    def test_read_db_group_reads_only_declared_keys(self, tmp_path: Path) -> None:
         options = _RodRecordingOptions()
-        data_access = DataAccessCollection(credentials=[{"db_path": str(tmp_path / "rod.sqlite")}])
+        data_access = DataAccessCollection(credentials=[{"sqlite": str(tmp_path / "rod.sqlite")}])
 
-        assert ReadDB.match_subclass_data_access(data_access, ["any"], options) is None
-        assert set(options.read_keys) == {"data_access_handle"}
-        assert set(options.read_keys) <= ReadDB.declared_reader_option_keys()
+        assert not SqliteFG.match_feature_group_criteria("rod_any", options, data_access)
+        read = set(options.read_keys) - {SqliteFG.get_class_name()}
+        assert read == {"data_access_handle"}
+        assert read <= ReadDBFG.declared_option_keys()
 
 
 class TestDeclaredDefaultIsLoadBearing:

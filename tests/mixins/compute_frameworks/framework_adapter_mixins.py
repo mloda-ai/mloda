@@ -1,7 +1,7 @@
-"""Compute-framework adapters and a loads-into-framework check for file format groups.
+"""Compute-framework adapters and loads-into-framework checks for file and database format groups.
 
 Adapters resolve the framework class lazily (after importorskip), never at import, class or parametrize time.
-Combine one adapter with FileLoadsIntoFrameworkMixin in a concrete Test class.
+Combine one adapter with FileLoadsIntoFrameworkMixin or DatabaseLoadsIntoFrameworkMixin in a concrete Test class.
 """
 
 import os
@@ -138,4 +138,53 @@ class FileLoaderNameMixin(FileLoadsIntoFrameworkMixin):
         assert len(capture.contexts) == 1
         context = capture.contexts[0]
         assert context.reader_class is self.file_group
+        assert context.data_access_loader == self.expected_loader
+
+
+class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
+    """A database group loads exactly the requested columns, with their values, into the adapter's framework.
+
+    The concrete class sets ``db_group``, ``credential_key`` and ``expected_loader``; combine with an adapter.
+    """
+
+    db_group: type[Any]
+    credential_key: str
+    expected_loader: str
+    columns = ("dbloads_a", "dbloads_b", "dbloads_c")
+
+    def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
+        raise NotImplementedError
+
+    def values_of(self, result: Any, column: str) -> list[Any]:
+        raise NotImplementedError
+
+    def _run(self, tmp_path: Path, extender: Any = None) -> list[Any]:
+        framework = self.compute_framework()
+        path = tmp_path / "dbloads.db"
+        self.write_database(path, {"dbloads_table": {name: [1, 2, 3] for name in self.columns}})
+        return mloda.run_all(
+            list(self.columns[:2]),
+            compute_frameworks=[framework],
+            plugin_collector=PluginCollector.enabled_feature_groups({self.db_group}),
+            data_access_collection=DataAccessCollection(
+                credentials={"dbloads_handle": {self.credential_key: str(path)}}
+            ),
+            function_extender=None if extender is None else {extender},
+        )
+
+    def test_loads_requested_columns_with_their_values(self, tmp_path: Path) -> None:
+        result = self._run(tmp_path)
+
+        assert len(result) == 1
+        assert self.columns_of(result[0]) == set(self.columns[:2])
+        assert [self.values_of(result[0], name) for name in self.columns[:2]] == [[1, 2, 3], [1, 2, 3]]
+
+    def test_input_data_load_names_the_loader(self, tmp_path: Path) -> None:
+        capture = _LoadCapture()
+
+        self._run(tmp_path, capture)
+
+        assert len(capture.contexts) == 1
+        context = capture.contexts[0]
+        assert context.reader_class is self.db_group
         assert context.data_access_loader == self.expected_loader

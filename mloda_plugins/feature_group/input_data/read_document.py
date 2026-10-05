@@ -93,7 +93,7 @@ class ReadDocument(BaseInputData):
     @classmethod
     def _final_reader_requires(cls) -> tuple[str, ...]:
         # Requiring suffix alongside produce_document screens out intermediate bases that
-        # share produce_document but leave suffix abstract, mirroring ReadDB's connect requirement.
+        # share produce_document but leave suffix abstract.
         return ("produce_document", "suffix")
 
     @classmethod

@@ -1,9 +1,8 @@
 """Readers decline with an attributable reason (issue #727, cycles 2 and 3).
 
-A reader that ESTABLISHED OWNERSHIP of an input (suffix match for files, valid credentials for
-databases) but whose content rule fails must record an attributable reason via
-``record_match_rejection``; a plain non-match (wrong suffix, unrecognized or invalid credentials)
-records nothing, and so does a successful match.
+A reader that ESTABLISHED OWNERSHIP of an input (suffix match for files) but whose content rule fails must
+record an attributable reason via ``record_match_rejection``; a plain non-match (wrong suffix) records nothing,
+and so does a successful match. Databases: the database contract mixin.
 
 Cycle 3: a reader records a ``MatchRejection`` stamped ``stage="input_data"``, the engine harvests
 it into an ``input_data`` elimination and ``render_resolution_failure`` labels the near-miss line
@@ -12,13 +11,11 @@ to ``value_rejection`` without crashing the run.
 
 All names carry a ``rej727`` marker and the file suffixes are globally unique: the readers and the
 feature group defined here become global subclasses discovered process-wide, so under pytest-xdist
-they must stay inert for every other test's inputs. The ReadDB doubles are additionally never final
-readers (no load_data or hook overrides), so reader discovery never returns them at all.
+they must stay inert for every other test's inputs.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +30,6 @@ from mloda.core.prepare.resolution_failure_renderer import render_resolution_fai
 from mloda.provider import BaseInputData, ComputeFramework, FeatureGroup, FeatureSet
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
@@ -42,8 +38,6 @@ BOGUS_STAGE_FEATURE_REJ727 = "rej727_bogus_stage_column"
 BOGUS_STAGE_REASON_REJ727 = "custom decline"
 FILE_SUFFIX_REJ727 = ".rej727csv"
 NIE_SUFFIX_REJ727 = ".rej727nie"
-DB_MARKER_KEY_REJ727 = "rej727db_marker"
-DB_ACCESS_REJ727: dict[str, Any] = {DB_MARKER_KEY_REJ727: True}
 
 
 class Rej727ReaderFamily(SuffixFileReader):
@@ -77,28 +71,6 @@ class Rej727NoIntrospectionReader(Rej727ReaderFamily):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return {FEATURE_NAME_REJ727: [1]}
-
-
-class Rej727DecliningDbReader(ReadDB):
-    """Recognizes only the marker credentials, then declines every feature at the content rule."""
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        return credentials.get(DB_MARKER_KEY_REJ727) is True
-
-    @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        return False
-
-
-class Rej727AgnosticDbReader(ReadDB):
-    """Accepts the marker credentials, soft-declines unknown ones; cannot introspect features."""
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        if credentials.get(DB_MARKER_KEY_REJ727) is not True:
-            raise NotImplementedError
-        return True
 
 
 class Rej727FileFG(FeatureGroup):
@@ -235,134 +207,6 @@ class TestPinnedFileMatchRejection:
         assert Rej727CsvHeaderReader.get_class_name() in stored.reason
         assert file_path in stored.reason
         assert FEATURE_NAME_REJ727 in stored.reason
-
-
-class TestReadDbMatchRejections:
-    """Unit level: valid credentials establish ownership, check_feature_in_data_access is the content rule."""
-
-    def test_declined_feature_with_valid_credentials_records_attributable_reason(
-        self, rejection_window: dict[str, Any]
-    ) -> None:
-        """Ownership established, feature declined: one input_data rejection naming reader and feature."""
-        matched = Rej727DecliningDbReader.match_read_db_data_access([DB_ACCESS_REJ727], [FEATURE_NAME_REJ727])
-
-        assert matched is None
-        assert list(rejection_window) == [Rej727DecliningDbReader.get_class_name()]
-        stored = rejection_window[Rej727DecliningDbReader.get_class_name()]
-        assert stored.stage == "input_data"
-        assert Rej727DecliningDbReader.get_class_name() in stored.reason
-        assert FEATURE_NAME_REJ727 in stored.reason
-
-    def test_not_implemented_feature_check_matches_and_records_nothing(self, rejection_window: dict[str, Any]) -> None:
-        """A reader that cannot introspect features keeps matching on credentials alone, silently."""
-        matched = Rej727AgnosticDbReader.match_read_db_data_access([DB_ACCESS_REJ727], [FEATURE_NAME_REJ727])
-
-        assert matched is DB_ACCESS_REJ727
-        assert rejection_window == {}
-
-    def test_not_implemented_credentials_check_records_nothing(self, rejection_window: dict[str, Any]) -> None:
-        """NotImplementedError from is_valid_credentials is a soft no-match: no ownership, no recording."""
-        matched = Rej727AgnosticDbReader.match_read_db_data_access([{"rej727_unrelated": 1}], [FEATURE_NAME_REJ727])
-
-        assert matched is None
-        assert rejection_window == {}
-
-    def test_invalid_credentials_record_nothing(self, rejection_window: dict[str, Any]) -> None:
-        """is_valid_credentials returning False is a plain non-match: no ownership, no recording."""
-        matched = Rej727DecliningDbReader.match_read_db_data_access([{"rej727_unrelated": 1}], [FEATURE_NAME_REJ727])
-
-        assert matched is None
-        assert rejection_window == {}
-
-
-CLAIM1753_PREFIX = "rej1753_"
-CLAIM1753_KEY = "rej1753db_marker"
-CLAIM1753_HANDLE = "rej1753_handle"
-CLAIM1753_OWN_NAME = "rej1753_own_column"
-CLAIM1753_FOREIGN_NAME = "other1753_column"
-
-
-class Rej1753ClaimingDbReader(ReadDB):
-    """Final reader whose credential slot can be malformed; claims only rej1753_ feature names."""
-
-    probe_calls: list[Any] = []
-
-    @classmethod
-    def claims_feature_name(cls, feature_name: str) -> bool:
-        return feature_name.startswith(CLAIM1753_PREFIX)
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        if CLAIM1753_KEY not in credentials:
-            return False
-        cls.probe_calls.append(credentials)
-        if credentials[CLAIM1753_KEY] is not True:
-            record_match_rejection(cls.get_class_name(), "malformed rej1753 credential slot", stage="input_data")
-            return False
-        return True
-
-    @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        return True
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        return {CLAIM1753_OWN_NAME: [1]}
-
-
-@pytest.fixture()
-def claim1753_calls() -> Iterator[list[Any]]:
-    Rej1753ClaimingDbReader.probe_calls.clear()
-    yield Rej1753ClaimingDbReader.probe_calls
-    Rej1753ClaimingDbReader.probe_calls.clear()
-
-
-def _malformed_dac() -> DataAccessCollection:
-    return DataAccessCollection(credentials={CLAIM1753_HANDLE: {CLAIM1753_KEY: "malformed"}})
-
-
-class TestReadDbClaimsFeatureName:
-    """An unclaimed feature name is a silent non-match before any credential probe."""
-
-    def test_default_claims_every_feature_name(self) -> None:
-        assert ReadDB.claims_feature_name("anything") is True
-
-    @pytest.mark.parametrize(
-        ("data_access", "options"),
-        [
-            pytest.param(_malformed_dac(), Options(), id="collection"),
-            pytest.param(_malformed_dac(), Options({"data_access_handle": CLAIM1753_HANDLE}), id="handle_hint"),
-            pytest.param({CLAIM1753_KEY: "malformed"}, Options(), id="plain_dict"),
-        ],
-    )
-    def test_unclaimed_name_skips_credential_probe(
-        self, rejection_window: dict[str, Any], claim1753_calls: list[Any], data_access: Any, options: Options
-    ) -> None:
-        matched = Rej1753ClaimingDbReader.match_subclass_data_access(data_access, [CLAIM1753_FOREIGN_NAME], options)
-
-        assert matched is None
-        assert claim1753_calls == []
-        assert rejection_window == {}
-
-    def test_claimed_name_still_probes_and_records_malformed_slot(
-        self, rejection_window: dict[str, Any], claim1753_calls: list[Any]
-    ) -> None:
-        matched = Rej1753ClaimingDbReader.match_subclass_data_access(_malformed_dac(), [CLAIM1753_OWN_NAME], Options())
-
-        assert matched is None
-        assert len(claim1753_calls) >= 1
-        assert list(rejection_window) == [Rej1753ClaimingDbReader.get_class_name()]
-
-    def test_claimed_name_with_valid_credentials_matches(
-        self, rejection_window: dict[str, Any], claim1753_calls: list[Any]
-    ) -> None:
-        dac = DataAccessCollection(credentials={CLAIM1753_HANDLE: {CLAIM1753_KEY: True}})
-
-        matched = Rej1753ClaimingDbReader.match_subclass_data_access(dac, [CLAIM1753_OWN_NAME], Options())
-
-        assert matched is not None
-        assert len(claim1753_calls) >= 1
-        assert rejection_window == {}
 
 
 class TestEngineHarvestsReaderRejection:

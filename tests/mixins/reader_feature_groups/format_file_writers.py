@@ -1,7 +1,8 @@
-"""Write a small file of each stock format holding exactly the given columns (backends imported lazily)."""
+"""Write a small file or database of each stock format holding exactly the given columns (backends imported lazily)."""
 
 import csv
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -44,3 +45,22 @@ def write_orc(path: Path, columns: dict[str, list[Any]]) -> None:
 
     with pa.OSFile(str(path), "wb") as sink:
         pyarrow_orc.write_table(pa.Table.from_pydict(columns), sink)
+
+
+def write_sqlite(path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
+    """Create a SQLite database holding one table per entry, each with exactly the given columns."""
+    declared = {int: "INTEGER", float: "REAL", str: "TEXT", bytes: "BLOB"}
+    connection = sqlite3.connect(path)
+    try:
+        for table, columns in tables.items():
+            names = list(columns)
+            quoted_table = '"' + table.replace('"', '""') + '"'
+            quoted = ['"' + name.replace('"', '""') + '"' for name in names]
+            types = [declared[type(columns[name][0])] for name in names]
+            connection.execute(f"CREATE TABLE {quoted_table} ({', '.join(f'{q} {t}' for q, t in zip(quoted, types))})")
+            placeholders = ", ".join("?" for _ in names)
+            insert = f"INSERT INTO {quoted_table} VALUES ({placeholders})"  # nosec B608 - quoted names, bound values
+            connection.executemany(insert, list(zip(*(columns[name] for name in names))))
+        connection.commit()
+    finally:
+        connection.close()

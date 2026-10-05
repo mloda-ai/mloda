@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
@@ -28,8 +29,6 @@ from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.read_db import ReadDB
-from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
@@ -39,7 +38,6 @@ MODULE_SUFFIX_MARKERS = ("vg961", "vg1006", "vg1454")
 VG961_FILE_FEATURE = "vg961_file_column"
 VG961_FILE_SUFFIX = ".vg961csv"
 
-VG961_DB_FEATURE = "vg961_db_column"
 VG961_DB_MARKER = "vg961_db_marker"
 
 VG1006_FILE_FEATURE = "vg1006_file_column"
@@ -56,6 +54,44 @@ VG1006_FOREIGN_REASON = "vg1006 foreign reason"
 VG1454_FILE_FEATURE = "vg1454_file_column"
 VG1454_FILE_SUFFIX = ".vg1454csv"
 VG1454_JSON_SUFFIX = ".vg1454json"
+
+
+class _CredentialFamily(BaseInputData):
+    """Credential-matching family built directly on BaseInputData, never final and inert without valid credentials."""
+
+    @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        if isinstance(data_access, dict) and not isinstance(data_access, RegisteredCredential):
+            return RegisteredCredential(data_access)
+        return data_access
+
+    @classmethod
+    def is_valid_credentials(cls, credentials: Any) -> bool:
+        return False
+
+    @classmethod
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return True
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Any = None) -> Any:
+        if isinstance(data_access, DataAccessCollection):
+            candidates = list(data_access.credentials.values())
+        elif isinstance(data_access, dict):
+            candidates = [data_access]
+        else:
+            candidates = []
+        for credentials in candidates:
+            if not cls.is_valid_credentials(credentials):
+                continue
+            if cls.check_feature_in_data_access(feature_names[0], credentials):
+                return credentials
+            record_match_rejection(
+                cls.get_class_name(),
+                f"{cls.get_class_name()} accepted the credentials but declined the feature '{feature_names[0]}'",
+                stage=INPUT_DATA_STAGE,
+            )
+        return None
 
 
 class Vg961FileFamily(SuffixFileReader):
@@ -92,41 +128,6 @@ class Vg961FileFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {VG961_FILE_FEATURE}
-
-
-class Vg961DbFamily(ReadDB):
-    """Family base of the db shape; it overrides nothing, so it never classifies as final."""
-
-
-class Vg961DbReader(Vg961DbFamily):
-    """Final db reader accepting only vg961-marked credentials, then declining its feature on content."""
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        return {VG961_DB_FEATURE: [1]}
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        return VG961_DB_MARKER in credentials
-
-    @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        return False
-
-
-class Vg961DbFG(FeatureGroup):
-    """Root FG whose name rule claims vg961_db_column while its addressed db reader declines the feature."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return Vg961DbFamily()
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return None
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {VG961_DB_FEATURE}
 
 
 class Vg1006AliasFamily(SuffixFileReader):
@@ -223,14 +224,10 @@ class Vg1454JsonReader(Vg1454FileFamily):
 VG1454_BROKEN_DB_FEATURE = "vg1454_broken_db_feature"
 
 
-class Vg1454BrokenSuffixDbFamily(ReadDB):
-    """Family base of an unrelated db shape; it overrides nothing, so it never classifies as final."""
-
-
-class Vg1454BrokenSuffixDbReader(Vg1454BrokenSuffixDbFamily):
-    """Final db reader from a totally different family than Vg1454FileFamily; its suffix() raises an
+class Vg1454BrokenSuffixReader(BaseInputData):
+    """Final reader from a totally different family than Vg1454FileFamily; its suffix() raises an
     unrelated exception instead of returning a tuple or raising NotImplementedError, modeling a broken
-    third-party plugin for bug 2's cross-family exception containment."""
+    third-party plugin for bug 2's cross-family exception containment. It never matches anything."""
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
@@ -241,12 +238,8 @@ class Vg1454BrokenSuffixDbReader(Vg1454BrokenSuffixDbFamily):
         return {VG1454_BROKEN_DB_FEATURE: [1]}
 
     @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        return VG961_DB_MARKER in credentials
-
-    @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        return False
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Any = None) -> Any:
+        return None
 
 
 class Vg1454FileFG(FeatureGroup):
@@ -267,7 +260,7 @@ class Vg1454FileFG(FeatureGroup):
 VG1756_FEATURE = "vg1756_x1"
 
 
-class Vg1756DbFamily(ReadDB):
+class Vg1756DbFamily(_CredentialFamily):
     """Family base of the two-sibling db shape; it overrides nothing, so it never classifies as final."""
 
 
@@ -444,20 +437,6 @@ class TestOwnedContentDeclineGatesNameRules:
         assert message is not None
         assert f"  - {Vg961FileFG.__name__} (input data): {elimination.reason}" in message
 
-    def test_an_owned_db_feature_decline_gates_the_name_rule(self) -> None:
-        """The addressed db reader accepts the credentials but declines the feature: eliminated too."""
-        feature = Feature(name=VG961_DB_FEATURE, options={Vg961DbReader.__name__: {VG961_DB_MARKER: "vg961"}})
-        accessible_plugins: FeatureGroupEnvironmentMapping = {Vg961DbFG: {PandasDataFrame}}
-
-        result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, None, None)
-
-        assert result.identified == {}
-        elimination = result.eliminations.get(Vg961DbFG)
-        assert elimination is not None
-        assert elimination.stage == "input_data"
-        assert "declined" in elimination.reason
-        assert VG961_DB_FEATURE in elimination.reason
-
     def test_an_owned_decline_on_the_pinned_file_gates_the_name_rule_even_with_a_match_on_another(
         self, tmp_path: Path
     ) -> None:
@@ -614,7 +593,7 @@ class TestUnrelatedFamilyExceptionContainment:
     def test_a_broken_sibling_familys_suffix_does_not_abort_an_unrelated_no_owner_probe(
         self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """Vg1454BrokenSuffixDbReader lives in a totally different (ReadDB) family from Vg1454FileFamily
+        """Vg1454BrokenSuffixReader lives in a totally different family from Vg1454FileFamily
         and raises RuntimeError from suffix(); round 1 probes every registered reader's suffix() with no
         per-reader containment, so today this is expected to raise the RuntimeError unhandled out of this
         call (previously impossible: a reader's suffix() was only ever probed while matching its own
@@ -725,7 +704,7 @@ class TestPinnedReaderDoesNotFallBackToGlobalRoute:
                 [feature],
                 compute_frameworks=[PythonDictFramework],
                 data_access_collection=DataAccessCollection(credentials=[{"vg1756_sibling": {}}]),
-                plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
+                plugin_collector=PluginCollector.enabled_feature_groups({Vg1756DbFG}),
             )
 
 
@@ -800,13 +779,16 @@ class TestModuleLeakPolicy:
                 assert all(any(marker in s for marker in MODULE_SUFFIX_MARKERS) for s in cls.suffix()), (
                     f"{cls.__name__} must own only suffixes carrying one of {MODULE_SUFFIX_MARKERS}"
                 )
-            else:
-                assert issubclass(cls, ReadDB), f"{cls.__name__} must be a module-marked file or db reader"
+            elif issubclass(cls, _CredentialFamily):
                 assert cls.is_valid_credentials({"vg961_foreign": "x"}) is False, (
                     f"{cls.__name__} must stay inert on foreign credentials"
                 )
                 assert cls.is_valid_credentials({VG961_DB_MARKER: "vg961"}) is True, (
                     f"{cls.__name__} must require its module-unique credentials marker"
+                )
+            else:
+                assert cls.match_subclass_data_access({"vg961_foreign": "x"}, ["any"], Options()) is None, (
+                    f"{cls.__name__} must stay inert on foreign credentials"
                 )
             for key, spec in cls.reader_option_specs().items():
                 if spec.framework_set:

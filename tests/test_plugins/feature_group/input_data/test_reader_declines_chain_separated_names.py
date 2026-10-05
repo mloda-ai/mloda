@@ -1,4 +1,6 @@
-"""Unvalidated readers (a suffix file reader family, ReadDB, ReadDocument) must decline chain/column-separated names.
+"""Unvalidated readers (a suffix file reader family, ReadDocument) must decline chain/column-separated names.
+
+Database groups: the database contract mixin.
 
 The reader and feature groups here become global subclasses discovered process-wide, so every
 name carries a "chaindecline" marker to stay inert for other tests under pytest-xdist.
@@ -28,7 +30,6 @@ from mloda.provider import (
 )
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 from tests.helpers.suffix_file_reader import SuffixFileReader
@@ -39,18 +40,7 @@ CHAINDECLINE_PLAIN_FEATURE = "chaindecline_plain_column"
 CHAINDECLINE_CHAIN_FEATURE = f"{CHAINDECLINE_PLAIN_FEATURE}{CHAIN_SEPARATOR}rebased_chaindeclinechain"
 CHAINDECLINE_MULTI_OUTPUT_FEATURE = f"{CHAINDECLINE_PLAIN_FEATURE}{COLUMN_SEPARATOR}0"
 
-CHAINDECLINE_DB_MARKER_KEY = "chaindecline_db_marker"
-CHAINDECLINE_DB_ACCESS: dict[str, Any] = {CHAINDECLINE_DB_MARKER_KEY: True}
-CHAINDECLINE_DB_PLAIN_FEATURE = "chaindecline_db_plain_column"
-CHAINDECLINE_DB_CHAIN_FEATURE = f"{CHAINDECLINE_DB_PLAIN_FEATURE}{CHAIN_SEPARATOR}rebased"
-CHAINDECLINE_DB_MULTI_OUTPUT_FEATURE = f"{CHAINDECLINE_DB_PLAIN_FEATURE}{COLUMN_SEPARATOR}0"
-
-
 CHAINDECLINE_ABORT_PLAIN_FEATURE = "chaindecline_abort_plain_column"
-
-CHAINDECLINE_DB_ABORT_MARKER_KEY = "chaindecline_db_abort_marker"
-CHAINDECLINE_DB_ABORT_ACCESS: dict[str, Any] = {CHAINDECLINE_DB_ABORT_MARKER_KEY: True}
-CHAINDECLINE_DB_ABORT_PLAIN_FEATURE = "chaindecline_db_abort_plain_column"
 
 CHAINDECLINE_GENERIC_SUFFIX = ".chaindeclinegeneric"
 CHAINDECLINE_READDOC_SUFFIX = ".chaindeclinereaddoc"
@@ -119,48 +109,6 @@ class ChainDeclineDocReader(ReadDocument):
         return {}
 
 
-class ChainDeclineUnvalidatedDbReader(ReadDB):
-    """Accepts only the marker credentials; never overrides check_feature_in_data_access."""
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        return credentials.get(CHAINDECLINE_DB_MARKER_KEY) is True
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        return {CHAINDECLINE_DB_PLAIN_FEATURE: [1]}
-
-
-class ChainDeclineAbortCredentialsDbReader(ReadDB):
-    """Accepts only the marker credentials; is_valid_credentials then raises a marked NotImplementedError."""
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        if credentials.get(CHAINDECLINE_DB_ABORT_MARKER_KEY) is not True:
-            return False
-        raise escalate_match_abort(NotImplementedError("chaindecline db marked abort"))
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        return {CHAINDECLINE_DB_ABORT_PLAIN_FEATURE: [1]}
-
-
-class ChainDeclineAbortFeatureDbReader(ReadDB):
-    """Accepts only the marker credentials; check_feature_in_data_access then raises a marked NotImplementedError."""
-
-    @classmethod
-    def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
-        return credentials.get(CHAINDECLINE_DB_ABORT_MARKER_KEY) is True
-
-    @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        raise escalate_match_abort(NotImplementedError("chaindecline db marked abort"))
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        return {CHAINDECLINE_DB_ABORT_PLAIN_FEATURE: [1]}
-
-
 class ChainDeclineRootFG(FeatureGroup):
     """Root group fronting ChainDeclineUnvalidatedReader; matches whatever the reader accepts."""
 
@@ -200,32 +148,6 @@ class ChainDeclineNamedRootFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {CHAINDECLINE_CHAIN_FEATURE}
-
-
-class ChainDeclineDbRootFG(FeatureGroup):
-    """Root group fronting ChainDeclineUnvalidatedDbReader; matches whatever credentials it accepts."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return ChainDeclineUnvalidatedDbReader()
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return None
-
-
-class ChainDeclineDbChainedFG(FeatureChainParserMixin, FeatureGroup):
-    """Chain-shaped db group: chaindecline_db_plain_column__<op>; default forward_group input_features."""
-
-    PREFIX_PATTERN = r"chaindecline_db_plain_column__([\w]+)$"
-    PROPERTY_MAPPING = {
-        "operation": PropertySpec(
-            "Operation applied to the source values",
-            allowed_values={"rebased": "Rebases the source values"},
-            context=True,
-            strict_validation=True,
-        ),
-        DefaultOptionKeys.in_features: PropertySpec("Source features", context=True),
-    }
 
 
 def _document_dac(route: str, tmp_path: Path, file_name: str) -> tuple[DataAccessCollection, str]:
@@ -297,75 +219,6 @@ class TestBaseInputDataPinnedResolutionPropagation:
         assert is_match_abort(excinfo.value)
 
 
-class TestReadDbDeclinesChainSeparatedNames:
-    """match_read_db_data_access must decline CHAIN_SEPARATOR/COLUMN_SEPARATOR names when unvalidated."""
-
-    def test_chain_separated_name_declines_and_records(self, rejection_window: dict[str, MatchRejection]) -> None:
-        matched = ChainDeclineUnvalidatedDbReader.match_read_db_data_access(
-            [CHAINDECLINE_DB_ACCESS], [CHAINDECLINE_DB_CHAIN_FEATURE]
-        )
-
-        assert matched is None
-        assert list(rejection_window) == [ChainDeclineUnvalidatedDbReader.get_class_name()]
-        stored = rejection_window[ChainDeclineUnvalidatedDbReader.get_class_name()]
-        assert stored.stage == INPUT_DATA_STAGE
-        assert ChainDeclineUnvalidatedDbReader.get_class_name() in stored.reason
-        assert CHAINDECLINE_DB_CHAIN_FEATURE in stored.reason
-
-    def test_column_separated_name_declines_and_records(self, rejection_window: dict[str, MatchRejection]) -> None:
-        matched = ChainDeclineUnvalidatedDbReader.match_read_db_data_access(
-            [CHAINDECLINE_DB_ACCESS], [CHAINDECLINE_DB_MULTI_OUTPUT_FEATURE]
-        )
-
-        assert matched is None
-        assert list(rejection_window) == [ChainDeclineUnvalidatedDbReader.get_class_name()]
-
-    def test_plain_name_still_matches_and_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
-        """The credentials dict is returned unchanged, silently."""
-        matched = ChainDeclineUnvalidatedDbReader.match_read_db_data_access(
-            [CHAINDECLINE_DB_ACCESS], [CHAINDECLINE_DB_PLAIN_FEATURE]
-        )
-
-        assert matched is CHAINDECLINE_DB_ACCESS
-        assert rejection_window == {}
-
-
-class TestReadDbMarkedAbortsPropagate:
-    """A marked NotImplementedError from ReadDB's credential/feature hooks must escape matching, not decline
-    silently: _credentials_predicate and match_read_db_data_access's own is_valid_credentials/
-    check_feature_in_data_access calls are independent call sites, each needing its own guard."""
-
-    def test_marked_abort_from_is_valid_credentials_reraises_via_match_read_db_data_access(self) -> None:
-        with pytest.raises(NotImplementedError) as excinfo:
-            ChainDeclineAbortCredentialsDbReader.match_read_db_data_access(
-                [CHAINDECLINE_DB_ABORT_ACCESS], [CHAINDECLINE_DB_ABORT_PLAIN_FEATURE]
-            )
-
-        assert is_match_abort(excinfo.value)
-
-    def test_marked_abort_from_check_feature_in_data_access_reraises_via_match_read_db_data_access(self) -> None:
-        """Needs BOTH the check_feature_in_data_access handler and the outer is_valid_credentials handler fixed:
-        the inner handler's re-raise falls straight into the outer try's own except clause."""
-        with pytest.raises(NotImplementedError) as excinfo:
-            ChainDeclineAbortFeatureDbReader.match_read_db_data_access(
-                [CHAINDECLINE_DB_ABORT_ACCESS], [CHAINDECLINE_DB_ABORT_PLAIN_FEATURE]
-            )
-
-        assert is_match_abort(excinfo.value)
-
-    def test_marked_abort_from_is_valid_credentials_reraises_via_credentials_predicate(self) -> None:
-        """_credentials_predicate is a separate caller of is_valid_credentials, reached through
-        DataAccessCollection.resolve's predicate parameter before match_read_db_data_access ever runs."""
-        dac = DataAccessCollection(credentials={"chaindecline_abort_handle": CHAINDECLINE_DB_ABORT_ACCESS})
-
-        with pytest.raises(NotImplementedError) as excinfo:
-            ChainDeclineAbortCredentialsDbReader.match_subclass_data_access(
-                dac, [CHAINDECLINE_DB_ABORT_PLAIN_FEATURE], Options()
-            )
-
-        assert is_match_abort(excinfo.value)
-
-
 class TestChainedFeatureResolvesToSingleFeatureGroup:
     """A chain-shaped name resolves to exactly the chained group."""
 
@@ -415,36 +268,6 @@ class TestOwnedContentDeclineGatesExplicitNameRule:
         assert elimination.stage == INPUT_DATA_STAGE
         assert ChainDeclineUnvalidatedReader.get_class_name() in elimination.reason
         assert CHAINDECLINE_CHAIN_FEATURE in elimination.reason
-
-
-class TestChainedDbFeatureResolvesToSingleFeatureGroup:
-    """A chain-shaped db name resolves to exactly the chained group."""
-
-    def _accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
-        return {ChainDeclineDbRootFG: {PandasDataFrame}, ChainDeclineDbChainedFG: {PandasDataFrame}}
-
-    def test_plain_db_name_resolves_to_root_group_only(self) -> None:
-        feature = Feature(
-            name=CHAINDECLINE_DB_PLAIN_FEATURE,
-            options={ChainDeclineUnvalidatedDbReader.__name__: CHAINDECLINE_DB_ACCESS},
-        )
-
-        result = IdentifyFeatureGroupClass.evaluate(feature, self._accessible_plugins(), None)
-
-        assert result.failure_kind is None
-        assert result.identified == {ChainDeclineDbRootFG: {PandasDataFrame}}
-
-    def test_chain_shaped_db_name_resolves_to_chained_group_only(self) -> None:
-        feature = Feature(
-            name=CHAINDECLINE_DB_CHAIN_FEATURE,
-            options={ChainDeclineUnvalidatedDbReader.__name__: CHAINDECLINE_DB_ACCESS},
-        )
-
-        result = IdentifyFeatureGroupClass.evaluate(feature, self._accessible_plugins(), None)
-
-        assert result.failure_kind is None
-        assert result.identified == {ChainDeclineDbChainedFG: {PandasDataFrame}}
-        assert ChainDeclineDbRootFG not in result.identified
 
 
 class TestReadDocumentDeclinesChainSeparatedNames:

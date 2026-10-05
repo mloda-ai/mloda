@@ -1,6 +1,6 @@
 """Tests for the ReadDocument.load_data template-method lifecycle seam.
 
-Contract pinned here (mirrors the ReadDB seam):
+Contract pinned here (the document template-method seam):
 
     ReadDocument gains
       - classmethod produce_document(file_path): the per-format parse hook; the base default
@@ -134,7 +134,7 @@ class _DocHookNoSuffixDoc(ReadDocument):
     """Overrides produce_document but NOT suffix: cannot match or label files, so not final.
 
     The default document_file_type calls cls.suffix(), so the classification screen must
-    reject this shape up front (mirroring ReadDB's connect requirement).
+    reject this shape up front.
     """
 
     produce_calls: ClassVar[list[str]] = []

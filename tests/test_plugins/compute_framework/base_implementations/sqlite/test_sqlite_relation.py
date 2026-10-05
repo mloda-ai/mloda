@@ -15,7 +15,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
     _infer_sqlite_type_from_values,
     _sqlite_affinity_to_arrow_type,
 )
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
 )
@@ -477,7 +477,7 @@ class TestAffinityClassMatchesRelationAndReaderCallSites:
     def test_call_sites_agree(self, declared_type: str, expected_label: str, expected_arrow_type: pa.DataType) -> None:
         assert sqlite_affinity_class(declared_type) == expected_label
         assert _sqlite_affinity_to_arrow_type(declared_type) == expected_arrow_type
-        assert SQLITEReader._affinity_to_datatype(declared_type) == _LABEL_TO_DATATYPE[expected_label]
+        assert SqliteFG._affinity_to_datatype(declared_type) == _LABEL_TO_DATATYPE[expected_label]
 
 
 class TestSqliteDatetimeAdapter:

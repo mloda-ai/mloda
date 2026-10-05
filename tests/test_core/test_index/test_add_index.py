@@ -5,9 +5,7 @@ import sqlite3
 import tempfile
 from typing import Any
 
-from mloda.user import PluginCollector
-from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -23,9 +21,6 @@ from mloda.user import Options
 from mloda.core.abstract_plugins.components.index.add_index_feature import create_index_feature
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
-from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
-    DBInputDataTestFeatureGroup,
-)
 
 
 class TestAddIndex:
@@ -71,27 +66,36 @@ class TestAddIndex:
 
                 return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
-        class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
+        class SqliteFGWithIndex(SqliteFG):
             @classmethod
             def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
 
             @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: FeatureName | str,
+                options: Options,
+                data_access_collection: DataAccessCollection | None = None,
+            ) -> bool:
+                # Feature is only valid for this test
+                if options.get("test_add_index_simple") is None:
+                    return False
+
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+            @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                reader = cls.input_data()
-                if reader is not None:
-                    result = reader.load(features)
+                result = super().calculate_feature(data, features)
 
-                    # As of date of writing this test, we did not handle the types automatically.
-                    # Thus, we need to convert the columns to int64...
-                    for column_name in features.get_all_names():
-                        index = result.schema.get_field_index(column_name)
-                        int64_column = result[column_name].cast(pa.int64())
-                        result = result.set_column(index, column_name, int64_column)
+                # As of date of writing this test, we did not handle the types automatically.
+                # Thus, we need to convert the columns to int64...
+                for column_name in features.get_all_names():
+                    index = result.schema.get_field_index(column_name)
+                    int64_column = result[column_name].cast(pa.int64())
+                    result = result.set_column(index, column_name, int64_column)
 
-                    return result
-
-                raise ValueError(f"Reading file failed for feature {features.get_name_of_one_feature()}.")
+                return result
 
         class AddIndexTest(FeatureGroup):
             @classmethod
@@ -118,12 +122,11 @@ class TestAddIndex:
         link = Link(
             jointype="inner",
             left=JoinSpec(CsvFGWithIndex, Index(("id",))),
-            right=JoinSpec(DBInputDataTestFeatureGroupWithIndex, Index(("id",))),
+            right=JoinSpec(SqliteFGWithIndex, Index(("id",))),
         )
         f = Feature(
             name="TestAddIndexFeature",
             options={
-                SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
                 "test_add_index_simple": True,
             },
         )
@@ -132,8 +135,7 @@ class TestAddIndex:
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
-            data_access_collection=DataAccessCollection(files={self.file_path}),
-            plugin_collector=PluginCollector.disabled_feature_groups({ReadDBFeature}),
+            data_access_collection=DataAccessCollection(files={self.file_path}, credentials=[{"sqlite": self.db_path}]),
         )
         res = result[0].to_pydict()
         assert res == {"TestAddIndexFeature": [6534.37, 2517.54]}

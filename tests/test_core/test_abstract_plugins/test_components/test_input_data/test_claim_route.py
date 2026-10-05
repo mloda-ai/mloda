@@ -33,3 +33,10 @@ def test_provider_exports_are_the_core_objects() -> None:
     assert provider.FormatFeatureGroup is FormatFeatureGroup
     for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "FormatFeatureGroup"):
         assert name in provider.__all__
+
+
+def test_provider_exports_read_file_fg() -> None:
+    from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+
+    assert provider.ReadFileFG is ReadFileFG
+    assert "ReadFileFG" in provider.__all__

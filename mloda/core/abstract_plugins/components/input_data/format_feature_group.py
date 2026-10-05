@@ -75,6 +75,24 @@ class FormatFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
+        """Why the source cannot enumerate its columns, None when no reason is known."""
+        return None
+
+    @classmethod
+    def has_column(cls, match: SourceMatch, column: str) -> bool | None:
+        """Whether the source has the column, None when unknown."""
+        columns = cls.columns(match)
+        return None if columns is None else column in columns
+
+    @classmethod
+    def ambiguity_fix(
+        cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
+    ) -> str:
+        """Advice appended to the several-sources abort."""
+        return "narrow with a data_access_handle or column_to_file."
+
+    @classmethod
     def declared_names(cls) -> frozenset[str]:
         return frozenset()
 
@@ -87,7 +105,20 @@ class FormatFeatureGroup(FeatureGroup):
         cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
     ) -> bool:
         """True when the user pointed at this group: class-name key or feature_group= scope."""
-        return cls._scope_points_here(current_feature_group_scope()) or cls.get_class_name() in options
+        return cls._scope_points_here(current_feature_group_scope()) or any(
+            key in options for key in cls.pointer_keys()
+        )
+
+    @classmethod
+    def pointer_keys(cls) -> tuple[str, ...]:
+        """Own class name, then concrete format ancestors, most-derived first."""
+        return tuple(
+            klass.__name__
+            for klass in cls.__mro__
+            if issubclass(klass, FormatFeatureGroup)
+            and klass is not FormatFeatureGroup
+            and (klass is cls or not inspect.isabstract(klass))
+        )
 
     @classmethod
     def _scope_points_here(cls, scope: Any) -> bool:
@@ -125,6 +156,8 @@ class FormatFeatureGroup(FeatureGroup):
                 )
                 if loader is not None:
                     return loader
+            if "load_neutral" in klass.__dict__:
+                return None
         return None
 
     @classmethod
@@ -181,6 +214,14 @@ class FormatFeatureGroup(FeatureGroup):
         )
 
     @classmethod
+    def _listed_columns(cls, match: SourceMatch) -> str:
+        columns = cls.columns(match)
+        if columns is not None:
+            return _listed(columns)
+        reason = cls.unknown_columns_reason(match)
+        return "unknown" if reason is None else f"unknown ({reason})"
+
+    @classmethod
     def _abort(cls, error: ValueError) -> bool:
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
         if aborts_are_contained():
@@ -196,10 +237,15 @@ class FormatFeatureGroup(FeatureGroup):
         data_access_collection: DataAccessCollection | None,
     ) -> bool:
         name = str(feature_name)
+        if inspect.isabstract(cls):
+            if cls.is_pointed(name, options, data_access_collection):
+                reason = f"{cls.get_class_name()} is abstract; missing {sorted(cls.__abstractmethods__)}"
+                record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            return False
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
         fitting: dict[str, SourceMatch] = {}
-        seen: dict[str, tuple[SourceMatch, Collection[str] | None]] = {}
+        seen: dict[str, SourceMatch] = {}
         undeclared = False
         for route in cls.CLAIM_ROUTES:
             if not all(key in options for key in route.required_options):
@@ -209,19 +255,21 @@ class FormatFeatureGroup(FeatureGroup):
                 continue
             for match in cls.find_sources(route, name, options, data_access_collection):
                 if route.names is NamePolicy.CHECKED:
-                    columns = cls.columns(match)
-                    seen[match.source] = (match, columns)
-                    if columns is not None and base_name in columns:
+                    seen[match.source] = match
+                    if cls.has_column(match, base_name):
                         fitting[match.source] = match
                 elif route.names is NamePolicy.OPEN or cls._declared_name(base_name):
                     fitting[match.source] = match
                 else:
                     undeclared = True
+        if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls._passes_option_declarations(options):
+            return False
         if len(fitting) > 1:
             return cls._abort(
                 ValueError(
                     f"{cls.get_class_name()} found feature '{name}' in several sources: "
-                    f"{', '.join(sorted(fitting))}; narrow with a data_access_handle or column_to_file."
+                    f"{', '.join(sorted(fitting))}; "
+                    f"{cls.ambiguity_fix(name, list(fitting.values()), data_access_collection)}"
                 )
             )
         if len(fitting) == 1:
@@ -229,7 +277,7 @@ class FormatFeatureGroup(FeatureGroup):
             return True
         if seen:
             described = "; ".join(
-                f"{source} has columns {_listed(columns)}" for source, (_, columns) in sorted(seen.items())
+                f"{source} has columns {cls._listed_columns(match)}" for source, match in sorted(seen.items())
             )
             reason = f"column '{base_name}' is in none of the sources of {cls.get_class_name()}: {described}"
             if pointed:

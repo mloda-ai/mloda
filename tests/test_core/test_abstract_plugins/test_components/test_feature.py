@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_files.text_file_reader import TextFileReader
 
 
 def test_feature_equals() -> None:
@@ -367,7 +367,7 @@ def test_hashed_feature_stays_found_after_its_file_is_deleted(tmp_path: Path) ->
     path = tmp_path / "feature_hash_gone.csv"
     path.write_text("x\n1\n")
     f = Feature("x")
-    f.input_data_match = (CsvReader, str(path))
+    f.input_data_match = (TextFileReader, str(path))
     members = {f}
     assert f in members
 

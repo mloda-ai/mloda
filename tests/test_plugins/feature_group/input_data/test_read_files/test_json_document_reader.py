@@ -9,7 +9,7 @@ from typing import Any
 from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.json_document_reader import JsonDocumentReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import ReadFileFG
 
 
 class MockFeatureSet:
@@ -23,15 +23,14 @@ class MockFeatureSet:
 
 
 class TestJsonDocumentReaderInheritance:
-    """Tests that JsonDocumentReader inherits from ReadDocument, not ReadFile."""
+    """Tests that JsonDocumentReader inherits from ReadDocument, not ReadFileFG."""
 
     def test_json_document_reader_inherits_from_read_document(self) -> None:
         """JsonDocumentReader must be a subclass of ReadDocument."""
         assert issubclass(JsonDocumentReader, ReadDocument)
 
-    def test_json_document_reader_not_inherits_from_read_file(self) -> None:
-        """JsonDocumentReader must NOT be a subclass of ReadFile after migration."""
-        assert not issubclass(JsonDocumentReader, ReadFile)
+    def test_json_document_reader_not_inherits_from_read_file_fg(self) -> None:
+        assert not issubclass(JsonDocumentReader, ReadFileFG)
 
 
 class TestJsonDocumentReaderLoadData:

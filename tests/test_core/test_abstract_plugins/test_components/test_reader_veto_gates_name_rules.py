@@ -24,7 +24,7 @@ from mloda.core.prepare.resolution_failure_renderer import render_resolution_fai
 from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
 VG954_FEATURE_NAME = "vg954_column"
@@ -169,7 +169,7 @@ class Vg954PlainFG(FeatureGroup):
         return {VG954_PLAIN_FEATURE_NAME}
 
 
-class Vg954GlobalFamily(ReadFile):
+class Vg954GlobalFamily(SuffixFileReader):
     """Family base of the unowned-content shape; it overrides nothing, so it never classifies as final."""
 
 
@@ -478,7 +478,7 @@ class TestModuleLeakPolicy:
 
         assert module_level, "expected this module's final readers to be reachable through __subclasses__()"
         for cls in module_level:
-            if issubclass(cls, ReadFile):
+            if issubclass(cls, SuffixFileReader):
                 assert all("vg954" in s for s in cls.suffix()), f"{cls.__name__} must own only vg954-marked suffixes"
             else:
                 assert getattr(cls, "VG954_ACCESS", ""), f"{cls.__name__} must declare its module-unique access marker"

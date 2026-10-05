@@ -2,7 +2,7 @@
 
 Contract:
 
-  1. ``CsvReader.load_data`` RESOLVES a CSV into a lightweight, immutable ``FileSource``
+  1. ``CsvFG.load_neutral`` RESOLVES a CSV into a lightweight, immutable ``FileSource``
      descriptor (``.path``, ``.format``, ``.columns``) instead of eagerly materializing a
      ``pyarrow.Table``. This decouples CSV input from pyarrow: any compute framework can
      later materialize the descriptor into its own native type.
@@ -15,13 +15,14 @@ Contract:
      ``ComputeFrameworkTransformer`` and materializes a ``FileSource`` into a columnar
      ``dict[str, list[Any]]`` using only the stdlib.
 
-  4. ``CsvReader.get_column_names`` discovers the header with the stdlib ``csv`` module,
+  4. ``CsvFG.column_names`` discovers the header with the stdlib ``csv`` module,
      decoding UTF-8 explicitly and stripping a leading BOM.
 """
 
 from __future__ import annotations
 
 import csv
+import gc
 import os
 import tempfile
 from collections.abc import Iterator
@@ -33,8 +34,10 @@ import pytest
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.provider import FeatureSet
 from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -42,7 +45,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 
 
 @pytest.fixture()
@@ -59,6 +62,14 @@ def csv_path() -> Iterator[str]:
     os.remove(path)
 
 
+def _csv_fg() -> Any:
+    return load_group("csv_fg", "CsvFG")
+
+
+def _match(path: str | Path) -> SourceMatch:
+    return SourceMatch(source=os.path.abspath(path), access=str(path))
+
+
 def _feature_set(names: list[str]) -> FeatureSet:
     features = FeatureSet()
     for name in names:
@@ -66,20 +77,20 @@ def _feature_set(names: list[str]) -> FeatureSet:
     return features
 
 
-class TestCsvLoadDataResolvesFileSource:
-    """CsvReader.load_data returns a FileSource descriptor, not a materialized table."""
+class TestCsvLoadNeutralResolvesFileSource:
+    """CsvFG.load_neutral returns a FileSource descriptor, not a materialized table."""
 
-    def test_load_data_returns_file_source(self, csv_path: str) -> None:
-        """load_data resolves to a FileSource descriptor, not a materialized pyarrow.Table."""
+    def test_load_neutral_returns_file_source(self, csv_path: str) -> None:
+        """load_neutral resolves to a FileSource descriptor, not a materialized pyarrow.Table."""
         features = _feature_set(["A", "B"])
-        result = CsvReader.load_data(csv_path, features)
+        result = _csv_fg().load_neutral(_match(csv_path), features)
 
         assert isinstance(result, FileSource), f"Expected a FileSource descriptor, got {type(result)!r}"
 
     def test_file_source_carries_path_format_and_columns(self, csv_path: str) -> None:
         """FileSource pins ``.path`` / ``.format`` / ``.columns`` as an immutable, sorted tuple."""
         features = _feature_set(["A", "B"])
-        result = CsvReader.load_data(csv_path, features)
+        result = _csv_fg().load_neutral(_match(csv_path), features)
 
         assert result.path == csv_path
         assert result.format == "csv"
@@ -161,7 +172,7 @@ class TestFileSourceToDictTransformer:
 class TestCsvHeaderIsUtf8Decoded:
     """Header discovery must decode UTF-8 explicitly and strip a leading BOM."""
 
-    def test_get_column_names_decodes_utf8_and_strips_bom(self) -> None:
+    def test_column_names_decodes_utf8_and_strips_bom(self) -> None:
         """A UTF-8 header (with a non-ASCII name and a BOM) is decoded correctly.
 
         The file is written as explicit UTF-8 bytes prefixed with a UTF-8 BOM
@@ -174,7 +185,7 @@ class TestCsvHeaderIsUtf8Decoded:
         with open(path, "wb") as f:
             f.write(b"\xef\xbb\xbf" + content.encode("utf-8"))
         try:
-            names = list(CsvReader.get_column_names(path))
+            names = list(_csv_fg().column_names(path))
 
             assert names[0] == "café", f"expected 'café' as the first header, got {names[0]!r}"
             assert not names[0].startswith("\ufeff"), f"BOM leaked into the first header: {names[0]!r}"
@@ -199,20 +210,18 @@ def csv_path_with_blanks_and_embedded_newline() -> Iterator[str]:
     os.remove(path)
 
 
-class TestCsvReaderCountRows:
-    """CsvReader.count_rows counts like FileSourceDictTransformer, dict framework only."""
+class TestCsvFGCountRows:
+    """CsvFG.count_rows counts like FileSourceDictTransformer, dict framework only."""
 
-    def test_count_rows_matches_transformer_row_count_for_str_and_path(
-        self, csv_path_with_blanks_and_embedded_newline: str
-    ) -> None:
+    def test_count_rows_matches_transformer_row_count(self, csv_path_with_blanks_and_embedded_newline: str) -> None:
         transformer_map = ComputeFrameworkTransformer().transformer_map
         transformer = transformer_map[(FileSource, dict)]
         source = FileSource(path=csv_path_with_blanks_and_embedded_newline, format="csv", columns=("A", "B"))
         materialized = transformer.transform(FileSource, dict, source, None)
         expected = len(materialized["A"])
 
-        for candidate in (csv_path_with_blanks_and_embedded_newline, Path(csv_path_with_blanks_and_embedded_newline)):
-            assert CsvReader.count_rows(candidate, PythonDictFramework) == expected
+        match = _match(csv_path_with_blanks_and_embedded_newline)
+        assert _csv_fg().count_rows(match, PythonDictFramework) == expected
 
     def test_count_rows_raises_value_error_on_ragged_row_like_the_transformer(self, tmp_path: Path) -> None:
         """A short data row is a ValueError in FileSourceDictTransformer; count_rows must match."""
@@ -229,48 +238,101 @@ class TestCsvReaderCountRows:
         with pytest.raises(ValueError):
             transformer.transform(FileSource, dict, source, None)
         with pytest.raises(ValueError):
-            CsvReader.count_rows(str(path), PythonDictFramework)
-
-    def test_count_rows_rejects_non_path_data_access_under_dict_framework(self) -> None:
-        with pytest.raises(ValueError):
-            CsvReader.count_rows(DataAccessCollection(files={"dummy.csv"}), PythonDictFramework)
+            _csv_fg().count_rows(_match(path), PythonDictFramework)
 
     def test_count_rows_raises_oserror_for_absent_file_under_dict_framework(self, tmp_path: Path) -> None:
         with pytest.raises(OSError):
-            CsvReader.count_rows(str(tmp_path / "absent.csv"), PythonDictFramework)
+            _csv_fg().count_rows(_match(tmp_path / "absent.csv"), PythonDictFramework)
 
     def test_count_rows_counts_zero_for_empty_and_header_only_files(self, tmp_path: Path) -> None:
         empty_path = tmp_path / "empty.csv"
         empty_path.write_bytes(b"")
-        assert CsvReader.count_rows(str(empty_path), PythonDictFramework) == 0
+        assert _csv_fg().count_rows(_match(empty_path), PythonDictFramework) == 0
 
         header_only_path = tmp_path / "header_only.csv"
         with open(header_only_path, "w", newline="") as f:
             csv.writer(f).writerow(["A", "B"])
-        assert CsvReader.count_rows(str(header_only_path), PythonDictFramework) == 0
+        assert _csv_fg().count_rows(_match(header_only_path), PythonDictFramework) == 0
 
     def test_count_rows_is_none_under_non_dict_frameworks(self, csv_path_with_blanks_and_embedded_newline: str) -> None:
-        assert CsvReader.count_rows(csv_path_with_blanks_and_embedded_newline, PyArrowTable) is None
-        assert CsvReader.count_rows(csv_path_with_blanks_and_embedded_newline, PandasDataFrame) is None
+        match = _match(csv_path_with_blanks_and_embedded_newline)
+        assert _csv_fg().count_rows(match, PyArrowTable) is None
+        assert _csv_fg().count_rows(match, PandasDataFrame) is None
 
-    def test_count_rows_is_none_for_non_path_data_access_under_non_dict_framework(self) -> None:
-        """expected_data_framework is checked first, so a non-path access never reaches ValueError."""
-        non_path = DataAccessCollection(files={"dummy.csv"})
-        assert CsvReader.count_rows(non_path, PyArrowTable) is None
-        assert CsvReader.count_rows(non_path, PandasDataFrame) is None
+    def test_count_rows_is_none_for_a_non_dict_framework_even_when_the_file_is_absent(self, tmp_path: Path) -> None:
+        """expected_data_framework is checked first, so an absent file never reaches an OSError."""
+        match = _match(tmp_path / "absent.csv")
+        assert _csv_fg().count_rows(match, PyArrowTable) is None
+        assert _csv_fg().count_rows(match, PandasDataFrame) is None
 
-    def test_count_rows_reports_none_for_a_load_data_overriding_subclass(
+    def test_count_rows_reports_none_for_a_load_neutral_overriding_subclass(
         self, csv_path_with_blanks_and_embedded_newline: str
     ) -> None:
-        class _CsvCountRowsProbeReader(CsvReader):
+        base = _csv_fg()
+
+        class _CsvCountRowsLoadNeutralProbeFG(base):  # type: ignore[misc,valid-type]
             @classmethod
-            def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-                return super().load_data(data_access, features)
+            def match_feature_group_criteria(cls, *args: Any, **kwargs: Any) -> bool:
+                return False
 
             @classmethod
-            def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
-                return None
+            def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+                return super().load_neutral(match, features)
 
-        assert (
-            _CsvCountRowsProbeReader.count_rows(csv_path_with_blanks_and_embedded_newline, PythonDictFramework) is None
+        match = _match(csv_path_with_blanks_and_embedded_newline)
+        assert _CsvCountRowsLoadNeutralProbeFG.count_rows(match, PythonDictFramework) is None
+        del _CsvCountRowsLoadNeutralProbeFG
+        gc.collect()
+
+    def test_count_rows_reports_none_for_a_subclass_with_a_dict_loader(
+        self, csv_path_with_blanks_and_embedded_newline: str
+    ) -> None:
+        base = _csv_fg()
+
+        class _CsvCountRowsLoaderProbeFG(base):  # type: ignore[misc,valid-type]
+            @classmethod
+            def match_feature_group_criteria(cls, *args: Any, **kwargs: Any) -> bool:
+                return False
+
+        _CsvCountRowsLoaderProbeFG.register_loader(PythonDictFramework, lambda match, features: {})
+
+        match = _match(csv_path_with_blanks_and_embedded_newline)
+        assert _CsvCountRowsLoaderProbeFG.count_rows(match, PythonDictFramework) is None
+        assert base.count_rows(match, PythonDictFramework) is not None
+        del _CsvCountRowsLoaderProbeFG
+        gc.collect()
+
+
+class TestCsvHeaderParseError:
+    """A header larger than csv.field_size_limit() raises csv.Error; it must be a per-file failure."""
+
+    @staticmethod
+    def _oversized(path: Path) -> None:
+        path.write_text("x" * (csv.field_size_limit() + 1000))
+
+    def test_a_folder_with_an_unparseable_header_and_a_valid_csv_resolves_the_valid_one(self, tmp_path: Path) -> None:
+        folder = tmp_path / "hdr_folder"
+        folder.mkdir()
+        self._oversized(folder / "a_bad.csv")
+        good = folder / "b_good.csv"
+        good.write_text("csv_hdr_err_col\n1\n")
+        feature = Feature("csv_hdr_err_col")
+
+        result = IdentifyFeatureGroupClass.evaluate(
+            feature, {_csv_fg(): {PyArrowTable}}, None, DataAccessCollection(folders={"hdr_dir": str(folder)})
         )
+
+        assert _csv_fg() in result.identified
+        assert feature.input_data_match is not None
+        assert feature.input_data_match[1].source == os.path.abspath(good)
+
+    def test_pointed_at_the_unparseable_file_aborts_with_the_reason(self, tmp_path: Path) -> None:
+        bad = tmp_path / "hdr_bad.csv"
+        self._oversized(bad)
+        feature = Feature("csv_hdr_err_col", Options({"CsvFG": str(bad)}))
+
+        with pytest.raises(ValueError) as exc_info:
+            resolve_or_raise(feature, {_csv_fg(): {PyArrowTable}}, None, None)
+
+        assert os.path.abspath(bad) in str(exc_info.value)
+        assert "could not read its columns" in str(exc_info.value)

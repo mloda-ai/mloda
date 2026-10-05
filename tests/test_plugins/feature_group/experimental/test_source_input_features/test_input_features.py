@@ -20,8 +20,7 @@ from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.source_input_feature import SourceInputFeature
 
 from mloda.provider import ApiInputDataFeature
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 class FeatureInputFeatureTest(FeatureGroup):
@@ -65,7 +64,7 @@ class TestInputFeatures:
             InputFeatureGroupTest,
             FeatureInputFeatureTest,
             FeatureInputCreatorTest,
-            ReadFileFeature,
+            CsvFG,
         }
     )
 
@@ -160,7 +159,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.in_features: frozenset([("FeatureInputCsv", CsvReader, file_path)]),
+                    DefaultOptionKeys.in_features: frozenset([("FeatureInputCsv", CsvFG, file_path)]),
                     "initial_requested_data": True,
                 },
             )
@@ -223,7 +222,7 @@ class TestInputFeatures:
             Feature(
                 name=self._requested_name,
                 options={
-                    DefaultOptionKeys.in_features: frozenset([("FeatureInputCsv2", CsvReader, file_path)]),
+                    DefaultOptionKeys.in_features: frozenset([("FeatureInputCsv2", CsvFG, file_path)]),
                     "initial_requested_data": True,
                 },
             )
@@ -289,7 +288,7 @@ class TestInputFeatures:
                                 "FeatureInputCsv",
                                 None,
                                 None,
-                                (ReadFileFeature, "FeatureInputCsv"),
+                                (CsvFG, "FeatureInputCsv"),
                                 (FeatureInputFeatureTest, "FeatureInputFeatureTest"),
                                 JoinType.APPEND.value,
                                 "FeatureInputCsv",
@@ -344,7 +343,7 @@ class TestInputFeatures:
                                 "FeatureInputCsv",
                                 None,
                                 None,
-                                (ReadFileFeature, "FeatureInputCsv"),
+                                (CsvFG, "FeatureInputCsv"),
                                 (FeatureInputFeatureTest, "FeatureInputFeatureTest"),
                                 "outer",
                                 "FeatureInputCsv",

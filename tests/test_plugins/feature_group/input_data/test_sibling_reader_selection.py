@@ -6,7 +6,7 @@ class name (``BaseInputData.data_access_name()``, i.e. ``cls.__name__``). The ke
 may also be the reader class itself. The matched ``(ReaderClass, data_access)``
 pair is written to the matcher's options fork under the reserved ``"BaseInputData"`` key, moved onto
 ``Feature.input_data_match`` and consumed by ``init_reader`` at load time. For non-file sources (e.g. HTTP), subclassing
-``ReadFile`` and overriding ``match_subclass_data_access`` plus ``load_data`` is
+a reader family and overriding ``match_subclass_data_access`` plus ``load_data`` is
 the sanctioned pattern; ``suffix()`` is inert on that path.
 
 Isolation: test readers defined here are discovered process-wide via
@@ -15,6 +15,9 @@ requires a unique marker value (or marker options key) and returns None otherwis
 so it can never hijack matching in other tests running in the same worker process.
 """
 
+import os
+from collections.abc import Collection
+from pathlib import Path
 from typing import Any, cast
 
 import pyarrow as pa
@@ -25,26 +28,42 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.provider import FeatureGroup, FeatureSet, PropertySpec
-from mloda.user import Feature, FeatureName
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.provider import FeatureGroup, FeatureSet, PropertySpec, ReadFileFG
+from mloda.user import Feature, FeatureName, PluginCollector, mloda
 from mloda.user import Options
-from mloda.user import PluginCollector
-from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 _ACCESS_A = "sibling_sel_565_access_a"
 _ACCESS_B = "sibling_sel_565_access_b"
-_URL_MARKER_KEY = "sibling_sel_565_url_marker"
-_URL_ACCESS = "fake-http://example/sibling_sel_565/data"
-_URL_FEATURE_NAME = "sibling_sel_565_url_value"
-_URL_FEATURE_VALUES = [11, 22, 33]
 
 
-class SiblingSel565ReaderA(ReadFile):
+class SiblingSelFamily(BaseInputData):
+    """Test-local reader family base; it overrides no load_data, so it never classifies as final."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return None
+
+
+class SiblingSelFG(FeatureGroup):
+    """Root group fronting SiblingSelFamily; matches only what a marker-gated reader of the family accepts."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return SiblingSelFamily()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return cls.input_data().load(features)  # type: ignore[union-attr]
+
+
+class SiblingSel565ReaderA(SiblingSelFamily):
     """Final reader (wholesale load_data override) that only matches its own marker access string."""
 
     @classmethod
@@ -58,7 +77,7 @@ class SiblingSel565ReaderA(ReadFile):
         return {"sibling_sel_565_a": [1]}
 
 
-class SiblingSel565ReaderB(ReadFile):
+class SiblingSel565ReaderB(SiblingSelFamily):
     """Sibling of SiblingSel565ReaderA; only matches its own marker access string."""
 
     @classmethod
@@ -72,13 +91,14 @@ class SiblingSel565ReaderB(ReadFile):
         return {"sibling_sel_565_b": [2]}
 
 
-class SiblingSel565UrlReader(ReadFile):
-    """URL-style reader recipe: overrides match_subclass_data_access and load_data wholesale.
+_URL_MARKER_KEY = "sibling_sel_565_url_marker"
+_URL_ACCESS = "fake-http://example/sibling_sel_565/data"
+_URL_FEATURE_NAME = "sibling_sel_565_url_value"
+_URL_FEATURE_VALUES = [11, 22, 33]
 
-    Deliberately does NOT override suffix(): the option-key selection path never
-    consults it, which the end-to-end tests pin. Matching requires this test's
-    unique marker option key so the reader never matches in other tests.
-    """
+
+class SiblingSel565UrlReader(SiblingSelFamily):
+    """Non-file reader recipe: final, no suffix, gated by a unique marker option key."""
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
@@ -126,7 +146,7 @@ _TWIN_ALIAS = "sibling_sel_1777_twin_alias"
 _TWIN_MARKER = "sibling_sel_1777_twin_marker"
 
 
-class SiblingSel1777ReplParent(ReadFile):
+class SiblingSel1777ReplParent(SiblingSelFamily):
     """Final aliased parent accepting only its unique marker."""
 
     @classmethod
@@ -150,7 +170,7 @@ class SiblingSel1777ReplChild(SiblingSel1777ReplParent):
         return {"sibling_sel_1777_repl_child": [1]}
 
 
-class SiblingSel1777TwinA(ReadFile):
+class SiblingSel1777TwinA(SiblingSelFamily):
     """Final reader sharing the twin alias."""
 
     @classmethod
@@ -166,7 +186,7 @@ class SiblingSel1777TwinA(ReadFile):
         return {"sibling_sel_1777_twin_a": [1]}
 
 
-class SiblingSel1777TwinB(ReadFile):
+class SiblingSel1777TwinB(SiblingSelFamily):
     """Unrelated final reader sharing the twin alias."""
 
     @classmethod
@@ -188,7 +208,7 @@ _VALUE_FEATURE = "sibling_sel_1777_value_feat"
 
 
 class SiblingSel1777ValueFG(FeatureGroup):
-    """Root group fronting ReadFile; the required strict mapped key keeps it from matching other tests' features."""
+    """Root group fronting SiblingSelFamily; the required strict mapped key keeps it from matching other tests' features."""
 
     PROPERTY_MAPPING = {
         _VALUE_KEY: PropertySpec("Mode", allowed_values={"good": "Good mode"}, context=True, strict_validation=True),
@@ -196,7 +216,7 @@ class SiblingSel1777ValueFG(FeatureGroup):
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return ReadFile()
+        return SiblingSelFamily()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -231,10 +251,10 @@ class TestPinnedReaderConflict1777:
                 SiblingSel565ReaderB.__name__: "sibling_sel_1777_unknown",
             },
         )
-        accessible: FeatureGroupEnvironmentMapping = {ReadFileFeature: {PyArrowTable}}
+        accessible: FeatureGroupEnvironmentMapping = {SiblingSelFG: {PyArrowTable}}
         result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None, None)
         assert result.identified == {}
-        elimination = result.eliminations.get(ReadFileFeature)
+        elimination = result.eliminations.get(SiblingSelFG)
         assert elimination is not None
         assert "SiblingSel565ReaderA" in elimination.reason
 
@@ -296,10 +316,10 @@ class TestPinnedReaderConflict1777:
             name="sibling_sel_1777_feat",
             options={SiblingSel565ReaderA.__name__: _ACCESS_A, SiblingSel565ReaderB.__name__: _ACCESS_B},
         )
-        accessible: FeatureGroupEnvironmentMapping = {ReadFileFeature: {PyArrowTable}}
+        accessible: FeatureGroupEnvironmentMapping = {SiblingSelFG: {PyArrowTable}}
         result = IdentifyFeatureGroupClass.evaluate(feature, accessible, None, None)
         assert result.identified == {}
-        elimination = result.eliminations.get(ReadFileFeature)
+        elimination = result.eliminations.get(SiblingSelFG)
         assert elimination is not None
         assert elimination.stage == "matcher_error"
         assert "SiblingSel565ReaderA" in elimination.reason
@@ -346,50 +366,6 @@ class TestReservedBaseInputDataKey:
         reader, data_access = SiblingSel565ReaderA().init_reader((SiblingSel565ReaderA, _ACCESS_A))
         assert isinstance(reader, SiblingSel565ReaderA)
         assert data_access == _ACCESS_A
-
-
-class TestUrlReaderRecipeEndToEnd:
-    """Group D: sanctioned non-file (HTTP-style) reader recipe, end to end."""
-
-    def test_url_reader_is_final_and_suffix_inert(self) -> None:
-        assert SiblingSel565UrlReader.is_final_reader() is True
-        with pytest.raises(NotImplementedError):
-            SiblingSel565UrlReader.suffix()
-
-    def test_url_reader_end_to_end_string_key(self) -> None:
-        feature = Feature(
-            name=_URL_FEATURE_NAME,
-            options={
-                SiblingSel565UrlReader.__name__: _URL_ACCESS,
-                _URL_MARKER_KEY: True,
-            },
-        )
-        features: list[Feature | str] = [feature]
-        result = mloda.run_all(
-            features,
-            compute_frameworks=["PyArrowTable"],
-            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
-        )
-        assert result[0].to_pydict()[_URL_FEATURE_NAME] == _URL_FEATURE_VALUES
-
-    def test_url_reader_end_to_end_class_key(self) -> None:
-        feature = Feature(
-            name=_URL_FEATURE_NAME,
-            options=cast(
-                dict[str, Any],
-                {
-                    SiblingSel565UrlReader: _URL_ACCESS,
-                    _URL_MARKER_KEY: True,
-                },
-            ),
-        )
-        features: list[Feature | str] = [feature]
-        result = mloda.run_all(
-            features,
-            compute_frameworks=["PyArrowTable"],
-            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
-        )
-        assert result[0].to_pydict()[_URL_FEATURE_NAME] == _URL_FEATURE_VALUES
 
 
 class TestClassKeyNormalization565:
@@ -440,7 +416,7 @@ def _ambiguous_match(data_access: Any) -> Any:
     return data_access if data_access == _AMBIG_MARKER else None
 
 
-class SiblingSel1757ReaderA(ReadFile):
+class SiblingSel1757ReaderA(SiblingSelFamily):
     """Final reader accepting only the unique ambiguity marker."""
 
     @classmethod
@@ -452,7 +428,7 @@ class SiblingSel1757ReaderA(ReadFile):
         return {"sibling_sel_1757_a": [1]}
 
 
-class SiblingSel1757ReaderB(ReadFile):
+class SiblingSel1757ReaderB(SiblingSelFamily):
     """Sibling accepting the same unique ambiguity marker."""
 
     @classmethod
@@ -470,7 +446,7 @@ class TestAmbiguousReaderMatch1757:
     def test_two_acceptors_raise_naming_both_and_pin_hint(self) -> None:
         collection = DataAccessCollection(files={_AMBIG_MARKER})
         with pytest.raises(ValueError) as excinfo:
-            ReadFile.match_data_access(["sibling_sel_1757_feat"], collection, options=Options())
+            SiblingSelFamily.match_data_access(["sibling_sel_1757_feat"], collection, options=Options())
         message = str(excinfo.value)
         assert "SiblingSel1757ReaderA" in message
         assert "SiblingSel1757ReaderB" in message
@@ -482,7 +458,7 @@ class TestAmbiguousReaderMatch1757:
     def test_pinned_reader_still_resolves_via_feature_scope(self) -> None:
         collection = DataAccessCollection(files={_AMBIG_MARKER})
         options = Options(group={SiblingSel1757ReaderB.__name__: _AMBIG_MARKER})
-        assert ReadFile().matches("sibling_sel_1757_feat", options, collection) is True
+        assert SiblingSelFamily().matches("sibling_sel_1757_feat", options, collection) is True
         assert options.get("BaseInputData") == (SiblingSel1757ReaderB, _AMBIG_MARKER)
 
 
@@ -497,7 +473,7 @@ def _accept(data_access: Any, marker: str, result: Any) -> Any:
     return None
 
 
-class SiblingSel1757SameParent(ReadFile):
+class SiblingSel1757SameParent(SiblingSelFamily):
     """Final parent reader accepting only the unique same-access marker."""
 
     @classmethod
@@ -517,7 +493,7 @@ class SiblingSel1757SameChild(SiblingSel1757SameParent):
         return {"sibling_sel_1757_same_child": [1]}
 
 
-class SiblingSel1757DiffParent(ReadFile):
+class SiblingSel1757DiffParent(SiblingSelFamily):
     """Final parent reader accepting only the unique different-access marker."""
 
     @classmethod
@@ -541,7 +517,7 @@ class SiblingSel1757DiffChild(SiblingSel1757DiffParent):
         return {"sibling_sel_1757_diff_child": [1]}
 
 
-class SiblingSel1757AliasPlain(ReadFile):
+class SiblingSel1757AliasPlain(SiblingSelFamily):
     """Final reader accepting only the unique alias marker."""
 
     @classmethod
@@ -553,7 +529,7 @@ class SiblingSel1757AliasPlain(ReadFile):
         return {"sibling_sel_1757_alias_plain": [1]}
 
 
-class SiblingSel1757Aliased(ReadFile):
+class SiblingSel1757Aliased(SiblingSelFamily):
     """Final reader overriding data_access_name() with an alias."""
 
     @classmethod
@@ -574,13 +550,13 @@ class TestSubclassPreferenceAndAlias1757:
 
     def test_child_wins_over_parent_for_the_same_access(self) -> None:
         collection = DataAccessCollection(files={_SAME_MARKER})
-        matched = ReadFile.match_data_access(["sibling_sel_1757_same_feat"], collection, options=Options())
+        matched = SiblingSelFamily.match_data_access(["sibling_sel_1757_same_feat"], collection, options=Options())
         assert matched == (SiblingSel1757SameChild, _SAME_MARKER)
 
     def test_child_and_parent_with_different_accesses_raise_naming_both(self) -> None:
         collection = DataAccessCollection(files={_DIFF_MARKER})
         with pytest.raises(ValueError) as excinfo:
-            ReadFile.match_data_access(["sibling_sel_1757_diff_feat"], collection, options=Options())
+            SiblingSelFamily.match_data_access(["sibling_sel_1757_diff_feat"], collection, options=Options())
         message = str(excinfo.value)
         assert "SiblingSel1757DiffParent" in message
         assert "SiblingSel1757DiffChild" in message
@@ -588,8 +564,104 @@ class TestSubclassPreferenceAndAlias1757:
     def test_aliased_sibling_is_named_and_hinted_by_its_alias(self) -> None:
         collection = DataAccessCollection(files={_ALIAS_MARKER})
         with pytest.raises(ValueError) as excinfo:
-            ReadFile.match_data_access(["sibling_sel_1757_alias_feat"], collection, options=Options())
+            SiblingSelFamily.match_data_access(["sibling_sel_1757_alias_feat"], collection, options=Options())
         message = str(excinfo.value)
         assert "sibling_sel_1757_alias_name" in message
         assert "SiblingSel1757Aliased" not in message
         assert "options={'sibling_sel_1757_alias_name'" in message
+
+
+_CSVFG_COL = "sibling_sel_csvfg_col"
+
+
+def _csv_file(tmp_path: Path) -> str:
+    path = tmp_path / "sibling_sel_csvfg.csv"
+    path.write_text(f"{_CSVFG_COL}\n1\n2\n")
+    return str(path)
+
+
+class TestClassKeyNormalizationOnCsvFG:
+    """Groups B and E on the stock CsvFG: a format group class as an option key equals its class-name string."""
+
+    def test_options_class_key_equals_string_key(self, tmp_path: Path) -> None:
+        path = _csv_file(tmp_path)
+        class_keyed = Options(cast(dict[str, Any], {CsvFG: path}))
+        string_keyed = Options({"CsvFG": path})
+        assert class_keyed == string_keyed
+        assert hash(class_keyed) == hash(string_keyed)
+        assert class_keyed.get("CsvFG") == path
+
+    def test_feature_class_key_equals_string_key(self, tmp_path: Path) -> None:
+        path = _csv_file(tmp_path)
+        class_keyed = Feature(name=_CSVFG_COL, options=cast(dict[str, Any], {CsvFG: path}))
+        string_keyed = Feature(name=_CSVFG_COL, options={"CsvFG": path})
+        assert class_keyed == string_keyed
+        assert hash(class_keyed) == hash(string_keyed)
+        assert len({class_keyed, string_keyed}) == 1
+
+    def test_class_key_resolves_like_the_string_form(self, tmp_path: Path) -> None:
+        path = _csv_file(tmp_path)
+        feature = Feature(name=_CSVFG_COL, options=cast(dict[str, Any], {CsvFG: path}))
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, {CsvFG: {PyArrowTable}}, None)
+
+        assert CsvFG in result.identified
+        assert feature.input_data_match is not None
+        assert feature.input_data_match[0] is CsvFG
+        assert feature.input_data_match[1].source == os.path.abspath(path)
+
+
+class TestSecondCsvFormatGroupIsAmbiguous:
+    """Two format groups owning the same suffix on the same file are ambiguous; no reader-level pick exists."""
+
+    def test_a_gated_second_csv_group_next_to_csvfg_gives_multiple_feature_groups(self, tmp_path: Path) -> None:
+        marker = "sibling_sel_second_csv_marker"
+
+        class SiblingSelSecondCsvFG(ReadFileFG):
+            """Owns .csv too; gated by a unique marker option so it never claims in other tests."""
+
+            @classmethod
+            def suffixes(cls) -> tuple[str, ...]:
+                return (".csv",)
+
+            @classmethod
+            def column_names(cls, path: str) -> Collection[str]:
+                with open(path, encoding="utf-8") as handle:
+                    return handle.readline().strip().split(",")
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: FeatureName | str,
+                options: Options,
+                data_access_collection: DataAccessCollection | None = None,
+            ) -> bool:
+                if options.get(marker) is None:
+                    return False
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+        path = _csv_file(tmp_path)
+        feature = Feature(_CSVFG_COL, Options(context={marker: True}))
+        plugins: FeatureGroupEnvironmentMapping = {CsvFG: {PyArrowTable}, SiblingSelSecondCsvFG: {PyArrowTable}}
+
+        with pytest.raises(ValueError, match="Multiple feature groups found") as excinfo:
+            resolve_or_raise(feature, plugins, None, DataAccessCollection(files={path}))
+
+        assert "CsvFG" in str(excinfo.value)
+        assert "SiblingSelSecondCsvFG" in str(excinfo.value)
+
+
+class TestUrlReaderRecipeEndToEnd:
+    """A non-file reader pinned by class-name string or class key runs end to end through a root group."""
+
+    @pytest.mark.parametrize("by_class", [False, True])
+    def test_url_reader_end_to_end(self, by_class: bool) -> None:
+        key: Any = SiblingSel565UrlReader if by_class else SiblingSel565UrlReader.__name__
+        feature = Feature(name=_URL_FEATURE_NAME, options={key: _URL_ACCESS, _URL_MARKER_KEY: True})
+        features: list[Feature | str] = [feature]
+        result = mloda.run_all(
+            features,
+            compute_frameworks=["PyArrowTable"],
+            plugin_collector=PluginCollector.enabled_feature_groups({SiblingSelFG}),
+        )
+        assert result[0].to_pydict()[_URL_FEATURE_NAME] == _URL_FEATURE_VALUES

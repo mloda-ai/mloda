@@ -9,7 +9,7 @@ import yaml
 from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.yaml_document_reader import YamlDocumentReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import ReadFileFG
 
 
 class MockFeatureSet:
@@ -23,15 +23,14 @@ class MockFeatureSet:
 
 
 class TestYamlDocumentReaderInheritance:
-    """Tests that YamlDocumentReader inherits from ReadDocument, not ReadFile."""
+    """Tests that YamlDocumentReader inherits from ReadDocument, not ReadFileFG."""
 
     def test_yaml_document_reader_inherits_from_read_document(self) -> None:
         """YamlDocumentReader must be a subclass of ReadDocument."""
         assert issubclass(YamlDocumentReader, ReadDocument)
 
-    def test_yaml_document_reader_not_inherits_from_read_file(self) -> None:
-        """YamlDocumentReader must NOT be a subclass of ReadFile."""
-        assert not issubclass(YamlDocumentReader, ReadFile)
+    def test_yaml_document_reader_not_inherits_from_read_file_fg(self) -> None:
+        assert not issubclass(YamlDocumentReader, ReadFileFG)
 
 
 class TestYamlDocumentReaderLoadData:

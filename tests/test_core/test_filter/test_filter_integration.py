@@ -5,9 +5,8 @@ import pyarrow as pa
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.user import DataAccessCollection, FeatureName, PluginCollector, mloda
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-from mloda.provider import BaseInputData
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda.provider import BaseInputData, SourceMatch
 from mloda.provider import DataCreator
 from mloda.user import Options
 from mloda.user import GlobalFilter
@@ -188,7 +187,7 @@ class TestGlobalFilterOnReaderBackedColumn:
             [Feature("gf_csv_val")],
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self._csv(tmp_path)}),
-            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
             global_filter=global_filter,
         )
 
@@ -201,12 +200,12 @@ class TestGlobalFilterOnReaderBackedColumn:
         global_filter.add_filter("gf_csv_val", "equal", {"value": 20})
 
         matched = global_filter.identify_matched_filters(
-            ReadFileFeature, Feature("gf_csv_val"), DataAccessCollection(files={csv_path})
+            CsvFG, Feature("gf_csv_val"), DataAccessCollection(files={csv_path})
         )
 
         assert len(matched) == 1
         filter_feature = next(iter(matched)).filter_feature
-        assert filter_feature.input_data_match == (CsvReader, csv_path)
+        assert filter_feature.input_data_match == (CsvFG, SourceMatch(source=csv_path, access=csv_path))
         assert RESERVED_READER_OPTION_KEY not in filter_feature.options.group
         assert RESERVED_READER_OPTION_KEY not in filter_feature.options.context
 
@@ -228,7 +227,7 @@ class TestGlobalFilterFromAnotherSource:
                 [Feature(feature)],
                 compute_frameworks=["PyArrowTable"],
                 data_access_collection=DataAccessCollection(files=files),
-                plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
+                plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
                 global_filter=global_filter,
             )
         )

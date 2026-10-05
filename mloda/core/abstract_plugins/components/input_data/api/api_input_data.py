@@ -8,7 +8,7 @@ class ApiInputData(BaseInputData):
     This class represents api input data, which was passed through the api.
 
     It injects in-memory data passed through the API and is NOT an HTTP client;
-    HTTP sources are typically ReadFile subclasses overriding match_subclass_data_access.
+    HTTP sources are custom BaseInputData readers.
     """
 
     def matches(

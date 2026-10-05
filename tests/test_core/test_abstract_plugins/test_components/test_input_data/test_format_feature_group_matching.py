@@ -1,7 +1,8 @@
 """FormatFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
 
 from abc import abstractmethod
-from typing import ClassVar
+from collections.abc import Collection
+from typing import Any, ClassVar
 
 import pytest
 
@@ -9,7 +10,9 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import ClaimRoute, NamePolicy, SourceMatch
+from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
@@ -21,6 +24,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
     ToyOpenFG,
     ToyOtherFormatFG,
     ToyRequiredOptionFG,
+    column_values,
     foreign_dac,
     toy_dac,
 )
@@ -334,3 +338,269 @@ class TestPointedRoutesDeclineWithReason:
         elimination = result.eliminations[ToyDeclaredFG]
         assert elimination.stage == "input_data"
         assert "toyfmt_undeclared" in elimination.reason
+
+
+class _AbstractRouted(FormatFeatureGroup):
+    """Abstract group that inherits routes but implements no hooks."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.CHECKED, True),)
+
+
+class _AbstractRoutedChild(_AbstractRouted):
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        return None
+
+
+class TestAbstractGroupsNeverClaim:
+    def test_identification_skips_an_abstract_group_with_inherited_routes(self) -> None:
+        result = _identify(Feature(COL), toy_dac(h1={COL: [1]}), _AbstractRouted, _AbstractRoutedChild)
+
+        assert result.identified == {}
+
+    def test_matcher_does_not_call_the_abstract_hooks(self) -> None:
+        assert _AbstractRouted._matches_by_default_rules(COL, Options(), toy_dac(h1={COL: [1]})) is False
+
+    def test_scoped_abstract_group_records_its_missing_abstract_methods(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        with feature_group_scope(_AbstractRoutedChild):
+            assert _AbstractRoutedChild._matches_by_default_rules(COL, Options(), toy_dac(h1={COL: [1]})) is False
+
+        reason = rejection_window["_AbstractRoutedChild"].reason
+        assert str(sorted(_AbstractRoutedChild.__abstractmethods__)) in reason
+
+    def test_pointed_abstract_group_records_its_missing_abstract_methods(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options({"_AbstractRouted": {COL: [1]}})
+        assert _AbstractRouted._matches_by_default_rules(COL, options, None) is False
+
+        reason = rejection_window["_AbstractRouted"].reason
+        assert str(sorted(_AbstractRouted.__abstractmethods__)) in reason
+
+
+class _VirtualColumnFG(ToyFormatFG):
+    """has_column answers for a column that columns() does not list."""
+
+    @classmethod
+    def has_column(cls, match: SourceMatch, column: str) -> bool | None:
+        return column == "toyfmt_virtual"
+
+
+class _NoColumnsFG(ToyFormatBase):
+    @classmethod
+    def columns(cls, match: SourceMatch) -> None:
+        return None
+
+
+COLUMNS_CALLS: list[str] = []
+
+
+class _SpyColumnsFG(ToyFormatFG):
+    @classmethod
+    def has_column(cls, match: SourceMatch, column: str) -> bool | None:
+        return column == COL
+
+    @classmethod
+    def columns(cls, match: SourceMatch) -> list[str]:
+        COLUMNS_CALLS.append(match.source)
+        return [COL]
+
+
+class TestHasColumnHook:
+    def test_default_derives_from_columns(self) -> None:
+        match = SourceMatch(source="h1:toy", access={COL: [1]})
+
+        assert ToyFormatFG.has_column(match, COL) is True
+        assert ToyFormatFG.has_column(match, "toyfmt_absent") is False
+
+    def test_default_is_none_when_columns_is_unknown(self) -> None:
+        assert _NoColumnsFG.has_column(SourceMatch(source="h1:toy", access={}), COL) is None
+
+    def test_has_column_decides_fitting_over_columns(self) -> None:
+        feature = Feature("toyfmt_virtual")
+        result = _identify(feature, toy_dac(h1={COL: [1]}), _VirtualColumnFG)
+
+        assert _VirtualColumnFG in result.identified
+        pair = feature.input_data_match
+        assert pair is not None
+        assert pair[1].source == "h1:toy"
+
+    def test_has_column_false_declines_even_when_columns_lists_the_name(self) -> None:
+        assert not _claims(Feature(COL), toy_dac(h1={COL: [1]}), _VirtualColumnFG)
+
+    def test_columns_is_not_called_on_a_successful_fit(self) -> None:
+        COLUMNS_CALLS.clear()
+
+        assert _claims(Feature(COL), toy_dac(h1={COL: [1]}), _SpyColumnsFG)
+        assert COLUMNS_CALLS == []
+
+    def test_columns_is_called_for_rejection_text(self) -> None:
+        COLUMNS_CALLS.clear()
+
+        result = _identify(Feature("toyfmt_absent"), toy_dac(h1={COL: [1]}), _SpyColumnsFG)
+
+        assert "h1:toy" in result.eliminations[_SpyColumnsFG].reason
+        assert COLUMNS_CALLS
+
+
+FIX_TEXT = "toyfmt-specific: remove one of the duplicate sources."
+
+
+class _FixTextFG(ToyFormatFG):
+    @classmethod
+    def ambiguity_fix(
+        cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
+    ) -> str:
+        return FIX_TEXT
+
+
+class TestAmbiguityFixHook:
+    def test_default_keeps_todays_text(self) -> None:
+        text = ToyFormatFG.ambiguity_fix(COL, [], None)
+
+        assert "data_access_handle" in text
+        assert "column_to_file" in text
+
+    def test_override_text_ends_the_abort(self) -> None:
+        dac = toy_dac(h1={COL: [1]}, h2={COL: [2]})
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(Feature(COL), _plugins(_FixTextFG), None, dac)
+
+        message = str(exc_info.value)
+        assert message.endswith(FIX_TEXT)
+        assert "h1:toy" in message
+        assert "h2:toy" in message
+        assert "column_to_file" not in message
+
+
+class _PointedParent(ToyFormatBase):
+    """Open, pointed-only; sources come from its own class-name key."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.OPEN, False),)
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        for key in ("_PointedParent", "_AbstractToyMid"):
+            scoped = options.get(key)
+            if scoped is not None:
+                return [SourceMatch(source="scoped:toy", access=scoped)]
+        return []
+
+
+class _PointedChild(_PointedParent):
+    """Concrete subclass of a concrete format group."""
+
+
+class _AbstractOpenMid(ToyFormatBase):
+    @classmethod
+    @abstractmethod
+    def marker(cls) -> str: ...
+
+
+class _OpenUnderAbstract(_AbstractOpenMid):
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("toy", NamePolicy.OPEN, False),)
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        scoped = options.get("_AbstractOpenMid")
+        return [] if scoped is None else [SourceMatch(source="scoped:toy", access=scoped)]
+
+    @classmethod
+    def marker(cls) -> str:
+        return "x"
+
+
+class TestPointerKeysFollowTheMro:
+    def test_own_name_first_then_concrete_format_ancestors(self) -> None:
+        keys = ToyFormatSubFG.pointer_keys()
+
+        assert keys[:2] == ("ToyFormatSubFG", "ToyFormatFG")
+        assert "FormatFeatureGroup" not in keys
+
+    def test_abstract_ancestor_is_not_a_pointer_key(self) -> None:
+        keys = _OpenUnderAbstract.pointer_keys()
+
+        assert keys[0] == "_OpenUnderAbstract"
+        assert "_AbstractOpenMid" not in keys
+
+    def test_parent_key_points_a_concrete_subclass(self) -> None:
+        feature = Feature("toyfmt_any", Options({"_PointedParent": {COL: [1]}}))
+
+        assert _claims(feature, None, _PointedChild)
+
+    def test_abstract_ancestor_key_does_not_point(self) -> None:
+        feature = Feature("toyfmt_any", Options({"_AbstractOpenMid": {COL: [1]}}))
+
+        assert not _claims(feature, None, _OpenUnderAbstract)
+
+    def test_subclass_takes_over_a_parent_pointed_feature(self) -> None:
+        feature = Feature("toyfmt_any", Options({"_PointedParent": {COL: [1]}}))
+        result = evaluate_or_raise(feature, _plugins(_PointedParent, _PointedChild), None, None)
+
+        assert set(result.identified) == {_PointedChild}
+        assert result.specialized_from == (_PointedParent,)
+        pair = feature.input_data_match
+        assert pair is not None
+        assert pair[0] is _PointedChild
+
+    def test_takeover_runs_end_to_end_with_enabled_feature_groups_gating(self) -> None:
+        feature = Feature("toyfmt_any", Options({"_PointedParent": {"toyfmt_any": [4, 5]}}))
+        session = mloda.prepare(
+            [feature],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({_PointedParent, _PointedChild}),
+        )
+
+        steps = [st for st in session.resolved_plan() if st.step_kind == "compute"]
+        assert {st.feature_group for st in steps} == {_PointedChild}
+        assert column_values(session.run(), "toyfmt_any") == [4, 5]
+
+
+CACHED_CALLS: list[str] = []
+
+
+class _CachedColumnsFG(ToyFormatFG):
+    @classmethod
+    def columns(cls, match: SourceMatch) -> Collection[str] | None:
+        from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
+
+        def compute() -> list[str]:
+            CACHED_CALLS.append(match.source)
+            return list(match.access)
+
+        return run_cached(("toyfmt_cache", match.source), compute)
+
+
+class TestMatchesAreSharedWithinOneRun:
+    DERIVED = "toyfmt_cache_a__sum_aggr"
+
+    def _run(self) -> None:
+        mloda.run_all(
+            ["toyfmt_cache_a", "toyfmt_cache_b", self.DERIVED],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({_CachedColumnsFG, PyArrowAggregatedFeatureGroup}),
+            data_access_collection=toy_dac(hcache={"toyfmt_cache_a": [1, 2], "toyfmt_cache_b": [3, 4]}),
+        )
+
+    def test_columns_is_computed_once_per_run_and_again_for_a_second_run(self) -> None:
+        CACHED_CALLS.clear()
+
+        self._run()
+        assert CACHED_CALLS == ["hcache:toy"]
+
+        self._run()
+        assert CACHED_CALLS == ["hcache:toy", "hcache:toy"]

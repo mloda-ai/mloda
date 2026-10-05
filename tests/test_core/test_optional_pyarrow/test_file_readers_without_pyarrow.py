@@ -1,5 +1,5 @@
-"""Tests that file-reader modules import cleanly under blocked pyarrow and that
-CsvReader.load_data resolves a backend-neutral FileSource descriptor without pyarrow.
+"""Tests that file format group modules import cleanly under blocked pyarrow and that
+CsvFG.load_neutral resolves a backend-neutral FileSource descriptor without pyarrow.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ _BODY_CSV_IMPORT: str = """
 import sys
 
 try:
-    from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
     print("IMPORTED")
 except ImportError as e:
     print("IMPORT_ERROR:" + str(e))
@@ -30,7 +30,8 @@ try:
     from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
     from mloda.provider import FeatureSet
     from mloda.user import Feature
-    from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+    from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 except Exception as e:
     print("IMPORT_FAILED:" + type(e).__name__)
     sys.exit(0)
@@ -38,7 +39,7 @@ except Exception as e:
 features = FeatureSet()
 features.add(Feature("A"))
 
-result = CsvReader.load_data("/nonexistent/path.csv", features)
+result = CsvFG.load_neutral(SourceMatch(source="/nonexistent/path.csv", access="/nonexistent/path.csv"), features)
 if isinstance(result, FileSource) and result.format == "csv" and result.columns == ("A",):
     print("FILESOURCE")
 else:
@@ -52,7 +53,7 @@ _BODY_JSON_IMPORT: str = """
 import sys
 
 try:
-    from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
+    from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
     print("IMPORTED")
 except ImportError as e:
     print("IMPORT_ERROR:" + str(e))
@@ -67,7 +68,7 @@ _BODY_PARQUET_IMPORT: str = """
 import sys
 
 try:
-    from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
+    from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
     print("IMPORTED")
 except ImportError as e:
     print("IMPORT_ERROR:" + str(e))
@@ -82,7 +83,7 @@ _BODY_FEATHER_IMPORT: str = """
 import sys
 
 try:
-    from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
+    from mloda_plugins.feature_group.input_data.file_formats.feather_fg import FeatherFG
     print("IMPORTED")
 except ImportError as e:
     print("IMPORT_ERROR:" + str(e))
@@ -97,7 +98,7 @@ _BODY_ORC_IMPORT: str = """
 import sys
 
 try:
-    from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
+    from mloda_plugins.feature_group.input_data.file_formats.orc_fg import OrcFG
     print("IMPORTED")
 except ImportError as e:
     print("IMPORT_ERROR:" + str(e))
@@ -107,8 +108,8 @@ except Exception as e:
 
 
 @pytest.mark.timeout(30)
-def test_csv_reader_imports_without_pyarrow() -> None:
-    """CsvReader module must import successfully even when pyarrow is absent."""
+def test_csv_fg_imports_without_pyarrow() -> None:
+    """CsvFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_CSV_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -117,8 +118,8 @@ def test_csv_reader_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_csv_reader_load_data_returns_file_source_without_pyarrow() -> None:
-    """CsvReader.load_data returns a lightweight FileSource descriptor even when pyarrow
+def test_csv_fg_load_neutral_returns_file_source_without_pyarrow() -> None:
+    """CsvFG.load_neutral returns a lightweight FileSource descriptor even when pyarrow
     is absent; a per-framework transformer materializes it later.
     """
     result = run_blocked(_BODY_CSV_LOAD)
@@ -129,8 +130,8 @@ def test_csv_reader_load_data_returns_file_source_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_json_reader_imports_without_pyarrow() -> None:
-    """JsonReader module must import successfully even when pyarrow is absent."""
+def test_json_fg_imports_without_pyarrow() -> None:
+    """JsonFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_JSON_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -139,8 +140,8 @@ def test_json_reader_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_parquet_reader_imports_without_pyarrow() -> None:
-    """ParquetReader module must import successfully even when pyarrow is absent."""
+def test_parquet_fg_imports_without_pyarrow() -> None:
+    """ParquetFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_PARQUET_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -149,8 +150,8 @@ def test_parquet_reader_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_feather_reader_imports_without_pyarrow() -> None:
-    """FeatherReader module must import successfully even when pyarrow is absent."""
+def test_feather_fg_imports_without_pyarrow() -> None:
+    """FeatherFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_FEATHER_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -159,8 +160,8 @@ def test_feather_reader_imports_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_orc_reader_imports_without_pyarrow() -> None:
-    """OrcReader module must import successfully even when pyarrow is absent."""
+def test_orc_fg_imports_without_pyarrow() -> None:
+    """OrcFG module must import successfully even when pyarrow is absent."""
     result = run_blocked(_BODY_ORC_IMPORT)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
     assert "IMPORTED" in result.stdout, (
@@ -169,47 +170,65 @@ def test_orc_reader_imports_without_pyarrow() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Feather: match still assumes a plain name present, load_data raises ImportError
+# Feather: match declines with a rejection naming mloda[pyarrow], load_neutral raises ImportError
 # ---------------------------------------------------------------------------
-_BODY_FEATHER_MATCH_AND_LOAD: str = """
+_BODY_FEATHER_DECLINE_AND_LOAD: str = """
+import os
 import sys
+import tempfile
 
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS
 from mloda.provider import FeatureSet
-from mloda.user import Feature
-from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
+from mloda.user import DataAccessCollection, Feature, Options
+from mloda_plugins.feature_group.input_data.file_formats.feather_fg import FeatherFG
 
-match_result = FeatherReader.match_read_file_data_access(["/nonexistent/x.feather"], ["a"])
+fd, path = tempfile.mkstemp(suffix=".feather")
+os.close(fd)
+with open(path, "wb") as f:
+    f.write(b"placeholder")
+
+window = {}
+token = MATCH_REJECTION_REASONS.set(window)
+try:
+    matched = FeatherFG.match_feature_group_criteria("a", Options(), DataAccessCollection(files={path}))
+finally:
+    MATCH_REJECTION_REASONS.reset(token)
 
 features = FeatureSet()
 features.add(Feature("a"))
 
 try:
-    FeatherReader.load_data("/nonexistent/x.feather", features)
+    FeatherFG.load_neutral(SourceMatch(source=path, access=path), features)
     load_result = "NO_RAISE"
 except ImportError as e:
     load_result = "IMPORT_ERROR:" + str(e)
 except Exception as e:
     load_result = "OTHER:" + type(e).__name__ + ":" + str(e)
+finally:
+    os.remove(path)
 
-print("MATCH:" + str(match_result))
+print("MATCH:" + str(matched))
+rejection = window.get("FeatherFG")
+print("REJECTION:" + ("NONE" if rejection is None else rejection.reason))
 print("LOAD:" + load_result)
 """
 
 
 @pytest.mark.timeout(30)
-def test_feather_reader_match_and_load_without_pyarrow() -> None:
-    """Regression guard: real pyarrow absence still matches the plain name and load_data raises ImportError."""
-    result = run_blocked(_BODY_FEATHER_MATCH_AND_LOAD)
+def test_feather_fg_declines_with_an_install_hint_and_load_raises_without_pyarrow() -> None:
+    """Without pyarrow the Feather group declines at match time, recording why, and load_neutral raises ImportError."""
+    result = run_blocked(_BODY_FEATHER_DECLINE_AND_LOAD)
     assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
-    assert "MATCH:/nonexistent/x.feather" in result.stdout, (
-        f"Expected match sentinel. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
+    assert "MATCH:False" in result.stdout, f"Expected a decline. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
+    rejection_lines = [line for line in result.stdout.splitlines() if line.startswith("REJECTION:")]
+    assert rejection_lines and "mloda[pyarrow]" in rejection_lines[0], (
+        f"Expected a rejection naming mloda[pyarrow]. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
     )
     assert "LOAD:IMPORT_ERROR:" in result.stdout, (
         f"Expected import-error sentinel. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
     )
-    assert "mloda[pyarrow]" in result.stdout, (
-        f"Expected mloda[pyarrow] install hint. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
-    )
+    assert "mloda[pyarrow]" in result.stdout
 
 
 # ---------------------------------------------------------------------------

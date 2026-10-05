@@ -151,7 +151,7 @@ class Link:
         left_discriminator: Optional dict to identify the left node when two nodes of the
             same FeatureGroup class exist with different data sources (e.g. different CSV
             files). Must match key-value pairs in the left feature's options.
-            Example: left_discriminator={"CsvReader": "application_train.csv"}
+            Example: left_discriminator={"CsvFG": "application_train.csv"}
         right_discriminator: Optional dict to identify the right node. Must match
             key-value pairs in the right feature's options.
 
@@ -211,10 +211,10 @@ class Link:
         >>> # Same FeatureGroup class with different data sources (e.g. two CSV files):
         >>> # Features must have the matching option key set at creation time.
         >>> Link.inner(
-        ...     JoinSpec(ReadFileFeature, "id"),
-        ...     JoinSpec(ReadFileFeature, "id"),
-        ...     left_discriminator={"CsvReader": "application_train.csv"},
-        ...     right_discriminator={"CsvReader": "bureau.csv"},
+        ...     JoinSpec(CsvFG, "id"),
+        ...     JoinSpec(CsvFG, "id"),
+        ...     left_discriminator={"CsvFG": "application_train.csv"},
+        ...     right_discriminator={"CsvFG": "bureau.csv"},
         ... )
         >>>
     Polymorphic Matching:

@@ -48,8 +48,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader  # noqa: F401
+import mloda_plugins.feature_group.input_data.file_formats.stock_formats  # noqa: F401
 
 
 #: pyarrow's default ``ConvertOptions().null_values`` minus ``""``, pinned literally so a pyarrow

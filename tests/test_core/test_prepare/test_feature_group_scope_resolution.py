@@ -39,12 +39,12 @@ from mloda.core.prepare.identify_feature_group import (
 )
 from tests.helpers.plugin_stubs import StubFeatureGroup, make_fg
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
-from mloda.provider import BaseInputData, DataCreator, FeatureSet
+from mloda.provider import BaseInputData, DataCreator, FeatureSet, SourceMatch
 from mloda.user import Credential, DataAccessCollection, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
@@ -981,58 +981,10 @@ def test_no_replacement_logs_no_debug_line(caplog: pytest.LogCaptureFixture) -> 
 
 
 # ---------------------------------------------------------------------------
-# Two reader-backed roots matching one column: ambiguous bare, loadable when scoped
+# The real CsvFG and ParquetFG matching one column: ambiguous bare, loadable when scoped
 # ---------------------------------------------------------------------------
 
 READER_COL = "scope_reader_shared_col"
-
-
-class CsvFG(FeatureGroup):
-    """Root reading the shared column through CsvReader."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return CsvReader()
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Any = None,
-    ) -> bool:
-        # Only the unique column, so no other test's file feature can resolve here.
-        return str(feature_name) == READER_COL and super().match_feature_group_criteria(
-            feature_name, options, data_access_collection
-        )
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return CsvReader().load(features)
-
-
-class ParquetFG(FeatureGroup):
-    """Root reading the shared column through ParquetReader."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return ParquetReader()
-
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: Any = None,
-    ) -> bool:
-        # Only the unique column, so no other test's file feature can resolve here.
-        return str(feature_name) == READER_COL and super().match_feature_group_criteria(
-            feature_name, options, data_access_collection
-        )
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return ParquetReader().load(features)
 
 
 def _reader_files(tmp_path: Path) -> tuple[str, str]:
@@ -1063,8 +1015,8 @@ def test_two_reader_backed_roots_are_ambiguous_and_name_their_sources(tmp_path: 
     message = str(exc_info.value)
     assert "CsvFG" in message
     assert "ParquetFG" in message
-    assert f"CsvReader: {csv_path}" in message
-    assert f"ParquetReader: {parquet_path}" in message
+    assert f"CsvFG: {csv_path}" in message
+    assert f"ParquetFG: {parquet_path}" in message
     assert "BaseInputData already set" not in message
 
 
@@ -1094,7 +1046,7 @@ def test_resolved_reader_feature_holds_its_pair_on_input_data_match_not_in_optio
         copy_features=False,
     )
 
-    assert feature.input_data_match == (CsvReader, csv_path)
+    assert feature.input_data_match == (CsvFG, SourceMatch(source=csv_path, access=csv_path))
     assert RESERVED_READER_OPTION_KEY not in feature.options.group
     assert RESERVED_READER_OPTION_KEY not in feature.options.context
 

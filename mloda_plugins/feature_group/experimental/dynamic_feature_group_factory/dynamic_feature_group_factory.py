@@ -23,7 +23,7 @@ class DynamicFeatureGroupCreator:
 
     - Create feature group classes at runtime without explicit class definitions
     - Override specific methods (calculate_feature, match_feature_group_criteria, etc.)
-    - Inherit from any FeatureGroup subclass (e.g., ReadFileFeature, SourceInputFeature)
+    - Inherit from any FeatureGroup subclass (e.g., CsvFG, SourceInputFeature)
     - Cache created classes to avoid duplicate definitions
     - Support full feature group lifecycle customization
 

@@ -949,8 +949,7 @@ Available join types:
         frameworks: set[type[ComputeFramework]],
         graph: Graph,
     ) -> tuple[frozenset[UUID], bool]:
-        """Direct parents of the consumers that descend from a link side but run on another framework, and whether
-        that side is the declared left one."""
+        """Consumer parents on another framework that descend from a link side, and whether that side is the left."""
         nodes = graph.get_nodes()
         side_members = split.left_uuids_any_distance | split.right_uuids_any_distance
         carriers: set[UUID] = set()
@@ -1765,10 +1764,7 @@ Available join types:
     def _independent_link_children(
         self, link: Link, children_uuids: set[UUID], graph: Graph
     ) -> list[tuple[set[UUID], JoinSide | None]]:
-        """Children reading disjoint steps on the link's declared sides (e.g. option variants) each get a join.
-
-        Variants sharing one side and differing on the other are split by the differing side, which is returned
-        with them: that side is the one each join must merge into."""
+        """Split children reading disjoint side steps (e.g. option variants), each getting a join, with the varying side."""
         step_of = {uuid: index for index, uuids in enumerate(self.feature_set_collections) for uuid in uuids}
         components: list[tuple[set[UUID], set[int]]] = []
         side_steps: dict[UUID, tuple[frozenset[int], frozenset[int]]] = {}

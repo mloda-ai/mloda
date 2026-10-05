@@ -10,10 +10,6 @@ import pytest
 from conftest import _write_broken_optional_root_package
 
 import mloda.core.abstract_plugins.plugin_loader.plugin_loader as plugin_loader_module
-from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    _collect_filtered_subclasses,  # noqa: F401
-    get_all_filtered_subclasses,
-)
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import OPTIONAL_PLUGIN_DEPENDENCIES
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.user import PluginLoader
@@ -91,26 +87,6 @@ class TestPluginLoader:
         for res in result:
             assert "feature_group" not in res
 
-    def test_auto_load_triggers_when_subclasses_empty(self) -> None:
-        """Auto-load fires load_group when _collect_filtered_subclasses returns empty."""
-        from unittest.mock import MagicMock
-
-        from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-
-        mock_load = MagicMock()
-
-        with patch(
-            "mloda.core.abstract_plugins.components.input_data.base_input_data._collect_filtered_subclasses",
-            return_value=[],
-        ):
-            with patch(
-                "mloda.core.abstract_plugins.plugin_loader.plugin_loader.PluginLoader.load_group",
-                mock_load,
-            ):
-                get_all_filtered_subclasses(ReadDocument, ReadDocument)
-
-        mock_load.assert_called_once_with("feature_group/input_data/read_files")
-
     def test_load_nested_group_builds_correct_module_path(self) -> None:
         """Nested group paths like 'feature_group/input_data/file_formats' produce correct module names."""
         plugin_loader = PluginLoader()
@@ -119,12 +95,13 @@ class TestPluginLoader:
         assert "mloda_plugins.feature_group.input_data.file_formats.parquet_fg" in plugin_loader.plugins
         assert "mloda_plugins.feature_group.input_data.file_formats.stock_formats" in plugin_loader.plugins
 
-    def test_the_read_files_group_holds_the_document_readers(self) -> None:
+    def test_the_document_formats_group_holds_the_document_groups(self) -> None:
         plugin_loader = PluginLoader()
-        plugin_loader.load_group("feature_group/input_data/read_files")
-        assert "mloda_plugins.feature_group.input_data.read_files.json_document_reader" in plugin_loader.plugins
-        assert "mloda_plugins.feature_group.input_data.read_files.csv" not in plugin_loader.plugins
-        assert "mloda_plugins.feature_group.input_data.read_files.parquet" not in plugin_loader.plugins
+        plugin_loader.load_group("feature_group/input_data/document_formats")
+        base = "mloda_plugins.feature_group.input_data.document_formats"
+        for module in ("text_fg", "markdown_fg", "yaml_fg", "json_document_fg"):
+            assert f"{base}.{module}" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" not in plugin_loader.plugins
 
     @pytest.mark.timeout(60)
     def test_a_plain_csv_run_all_works_after_plugin_loader_all_without_importing_the_groups(

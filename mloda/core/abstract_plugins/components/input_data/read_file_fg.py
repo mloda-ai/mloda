@@ -1,6 +1,8 @@
 """Abstract base of one-FeatureGroup-per-file-format: finds files and folders, lists columns, caches per run.
 
 A subclass declares ``suffixes()`` and ``column_names(path)``; the base claims a feature when a file has the column.
+Third-party groups should run the contract mixins in mloda's ``tests/mixins/reader_feature_groups/``
+(``file_format_feature_group_test_mixin``).
 """
 
 import inspect
@@ -12,14 +14,17 @@ from typing import Any, ClassVar, cast
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+    HANDLE_OPTION,
+    HANDLE_SPEC,
+    FormatFeatureGroup,
+)
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 
-_HANDLE_OPTION = "data_access_handle"
 _DOCUMENT_SUFFIXES_OPTION = "document_suffixes"
 
 
@@ -37,15 +42,7 @@ class ReadFileFG(FormatFeatureGroup):
         ClaimRoute("folder", NamePolicy.CHECKED, True),
     )
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
-        _HANDLE_OPTION: PropertySpec(
-            "Name of the DataAccessCollection file or folder handle to read from.",
-            default=None,
-            strict_validation=True,
-            context=True,
-            element_validator=lambda value: isinstance(value, str),
-            match_guard=lambda value: isinstance(value, str),
-            expected="a str handle name",
-        ),
+        HANDLE_OPTION: HANDLE_SPEC,
         _DOCUMENT_SUFFIXES_OPTION: PropertySpec(
             "Suffixes handed over to document readers; this group never claims them.",
             default=None,
@@ -140,7 +137,7 @@ class ReadFileFG(FormatFeatureGroup):
             return []
         files: list[str] = list(dac.files.values())
         folders: list[str] = list(dac.folders.values())
-        handle = options.get(_HANDLE_OPTION)
+        handle = options.get(HANDLE_OPTION)
         if isinstance(handle, str):
             if handle in dac.files:
                 files, folders = [dac.files[handle]], []

@@ -4,12 +4,17 @@ See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guid
 """
 
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.prepare.identify_feature_group import resolve_or_raise
+from mloda.user import Feature
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 
 
 class TestNewConstructorShape:
@@ -51,7 +56,7 @@ class TestNewConstructorShape:
         """Under the loosened API, ``column_to_file`` accepts either a handle or a path.
 
         Passing a path that appears in ``files.values()`` must succeed and be normalized
-        to the matching file handle internally so ``_resolve_pinned_file`` can index
+        to the matching file handle internally so a file format group can index
         ``files`` by the stored value.
         """
         dac = DataAccessCollection(
@@ -332,18 +337,17 @@ class TestAutoHandleAssignment:
 class TestColumnToFileAcceptsPathOrHandle:
     """``column_to_file`` may reference a file by handle or by path; mixed is OK."""
 
-    def test_path_value_resolves_through_resolve_pinned_file(self) -> None:
-        """End-to-end: path values must be normalized so _resolve_pinned_file finds them."""
-        from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+    def test_path_value_resolves_through_a_file_format_group(self, tmp_path: Path) -> None:
+        """End-to-end: a path value is normalized so a file format group finds the pinned file."""
+        path = tmp_path / "tx.csv"
+        path.write_text("amount\n1\n", encoding="utf-8")
+        dac = DataAccessCollection(files={str(path)}, column_to_file={"amount": str(path)})
+        feature = Feature("amount")
 
-        dac = DataAccessCollection(
-            files={"/data/tx.csv"},
-            column_to_file={"amount": "/data/tx.csv"},
-        )
-        # _resolve_pinned_file does files_registry[column_map[name]]; the normalization
-        # must make that indexing succeed.
-        resolved = BaseInputData._resolve_pinned_file(dac, ["amount"])
-        assert resolved == "/data/tx.csv"
+        resolve_or_raise(feature, {load_group("csv_fg", "CsvFG"): {PyArrowTable}}, None, dac)
+
+        assert feature.input_data_match is not None
+        assert feature.input_data_match[1].source == str(path)
 
     def test_mixed_handle_and_path_both_resolve(self) -> None:
         dac = DataAccessCollection(

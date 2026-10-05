@@ -18,6 +18,7 @@ from mloda.provider import FormatFeatureGroup, ReadFileFG
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.user import DataAccessCollection, Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     FileLoadsIntoFrameworkMixin,
     PyArrowTableAdapter,
@@ -176,6 +177,24 @@ class TestPinnedFileOwnedBySomeFileGroup:
         path = tmp_path / f"pinned{TOY_SUFFIX}"
         write_toy_file(path, {"toyfmt_g6_col": [1]})
         BaseInputData._record_unowned_pin(self._dac(path, "toyfmt_g6_col"), ["toyfmt_g6_col"])
+        assert self._unowned_pin_reasons(rejection_window) == []
+
+    @pytest.mark.parametrize(
+        "module,name,suffix",
+        [
+            ("text_fg", "TextFG", ".TXT"),
+            ("text_fg", "PyFG", ".py"),
+            ("markdown_fg", "MarkdownFG", ".md"),
+            ("yaml_fg", "YamlFG", ".yml"),
+        ],
+    )
+    def test_a_pin_to_a_document_group_suffix_records_no_unowned_pin(
+        self, tmp_path: Path, rejection_window: dict[str, MatchRejection], module: str, name: str, suffix: str
+    ) -> None:
+        load_document_group(module, name)
+        path = tmp_path / f"pinned{suffix}"
+        path.write_text("toyfmt_g6_doc\n", encoding="utf-8")
+        BaseInputData._record_unowned_pin(self._dac(path, name), [name])
         assert self._unowned_pin_reasons(rejection_window) == []
 
     def test_a_pin_to_a_suffix_nobody_owns_still_records_it(

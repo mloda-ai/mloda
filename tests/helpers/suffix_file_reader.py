@@ -1,7 +1,7 @@
-"""Test-local BaseInputData file reader family that drives the suffix, column and pin matching machinery.
+"""Test-local BaseInputData file reader that drives the suffix, column and pin matching machinery.
 
 A subclass owns unique suffixes, so it never claims data in other tests. It stays non-final until a
-subclass overrides ``load_data``.
+subclass overrides ``load_data``. A reader matches only itself, so a root FeatureGroup returns the concrete reader.
 """
 
 from __future__ import annotations
@@ -10,6 +10,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
+)
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.provider import INPUT_DATA_STAGE, BaseInputData, record_match_rejection
 from mloda.user import DataAccessCollection, Options
@@ -29,8 +33,6 @@ class SuffixFileReader(BaseInputData):
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
         if isinstance(data_access, DataAccessCollection):
-            if cls._pin_applies(data_access, feature_names):
-                return cls._resolve_pinned_file(data_access, feature_names)
             file_match = data_access.resolve(
                 "file", predicate=lambda p: cls._file_matches(p, feature_names), hint=options.get("data_access_handle")
             )
@@ -77,7 +79,7 @@ class SuffixFileReader(BaseInputData):
 
     @classmethod
     def _declines_unvalidated_separator_name(cls, file_name: str, feature_names: list[str]) -> bool:
-        feature = cls._first_separator_name(feature_names)
+        feature = next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
         if feature is None or cls._column_names_or_none(file_name) is not None:
             return False
         record_match_rejection(

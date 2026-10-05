@@ -93,7 +93,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 3
+    assert content["format"] == PLAN_LOCK_FORMAT == 4
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
@@ -102,7 +102,6 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "compute_framework",
         "compute_framework_reason",
         "specialized_from",
-        "reader",
         "result_framework",
     }
     assert set(content["joins"][0]) == {
@@ -152,6 +151,20 @@ def test_a_lock_with_an_edited_format_version_fails_check(tmp_path: Path) -> Non
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
     content["format"] = PLAN_LOCK_FORMAT + 1
+    lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(PlanLockMismatchError, match="format"):
+        check_plan_lock(plan, lock)
+
+
+def test_a_lock_written_in_the_previous_format_with_a_reader_entry_fails_check(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    plan = _plan()
+    write_plan_lock(plan, lock)
+    content = json.loads(lock.read_text(encoding="utf-8"))
+    content["format"] = 3
+    for record in content["compute"]:
+        record["reader"] = None
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
     with pytest.raises(PlanLockMismatchError, match="format"):

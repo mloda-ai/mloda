@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -115,15 +116,15 @@ class TestNeutralFallback:
 
 class TestTools:
     def _step_group_and_match(self, group: type, feature: str) -> tuple[Any, Any]:
-        session = mloda.prepare(
-            [Feature(feature)],
-            compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({group}),
-            data_access_collection=toy_dac(h1={"toyfmt_a": [1], "toyfmt_b": [2]}),
+        requested = Feature(feature)
+        resolve_or_raise(
+            requested,
+            {group: {PythonDictFramework}},
+            None,
+            toy_dac(h1={"toyfmt_a": [1], "toyfmt_b": [2]}),
         )
-        step = next(s for s in session.resolved_plan() if s.step_kind == "compute")
-        assert step.reader_data_access is not None
-        return step.feature_group, step.reader_data_access[1]
+        assert requested.input_data_match is not None
+        return group, requested.input_data_match[1]
 
     def test_describe_columns_defaults_to_columns_with_none_types(self) -> None:
         fg, match = self._step_group_and_match(ToyFormatFG, "toyfmt_a")

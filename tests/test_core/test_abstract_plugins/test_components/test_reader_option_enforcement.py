@@ -1,6 +1,6 @@
 """Pins selection-time enforcement of ``READER_OPTIONS`` specs (issue #949, cycle 2): per-candidate
 vetoes before the probe; absence vetoes record only on the feature-scope (ownership) path.
-Leak policy: leaked final readers are foreign-inert (TestModuleLeakPolicy pins it); absence-firing ones are test-local.
+Leak policy: leaked readers are foreign-inert (TestModuleLeakPolicy pins it); absence-firing ones are test-local.
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ def _roe_raising_validator(value: Any) -> Any:
 
 
 class _RoeMarkedReader(BaseInputData):
-    """Family base: a child matches ONLY its own module-unique access string or dac folder handle."""
+    """Base: a child matches ONLY its own module-unique access string or dac folder handle."""
 
     ROE_ACCESS: ClassVar[str] = ""
     ROE_HANDLE: ClassVar[str] = ""
@@ -118,12 +118,8 @@ class _RoeMarkedReader(BaseInputData):
         return None
 
 
-class RoeStrictFamily(_RoeMarkedReader):
-    """Scopes the global probes of the strict-values reader to exactly that one candidate."""
-
-
-class RoeStrictValuesReader(RoeStrictFamily):
-    """Final reader with two strict membership keys; both fire only when their unique key is present."""
+class RoeStrictValuesReader(_RoeMarkedReader):
+    """Reader with two strict membership keys; both fire only when their unique key is present."""
 
     ROE_ACCESS = ROE_STRICT_ACCESS
     ROE_HANDLE = ROE_STRICT_HANDLE
@@ -149,7 +145,7 @@ class RoeStrictValuesReader(RoeStrictFamily):
 
 
 class RoeScalarOnlyReader(_RoeMarkedReader):
-    """Final reader whose key rejects a list/tuple/set/frozenset value outright, never unpacked (#1154)."""
+    """Reader whose key rejects a list/tuple/set/frozenset value outright, never unpacked."""
 
     ROE_ACCESS = ROE_SCALAR_ACCESS
 
@@ -169,7 +165,7 @@ class RoeScalarOnlyReader(_RoeMarkedReader):
 
 
 class RoeValidatorReader(_RoeMarkedReader):
-    """Final reader with validator-backed strict keys: one replacing membership, one raising."""
+    """Reader with validator-backed strict keys: one replacing membership, one raising."""
 
     ROE_ACCESS = ROE_VALIDATOR_ACCESS
 
@@ -195,7 +191,7 @@ class RoeValidatorReader(_RoeMarkedReader):
 
 
 class RoeLenientReader(_RoeMarkedReader):
-    """Final reader whose keys never reject: non-strict values and declared defaults (None included)."""
+    """Reader whose keys never reject: non-strict values and declared defaults (None included)."""
 
     ROE_ACCESS = ROE_LENIENT_ACCESS
 
@@ -214,12 +210,8 @@ class RoeLenientReader(_RoeMarkedReader):
         return {ROE_FEATURE_NAME: [1]}
 
 
-class RoeCondFamily(_RoeMarkedReader):
-    """Scopes the global probes of the conditional reader to exactly that one candidate."""
-
-
-class RoeConditionalReader(RoeCondFamily):
-    """Final reader whose key is required only when the module-unique trigger option is supplied."""
+class RoeConditionalReader(_RoeMarkedReader):
+    """Reader whose key is required only when the module-unique trigger option is supplied."""
 
     ROE_ACCESS = ROE_COND_ACCESS
     ROE_HANDLE = ROE_COND_HANDLE
@@ -234,7 +226,7 @@ class RoeConditionalReader(RoeCondFamily):
 
 
 class RoeRaisingPredicateReader(_RoeMarkedReader):
-    """Final reader whose required_when predicate always raises: a silent non-match, never a crash."""
+    """Reader whose required_when predicate always raises: a silent non-match, never a crash."""
 
     ROE_ACCESS = ROE_FUSSY_ACCESS
 
@@ -248,7 +240,7 @@ class RoeRaisingPredicateReader(_RoeMarkedReader):
 
 
 class RoeProbeCountingReader(_RoeMarkedReader):
-    """Final reader instrumenting its probe, pinning that the veto pre-empts match_subclass_data_access."""
+    """Reader instrumenting its probe, pinning that the veto pre-empts match_subclass_data_access."""
 
     ROE_ACCESS = ROE_PROBE_ACCESS
 
@@ -275,16 +267,8 @@ class RoeProbeCountingReader(_RoeMarkedReader):
         return {ROE_FEATURE_NAME: [1]}
 
 
-class RoePairFamily(_RoeMarkedReader):
-    """Two-candidate family: a spec-vetoed reader plus a clean sibling on the SAME dac handle."""
-
-
-class RoePairVetoedFamily(RoePairFamily):
-    """Narrower family whose only final reader is the vetoed one, for a deterministic solo probe."""
-
-
-class RoePairVetoedReader(RoePairVetoedFamily):
-    """Final reader whose strict key rejects the pair test's supplied value."""
+class RoePairVetoedReader(_RoeMarkedReader):
+    """Reader whose strict key rejects the pair test's supplied value."""
 
     ROE_ACCESS = ROE_PAIR_VETOED_ACCESS
     ROE_HANDLE = ROE_PAIR_HANDLE
@@ -303,8 +287,8 @@ class RoePairVetoedReader(RoePairVetoedFamily):
         return {ROE_FEATURE_NAME: [1]}
 
 
-class RoePairCleanReader(RoePairFamily):
-    """Final sibling declaring no extra specs; it must win once the vetoed sibling is a non-match."""
+class RoePairCleanReader(_RoeMarkedReader):
+    """Sibling declaring no extra specs; it must win once the vetoed sibling is a non-match."""
 
     ROE_ACCESS = ROE_PAIR_CLEAN_ACCESS
     ROE_HANDLE = ROE_PAIR_HANDLE
@@ -314,12 +298,8 @@ class RoePairCleanReader(RoePairFamily):
         return {ROE_FEATURE_NAME: [1]}
 
 
-class RoeEngineFamily(_RoeMarkedReader):
-    """Reader family the engine feature group binds; only its one final child is probed."""
-
-
-class RoeEngineReader(RoeEngineFamily):
-    """Final reader behind the engine integration tests."""
+class RoeEngineReader(_RoeMarkedReader):
+    """Reader behind the engine integration tests."""
 
     ROE_ACCESS = ROE_ENGINE_ACCESS
 
@@ -338,24 +318,21 @@ class RoeEngineReader(RoeEngineFamily):
 
 
 class RoeEnforcementFG(FeatureGroup):
-    """Root feature group matching ONLY via its reader family; unique names keep it inert elsewhere."""
+    """Root feature group matching ONLY via its reader; unique names keep it inert elsewhere."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return RoeEngineFamily()
+        return RoeEngineReader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
 
 
-def _roe_required_family(tag: str) -> tuple[type[BaseInputData], type[BaseInputData]]:
-    """(family, reader) with an unconditionally required key, built test-locally per the leak policy;
+def _roe_required_reader(tag: str) -> type[BaseInputData]:
+    """A reader with an unconditionally required key, built test-locally per the leak policy;
     the per-test tag keys data_access_name() so a traceback-kept stale twin is never the addressed reader."""
 
-    class RoeLocalRequiredFamily(_RoeMarkedReader):
-        """Scopes the solo global probe to the one required-key reader."""
-
-    class RoeLocalRequiredReader(RoeLocalRequiredFamily):
+    class RoeLocalRequiredReader(_RoeMarkedReader):
         ROE_ACCESS = ROE_REQUIRED_ACCESS
         ROE_HANDLE = ROE_REQUIRED_HANDLE
 
@@ -371,7 +348,7 @@ def _roe_required_family(tag: str) -> tuple[type[BaseInputData], type[BaseInputD
         def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
             return {ROE_FEATURE_NAME: [1]}
 
-    return RoeLocalRequiredFamily, RoeLocalRequiredReader
+    return RoeLocalRequiredReader
 
 
 def _roe_nullable_reader(tag: str) -> type[BaseInputData]:
@@ -413,7 +390,7 @@ class TestFeatureScopeStrictValues:
         """A strict-rejected value vetoes the addressed reader and records class, key and value."""
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: "roe_bogus"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         assert "BaseInputData" not in options
@@ -439,7 +416,7 @@ class TestFeatureScopeStrictValues:
         """The recorded reason renders the value through safe_value_text, never verbatim, never raising."""
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: value})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         owner = RoeStrictValuesReader.get_class_name()
@@ -458,7 +435,7 @@ class TestFeatureScopeStrictValues:
         """Control: a valid value matches, writes the reader pair, and records nothing."""
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: "roe_parquet"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert options.get("BaseInputData") == (RoeStrictValuesReader, ROE_STRICT_ACCESS)
@@ -480,7 +457,7 @@ class TestFeatureScopeStrictValues:
         """One bad element in any sequence container rejects the whole value."""
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: container})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[RoeStrictValuesReader.get_class_name()]
@@ -493,7 +470,7 @@ class TestFeatureScopeStrictValues:
             {RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: ("roe_csv", "roe_parquet")}
         )
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert rejection_window == {}
@@ -502,7 +479,7 @@ class TestFeatureScopeStrictValues:
         """The value "xyz" over allowed {"x","y","z"} must reject: char-wise iteration would accept it."""
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_CHAR_KEY: "xyz"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[RoeStrictValuesReader.get_class_name()]
@@ -516,7 +493,7 @@ class TestFeatureScopeStrictValues:
         """An unhashable composite can never be a member of the Mapping space: rejection, not TypeError."""
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: {"roe_csv": 1}})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[RoeStrictValuesReader.get_class_name()]
@@ -529,7 +506,7 @@ class TestFeatureScopeStrictValues:
         """Control: without allow_explicit_none a supplied None is absent, so nothing is validated."""
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: None})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert rejection_window == {}
@@ -538,7 +515,7 @@ class TestFeatureScopeStrictValues:
         """Control: a value outside a NON-strict spec's declared space keeps matching byte-identically."""
         options = Options({RoeLenientReader.__name__: ROE_LENIENT_ACCESS, ROE_LAX_KEY: "roe_bogus"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeLenientReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert options.get("BaseInputData") == (RoeLenientReader, ROE_LENIENT_ACCESS)
@@ -549,13 +526,13 @@ class TestFeatureScopeStrictValues:
         pair = (RoeStrictValuesReader, ROE_STRICT_ACCESS)
         options = Options(group={"BaseInputData": pair, RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS})
 
-        assert BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME) is True
+        assert RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME) is True
         assert options.get("BaseInputData") == pair
         assert rejection_window == {}
 
         global_options = Options(group={"BaseInputData": pair})
         dac = DataAccessCollection(folders={ROE_STRICT_HANDLE: "/roe/nowhere"})
-        assert RoeStrictFamily.match_data_access([ROE_FEATURE_NAME], dac, options=global_options) == (
+        assert RoeStrictValuesReader.match_data_access([ROE_FEATURE_NAME], dac, options=global_options) == (
             RoeStrictValuesReader,
             ROE_STRICT_ACCESS,
         )
@@ -581,7 +558,7 @@ class TestScalarOnlyRejectsCollectionsOutright:
         """Every element individually passes the validator, yet scalar_only rejects the shape itself."""
         options = Options({RoeScalarOnlyReader.__name__: ROE_SCALAR_ACCESS, ROE_SCALAR_KEY: container})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeScalarOnlyReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[RoeScalarOnlyReader.get_class_name()]
@@ -593,7 +570,7 @@ class TestScalarOnlyRejectsCollectionsOutright:
         """Control: a plain scalar value the validator accepts still matches."""
         options = Options({RoeScalarOnlyReader.__name__: ROE_SCALAR_ACCESS, ROE_SCALAR_KEY: 5})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeScalarOnlyReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert rejection_window == {}
@@ -604,7 +581,7 @@ class TestScalarOnlyRejectsCollectionsOutright:
         """Control: scalar_only changes nothing for a plain scalar value the validator rejects."""
         options = Options({RoeScalarOnlyReader.__name__: ROE_SCALAR_ACCESS, ROE_SCALAR_KEY: -1})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeScalarOnlyReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[RoeScalarOnlyReader.get_class_name()]
@@ -621,7 +598,7 @@ class TestElementValidator:
         """Control: a value outside allowed_values passes because only the validator decides."""
         options = Options({RoeValidatorReader.__name__: ROE_VALIDATOR_ACCESS, ROE_COUNT_KEY: 7})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeValidatorReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert options.get("BaseInputData") == (RoeValidatorReader, ROE_VALIDATOR_ACCESS)
@@ -633,7 +610,7 @@ class TestElementValidator:
         """A member of allowed_values still rejects when the validator says no."""
         options = Options({RoeValidatorReader.__name__: ROE_VALIDATOR_ACCESS, ROE_COUNT_KEY: "roe_member"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeValidatorReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[RoeValidatorReader.get_class_name()]
@@ -648,7 +625,7 @@ class TestElementValidator:
         """A validator that raises cannot judge the value, so the value is rejected, not the run."""
         options = Options({RoeValidatorReader.__name__: ROE_VALIDATOR_ACCESS, ROE_TOUCHY_KEY: ROE_BOOM_VALUE})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeValidatorReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[RoeValidatorReader.get_class_name()]
@@ -665,7 +642,7 @@ class TestRequiredness:
         """A truthy required_when over an absent key records a rejection naming class and key."""
         options = Options({RoeConditionalReader.__name__: ROE_COND_ACCESS, ROE_TRIGGER_KEY: True})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeConditionalReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         assert "BaseInputData" not in options
@@ -686,7 +663,7 @@ class TestRequiredness:
         """Control: a falsy predicate makes the absent key simply optional."""
         options = Options({RoeConditionalReader.__name__: ROE_COND_ACCESS})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeConditionalReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert options.get("BaseInputData") == (RoeConditionalReader, ROE_COND_ACCESS)
@@ -700,7 +677,7 @@ class TestRequiredness:
             {RoeConditionalReader.__name__: ROE_COND_ACCESS, ROE_TRIGGER_KEY: True, ROE_COND_KEY: "roe_supplied"}
         )
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeConditionalReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert rejection_window == {}
@@ -711,7 +688,7 @@ class TestRequiredness:
         """A raising predicate is contained as a non-match, reported only as a generic pin rejection."""
         options = Options({RoeRaisingPredicateReader.__name__: ROE_FUSSY_ACCESS})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeRaisingPredicateReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         assert "BaseInputData" not in options
@@ -726,10 +703,10 @@ class TestRequiredness:
         self, rejection_window: dict[str, MatchRejection], collect_after: None
     ) -> None:
         """A NO_DEFAULT spec without required_when makes absence a RECORDED rejection: ownership is established."""
-        _, reader = _roe_required_family("absent")
+        reader = _roe_required_reader("absent")
         options = Options({reader.data_access_name(): ROE_REQUIRED_ACCESS})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = reader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         owner = reader.get_class_name()
@@ -747,10 +724,10 @@ class TestRequiredness:
         self, rejection_window: dict[str, MatchRejection], collect_after: None
     ) -> None:
         """Control: supplying the required key restores the match and the pair write."""
-        _, reader = _roe_required_family("present")
+        reader = _roe_required_reader("present")
         options = Options({reader.data_access_name(): ROE_REQUIRED_ACCESS, ROE_REQUIRED_KEY: "roe_supplied"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = reader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert options.get("BaseInputData") == (reader, ROE_REQUIRED_ACCESS)
@@ -763,7 +740,7 @@ class TestRequiredness:
         reader = _roe_nullable_reader("supplied")
         options = Options({reader.data_access_name(): ROE_NULLABLE_ACCESS, ROE_NULLABLE_KEY: None})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = reader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert rejection_window == {}
@@ -775,7 +752,7 @@ class TestRequiredness:
         reader = _roe_nullable_reader("absent")
         options = Options({reader.data_access_name(): ROE_NULLABLE_ACCESS})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = reader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         stored = rejection_window[reader.get_class_name()]
@@ -786,7 +763,7 @@ class TestRequiredness:
         """Control: declared defaults, a None default included, never reject an absent key."""
         options = Options({RoeLenientReader.__name__: ROE_LENIENT_ACCESS})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeLenientReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert rejection_window == {}
@@ -802,7 +779,7 @@ class TestGlobalProbeEnforcement:
         options = Options({ROE_FORMAT_KEY: "roe_bogus"})
         dac = DataAccessCollection(folders={ROE_STRICT_HANDLE: "/roe/nowhere"})
 
-        result = RoeStrictFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
+        result = RoeStrictValuesReader.match_data_access([ROE_FEATURE_NAME], dac, options=options)
 
         assert result == (None, None)
         owner = RoeStrictValuesReader.get_class_name()
@@ -817,10 +794,10 @@ class TestGlobalProbeEnforcement:
         self, rejection_window: dict[str, MatchRejection], collect_after: None
     ) -> None:
         """options=None reads as all-absent: the unconditional key still vetoes, silently."""
-        family, _ = _roe_required_family("none_options")
+        reader = _roe_required_reader("none_options")
         dac = DataAccessCollection(folders={ROE_REQUIRED_HANDLE: "/roe/nowhere"})
 
-        result = family.match_data_access([ROE_FEATURE_NAME], dac, options=None)
+        result = reader.match_data_access([ROE_FEATURE_NAME], dac, options=None)
 
         assert result == (None, None)
         assert rejection_window == {}
@@ -829,10 +806,10 @@ class TestGlobalProbeEnforcement:
         self, rejection_window: dict[str, MatchRejection], collect_after: None
     ) -> None:
         """Supplied Options missing the required key: the candidate vetoes, the window stays empty."""
-        family, _ = _roe_required_family("global_absent")
+        reader = _roe_required_reader("global_absent")
         dac = DataAccessCollection(folders={ROE_REQUIRED_HANDLE: "/roe/nowhere"})
 
-        result = family.match_data_access([ROE_FEATURE_NAME], dac, options=Options())
+        result = reader.match_data_access([ROE_FEATURE_NAME], dac, options=Options())
 
         assert result == (None, None)
         assert rejection_window == {}
@@ -844,7 +821,7 @@ class TestGlobalProbeEnforcement:
         options = Options({ROE_TRIGGER_KEY: True})
         dac = DataAccessCollection(folders={ROE_COND_HANDLE: "/roe/nowhere"})
 
-        result = RoeCondFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
+        result = RoeConditionalReader.match_data_access([ROE_FEATURE_NAME], dac, options=options)
 
         assert result == (None, None)
         assert rejection_window == {}
@@ -855,24 +832,24 @@ class TestGlobalProbeEnforcement:
         """Control: without the trigger the conditional candidate claims the collection cleanly."""
         dac = DataAccessCollection(folders={ROE_COND_HANDLE: "/roe/nowhere"})
 
-        result = RoeCondFamily.match_data_access([ROE_FEATURE_NAME], dac, options=Options())
+        result = RoeConditionalReader.match_data_access([ROE_FEATURE_NAME], dac, options=Options())
 
         assert result == (RoeConditionalReader, ROE_COND_ACCESS)
         assert rejection_window == {}
 
-    def test_a_vetoed_candidate_leaves_sibling_candidates_probing(
+    def test_a_vetoed_candidate_leaves_a_clean_reader_probing(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """The veto is per candidate: probed solo it is a plain non-match, and its clean sibling wins."""
+        """The veto is per candidate: the vetoed reader is a plain non-match, the clean reader still matches."""
         options = Options({ROE_PAIR_KEY: "roe_bogus"})
         dac = DataAccessCollection(folders={ROE_PAIR_HANDLE: "/roe/nowhere"})
 
-        solo = RoePairVetoedFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
+        solo = RoePairVetoedReader.match_data_access([ROE_FEATURE_NAME], dac, options=options)
         assert solo == (None, None)
         stored = rejection_window[RoePairVetoedReader.get_class_name()]
         assert stored.stage == INPUT_DATA_STAGE
 
-        paired = RoePairFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
+        paired = RoePairCleanReader.match_data_access([ROE_FEATURE_NAME], dac, options=options)
         assert paired == (RoePairCleanReader, ROE_PAIR_CLEAN_ACCESS)
         assert set(rejection_window) <= {RoePairVetoedReader.get_class_name()}
 
@@ -881,7 +858,7 @@ class TestGlobalProbeEnforcement:
         options = Options({ROE_FORMAT_KEY: "roe_csv"})
         dac = DataAccessCollection(folders={ROE_STRICT_HANDLE: "/roe/nowhere"})
 
-        result = RoeStrictFamily.match_data_access([ROE_FEATURE_NAME], dac, options=options)
+        result = RoeStrictValuesReader.match_data_access([ROE_FEATURE_NAME], dac, options=options)
 
         assert result == (RoeStrictValuesReader, ROE_STRICT_ACCESS)
         assert rejection_window == {}
@@ -890,7 +867,7 @@ class TestGlobalProbeEnforcement:
         """Control: all-absent keys with declared defaults pass the checks even for options=None."""
         dac = DataAccessCollection(folders={ROE_STRICT_HANDLE: "/roe/nowhere"})
 
-        result = RoeStrictFamily.match_data_access([ROE_FEATURE_NAME], dac, options=None)
+        result = RoeStrictValuesReader.match_data_access([ROE_FEATURE_NAME], dac, options=None)
 
         assert result == (RoeStrictValuesReader, ROE_STRICT_ACCESS)
         assert rejection_window == {}
@@ -904,7 +881,7 @@ class TestEnforcementPrecedesTheProbe:
         RoeProbeCountingReader.roe_calls.clear()
         options = Options({RoeProbeCountingReader.__name__: ROE_PROBE_ACCESS, ROE_PROBE_KEY: "roe_bogus"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeProbeCountingReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert RoeProbeCountingReader.roe_calls == []
         assert matched is False
@@ -917,7 +894,7 @@ class TestEnforcementPrecedesTheProbe:
         RoeProbeCountingReader.roe_calls.clear()
         options = Options({RoeProbeCountingReader.__name__: ROE_PROBE_ACCESS, ROE_PROBE_KEY: "roe_ok"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeProbeCountingReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is True
         assert RoeProbeCountingReader.roe_calls == [ROE_PROBE_ACCESS]
@@ -932,7 +909,7 @@ class TestOutsideAnActiveWindow:
         assert MATCH_REJECTION_REASONS.get() is None
         options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: "roe_bogus"})
 
-        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+        matched = RoeStrictValuesReader.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         assert MATCH_REJECTION_REASONS.get() is None
@@ -980,17 +957,17 @@ class TestEngineIntegration:
 
 
 class TestModuleLeakPolicy:
-    """The module's leak policy, machine-checked over every module-level final reader."""
+    """The module's leak policy, machine-checked over every module-level reader."""
 
     def test_module_level_readers_cannot_fire_on_foreign_options(self) -> None:
-        """Every module-level final reader carries its marker and no absence-firing spec; RoeLocal* are exempt."""
+        """Every module-level reader carries its marker and no absence-firing spec; RoeLocal* are exempt."""
         module_level = [
             cls
             for cls in get_all_subclasses(BaseInputData)
-            if cls.__module__ == __name__ and cls.is_final_reader() and "Local" not in cls.__name__
+            if cls.__module__ == __name__ and "load_data" in vars(cls) and "Local" not in cls.__name__
         ]
 
-        assert module_level, "expected this module's final readers to be reachable through __subclasses__()"
+        assert module_level, "expected this module's readers to be reachable through __subclasses__()"
         for cls in module_level:
             assert getattr(cls, "ROE_ACCESS", ""), f"{cls.__name__} must declare its module-unique access marker"
             for key, spec in cls.reader_option_specs().items():

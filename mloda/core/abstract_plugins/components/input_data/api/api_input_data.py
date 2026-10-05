@@ -7,8 +7,8 @@ class ApiInputData(BaseInputData):
     """
     This class represents api input data, which was passed through the api.
 
-    It injects in-memory data passed through the API and is NOT an HTTP client;
-    HTTP sources are custom BaseInputData readers.
+    It injects in-memory data passed through the API and is NOT an HTTP client; an HTTP source is a plain
+    FeatureGroup that claims only when pointed at (govdata is the example).
     """
 
     def matches(

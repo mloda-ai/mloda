@@ -1007,7 +1007,10 @@ class TestGateBypass:
 
 
 class TestSealOnFirstUse:
-    @pytest.mark.parametrize("attr, value", [("raise_on_error", False), ("priority", 1), ("never_fall_back", True)])
+    @pytest.mark.parametrize(
+        "attr, value",
+        [("raise_on_error", False), ("priority", 1), ("never_fall_back", True), ("raise_on_run_complete", True)],
+    )
     def test_flags_cannot_be_set_after_build_hook_extenders(self, attr: str, value: Any) -> None:
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders
 

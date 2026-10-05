@@ -8,6 +8,7 @@ as results become available, instead of accumulating them internally.
 
 from __future__ import annotations
 
+import logging
 import types
 from typing import Any, Generator, Iterator
 from unittest.mock import Mock, MagicMock
@@ -273,8 +274,10 @@ class TestComputeStreamCleanup:
 
 
 class _RunCompleteProbe(Extender):
-    def __init__(self) -> None:
+    def __init__(self, error: Exception | None = None, raise_on_run_complete: bool = False) -> None:
         self.run_ids: list[str | None] = []
+        self.error = error
+        self.raise_on_run_complete = raise_on_run_complete
 
     def wraps(self) -> set[ExtenderHook]:
         return set()
@@ -284,6 +287,8 @@ class _RunCompleteProbe(Extender):
 
     def on_run_complete(self, run_id: str | None) -> None:
         self.run_ids.append(run_id)
+        if self.error is not None:
+            raise self.error
 
 
 _EARLY_CLOSE_COLUMN = "early_closed_stream_col"
@@ -301,6 +306,18 @@ class _EarlyCloseFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {_EARLY_CLOSE_COLUMN: [1, 2, 3]}
+
+
+def _early_close_kwargs(probe: _RunCompleteProbe) -> dict[str, Any]:
+    return {
+        "compute_frameworks": ["PythonDictFramework"],
+        "plugin_collector": PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
+        "function_extender": {probe},
+    }
+
+
+def _early_close_session(probe: _RunCompleteProbe) -> Any:
+    return mloda.prepare([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs(probe))
 
 
 class TestComputeStreamNotifiesExtenders:
@@ -352,6 +369,40 @@ class TestComputeStreamNotifiesExtenders:
         stream.close()
 
         assert order == ["join", "signal"]
+
+    def test_exhausted_api_stream_raises_the_opt_in_extender_failure(self) -> None:
+        failure = RuntimeError("opt-in boom")
+        probe = _RunCompleteProbe(error=failure, raise_on_run_complete=True)
+        session = _early_close_session(probe)
+
+        with pytest.raises(RuntimeError) as raised:
+            list(session.stream_run())
+
+        assert raised.value is failure
+        assert probe.run_ids
+
+    def test_early_closed_api_stream_does_not_raise_the_opt_in_extender_failure(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        probe = _RunCompleteProbe(error=RuntimeError("opt-in boom"), raise_on_run_complete=True)
+        session = _early_close_session(probe)
+
+        with caplog.at_level(logging.ERROR):
+            stream = session.stream_run()
+            next(stream)
+            stream.close()
+
+        assert probe.run_ids
+        assert [r for r in caplog.records if r.levelno == logging.ERROR]
+
+    def test_sync_run_all_raises_the_opt_in_extender_failure(self) -> None:
+        failure = RuntimeError("opt-in boom")
+        probe = _RunCompleteProbe(error=failure, raise_on_run_complete=True)
+
+        with pytest.raises(RuntimeError) as raised:
+            mloda.run_all([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs(probe))
+
+        assert raised.value is failure
 
 
 class TestComputeStreamErrorHandling:

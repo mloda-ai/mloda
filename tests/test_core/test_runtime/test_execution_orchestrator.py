@@ -686,8 +686,10 @@ class _RunCompleteRecorder(Extender):
         priority: int = 100,
         hooks: set[ExtenderHook] | None = None,
         raises: bool = False,
-        error: type[BaseException] = RuntimeError,
+        error: type[BaseException] | BaseException = RuntimeError,
+        raise_on_run_complete: bool = False,
     ) -> None:
+        self.raise_on_run_complete = raise_on_run_complete
         self.label = label
         self.log = log
         self.priority = priority
@@ -704,11 +706,16 @@ class _RunCompleteRecorder(Extender):
     def on_run_complete(self, run_id: str | None) -> None:
         self.log.append((self.label, run_id))
         if self.raises:
+            if isinstance(self.error, BaseException):
+                raise self.error
             raise self.error(_RUN_COMPLETE_BOOM)
 
 
-def _entered_orchestrator(extenders: set[Extender]) -> ExecutionOrchestrator:
-    orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
+def _entered_orchestrator(extenders: set[Extender], empty_plan: bool = False) -> ExecutionOrchestrator:
+    planner = Mock(spec=ExecutionPlan)
+    if empty_plan:
+        planner.__iter__ = Mock(return_value=iter([]))
+    orchestrator = ExecutionOrchestrator(planner)
     orchestrator.__enter__({ParallelizationMode.SYNC}, extenders, None, None, RunContext(run_id="run-1"))
     return orchestrator
 
@@ -860,9 +867,11 @@ class TestExitNotifiesExtendersOfRunCompletion:
         assert log == [("raiser", "run-1"), ("survivor", "run-1")]
         assert [r for r in caplog.records if r.levelno == logging.ERROR]
 
-    def test_raising_extender_does_not_replace_the_run_exception(self) -> None:
+    @pytest.mark.parametrize("opt_in", [False, True])
+    def test_raising_extender_does_not_replace_the_run_exception(self, opt_in: bool) -> None:
         log: _RunLog = []
-        orchestrator = _entered_orchestrator({_RunCompleteRecorder("raiser", log, raises=True)})
+        raiser = _RunCompleteRecorder("raiser", log, raises=True, raise_on_run_complete=opt_in)
+        orchestrator = _entered_orchestrator({raiser})
         failure = RuntimeError("compute failed")
         orchestrator._check_for_error = Mock(side_effect=failure)  # type: ignore[method-assign]
 
@@ -874,3 +883,80 @@ class TestExitNotifiesExtendersOfRunCompletion:
 
         assert log == [("raiser", "run-1")]
         assert raised.value is failure
+
+    def test_default_extender_failure_on_a_successful_run_is_logged_not_raised(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        log: _RunLog = []
+        orchestrator = _entered_orchestrator({_RunCompleteRecorder("raiser", log, raises=True)}, empty_plan=True)
+
+        orchestrator.compute()
+        with caplog.at_level(logging.ERROR):
+            orchestrator.__exit__(None, None, None)
+
+        assert log == [("raiser", "run-1")]
+        assert [r for r in caplog.records if r.levelno == logging.ERROR]
+
+    def test_opt_in_failure_on_a_successful_run_propagates_after_later_extenders_are_notified(self) -> None:
+        log: _RunLog = []
+        failure = RuntimeError("opt-in boom")
+        raiser = _RunCompleteRecorder(
+            "raiser", log, priority=10, raises=True, error=failure, raise_on_run_complete=True
+        )
+        survivor = _RunCompleteRecorder("survivor", log, priority=20)
+        orchestrator = _entered_orchestrator({raiser, survivor}, empty_plan=True)
+
+        orchestrator.compute()
+        with pytest.raises(RuntimeError) as raised:
+            orchestrator.__exit__(None, None, None)
+
+        assert raised.value is failure
+        assert log == [("raiser", "run-1"), ("survivor", "run-1")]
+
+    @pytest.mark.parametrize(
+        "first_error, first_opt_in, second_error, second_opt_in",
+        [
+            (ValueError, False, RuntimeError, True),
+            (RuntimeError, True, ValueError, True),
+        ],
+        ids=["default_then_opt_in", "opt_in_then_opt_in"],
+    )
+    def test_only_the_propagating_failure_escapes_and_the_other_is_logged(
+        self,
+        first_error: type[BaseException],
+        first_opt_in: bool,
+        second_error: type[BaseException],
+        second_opt_in: bool,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        log: _RunLog = []
+        first = _RunCompleteRecorder(
+            "first", log, priority=10, raises=True, error=first_error, raise_on_run_complete=first_opt_in
+        )
+        second = _RunCompleteRecorder(
+            "second", log, priority=20, raises=True, error=second_error, raise_on_run_complete=second_opt_in
+        )
+        orchestrator = _entered_orchestrator({first, second}, empty_plan=True)
+
+        orchestrator.compute()
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(RuntimeError, match=_RUN_COMPLETE_BOOM):
+                orchestrator.__exit__(None, None, None)
+
+        assert log == [("first", "run-1"), ("second", "run-1")]
+        errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+        assert len(errors) == 1
+        assert "ValueError" in errors[0]
+
+    def test_manager_is_shut_down_when_the_opt_in_failure_propagates(self) -> None:
+        log: _RunLog = []
+        raiser = _RunCompleteRecorder("raiser", log, raises=True, raise_on_run_complete=True)
+        orchestrator = _entered_orchestrator({raiser}, empty_plan=True)
+        orchestrator.manager = Mock()
+        orchestrator.manager.shutdown.side_effect = lambda: log.append(("shutdown", None))
+
+        orchestrator.compute()
+        with pytest.raises(RuntimeError, match=_RUN_COMPLETE_BOOM):
+            orchestrator.__exit__(None, None, None)
+
+        assert log == [("raiser", "run-1"), ("shutdown", None)]

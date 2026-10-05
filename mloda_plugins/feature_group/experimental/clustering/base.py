@@ -245,7 +245,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
+        source_features = cls._extract_validated_source_features(feature)
         algorithm, k_value = cls._extract_clustering_params(feature)
 
         if algorithm is None or k_value is None:

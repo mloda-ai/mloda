@@ -405,11 +405,13 @@ Read each value through the mixin helpers, so the name stays authoritative when 
 def calculate_feature(cls, data, features):
     for feature in features.features:
         operation_type = cls._resolve_operation(feature, "operation_type")
-        in_feature_name = cls._extract_source_features(feature)[0]
+        in_feature_name = cls._extract_single_source_feature(feature)
 
         # Process using extracted values
         # ... implementation logic
 ```
+
+Multi-source groups use `_extract_validated_source_features`, which enforces `MIN_IN_FEATURES` / `MAX_IN_FEATURES` and rejects empty operands on a direct call.
 
 ### 5. Advanced PROPERTY_MAPPING Features
 

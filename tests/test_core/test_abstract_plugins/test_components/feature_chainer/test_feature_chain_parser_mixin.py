@@ -968,6 +968,67 @@ class TestFeatureChainParserMixinExtractSingleSourceFeature:
             MockFeatureGroupMinZero._extract_single_source_feature(feature)
 
 
+def _config_feature(in_features: list[str]) -> Feature:
+    return Feature(
+        name="simple_name",
+        options=Options(context={DefaultOptionKeys.in_features: in_features, "operation": "op1"}),
+    )
+
+
+class TestFeatureChainParserMixinExtractValidatedSourceFeatures:
+    """Tests for _extract_validated_source_features() classmethod."""
+
+    def test_raises_for_too_few_sources(self) -> None:
+        with pytest.raises(ValueError, match="at least 2 in_feature"):
+            MockFeatureGroupWithMinMax._extract_validated_source_features(_config_feature(["feature_a"]))
+
+    def test_raises_for_too_many_sources(self) -> None:
+        with pytest.raises(ValueError, match="at most 3 in_feature"):
+            MockFeatureGroupWithMinMax._extract_validated_source_features(_config_feature(["a", "b", "c", "d"]))
+
+    def test_returns_sources_in_declared_order_string_based(self) -> None:
+        feature = Feature(name="feat2&feat1__op1_test", options=Options(context={"operation": "op1"}))
+
+        result = MockFeatureGroupWithMinMax._extract_validated_source_features(feature)
+
+        assert result == ["feat2", "feat1"]
+        assert result == MockFeatureGroupWithMinMax._extract_source_features(feature)
+
+    @pytest.mark.parametrize("in_features", [["feature_a", "feature_b"], ["feature_b", "feature_a", "feature_c"]])
+    def test_returns_sources_in_declared_order_config_based(self, in_features: list[str]) -> None:
+        result = MockFeatureGroupWithMinMax._extract_validated_source_features(_config_feature(in_features))
+
+        assert result == in_features
+        assert all(type(name) is str for name in result)
+
+    def test_raises_for_empty_operand(self) -> None:
+        feature = _config_feature(["feature_a", ""])
+
+        with pytest.raises(ValueError) as exc_info:
+            MockFeatureGroupWithMinMax._extract_validated_source_features(feature)
+
+        expected = MockFeatureGroupWithMinMax.source_features_reason(feature.name, ["feature_a", ""])
+        assert expected is not None
+        assert "empty in_feature operand" in expected
+        assert str(exc_info.value) == expected
+
+    def test_raises_custom_message_when_in_feature_count_reason_overridden(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            MockFeatureGroupSingleInFeatureCustomReason._extract_validated_source_features(
+                _config_feature(["feature_a", "feature_b"])
+            )
+
+        assert (
+            str(exc_info.value) == "MockFeatureGroupSingleInFeatureCustomReason needs exactly one input column; got 2."
+        )
+
+    def test_raises_generic_message_for_zero_sources(self) -> None:
+        feature = Feature(name="simple_name", options=Options(context={"operation": "op1"}))
+
+        with pytest.raises(ValueError, match="at least 1 in_feature"):
+            MockFeatureGroupZeroSources._extract_validated_source_features(feature)
+
+
 def _constant_operation_extractor(_feature: Feature) -> str:
     """An extract_fn stand-in that always resolves to a fixed, non-None operation value."""
     return "op1"

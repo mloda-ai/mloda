@@ -235,7 +235,7 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
+        source_features = cls._extract_validated_source_features(feature)
         pipeline_name = cls._extract_pipeline_name(feature)
         if pipeline_name is None:
             raise ValueError(f"Could not extract pipeline name from: {feature.name}")

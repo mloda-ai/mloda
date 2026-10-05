@@ -719,14 +719,20 @@ class FeatureChainParserMixin:
         return [str(f.name) for f in feature.options.get_in_features()]
 
     @classmethod
+    def _extract_validated_source_features(cls, feature: Feature) -> list[str]:
+        """``_extract_source_features`` plus the empty-operand and MIN/MAX_IN_FEATURES checks of a match."""
+        sources = cls._extract_source_features(feature)
+        cls._raise_source_features_reason(feature.name, sources)
+        return sources
+
+    @classmethod
     def _extract_single_source_feature(cls, feature: Feature) -> str:
-        """Single-source counterpart to ``_extract_source_features``; always enforces exactly one result.
+        """Single-source counterpart to ``_extract_validated_source_features``; always enforces exactly one result.
 
         Raises:
             ValueError: if the resolved source count is not exactly one
         """
-        source_features = cls._extract_source_features(feature)
-        cls.validate_in_feature_count(feature.name, len(source_features))
+        source_features = cls._extract_validated_source_features(feature)
         if len(source_features) != 1:
             raise ValueError(
                 f"Feature '{feature.name}' resolved {len(source_features)} source feature(s), expected exactly 1"

@@ -189,8 +189,7 @@ class GeoDistanceFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             ValueError: If parameters cannot be extracted
         """
         # Use the mixin method to extract source features
-        source_features = cls._extract_source_features(feature)
-        cls.validate_in_feature_count(feature.name, len(source_features))
+        source_features = cls._extract_validated_source_features(feature)
 
         distance_type = cls._extract_distance_unit(feature)
 

@@ -337,7 +337,7 @@ mloda.run_all(
 
 mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed.
 
-A feature between a join side and the feature consuming the join runs on that side's compute framework; pinning it elsewhere fails at plan time. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join.
+A feature between a join side and the feature consuming the join runs on that side's compute framework. The one exception is a direct input of the consumer that is pinned to another framework: the join then reads that side through the input's hop. Still rejected at plan time are an off-framework feature below another input of the consumer, one side reaching the consumer through two different frameworks, inputs off the sides' framework when the two sides differ in framework, and any such input for APPEND or UNION links. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join.
 
 In the following section, we will see how this can look like.
 

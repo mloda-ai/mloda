@@ -490,38 +490,141 @@ class SidePathC(FeatureGroup):
         return {PyArrowTable}
 
 
-def _side_path_prepare(p_group: type[FeatureGroup], direct: bool) -> Any:
+def _side_path_prepare(
+    p_group: type[FeatureGroup],
+    direct: bool,
+    swap_link_sides: bool = False,
+    mode: ParallelizationMode = ParallelizationMode.SYNC,
+    extra_groups: set[type[FeatureGroup]] | None = None,
+    consumer: type[FeatureGroup] = SidePathC,
+) -> Any:
     options = {"sp_p": p_group.get_class_name(), "sp_direct": direct}
+    left, right = (MultiLinkRootBSame, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBSame)
     return mloda.prepare(
-        [Feature(SidePathC.get_class_name(), options=options)],
-        links={Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX))},
+        [Feature(consumer.get_class_name(), options=options)],
+        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
         compute_frameworks=[PandasDataFrame, PyArrowTable],
-        parallelization_modes={ParallelizationMode.SYNC},
+        parallelization_modes={mode},
         plugin_collector=PluginCollector.enabled_feature_groups(
-            {MultiLinkRootA, MultiLinkRootBSame, p_group, SidePathQ, SidePathC}
+            {MultiLinkRootA, MultiLinkRootBSame, p_group, SidePathQ, consumer, *(extra_groups or set())}
         ),
     )
 
 
-def test_a_pinned_framework_mid_between_a_link_side_and_its_consumer_raises_at_plan_time() -> None:
-    with pytest.raises(ValueError, match="SidePathPandasP.*must run on"):
-        _side_path_prepare(SidePathPandasP, direct=False)
-
-
-def test_a_pinned_framework_mid_next_to_a_direct_side_read_raises_at_plan_time() -> None:
-    with pytest.raises(ValueError, match="SidePathPandasP.*must run on"):
-        _side_path_prepare(SidePathPandasP, direct=True)
-
-
-@pytest.mark.parametrize("p_group", [SidePathArrowP, SidePathFreeP], ids=["pyarrow_mid", "free_mid"])
-def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_correct(
-    p_group: type[FeatureGroup],
-) -> None:
-    results = _side_path_prepare(p_group, direct=False).run()
-
+def _side_path_values(results: Any) -> list[list[int]]:
     c_name = SidePathC.get_class_name()
-    values = [sorted(result[c_name].to_pylist()) for result in results if c_name in result.column_names]
-    assert values == [[211, 422, 633]]
+    return [sorted(result[c_name].to_pylist()) for result in results if c_name in result.column_names]
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("direct", [False, True], ids=["indirect", "direct"])
+@pytest.mark.parametrize(
+    "p_group",
+    [SidePathArrowP, SidePathFreeP, SidePathPandasP],
+    ids=["pyarrow_mid", "free_mid", "pandas_mid"],
+)
+def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_correct(
+    p_group: type[FeatureGroup], direct: bool, swap_link_sides: bool
+) -> None:
+    results = _side_path_prepare(p_group, direct, swap_link_sides).run()
+
+    assert _side_path_values(results) == [[211, 422, 633]]
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("direct", [False, True], ids=["indirect", "direct"])
+@pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
+def test_a_pandas_mid_between_a_link_side_and_its_consumer_is_correct_in_parallel_modes(
+    flight_server: Any, mode: ParallelizationMode, direct: bool, swap_link_sides: bool
+) -> None:
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+    results = _side_path_prepare(SidePathPandasP, direct, swap_link_sides, mode).run(
+        parallelization_modes={mode}, flight_server=server
+    )
+
+    assert _side_path_values(results) == [[211, 422, 633]]
+
+
+class SidePathR(_SidePathP):
+    """PyArrow-only second reader of root A."""
+
+    FRAMEWORKS: ClassVar[set[type[ComputeFramework]]] = {PyArrowTable}
+
+
+class SidePathBelowR(FeatureGroup):
+    """PyArrow reader of the Pandas mid, standing between it and the link child."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathPandasP")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), data.column("SidePathPandasP"))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class SidePathQBelow(FeatureGroup):
+    """PyArrow link child reading A directly and through Pandas P then PyArrow R."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathBelowR"), Feature("mlg_a"), Feature("mlg_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), data.column("SidePathBelowR"))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class SidePathQTwoFrames(FeatureGroup):
+    """PyArrow link child reading A through Pandas P and through PyArrow R."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathPandasP"), Feature("SidePathR"), Feature("mlg_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), data.column("SidePathR"))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+@pytest.mark.parametrize(
+    "consumer, extra_groups, names",
+    [
+        pytest.param(
+            SidePathQBelow,
+            {SidePathBelowR},
+            ("SidePathPandasP",),
+            id="mid_below_a_side_framework_parent",
+        ),
+        pytest.param(
+            SidePathQTwoFrames,
+            {SidePathPandasP, SidePathR},
+            ("SidePathPandasP",),
+            id="two_frames_of_one_side",
+        ),
+    ],
+)
+def test_a_side_path_through_two_frameworks_into_one_consumer_raises_at_plan_time(
+    consumer: type[FeatureGroup], extra_groups: set[type[FeatureGroup]], names: tuple[str, ...]
+) -> None:
+    with pytest.raises(ValueError) as error:
+        _side_path_prepare(SidePathPandasP, False, extra_groups=extra_groups, consumer=consumer)
+
+    message = str(error.value)
+    assert all(name in message for name in names)
+    assert "missing Links" not in message
+    assert "unlinked sources" not in message
 
 
 class DownstreamHopQ(FeatureGroup):

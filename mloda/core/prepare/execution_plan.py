@@ -473,6 +473,10 @@ class ExecutionPlan:
                 adjacency[dest_uuid].update(js.source_framework_uuids)
             for src_uuid in js.source_framework_uuids:
                 adjacency[src_uuid].update(js.destination_framework_uuids)
+            for carrier in js.carriers:
+                adjacency[carrier].update(js.destination_framework_uuids | js.source_framework_uuids)
+                for side_uuid in js.destination_framework_uuids | js.source_framework_uuids:
+                    adjacency[side_uuid].add(carrier)
 
         starts = ExecutionPlan._same_framework_lineage(uuid_a, graph, memo)
         targets = ExecutionPlan._same_framework_lineage(uuid_b, graph, memo)
@@ -908,6 +912,62 @@ Available join types:
             source_framework_uuids=ep.source_framework_uuids,
         )
 
+    @staticmethod
+    def _destination_hop(ep: JoinStep, graph: Graph, owning_step_of: Mapping[UUID, UUID]) -> TransformFrameworkStep:
+        """The hop that copies the carriers' frame into the join's destination framework, where the join merges into it."""
+        nodes = graph.get_nodes()
+        carrier = min(ep.carriers)
+        if len({owning_step_of.get(c, c) for c in ep.carriers}) > 1:
+            names = sorted(format_feature_group_class(nodes[c].feature_group_class) for c in ep.carriers)
+            raise ValueError(
+                f"The consumers of {ep.link} read one link side through several steps on another compute framework "
+                f"({', '.join(names)}), which the join cannot read through one hop. "
+                "Read the side through one feature or compute them on one compute framework."
+            )
+        destination_group = ep.link.right_feature_group if ep.swap_merge_sides else ep.link.left_feature_group
+        return TransformFrameworkStep(
+            from_framework=nodes[carrier].feature.get_compute_framework(),
+            to_framework=ep.destination_framework,
+            required_uuids=set(ep.carriers),
+            from_feature_group=nodes[carrier].feature_group_class,
+            to_feature_group=destination_group,
+            source_step_uuid=owning_step_of.get(carrier, carrier),
+        )
+
+    def _join_carriers(
+        self,
+        children_uuids: set[UUID],
+        split: Any,
+        frameworks: set[type[ComputeFramework]],
+        graph: Graph,
+    ) -> tuple[frozenset[UUID], bool]:
+        """Direct parents of the consumers that descend from a link side but run on another framework, and whether
+        that side is the declared left one."""
+        nodes = graph.get_nodes()
+        side_members = split.left_uuids_any_distance | split.right_uuids_any_distance
+        carriers: set[UUID] = set()
+        sides: set[bool] = set()
+        for child in children_uuids:
+            parents = graph.parent_to_children_mapping[child]
+            for parent in parents - self.get_parent_parents(parents, graph):
+                if parent in side_members or nodes[parent].feature.get_compute_framework() in frameworks:
+                    continue
+                above = graph.parent_to_children_mapping.get(parent, set())
+                from_left = bool(above & split.left_uuids_any_distance)
+                from_right = bool(above & split.right_uuids_any_distance)
+                if from_left or from_right:
+                    carriers.add(parent)
+                    sides.add(from_left)
+                    if from_left and from_right:
+                        sides.add(False)
+        if len(sides) > 1:
+            names = sorted(format_feature_group_class(nodes[c].feature_group_class) for c in carriers)
+            raise ValueError(
+                f"The consumers read both sides of a link through features on another compute framework "
+                f"({', '.join(names)}), which the join cannot read. Compute them on one compute framework."
+            )
+        return frozenset(carriers), next(iter(sides), True)
+
     def add_tfs(
         self, execution_plan: list[JoinStep | FeatureGroupStep], graph: Graph
     ) -> list[TransformFrameworkStep | JoinStep | FeatureGroupStep]:
@@ -964,6 +1024,13 @@ Available join types:
                     # 2) The child feature using this join needs to know which cfw to use. We use the tfs vehicle for this.
                     store_val = None
 
+                    if ep.carriers:
+                        destination_hop = self._destination_hop(ep, graph, owning_step_of)
+                        new_execution_plan.append(destination_hop)
+                        ep.required_uuids.add(destination_hop.uuid)
+                        ep.destination_hop_uuid = destination_hop.uuid
+                        need_to_upload_collector.update(ep.carriers)
+
                     for inner_ep in execution_plan:
                         if isinstance(inner_ep, FeatureGroupStep):
                             # 1) We do 1 here:
@@ -989,7 +1056,11 @@ Available join types:
                             if any(elem in inner_ep.required_uuids for elem in ep.destination_framework_uuids) and any(
                                 elem in inner_ep.required_uuids for elem in ep.source_framework_uuids
                             ):
-                                if ep.link.jointype in (JoinType.APPEND, JoinType.UNION):
+                                if ep.destination_hop_uuid is not None:
+                                    if inner_ep.compute_framework == ep.destination_framework:
+                                        inner_ep.tfs_ids = {ep.destination_hop_uuid}
+                                        inner_ep.features.any_uuid = ep.destination_hop_uuid
+                                elif ep.link.jointype in (JoinType.APPEND, JoinType.UNION):
                                     self.set_store_value_to_left_most_index_and_update_feature_group(
                                         inner_ep, store_val
                                     )
@@ -1027,7 +1098,7 @@ Available join types:
                     matching_join_steps = [
                         js
                         for js in left_join_frameworks
-                        if js.matched(ep.compute_framework, parent_node_property.feature.uuid)
+                        if js.matched(ep.compute_framework, parent_node_property.feature.uuid, ep.required_uuids)
                     ]
                     if matching_join_steps:
                         # Served by a join, no explicit hop needed.
@@ -1155,6 +1226,10 @@ Available join types:
                     if nodes[via].feature.get_compute_framework() == ep.compute_framework
                     for declared in edge_parents.get(member_uuid, set()) & edge_parents.get(via, set())
                     if nodes[declared].feature.get_compute_framework() != ep.compute_framework
+                    and not any(
+                        declared in js.carriers and js.matched(ep.compute_framework, declared, ep.required_uuids)
+                        for js in left_join_frameworks
+                    )
                 ]
                 if cycle_errors:
                     raise ValueError(min(cycle_errors))
@@ -1797,6 +1872,7 @@ Available join types:
                     destination_framework_uuids, source_framework_uuids = result
 
         join_step_required_uuids: set[UUID]
+        carriers: frozenset[UUID] = frozenset()
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             sides = self.resolve_append_or_union_sides(link, link_fw, required_uuids, graph, pre_execution_plan)
             destination_framework = sides.destination_framework
@@ -1835,6 +1911,22 @@ Available join types:
                 # join_uuids_left/right below narrow independently rather than reusing these.
                 left_uuids, right_uuids = resolved_left, resolved_right
             join_step_required_uuids = required_uuids
+
+            carriers, carriers_on_left = self._join_carriers(
+                children_uuids, split, {destination_framework, source_framework}, graph
+            )
+            if carriers and destination_framework != source_framework:
+                raise ValueError(
+                    f"The consumers of {link} read a link side through a feature on a third compute framework, which "
+                    "needs both link sides on one compute framework."
+                )
+            if carriers and (side is JoinSide.LEFT) != carriers_on_left:
+                side = JoinSide.LEFT if carriers_on_left else JoinSide.RIGHT
+                swap_sides = side is JoinSide.RIGHT
+                destination_framework_uuids, source_framework_uuids = (
+                    source_framework_uuids,
+                    destination_framework_uuids,
+                )
 
             # destination_uuids/source_uuids must only ever name genuine declared-side members, regardless
             # of which branch above ran; any-distance widening keeps a nearer wrong-framework sibling from
@@ -1875,6 +1967,7 @@ Available join types:
             source_framework_uuids=set(record.source_uuids),
             swap_merge_sides=record.inverted,
             token=record.token,
+            carriers=carriers,
         )
         self.planned_records.append(record)
 

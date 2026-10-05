@@ -238,7 +238,8 @@ class ComputeFrameworkExecutor:
 
         elif isinstance(step, JoinStep):
             cfw_uuid = self.cfw_register.get_cfw_uuid(
-                step.destination_framework.get_class_name(), next(iter(step.destination_framework_uuids))
+                step.destination_framework.get_class_name(),
+                step.destination_hop_uuid or next(iter(step.destination_framework_uuids)),
             )
 
         if cfw_uuid is None:

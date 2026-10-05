@@ -13,6 +13,8 @@ from mloda.core.runtime.flight.flight_server import FlightServer
 
 
 class JoinStep(Step):
+    destination_hop_uuid: UUID | None = None
+
     def __init__(
         self,
         link: Link,
@@ -23,8 +25,12 @@ class JoinStep(Step):
         source_framework_uuids: set[UUID],
         swap_merge_sides: bool = False,
         token: UUID | None = None,
+        carriers: frozenset[UUID] = frozenset(),
     ) -> None:
         self.link = link
+        # Consumer parents on another framework that descend from the destination side; the join reads them through
+        # the hop whose cfw uuid is destination_hop_uuid.
+        self.carriers = carriers
         self.swap_merge_sides = swap_merge_sides
         self.destination_framework = destination_framework
         self.source_framework = source_framework
@@ -136,12 +142,21 @@ class JoinStep(Step):
             raise ValueError("From_cfw is a UUID, but we are not using flightserver.")
         return from_cfw.get_data(), from_cfw.uuid
 
-    def matched(self, other_framework: type[ComputeFramework], uuid: UUID) -> UUID | None:
+    def reads_join_frame(self, required_uuids: set[UUID]) -> bool:
+        """Whether a step with these required uuids reads both join sides, so it reads the merged frame."""
+        return bool(required_uuids & self.destination_framework_uuids) and bool(
+            required_uuids & self.source_framework_uuids
+        )
+
+    def matched(
+        self, other_framework: type[ComputeFramework], uuid: UUID, required_uuids: set[UUID] | None = None
+    ) -> UUID | None:
         """
-        If matched, return the uuid of the join step.
+        If matched, return the uuid of the join step; a carrier matches only for a step reading the merged frame.
         """
 
-        if uuid not in self.destination_framework_uuids and uuid not in self.source_framework_uuids:
+        carried = uuid in self.carriers and required_uuids is not None and self.reads_join_frame(required_uuids)
+        if not carried and uuid not in self.destination_framework_uuids and uuid not in self.source_framework_uuids:
             return None
 
         if other_framework == self.destination_framework:

@@ -232,6 +232,36 @@ def test_feather_fg_declines_with_an_install_hint_and_load_raises_without_pyarro
 
 
 # ---------------------------------------------------------------------------
+# Dict transformer: a non-CSV FileSource needs pyarrow, so it raises ImportError without it
+# ---------------------------------------------------------------------------
+_BODY_DICT_TRANSFORMER_NON_CSV: str = """
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_file_source_transformer import (
+    FileSourceDictTransformer,
+)
+
+try:
+    FileSourceDictTransformer.transform_fw_to_other_fw(
+        FileSource(path="/nonexistent/data.parquet", format="parquet", columns=("a",))
+    )
+    print("NO_RAISE")
+except ImportError as e:
+    print("IMPORT_ERROR:" + str(e))
+except Exception as e:
+    print("OTHER:" + type(e).__name__ + ":" + str(e))
+"""
+
+
+@pytest.mark.timeout(30)
+def test_dict_file_source_transformer_non_csv_raises_import_error_without_pyarrow() -> None:
+    result = run_blocked(_BODY_DICT_TRANSFORMER_NON_CSV)
+    assert result.returncode == 0, f"Body crashed.\nstderr:\n{result.stderr}"
+    assert "IMPORT_ERROR:" in result.stdout, (
+        f"Expected import-error sentinel. Got stdout: {result.stdout!r}\nstderr: {result.stderr}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # YAML: the module must import without PyYAML, and only raise once the file is loaded
 # ---------------------------------------------------------------------------
 _BODY_YAML_IMPORT_AND_LOAD: str = """

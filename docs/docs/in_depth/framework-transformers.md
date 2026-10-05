@@ -162,7 +162,7 @@ To create a custom transformer for a new pair of frameworks:
 
 - Never override an unsupported hook with `raise NotImplementedError`: registration keys off the override itself, not its body, so the dead edge is registered, and a chain routes through it and crashes instead of reporting "no chain exists".
 - Override detection resolves through the MRO, so a subclass of a two-way transformer (for example `DuckDBPyArrowTransformer`) inherits both overrides and cannot drop a direction by omission.
-- `FileSourcePyArrowTransformer` and `FileSourceDictTransformer` are the reference one-way implementations; both omit `transform_other_fw_to_fw()`.
+- `FileSourcePyArrowTransformer` and `FileSourceDictTransformer` are the reference one-way implementations; both omit `transform_other_fw_to_fw()`. They read csv, parquet, json, feather and orc.
 
 Example of a two-way transformer:
 

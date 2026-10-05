@@ -11,17 +11,17 @@ import csv
 import importlib
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from mloda.user import DataAccessCollection
-from mloda.user import mloda
+from mloda.provider import ReadFileFG
+from mloda.user import DataAccessCollection, mloda
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
-    FileLoadsIntoFrameworkMixin,
     FileLoaderNameMixin,
+    FileLoadsIntoFrameworkMixin,
     PandasDataFrameAdapter,
     PolarsDataFrameAdapter,
     PyArrowTableAdapter,
@@ -128,6 +128,37 @@ class _OrcFiles:
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_orc(path, columns)
+
+
+class _DefaultNeutralParquetFG(ReadFileFG):
+    """A third-party style Parquet group that keeps the default FileSource ``load_neutral``."""
+
+    @classmethod
+    def suffixes(cls) -> tuple[str, ...]:
+        return (".dnparquet",)
+
+    @classmethod
+    def file_format(cls) -> str:
+        return "parquet"
+
+    @classmethod
+    def column_names(cls, path: str) -> Collection[str]:
+        import pyarrow.parquet as pyarrow_parquet
+
+        return list(pyarrow_parquet.read_schema(path).names)
+
+
+class _DefaultNeutralParquetFiles:
+    file_group = _DefaultNeutralParquetFG
+
+    def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
+        write_parquet(path, columns)
+
+
+class TestDefaultNeutralParquetIntoPythonDict(
+    _DefaultNeutralParquetFiles, PythonDictAdapter, FileLoadsIntoFrameworkMixin
+):
+    pass
 
 
 class TestCsvIntoPyArrowTable(_CsvFiles, PyArrowTableAdapter, FileLoaderNameMixin):

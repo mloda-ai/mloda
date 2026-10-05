@@ -37,33 +37,45 @@ _SECRET_NAME = (  # nosec B105
     r"account[_-]?key|secret[_-]?key|private[_-]?key)"
 )
 
+_KNOWN_SCHEMES = r"(?i:bearer|basic|token|digest|apikey|negotiate)"
+
 # (?<![\w-]), not (?<![A-Za-z]): a name-start anchor so a prefixed identifier (sslpassword,
 # PGPASSWORD, X-Api-Key) still matches, captured whole so the prefix survives the replacement.
+# Optional scheme prefix so `access_token=Bearer abc` masks the token, not just the word `Bearer`.
 # Trailing `}` optional: an unterminated `{` masks to end of line instead of rescanning.
 _KEYWORD_PATTERN = re.compile(
     rf"(?<![\w-])(?P<keyword>[\w-]*{_SECRET_NAME})(?P<sep>[ \t]*=[ \t]*)"
+    rf"(?:{_KNOWN_SCHEMES}[ \t]+)?"
     r"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|\{(?:[^}\n]|\}\})*\}?|[^;&\s'\"]*)",
     re.IGNORECASE,
 )
 
+
+def _container_body(closer: str) -> str:
+    """Quote-aware container body: a closer inside a quoted string does not end it."""
+    return rf"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|[^\{closer}'\"\n])*"
+
+
 # Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
 _QUOTED_KEY_PATTERN = re.compile(
     r"(?P<lead>[{,][ \t]*)(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
-    r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\"|\[[^\]\n]*\]?|\{[^}\n]*\}?|\([^)\n]*\)?"
-    r"|frozenset\(\{[^}\n]*\}\)?|[^,}\s]*)",
+    r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\""
+    rf"|\[{_container_body(']')}\]?|\{{{_container_body('}')}\}}?"
+    rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')')}\)?|[^,}}\s]*)",
     re.IGNORECASE,
 )
 
-# Token-shaped (not prose): has a digit, uppercase or one of -_~+/, a `.` before a token char, or is 20+ chars long.
-# Scheme words use a scoped (?i:...) so the uppercase check here stays case-sensitive.
+# Token-shaped (not prose): has a digit or one of -_~+/, a `.` before a token char, or is 20+ chars long.
 _TOKEN68 = r"[A-Za-z0-9\-._~+/]"
-_TOKEN_SHAPE = rf"(?={_TOKEN68}{{20}}|{_TOKEN68}*(?:[0-9A-Z\-_~+/]|\.{_TOKEN68}))"
+_TOKEN_SHAPE = rf"(?={_TOKEN68}{{20}}|{_TOKEN68}*(?:[0-9\-_~+/]|\.{_TOKEN68}))"
 _BEARER_PATTERN = re.compile(rf"(?<![\w-])(?P<scheme>(?i:bearer))[ \t]+{_TOKEN_SHAPE}{_TOKEN68}+=*")
 
-# Run before _KEYWORD_PATTERN so `access_token=Bearer abc` does not leak abc.
+# A scheme word is known or scheme-shaped (not all lowercase letters, so prose like `denied for` is skipped);
+# the rest of the value is masked up to the closing quote when the head opened one, else to end of line.
 _AUTHORIZATION_PATTERN = re.compile(
-    r"(?P<head>(?<![\w-])(?i:(?:proxy-)?authorization)['\"]?[ \t]*[:=][ \t]*['\"]?)"
-    r"(?:(?P<scheme>(?i:bearer|basic|token|digest|apikey|negotiate))[ \t]+[^\s'\",;]+"
+    r"(?P<head>(?<![\w-])(?i:(?:proxy-)?authorization)['\"]?[ \t]*[:=][ \t]*(?P<q>['\"])?)"
+    rf"(?:(?P<scheme>{_KNOWN_SCHEMES}|(?![a-z]+(?![\w-]))[A-Za-z][\w-]*)[ \t]+"
+    r"(?(q)(?:(?!(?P=q))[^\n])*|[^\n]*)"
     rf"|{_TOKEN_SHAPE}{_TOKEN68}+=*)"
 )
 

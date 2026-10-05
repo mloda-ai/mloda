@@ -330,6 +330,48 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["abc123"],
         ["access_token="],
     ),
+    (
+        "access_token_with_bearer_plain_word",
+        "access_token=Bearer hunter",
+        ["hunter"],
+        ["access_token="],
+    ),
+    (
+        "api_key_with_basic_value",
+        "api_key=Basic dXNlcg",
+        ["dXNlcg"],
+        ["api_key="],
+    ),
+    (
+        "authorization_unknown_scheme_ntlm",
+        "Authorization: NTLM TlRMTVNTUAAB",
+        ["TlRMTVNTUAAB"],
+        ["Authorization: NTLM"],
+    ),
+    (
+        "authorization_unknown_scheme_dpop",
+        "Authorization: DPoP eyJhbGciOiJ.x.y",
+        ["eyJhbGciOiJ"],
+        ["Authorization: DPoP"],
+    ),
+    (
+        "authorization_aws4_signature",
+        "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/x, SignedHeaders=host, Signature=abc123def",
+        ["AKIDEXAMPLE", "abc123def"],
+        ["Authorization: AWS4-HMAC-SHA256"],
+    ),
+    (
+        "authorization_quoted_bearer_value_with_space",
+        "{'Authorization': 'Bearer abc def'}",
+        ["def"],
+        ["{'Authorization': 'Bearer"],
+    ),
+    (
+        "authorization_quoted_digest_params_keep_sibling",
+        "{'Authorization': 'Digest username=\"u\", response=\"hunter2z9\"', 'host': 'h'}",
+        ["hunter2z9"],
+        ["'host': 'h'"],
+    ),
 ]
 
 
@@ -355,7 +397,15 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "{'password': ('a', 'hunter2z9'), 'host': 'h'}",
         "{'password': '***', 'host': 'h'}",
     ),
+    ("dict_repr_password_tuple_quoted_paren", "{'password': ('a)b', 'hunter2z9')}", "{'password': '***'}"),
+    ("dict_repr_password_list_quoted_bracket", "{'password': ['a]b', 'hunter2z9']}", "{'password': '***'}"),
+    ("dict_repr_password_set_quoted_brace", "{'password': {'a}b', 'hunter2z9'}}", "{'password': '***'}"),
+    ("dict_repr_token_repr_call_value", "{'token': Secret(value='hunter2z9')}", "{'token': '***'}"),
 ]
+
+
+def test_scrub_credentials_masks_ordered_dict_value_under_secret_key() -> None:
+    assert "hunter2z9" not in scrub_credentials("{'password': OrderedDict([('a', 'hunter2z9')])}")
 
 
 @pytest.mark.parametrize(
@@ -422,6 +472,9 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "Bearer token required",
     "authorization: denied for role x",
     "authorization failed",
+    "Missing Bearer Token",
+    "Bearer Token Usage",
+    "Authorization: Required",
 ]
 
 
@@ -486,6 +539,10 @@ def test_text_without_url_is_unchanged() -> None:
         "authorization=eyJhbGciOi.x.y",
         "Bearer abc.def.ghi",
         "{'password': ('a', 'hunter2z9')}",
+        "Authorization: NTLM TlRMTVNTUAAB",
+        "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/x, SignedHeaders=host, Signature=abc123def",
+        "{'Authorization': 'Digest username=\"u\", response=\"hunter2z9\"', 'host': 'h'}",
+        "access_token=Bearer hunter",
     ],
 )
 def test_scrub_credentials_is_idempotent(text: str) -> None:

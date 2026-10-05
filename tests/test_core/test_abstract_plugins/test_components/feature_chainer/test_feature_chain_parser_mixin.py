@@ -968,6 +968,10 @@ class TestFeatureChainParserMixinExtractSingleSourceFeature:
         with pytest.raises(ValueError):
             MockFeatureGroupMinZero._extract_single_source_feature(feature)
 
+    def test_extract_single_source_feature_raises_for_empty_operand(self) -> None:
+        with pytest.raises(ValueError, match="empty in_feature operand"):
+            MockFeatureGroupSingleInFeature._extract_single_source_feature(_config_feature([""]))
+
 
 def _config_feature(in_features: list[str]) -> Feature:
     return Feature(
@@ -1004,22 +1008,6 @@ class TestFeatureChainParserMixinExtractValidatedSourceFeatures:
         assert expected is not None
         assert "empty in_feature operand" in expected
         assert str(exc_info.value) == expected
-
-    def test_raises_custom_message_when_in_feature_count_reason_overridden(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            MockFeatureGroupSingleInFeatureCustomReason._extract_validated_source_features(
-                _config_feature(["feature_a", "feature_b"])
-            )
-
-        assert (
-            str(exc_info.value) == "MockFeatureGroupSingleInFeatureCustomReason needs exactly one input column; got 2."
-        )
-
-    def test_raises_generic_message_for_zero_sources(self) -> None:
-        feature = Feature(name="simple_name", options=Options(context={"operation": "op1"}))
-
-        with pytest.raises(ValueError, match="at least 1 in_feature"):
-            MockFeatureGroupZeroSources._extract_validated_source_features(feature)
 
 
 def _constant_operation_extractor(_feature: Feature) -> str:

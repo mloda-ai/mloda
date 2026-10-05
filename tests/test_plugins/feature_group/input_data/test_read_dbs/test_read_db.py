@@ -21,7 +21,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_files.text_file_reader import TextFileReader
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
@@ -267,12 +267,12 @@ class TestReadDB:
         assert options.get(SQLITEReader.__name__) is first
 
     def test_feature_scope_data_access_does_not_wrap_read_file_reader_value(self) -> None:
-        """A ReadFile-family reader (CsvReader) is not wrapped into a RegisteredCredential; only DB readers get the stored-value wrap."""
-        options = Options(group={CsvReader.__name__: {"k": "v"}})
+        """A file reader (TextFileReader) is not wrapped into a RegisteredCredential; only DB readers get the stored-value wrap."""
+        options = Options(group={TextFileReader.__name__: {"k": "v"}})
 
-        CsvReader.feature_scope_data_access(options, "some_column")
+        TextFileReader.feature_scope_data_access(options, "some_column")
 
-        assert type(options.get(CsvReader.__name__)) is dict
+        assert type(options.get(TextFileReader.__name__)) is dict
 
     def test_wrap_feature_scoped_access_wraps_dict_subclass(self) -> None:
         """A dict subclass (not exactly dict) still ends up wrapped as a RegisteredCredential."""

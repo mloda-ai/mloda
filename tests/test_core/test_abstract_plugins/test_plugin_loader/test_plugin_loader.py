@@ -1,5 +1,7 @@
 import importlib
 import logging
+import subprocess  # nosec B404
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -70,8 +72,8 @@ class TestPluginLoader:
     def test_load_group(self) -> None:
         plugin_loader = PluginLoader()
         plugin_loader.load_group("feature_group")
-        assert "mloda_plugins.feature_group.input_data.read_files.parquet" in plugin_loader.plugins
-        assert "mloda_plugins.feature_group.input_data.read_files.csv" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.parquet_fg" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" in plugin_loader.plugins
 
     def test_load_all_groups(self) -> None:
         plugin_loader = PluginLoader()
@@ -93,7 +95,7 @@ class TestPluginLoader:
         """Auto-load fires load_group when _collect_filtered_subclasses returns empty."""
         from unittest.mock import MagicMock
 
-        from mloda_plugins.feature_group.input_data.read_file import ReadFile
+        from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 
         mock_load = MagicMock()
 
@@ -105,16 +107,50 @@ class TestPluginLoader:
                 "mloda.core.abstract_plugins.plugin_loader.plugin_loader.PluginLoader.load_group",
                 mock_load,
             ):
-                get_all_filtered_subclasses(ReadFile, ReadFile)
+                get_all_filtered_subclasses(ReadDocument, ReadDocument)
 
         mock_load.assert_called_once_with("feature_group/input_data/read_files")
 
     def test_load_nested_group_builds_correct_module_path(self) -> None:
-        """Nested group paths like 'feature_group/input_data/read_files' produce correct module names."""
+        """Nested group paths like 'feature_group/input_data/file_formats' produce correct module names."""
+        plugin_loader = PluginLoader()
+        plugin_loader.load_group("feature_group/input_data/file_formats")
+        assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.parquet_fg" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.stock_formats" in plugin_loader.plugins
+
+    def test_the_read_files_group_holds_the_document_readers(self) -> None:
         plugin_loader = PluginLoader()
         plugin_loader.load_group("feature_group/input_data/read_files")
-        assert "mloda_plugins.feature_group.input_data.read_files.csv" in plugin_loader.plugins
-        assert "mloda_plugins.feature_group.input_data.read_files.parquet" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.read_files.json_document_reader" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.read_files.csv" not in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.read_files.parquet" not in plugin_loader.plugins
+
+    @pytest.mark.timeout(60)
+    def test_a_plain_csv_run_all_works_after_plugin_loader_all_without_importing_the_groups(
+        self, tmp_path: Path
+    ) -> None:
+        """A fresh interpreter that only calls PluginLoader.all() finds CsvFG from a file handle alone."""
+        csv_path = tmp_path / "loader_a16.csv"
+        csv_path.write_text("a16_loader_col,a16_other_col\n1,2\n3,4\n")
+        body = (
+            "import sys\n"
+            "from mloda.user import DataAccessCollection, PluginLoader, mloda\n"
+            "PluginLoader.all()\n"
+            "result = mloda.run_all(\n"
+            "    ['a16_loader_col'],\n"
+            "    compute_frameworks=['PyArrowTable'],\n"
+            "    data_access_collection=DataAccessCollection(files={sys.argv[1]}),\n"
+            ")\n"
+            "print('COLUMN:' + ','.join(sorted(result[0].column_names)))\n"
+        )
+
+        completed = subprocess.run(  # nosec B603
+            [sys.executable, "-c", body, str(csv_path)], capture_output=True, text=True, timeout=55
+        )
+
+        assert completed.returncode == 0, f"stderr:\n{completed.stderr}"
+        assert "COLUMN:a16_loader_col" in completed.stdout.splitlines()
 
     def test_load_matching_only_loads_transformer_files(self) -> None:
         """load_matching with '*transformer*' loads only transformer files, not dataframe/filter/merge."""

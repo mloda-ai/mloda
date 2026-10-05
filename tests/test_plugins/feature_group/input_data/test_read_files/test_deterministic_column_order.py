@@ -8,21 +8,26 @@ import pyarrow as pa
 import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
 
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.user import DataType
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-from mloda_plugins.feature_group.input_data.read_files.feather import FeatherReader
-from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
-from mloda_plugins.feature_group.input_data.read_files.orc import OrcReader
-from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
+from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 
 
 def _loaded_column_names(result: Any) -> list[str]:
-    """CsvReader resolves a FileSource descriptor whose ``columns`` pins the order;
-    the other readers still return a materialized table with ``column_names``."""
+    """CsvFG resolves a FileSource descriptor whose ``columns`` pins the order;
+    the other groups return a materialized table with ``column_names``."""
     if isinstance(result, FileSource):
         return list(result.columns)
     return list(result.column_names)
+
+
+def _match(path: str) -> SourceMatch:
+    return SourceMatch(source=path, access=path)
+
+
+def _group(module_name: str, class_name: str) -> Any:
+    return load_group(module_name, class_name)
 
 
 class FeatureSetStub:
@@ -36,7 +41,7 @@ class FeatureSetStub:
 
 
 class TestDeterministicColumnOrder:
-    """The five read-files plugins must materialize get_all_names() (a sorted tuple) in a
+    """The five stock file format groups must materialize get_all_names() (a sorted tuple) in a
     deterministic, alphabetically sorted order so the output column order does not
     depend on PYTHONHASHSEED."""
 
@@ -87,29 +92,21 @@ class TestDeterministicColumnOrder:
         shutil.rmtree(cls.base_path, ignore_errors=True)
 
     def test_column_order_is_sorted(self) -> None:
-        test_cases: list[tuple[Any, Any]] = [
-            (FeatherReader, self.feather_file),
-            (JsonReader, self.json_file),
-            (CsvReader, self.csv_file),
-            (OrcReader, self.orc_file),
-            (ParquetReader, self.parquet_file),
-        ]
-
         features = FeatureSetStub(self.physical_columns)
 
-        for cls, path in test_cases:
-            columns = _loaded_column_names(cls.load_data(path, features))
+        for cls, path in self._all_groups():
+            columns = _loaded_column_names(cls.load_neutral(_match(path), features))
             assert columns == self.sorted_columns, (
                 f"{cls.__name__} returned columns {columns}, expected {self.sorted_columns}"
             )
 
-    def _all_readers(self) -> list[tuple[Any, Any]]:
+    def _all_groups(self) -> list[tuple[Any, Any]]:
         return [
-            (FeatherReader, self.feather_file),
-            (JsonReader, self.json_file),
-            (CsvReader, self.csv_file),
-            (OrcReader, self.orc_file),
-            (ParquetReader, self.parquet_file),
+            (_group("feather_fg", "FeatherFG"), self.feather_file),
+            (_group("json_fg", "JsonFG"), self.json_file),
+            (_group("csv_fg", "CsvFG"), self.csv_file),
+            (_group("orc_fg", "OrcFG"), self.orc_file),
+            (_group("parquet_fg", "ParquetFG"), self.parquet_file),
         ]
 
     def test_empty_feature_set_returns_zero_columns(self) -> None:
@@ -117,8 +114,8 @@ class TestDeterministicColumnOrder:
         without raising. Regression lock for the already-sorted readers."""
         features = FeatureSetStub([])
 
-        for cls, path in self._all_readers():
-            columns = _loaded_column_names(cls.load_data(path, features))
+        for cls, path in self._all_groups():
+            columns = _loaded_column_names(cls.load_neutral(_match(path), features))
             assert columns == [], f"{cls.__name__} returned columns {columns}, expected [] for empty feature set"
 
     def test_single_column_feature_set_returns_that_column(self) -> None:
@@ -126,22 +123,22 @@ class TestDeterministicColumnOrder:
         Regression lock for the already-sorted readers."""
         features = FeatureSetStub(["a1"])
 
-        for cls, path in self._all_readers():
-            columns = _loaded_column_names(cls.load_data(path, features))
+        for cls, path in self._all_groups():
+            columns = _loaded_column_names(cls.load_neutral(_match(path), features))
             assert columns == ["a1"], f"{cls.__name__} returned columns {columns}, expected ['a1']"
 
-    def test_feather_get_column_names_returns_physical_column_names(self) -> None:
-        assert FeatherReader.get_column_names(self.feather_file) == self.physical_columns
+    def test_feather_column_names_returns_physical_column_names(self) -> None:
+        assert list(_group("feather_fg", "FeatherFG").column_names(self.feather_file)) == self.physical_columns
 
-    def test_orc_get_column_names_returns_physical_column_names(self) -> None:
-        assert OrcReader.get_column_names(self.orc_file) == self.physical_columns
+    def test_orc_column_names_returns_physical_column_names(self) -> None:
+        assert list(_group("orc_fg", "OrcFG").column_names(self.orc_file)) == self.physical_columns
 
     def test_parquet_describe_columns_maps_string_column_to_string_type(self, tmp_path: Path) -> None:
         table = pa.Table.from_pydict({"a": [1, 2, 3], "b": ["x", "y", "z"]})
         file_path = str(tmp_path / "typed.parquet")
         pyarrow_parquet.write_table(table, file_path)
 
-        described = ParquetReader.describe_columns(file_path)
+        described = _group("parquet_fg", "ParquetFG").describe_columns(_match(file_path))
 
         assert described == {"a": DataType.INT64, "b": DataType.STRING}
 
@@ -150,17 +147,18 @@ class TestDeterministicColumnOrder:
         file_path = str(tmp_path / "nested.parquet")
         pyarrow_parquet.write_table(table, file_path)
 
-        described = ParquetReader.describe_columns(file_path)
+        described = _group("parquet_fg", "ParquetFG").describe_columns(_match(file_path))
 
         assert described == {"a": DataType.INT64, "nested": None}
 
-    def test_parquet_get_column_names_returns_top_level_names_for_nested_column(self, tmp_path: Path) -> None:
+    def test_parquet_column_names_returns_top_level_names_for_nested_column(self, tmp_path: Path) -> None:
         """Must report top-level names, not pyarrow's leaf-flattened nested fields, and agree with describe_columns."""
         table = pa.Table.from_pydict({"a": [1, 2, 3], "nested": [[1, 2], [3], []]})
         file_path = str(tmp_path / "nested_names.parquet")
         pyarrow_parquet.write_table(table, file_path)
 
-        column_names = ParquetReader.get_column_names(file_path)
+        parquet = _group("parquet_fg", "ParquetFG")
+        column_names = parquet.column_names(file_path)
 
         assert sorted(column_names) == ["a", "nested"]
-        assert set(column_names) == set(ParquetReader.describe_columns(file_path).keys())
+        assert set(column_names) == set(parquet.describe_columns(_match(file_path)).keys())

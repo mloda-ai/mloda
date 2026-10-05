@@ -35,8 +35,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framewor
     SqliteFramework,
     _regexp,
 )
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader  # noqa: F401
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG  # noqa: F401
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -145,7 +144,7 @@ class TestNamedDataAccessHandlesIntegration:
         assert "single_col" in result[0].to_pydict()
 
     def test_multiple_files_no_hint_raises_value_error(self, overlapping_csvs: tuple[str, str]) -> None:
-        """Pattern: two matching files without a hint surface a ValueError listing the handle candidates."""
+        """Pattern: two matching files without a hint surface a ValueError listing the candidate paths and the data_access_handle fix."""
         path_a, path_b = overlapping_csvs
         dac = DataAccessCollection(files={"a": path_a, "b": path_b})
         with pytest.raises(ValueError) as excinfo:
@@ -155,7 +154,9 @@ class TestNamedDataAccessHandlesIntegration:
                 data_access_collection=dac,
             )
         msg = str(excinfo.value)
+        assert "several sources" in msg
         assert "data_access_handle" in msg
+        assert path_a in msg and path_b in msg
         assert "'a'" in msg and "'b'" in msg
 
     def test_per_feature_data_access_handle_disambiguates(self, overlapping_csvs: tuple[str, str]) -> None:

@@ -41,7 +41,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import DefaultOptionKeys, ReadFileFG
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
@@ -103,14 +103,13 @@ ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
     ),
 }
 
-# Keys that ONLY the reader surface declares: nothing about them is in any PROPERTY_MAPPING, so they are
-# the probe for whether the union really reaches READER_OPTIONS. "BaseInputData" is the reserved key the
+# Keys that ONLY the reader surface declares: nothing about them is in any PROPERTY_MAPPING outside the
+# file format groups, so they are the probe for whether the union really reaches READER_OPTIONS. "BaseInputData" is the reserved key the
 # framework itself writes; the other two are read inside reader matching.
 READER_ONLY_KEYS: frozenset[str] = frozenset({"BaseInputData", "data_access_handle", "document_suffixes"})
 
 # Individual source files whose reads are asserted key-by-key below, so a scanner blind spot cannot
 # silently drop them again. Relative to SCAN_ROOT.
-READ_FILE_REL = "input_data/read_file.py"
 READ_DOCUMENT_REL = "input_data/read_document.py"
 
 # Declared by the throwaway reader below, never by shipped code.
@@ -390,6 +389,19 @@ def property_mapping_declared_union() -> frozenset[str]:
     return frozenset(keys)
 
 
+def reader_surface_probe_union() -> frozenset[str]:
+    """The PROPERTY_MAPPING union without the file format groups, which declare the two reader keys too.
+
+    ``ReadFileFG`` declares ``document_suffixes`` and ``data_access_handle`` in its PROPERTY_MAPPING, so the full
+    union no longer tells the reader surface apart; this one does.
+    """
+    keys: set[str] = set()
+    for cls in get_all_subclasses(FeatureGroup):
+        if cls.__module__.startswith("mloda_plugins") and not issubclass(cls, ReadFileFG):
+            keys |= set(cls.declared_option_keys())
+    return frozenset(keys)
+
+
 def reader_declared_union() -> frozenset[str]:
     """Every READER_OPTIONS key declared by ``BaseInputData`` or a shipped reader subclass.
 
@@ -467,8 +479,8 @@ def test_declared_union_recognizes_reader_declarations(key: str) -> None:
 
 @pytest.mark.parametrize("key", sorted(READER_ONLY_KEYS))
 def test_reader_keys_are_attributable_to_the_reader_surface_alone(key: str) -> None:
-    """No PROPERTY_MAPPING and no framework-reserved key covers these, so only READER_OPTIONS carries them."""
-    assert key not in property_mapping_declared_union()
+    """No PROPERTY_MAPPING outside the file format groups and no framework-reserved key covers these."""
+    assert key not in reader_surface_probe_union()
     assert key not in FRAMEWORK_KEYS
 
 
@@ -476,7 +488,7 @@ def test_reader_declarations_are_load_bearing_for_the_tree_wide_scan() -> None:
     """Exclude the reader surface from the union and the readers' own match-time reads are flagged."""
     violations = find_violations(
         SCAN_ROOT,
-        property_mapping_declared_union(),
+        reader_surface_probe_union(),
         FRAMEWORK_KEYS,
         ALLOWED_LITERAL_KEYS,
         ALLOWED_DYNAMIC_READS,
@@ -521,15 +533,15 @@ def test_read_document_selection_key_is_the_reader_class_name() -> None:
 class TestEveryKnownReadSiteStaysVisible:
     """Per-key pins on the reader files whose reads a scanner blind spot could drop."""
 
-    @pytest.mark.parametrize("rel", [READ_FILE_REL, READ_DOCUMENT_REL])
+    @pytest.mark.parametrize("rel", [READ_DOCUMENT_REL])
     def test_reader_match_time_reads_are_resolved(self, rel: str) -> None:
-        """Both readers' match-time keys stay visible whichever accessor resolves them."""
+        """The reader's match-time keys stay visible whichever accessor resolves them."""
         resolved = _resolved_keys_in(rel)
 
         assert "document_suffixes" in resolved
         assert "data_access_handle" in resolved
 
-    @pytest.mark.parametrize("rel", [READ_FILE_REL, READ_DOCUMENT_REL])
+    @pytest.mark.parametrize("rel", [READ_DOCUMENT_REL])
     def test_document_suffixes_is_read_through_the_reader_option_accessor(self, rel: str) -> None:
         """``document_suffixes`` resolves its declared default through the presence-honouring accessor.
 

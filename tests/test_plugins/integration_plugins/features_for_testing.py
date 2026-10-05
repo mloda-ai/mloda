@@ -10,7 +10,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 
 
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 try:
@@ -30,7 +30,7 @@ class MixedCfwFeature(FeatureGroup):
             feature_set.add(
                 Feature(
                     name=py_f,
-                    options={CsvReader.__name__: self.file_path, "123": 2},
+                    options={CsvFG.get_class_name(): self.file_path, "123": 2},
                     compute_framework="PyArrowTable",
                 )
             )
@@ -40,7 +40,7 @@ class MixedCfwFeature(FeatureGroup):
             feature_set.add(
                 Feature(
                     name=py_f,
-                    options={CsvReader.__name__: self.file_path, "123": 2},
+                    options={CsvFG.get_class_name(): self.file_path, "123": 2},
                     compute_framework="PandasDataFrame",
                 )
             )
@@ -70,7 +70,7 @@ class DuplicateFeatureSetup(MixedCfwFeature):
             feature_set.add(
                 Feature(
                     name=py_f,
-                    options={CsvReader.__name__: self.file_path, "group": "left"},
+                    options={CsvFG.get_class_name(): self.file_path, "group": "left"},
                     compute_framework="PandasDataFrame",
                 )
             )
@@ -80,7 +80,7 @@ class DuplicateFeatureSetup(MixedCfwFeature):
             feature_set.add(
                 Feature(
                     name=py_f,
-                    options={CsvReader.__name__: self.file_path, "group": "right"},
+                    options={CsvFG.get_class_name(): self.file_path, "group": "right"},
                     compute_framework="PandasDataFrame",
                 )
             )

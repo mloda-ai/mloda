@@ -60,9 +60,9 @@ class PlanStep:
     recorded no candidates for that side. APPEND/UNION sides carry only the index-bearing parent.
 
     ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``,
-    and ``step_uuid`` its ``FeatureGroupStep.uuid`` (equal to ``HookContext.step_uuid`` on that step's hooks), the key
-    ``RunResult.frames()`` pairs frames by; both
-    are None for join/transform steps and, like ``join_token``, excluded from equality.
+    and ``step_uuid`` its ``FeatureGroupStep.uuid`` (equal to ``HookContext.step_uuid`` on that step's hooks), the
+    key ``RunResult.frames()`` pairs frames by; both are None for join/transform steps and, like ``join_token``,
+    excluded from equality.
     ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
     it participates in equality but is excluded from hashing.
 

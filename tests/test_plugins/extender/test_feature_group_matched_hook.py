@@ -131,6 +131,22 @@ class _MatchDepthDerivedFeatureGroup(FeatureGroup):
         return data
 
 
+class _MatchMultiColRootFeatureGroup(FeatureGroup):
+    """Root serving three columns, all requested in one prepare call."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({f"{_MARKER}_multi_col_{i}" for i in range(3)})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_MARKER}_multi_col_{i}": [1, 2, 3] for i in range(3)}
+
+
 class _MatchContextCapturingExtender(Extender):
     """Calls func like a real extender, then reads HookContext.current() afterward."""
 
@@ -153,11 +169,15 @@ class _MatchListCapturingExtender(Extender):
     def __init__(self, priority: int = 100) -> None:
         self.priority = priority
         self.captured: list[HookContext] = []
+        self.pre_call_feature_group_classes: list[str | None] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_MATCHED}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        pre_context = HookContext.current()
+        assert pre_context is not None
+        self.pre_call_feature_group_classes.append(pre_context.feature_group_class)
         result = func(*args, **kwargs)
         context = HookContext.current()
         assert context is not None
@@ -233,6 +253,21 @@ class TestFeatureGroupMatchedHookFiresOnResolve:
             f"{_MatchHookRootFeatureGroup.__module__}.{_MatchHookRootFeatureGroup.__qualname__}"
         )
         assert extender.captured.feature_names == (f"{_MARKER}_root_col",)
+
+    def test_absent_identity_fields_are_none_not_empty_strings(self) -> None:
+        extender = _MatchListCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_root_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchHookRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.pre_call_feature_group_classes == [None]
+        assert extender.captured[0].feature_group_version is None
+        assert extender.captured[0].compute_framework_name is None
 
 
 class TestPlanIdConsistentAcrossMatches:
@@ -457,6 +492,52 @@ class TestPlanCountsAndDepthOnMatchContext:
 
         feature_counts = [_require_int(context.plan_feature_count) for context in extender.captured]
         assert feature_counts[0] < feature_counts[1]
+
+        first, second = extender.captured
+        assert (first.feature_group_class, first.plan_depth) == (derived_key, 0)
+        assert (first.plan_feature_count, first.plan_node_count) == (0, 0)
+        assert (second.feature_group_class, second.plan_depth) == (root_key, 1)
+        assert (second.plan_feature_count, second.plan_node_count) == (1, 1)
+
+    def test_node_count_counts_plan_nodes_not_feature_group_classes(self) -> None:
+        extender = _MatchListCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_multi_col_{i}") for i in range(3)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchMultiColRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert len(extender.captured) == 3
+        third = extender.captured[2]
+        assert third.plan_feature_count == 2
+        assert third.plan_node_count == 2
+
+    def test_duplicate_root_resolution_is_not_double_counted_in_node_count(self) -> None:
+        extender = _MatchListCapturingExtender()
+
+        mloda.prepare(
+            [
+                Feature(_MatchDepthDerivedFeatureGroup.get_class_name(), options=Options({"variant": 1})),
+                Feature(_MatchDepthDerivedFeatureGroup.get_class_name(), options=Options({"variant": 2})),
+            ],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchDepthRootFeatureGroup, _MatchDepthDerivedFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        root_key = f"{_MatchDepthRootFeatureGroup.__module__}.{_MatchDepthRootFeatureGroup.__qualname__}"
+        root_contexts = [c for c in extender.captured if c.feature_group_class == root_key]
+        assert len(root_contexts) == 2
+        last = extender.captured[-1]
+        assert len(extender.captured) == 4
+        assert last.plan_feature_count == 3
+        assert last.plan_node_count == 3
 
 
 class TestEngineFunctionExtenderAndRunIdConstruction:

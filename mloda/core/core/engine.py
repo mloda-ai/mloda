@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.function_extender import (
     _invoke_extender,
     build_hook_extenders,
 )
-from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.hook_context import HookContext, _no_rows, instrument
 from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -52,11 +52,6 @@ from mloda.core.abstract_plugins.components.validators.link_validator import Lin
 
 
 logger = logging.getLogger(__name__)
-
-
-def _no_match_rows(result: Any) -> int | None:
-    """row_count stand-in for FEATURE_GROUP_MATCHED: its return value carries no row semantics."""
-    return None
 
 
 class Engine:
@@ -360,16 +355,16 @@ class Engine:
 
     def _resolve_with_match_hook(self, extender: Extender, feature: Feature, depth: int) -> EvaluationResult:
         """Dispatch resolve_or_raise through extender, instrumenting the call with a HookContext.
-        feature_group_class is only known once resolve_or_raise returns, so the context starts with a placeholder and is written post-hoc."""
+        feature_group_class is only known once resolve_or_raise returns, so the context starts with None and is written post-hoc; counts are taken before this match."""
         plan = self.plan_context
         context = HookContext(
             hook=ExtenderHook.FEATURE_GROUP_MATCHED,
-            feature_group_class="",
-            feature_group_version="",
+            feature_group_class=None,
+            feature_group_version=None,
             plugin_version=None,
             feature_names=(str(feature.name),),
             input_features=None,
-            compute_framework_name="",
+            compute_framework_name=None,
             run_id=None,
             plan_id=self.run_context.plan_id,
             carrier=None,
@@ -377,8 +372,8 @@ class Engine:
             project_id=plan.project_id if plan else None,
             principal=plan.principal if plan else None,
             worker_index=None,
-            plan_feature_count=len(self.resolution_records) + 1,
-            plan_node_count=len(self.feature_group_collection),
+            plan_feature_count=len(self.resolution_records),
+            plan_node_count=sum(len(features) for features in self.feature_group_collection.values()),
             plan_depth=depth,
         )
 
@@ -399,7 +394,7 @@ class Engine:
                 EvaluationResult,
                 _invoke_extender(
                     extender,
-                    instrument(context, _resolve, row_count=_no_match_rows),
+                    instrument(context, _resolve, row_count=_no_rows),
                     feature,
                     self.accessible_plugins,
                     self.links,

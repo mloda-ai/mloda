@@ -23,7 +23,13 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
-from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, input_data_load_gate_scope, instrument
+from mloda.core.abstract_plugins.hook_context import (
+    HookContext,
+    OutputSchema,
+    _no_rows,
+    input_data_load_gate_scope,
+    instrument,
+)
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -53,11 +59,6 @@ def framework_rank_key(
         )
 
     return key
-
-
-def _no_rows(data: Any) -> int | None:
-    """row_count stand-in for hooks whose return value carries no row semantics."""
-    return None
 
 
 def _python_dtype(values: Any) -> str | None:

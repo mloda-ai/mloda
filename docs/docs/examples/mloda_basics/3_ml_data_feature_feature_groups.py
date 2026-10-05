@@ -152,23 +152,15 @@ def _(mo):
     The default behaviour covers mostly name based approaches to identify a feature (equal or prefix of a feature name).
     But this can be also a call to a webservice, which knows which data supports or could be any other algorithmic solution.
 
-    As example could be this sqlite database, where we check the table for metainformation.
+    As example could be this sqlite database, where we check the table catalog for metainformation.
 
     ```python
     @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        # get tables in the database
-        result, _ = cls.read_db(data_access, query="SELECT name FROM sqlite_master WHERE type='table';")
-        table_names = [table[0] for table in result]
-
-        # check if the feature_name is in the tables
-        for table in table_names:
-            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(table)});")
-            column_names = [column[1] for column in result]
-            if feature_name in column_names:
-                return True
-        return False
+    def table_columns(cls, connection: Any, table: str) -> Collection[str]:
+        return [row[1] for row in connection.execute(f"PRAGMA table_info({quote_ident(table)});")]
     ```
+
+    The database group lists the tables and their columns once per run and matches a feature when a table has the column.
 
     This means, you are open to customize this logic to match a Feature to a FeatureGroup. But please, do not query the database for every single feature to feature group match lookup. :)
     """)

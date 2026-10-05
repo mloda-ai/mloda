@@ -80,23 +80,20 @@ Output
 1   Value2         3]
 ```
 
-#### ReadDocument: Unstructured File Access
+#### Document format groups
 
-For unstructured files (Markdown `.md`, YAML `.yaml`/`.yml`, text `.text`/`.txt`/`.TXT`), mloda provides `ReadDocumentFeature`.
-It skips structured file types (CSV, JSON, Parquet, etc.) by default to avoid conflicts
-with the file format groups (`CsvFG`, `JsonFG`, ...).
-ReadDocument matches by file suffix only and ignores feature names, so when a folder or file set mixes document
-suffixes such as `.txt` with structured files (CSV, Parquet), exclude `ReadDocumentFeature` through the
-`PluginCollector` (`PluginCollector.disabled_feature_groups({ReadDocumentFeature})`) to avoid multiple feature group matches.
+For unstructured files, mloda ships one group per format: `TextFG` (`.text`/`.txt`/`.TXT`), `PyFG` (`.py`),
+`MarkdownFG` (`.md`), `YamlFG` (`.yaml`/`.yml`) and `JsonDocumentFG` (`.json`). Each answers three names:
+`TextFG` (the content), `TextFG~source` (the path) and `TextFG~file_type` (the file's actual suffix, lowercased, without the dot).
+A request reads one file; with several matching files, pick one with a `data_access_handle`, a
+`column_to_file` entry or `options={"TextFG": path}`.
 
-To read a structured file type as a document, use the `document_suffixes` option:
+To read a `.json` file as a document, list it in `document_suffixes`; `JsonFG` then steps aside and
+`JsonDocumentFG` claims it:
 
 ```py
-Feature("content", options={"document_suffixes": frozenset({".json"})})
+Feature("JsonDocumentFG", options={"document_suffixes": frozenset({".json"})})
 ```
-
-This tells ReadDocument to include .json files and the file format groups to auto-exclude them
-for that feature.
 
 #### Disambiguating columns shared across multiple files
 

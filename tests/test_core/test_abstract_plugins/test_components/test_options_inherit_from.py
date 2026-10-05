@@ -2416,14 +2416,14 @@ class TestInheritFromConflictMessagesMaskMappingValues:
     def test_group_vs_group_conflict_masks_both_values(
         self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
     ) -> None:
-        consumer = Options(group={"SQLITEReader": consumer_value})
-        child = Options(group={"SQLITEReader": child_value})
+        consumer = Options(group={"credential_option_key": consumer_value})
+        child = Options(group={"credential_option_key": child_value})
 
         with pytest.raises(ValueError) as excinfo:
             child.inherit_from(consumer)
 
         message = str(excinfo.value)
-        assert "SQLITEReader" in message
+        assert "credential_option_key" in message
         assert consumer_marker not in message
         assert child_marker not in message
 
@@ -2431,14 +2431,14 @@ class TestInheritFromConflictMessagesMaskMappingValues:
     def test_group_vs_child_context_conflict_masks_both_values(
         self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
     ) -> None:
-        consumer = Options(group={"SQLITEReader": consumer_value})
-        child = Options(context={"SQLITEReader": child_value})
+        consumer = Options(group={"credential_option_key": consumer_value})
+        child = Options(context={"credential_option_key": child_value})
 
         with pytest.raises(ValueError, match="child's context") as excinfo:
             child.inherit_from(consumer)
 
         message = str(excinfo.value)
-        assert "SQLITEReader" in message
+        assert "credential_option_key" in message
         assert consumer_marker not in message
         assert child_marker not in message
 
@@ -2447,15 +2447,15 @@ class TestInheritFromConflictMessagesMaskMappingValues:
         self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
     ) -> None:
         consumer = Options(
-            context={"SQLITEReader": consumer_value},
-            propagate_context_keys=frozenset({"SQLITEReader"}),
+            context={"credential_option_key": consumer_value},
+            propagate_context_keys=frozenset({"credential_option_key"}),
         )
-        child = Options(context={"SQLITEReader": child_value})
+        child = Options(context={"credential_option_key": child_value})
 
         with pytest.raises(ValueError, match="Context key.*conflict") as excinfo:
             child.inherit_from(consumer)
 
         message = str(excinfo.value)
-        assert "SQLITEReader" in message
+        assert "credential_option_key" in message
         assert consumer_marker not in message
         assert child_marker not in message

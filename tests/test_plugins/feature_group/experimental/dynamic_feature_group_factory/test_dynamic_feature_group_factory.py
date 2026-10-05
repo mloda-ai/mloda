@@ -1,5 +1,5 @@
 from typing import Any
-from mloda.provider import FeatureGroup
+from mloda.provider import BaseInputData, FeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import FeatureName
@@ -18,8 +18,6 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeatureComposite,
     SourceTuple,
 )
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
@@ -63,11 +61,7 @@ class TestDynamicFeatureGroupFactory:
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
 
     def test_dynamic_feature_group_creator_with_input_data_feature_group(self) -> None:
-        class MockReadFile(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".mock",)
-
+        class MockReadFile(BaseInputData):
             @classmethod
             def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
                 return "mock_data"
@@ -83,7 +77,7 @@ class TestDynamicFeatureGroupFactory:
 
         # Create a dynamic feature group
         DynamicTestFeatureGroup = DynamicFeatureGroupCreator.create(
-            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=ReadDocumentFeature
+            properties, class_name="DynamicTestFileFeatureGroup", feature_group_cls=SourceInputFeature
         )
 
         # Test match criteria
@@ -103,7 +97,22 @@ class TestDynamicFeatureGroupFactory:
 
         # Test that the created class is a subclass of FeatureGroup
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
-        assert issubclass(DynamicTestFeatureGroup, ReadDocumentFeature)
+        assert issubclass(DynamicTestFeatureGroup, SourceInputFeature)
+
+    def test_dynamic_feature_group_creator_consuming_a_document_group(self) -> None:
+        properties: dict[str, Any] = {
+            "input_features": lambda self, options, feature_name: {Feature("PyFG")},
+            "calculate_feature": lambda cls, data, features: f"Calculated with {cls.__name__}",
+            "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
+                feature_name == FeatureName("dynamic_py_consumer")
+            ),
+        }
+
+        Consumer = DynamicFeatureGroupCreator.create(properties, class_name="DynamicPyConsumerFeatureGroup")
+
+        assert Consumer.match_feature_group_criteria(FeatureName("dynamic_py_consumer"), Options())
+        assert Consumer().input_features(Options(), FeatureName("dynamic_py_consumer")) == {Feature("PyFG")}
+        assert Consumer.calculate_feature(None, FeatureSet()) == "Calculated with DynamicPyConsumerFeatureGroup"
 
     def test_dynamic_feature_group_creator_with_complex_logic(self) -> None:
         def custom_set_feature_name(self: Any, config: Options, feature_name: FeatureName) -> FeatureName:

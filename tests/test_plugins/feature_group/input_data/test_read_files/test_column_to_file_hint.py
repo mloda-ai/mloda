@@ -1,17 +1,15 @@
 import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
-from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Feature, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from tests.helpers.suffix_file_reader import SuffixFileReader
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv
-from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group, load_group
 
 
 def _csv_group() -> Any:
@@ -39,42 +37,6 @@ class TestColumnToFileHint:
         assert os.path.abspath(a) in str(excinfo.value)
         assert os.path.abspath(b) in str(excinfo.value)
 
-    def test_conflict_in_batch_raises(self) -> None:
-        class TestRF(SuffixFileReader):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "val"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        dac = DataAccessCollection(
-            files={"a.csv", "b.csv"},
-            column_to_file={"id": "a.csv", "val": "b.csv"},
-        )
-        with pytest.raises(ValueError) as excinfo:
-            TestRF.match_subclass_data_access(dac, ["id", "val"], options=Options({}))
-        assert "pinned to different files" in str(excinfo.value)
-
-    def test_mixed_batch_raises(self) -> None:
-        class TestRF(SuffixFileReader):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "unpinned_col"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        dac = DataAccessCollection(
-            files={"a.csv", "b.csv"},
-            column_to_file={"id": "a.csv"},
-        )
-        with pytest.raises(ValueError) as excinfo:
-            TestRF.match_subclass_data_access(dac, ["id", "unpinned_col"], options=Options({}))
-        assert "Mixed batch" in str(excinfo.value)
-
     def test_construction_rejects_unknown_file(self) -> None:
         with pytest.raises(ValueError):
             DataAccessCollection(files={"a.csv"}, column_to_file={"col": "b"})
@@ -100,117 +62,22 @@ class TestColumnToFileHint:
         assert by_columns[frozenset({"cfh_int_amount"})].to_pydict() == {"cfh_int_amount": [500, 300]}
 
 
-class TestColumnToFileHintReadDocument:
-    def test_document_pins_correct_file(self) -> None:
-        class TestRD(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".txt",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
+class TestColumnToFileHintTextFG:
+    def test_a_pin_on_the_text_output_loads_the_pinned_file_among_two(self, tmp_path: Path) -> None:
+        first = tmp_path / "first.txt"
+        second = tmp_path / "second.txt"
+        first.write_text("first body", encoding="utf-8")
+        second.write_text("second body", encoding="utf-8")
         dac = DataAccessCollection(
-            files={"a.txt", "b.txt"},
-            column_to_file={"feature_a": "a.txt"},
+            files={"first": str(first), "second": str(second)},
+            column_to_file={"TextFG": "second", "TextFG~source": "second"},
         )
-        result = TestRD.match_subclass_data_access(dac, ["feature_a"], options=Options({}))
-        assert result == "a.txt"
 
-    def test_document_no_hint_raises_on_ambiguity(self) -> None:
-        class TestRD(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".txt",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
-        dac = DataAccessCollection(files={"a.txt", "b.txt"})
-        with pytest.raises(ValueError) as excinfo:
-            TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
-        assert "data_access_handle" in str(excinfo.value)
-
-    def test_document_hint_resolves_ambiguity(self) -> None:
-        class TestRD(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".txt",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
-        dac = DataAccessCollection(files={"a": "a.txt", "b": "b.txt"})
-        result = TestRD.match_subclass_data_access(
-            dac, ["any_feature"], options=Options(context={"data_access_handle": "a"})
+        result = mloda.run_all(
+            ["TextFG", "TextFG~source"],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({load_document_group("text_fg", "TextFG")}),
+            data_access_collection=dac,
         )
-        assert result == "a.txt"
 
-    def test_document_mixed_batch_raises(self) -> None:
-        class TestRD(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".txt",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
-        dac = DataAccessCollection(
-            files={"a.txt", "b.txt"},
-            column_to_file={"feature_a": "a.txt"},
-        )
-        with pytest.raises(ValueError):
-            TestRD.match_subclass_data_access(dac, ["feature_a", "unpinned"], options=Options({}))
-
-    def test_document_folder_traversal(self) -> None:
-        class TestRD(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".txt",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
-        tmp_dir = tempfile.mkdtemp()
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".txt", dir=tmp_dir, delete=False) as f:
-                _ = f.name
-            dac = DataAccessCollection(folders={tmp_dir})
-            result = TestRD.match_subclass_data_access(dac, ["any_feature"], options=Options({}))
-            assert result is not None
-            assert result.endswith(".txt")
-        finally:
-            import shutil
-
-            shutil.rmtree(tmp_dir)
-
-    def test_document_str_path_suffix_check(self) -> None:
-        class TestRD(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".txt",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
-        result = TestRD.match_subclass_data_access("file.csv", ["any_feature"], options=Options({}))
-        assert result is None
-
-    def test_document_str_path_correct_suffix(self) -> None:
-        class TestRD(ReadDocument):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".txt",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: Any) -> Any:
-                return None
-
-        result = TestRD.match_subclass_data_access("file.txt", ["any_feature"], options=Options({}))
-        assert result == "file.txt"
+        assert result == [{"TextFG": ["second body"], "TextFG~source": [str(second)]}]

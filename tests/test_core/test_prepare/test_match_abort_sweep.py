@@ -23,8 +23,8 @@ A fourth pass reads the other pairing on one ``try``: a ``finally`` that discard
 through a return, break or continue or by raising a replacement, undoes every escalation it encloses: the
 re-raises of its own clauses, and the marked raises in the arms those clauses never catch.
 
-Not covered: plugin code under ``mloda_plugins``, except the match helpers of ReadFileFG (core), the
-file format groups, ReadDB and ReadDocument, checked by the parametrized tests below; dynamic dispatch, which is
+Not covered: plugin code under ``mloda_plugins``, except the match helpers of ReadFileFG and ReadDBFG (core), the
+file, database and document format groups, checked by the parametrized tests below; dynamic dispatch, which is
 why SEEDS is hand-written; decorators; ``except*`` groups, which neither pass over a ``try`` reads, as their clauses split an exception
 group between them instead of racing for it, so the third pass's first-match reasoning does not hold there
 and the fourth drops them with it; a raise in the body of a nested try that has handlers, assumed caught there, and
@@ -61,7 +61,7 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser.py": "the parsing that matcher runs",
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": "the required_when guard",
     "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
-    "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "reader matching and file pinning",
+    "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "reader matching",
     "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api reader's match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
     "mloda/core/abstract_plugins/components/match_data/match_data.py": "reader selection during matching",
@@ -74,7 +74,6 @@ for _module in MATCH_PATH_MODULES:
 SEEDS: dict[str, str] = {
     "match_feature_group_criteria": "the match hook every candidate is asked",
     "_filter_feature_group_by_criteria": "the seam that contains a raising hook",
-    "_resolve_pinned_file": "called from reader match hooks in mloda_plugins",
     "check_required_when": "runs inside the wrapper install_required_when_guard installs",
     "guarded": "the installed closure IS a guarded class's matcher; the setattr is no call edge",
 }
@@ -82,7 +81,7 @@ SEEDS: dict[str, str] = {
 # Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
 # instead of at the raise. Resolution is by name, so an entry can be a name COLLISION, not a call edge.
 _CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
-_READER_AUTO_LOAD = "contained: reader auto-load during matching; a broken plugin group must not abort the run"
+_BUILTIN_ALL_COLLISION = "name collision: the builtin all(), not PluginLoader.all"
 _DECIDED_ABOVE_BY_READER_SELECTION = (
     "decided above by the marked raise in both add_base_input_data_to_options callers; this write only "
     "ever reaches an absent key"
@@ -114,9 +113,7 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "__init__"): _READER_AUTO_LOAD,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "load_group"): _READER_AUTO_LOAD,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _READER_AUTO_LOAD,
+    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _BUILTIN_ALL_COLLISION,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
     ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
         "real edge, collided verdict: it raises nothing itself; the set.add / set.update names do"
@@ -169,9 +166,7 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ),
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "__init__"): _READER_AUTO_LOAD,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "load_group"): _READER_AUTO_LOAD,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _READER_AUTO_LOAD,
+    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _BUILTIN_ALL_COLLISION,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
     ("mloda/core/abstract_plugins/components/declared_attributes.py", "unmet_reason"): (
         "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
@@ -1034,7 +1029,6 @@ def test_known_escalations_are_enumerated() -> None:
     mixin = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py"
     expected = {
         (base_input_data, "add_base_input_data_to_options"),
-        (base_input_data, "_resolve_pinned_file"),
         (match_data, "add_base_input_data_to_options"),
         (mixin, "_validate_forwarded_name_mismatch"),
     }
@@ -1161,19 +1155,21 @@ def test_declared_swallowing_helpers_outside_the_path_are_still_called() -> None
 
 
 def test_the_swallowing_closure_is_transitive() -> None:
-    """One wrapper that swallows nothing itself must not hide the swallow two calls below it."""
-    loader = "mloda/core/abstract_plugins/plugin_loader/plugin_loader.py"
-    definitions = [definition for definition in _index().functions.get("load_group", []) if definition.module == loader]
+    """One wrapper that swallows nothing itself must not hide the swallow one call below it."""
+    utils = "mloda/core/abstract_plugins/components/utils.py"
+    definitions = [
+        definition for definition in _index().functions.get("contained_raise_reason", []) if definition.module == utils
+    ]
 
     assert definitions and not any(_swallows(definition.node) for definition in definitions), (
-        "load_group now swallows in its own body; pick another transitive-only entry of that chain"
+        "contained_raise_reason now swallows in its own body; pick another transitive-only entry"
     )
 
     pairs = {(call.module, call.function) for call in sweep().swallowing_external}
 
-    assert (loader, "load_group") in pairs, (
-        "get_all_filtered_subclasses calls load_group, which reaches _load_plugin, whose handler swallows. A "
-        f"depth-1 swallow check sees none of it. Seen instead: {sorted(pairs)}"
+    assert (utils, "contained_raise_reason") in pairs, (
+        "contained_raise_reason calls safe_exc_str, whose handler swallows. A depth-0 swallow check sees none "
+        f"of it. Seen instead: {sorted(pairs)}"
     )
 
 
@@ -2581,14 +2577,13 @@ def test_the_sweep_flags_a_returning_finally_spliced_into_the_real_seam() -> Non
 
 _READER_MATCH_MODULES = [
     pytest.param("mloda/core/abstract_plugins/components/input_data/read_file_fg.py", id="read_file_fg"),
-    pytest.param("mloda_plugins/feature_group/input_data/read_db.py", id="read_db"),
-    pytest.param("mloda_plugins/feature_group/input_data/read_document.py", id="read_document"),
+    pytest.param("mloda/core/abstract_plugins/components/input_data/read_db_fg.py", id="read_db_fg"),
 ]
 
 
 @pytest.mark.parametrize("module", _READER_MATCH_MODULES)
 def test_reader_match_handlers_escalate_or_declare_a_swallow(module: str) -> None:
-    """Each reader family's match helpers are plugin code, outside the walked graph, so they get a direct check."""
+    """Each reader module's match helpers are plugin code, outside the walked graph, so they get a direct check."""
     source = (_REPO_ROOT / module).read_text(encoding="utf-8")
 
     handlers = classify_handlers(source, module, functions=None)
@@ -2604,12 +2599,19 @@ def test_reader_match_handlers_escalate_or_declare_a_swallow(module: str) -> Non
 _FILE_FORMAT_MODULES = [
     pytest.param(f"mloda_plugins/feature_group/input_data/file_formats/{name}_fg.py", id=f"{name}_fg")
     for name in ("csv", "parquet", "json", "feather", "orc")
+] + [
+    pytest.param("mloda_plugins/feature_group/input_data/db_formats/sqlite_fg.py", id="sqlite_fg"),
+    pytest.param("mloda/core/abstract_plugins/components/input_data/read_document_fg.py", id="read_document_fg"),
+    *(
+        pytest.param(f"mloda_plugins/feature_group/input_data/document_formats/{name}.py", id=name)
+        for name in ("text_fg", "markdown_fg", "yaml_fg", "json_document_fg")
+    ),
 ]
 
 
 @pytest.mark.parametrize("module", _FILE_FORMAT_MODULES)
 def test_file_format_handlers_escalate_or_declare_a_swallow(module: str) -> None:
-    """The stock file format groups hook into the match path, so none may hold an unannotated broad handler."""
+    """The stock file, database and document format groups hook into the match path, so none may hold an unannotated broad handler."""
     source = (_REPO_ROOT / module).read_text(encoding="utf-8")
 
     handlers = classify_handlers(source, module, functions=None)

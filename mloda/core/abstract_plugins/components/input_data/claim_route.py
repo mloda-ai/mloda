@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 class NamePolicy(Enum):
@@ -34,8 +34,13 @@ class SourceMatch:
     access: Any = field(compare=False, hash=False, repr=False, default=None)
 
 
-DataAccessReader = type[Any]
-"""The reader class (a BaseInputData or FormatFeatureGroup subclass) in an (owner, access) pair."""
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+    from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+
+    DataAccessReader = type[BaseInputData] | type[FormatFeatureGroup]
+else:
+    DataAccessReader = type
 
 _FEATURE_GROUP_SCOPE: ContextVar[Any] = ContextVar("mloda_feature_group_scope", default=None)
 

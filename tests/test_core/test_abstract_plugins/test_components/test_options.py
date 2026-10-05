@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.user import Credential, Feature, Options
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
 
@@ -577,24 +577,24 @@ class TestOptionsWithCredentialValues:
     """Options group holding Credential values compares/hashes by value and never leaks it via str()."""
 
     def test_options_with_equal_credentials_are_equal_and_hash_alike(self) -> None:
-        options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
-        options2 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
+        options1 = Options(group={"credential_option_key": Credential(sqlite="/x.db")})
+        options2 = Options(group={"credential_option_key": Credential(sqlite="/x.db")})
         assert options1 == options2
         assert hash(options1) == hash(options2)
 
     def test_options_with_different_credentials_are_not_equal(self) -> None:
-        options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
-        options2 = Options(group={"SQLITEReader": Credential(sqlite="/y.db")})
+        options1 = Options(group={"credential_option_key": Credential(sqlite="/x.db")})
+        options2 = Options(group={"credential_option_key": Credential(sqlite="/y.db")})
         assert options1 != options2
 
     def test_str_never_contains_the_secret_value(self) -> None:
-        options = Options(group={"SQLITEReader": Credential(sqlite="/secret/path/analytics.db")})
+        options = Options(group={"credential_option_key": Credential(sqlite="/secret/path/analytics.db")})
         assert "/secret/path/analytics.db" not in str(options)
 
     def test_str_redacts_a_reader_tuple_in_base_input_data_context(self) -> None:
         """Only the reserved BaseInputData reader tuple is masked; a plain non-reader dict stays readable."""
         options = Options(
-            context={"BaseInputData": (SQLITEReader, {"sqlite": "/raw/reader_tuple_marker.db"})},
+            context={"BaseInputData": (SqliteFG, {"sqlite": "/raw/reader_tuple_marker.db"})},
         )
         text = str(options)
         assert "/raw/reader_tuple_marker.db" not in text
@@ -607,7 +607,7 @@ class TestOptionsWithCredentialValues:
     def test_str_redacts_a_reader_tuple_dsn_string_in_base_input_data_context(self) -> None:
         """The reserved BaseInputData reader tuple also masks a DSN string second element."""
         options = Options(
-            context={"BaseInputData": (SQLITEReader, "postgresql://dbuser:cred_marker_q7@dbhost/db")},
+            context={"BaseInputData": (SqliteFG, "postgresql://dbuser:cred_marker_q7@dbhost/db")},
         )
         text = str(options)
         assert "cred_marker_q7" not in text

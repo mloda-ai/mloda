@@ -80,6 +80,8 @@ Subclass the base that fits your source and write only what it asks for. The bas
     assert not is_valid_credentials({"host": "db", "password": "secret"})
     ```
 
+- **ReadDBFG query route**: opt in with `CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)` and implement `produce_query_rows(connection, query_text, features)`. A query-only group lists just `(ReadDBFG.QUERY_ROUTE,)` and stubs the table hooks. The source is a hash of the query text, so textually different queries are different sources.
+
 Override `data_access_identity` to publish a richer identity than the default. Run the contract mixins in mloda's `tests/mixins/reader_feature_groups/` against your group; they pin the behavior every format group shares.
 
 
@@ -97,6 +99,7 @@ The stdlib reader does not yet cover pyarrow's full surface. Where they differ, 
 
 - `options={"CsvFG": path}` points the group at one file (or folder). A subclass also answers to its parent's name, so `Feature("x", options={"CsvFG": path})` reaches a `CsvFG` subclass.
 - `options={"SqliteFG": Credential(sqlite="/x.db")}` points a database group at one database. Prefer `Credential` for secrets: a plain-dict pointer shows its values in `str(options)`.
+- `Feature(name, options={"query_text": ..., "<Group>": Credential(...)})` runs a query on a database group that opts into `ReadDBFG.QUERY_ROUTE`.
 - `Feature(..., feature_group=CsvFG)` scopes resolution to that group (and its subclasses) without choosing a source.
 - `data_access_handle` only narrows: it picks one of the sources the `DataAccessCollection` holds and never points a group at a source the collection lacks.
 - `column_to_file` pins columns to files in the `DataAccessCollection`; a pinned file that cannot serve the request aborts instead of falling back (see [access-feature-data](access-feature-data.md)).

@@ -128,7 +128,7 @@ def worker(
         error_out(cfw_register, command_queue)
         return
 
-    cfw.worker_index = worker_index
+    object.__setattr__(cfw, "worker_index", worker_index)
     run_context = RunContext()
     reason: CloseReason = "error"
 
@@ -198,6 +198,7 @@ def worker(
             deadline=time.monotonic() + run_context.graceful_shutdown_timeout,
             reason=reason,
             run_id=run_context.run_id,
+            plan_id=run_context.plan_id,
             worker_index=worker_index,
             carrier=run_context.carrier,
             tenant_id=run_context.tenant_id,

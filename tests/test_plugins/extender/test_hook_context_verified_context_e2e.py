@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, GateBypassError
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.api.request import mlodaAPI
@@ -194,7 +194,6 @@ class TestOptionsCannotOverrideVerifiedContext:
 
 _PREPARE_SCOPE = {"tenant_id": "acme-prepare", "project_id": "proj-prepare", "principal": "hash-prepare"}
 _RUN_SCOPE = {"tenant_id": "tenant-run", "project_id": "proj-run", "principal": "hash-run"}
-_NO_SCOPE: dict[str, str | None] = {"tenant_id": None, "project_id": None, "principal": None}
 
 
 def _identity(context: HookContext) -> dict[str, str | None]:
@@ -202,7 +201,7 @@ def _identity(context: HookContext) -> dict[str, str | None]:
 
 
 class TestEachHookReportsTheIdentityActiveWhenItsPhaseBegan:
-    """A run outside any scope must not inherit the identity of the scope that prepared the session."""
+    """A run outside any scope inherits the identity of the scope that prepared the session."""
 
     @pytest.mark.parametrize("run_scope", [_RUN_SCOPE, None])
     def test_match_reports_prepare_scope_and_calculate_reports_run_scope(
@@ -217,4 +216,196 @@ class TestEachHookReportsTheIdentityActiveWhenItsPhaseBegan:
             session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_MATCHED]) == _PREPARE_SCOPE
-        assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]) == (run_scope or _NO_SCOPE)
+        assert _identity(extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]) == (
+            run_scope or _PREPARE_SCOPE
+        )
+
+
+class _RunEvents(Extender):
+    """Late extender recording which run hooks it saw, with the identity each run hook reported."""
+
+    def __init__(self) -> None:
+        self.priority = 500
+        self.events: list[tuple[str, str | None]] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.events.append(("run_start", run.principal))
+
+    def on_run_complete(self, run: Any, outcome: Any) -> None:
+        self.events.append((f"run_complete:{outcome.status}:{outcome.error_type}", run.principal))
+
+
+class _MatchedGateBase(Extender):
+    """A never_fall_back gate wrapping FEATURE_GROUP_MATCHED, the shape that engages the fail-closed check."""
+
+    never_fall_back = True
+
+    def __init__(self) -> None:
+        self.priority = 1
+        self.run_starts: list[tuple[str | None, str | None]] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_MATCHED}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class _MatchedGateWithoutRunStart(_MatchedGateBase):
+    pass
+
+
+class _MatchedGatePassingRunStart(_MatchedGateBase):
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.run_starts.append((plan.principal, run.principal))
+
+
+class _MatchedGateRefusingOnIdentityChange(_MatchedGateBase):
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.run_starts.append((plan.principal, run.principal))
+        if run.principal != plan.principal:
+            raise PermissionError("identity changed since prepare")
+
+
+class _CalculateGate(_MatchedGateBase):
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+
+class _CalculateGatePassingRunStart(_CalculateGate):
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.run_starts.append((plan.principal, run.principal))
+
+
+class TestRunStartIdentity:
+    def test_calculate_hook_context_carries_the_run_identity_when_it_differs_from_the_plan(self) -> None:
+        capture = _ContextCapturingExtender()
+        gate = _MatchedGatePassingRunStart()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={capture, gate})
+
+        with verified_context(**_RUN_SCOPE):
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is not None
+        assert _identity(capture.captured) == _RUN_SCOPE
+
+
+class TestRunStartGateWithDifferingIdentity:
+    def test_a_passing_gate_overriding_on_run_start_lets_the_run_proceed(self) -> None:
+        gate = _MatchedGatePassingRunStart()
+        capture = _ContextCapturingExtender()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={gate, capture})
+
+        with verified_context(**_RUN_SCOPE):
+            result = session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert result and capture.captured is not None
+        assert gate.run_starts == [("hash-prepare", "hash-run")]
+
+    def test_a_refusing_gate_runs_nothing_and_later_extenders_only_see_run_complete(self) -> None:
+        gate = _MatchedGateRefusingOnIdentityChange()
+        capture = _ContextCapturingExtender()
+        events = _RunEvents()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={gate, capture, events})
+
+        with pytest.raises(PermissionError, match="identity changed since prepare"):
+            with verified_context(**_RUN_SCOPE):
+                session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is None
+        assert events.events == [("run_complete:failed:PermissionError", "hash-run")]
+
+    def test_a_refusing_gate_lets_a_run_with_the_same_identity_proceed(self) -> None:
+        gate = _MatchedGateRefusingOnIdentityChange()
+        capture = _ContextCapturingExtender()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={gate, capture})
+
+        with verified_context(**_PREPARE_SCOPE):
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is not None
+
+
+class TestFailClosedRunStartIdentityRefusal:
+    def test_a_matched_gate_without_on_run_start_refuses_a_run_under_a_different_identity(self) -> None:
+        gate = _MatchedGateWithoutRunStart()
+        capture = _ContextCapturingExtender()
+        events = _RunEvents()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={gate, capture, events})
+
+        with pytest.raises(GateBypassError):
+            with verified_context(**_RUN_SCOPE):
+                session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is None
+        assert events.events == [("run_complete:failed:GateBypassError", "hash-run")]
+
+    def test_another_gate_overriding_on_run_start_does_not_satisfy_the_matched_gate(self) -> None:
+        capture = _ContextCapturingExtender()
+        other_gate = _CalculateGatePassingRunStart()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={_MatchedGateWithoutRunStart(), other_gate, capture})
+
+        with pytest.raises(GateBypassError):
+            with verified_context(**_RUN_SCOPE):
+                session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is None
+
+    def test_the_refusal_also_raises_at_the_stream_run_call(self) -> None:
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={_MatchedGateWithoutRunStart()})
+
+        with pytest.raises(GateBypassError):
+            with verified_context(**_RUN_SCOPE):
+                session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
+
+    def test_the_same_identity_runs(self) -> None:
+        capture = _ContextCapturingExtender()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={_MatchedGateWithoutRunStart(), capture})
+
+        with verified_context(**_PREPARE_SCOPE):
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is not None
+
+    def test_inheriting_the_preparers_identity_runs(self) -> None:
+        capture = _ContextCapturingExtender()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={_MatchedGateWithoutRunStart(), capture})
+
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is not None
+
+    def test_a_gate_that_does_not_wrap_matched_does_not_trigger_the_refusal(self) -> None:
+        capture = _ContextCapturingExtender()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={_CalculateGate(), capture})
+
+        with verified_context(**_RUN_SCOPE):
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is not None
+
+    def test_no_gate_at_all_runs_under_a_different_identity(self) -> None:
+        capture = _ContextCapturingExtender()
+        with verified_context(**_PREPARE_SCOPE):
+            session = _prepare_session(function_extender={capture})
+
+        with verified_context(**_RUN_SCOPE):
+            session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert capture.captured is not None

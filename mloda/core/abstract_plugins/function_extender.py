@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 import functools
 import inspect
 import logging
@@ -11,9 +12,20 @@ from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature_set import FeatureSet
     from mloda.core.abstract_plugins.components.options import Options
+    from mloda.core.abstract_plugins.plan_context import PlanContext
+    from mloda.core.abstract_plugins.run_context import RunContext
+    from mloda.core.api.plan_info import PlanStep
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LifecycleOutcome:
+    """How a plan or run ended, passed to on_plan_complete and on_run_complete."""
+
+    status: Literal["succeeded", "failed", "cancelled"]
+    error_type: str | None = None
 
 
 class ExtenderHook(Enum):
@@ -113,21 +125,27 @@ class Extender(ABC):
         STOP and this worker starting to close. Capture it and pass it to threads, since a thread
         started inside close() does not inherit it; close order across extenders is unspecified."""
 
-    def on_run_complete(self, run_id: str | None) -> None:
-        """Called once per run in the PARENT on the caller's own extender objects, after all workers
-        were joined, in every mode (close() is MULTIPROCESSING worker only). Fires once per run(),
-        run_all(), stream_run() or stream_all() call that got as far as setting up execution (a stream
-        does on its first iteration; one closed early fires after its workers are joined). Fires when
-        setup (e.g. the MULTIPROCESSING picklability preflight) or execution raised, so it is not a
-        success signal. Does not fire for prepare, explain, a never-iterated stream, a failure while
-        planning before setup, or when finalizing raised (collecting artifacts, joining or terminating
-        the workers). A session re-run fires again with the same run_id. raise_on_error and
-        never_fall_back do not apply; an Exception here is logged, unless raise_on_run_complete is
-        True and the run succeeded (a stream only when exhausted), then the first such one is
-        re-raised after every extender was notified.
-        The worker copy is pickled once per run at setup (a stream's first iteration), so for runs
-        executed one after another it reflects the parent's state after the previous run's
-        on_run_complete; its changes never flow back to the parent."""
+    def on_plan_start(self, plan: "PlanContext") -> None:
+        """Called once in the PARENT when planning begins (prepare, explain, diagnose, run_all, stream_all).
+        An Exception raised here is logged, never propagated."""
+
+    def on_plan_complete(self, plan: "PlanContext", outcome: "LifecycleOutcome") -> None:
+        """Called once in the PARENT when planning ends, whether it succeeded or failed.
+        An Exception raised here is logged, never propagated."""
+
+    def on_run_start(self, run: "RunContext", plan: "PlanContext", steps: "tuple[PlanStep, ...]") -> None:
+        """Called once in the PARENT per run, before any setup or compute, in sorted extender order.
+        An Exception propagates and refuses the run when raise_on_error or never_fall_back is True,
+        else it is logged and the run proceeds. Extenders after a refusing one get on_run_complete only."""
+
+    def on_run_complete(self, run: "RunContext", outcome: "LifecycleOutcome") -> None:
+        """Called once per run() or stream, in the PARENT on the caller's own extender objects, after the
+        workers were joined and the runner exited, in every mode (close() is MULTIPROCESSING worker only).
+        Fires with a failed outcome when setup, execution, finalizing or a run_start refusal raised, and
+        with cancelled when a stream is closed early or never iterated. An Exception raised here is
+        logged, unless raise_on_run_complete is True and the outcome succeeded, then the first such one
+        is re-raised after every extender was called. The worker copy is pickled once per run at setup,
+        so its changes never flow back to the parent."""
 
     @staticmethod
     def feature_group_name(func: Any) -> str:
@@ -188,6 +206,53 @@ def extender_sort_key(extender: Extender) -> tuple[int, int, str, str]:
         type(extender).__module__,
         type(extender).__qualname__,
     )
+
+
+def call_contained_hook(extenders: Iterable[Extender], hook: str, *args: Any) -> None:
+    """Call a lifecycle hook on every extender in sorted order, logging exceptions and continuing."""
+    for extender in sorted(extenders, key=extender_sort_key):
+        try:
+            getattr(extender, hook)(*args)
+        except Exception as e:
+            logger.error("Extender %s.%s() %s", extender.__class__.__name__, hook, contained_raise_reason(e))
+
+
+def call_run_complete_hook(extenders: Iterable[Extender], run: "RunContext", outcome: LifecycleOutcome) -> None:
+    """Call on_run_complete on every extender; re-raise the first raise_on_run_complete failure of a successful run."""
+    failure: Exception | None = None
+    for extender in sorted(extenders, key=extender_sort_key):
+        try:
+            extender.on_run_complete(run, outcome)
+        except Exception as e:
+            if extender.raise_on_run_complete and outcome.status == "succeeded" and failure is None:
+                failure = e
+            else:
+                logger.error("Extender %s.on_run_complete() %s", extender.__class__.__name__, contained_raise_reason(e))
+    if failure is not None:
+        raise failure
+
+
+def call_run_start_hook(extenders: Iterable[Extender], run: "RunContext", plan: "PlanContext", steps: Any) -> None:
+    """Call on_run_start in sorted order; a breaking or never_fall_back extender's exception refuses the run."""
+    for extender in sorted(extenders, key=extender_sort_key):
+        try:
+            extender.on_run_start(run, plan, steps)
+        except Exception as e:
+            if extender.raise_on_error or extender.never_fall_back:
+                raise
+            logger.warning("Extender %s.on_run_start() %s", extender.__class__.__name__, contained_raise_reason(e))
+
+
+def reject_old_run_complete_signature(extenders: Iterable[Extender]) -> None:
+    """Raise TypeError for an extender whose on_run_complete still takes the old single run_id parameter."""
+    for extender in extenders:
+        parameters = inspect.signature(extender.on_run_complete).parameters.values()
+        positional = [p for p in parameters if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+        if len(positional) < 2 and not any(p.kind is p.VAR_POSITIONAL for p in parameters):
+            raise TypeError(
+                f"{type(extender).__name__}.on_run_complete must accept (run, outcome); "
+                "the single run_id parameter was replaced."
+            )
 
 
 def build_hook_extenders(function_extender: Iterable[Extender]) -> dict[ExtenderHook, Extender]:

@@ -23,6 +23,7 @@ class CloseContext:
     deadline: float  # a time.monotonic() timestamp
     reason: CloseReason
     run_id: str | None = None
+    plan_id: str | None = None
     worker_index: int | None = None
     carrier: dict[str, str] | None = field(default=None, hash=False)
     tenant_id: str | None = None

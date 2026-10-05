@@ -140,7 +140,9 @@ class TestJoinHookFiresWithCorrectContext:
         assert context.join_type == "inner"
         assert context.join_keys == (f"{_MARKER}_left_id={_MARKER}_right_id",)
         assert context.compute_framework_name == "PythonDictFramework"
-        assert context.run_id == session.run_id
+        assert context.run_id is not None
+        assert context.plan_id == session.plan_id
+        assert context.run_id != session.plan_id
         assert context.carrier == carrier
         assert context.worker_index is None
         assert context.tenant_id == "acme"

@@ -278,6 +278,7 @@ class _RunCompleteProbe(Extender):
         self.run_ids: list[str | None] = []
         self.error = error
         self.raise_on_run_complete = raise_on_run_complete
+        self.outcomes: list[Any] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return set()
@@ -285,8 +286,9 @@ class _RunCompleteProbe(Extender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         return func(*args, **kwargs)
 
-    def on_run_complete(self, run_id: str | None) -> None:
-        self.run_ids.append(run_id)
+    def on_run_complete(self, run: Any, outcome: Any) -> None:
+        self.run_ids.append(run.run_id)
+        self.outcomes.append(outcome)
         if self.error is not None:
             raise self.error
 
@@ -308,46 +310,53 @@ class _EarlyCloseFeatureGroup(FeatureGroup):
         return {_EARLY_CLOSE_COLUMN: [1, 2, 3]}
 
 
-def _early_close_kwargs(probe: _RunCompleteProbe) -> dict[str, Any]:
+def _early_close_kwargs(extenders: set[Extender]) -> dict[str, Any]:
     return {
         "compute_frameworks": ["PythonDictFramework"],
         "plugin_collector": PluginCollector.enabled_feature_groups({_EarlyCloseFeatureGroup}),
-        "function_extender": {probe},
+        "function_extender": extenders,
     }
 
 
-def _early_close_session(probe: _RunCompleteProbe) -> Any:
-    return mloda.prepare([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs(probe))
+def _early_close_session(extenders: set[Extender]) -> Any:
+    return mloda.prepare([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs(extenders))
 
 
 class TestComputeStreamNotifiesExtenders:
-    def test_early_closed_stream_notifies_extenders_once(self) -> None:
+    def test_early_closed_stream_notifies_extenders_once_as_cancelled(self) -> None:
+        """Request-level replacement: the orchestrator no longer notifies, the stream does."""
+        probe = _RunCompleteProbe()
+        session = _early_close_session({probe})
+
+        stream = session.stream_run()
+        next(stream)
+        stream.close()
+
+        assert len(probe.run_ids) == 1 and probe.run_ids[0] is not None
+        assert [o.status for o in probe.outcomes] == ["cancelled"]
+
+    def test_orchestrator_exit_alone_no_longer_notifies_extenders(self) -> None:
         probe = _RunCompleteProbe()
         mock_planner = Mock(spec=ExecutionPlan)
         mock_planner.__iter__ = Mock(return_value=iter([]))
         orchestrator = ExecutionOrchestrator(mock_planner)
         orchestrator.__enter__({ParallelizationMode.SYNC}, {probe}, None, None, RunContext(run_id="stream-run"))
-
-        def mock_pop() -> Generator[tuple[UUID, Any], None, None]:
-            yield uuid4(), "data_1"
-            yield uuid4(), "data_2"
-
         orchestrator.data_lifecycle_manager = MagicMock()
-        orchestrator.data_lifecycle_manager.pop_result_data_collection = mock_pop
+        orchestrator.data_lifecycle_manager.pop_result_data_collection = lambda: iter([(uuid4(), "data_1")])
 
         gen = orchestrator.compute_stream()
         next(gen)
         gen.close()
         orchestrator.__exit__(None, None, None)
 
-        assert probe.run_ids == ["stream-run"]
+        assert probe.run_ids == []
 
     def test_api_stream_closed_early_joins_workers_before_signalling_while_the_inner_generator_is_referenced(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         order: list[str] = []
         probe = _RunCompleteProbe()
-        monkeypatch.setattr(probe, "on_run_complete", lambda run_id: order.append("signal"))
+        monkeypatch.setattr(probe, "on_run_complete", lambda run, outcome: order.append("signal"))
         monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self: order.append("join"))
         real_compute_stream = ExecutionOrchestrator.compute_stream
         inner_generators: list[Any] = []
@@ -373,7 +382,7 @@ class TestComputeStreamNotifiesExtenders:
     def test_exhausted_api_stream_raises_the_opt_in_extender_failure(self) -> None:
         failure = RuntimeError("opt-in boom")
         probe = _RunCompleteProbe(error=failure, raise_on_run_complete=True)
-        session = _early_close_session(probe)
+        session = _early_close_session({probe})
 
         with pytest.raises(RuntimeError) as raised:
             list(session.stream_run())
@@ -385,7 +394,7 @@ class TestComputeStreamNotifiesExtenders:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         probe = _RunCompleteProbe(error=RuntimeError("opt-in boom"), raise_on_run_complete=True)
-        session = _early_close_session(probe)
+        session = _early_close_session({probe})
 
         with caplog.at_level(logging.ERROR):
             stream = session.stream_run()
@@ -400,7 +409,7 @@ class TestComputeStreamNotifiesExtenders:
         probe = _RunCompleteProbe(error=failure, raise_on_run_complete=True)
 
         with pytest.raises(RuntimeError) as raised:
-            mloda.run_all([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs(probe))
+            mloda.run_all([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs({probe}))
 
         assert raised.value is failure
 

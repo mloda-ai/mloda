@@ -255,6 +255,10 @@ def test_import_steward_governance() -> None:
         PlanStep,
         # Credential scrubbing
         scrub_credentials,
+        # Plan/run lifecycle
+        LifecycleOutcome,
+        PlanContext,
+        RunContext,
     )
 
     # Plugin inspection
@@ -289,6 +293,14 @@ def test_import_steward_governance() -> None:
     # Credential scrubbing
     assert callable(scrub_credentials)
     assert "scrub_credentials" in steward_module.__all__
+    # Plan/run lifecycle
+    for lifecycle_name, lifecycle_type in (
+        ("LifecycleOutcome", LifecycleOutcome),
+        ("PlanContext", PlanContext),
+        ("RunContext", RunContext),
+    ):
+        assert lifecycle_type is not None
+        assert lifecycle_name in steward_module.__all__
 
 
 # =============================================================================

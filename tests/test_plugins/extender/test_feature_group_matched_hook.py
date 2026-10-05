@@ -1,14 +1,16 @@
 """Tests wiring FEATURE_GROUP_MATCHED into Engine's matching path.
 
 Covers mlodaAPI.prepare/run_all threading function_extender into Engine, Engine.get_function_extender,
-HookContext population (run_id/carrier/worker_index/plan_*), and deny-before-match / deny-with-fallback.
+HookContext population (plan_id/run_id/carrier/worker_index/plan_*), and deny-before-match / deny-with-fallback.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+from mloda.core.abstract_plugins.plan_context import PlanContext
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -19,7 +21,6 @@ from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import BaseTestComputeFramework1
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 
@@ -234,8 +235,8 @@ class TestFeatureGroupMatchedHookFiresOnResolve:
         assert extender.captured.feature_names == (f"{_MARKER}_root_col",)
 
 
-class TestRunIdConsistentAcrossMatches:
-    def test_run_id_is_non_empty_and_equal_to_session_run_id_across_matches(self) -> None:
+class TestPlanIdConsistentAcrossMatches:
+    def test_plan_id_is_session_plan_id_and_run_id_is_none_across_matches(self) -> None:
         extender = _MatchListCapturingExtender()
 
         session = mloda.prepare(
@@ -249,10 +250,10 @@ class TestRunIdConsistentAcrossMatches:
         )
 
         assert len(extender.captured) == 2
-        assert isinstance(session.run_id, str)
-        assert session.run_id
-        run_ids = {context.run_id for context in extender.captured}
-        assert run_ids == {session.run_id}
+        assert isinstance(session.plan_id, str)
+        assert session.plan_id
+        assert {context.plan_id for context in extender.captured} == {session.plan_id}
+        assert {context.run_id for context in extender.captured} == {None}
 
 
 class TestCarrierAndWorkerIndexNoneDuringMatch:
@@ -298,6 +299,7 @@ class TestTenantProjectPrincipalSurfaceDuringMatchWhenScopeIsActive:
         assert all(context.tenant_id == "acme" for context in extender.captured)
         assert all(context.project_id == "proj1" for context in extender.captured)
         assert all(context.principal == "hash123" for context in extender.captured)
+        assert all(context.plan_id is not None and context.run_id is None for context in extender.captured)
 
 
 class TestStreamAllForwardsFunctionExtenderIntoMatchTimeHooks:
@@ -458,7 +460,7 @@ class TestPlanCountsAndDepthOnMatchContext:
 
 
 class TestEngineFunctionExtenderAndRunIdConstruction:
-    """Engine stores function_extender/run_id on a RunContext and selects extenders from its own table."""
+    """Engine stores function_extender/plan_id on a RunContext and selects extenders from its own table."""
 
     def test_engine_accepts_kwargs_and_selects_extenders_from_its_own_table(self) -> None:
         with (
@@ -479,12 +481,18 @@ class TestEngineFunctionExtenderAndRunIdConstruction:
                 compute_framework,
                 None,
                 function_extender={extender},
-                run_id="fgmatch051-direct-run-id",
+                plan_context=PlanContext(
+                    plan_id="fgmatch051-direct-plan-id",
+                    tenant_id=None,
+                    project_id=None,
+                    principal=None,
+                    created_at=datetime.now(timezone.utc),
+                ),
             )
 
             assert engine.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED) is extender
             assert engine.get_function_extender(ExtenderHook.JOIN) is None
-            assert engine.run_context == RunContext(run_id="fgmatch051-direct-run-id")
+            assert engine.run_context == RunContext(plan_id="fgmatch051-direct-plan-id")
 
 
 class TestExtenderCannotSubstituteTheMatchedFeatureGroup:

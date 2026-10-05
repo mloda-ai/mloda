@@ -27,6 +27,7 @@ from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecut
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 # Only this token, never an identifier or comment, must be searched for in scrub assertions below.
 _LEAK_MARKER = "hunter2z9"
@@ -1476,3 +1477,58 @@ class TestMultiExecuteStep:
         args_tuple = call_args.args[2]
         assert len(args_tuple) == 3
         assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid)
+
+
+class TestExecutorSealsTheAttachedFramework:
+    def _attached(self) -> ComputeFramework:
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_run_context.return_value = RunContext(run_id="run-1", carrier={"k": "v"})
+        executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
+        cfw_uuid = executor.init_compute_framework(PythonDictFramework, ParallelizationMode.SYNC, set())
+        return executor.cfw_collection[cfw_uuid]
+
+    def test_attached_framework_has_the_run_context(self) -> None:
+        cfw = self._attached()
+
+        assert cfw.run_context.run_id == "run-1"
+        assert cfw.run_context.carrier == {"k": "v"}
+
+    @pytest.mark.parametrize("name,value", [("run_context", RunContext(run_id="forged")), ("worker_index", 5)])
+    def test_attached_framework_rejects_assignment(self, name: str, value: Any) -> None:
+        cfw = self._attached()
+
+        with pytest.raises(AttributeError):
+            setattr(cfw, name, value)
+
+        assert cfw.run_context.run_id == "run-1"
+        assert cfw.worker_index is None
+
+    @pytest.mark.parametrize("name", ["run_context", "worker_index", "_run_context_sealed"])
+    def test_attached_framework_rejects_deletion(self, name: str) -> None:
+        cfw = self._attached()
+
+        with pytest.raises(AttributeError):
+            delattr(cfw, name)
+
+        assert cfw.run_context.run_id == "run-1"
+        assert cfw.worker_index is None
+        assert cfw.__dict__["_run_context_sealed"] is True
+        with pytest.raises(AttributeError):
+            cfw.run_context = RunContext(run_id="forged")
+
+    @pytest.mark.parametrize("name,value", [("run_context", RunContext(run_id="forged")), ("worker_index", 5)])
+    def test_sealed_framework_stays_sealed_after_pickle_round_trip(self, name: str, value: Any) -> None:
+        restored = pickle.loads(pickle.dumps(self._attached()))  # nosec B301
+
+        assert restored.run_context.run_id == "run-1"
+        with pytest.raises(AttributeError):
+            setattr(restored, name, value)
+
+    def test_unattached_framework_pickle_round_trip_stays_assignable(self) -> None:
+        cfw = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        restored = pickle.loads(pickle.dumps(cfw))  # nosec B301
+        restored.run_context = RunContext(run_id="free")
+        restored.worker_index = 1
+
+        assert restored.run_context.run_id == "free"

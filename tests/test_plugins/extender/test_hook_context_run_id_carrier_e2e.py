@@ -208,9 +208,11 @@ class TestRunIdAndCarrierSurfaceOnHookContext:
             carrier=_CARRIER,
         )
 
-        assert_valid_uuid7(session.run_id)
         assert extender.captured is not None
-        assert extender.captured.run_id == session.run_id
+        assert extender.captured.run_id is not None
+        assert_valid_uuid7(extender.captured.run_id)
+        assert extender.captured.plan_id == session.plan_id
+        assert extender.captured.run_id != session.plan_id
         assert extender.captured.carrier == _CARRIER
 
 
@@ -266,5 +268,7 @@ class TestTwoFeatureGroupsShareSameRunId:
 
         assert len(extender.captured) == 2
         run_ids = {context.run_id for context in extender.captured}
-        assert run_ids == {session.run_id}
-        assert_valid_uuid7(session.run_id)
+        (run_id,) = run_ids
+        assert run_id is not None
+        assert_valid_uuid7(run_id)
+        assert {context.plan_id for context in extender.captured} == {session.plan_id}

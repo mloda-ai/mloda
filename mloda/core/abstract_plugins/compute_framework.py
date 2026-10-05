@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.function_extender import (
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
 from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, input_data_load_gate_scope, instrument
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
@@ -72,6 +73,10 @@ def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
     if not data:
         return None
     return tuple((str(key), safe_field(lambda: _python_dtype(data[key]), None)) for key in sorted(data, key=str))
+
+
+_SEAL_FLAG = "_run_context_sealed"
+_SEALED_ATTRS = frozenset({"run_context", "worker_index", _SEAL_FLAG})
 
 
 class EmptyResultError(ValueError):
@@ -133,7 +138,7 @@ class ComputeFramework(ABC):
         # function_extender only by __setstate__, i.e. only on the actual unpickle in the worker.
         self._pending_extender_payload: bytes | None = None
         # Set post-construction so a subclass's fixed __init__ signature isn't broken.
-        # RunContext is internal; hook authors should read run_id/carrier off HookContext instead.
+        # RunContext is exported from mloda.steward for on_run_start/on_run_complete.
         self.run_context: RunContext = RunContext()
         self.worker_index: int | None = None
 
@@ -148,10 +153,25 @@ class ComputeFramework(ABC):
         self.framework_connection_object: Any | None = None
 
     @final
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError(f"{name!r} cannot be reassigned on a framework attached to a run")
+        object.__setattr__(self, name, value)
+
+    @final
+    def __delattr__(self, name: str) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError(f"{name!r} cannot be deleted on a framework attached to a run")
+        object.__delattr__(self, name)
+
+    @final
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Materialize a deferred worker extender payload on the actual unpickle, so an
         extender's own __setstate__ (e.g. building a live handle) fires in the worker's pid."""
         self.__dict__.update(state)
+        restored = self.__dict__.get("run_context")
+        if restored is not None and restored.run_id:
+            object.__setattr__(self, _SEAL_FLAG, True)
         if self._pending_extender_payload is not None:
             self.function_extender, self._hook_extenders = pickle.loads(self._pending_extender_payload)  # nosec B301
             self._pending_extender_payload = None
@@ -701,20 +721,39 @@ class ComputeFramework(ABC):
                 )
 
         fetch_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
-        if extender is None and fetch_extender is None:
-            return method(self.data, features)
-
-        context = self._build_hook_context(hook, feature_group, features)
         gated = fetch_extender is not None and fetch_extender.never_fall_back
-        with self.activate(), context.activate(), input_data_load_gate_scope() if gated else contextlib.nullcontext():
-            if extender is None:
+        marker = InputDataLoadMarker(fetch_extender is not None, gated)
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+
+        stamped = isinstance(features, FeatureSet)
+        prior_marker = features._load_marker if stamped else None
+        if stamped:
+            features._load_marker = marker
+        token = current_input_data_load_marker.set(marker)
+        try:
+            if extender is None and fetch_extender is None:
                 return method(self.data, features)
-            return _invoke_extender(
-                extender,
-                instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
-                self.data,
-                features,
-            )
+
+            context = self._build_hook_context(hook, feature_group, features)
+            marker.active = (self, context)
+            with (
+                self.activate(),
+                context.activate(),
+                input_data_load_gate_scope() if gated else contextlib.nullcontext(),
+            ):
+                if extender is None:
+                    return method(self.data, features)
+                return _invoke_extender(
+                    extender,
+                    instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
+                    self.data,
+                    features,
+                )
+        finally:
+            marker.active = None
+            current_input_data_load_marker.reset(token)
+            if stamped and prior_marker is not None and prior_marker.active is not None:
+                features._load_marker = prior_marker
 
     @final
     def run_validate_input_features(self, feature_group: Any, features: Any) -> None:
@@ -875,6 +914,7 @@ class ComputeFramework(ABC):
             compute_framework_name=self.get_class_name(),
             rows_in=safe_field(lambda: self._row_count(self.data), None),
             run_id=self.run_context.run_id,
+            plan_id=self.run_context.plan_id,
             carrier=self.run_context.carrier,
             tenant_id=self.run_context.tenant_id,
             project_id=self.run_context.project_id,

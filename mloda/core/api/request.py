@@ -13,6 +13,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
 from mloda.core.api.plan_info import PlanStep, build_plan_steps
+from mloda.core.api.plan_lock import plan_structure_hash
 from mloda.core.prepare.identify_feature_group import (
     ComputeFrameworkPinError,
     FeatureResolutionError,
@@ -119,11 +120,20 @@ class mlodaAPI:
                 parallelization_modes,
                 output_framework,
             )
+            if self._extenders:
+                self._stamp_structure_hash()
         except BaseException as error:
             plan_outcome = LifecycleOutcome("failed", type(error).__name__)
             raise
         finally:
             call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
+
+    def _stamp_structure_hash(self) -> None:
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        self._plan_steps = tuple(self.resolved_plan())
+        self.plan_context = replace(self.plan_context, structure_hash=plan_structure_hash(self._plan_steps))
+        self.engine.plan_context = self.plan_context
 
     def _plan(
         self,

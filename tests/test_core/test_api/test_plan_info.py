@@ -83,6 +83,7 @@ from mloda.steward import (
     HookContext,
     PlanLockMismatchError,
     check_plan_lock,
+    plan_structure_hash,
     write_plan_lock,
 )
 from tests.helpers.probe_runner import run_probes
@@ -1506,6 +1507,8 @@ class TestPlanLock:
 
         check_plan_lock(second, lock)
 
+        assert plan_structure_hash(first) == plan_structure_hash(second)
+
     @pytest.mark.parametrize(
         ("explain_plan", "differing_key"),
         [
@@ -1547,6 +1550,11 @@ class TestPlanLock:
         assert len(content["compute"]) > 1
         assert len(content["joins"]) >= 1
         assert len(content["transforms"]) >= 1
+
+        hashes = {output["structure_hash"] for output in outputs}
+        assert len(hashes) == 1
+        assert outputs[0]["structure_hash"] != "None"
+        assert outputs[0]["structure_hash"] == outputs[0]["expected_structure_hash"]
 
 
 # ---------------------------------------------------------------------------

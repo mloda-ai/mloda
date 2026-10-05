@@ -8,7 +8,7 @@ from mloda.core.api.plugin_info import FeatureGroupInfo, ComputeFrameworkInfo, E
 from mloda.core.api.plan_info import PlanStep
 
 # Plan lock file
-from mloda.core.api.plan_lock import PlanLockMismatchError, check_plan_lock, write_plan_lock
+from mloda.core.api.plan_lock import PlanLockMismatchError, check_plan_lock, plan_structure_hash, write_plan_lock
 
 # Documentation/discovery
 from mloda.core.api.plugin_docs import (
@@ -81,6 +81,7 @@ __all__ = [
     # Plan lock file
     "write_plan_lock",
     "check_plan_lock",
+    "plan_structure_hash",
     "PlanLockMismatchError",
     # Documentation
     "get_feature_group_docs",

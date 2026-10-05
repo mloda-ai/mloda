@@ -36,6 +36,10 @@ It never holds option values, `data_access_identity`, versions, per-run ids or t
 - Data.
 - Extenders.
 
+## Structure hash
+
+`plan_structure_hash(plan)` (from `mloda.steward`) is the sha256 hex of the lock text, so an equal hash means an equal lock file. A session with extenders carries it as `PlanContext.structure_hash`. Like the lock it excludes option values and data access, and includes the reason text and the lock format number, so it is a plan-shape fingerprint, not a reproducibility or audit fingerprint. The churn sources below apply.
+
 ## Churn sources
 
 - A reason can change without a framework change, for example `saves 1 conversion` to `saves 2 conversions`.

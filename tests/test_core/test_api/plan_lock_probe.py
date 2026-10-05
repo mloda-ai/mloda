@@ -84,12 +84,13 @@ def collect() -> dict[str, str]:
     plugins = PluginCollector.enabled_feature_groups(
         {LockProbeLeftPandas, LockProbeRightArrow, LockProbeConsumer, LockProbeAnyFramework}
     )
+    features: list[Feature | str] = [
+        "LockProbeConsumer",
+        Feature("lock_probe_any_value", compute_framework="PandasDataFrame"),
+        Feature("lock_probe_any_value", compute_framework="PyArrowTable"),
+    ]
     plan = mloda.explain(
-        [
-            "LockProbeConsumer",
-            Feature("lock_probe_any_value", compute_framework="PandasDataFrame"),
-            Feature("lock_probe_any_value", compute_framework="PyArrowTable"),
-        ],
+        features,
         compute_frameworks=[PandasDataFrame, PyArrowTable],
         links={link},
         plugin_collector=plugins,
@@ -107,7 +108,7 @@ def collect() -> dict[str, str]:
             return func(*args, **kwargs)
 
     session = mloda.prepare(
-        ["LockProbeConsumer"],
+        features,
         compute_frameworks=[PandasDataFrame, PyArrowTable],
         links={link},
         plugin_collector=plugins,

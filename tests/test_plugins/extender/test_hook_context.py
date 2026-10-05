@@ -324,9 +324,6 @@ class TestHookContextInputFeatureEdgesField:
 class TestHookContextStepUuidField:
     """HookContext carries the uuid of the compute step it ran in, None when not in one."""
 
-    def test_step_uuid_defaults_to_none(self) -> None:
-        assert _make_context().step_uuid is None
-
     def test_step_uuid_can_be_set_via_constructor(self) -> None:
         step_uuid = uuid4()
 

@@ -857,9 +857,13 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
             function_extender={extender},
         )
         session.run()
+        first_uuid = extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE].step_uuid
         extender.captured.clear()
         _forge_outcomes.clear()
 
         session.run()
 
         assert ExtenderHook.VALIDATE_OUTPUT_FEATURE in extender.captured
+        second_uuid = extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE].step_uuid
+        assert first_uuid is not None
+        assert second_uuid == first_uuid

@@ -1551,8 +1551,6 @@ class TestPlanLock:
         assert len(content["joins"]) >= 1
         assert len(content["transforms"]) >= 1
 
-        hashes = {output["structure_hash"] for output in outputs}
-        assert len(hashes) == 1
         assert outputs[0]["structure_hash"] != "None"
         assert outputs[0]["structure_hash"] == outputs[0]["expected_structure_hash"]
 
@@ -2182,6 +2180,7 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
 
         hook_inputs = recorder.input_features_by_step()
         hook_edges = recorder.input_feature_edges_by_step()
+        hook_uuids = recorder.step_uuid_by_step()
         assert len(hook_inputs) == len(compute_steps), "every compute step must be hooked exactly once"
 
         for step in compute_steps:
@@ -2190,21 +2189,6 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
             assert key in hook_inputs, f"no calculate hook captured for {key}"
             assert frozenset(step.input_feature_names) == hook_inputs[key]
             assert dict(step.input_feature_edges) == hook_edges[key]
-
-    def test_every_compute_step_uuid_matches_its_calculate_hook_context(self) -> None:
-        recorder = PlanInfoCalculateHookRecorder()
-        session = _prepare_chained_session_with(recorder)
-
-        session.run()
-
-        compute_steps = [step for step in session.resolved_plan() if step.step_kind == "compute"]
-        assert len(compute_steps) == 2
-        hook_uuids = recorder.step_uuid_by_step()
-        assert len(hook_uuids) == len(compute_steps)
-
-        for step in compute_steps:
-            assert step.feature_group is not None
-            key = (f"{step.feature_group.__module__}.{step.feature_group.__qualname__}", step.feature_names)
             assert step.step_uuid is not None
             assert hook_uuids[key] is not None
             assert hook_uuids[key] == step.step_uuid

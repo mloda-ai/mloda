@@ -70,6 +70,8 @@ class JoinStep(Step):
             join_type=self.link.jointype.value,
             join_keys=self._join_keys(),
             asof_config=self.link.asof_config,
+            join_left_feature_group=f"{self.link.left_feature_group.__module__}.{self.link.left_feature_group.__qualname__}",
+            join_right_feature_group=f"{self.link.right_feature_group.__module__}.{self.link.right_feature_group.__qualname__}",
             run_id=cfw.run_context.run_id,
             plan_id=cfw.run_context.plan_id,
             carrier=cfw.run_context.carrier,

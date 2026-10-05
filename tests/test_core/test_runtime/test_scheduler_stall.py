@@ -57,6 +57,9 @@ class InFlightStep:
     def get_uuids(self) -> set[UUID]:
         return {self.uuid}
 
+    def get_wait_uuids(self) -> set[UUID]:
+        return set(self.required_uuids)
+
     def poll(self) -> None:
         """Stands in for WorkerManager.poll_result_queues draining the worker's result queue."""
         self.polls += 1
@@ -74,6 +77,9 @@ class ProducerStep:
 
     def get_uuids(self) -> set[UUID]:
         return {self.uuid}
+
+    def get_wait_uuids(self) -> set[UUID]:
+        return set(self.required_uuids)
 
 
 def _finish_on_execute(step: Any) -> None:

@@ -210,7 +210,7 @@ class ExecutionOrchestrator:
                 continue
 
             if not self._can_run_step(
-                step.required_uuids, step.get_uuids(), finished_ids, currently_running_steps, step, made_progress
+                step.get_wait_uuids(), step.get_uuids(), finished_ids, currently_running_steps, step, made_progress
             ):
                 continue
             self._execute_step(step)
@@ -235,7 +235,7 @@ class ExecutionOrchestrator:
         for step in self.execution_planner:
             producible.update(step.get_uuids())
             if not self._is_step_done(step.get_uuids(), finished_ids):
-                unfinished.append((step, step.required_uuids - finished_ids))
+                unfinished.append((step, step.get_wait_uuids() - finished_ids))
 
         never_produced: set[UUID] = set()
         for _, missing in unfinished:

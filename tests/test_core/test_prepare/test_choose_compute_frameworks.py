@@ -393,14 +393,56 @@ def _side_path_net(mid_allowed: set[type[ComputeFramework]]) -> tuple[_Net, Feat
     return net, left, mid
 
 
-def test_a_mid_pinned_off_a_link_sides_framework_is_infeasible() -> None:
-    net, _, _ = _side_path_net({P})
+def test_a_mid_pinned_off_a_link_sides_framework_is_feasible() -> None:
+    net, left, mid = _side_path_net({P})
 
+    net.choose()
+
+    assert left.chosen_compute_framework is A
+    assert mid.chosen_compute_framework is P
+
+
+def _side_path_net_mid_below_side_parent() -> _Net:
+    net, _, mid = _side_path_net({P})
+    left = next(f for f in net.features if f.name == "side_path_left")
+    child = next(f for f in net.features if f.name == "side_path_child")
+    below = net.add(ChooserHostFG, "side_path_below", {A})
+    net.edge(mid, below)
+    net.edge(below, child)
+    net.edge(left, child)
+    return net
+
+
+def _side_path_net_two_frames_into_one_consumer() -> _Net:
+    net, left, _ = _side_path_net({P})
+    child = next(f for f in net.features if f.name == "side_path_child")
+    other = net.add(ChooserHostFG, "side_path_other", {A})
+    net.edge(left, other)
+    net.edge(other, child)
+    return net
+
+
+@pytest.mark.parametrize(
+    "build, names",
+    [
+        pytest.param(
+            _side_path_net_mid_below_side_parent,
+            ("side_path_mid", "side_path_left"),
+            id="mid_below_a_side_framework_parent",
+        ),
+        pytest.param(
+            _side_path_net_two_frames_into_one_consumer,
+            ("side_path_other", "side_path_mid"),
+            id="one_consumer_two_frames_of_one_side",
+        ),
+    ],
+)
+def test_a_side_path_the_chooser_cannot_bridge_is_infeasible(build: Callable[[], _Net], names: tuple[str, ...]) -> None:
     with pytest.raises(ValueError, match="ChooserLayerFG") as error:
-        net.choose()
+        build().choose()
 
-    assert "ChooserLeftFG" in str(error.value)
-    assert "must run on" in str(error.value)
+    assert all(name in str(error.value) for name in names)
+    assert "missing Links" not in str(error.value)
 
 
 def test_a_free_mid_between_a_link_side_and_its_consumer_runs_on_the_sides_framework() -> None:

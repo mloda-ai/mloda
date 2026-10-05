@@ -209,6 +209,57 @@ class PlainRaisingGuardPgv(FeatureGroup):
     PROPERTY_MAPPING = {"limit_pgv": property_spec("positive count", match_guard=_raising_guard_pgv, default=None)}
 
 
+class WideningGuardedPgv(PlainGuardedPgv):
+    """Widens name matching to `_score` and keeps the option declarations."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith("_score") and cls.passes_option_declarations(options)
+
+
+class WideningStrictModePgv(PlainStrictModePgv):
+    """Widens name matching to `_score` and keeps the option declarations."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith("_score") and cls.passes_option_declarations(options)
+
+
+class MixinWideningGuardedPgv(FeatureChainParserMixin, FeatureGroup):
+    """Mixin group with a match_guard and a widening override."""
+
+    MIN_IN_FEATURES = 0
+    PROPERTY_MAPPING = {
+        "limit_pgv": property_spec("positive count", match_guard=_is_positive_int_pgv, default=None),
+        "mode": PropertySpec(
+            "Mode of operation",
+            allowed_values={"mode_a": "Mode A"},
+            context=False,
+            strict_validation=True,
+            default=None,
+        ),
+    }
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith("_score") and cls.passes_option_declarations(options)
+
+
 class TestPlainGroupStrictValidation:
     """A plain group judges present option values like a mixin group: a rejection is a non-match."""
 
@@ -236,12 +287,18 @@ class TestPlainGroupStrictValidation:
         )
         assert PlainElementValidatorPgv.match_feature_group_criteria(name, Options(group={"mode": "valid_x"})) is True
 
-    def test_rejection_reason_is_recorded(self, rejection_window: dict[str, MatchRejection]) -> None:
-        name = PlainStrictModePgv.get_class_name()
+    @pytest.mark.parametrize(
+        ("group", "name"),
+        [(PlainStrictModePgv, None), (WideningStrictModePgv, "x_score")],
+    )
+    def test_rejection_reason_is_recorded(
+        self, rejection_window: dict[str, MatchRejection], group: type[FeatureGroup], name: str | None
+    ) -> None:
+        key = group.get_class_name()
 
-        assert PlainStrictModePgv.match_feature_group_criteria(name, Options(group={"mode": "mode_b"})) is False
+        assert group.match_feature_group_criteria(name or key, Options(group={"mode": "mode_b"})) is False
 
-        rejection = rejection_window[name]
+        rejection = rejection_window[key]
         assert rejection.stage == "value_rejection"
         assert "mode_b" in rejection.reason
         assert "'mode'" in rejection.reason
@@ -289,6 +346,28 @@ class TestPlainGroupMatchGuard:
         name = PlainGuardedPgv.get_class_name()
 
         assert PlainGuardedPgv.match_feature_group_criteria(name, Options(context={"limit_pgv": value})) is expected
+
+    @pytest.mark.parametrize(
+        ("name", "value", "expected"),
+        [("x_score", 4, True), ("x_score", 0, False), ("x_score", True, False), ("x_other", 4, False)],
+    )
+    def test_widened_name_is_decided_by_the_guard(self, name: str, value: Any, expected: bool) -> None:
+        assert WideningGuardedPgv.match_feature_group_criteria(name, Options(context={"limit_pgv": value})) is expected
+
+    def test_widened_strict_value_is_enforced(self) -> None:
+        assert WideningStrictModePgv.match_feature_group_criteria("x_score", Options(group={"mode": "mode_a"})) is True
+        assert WideningStrictModePgv.match_feature_group_criteria("x_score", Options(group={"mode": "mode_b"})) is False
+
+    @pytest.mark.parametrize(
+        ("options", "expected"),
+        [
+            (Options(context={"limit_pgv": 4}), True),
+            (Options(context={"limit_pgv": 0}), False),
+            (Options(group={"mode": "mode_b"}), False),
+        ],
+    )
+    def test_mixin_group_widened_name_keeps_declarations(self, options: Options, expected: bool) -> None:
+        assert MixinWideningGuardedPgv.match_feature_group_criteria("x_score", options) is expected
 
     def test_absent_value_skips_the_guard(self) -> None:
         assert PlainGuardedPgv.match_feature_group_criteria(PlainGuardedPgv.get_class_name(), Options()) is True

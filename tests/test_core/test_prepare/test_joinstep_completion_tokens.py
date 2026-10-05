@@ -265,7 +265,34 @@ def test_add_joinstep_leaves_the_parent_uuids_a_consumer_waits_for_untouched() -
     )
 
 
-def test_add_joinstep_makes_a_consumer_wait_for_both_orientations_of_its_link() -> None:
+@pytest.mark.parametrize("recorded", [True, False], ids=["recorded_consumer", "unrecorded_token_carrier"])
+def test_add_joinstep_makes_a_consumer_wait_for_the_orientations_that_list_it_else_for_all(recorded: bool) -> None:
+    """A recorded consumer of both orientations waits on both; an unrecorded link-token carrier falls back to all."""
+    planned = _planned()
+    link = _token_link()
+    declared = _add_branch(planned, link, "declared", PyArrowTable, PandasDataFrame)
+    _add_branch(planned, link, "inverted", PandasDataFrame, PyArrowTable)
+    if recorded:
+        waiting = declared.consumer
+        for child_uuid in waiting.get_uuids():
+            trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child_uuid)
+    else:
+        waiting = _step(TokenChild, feature("carrier_child", PyArrowTable), {link.uuid})
+        planned.pre_execution_plan.append(waiting)
+
+    fw_execution_plan = _add_joinstep(planned)
+
+    join_uuids = {step.uuid for step in _join_steps(fw_execution_plan, link)}
+    assert len(join_uuids) == (3 if recorded else 2), f"unexpected JoinStep count; got: {join_uuids}"
+    assert link.uuid not in waiting.required_uuids, "no step may keep waiting on the link uuid"
+    recorded_tokens = {r.token for r in planned.plan.planned_records if waiting.get_uuids() & r.consumers}
+    assert bool(recorded_tokens) == recorded, "the carrier must be listed in no record"
+    expected = recorded_tokens if recorded else join_uuids
+    assert len(expected) == 2
+    assert expected <= waiting.required_uuids, f"a step must wait on every join it needs; got: {waiting.required_uuids}"
+
+
+def test_add_joinstep_makes_a_consumer_wait_only_for_the_orientation_that_lists_it() -> None:
     planned = _planned()
     link = _token_link()
     declared = _add_branch(planned, link, "declared", PyArrowTable, PandasDataFrame)
@@ -273,13 +300,12 @@ def test_add_joinstep_makes_a_consumer_wait_for_both_orientations_of_its_link() 
 
     fw_execution_plan = _add_joinstep(planned)
 
-    join_uuids = {step.uuid for step in _join_steps(fw_execution_plan, link)}
-    assert len(join_uuids) == 2, f"both orientations must plan a JoinStep; got: {join_uuids}"
+    records = planned.plan.planned_records
     for branch in (declared, inverted):
-        assert link.uuid not in branch.consumer.required_uuids, "no step may keep waiting on the link uuid"
-        assert join_uuids.issubset(branch.consumer.required_uuids), (
-            f"a consumer of the link must wait for every JoinStep of it; got: {branch.consumer.required_uuids}"
-        )
+        own = {r.token for r in records if branch.consumer.get_uuids() & r.consumers}
+        joins = {step.uuid for step in _join_steps(fw_execution_plan, link)}
+        assert own and own < joins
+        assert branch.consumer.required_uuids & joins == own
 
 
 def test_add_joinstep_rejects_a_link_token_that_no_joinstep_produces() -> None:

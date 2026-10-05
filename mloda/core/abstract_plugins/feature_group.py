@@ -635,12 +635,13 @@ class FeatureGroup(ABC):
 
         Writes to ``options`` reach the feature only if this candidate wins.
 
-        A matched candidate must also pass the value validation and ``match_guard`` of its PROPERTY_MAPPING.
+        A matched candidate must also pass the value validation and ``match_guard`` of its PROPERTY_MAPPING;
+        a widening override keeps them via ``cls.passes_option_declarations(options)``.
         """
         if not cls._matches_by_default_rules(feature_name, options, data_access_collection):
             return False
 
-        return cls._passes_option_declarations(options)
+        return cls.passes_option_declarations(options)
 
     @classmethod
     def _matches_by_default_rules(
@@ -675,8 +676,13 @@ class FeatureGroup(ABC):
         return False
 
     @classmethod
-    def _passes_option_declarations(cls, options: Options) -> bool:
-        """Validate present option values and ``match_guard`` against PROPERTY_MAPPING."""
+    def passes_option_declarations(cls, options: Options) -> bool:
+        """Run the PROPERTY_MAPPING value checks and ``match_guard`` on ``options`` without the name rules.
+
+        Lets a widening override keep them, e.g.
+        ``str(feature_name).endswith("_score") and cls.passes_option_declarations(options)``.
+        Options are checked as passed; values carried by the feature name are not merged in.
+        """
         property_mapping = cls.PROPERTY_MAPPING
         if not property_mapping:
             return True

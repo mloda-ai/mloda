@@ -201,7 +201,7 @@ matches by name and input data, so its `PROPERTY_MAPPING` is enforced on the raw
   `input_features`.
 - Present values are validated (`strict_validation`, `element_validator`) and `match_guard` runs, in the
   default `match_feature_group_criteria` of every plain group. A matcher override keeps them by delegating
-  via `super().match_feature_group_criteria(...)`; one that does not must run them itself.
+  via `super().match_feature_group_criteria(...)`; a widening override that skips `super()` keeps them with `cls.passes_option_declarations(options)`.
 - Declared defaults stay metadata until the group materializes them itself by calling
   `options_with_defaults` at its own read site. That call is what makes a declared default real at an
   `input_features` read site (see [Applying declared defaults](#applying-declared-defaults)).

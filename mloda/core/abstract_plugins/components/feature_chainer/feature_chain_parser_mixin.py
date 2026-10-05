@@ -350,6 +350,8 @@ class FeatureChainParserMixin:
 
         The preferred way to reach the parser from an overridden ``match_feature_group_criteria``: a raise from a
         match hook is contained as a ``match hook`` near-miss, but a rejection carries a better reason than a crash.
+        It does not run ``match_guard``, the in_features count or name agreement; a widening override keeps the
+        value and guard checks via ``cls.passes_option_declarations(options)``.
         """
         try:
             return FeatureChainParser.match_configuration_feature_chain_parser(

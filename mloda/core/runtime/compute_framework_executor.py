@@ -229,6 +229,8 @@ class ComputeFrameworkExecutor:
 
             if step.link_id:
                 childrens = {step.link_id}
+            elif step.private_copy:
+                childrens = set(step.copy_readers)
             else:
                 from_cfw = self.cfw_collection[from_cfw_uuid]
                 childrens = set(from_cfw.children_if_root)
@@ -238,7 +240,8 @@ class ComputeFrameworkExecutor:
 
         elif isinstance(step, JoinStep):
             cfw_uuid = self.cfw_register.get_cfw_uuid(
-                step.destination_framework.get_class_name(), next(iter(step.destination_framework_uuids))
+                step.destination_framework.get_class_name(),
+                step.destination_hop_uuid or next(iter(step.destination_framework_uuids)),
             )
 
         if cfw_uuid is None:

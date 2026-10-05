@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable
 from typing import Any, ClassVar
 
+import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -129,8 +130,84 @@ LsQ = _sum_group("LsQ", ("ls_p", "ls_w"), "ls_q", PyArrowTable)
 LsPqC = _sum_group("LsPqC", ("ls_p", "ls_q"), "ls_pqc", PandasDataFrame)
 
 
+class HdRootA(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"hd_a"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"hd_rid": [1, 2, 3], "hd_a": [10, 20, 30]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class HdRootB(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"hd_b"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"hd_rid": [1, 2, 3], "hd_b": [1, 2, 3]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+HdP = _sum_group("HdP", ("hd_a",), "hd_p", PandasDataFrame)
+HdQ = _sum_group("HdQ", ("hd_a",), "hd_q", PyArrowTable)
+HdQJoin = _sum_group("HdQJoin", ("hd_a", "hd_b"), "hd_q", PyArrowTable)
+HdQCycle = _sum_group("HdQCycle", ("hd_a", "hd_p"), "hd_q", PyArrowTable)
+HdC = _sum_group("HdC", ("hd_q", "hd_p"), "hd_c", PyArrowTable)
+HdCPandas = _sum_group("HdCPandas", ("hd_q", "hd_p"), "hd_c", PandasDataFrame)
+
+
+class RtRoot(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"rt_a"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"rt_a": [1, 2, 3]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+RtP = _sum_group("RtP", ("rt_a",), "rt_p", PandasDataFrame)
+RtQ = _sum_group("RtQ", ("rt_p",), "rt_q", PyArrowTable)
+RtC = _sum_group("RtC", ("rt_p", "rt_q"), "rt_c", PyArrowTable)
+RtQa = _sum_group("RtQa", ("rt_a",), "rt_qa", PyArrowTable)
+RtCa = _sum_group("RtCa", ("rt_a", "rt_qa"), "rt_ca", PyArrowTable)
+UNRELATED_LINK: Link = Link.inner(JoinSpec(LsRootX, Index(("ls_xid",))), JoinSpec(LsRootW, Index(("ls_xid",))))
+
+HD_DIAMOND_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQ, HdC}
+HD_DIAMOND_LINK_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdRootB, HdP, HdQJoin, HdC}
+HD_MIRROR_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQ, HdCPandas}
+HD_CYCLE_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQCycle, HdC}
+HD_LINK: Link = Link.inner(JoinSpec(HdRootA, "hd_rid"), JoinSpec(HdRootB, "hd_rid"))
+
+
+def _column_list(result: Any, column: str) -> list[int] | None:
+    names = list(result.column_names) if hasattr(result, "column_names") else list(result.columns)
+    if column not in names:
+        return None
+    values = result[column]
+    return sorted(int(v) for v in (values.to_pylist() if hasattr(values, "to_pylist") else values.tolist()))
+
+
 def _run(
-    requested: list[str], groups: set[type[FeatureGroup]], links: set[Link], column: str | None = None
+    requested: list[str],
+    groups: set[type[FeatureGroup]],
+    links: set[Link],
+    column: str | None = None,
+    mode: ParallelizationMode = ParallelizationMode.SYNC,
 ) -> dict[str, str]:
     """A plan-time reject shows up as the caught exception's message; column adds its sorted values."""
     try:
@@ -139,13 +216,17 @@ def _run(
             compute_frameworks=[PandasDataFrame, PyArrowTable],
             links=links,
             plugin_collector=PluginCollector.enabled_feature_groups(groups),
-            parallelization_modes={ParallelizationMode.SYNC},
+            parallelization_modes={mode},
         )
     except ValueError as error:
         return {"outcome": "rejected", "error": str(error)}
+    except Exception as error:
+        return {"outcome": "crashed", "error": f"{type(error).__name__}: {error}"}
     found = {"outcome": "accepted", "error": ""}
     if column is not None:
-        found["values"] = json.dumps([sorted(list(result[column])) for result in results if column in result])
+        found["values"] = json.dumps(
+            [values for values in (_column_list(result, column) for result in results) if values is not None]
+        )
     return found
 
 
@@ -167,10 +248,63 @@ def twin_chain_shape() -> dict[str, str]:
     return _run(["ls_pqc"], {LsRootX, LsRootW, LsP, LsQ, LsPqC}, {link}, "ls_pqc")
 
 
+def hop_diamond_shape(mode: ParallelizationMode = ParallelizationMode.SYNC) -> dict[str, str]:
+    """P (pandas) and Q (pyarrow) both read root A, a pyarrow C reads Q and P."""
+    return _run(["hd_c"], HD_DIAMOND_GROUPS, set(), "hd_c", mode)
+
+
+def hop_diamond_threading_shape() -> dict[str, str]:
+    return hop_diamond_shape(ParallelizationMode.THREADING)
+
+
+def hop_diamond_link_shape(mode: ParallelizationMode = ParallelizationMode.SYNC) -> dict[str, str]:
+    """As hop_diamond, but Q is the join consumer of Link A-B."""
+    return _run(["hd_c"], HD_DIAMOND_LINK_GROUPS, {HD_LINK}, "hd_c", mode)
+
+
+def hop_diamond_link_threading_shape() -> dict[str, str]:
+    return hop_diamond_link_shape(ParallelizationMode.THREADING)
+
+
+def hop_diamond_mirror_shape() -> dict[str, str]:
+    """As hop_diamond, but C is pandas, so P is same-framework and Q arrives through a hop."""
+    return _run(["hd_c"], HD_MIRROR_GROUPS, set(), "hd_c")
+
+
+def hop_diamond_cycle_shape() -> dict[str, str]:
+    """Q reads A and P, and C reads Q and P."""
+    return _run(["hd_c"], HD_CYCLE_GROUPS, set(), "hd_c")
+
+
+def read_through_hop_shape() -> dict[str, str]:
+    """C (pyarrow) reads P (pandas) and Q (pyarrow), where Q reads P only."""
+    return _run(["rt_c"], {RtRoot, RtP, RtQ, RtC}, set(), "rt_c")
+
+
+def read_through_root_shape() -> dict[str, str]:
+    """Ca (pyarrow) reads root A (pandas) and Qa (pyarrow), where Qa reads A only."""
+    return _run(["rt_ca"], {RtRoot, RtQa, RtCa}, set(), "rt_ca")
+
+
+def hop_diamond_mirror_unrelated_link_shape() -> dict[str, str]:
+    """The mirror shape next to an unrelated Link whose feature is also requested."""
+    groups: set[type[FeatureGroup]] = HD_MIRROR_GROUPS | {LsRootX, LsRootW, LsZ}
+    return _run(["hd_c", "ls_z"], groups, {UNRELATED_LINK}, "hd_c")
+
+
 SHAPES: dict[str, Callable[[], dict[str, str]]] = {
     "hop_parent": hop_parent_shape,
     "twin_sibling": twin_sibling_shape,
     "twin_chain": twin_chain_shape,
+    "hop_diamond": hop_diamond_shape,
+    "hop_diamond_threading": hop_diamond_threading_shape,
+    "hop_diamond_link": hop_diamond_link_shape,
+    "hop_diamond_link_threading": hop_diamond_link_threading_shape,
+    "hop_diamond_mirror": hop_diamond_mirror_shape,
+    "hop_diamond_cycle": hop_diamond_cycle_shape,
+    "read_through_hop": read_through_hop_shape,
+    "read_through_root": read_through_root_shape,
+    "hop_diamond_mirror_unrelated_link": hop_diamond_mirror_unrelated_link_shape,
 }
 
 

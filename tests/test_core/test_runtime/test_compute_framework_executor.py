@@ -668,6 +668,7 @@ class TestPrepareExecuteStep:
         executor.cfw_collection[from_cfw_uuid] = from_cfw
 
         step.link_id = None
+        step.private_copy = False
         step.uuid = uuid4()
 
         # Mock to_framework
@@ -1367,6 +1368,7 @@ class TestMultiExecuteStep:
         executor.cfw_collection[from_cfw_uuid] = from_cfw
 
         step.link_id = None
+        step.private_copy = False
         step.uuid = uuid4()
 
         mock_to_cfw_class = Mock()
@@ -1444,6 +1446,7 @@ class TestMultiExecuteStep:
         executor.cfw_collection[from_cfw_uuid] = from_cfw
 
         step.link_id = None
+        step.private_copy = False
         step.uuid = uuid4()
 
         mock_to_cfw_class = Mock()

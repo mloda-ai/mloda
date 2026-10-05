@@ -3,6 +3,7 @@ Arc consistency prunes the domains, then branch and bound with forward checking 
 """
 
 import re
+from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from functools import partial
 from typing import NamedTuple
@@ -304,7 +305,7 @@ class ChooseComputeFrameworks:
         return found
 
     def _side_path_rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
-        """A feature between a link side and its join consumer must share the side's framework."""
+        """A feature between a link side and its consumer shares the side's framework, unless it is a hoppable carrier."""
         if not self.occurrences:
             return []
         parents: dict[UUID, set[UUID]] = {}
@@ -312,21 +313,41 @@ class ChooseComputeFrameworks:
         for parent, child in self.graph.edges:
             parents.setdefault(child, set()).add(parent)
             children.setdefault(parent, set()).add(child)
+        consumers = Counter(child for _, _, _, child in self.occurrences)
         pairs: set[tuple[int, int]] = set()
-        for _, left_uuid, right_uuid, child_uuid in self.occurrences:
+        peer_pairs: set[tuple[int, int]] = set()
+        for link, left_uuid, right_uuid, child_uuid in self.occurrences:
             above_child = self._reach(child_uuid, parents)
+            hoppable = link.jointype not in (JoinType.APPEND, JoinType.UNION) and consumers[child_uuid] == 1
+            side_domains: set[Framework] = set()
             for side in (left_uuid, right_uuid):
-                for mid in (above_child & self._reach(side, children)) - {left_uuid, right_uuid}:
+                if side in owner:
+                    side_domains.update(blocks[owner[side]].domain)
+            for side in (left_uuid, right_uuid):
+                mids = (above_child & self._reach(side, children)) - {left_uuid, right_uuid}
+                carriers = {
+                    mid
+                    for mid in mids
+                    if hoppable
+                    and mid in owner
+                    and mid in parents.get(child_uuid, set())
+                    and not self._reach(mid, children) & above_child
+                    and side_domains.isdisjoint(blocks[owner[mid]].domain)
+                }
+                for mid in mids - carriers:
                     if side in owner and mid in owner and owner[side] != owner[mid]:
                         pairs.add((owner[side], owner[mid]))
+                for carrier in carriers:
+                    for peer in mids & parents.get(child_uuid, set()) - {carrier}:
+                        if peer in owner and owner[peer] != owner[carrier]:
+                            peer_pairs.add((owner[carrier], owner[peer]))
+        same = "so they must run on the same framework"
+        path = "{} and {} lie on one path from a link side to its join consumer, " + same
+        parallel = "{} and {} feed one join consumer on parallel paths from a link side, " + same
         return [
-            _Rule(
-                (side, mid),
-                lambda v: v[0] is v[1],
-                f"{blocks[mid].fg.__name__} carries link side {blocks[side].fg.__name__} to its join consumer, "
-                "so it must run on the same framework",
-            )
-            for side, mid in sorted(pairs)
+            _Rule((a, b), lambda v: v[0] is v[1], template.format(blocks[b].fg.__name__, blocks[a].fg.__name__))
+            for template, found in ((path, pairs), (parallel, peer_pairs))
+            for a, b in sorted(found)
         ]
 
     def _cost_groups(

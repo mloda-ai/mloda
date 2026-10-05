@@ -230,7 +230,7 @@ class ComputeFrameworkExecutor:
             if step.link_id:
                 childrens = {step.link_id}
             elif step.private_copy:
-                childrens = set()
+                childrens = set(step.copy_readers)
             else:
                 from_cfw = self.cfw_collection[from_cfw_uuid]
                 childrens = set(from_cfw.children_if_root)

@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data import
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.core.prepare.declared_sides import split_by_declared_side
+from mloda.core.prepare.declared_sides import DeclaredSideSplit, split_by_declared_side
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
@@ -736,7 +736,7 @@ Available join types:
         owning_step_of: dict[UUID, UUID],
         graph: Graph,
         memo: _LineageMemo,
-        reject_unorderable: bool,
+        join_steps: set[JoinStep],
     ) -> str | None:
         """Make the upstream hop that copies the frame `parent` writes into wait for `parent`; an error text if none can."""
         nodes = graph.get_nodes()
@@ -777,7 +777,10 @@ Available join types:
                 else:
                     frontier.append(upstream)
 
-        if not targets and not reject_unorderable:
+        joined = any(js.reads_join_frame(consumer.required_uuids) for js in join_steps) or any(
+            self._parents_linked_by_join(parent, source, join_steps, graph, memo) for source in hop.required_uuids
+        )
+        if not targets and joined:
             return None
         if not targets:
             return error(
@@ -942,10 +945,27 @@ Available join types:
             private_copy=not ep.carriers,
         )
 
+    @staticmethod
+    def _redirect_consumers_to_hop(
+        ep: JoinStep, hop: TransformFrameworkStep, execution_plan: Sequence[JoinStep | FeatureGroupStep]
+    ) -> None:
+        """Point the join's consumers on its destination framework at the hop's frame."""
+        readers: set[UUID] = set()
+        for inner_ep in execution_plan:
+            if (
+                isinstance(inner_ep, FeatureGroupStep)
+                and inner_ep.compute_framework == ep.destination_framework
+                and ep.reads_join_frame(inner_ep.required_uuids)
+            ):
+                inner_ep.tfs_ids = {hop.uuid}
+                inner_ep.features.any_uuid = hop.uuid
+                readers |= inner_ep.get_uuids()
+        hop.copy_readers = frozenset(readers)
+
     def _join_carriers(
         self,
         children_uuids: set[UUID],
-        split: Any,
+        split: DeclaredSideSplit,
         frameworks: set[type[ComputeFramework]],
         graph: Graph,
     ) -> tuple[frozenset[UUID], bool]:
@@ -954,6 +974,7 @@ Available join types:
         side_members = split.left_uuids_any_distance | split.right_uuids_any_distance
         carriers: set[UUID] = set()
         sides: set[bool] = set()
+        carried_children: set[UUID] = set()
         for child in children_uuids:
             parents = graph.parent_to_children_mapping[child]
             for parent in parents - self.get_parent_parents(parents, graph):
@@ -964,6 +985,7 @@ Available join types:
                 from_right = bool(above & split.right_uuids_any_distance)
                 if from_left or from_right:
                     carriers.add(parent)
+                    carried_children.add(child)
                     sides.add(from_left)
                     if from_left and from_right:
                         sides.add(False)
@@ -972,6 +994,13 @@ Available join types:
             raise ValueError(
                 f"The consumers read both sides of a link through features on another compute framework "
                 f"({', '.join(names)}), which the join cannot read. Compute them on one compute framework."
+            )
+        if carriers and carried_children != children_uuids:
+            names = sorted(format_feature_group_class(nodes[c].feature_group_class) for c in children_uuids)
+            raise ValueError(
+                f"The consumers of one link ({', '.join(names)}) read a link side through different frames: some "
+                "through a feature on another compute framework, some directly. The join merges into one frame, "
+                "so give each consumer its own Link or read the side through the same feature."
             )
         return frozenset(carriers), next(iter(sides), True)
 
@@ -1027,14 +1056,7 @@ Available join types:
                         ep.required_uuids.add(destination_hop.uuid)
                         ep.destination_hop_uuid = destination_hop.uuid
                         need_to_upload_collector.update(ep.destination_framework_uuids)
-                        for inner_ep in execution_plan:
-                            if (
-                                isinstance(inner_ep, FeatureGroupStep)
-                                and inner_ep.compute_framework == ep.destination_framework
-                                and ep.consumers_read_both_sides(inner_ep.required_uuids)
-                            ):
-                                inner_ep.tfs_ids = {destination_hop.uuid}
-                                inner_ep.features.any_uuid = destination_hop.uuid
+                        self._redirect_consumers_to_hop(ep, destination_hop, execution_plan)
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -1052,6 +1074,7 @@ Available join types:
                         ep.required_uuids.add(destination_hop.uuid)
                         ep.destination_hop_uuid = destination_hop.uuid
                         need_to_upload_collector.update(ep.carriers)
+                        self._redirect_consumers_to_hop(ep, destination_hop, execution_plan)
 
                     for inner_ep in execution_plan:
                         if isinstance(inner_ep, FeatureGroupStep):
@@ -1075,14 +1098,12 @@ Available join types:
 
                             # Check if any element of ep.destination_framework_uuids is in inner_ep.required_uuids
                             # same for source framework
-                            if any(elem in inner_ep.required_uuids for elem in ep.destination_framework_uuids) and any(
-                                elem in inner_ep.required_uuids for elem in ep.source_framework_uuids
+                            if (
+                                ep.destination_hop_uuid is None
+                                and any(elem in inner_ep.required_uuids for elem in ep.destination_framework_uuids)
+                                and any(elem in inner_ep.required_uuids for elem in ep.source_framework_uuids)
                             ):
-                                if ep.destination_hop_uuid is not None:
-                                    if inner_ep.compute_framework == ep.destination_framework:
-                                        inner_ep.tfs_ids = {ep.destination_hop_uuid}
-                                        inner_ep.features.any_uuid = ep.destination_hop_uuid
-                                elif ep.link.jointype in (JoinType.APPEND, JoinType.UNION):
+                                if ep.link.jointype in (JoinType.APPEND, JoinType.UNION):
                                     self.set_store_value_to_left_most_index_and_update_feature_group(
                                         inner_ep, store_val
                                     )
@@ -1246,6 +1267,7 @@ Available join types:
                     for member_uuid in ep.get_uuids()
                     for via in edge_parents.get(member_uuid, set())
                     if nodes[via].feature.get_compute_framework() == ep.compute_framework
+                    and any(not edge_parents.get(u) for u in self._same_framework_lineage(via, graph, memo) - {via})
                     for declared in edge_parents.get(member_uuid, set()) & edge_parents.get(via, set())
                     if nodes[declared].feature.get_compute_framework() != ep.compute_framework
                     and not any(
@@ -1363,7 +1385,7 @@ Available join types:
                 owning_step_of,
                 graph,
                 memo,
-                reject_unorderable=not left_join_frameworks,
+                join_steps=left_join_frameworks,
             )
             if pair_error is not None:
                 pair_errors.append(pair_error)
@@ -1785,38 +1807,37 @@ Available join types:
         nodes = graph.get_nodes()
         result: list[tuple[set[UUID], JoinSide | None]] = []
         for members, _ in components:
-            conflicting: type[FeatureGroup] | None = None
             by_variant: dict[tuple[type[FeatureGroup], str], list[UUID]] = {}
             for member in sorted(members):
                 key = (nodes[member].feature_group_class, str(nodes[member].name))
                 by_variant.setdefault(key, []).append(member)
-            for (group, _name), variants in by_variant.items():
-                if len({side_steps[v][0] for v in variants}) > 1 or len({side_steps[v][1] for v in variants}) > 1:
-                    conflicting = group
-            if conflicting is None:
+            conflicting = any(
+                len({side_steps[v][0] for v in variants}) > 1 or len({side_steps[v][1] for v in variants}) > 1
+                for variants in by_variant.values()
+            )
+            if not conflicting:
                 result.append((members, None))
                 continue
             fan_out = self._split_by_varying_side(members, side_steps)
-            if fan_out is None:
-                raise ValueError(
-                    f"Feature group '{format_feature_group_class(conflicting)}' has option variants that read "
-                    "differing variants of both join sides, so one Link cannot join them separately. "
-                    "Align the options or request the variants in separate runs."
-                )
             result.extend(fan_out)
         return result
 
     @staticmethod
     def _split_by_varying_side(
         members: set[UUID], side_steps: dict[UUID, tuple[frozenset[int], frozenset[int]]]
-    ) -> list[tuple[set[UUID], JoinSide]] | None:
-        """One part per group of members sharing a varying-side step; None when both sides vary."""
+    ) -> list[tuple[set[UUID], JoinSide]]:
+        """One part per group of members sharing a varying-side step."""
         if len({side_steps[m][0] for m in members}) == 1:
             index, varying = 1, JoinSide.RIGHT
         elif len({side_steps[m][1] for m in members}) == 1:
             index, varying = 0, JoinSide.LEFT
         else:
-            return None
+            raise ValueError(
+                internal_invariant_error(
+                    "option variants read differing variants of both join sides in one component.",
+                    f"members={sorted(members)}",
+                )
+            )
         parts: list[tuple[set[UUID], set[int]]] = []
         for member in sorted(members):
             steps = set(side_steps[member][index])
@@ -1978,21 +1999,11 @@ Available join types:
                 )
             if carriers and (side is JoinSide.LEFT) != carriers_on_left:
                 side = JoinSide.LEFT if carriers_on_left else JoinSide.RIGHT
-                swap_sides = side is JoinSide.RIGHT
-                destination_framework_uuids, source_framework_uuids = (
-                    source_framework_uuids,
-                    destination_framework_uuids,
-                )
 
             # Joins fanned out over one shared side must not all merge into that side's frame.
             if varying_side is not None and not carriers and side is not varying_side:
                 if destination_framework == source_framework:
                     side = varying_side
-                    swap_sides = side is JoinSide.RIGHT
-                    destination_framework_uuids, source_framework_uuids = (
-                        source_framework_uuids,
-                        destination_framework_uuids,
-                    )
                 else:
                     shared_destination = True
             shared_source = varying_side is not None and destination_framework == source_framework

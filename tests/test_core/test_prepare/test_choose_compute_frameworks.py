@@ -423,14 +423,25 @@ def _side_path_net_two_frames_into_one_consumer() -> _Net:
 
 
 @pytest.mark.parametrize(
-    "build",
-    [_side_path_net_mid_below_side_parent, _side_path_net_two_frames_into_one_consumer],
-    ids=["mid_below_a_side_framework_parent", "one_consumer_two_frames_of_one_side"],
+    "build, names",
+    [
+        pytest.param(
+            _side_path_net_mid_below_side_parent,
+            ("side_path_mid", "side_path_left"),
+            id="mid_below_a_side_framework_parent",
+        ),
+        pytest.param(
+            _side_path_net_two_frames_into_one_consumer,
+            ("side_path_other", "side_path_mid"),
+            id="one_consumer_two_frames_of_one_side",
+        ),
+    ],
 )
-def test_a_side_path_the_chooser_cannot_bridge_is_infeasible(build: Callable[[], _Net]) -> None:
+def test_a_side_path_the_chooser_cannot_bridge_is_infeasible(build: Callable[[], _Net], names: tuple[str, ...]) -> None:
     with pytest.raises(ValueError, match="ChooserLayerFG") as error:
         build().choose()
 
+    assert all(name in str(error.value) for name in names)
     assert "missing Links" not in str(error.value)
 
 

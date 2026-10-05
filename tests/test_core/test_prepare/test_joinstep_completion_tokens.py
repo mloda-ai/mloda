@@ -272,27 +272,24 @@ def test_add_joinstep_makes_a_consumer_wait_for_the_orientations_that_list_it_el
     link = _token_link()
     declared = _add_branch(planned, link, "declared", PyArrowTable, PandasDataFrame)
     _add_branch(planned, link, "inverted", PandasDataFrame, PyArrowTable)
-    waiting = [declared.consumer]
-    if not recorded:
-        carrier = _step(TokenChild, feature("carrier_child", PyArrowTable), {link.uuid})
-        planned.pre_execution_plan.append(carrier)
-        waiting = [carrier]
     if recorded:
-        for child_uuid in declared.consumer.get_uuids():
+        waiting = declared.consumer
+        for child_uuid in waiting.get_uuids():
             trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child_uuid)
-        waiting = [declared.consumer]
+    else:
+        waiting = _step(TokenChild, feature("carrier_child", PyArrowTable), {link.uuid})
+        planned.pre_execution_plan.append(waiting)
 
     fw_execution_plan = _add_joinstep(planned)
 
     join_uuids = {step.uuid for step in _join_steps(fw_execution_plan, link)}
-    assert len(join_uuids) >= 2, f"both orientations must plan a JoinStep; got: {join_uuids}"
-    for step in waiting:
-        assert link.uuid not in step.required_uuids, "no step may keep waiting on the link uuid"
-        recorded_tokens = {r.token for r in planned.plan.planned_records if step.get_uuids() & r.consumers}
-        assert bool(recorded_tokens) == recorded, "the carrier must be listed in no record"
-        expected = recorded_tokens if recorded else join_uuids
-        assert len(expected) >= 2
-        assert expected <= step.required_uuids, f"a step must wait on every join it needs; got: {step.required_uuids}"
+    assert len(join_uuids) == (3 if recorded else 2), f"unexpected JoinStep count; got: {join_uuids}"
+    assert link.uuid not in waiting.required_uuids, "no step may keep waiting on the link uuid"
+    recorded_tokens = {r.token for r in planned.plan.planned_records if waiting.get_uuids() & r.consumers}
+    assert bool(recorded_tokens) == recorded, "the carrier must be listed in no record"
+    expected = recorded_tokens if recorded else join_uuids
+    assert len(expected) == 2
+    assert expected <= waiting.required_uuids, f"a step must wait on every join it needs; got: {waiting.required_uuids}"
 
 
 def test_add_joinstep_makes_a_consumer_wait_only_for_the_orientation_that_lists_it() -> None:

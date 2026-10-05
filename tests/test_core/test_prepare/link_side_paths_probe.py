@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable
 from typing import Any, ClassVar
 
+import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -164,6 +165,28 @@ HdQCycle = _sum_group("HdQCycle", ("hd_a", "hd_p"), "hd_q", PyArrowTable)
 HdC = _sum_group("HdC", ("hd_q", "hd_p"), "hd_c", PyArrowTable)
 HdCPandas = _sum_group("HdCPandas", ("hd_q", "hd_p"), "hd_c", PandasDataFrame)
 
+
+class RtRoot(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"rt_a"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"rt_a": [1, 2, 3]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+RtP = _sum_group("RtP", ("rt_a",), "rt_p", PandasDataFrame)
+RtQ = _sum_group("RtQ", ("rt_p",), "rt_q", PyArrowTable)
+RtC = _sum_group("RtC", ("rt_p", "rt_q"), "rt_c", PyArrowTable)
+RtQa = _sum_group("RtQa", ("rt_a",), "rt_qa", PyArrowTable)
+RtCa = _sum_group("RtCa", ("rt_a", "rt_qa"), "rt_ca", PyArrowTable)
+UNRELATED_LINK: Link = Link.inner(JoinSpec(LsRootX, Index(("ls_xid",))), JoinSpec(LsRootW, Index(("ls_xid",))))
+
 HD_DIAMOND_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQ, HdC}
 HD_DIAMOND_LINK_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdRootB, HdP, HdQJoin, HdC}
 HD_MIRROR_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQ, HdCPandas}
@@ -253,6 +276,22 @@ def hop_diamond_cycle_shape() -> dict[str, str]:
     return _run(["hd_c"], HD_CYCLE_GROUPS, set(), "hd_c")
 
 
+def read_through_hop_shape() -> dict[str, str]:
+    """C (pyarrow) reads P (pandas) and Q (pyarrow), where Q reads P only."""
+    return _run(["rt_c"], {RtRoot, RtP, RtQ, RtC}, set(), "rt_c")
+
+
+def read_through_root_shape() -> dict[str, str]:
+    """Ca (pyarrow) reads root A (pandas) and Qa (pyarrow), where Qa reads A only."""
+    return _run(["rt_ca"], {RtRoot, RtQa, RtCa}, set(), "rt_ca")
+
+
+def hop_diamond_mirror_unrelated_link_shape() -> dict[str, str]:
+    """The mirror shape next to an unrelated Link whose feature is also requested."""
+    groups: set[type[FeatureGroup]] = HD_MIRROR_GROUPS | {LsRootX, LsRootW, LsZ}
+    return _run(["hd_c", "ls_z"], groups, {UNRELATED_LINK}, "hd_c")
+
+
 SHAPES: dict[str, Callable[[], dict[str, str]]] = {
     "hop_parent": hop_parent_shape,
     "twin_sibling": twin_sibling_shape,
@@ -263,6 +302,9 @@ SHAPES: dict[str, Callable[[], dict[str, str]]] = {
     "hop_diamond_link_threading": hop_diamond_link_threading_shape,
     "hop_diamond_mirror": hop_diamond_mirror_shape,
     "hop_diamond_cycle": hop_diamond_cycle_shape,
+    "read_through_hop": read_through_hop_shape,
+    "read_through_root": read_through_root_shape,
+    "hop_diamond_mirror_unrelated_link": hop_diamond_mirror_unrelated_link_shape,
 }
 
 

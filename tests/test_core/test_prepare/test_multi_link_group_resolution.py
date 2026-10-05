@@ -627,6 +627,65 @@ def test_a_side_path_through_two_frameworks_into_one_consumer_raises_at_plan_tim
     assert "unlinked sources" not in message
 
 
+class SidePathTwoConsumerPandas(FeatureGroup):
+    """PyArrow consumer of the Pandas mid and root B."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathPandasP"), Feature("mlg_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.add(data.column("SidePathPandasP"), data.column("mlg_b"))
+        return data.append_column(cls.get_class_name(), total)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class SidePathTwoConsumerArrow(FeatureGroup):
+    """PyArrow consumer of the PyArrow mid and root B."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathR"), Feature("mlg_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.add(data.column("SidePathR"), data.column("mlg_b"))
+        return data.append_column(cls.get_class_name(), total)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+def test_two_consumers_of_one_link_reading_a_side_through_different_mids_raise_at_plan_time() -> None:
+    groups: set[type[FeatureGroup]] = {
+        MultiLinkRootA,
+        MultiLinkRootBSame,
+        SidePathPandasP,
+        SidePathR,
+        SidePathTwoConsumerPandas,
+        SidePathTwoConsumerArrow,
+    }
+
+    with pytest.raises(ValueError) as error:
+        mloda.prepare(
+            ["SidePathTwoConsumerPandas", "SidePathTwoConsumerArrow"],
+            links={Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX))},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        )
+
+    message = str(error.value)
+    assert "SidePathTwoConsumerPandas" in message
+    assert "SidePathTwoConsumerArrow" in message
+    assert "different frames" in message
+    assert "missing Links" not in message
+    assert "unlinked sources" not in message
+
+
 class DownstreamHopQ(FeatureGroup):
     """PyArrow link child reading both sides of the A-B link."""
 
@@ -886,6 +945,40 @@ class TieOneSidedLeftConsumer(TieOneSidedConsumer):
     VARY: ClassVar[str] = "left"
 
 
+class TieOneSidedChild(FeatureGroup):
+    """PyArrow child of a one-sided consumer named by the tie_consumer option."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(options.get("tie_consumer"), options={"tie_tag": options.get("tie_tag")})}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        consumer = features.get_options_key("tie_consumer")
+        return data.append_column(cls.get_class_name(), pc.multiply(data[consumer], 2))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TieBothVaryConsumer(FeatureGroup):
+    """PyArrow consumer reading its left variant from tie_l and its right variant from tie_r."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("tie_left_val", options={"tie_tag": options.get("tie_l")}),
+            Feature("tie_right_val", options={"tie_tag": options.get("tie_r")}),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data["tie_left_val"], data["tie_right_val"]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
 _TIE_ONE_SIDED_SHAPES = [
     pytest.param(TieOneSidedConsumer, "pa", "pa", id="same_framework_right_varies"),
     pytest.param(TieOneSidedLeftConsumer, "pa", "pa", id="same_framework_left_varies"),
@@ -901,11 +994,13 @@ def _tie_one_sided_expected(consumer: type[FeatureGroup], tag: str) -> list[int]
 
 def _tie_one_sided_kwargs(consumer: type[FeatureGroup], left: str, right: str, join_type: str) -> dict[str, Any]:
     left_group, right_group = _TIE_LEFT[left], _TIE_RIGHT[right]
-    make = Link.inner if join_type == "inner" else Link.left
+    make = {"inner": Link.inner, "left": Link.left, "right": Link.right, "outer": Link.outer}[join_type]
     return {
         "links": {make(JoinSpec(left_group, "tie_jid"), JoinSpec(right_group, "tie_jid"))},
         "compute_frameworks": [PandasDataFrame, PyArrowTable],
-        "plugin_collector": PluginCollector.enabled_feature_groups({left_group, right_group, consumer}),
+        "plugin_collector": PluginCollector.enabled_feature_groups(
+            {left_group, right_group, consumer, TieOneSidedChild, TieBothVaryConsumer}
+        ),
     }
 
 
@@ -937,23 +1032,56 @@ def test_one_sided_option_variant_requested_alone_over_one_link_joins_it(tag: st
     assert _tie_one_sided_run([tag]) == [expected]
 
 
-@pytest.mark.parametrize("join_type", ["inner", "left"])
+def _tie_child_features(consumer: type[FeatureGroup], tags: list[str]) -> list[Feature | str]:
+    options = {"tie_consumer": consumer.get_class_name()}
+    return [Feature("TieOneSidedChild", options={**options, "tie_tag": tag}) for tag in tags]
+
+
+@pytest.mark.parametrize("requested", ["consumer", "child", "both"])
+@pytest.mark.parametrize("join_type", ["inner", "left", "right", "outer"])
 @pytest.mark.parametrize("consumer, left, right", _TIE_ONE_SIDED_SHAPES)
 def test_option_variants_reading_one_join_side_alike_and_the_other_differently_join_each_variant(
-    consumer: type[FeatureGroup], left: str, right: str, join_type: str
+    consumer: type[FeatureGroup], left: str, right: str, join_type: str, requested: str
 ) -> None:
     kwargs = _tie_one_sided_kwargs(consumer, left, right, join_type)
     kwargs["parallelization_modes"] = {ParallelizationMode.SYNC}
+    features: list[Feature | str] = []
+    if requested != "child":
+        features += _tie_one_sided_features(consumer, ["a", "b"])
+    if requested != "consumer":
+        features += _tie_child_features(consumer, ["a", "b"])
 
-    session = mloda.prepare(_tie_one_sided_features(consumer, ["a", "b"]), **kwargs)
+    if join_type == "right" and right == "pd" and left == "pa":
+        with pytest.raises(ValueError, match="No compute framework assignment.*join right"):
+            mloda.prepare(features, **kwargs)
+        return
+
+    session = mloda.prepare(features, **kwargs)
 
     assert session.engine is not None
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
-    assert len(join_steps) == 2
-    _assert_consumers_wait_only_on_their_joins(session, (TieOneSidedConsumer,))
-    assert _column_values(session.run(), consumer.get_class_name()) == sorted(
-        _tie_one_sided_expected(consumer, tag) for tag in ("a", "b")
-    )
+    if requested == "consumer":
+        assert len(join_steps) == 2
+        _assert_consumers_wait_only_on_their_joins(session, (TieOneSidedConsumer,))
+    results = session.run()
+    expected = sorted(_tie_one_sided_expected(consumer, tag) for tag in ("a", "b"))
+    if requested != "child":
+        assert _column_values(results, consumer.get_class_name()) == expected
+    if requested != "consumer":
+        assert _column_values(results, "TieOneSidedChild") == sorted([v * 2 for v in e] for e in expected)
+
+
+def test_option_variants_reading_differing_variants_of_both_join_sides_join_each_variant() -> None:
+    kwargs = _tie_one_sided_kwargs(TieOneSidedConsumer, "pa", "pa", "inner")
+    pairs = (("a", "a"), ("a", "b"), ("b", "a"))
+    features: list[Feature | str] = [
+        Feature("TieBothVaryConsumer", options={"tie_l": left, "tie_r": right}) for left, right in pairs
+    ]
+
+    results = mloda.run_all(features, parallelization_modes={ParallelizationMode.SYNC}, **kwargs)
+
+    expected = sorted([i * TIE_SCALE[left] + 100 * i * TIE_SCALE[right] for i in (1, 2, 3)] for left, right in pairs)
+    assert _column_values(results, "TieBothVaryConsumer") == expected
 
 
 def test_one_sided_variants_requested_next_to_their_shared_side_feature_return_both() -> None:

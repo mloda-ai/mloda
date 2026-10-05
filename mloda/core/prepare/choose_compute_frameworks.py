@@ -305,8 +305,7 @@ class ChooseComputeFrameworks:
         return found
 
     def _side_path_rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
-        """A feature between a link side and its join consumer shares the side's framework, unless the join can read
-        it through its hop: a direct parent of the consumer whose frameworks exclude both sides'."""
+        """A feature between a link side and its consumer shares the side's framework, unless it is a hoppable carrier."""
         if not self.occurrences:
             return []
         parents: dict[UUID, set[UUID]] = {}
@@ -316,6 +315,7 @@ class ChooseComputeFrameworks:
             children.setdefault(parent, set()).add(child)
         consumers = Counter(child for _, _, _, child in self.occurrences)
         pairs: set[tuple[int, int]] = set()
+        peer_pairs: set[tuple[int, int]] = set()
         for link, left_uuid, right_uuid, child_uuid in self.occurrences:
             above_child = self._reach(child_uuid, parents)
             hoppable = link.jointype not in (JoinType.APPEND, JoinType.UNION) and consumers[child_uuid] == 1
@@ -340,15 +340,14 @@ class ChooseComputeFrameworks:
                 for carrier in carriers:
                     for peer in mids & parents.get(child_uuid, set()) - {carrier}:
                         if peer in owner and owner[peer] != owner[carrier]:
-                            pairs.add((owner[carrier], owner[peer]))
+                            peer_pairs.add((owner[carrier], owner[peer]))
+        same = "so they must run on the same framework"
+        path = "{} and {} lie on one path from a link side to its join consumer, " + same
+        parallel = "{} and {} feed one join consumer on parallel paths from a link side, " + same
         return [
-            _Rule(
-                (side, mid),
-                lambda v: v[0] is v[1],
-                f"{blocks[mid].fg.__name__} and {blocks[side].fg.__name__} lie on one path from a link side to its "
-                "join consumer, so they must run on the same framework",
-            )
-            for side, mid in sorted(pairs)
+            _Rule((a, b), lambda v: v[0] is v[1], template.format(blocks[b].fg.__name__, blocks[a].fg.__name__))
+            for template, found in ((path, pairs), (parallel, peer_pairs))
+            for a, b in sorted(found)
         ]
 
     def _cost_groups(

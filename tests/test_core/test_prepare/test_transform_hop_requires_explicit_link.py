@@ -521,6 +521,8 @@ _HOP_DIAMOND_EXPECTED_VALUES = {
     "hop_diamond_threading": "[[20, 40, 60]]",
     "hop_diamond_link": "[[21, 42, 63]]",
     "hop_diamond_link_threading": "[[21, 42, 63]]",
+    "read_through_hop": "[[2, 4, 6]]",
+    "read_through_root": "[[2, 4, 6]]",
 }
 
 
@@ -536,13 +538,14 @@ def test_same_root_diamond_with_a_hop_runs_correctly_under_every_hash_seed(
 
 
 @pytest.mark.timeout(60)
+@pytest.mark.parametrize("shape", ["hop_diamond_mirror", "hop_diamond_mirror_unrelated_link"])
 def test_same_root_diamond_mirror_is_rejected_with_its_real_cause_under_every_hash_seed(
-    link_side_paths_outputs: list[dict[str, str]],
+    shape: str, link_side_paths_outputs: list[dict[str, str]]
 ) -> None:
-    first = link_side_paths_outputs[0].get("hop_diamond_mirror_error")
+    first = link_side_paths_outputs[0].get(f"{shape}_error")
     for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, link_side_paths_outputs):
-        assert output["hop_diamond_mirror_outcome"] == "rejected", f"PYTHONHASHSEED={seed}: {output}"
-        assert output["hop_diamond_mirror_error"] == first, f"PYTHONHASHSEED={seed}"
+        assert output[f"{shape}_outcome"] == "rejected", f"PYTHONHASHSEED={seed}: {output}"
+        assert output[f"{shape}_error"] == first, f"PYTHONHASHSEED={seed}"
     assert "nothing merges" in str(first)
     assert "missing Links" not in str(first)
 
@@ -556,7 +559,8 @@ def test_same_root_diamond_with_a_cycle_has_one_outcome_under_every_hash_seed(
     for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, link_side_paths_outputs):
         found = {key: output.get(f"hop_diamond_cycle_{key}") for key in keys}
         assert found == first, f"PYTHONHASHSEED={seed}: {found} differs from {first}"
-    assert first["outcome"] in ("accepted", "rejected"), first
+    assert first["outcome"] == "rejected", first
+    assert "which already consumed it through a compute-framework hop" in str(first["error"])
     assert "missing Links" not in str(first["error"])
     assert "unlinked sources" not in str(first["error"])
 

@@ -150,11 +150,11 @@ class TestMlodaBasicsBaseDataSources:
             )
 
         message = str(exc_info.value)
-        assert "ReadFileFeature" in message
+        assert "JsonFG" in message
         assert "ReadDBFeature" in message
         assert "BaseInputData already set" not in message
 
-    @pytest.mark.parametrize("scope", ["ReadFileFeature", "ReadDBFeature"])
+    @pytest.mark.parametrize("scope", ["JsonFG", "ReadDBFeature"])
     def test_scoped_shared_column_loads_from_its_own_source(self, scope: str) -> None:
         PluginLoader.all()
 

@@ -8,8 +8,7 @@ from typing import Any
 from mloda.user import PluginCollector
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -17,7 +16,7 @@ from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda.provider import FeatureSet
+from mloda.provider import FeatureSet, SourceMatch
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import Options
@@ -54,7 +53,7 @@ class TestAddIndex:
     def test_add_index_simple(
         self,
     ) -> None:
-        class ReadFileFeatureWithIndex(ReadFileFeature):
+        class CsvFGWithIndex(CsvFG):
             @classmethod
             def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
@@ -70,13 +69,7 @@ class TestAddIndex:
                 if options.get("test_add_index_simple") is None:
                     return False
 
-                if isinstance(feature_name, FeatureName):
-                    feature_name = str(feature_name)
-
-                if cls().is_root(options, feature_name):
-                    input_data_class = cls.input_data()
-                    return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
-                return False
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
         class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
             @classmethod
@@ -124,13 +117,12 @@ class TestAddIndex:
 
         link = Link(
             jointype="inner",
-            left=JoinSpec(ReadFileFeatureWithIndex, Index(("id",))),
+            left=JoinSpec(CsvFGWithIndex, Index(("id",))),
             right=JoinSpec(DBInputDataTestFeatureGroupWithIndex, Index(("id",))),
         )
         f = Feature(
             name="TestAddIndexFeature",
             options={
-                CsvReader.__name__: self.file_path,
                 SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
                 "test_add_index_simple": True,
             },
@@ -140,6 +132,7 @@ class TestAddIndex:
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
+            data_access_collection=DataAccessCollection(files={self.file_path}),
             plugin_collector=PluginCollector.disabled_feature_groups({ReadDBFeature}),
         )
         res = result[0].to_pydict()
@@ -148,11 +141,11 @@ class TestAddIndex:
 
 def test_create_index_feature_copies_input_data_match() -> None:
     source = Feature("add_index_match_col", compute_framework="PyArrowTable")
-    source.input_data_match = (CsvReader, "add_index_match_access")
+    source.input_data_match = (CsvFG, SourceMatch(source="add_index_match_access"))
 
     index_feature = create_index_feature(Index(("id",)), FeatureGroup(), source)
 
-    assert index_feature.input_data_match == (CsvReader, "add_index_match_access")
+    assert index_feature.input_data_match == (CsvFG, SourceMatch(source="add_index_match_access"))
 
 
 def test_create_index_feature_copies_framework_pin() -> None:

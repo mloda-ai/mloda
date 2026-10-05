@@ -8,7 +8,7 @@ from typing import Any
 from mloda.user import Options
 from mloda_plugins.feature_group.input_data.read_files.markdown_document_reader import MarkdownDocumentReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import ReadFileFG
 
 
 class MockFeatureSet:
@@ -42,15 +42,14 @@ def hello():
 
 
 class TestMarkdownDocumentReaderInheritance:
-    """Tests that MarkdownDocumentReader inherits from ReadDocument, not ReadFile."""
+    """Tests that MarkdownDocumentReader inherits from ReadDocument, not ReadFileFG."""
 
     def test_markdown_document_reader_inherits_from_read_document(self) -> None:
         """MarkdownDocumentReader must be a subclass of ReadDocument."""
         assert issubclass(MarkdownDocumentReader, ReadDocument)
 
-    def test_markdown_document_reader_not_inherits_from_read_file(self) -> None:
-        """MarkdownDocumentReader must NOT be a subclass of ReadFile."""
-        assert not issubclass(MarkdownDocumentReader, ReadFile)
+    def test_markdown_document_reader_not_inherits_from_read_file_fg(self) -> None:
+        assert not issubclass(MarkdownDocumentReader, ReadFileFG)
 
 
 class TestMarkdownDocumentReaderLoadData:

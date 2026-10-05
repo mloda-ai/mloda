@@ -13,9 +13,7 @@
 
 ReadDB requires ("produce_rows", "connect") and ReadDocument requires
 ("produce_document", "suffix"); both declare a template load_data that probes
-this classification before any lifecycle work. ReadFile stays a pure anchor with
-an empty requires tuple, so its concrete readers classify via the wholesale
-load_data branch.
+this classification before any lifecycle work.
 
 The synthetic families below are built directly on BaseInputData and expose no
 matching surface (match_subclass_data_access returns None, and their
@@ -34,8 +32,6 @@ from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader, TextFileReader
 
 
@@ -305,7 +301,6 @@ class TestAnchorResolution:
         assert _final_reader_anchor(_SubFamilyWholesale) is _SubFamilyBase
 
     def test_real_readers_anchor_to_their_family(self) -> None:
-        assert _final_reader_anchor(CsvReader) is ReadFile
         assert _final_reader_anchor(SQLITEReader) is ReadDB
         assert _final_reader_anchor(TextFileReader) is ReadDocument
         assert _final_reader_anchor(PyFileReader) is ReadDocument
@@ -340,15 +335,14 @@ class TestLoudValidation:
 
 
 class TestFamilyDeclarations:
-    """ReadDB and ReadDocument declare hook seams; ReadFile stays a pure anchor."""
+    """ReadDB and ReadDocument declare hook seams."""
 
     def test_family_requires_tuples(self) -> None:
-        assert _final_reader_requires(ReadFile) == ()
         assert _final_reader_requires(ReadDB) == ("produce_rows", "connect")
         assert _final_reader_requires(ReadDocument) == ("produce_document", "suffix")
 
     def test_families_declare_the_anchor_marker_locally(self) -> None:
-        for family in (ReadDB, ReadDocument, ReadFile):
+        for family in (ReadDB, ReadDocument):
             assert "_final_reader_requires" in family.__dict__
 
     def test_read_db_and_read_document_declare_template_load_data(self) -> None:
@@ -359,7 +353,7 @@ class TestFamilyDeclarations:
         assert _is_final_reader(ReadDocument) is False
 
     def test_families_do_not_define_classification_locally(self) -> None:
-        for family in (ReadDB, ReadDocument, ReadFile):
+        for family in (ReadDB, ReadDocument):
             assert "supports_scoped_data_access" not in family.__dict__
             assert "is_final_reader" not in family.__dict__
             assert "final_reader_anchor" not in family.__dict__
@@ -368,11 +362,9 @@ class TestFamilyDeclarations:
 class TestRealFamilyClassification:
     def test_concrete_readers_are_final(self) -> None:
         assert _is_final_reader(SQLITEReader) is True
-        assert _is_final_reader(CsvReader) is True
         assert _is_final_reader(TextFileReader) is True
         assert _is_final_reader(PyFileReader) is True
 
     def test_family_bases_are_not_final(self) -> None:
         assert _is_final_reader(ReadDB) is False
-        assert _is_final_reader(ReadFile) is False
         assert _is_final_reader(ReadDocument) is False

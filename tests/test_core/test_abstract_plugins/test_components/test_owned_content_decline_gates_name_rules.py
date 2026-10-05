@@ -30,7 +30,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
 MODULE_SUFFIX_MARKERS = ("vg961", "vg1006", "vg1454")
@@ -58,7 +58,7 @@ VG1454_FILE_SUFFIX = ".vg1454csv"
 VG1454_JSON_SUFFIX = ".vg1454json"
 
 
-class Vg961FileFamily(ReadFile):
+class Vg961FileFamily(SuffixFileReader):
     """Family base of the file shape; it overrides nothing, so it never classifies as final."""
 
 
@@ -129,7 +129,7 @@ class Vg961DbFG(FeatureGroup):
         return {VG961_DB_FEATURE}
 
 
-class Vg1006AliasFamily(ReadFile):
+class Vg1006AliasFamily(SuffixFileReader):
     """Family base of the aliased file shape; it overrides nothing, so it never classifies as final."""
 
 
@@ -183,7 +183,7 @@ class Vg1006AliasFG(FeatureGroup):
         return {VG1006_FILE_FEATURE}
 
 
-class Vg1454FileFamily(ReadFile):
+class Vg1454FileFamily(SuffixFileReader):
     """Family base of the file shape; it overrides nothing, so it never classifies as final."""
 
 
@@ -553,14 +553,13 @@ class TestUnownedPinGatesTheNameRule:
 class TestUnconditionalAutoLoadBeforeOwnershipScan:
     """Bug 1: the ownership scan's bootstrap must not rely on get_all_filtered_subclasses' own
     emptiness-gated short-circuit. Vg1454CsvReader/Vg1454JsonReader are already imported final readers
-    of ReadFile in this process, so that short-circuit never fires for the ReadFile family; a fix that
-    still relies on it would leave stock readers like CsvReader/ParquetReader invisible to the ownership
-    scan even though ReadFile itself is already imported."""
+    of a file family in this process, so that short-circuit never fires for it; a fix that still relies
+    on it would leave stock readers invisible to the ownership scan."""
 
     def test_the_no_owner_probe_unconditionally_loads_read_files_auto_load_group(self, tmp_path: Path) -> None:
         """The post-loop ownership probe triggered by an unowned pin must call
-        PluginLoader.load_group("feature_group/input_data/read_files") (ReadFile's own _auto_load_group)
-        even though ReadFile already has final readers imported in this process. Expected entry point:
+        PluginLoader.load_group("feature_group/input_data/read_files") (ReadDocument's _auto_load_group)
+        even though a family already has final readers imported in this process. Expected entry point:
         BaseInputData._all_loadable_readers(), called unconditionally before the ownership scan."""
         path = tmp_path / "data.vg1454nobodyowns"
         path.write_text("a,b\n1,2\n", encoding="utf-8")
@@ -797,7 +796,7 @@ class TestModuleLeakPolicy:
 
         assert module_level, "expected this module's final readers to be reachable through __subclasses__()"
         for cls in module_level:
-            if issubclass(cls, ReadFile):
+            if issubclass(cls, SuffixFileReader):
                 assert all(any(marker in s for marker in MODULE_SUFFIX_MARKERS) for s in cls.suffix()), (
                     f"{cls.__name__} must own only suffixes carrying one of {MODULE_SUFFIX_MARKERS}"
                 )

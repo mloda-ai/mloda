@@ -23,9 +23,9 @@ A fourth pass reads the other pairing on one ``try``: a ``finally`` that discard
 through a return, break or continue or by raising a replacement, undoes every escalation it encloses: the
 re-raises of its own clauses, and the marked raises in the arms those clauses never catch.
 
-Not covered: plugin code under ``mloda_plugins``, except the match helpers of ReadFile, ReadDB and
-ReadDocument, checked by the parametrized test below; dynamic dispatch, which is why SEEDS is hand-written;
-decorators; ``except*`` groups, which neither pass over a ``try`` reads, as their clauses split an exception
+Not covered: plugin code under ``mloda_plugins``, except the match helpers of ReadFileFG (core), the
+file format groups, ReadDB and ReadDocument, checked by the parametrized tests below; dynamic dispatch, which is
+why SEEDS is hand-written; decorators; ``except*`` groups, which neither pass over a ``try`` reads, as their clauses split an exception
 group between them instead of racing for it, so the third pass's first-match reasoning does not hold there
 and the fourth drops them with it; a raise in the body of a nested try that has handlers, assumed caught there, and
 one inside a ``suppress`` block naming ``Exception`` or ``BaseException``, assumed dropped there.
@@ -2580,7 +2580,7 @@ def test_the_sweep_flags_a_returning_finally_spliced_into_the_real_seam() -> Non
 
 
 _READER_MATCH_MODULES = [
-    pytest.param("mloda_plugins/feature_group/input_data/read_file.py", id="read_file"),
+    pytest.param("mloda/core/abstract_plugins/components/input_data/read_file_fg.py", id="read_file_fg"),
     pytest.param("mloda_plugins/feature_group/input_data/read_db.py", id="read_db"),
     pytest.param("mloda_plugins/feature_group/input_data/read_document.py", id="read_document"),
 ]
@@ -2599,3 +2599,20 @@ def test_reader_match_handlers_escalate_or_declare_a_swallow(module: str) -> Non
     assert unannotated == [], f"unannotated match handlers in {module}: {[s.location() for s in unannotated]}"
     assert misannotated == [], f"misannotated match handlers in {module}: {[s.location() for s in misannotated]}"
     assert escalating != [], f"expected at least one escalating handler among {module}'s match helpers"
+
+
+_FILE_FORMAT_MODULES = [
+    pytest.param(f"mloda_plugins/feature_group/input_data/file_formats/{name}_fg.py", id=f"{name}_fg")
+    for name in ("csv", "parquet", "json", "feather", "orc")
+]
+
+
+@pytest.mark.parametrize("module", _FILE_FORMAT_MODULES)
+def test_file_format_handlers_escalate_or_declare_a_swallow(module: str) -> None:
+    """The stock file format groups hook into the match path, so none may hold an unannotated broad handler."""
+    source = (_REPO_ROOT / module).read_text(encoding="utf-8")
+
+    handlers = classify_handlers(source, module, functions=None)
+    bad = [site for site in handlers if site.kind in ("unannotated", "misannotated")]
+
+    assert bad == [], f"unannotated or misannotated handlers in {module}: {[s.location() for s in bad]}"

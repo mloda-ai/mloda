@@ -107,6 +107,7 @@ class TestJoinSpecWithoutIndexColumns:
         f = Feature(
             name="JoinSpecNoIndexResult",
             options={
+                "CsvFG": self.file_path,
                 "test_joinspec_no_index": True,
             },
         )
@@ -115,7 +116,6 @@ class TestJoinSpecWithoutIndexColumns:
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
-            data_access_collection=DataAccessCollection(files={self.file_path}),
             plugin_collector=PluginCollector.disabled_feature_groups(set()),
         )
 

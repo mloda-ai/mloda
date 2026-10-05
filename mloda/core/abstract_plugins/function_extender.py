@@ -282,10 +282,18 @@ class CompositeExtender(Extender):
     Constructed internally by build_hook_extenders(); not meant to be subclassed or instantiated directly.
     """
 
-    def __init__(self, extenders: list[Extender], function_type: ExtenderHook | None = None):
-        self.extenders = sorted(extenders, key=extender_sort_key)
+    extenders: tuple[Extender, ...]
+
+    def __init__(self, extenders: Iterable[Extender], function_type: ExtenderHook | None = None):
+        extenders = list(extenders)
+        self.extenders = tuple(sorted(extenders, key=extender_sort_key))
         self.function_type = function_type
         self.never_fall_back = any(child.never_fall_back for child in extenders)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in ("extenders", "function_type") and self.__dict__.get("_sealed"):
+            raise AttributeError(f"CompositeExtender.{name} is read-only once sealed")
+        super().__setattr__(name, value)
 
     def wraps(self) -> set[ExtenderHook]:
         if self.function_type:

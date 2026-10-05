@@ -929,7 +929,7 @@ class TestGateTierOrdering:
         built = build_hook_extenders([plain, gate])[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]
 
         assert isinstance(built, CompositeExtender)
-        assert built.extenders == [gate, plain]
+        assert built.extenders == (gate, plain)
 
     def test_composite_extender_puts_gate_outermost(self) -> None:
         order: list[str] = []
@@ -956,7 +956,7 @@ class TestGateTierOrdering:
     def test_priority_still_orders_two_gates(self) -> None:
         late = MockExtender("late", priority=50, never_fall_back=True)
         early = MockExtender("early", priority=10, never_fall_back=True)
-        assert CompositeExtender([late, early]).extenders == [early, late]
+        assert CompositeExtender([late, early]).extenders == (early, late)
 
     def test_extender_sort_key_has_gate_tier_first(self) -> None:
         from mloda.core.abstract_plugins.function_extender import extender_sort_key
@@ -1020,14 +1020,27 @@ class TestSealOnFirstUse:
         with pytest.raises(AttributeError):
             setattr(ext, attr, value)
 
-    def test_composite_built_by_build_hook_extenders_is_sealed(self) -> None:
+    @pytest.mark.parametrize(
+        "forge",
+        [
+            lambda c: setattr(c, "never_fall_back", True),
+            lambda c: setattr(c, "extenders", []),
+            lambda c: setattr(c, "function_type", None),
+            lambda c: c.extenders.clear(),
+            lambda c: c.extenders.append(MockExtender("x")),
+        ],
+        ids=["never_fall_back", "assign_extenders", "assign_function_type", "clear", "append"],
+    )
+    def test_composite_built_by_build_hook_extenders_is_sealed(self, forge: Any) -> None:
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders
 
-        built = build_hook_extenders([MockExtender("a", priority=1), MockExtender("b", priority=2)])[
+        built: Any = build_hook_extenders([MockExtender("a", priority=1), MockExtender("b", priority=2)])[
             ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
         ]
         with pytest.raises(AttributeError):
-            built.never_fall_back = True
+            forge(built)
+        assert len(built.extenders) == 2
+        assert built.function_type is ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
 
     def test_one_shot_iterator_of_two_extenders_seals_children_and_composite(self) -> None:
         from mloda.core.abstract_plugins.function_extender import build_hook_extenders

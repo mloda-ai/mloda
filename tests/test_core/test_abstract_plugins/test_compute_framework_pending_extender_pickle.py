@@ -88,6 +88,14 @@ class TestPendingExtenderPayloadMaterializesOnUnpickle:
                 restored.function_extender = set()
             with pytest.raises(AttributeError):
                 restored._hook_extenders = {}
+            function_extender: Any = restored.function_extender
+            hook_extenders: Any = restored._hook_extenders
+            with pytest.raises(AttributeError):
+                function_extender.clear()
+            with pytest.raises(TypeError):
+                hook_extenders.clear()
+        else:
+            assert isinstance(restored.function_extender, set)
 
     def test_materialization_happens_exactly_once_not_on_every_subsequent_round_trip(self) -> None:
         _MaterializationCountingExtender.materializations = 0

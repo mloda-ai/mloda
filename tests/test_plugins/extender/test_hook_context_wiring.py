@@ -783,6 +783,11 @@ class _ForgingFeatureGroup(FeatureGroup):
         _attempt("worker_index", forge_worker_index)
         _attempt("function_extender", forge_function_extender)
         _attempt("_hook_extenders", forge_hook_extenders)
+        hook_table: Any = cfw._hook_extenders
+        function_extenders: Any = cfw.function_extender
+        _attempt("_hook_extenders.pop", lambda: hook_table.pop(ExtenderHook.VALIDATE_OUTPUT_FEATURE))
+        _attempt("_hook_extenders.clear", lambda: hook_table.clear())
+        _attempt("function_extender.clear", lambda: function_extenders.clear())
         return {"sealed_forge_col": [1, 2, 3]}
 
 
@@ -825,6 +830,9 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
             "worker_index": AttributeError,
             "function_extender": AttributeError,
             "_hook_extenders": AttributeError,
+            "_hook_extenders.pop": TypeError,
+            "_hook_extenders.clear": TypeError,
+            "function_extender.clear": AttributeError,
         }
 
     def test_later_hooks_keep_the_real_identity(self) -> None:
@@ -836,3 +844,20 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         assert calculate.run_id != _FORGED_ID
         assert validate.run_id == calculate.run_id
         assert validate.worker_index == calculate.worker_index != 99
+
+    def test_prepared_session_keeps_its_extenders_across_runs(self) -> None:
+        extender = _MultiHookCapturingExtender()
+        session = mloda.prepare(
+            [Feature(name="sealed_forge_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_ForgingFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        session.run()
+        extender.captured.clear()
+        _forge_outcomes.clear()
+
+        session.run()
+
+        assert ExtenderHook.VALIDATE_OUTPUT_FEATURE in extender.captured

@@ -103,7 +103,7 @@ class TestTwoReader:
         assert "Multiple feature groups found" in str(excinfo.value)
         assert "BaseInputData already set" not in str(excinfo.value)
 
-    def test_agg_feature(self) -> None:
+    def _agg_groups(self) -> tuple[type[CsvFG], type[DBInputDataTestFeatureGroup], Link]:
         index = Index(("id",))
 
         class CsvFGWithIndex(CsvFG):
@@ -154,6 +154,10 @@ class TestTwoReader:
             left=JoinSpec(DBInputDataTestFeatureGroupWithIndex, index),
             right=JoinSpec(CsvFGWithIndex, index),
         )
+        return CsvFGWithIndex, DBInputDataTestFeatureGroupWithIndex, link
+
+    def test_agg_feature(self) -> None:
+        CsvFGWithIndex, DBInputDataTestFeatureGroupWithIndex, link = self._agg_groups()
         f = Feature(
             name="sum_of_",
             options={
@@ -181,4 +185,24 @@ class TestTwoReader:
                 links={link},
                 data_access_collection=DataAccessCollection(files={self.file_path}),
                 plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, DBInputDataTestFeatureGroupWithIndex}),
+            )
+
+    def test_pointer_on_the_consumer_aborts_naming_the_input_the_csv_lacks(self) -> None:
+        csv_group, db_group, link = self._agg_groups()
+        f = Feature(
+            name="sum_of_",
+            options={
+                "sum": ("any_num", "Amount"),
+                SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
+                "test_agg_feature": True,
+                csv_group.get_class_name(): self.file_path,
+            },
+        )
+
+        with pytest.raises(ValueError, match=r"column 'any_num' is in none of the sources"):
+            mloda.run_all(
+                [f],
+                compute_frameworks=["PyArrowTable"],
+                links={link},
+                plugin_collector=PluginCollector.enabled_feature_groups({csv_group, db_group, SumFeature}),
             )

@@ -41,6 +41,8 @@ from mloda.core.abstract_plugins.components.match_hook import probe_match_criter
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
+    escalate_match_abort,
+    is_deferred_match_abort,
     is_match_abort,
     contained_raise_reason,
     safe_exc_str,
@@ -49,6 +51,7 @@ from mloda.core.abstract_plugins.components.utils import (
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
@@ -134,6 +137,7 @@ class IdentifyFeatureGroupClass:
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
     _matched_options: dict[type[FeatureGroup], Options]
+    _deferred_aborts: dict[type[FeatureGroup], Exception]
     _input_data_matches: dict[type[FeatureGroup], tuple[DataAccessReader, Any]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
@@ -153,6 +157,7 @@ class IdentifyFeatureGroupClass:
         self._declarations = {}
         self._replaced = set()
         self._matched_options = {}
+        self._deferred_aborts = {}
         self._input_data_matches = {}
         self._data_access_collection = data_access_collection
 
@@ -200,6 +205,7 @@ class IdentifyFeatureGroupClass:
             self._domain_outcomes.clear()
             self._links_outcomes.clear()
             self._matched_options.clear()
+            self._deferred_aborts.clear()
             self._input_data_matches.clear()
         return result
 
@@ -527,6 +533,9 @@ class IdentifyFeatureGroupClass:
                     raise
                 if not self._filter_feature_group_by_domain(feature_group, feature):
                     self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
+                elif is_deferred_match_abort(exc):
+                    self._deferred_aborts[feature_group] = exc
+                    self._record_elimination(feature_group, "input_data", safe_exc_str(exc))
                 else:
                     raise
                 continue
@@ -614,6 +623,7 @@ class IdentifyFeatureGroupClass:
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         self._replaced = candidates - set(_identified_feature_groups)
+        self._raise_unmasked_deferred_abort(feature, _identified_feature_groups)
         if len(_identified_feature_groups) == 1:
             winner = next(iter(_identified_feature_groups))
             winner_options = self._matched_options[winner]
@@ -632,6 +642,42 @@ class IdentifyFeatureGroupClass:
             survivors = {fg: self._matched_options[fg] for fg in _identified_feature_groups}
             self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
+
+    def _raise_unmasked_deferred_abort(self, feature: Feature, identified: FeatureGroupEnvironmentMapping) -> None:
+        """Re-raise a pointed group's deferred abort unless another candidate computes the feature."""
+        # A deferring group with a surviving strict subclass is subclass takeover: its abort is dropped.
+        remaining = [
+            fg
+            for fg in sorted(self._deferred_aborts, key=_candidate_sort_key)
+            if not any(survivor is not fg and issubclass(survivor, fg) for survivor in identified)
+        ]
+        if not remaining:
+            return
+        # Every criteria match counts as computing, so a computing group eliminated later still masks the abort;
+        # only survivors count as reading, because one of them would win.
+        computing = any(
+            self._computes(fg, feature) for fg in sorted(self._criteria_matched_feature_groups, key=_candidate_sort_key)
+        )
+        reading = [
+            fg
+            for fg in sorted(identified, key=_candidate_sort_key)
+            if fg().is_root(self._matched_options[fg], feature.name)
+        ]
+        for fg in remaining:
+            if not computing or any(not issubclass(survivor, fg) for survivor in reading):
+                raise escalate_match_abort(self._deferred_aborts[fg])
+
+    def _computes(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """True when input_features returned a value; a raise is not computing, a marked abort still propagates."""
+        try:
+            return (
+                feature_group().input_features(self._matched_options[feature_group], FeatureName(feature.name))
+                is not None
+            )
+        except Exception as exc:  # noqa: BLE001  (an unmarked raise only says this candidate does not compute)
+            if is_match_abort(exc):
+                raise
+            return False
 
     @staticmethod
     def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:

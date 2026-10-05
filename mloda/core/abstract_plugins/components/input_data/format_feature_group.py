@@ -20,7 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
 )
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -222,12 +222,12 @@ class FormatFeatureGroup(FeatureGroup):
         return "unknown" if reason is None else f"unknown ({reason})"
 
     @classmethod
-    def _abort(cls, error: ValueError) -> bool:
+    def _abort(cls, error: ValueError, deferrable: bool = False) -> bool:
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
         if aborts_are_contained():
             record_match_rejection(cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE)
             return False
-        raise escalate_match_abort(error)
+        raise defer_match_abort(error) if deferrable else escalate_match_abort(error)
 
     @classmethod
     def _matches_by_default_rules(
@@ -281,7 +281,10 @@ class FormatFeatureGroup(FeatureGroup):
             )
             reason = f"column '{base_name}' is in none of the sources of {cls.get_class_name()}: {described}"
             if pointed:
-                return cls._abort(ValueError(f"{reason}; request a column a source has or point at another source."))
+                return cls._abort(
+                    ValueError(f"{reason}; request a column a source has or point at another source."),
+                    deferrable=True,
+                )
             record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
         elif pointed and undeclared:
             reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"

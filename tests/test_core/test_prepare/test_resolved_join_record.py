@@ -403,14 +403,14 @@ def _link_with_a_third_parent_it_never_mentions() -> ThirdParent:
 
     left = feature("resolved_join_unlinked_left", PyArrowTable, link.left_index)
     right = feature("resolved_join_unlinked_right", PandasDataFrame, link.right_index)
-    unlinked = feature("resolved_join_unlinked_third", PandasDataFrame)
+    unlinked = feature("resolved_join_unlinked_third", PyArrowTable)
     child = feature("resolved_join_unlinked_child", PandasDataFrame)
 
     _add_parents(planned, link, left, right)
     planned.graph.add_node(unlinked.uuid, NodeProperties(unlinked, ResolvedJoinUnlinked))
     planned.queue.append((ResolvedJoinUnlinked, {unlinked}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
-    # The third parent descends from the left side, so it shares that side's source step.
+    # The third parent descends from the left side on the same framework, so lineage counts through it.
     planned.graph.adjacency_list[left.uuid].append(unlinked.uuid)
     planned.graph.adjacency_list[unlinked.uuid] = []
     planned.graph.parent_to_children_mapping[unlinked.uuid] = {left.uuid}
@@ -420,7 +420,7 @@ def _link_with_a_third_parent_it_never_mentions() -> ThirdParent:
     declared: DeclaredFrameworks = {
         left.uuid: frozenset({PyArrowTable}),
         right.uuid: frozenset({PandasDataFrame}),
-        unlinked.uuid: frozenset({PandasDataFrame, PythonDictFramework}),
+        unlinked.uuid: frozenset({PyArrowTable, PythonDictFramework}),
     }
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared)
     return ThirdParent(planned.plan, link, left.uuid, right.uuid, unlinked.uuid)

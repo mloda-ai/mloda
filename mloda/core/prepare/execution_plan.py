@@ -441,21 +441,9 @@ class ExecutionPlan:
 
     @staticmethod
     def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep], graph: Graph) -> bool:
-        """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides
-        (not ``required_uuids``, which unions all of a join's consumers' parents, not just its own two).
-
-        Each side is widened to its own graph ancestors before the join-adjacency walk: a case-override
-        hop's parent (e.g. a derived feature) never sits on a JoinStep's side itself, only its own
-        upstream dependency does, so the bridge must be found through that dependency, not through
-        whichever sibling request happens to have pulled the join's index feature into its own parents
-        (an accident of feature-intake order, not a meaningful distinction).
-
-        This ancestor walk and the subclass check in `_entries_linked` (see add_tfs) are independent
-        mechanisms that can both decide two hops are linked. A join-served subclass pairing stays
-        linked unconditionally, since the join machinery already resolves it; every other subclass
-        pairing is additionally gated on `_shares_graph_ancestor`, confirming shared physical lineage
-        rather than independent roots that merely subclass for code reuse, with this walk as the
-        fallback for a subclass pair whose bridge has no shared ancestor of its own."""
+        """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides.
+        Each side widens only through same-framework ancestors; a compute-framework hop ends the lineage.
+        The answer is the same in both argument orders."""
         if uuid_a == uuid_b:
             return True
 
@@ -466,17 +454,45 @@ class ExecutionPlan:
             for src_uuid in js.source_framework_uuids:
                 adjacency[src_uuid].update(js.destination_framework_uuids)
 
-        starts = {uuid_a} | graph.parent_to_children_mapping.get(uuid_a, set())
-        targets = {uuid_b} | graph.parent_to_children_mapping.get(uuid_b, set())
+        starts = ExecutionPlan._same_framework_lineage(uuid_a, graph)
+        targets = ExecutionPlan._same_framework_lineage(uuid_b, graph)
 
+        # Test join neighbours before dropping visited ones, so a target that is also a start still counts.
         visited = set(starts)
         frontier = set(starts)
         while frontier:
-            frontier = set().union(*(adjacency[node] for node in frontier)) - visited
-            if frontier & targets:
+            reached = set().union(*(adjacency[node] for node in frontier))
+            if reached & targets:
                 return True
+            frontier = reached - visited
             visited |= frontier
         return False
+
+    @staticmethod
+    def _same_framework_lineage(uuid: UUID, graph: Graph) -> set[UUID]:
+        """`uuid` plus its ancestors reachable without crossing a compute-framework change."""
+        all_ancestors = graph.parent_to_children_mapping
+        nodes = graph.get_nodes()
+
+        def framework(node: UUID) -> Any:
+            props = nodes.get(node)
+            return props.feature.get_compute_framework() if props is not None else None
+
+        def direct_parents(node: UUID) -> set[UUID]:
+            if graph.parents_by_direct_:
+                return graph.parents_by_direct_.get(node, set())
+            ancestors = all_ancestors.get(node, set())
+            return ancestors - set().union(*(all_ancestors.get(a, set()) for a in ancestors))
+
+        own_framework = framework(uuid)
+        lineage = {uuid}
+        stack = [uuid]
+        while stack:
+            for parent in direct_parents(stack.pop()) - lineage:
+                if framework(parent) == own_framework:
+                    lineage.add(parent)
+                    stack.append(parent)
+        return lineage
 
     def _variant_conflict(
         self, feature_a: Feature, feature_b: Feature
@@ -661,7 +677,8 @@ Feature group '{feature_name}' depends on parents from {len(hops)} unlinked sour
 {split_text}{repeated_paragraph}
 When a feature depends on multiple input features from different sources, you must provide explicit
 Links to specify how to merge them. Without Links, the framework cannot determine how to combine the
-data, and only one of the sources would ever be read.
+data, and only one of the sources would ever be read. A parent counts as reaching a join side only
+through ancestors on its own compute framework, not through a compute-framework hop.
 {link_options}
 Available join types:
 - Link.inner(left, right)    - Keep only matching rows from both sides

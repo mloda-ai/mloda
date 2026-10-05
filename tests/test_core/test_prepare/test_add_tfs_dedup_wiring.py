@@ -411,14 +411,14 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     )
 
     graph = Graph()
-    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is False
-    assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}, graph) is True
+    _assert_linked_both_orders(a, b, join_step, graph, expected=False)
+    _assert_linked_both_orders(dest, src, join_step, graph, expected=True)
 
     # (a) A derived feature's own ancestor is a genuine join side (src); widening must bridge it
     # to the join's other genuine side (dest) through that ancestor, not just through its own uuid.
     derived = uuid4()
     graph.parent_to_children_mapping[derived] = {src}
-    assert ExecutionPlan._parents_linked_by_join(derived, dest, {join_step}, graph) is True
+    _assert_linked_both_orders(derived, dest, join_step, graph, expected=True)
 
     # (b) Both sides have a populated, but genuinely unrelated, ancestor set: widening must not
     # over-widen a link out of thin air.
@@ -426,7 +426,76 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     unrelated_b, unrelated_b_ancestor = uuid4(), uuid4()
     graph.parent_to_children_mapping[unrelated_a] = {unrelated_a_ancestor}
     graph.parent_to_children_mapping[unrelated_b] = {unrelated_b_ancestor}
-    assert ExecutionPlan._parents_linked_by_join(unrelated_a, unrelated_b, {join_step}, graph) is False
+    _assert_linked_both_orders(unrelated_a, unrelated_b, join_step, graph, expected=False)
+
+
+def _assert_linked_both_orders(a: UUID, b: UUID, join_step: JoinStep, graph: Graph, expected: bool) -> None:
+    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is expected
+    assert ExecutionPlan._parents_linked_by_join(b, a, {join_step}, graph) is expected
+
+
+def _framework_graph(*nodes: tuple[UUID, str, type[ComputeFramework]]) -> Graph:
+    graph = Graph()
+    for uuid, name, cfw in nodes:
+        graph.add_node(uuid, NodeProperties(_feature(name, cfw), DedupUpstreamFG))
+    return graph
+
+
+def _pandas_join(dest: UUID, src: UUID) -> JoinStep:
+    return JoinStep(
+        link=Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id")),
+        destination_framework=PandasDataFrame,
+        source_framework=PandasDataFrame,
+        required_uuids={dest, src},
+        destination_framework_uuids={dest},
+        source_framework_uuids={src},
+    )
+
+
+def test_parent_reaching_a_join_side_only_through_a_framework_hop_is_not_linked() -> None:
+    """A hop reads its parent into a new frame, so lineage behind it is not join-bridged."""
+    dest, src, hop, same_frame = uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "fh_dest", PandasDataFrame),
+        (src, "fh_src", PandasDataFrame),
+        (hop, "fh_hop", PyArrowTable),
+        (same_frame, "fh_same", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[hop] = {src}
+    graph.parent_to_children_mapping[same_frame] = {dest}
+
+    _assert_linked_both_orders(hop, same_frame, _pandas_join(dest, src), graph, expected=False)
+
+
+def test_parents_sharing_an_ancestor_without_a_join_path_are_not_linked() -> None:
+    """Sharing an ancestor is not a join bridge."""
+    dest, src, shared, a, b = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "so_dest", PandasDataFrame),
+        (src, "so_src", PandasDataFrame),
+        (shared, "so_shared", PandasDataFrame),
+        (a, "so_a", PandasDataFrame),
+        (b, "so_b", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[a] = {shared}
+    graph.parent_to_children_mapping[b] = {shared}
+
+    _assert_linked_both_orders(a, b, _pandas_join(dest, src), graph, expected=False)
+
+
+def test_linked_answer_does_not_depend_on_which_side_already_holds_a_join_side() -> None:
+    """One lineage holds both join sides, the other only one: the join between them still links both ways."""
+    dest, src, both, only_src = uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "as_dest", PandasDataFrame),
+        (src, "as_src", PandasDataFrame),
+        (both, "as_both", PandasDataFrame),
+        (only_src, "as_only_src", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[both] = {dest, src}
+    graph.parent_to_children_mapping[only_src] = {src}
+
+    _assert_linked_both_orders(both, only_src, _pandas_join(dest, src), graph, expected=True)
 
 
 # ---------------------------------------------------------------------------

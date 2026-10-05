@@ -354,8 +354,8 @@ class Engine:
         return feature_group_class, compute_frameworks, result
 
     def _resolve_with_match_hook(self, extender: Extender, feature: Feature, depth: int) -> EvaluationResult:
-        """Dispatch resolve_or_raise through extender, instrumenting the call with a HookContext.
-        feature_group_class is only known once resolve_or_raise returns, so the context starts with None and is written post-hoc; counts are taken before this match."""
+        """Run resolve_or_raise through the extender under a HookContext.
+        feature_group_class is None until the match resolves, then written post-hoc."""
         plan = self.plan_context
         context = HookContext(
             hook=ExtenderHook.FEATURE_GROUP_MATCHED,

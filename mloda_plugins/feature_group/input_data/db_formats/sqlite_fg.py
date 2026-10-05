@@ -74,7 +74,9 @@ class SqliteFG(ReadDBFG):
     @classmethod
     def describe_columns(cls, match: SourceMatch) -> dict[str, DataType | None]:
         """Column name to DataType by declared-type affinity; NUMERIC or undeclared maps to None."""
-        access = cast(DBTable, match.access)
+        if not isinstance(match.access, DBTable):
+            return super().describe_columns(match)
+        access = match.access
         connection = cls.get_connection(access.credentials)
         try:
             rows = list(connection.execute(f"PRAGMA table_info({quote_ident(str(access.table))});"))

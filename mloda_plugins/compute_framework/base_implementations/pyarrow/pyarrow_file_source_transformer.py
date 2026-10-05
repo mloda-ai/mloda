@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 from mloda.core.optional_dependency import require
@@ -17,6 +18,18 @@ def unsupported_format_error(transformer: str, file_format: str) -> ValueError:
         "Fix: override file_format() if the suffix is a supported format under another name, "
         "register a loader for the framework with register_loader, or override load_neutral."
     )
+
+
+def pyarrow_file_loader(file_format: str) -> Callable[[Any, Any], Any]:
+    """Build a ``(match, features)`` loader reading one fixed file format into a pa.Table."""
+
+    def load(match: Any, features: Any) -> Any:
+        from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+
+        source = FileSource(path=match.access, format=file_format, columns=tuple(sorted(features.get_all_names())))
+        return FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
+
+    return load
 
 
 class FileSourcePyArrowTransformer(BaseTransformer):

@@ -137,3 +137,30 @@ class TestFormatGroupsReadLikePyArrow:
         result = loader(SourceMatch(source=str(path), access=str(path)), _Features(_WANTED))
         whole_file = class_name in ("CsvFG", "JsonFG")
         assert result.to_pydict() == self._expected(reader, path, whole_file)
+
+    # CsvFG is left out: it keeps ReadFileFG's default load_neutral, which uses cls.file_format().
+    @pytest.mark.parametrize(
+        "module_name,class_name,suffix,writer,reader",
+        [f for f in _FORMATS if f[1] != "CsvFG"],
+        ids=[f[1] for f in _FORMATS if f[1] != "CsvFG"],
+    )
+    def test_subclass_renaming_the_format_still_reads_the_parents_fixed_format(
+        self, tmp_path: Path, module_name: str, class_name: str, suffix: str, writer: Any, reader: Any
+    ) -> None:
+        parent = load_group(module_name, class_name)
+
+        class Renamed(parent):  # type: ignore[valid-type, misc]
+            @classmethod
+            def suffixes(cls) -> tuple[str, ...]:
+                return (".renamed",)
+
+        assert Renamed.file_format() != parent.file_format()
+        path = tmp_path / f"renamed{suffix}"
+        writer(path, _DATA)
+        match = SourceMatch(source=str(path), access=str(path))
+        loader = Renamed._loader_for(PyArrowTable)
+
+        assert loader is not None
+        expected = self._expected(reader, path, class_name == "JsonFG")
+        assert Renamed.load_neutral(match, _Features(_WANTED)).to_pydict() == expected
+        assert loader(match, _Features(_WANTED)).to_pydict() == expected

@@ -5,21 +5,18 @@ from collections.abc import Collection
 from typing import Any
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.optional_dependency import require
 from mloda.provider import ReadFileFG
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
-    FileSourcePyArrowTransformer,
+    pyarrow_file_loader,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_suffixes import JSON_SUFFIXES
 
 
-def _read(match: SourceMatch, features: Any) -> Any:
-    source = FileSource(path=match.access, format="json", columns=tuple(sorted(features.get_all_names())))
-    return FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
+_read = pyarrow_file_loader("json")
 
 
 class JsonFG(ReadFileFG):

@@ -13,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.provider import FeatureSet, HashableDict
+from mloda.provider import FeatureSet, HashableDict, ReadDBFG
 from mloda.user import (
     Credential,
     DataAccessCollection,
@@ -26,6 +26,7 @@ from mloda.user import (
     mloda,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     DatabaseLoadsIntoFrameworkMixin,
@@ -65,6 +66,37 @@ class TestSqliteFGContract(DatabaseFormatFeatureGroupTestMixin):
         feature = Feature(self.present_column)
         assert self._claims(feature, dac)
         assert self._claimed_match(feature).source == self.expected_source
+
+
+QUERY_KEY = "toyfmt_sqlite_query"
+
+
+class SqliteQueryToyfmtFG(SqliteFG):
+    """Test-local SqliteFG that opts into the query route; its own credential key keeps it inert elsewhere."""
+
+    CREDENTIAL_KEY = QUERY_KEY
+    CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)
+
+    @classmethod
+    def produce_query_rows(cls, connection: Any, query_text: str, features: Any) -> Any:
+        cursor = connection.execute(query_text)
+        names = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        wanted = sorted(features.get_all_names())
+        return pa.table({name: [row[names.index(name)] for row in rows] for name in wanted})
+
+
+class TestSqliteQueryRouteContract(DatabaseFormatFeatureGroupTestMixin):
+    feature_group_class = SqliteQueryToyfmtFG
+    credential_key = QUERY_KEY
+    present_column = "impl_sqlite_query_present"
+    missing_column = "impl_sqlite_query_missing"
+
+    def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
+        write_sqlite(path, tables)
+
+    def query_for(self, table: str, columns: list[str]) -> str:
+        return f"SELECT {', '.join(quote_ident(c) for c in columns)} FROM {quote_ident(table)}"  # nosec B608 - quoted names
 
 
 class TestSqliteLoadsIntoPyArrowTable(PyArrowTableAdapter, DatabaseLoadsIntoFrameworkMixin):

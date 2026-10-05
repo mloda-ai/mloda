@@ -1,12 +1,13 @@
-"""Abstract database format group: finds credentials, lists table catalogs per run, loads one table.
+"""Abstract database format group: finds credentials, lists table catalogs per run, loads one table or query.
 
 A subclass writes ``is_valid_credentials``, ``database_identity``, ``connect``, ``list_tables``, ``table_columns``
-and ``produce_rows``.
+and ``produce_rows``; the opt-in ``QUERY_ROUTE`` adds ``produce_query_rows``.
 """
 
 from abc import abstractmethod
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
+from hashlib import sha256
 from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -25,6 +26,7 @@ from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 
 _MAX_DESCRIBED = 5
+QUERY_OPTION = "query_text"
 
 
 @dataclass(frozen=True, eq=False)
@@ -35,6 +37,14 @@ class DBTable:
     table: str | None
 
 
+@dataclass(frozen=True, eq=False)
+class DBQuery:
+    """The access of a query match: the credentials (never shown) and the query text."""
+
+    credentials: Any = field(repr=False)
+    query_text: str
+
+
 def _capped(names: list[str]) -> str:
     text = ", ".join(repr(name) for name in names[:_MAX_DESCRIBED])
     return text if len(names) <= _MAX_DESCRIBED else f"{text}, and {len(names) - _MAX_DESCRIBED} more"
@@ -43,11 +53,12 @@ def _capped(names: list[str]) -> str:
 class ReadDBFG(FormatFeatureGroup):
     """Abstract database format group: claims features found as columns of tables in matching credentials.
 
-    The base serves table catalogs only. Third-party groups should reuse the contract mixin
-    database_format_feature_group_test_mixin from tests/mixins/reader_feature_groups in mloda's repository.
+    The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should reuse the contract
+    mixin database_format_feature_group_test_mixin from tests/mixins/reader_feature_groups in mloda's repository.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
+    QUERY_ROUTE: ClassVar[ClaimRoute] = ClaimRoute("credentials", NamePolicy.OPEN, False, (QUERY_OPTION,))
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {HANDLE_OPTION: HANDLE_SPEC}
     TABLE_KEY: ClassVar[str] = "table_name"
     CATALOG_ERRORS: ClassVar[tuple[type[BaseException], ...]] = (OSError, ValueError, ImportError)
@@ -82,6 +93,11 @@ class ReadDBFG(FormatFeatureGroup):
     @abstractmethod
     def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
         """The requested columns of the table in a neutral form, fully materialized (the connection closes after)."""
+
+    @classmethod
+    def produce_query_rows(cls, connection: Any, query_text: str, features: Any) -> Any:
+        """The requested columns of the query result in a neutral form."""
+        raise NotImplementedError(f"{cls.get_class_name()} lists QUERY_ROUTE but does not implement produce_query_rows")
 
     @classmethod
     def close_connection(cls, connection: Any) -> None:
@@ -120,6 +136,35 @@ class ReadDBFG(FormatFeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None,
     ) -> list[SourceMatch]:
+        query = route == cls.QUERY_ROUTE
+        if query:
+            query_text = options.get(QUERY_OPTION)
+            if not isinstance(query_text, str) or not query_text:
+                record_match_rejection(
+                    cls.get_class_name(), f"{QUERY_OPTION} must be a non-empty string", stage=INPUT_DATA_STAGE
+                )
+                return []
+        elif cls.QUERY_ROUTE in cls.CLAIM_ROUTES and QUERY_OPTION in options:
+            record_match_rejection(
+                cls.get_class_name(), f"{QUERY_OPTION} is set, so the table route is not used", stage=INPUT_DATA_STAGE
+            )
+            return []
+        digest = sha256(query_text.encode()).hexdigest()[:16] if query else ""
+        candidates = cls._candidates(options, data_access_collection)
+        sources: dict[str, SourceMatch] = {}
+        for credentials in candidates:
+            if cls.is_valid_credentials(credentials):
+                identity = cls.database_identity(credentials)
+                if query:
+                    match = SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))
+                    sources.setdefault(match.source, match)
+                else:
+                    for match in cls._tables(identity, credentials):
+                        sources.setdefault(match.source, match)
+        return list(sources.values())
+
+    @classmethod
+    def _candidates(cls, options: Options, data_access_collection: DataAccessCollection | None) -> list[Any]:
         name = cls.get_class_name()
         key = next((key for key in cls.pointer_keys() if key in options), None)
         if key is not None:
@@ -134,17 +179,10 @@ class ReadDBFG(FormatFeatureGroup):
                     name, "the pointed credentials are not valid for this group", stage=INPUT_DATA_STAGE
                 )
                 return []
-            candidates = [wrapped]
-        elif data_access_collection is None:
+            return [wrapped]
+        if data_access_collection is None:
             return []
-        else:
-            candidates = cls._handle_credentials(options, data_access_collection)
-        sources: dict[str, SourceMatch] = {}
-        for credentials in candidates:
-            if cls.is_valid_credentials(credentials):
-                for match in cls._tables(cls.database_identity(credentials), credentials):
-                    sources.setdefault(match.source, match)
-        return list(sources.values())
+        return cls._handle_credentials(options, data_access_collection)
 
     @classmethod
     def _handle_credentials(cls, options: Options, dac: DataAccessCollection) -> list[Any]:
@@ -197,15 +235,17 @@ class ReadDBFG(FormatFeatureGroup):
 
     @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:
-        access = cast(DBTable, match.access)
-        if access.table is None:
+        access = match.access
+        if isinstance(access, DBQuery) or access.table is None:
             return None
         catalog, _ = cls._catalog(access.credentials)
         return None if catalog is None else catalog.get(access.table)
 
     @classmethod
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
-        access = cast(DBTable, match.access)
+        access = match.access
+        if isinstance(access, DBQuery):
+            return None
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
             return f"table '{access.table}' does not exist"
@@ -216,7 +256,7 @@ class ReadDBFG(FormatFeatureGroup):
         cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
     ) -> str:
         name = cls.get_class_name()
-        identities = {cls.database_identity(cast(DBTable, match.access).credentials) for match in matches}
+        identities = {cls.database_identity(match.access.credentials) for match in matches}
         if len(identities) > 1:
             handles = sorted(
                 handle
@@ -235,10 +275,19 @@ class ReadDBFG(FormatFeatureGroup):
         )
 
     @classmethod
+    def _loader_for_match(cls, framework: Any, match: SourceMatch) -> Any:
+        """No registered loader for a query match: it loads through the neutral path."""
+        if isinstance(match.access, DBQuery):
+            return None
+        return super()._loader_for_match(framework, match)
+
+    @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-        access = cast(DBTable, match.access)
+        access = match.access
         connection = cls.get_connection(access.credentials)
         try:
+            if isinstance(access, DBQuery):
+                return cls.produce_query_rows(connection, access.query_text, features)
             return cls.produce_rows(connection, cast(str, access.table), features)
         finally:
             cls.close_connection(connection)

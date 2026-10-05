@@ -350,8 +350,11 @@ class TestPointingIsExplicitOnly:
         assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
 
 
+_DERIVED = "toyfmt_col__sum_aggr"
+
+
 class TestPointedGroupDefersToAComputingCandidate:
-    DERIVED = "toyfmt_col__sum_aggr"
+    DERIVED = _DERIVED
 
     @pytest.mark.parametrize("fg", [ToyFormatFG, ToyRequiredOptionFG])
     def test_class_name_key_on_a_derived_feature_resolves_to_the_aggregation(self, fg: type) -> None:
@@ -363,18 +366,20 @@ class TestPointedGroupDefersToAComputingCandidate:
         assert elimination.stage == "input_data"
         assert "is in none of the sources" in elimination.reason
 
-    def test_pointed_reader_with_no_other_claimant_still_aborts(self) -> None:
-        feature = Feature("toyfmt_unclaimed", Options({"ToyFormatFG": {COL: [1]}}))
-        with pytest.raises(ValueError, match="is in none of the sources"):
-            evaluate_or_raise(feature, _plugins(ToyFormatFG, PyArrowAggregatedFeatureGroup), None, None)
-
-    def test_pointed_reader_aborts_when_another_reader_survives(self) -> None:
-        feature = Feature(self.DERIVED, Options({"ToyFormatFG": {COL: [1]}}))
-        dac = toy_dac(h1={self.DERIVED: [1]})
-        with pytest.raises(ValueError, match="is in none of the sources"):
-            evaluate_or_raise(
-                feature, _plugins(ToyFormatFG, ToyOtherFormatFG, PyArrowAggregatedFeatureGroup), None, dac
-            )
+    @pytest.mark.parametrize(
+        ("name", "groups", "dac"),
+        [
+            ("toyfmt_unclaimed", (ToyFormatFG, PyArrowAggregatedFeatureGroup), None),
+            (_DERIVED, (ToyFormatFG, ToyOtherFormatFG, PyArrowAggregatedFeatureGroup), toy_dac(h1={_DERIVED: [1]})),
+        ],
+        ids=["no_other_claimant", "another_reader_survives"],
+    )
+    def test_pointed_reader_still_aborts(
+        self, name: str, groups: tuple[type, ...], dac: DataAccessCollection | None
+    ) -> None:
+        feature = Feature(name, Options({"ToyFormatFG": {COL: [1]}}))
+        with pytest.raises(ValueError, match=rf"column '{name}' is in none of the sources of ToyFormatFG"):
+            evaluate_or_raise(feature, _plugins(*groups), None, dac)
 
     def test_computing_candidate_eliminated_later_still_counts_as_computed(self) -> None:
         feature = Feature(

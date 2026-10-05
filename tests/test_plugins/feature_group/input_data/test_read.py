@@ -199,7 +199,7 @@ class TestTwoReader:
             },
         )
 
-        with pytest.raises(ValueError, match="any_num"):
+        with pytest.raises(ValueError, match=r"column 'any_num' is in none of the sources"):
             mloda.run_all(
                 [f],
                 compute_frameworks=["PyArrowTable"],

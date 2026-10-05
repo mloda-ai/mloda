@@ -185,6 +185,75 @@ class TestMultipleSequentialRuns:
         assert df_second["PrepareRunApiFeature"].tolist() == ["10_x", "20_y", "30_z"]
 
 
+class _RefuseSecondRunStartExtender(Extender):
+    """Raises from on_run_start on the second run only."""
+
+    raise_on_error = True
+
+    def __init__(self) -> None:
+        self.starts = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.starts += 1
+        if self.starts == 2:
+            raise RuntimeError("refuse second run")
+
+
+def _rerun(session: Any, path: str, api_data: dict[str, Any]) -> None:
+    if path == "batch":
+        session.run(api_data=api_data)
+    else:
+        list(session.stream_run(api_data=api_data))
+
+
+class TestFailedRerunDoesNotExposeStaleResults:
+    """After a re-run raises, get_result()/get_artifacts() never return a previous run's data."""
+
+    _first = {"PrepareExample": {"api_id": [1, 2], "api_value": ["a", "b"]}}
+
+    def _prepare(self, function_extender: Any = None) -> Any:
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
+        return mloda.prepare(
+            features,
+            compute_frameworks=[PandasDataFrame],
+            api_data={"PrepareExample": {"api_id": [1], "api_value": ["initial"]}},
+            plugin_collector=_enabled,
+            function_extender=function_extender,
+        )
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_rerun_failing_in_computation_hides_first_run_data(self, path: str) -> None:
+        session = self._prepare()
+        first = session.run(api_data=self._first)
+        assert first[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
+
+        bad = {"PrepareExample": {"api_id": [1, 2], "api_value": [3, 4]}}
+        with pytest.raises(TypeError):
+            _rerun(session, path, bad)
+
+        with pytest.raises(ValueError, match="No results found"):
+            session.get_result()
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_rerun_refused_at_start_clears_previous_runner(self, path: str) -> None:
+        session = self._prepare(function_extender={_RefuseSecondRunStartExtender()})
+        session.run(api_data=self._first)
+
+        with pytest.raises(RuntimeError, match="refuse second run"):
+            _rerun(session, path, self._first)
+
+        with pytest.raises(ValueError, match="You need to run any run function beforehand."):
+            session.get_result()
+        with pytest.raises(ValueError, match="You need to run any run function beforehand."):
+            session.get_artifacts()
+
+
 class TestStepStateDoesNotLeakBetweenRuns:
     """Test 5: Internal step state does not leak between runs."""
 

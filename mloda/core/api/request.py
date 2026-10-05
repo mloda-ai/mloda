@@ -591,14 +591,13 @@ class mlodaAPI:
                 extenders' ``close()`` before being terminated, shared across every extender in
                 that worker.
         """
-        runner = self._batch_run(
+        self._batch_run(
             parallelization_modes,
             flight_server,
             api_data=api_data,
             artifacts=artifacts,
             run_context=self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout),
         )
-        self.runner = runner
         return self.get_result()
 
     def stream_run(
@@ -688,6 +687,7 @@ class mlodaAPI:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
         try:
+            self.runner = None
             self._start_run(run_context)
             runner = self._setup_engine_runner(parallelization_modes, flight_server)
             # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
@@ -730,8 +730,11 @@ class mlodaAPI:
             run_context = self._build_run_context(None, None)
         outcome = LifecycleOutcome("succeeded")
         try:
+            self.runner = None
             self._start_run(run_context)
             runner = self._setup_engine_runner(parallelization_modes, flight_server)
+            # Assigned before computing so a failed run still exposes its runner, never a prior run's.
+            self.runner = runner
             self._run_engine_computation(
                 runner,
                 parallelization_modes,
@@ -739,7 +742,6 @@ class mlodaAPI:
                 artifacts=artifacts,
                 run_context=run_context,
             )
-            self.runner = runner
             return runner
         except BaseException as error:
             outcome = LifecycleOutcome("failed", type(error).__name__)

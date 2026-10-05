@@ -384,6 +384,8 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
 
 `match_parser_criteria` calls the parser with the class's `PROPERTY_MAPPING` and patterns and turns a rejected option value into a non-match. Calling `FeatureChainParser` directly from a match hook lets that rejection escape as an exception; the engine contains it as a `match hook` near-miss for that candidate, but the rejection reason is the more useful one. Containment covers plugin raises only: a framework-owned raise, such as a forwarded option value contradicting the feature name, still aborts the whole resolution.
 
+`match_parser_criteria` does not run `match_guard`, the in_features count or name agreement; a widening override keeps the value and guard checks with `cls.passes_option_declarations(options)`.
+
 ### 3. Modernize input_features Method
 
 The mixin's `input_features` already handles both forms: an owned name supplies its sources (an agreeing `in_features` keeps its options and scope), otherwise `in_features` does. Override it only to add extras:

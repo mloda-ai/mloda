@@ -1179,7 +1179,7 @@ def test_known_escalating_handlers_are_enumerated() -> None:
     guards = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py"
     expected = {
         (match_hook, "call_match_hook"),
-        (feature_group, "_passes_option_declarations"),
+        (feature_group, "passes_option_declarations"),
         (feature_group, "is_root"),
         (mixin, "match_parser_criteria"),
         (guards, "check_required_when"),

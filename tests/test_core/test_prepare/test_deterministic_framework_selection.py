@@ -1079,9 +1079,15 @@ class PinnedUnpinnedSharedRootFG(_ConnAwareRoot):
 _SHARED_PLUGINS = PluginCollector.enabled_feature_groups({PinnedUnpinnedSharedRootFG})
 
 
-def _shared_root_steps(features: list[Feature | str]) -> tuple[Any, list[FeatureGroupStep]]:
+def _shared_root_steps(
+    features: list[Feature | str],
+    compute_frameworks: list[type[ComputeFramework]] | None = None,
+    plugins: PluginCollector = _SHARED_PLUGINS,
+) -> tuple[Any, list[FeatureGroupStep]]:
     session = mloda.prepare(
-        features, compute_frameworks=[PandasDataFrame, PyArrowTable], plugin_collector=_SHARED_PLUGINS
+        features,
+        compute_frameworks=compute_frameworks or [PandasDataFrame, PyArrowTable],
+        plugin_collector=plugins,
     )
     assert session.engine is not None
     steps = [
@@ -1102,6 +1108,7 @@ def test_pinned_and_unpinned_request_share_one_step_in_the_pinned_framework(pinn
     _, steps = _shared_root_steps(features)
 
     assert [step.compute_framework for step in steps] == [PyArrowTable]
+    assert [f.chosen_compute_framework_reason for f in steps[0].features.features] == ["pinned"]
 
     result = mloda.run_all(
         features,
@@ -1115,20 +1122,59 @@ def test_pinned_and_unpinned_request_share_one_step_in_the_pinned_framework(pinn
     assert result[0][PinnedUnpinnedSharedRootFG.NAME].to_pylist() == [1, 2, 3]
 
 
-@pytest.mark.parametrize(
-    ("pins_first", "expected_steps"), [(True, 3), (False, 2)], ids=["pins_first", "unpinned_first"]
+_UNPINNED_SLOT = "unpinned"
+_PIN_ORDERS = [
+    pytest.param(["pa", "pd", _UNPINNED_SLOT], id="pins_first"),
+    pytest.param([_UNPINNED_SLOT, "pa", "pd"], id="unpinned_first"),
+    pytest.param(["pa", _UNPINNED_SLOT, "pd"], id="unpinned_middle"),
+]
+
+
+@pytest.mark.parametrize("order", _PIN_ORDERS)
+def test_two_differing_pins_plus_unpinned_merge_nothing_in_any_order(order: list[str]) -> None:
+    by_slot: dict[str, Feature | str] = {
+        "pa": Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable"),
+        "pd": Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PandasDataFrame"),
+        _UNPINNED_SLOT: PinnedUnpinnedSharedRootFG.NAME,
+    }
+
+    _, steps = _shared_root_steps([by_slot[slot] for slot in order])
+
+    assert len(steps) == 3
+
+
+class PinnedUnpinnedSharedConsumerFG(_PlanConsumer):
+    OUTPUT = "pinned_unpinned_shared_consumer"
+    FW_NAME = "PyArrowTable"
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({cls.OUTPUT: [1, 2, 3]})
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable"),
+            Feature(PinnedUnpinnedSharedRootFG.NAME),
+        }
+
+
+_SHARED_CONSUMER_PLUGINS = PluginCollector.enabled_feature_groups(
+    {PinnedUnpinnedSharedRootFG, PinnedUnpinnedSharedConsumerFG}
 )
-def test_two_differing_pins_plus_unpinned_merge_only_into_an_earlier_pin(pins_first: bool, expected_steps: int) -> None:
-    """Pins first is ambiguous so nothing merges; unpinned first merges into the first pin."""
-    pins: list[Feature | str] = [
-        Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PyArrowTable"),
-        Feature(PinnedUnpinnedSharedRootFG.NAME, compute_framework="PandasDataFrame"),
-    ]
-    features = [*pins, PinnedUnpinnedSharedRootFG.NAME] if pins_first else [PinnedUnpinnedSharedRootFG.NAME, *pins]
 
-    _, steps = _shared_root_steps(features)
 
-    assert len(steps) == expected_steps
+def test_pinned_and_unpinned_consumer_inputs_share_one_read() -> None:
+    out = PinnedUnpinnedSharedConsumerFG.OUTPUT
+
+    _, steps = _shared_root_steps([out], plugins=_SHARED_CONSUMER_PLUGINS)
+
+    assert [step.compute_framework for step in steps] == [PyArrowTable]
+
+    result = mloda.run_all(
+        [out], compute_frameworks=[PandasDataFrame, PyArrowTable], plugin_collector=_SHARED_CONSUMER_PLUGINS
+    )
+
+    assert len(result) == 1
 
 
 def test_pinned_and_unpinned_request_with_differing_options_stay_two_steps() -> None:

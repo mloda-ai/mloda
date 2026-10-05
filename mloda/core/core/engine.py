@@ -85,7 +85,6 @@ class Engine:
         self.run_context = RunContext(plan_id=plan_context.plan_id if plan_context else None)
         # Holds the Feature objects ResolveComputeFrameworks.links rewrites: hash-stale after planning, so only read it before planning (as today).
         self.feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
-        self._frameworks_free_index: dict[type[FeatureGroup], dict[int, list[Feature]]] = defaultdict(dict)
 
         # use global filters
         self.global_filter = global_filter
@@ -189,6 +188,7 @@ class Engine:
             self.global_filter.reset_match_tracking()
 
         self.setup_features_recursion(features)
+        self._fold_into_narrower_twins()
 
         if self.global_filter:
             self.global_filter.warn_on_unmatched_filters()
@@ -568,6 +568,59 @@ class Engine:
         existing.framework_pinned = True
         return existing
 
+    def _fold_into_narrower_twins(self) -> None:
+        """Folds each feature into its unique minimal narrower-framework twin; decided from a snapshot, order-free."""
+        folds: list[tuple[type[FeatureGroup], Feature, Feature]] = []
+        for group_class, collection in self.feature_group_collection.items():
+            members = [f for f in collection if f.compute_frameworks is not None]
+            buckets: dict[int, list[Feature]] = defaultdict(list)
+            for member in members:
+                buckets[member.hash_ignoring_compute_frameworks()].append(member)
+            for bucket in buckets.values():
+                for host in bucket:
+                    host_cf = host.compute_frameworks
+                    assert host_cf is not None
+                    narrower = [
+                        t
+                        for t in bucket
+                        if t is not host
+                        and t.compute_frameworks is not None
+                        and t.compute_frameworks < host_cf
+                        and t.equals_ignoring_compute_frameworks(host)
+                    ]
+                    minimal = [
+                        t
+                        for t in narrower
+                        if not any(o.compute_frameworks < t.compute_frameworks for o in narrower)  # type: ignore[operator]
+                    ]
+                    if len(minimal) == 1 and self._same_matched_filters(host, minimal[0], group_class):
+                        folds.append((group_class, host, minimal[0]))
+        if not folds:
+            return
+        fold_map = {host.uuid: survivor.uuid for _, host, survivor in folds}
+        for group_class, host, survivor in folds:
+            collection = self.feature_group_collection[group_class]
+            collection = {f for f in collection if f is not host}
+            collection = {f for f in collection if f is not survivor}
+            self.feature_group_collection[group_class] = collection
+            self._merge_host_into(survivor, host)
+            survivor.framework_pinned = survivor.framework_pinned or host.framework_pinned
+            collection.add(survivor)
+            if self.global_filter is not None:
+                self.global_filter.probes.pop((group_class, host.name, host.uuid), None)
+        ties = [(fold_map.get(a, a), fold_map.get(b, b)) for a, b in self.filter_ties]
+        self.filter_ties = list(dict.fromkeys(ties))
+
+    def _same_matched_filters(self, host: Feature, target: Feature, group_class: type[FeatureGroup]) -> bool:
+        if self.global_filter is None:
+            return True
+        probes = self.global_filter.probes
+
+        def ids(f: Feature) -> set[UUID]:
+            return {sf.uuid for sf in probes.get((group_class, f.name, f.uuid), set())}
+
+        return ids(host) == ids(target)
+
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
         existing.options.union_own_keys(host.options)
@@ -620,13 +673,8 @@ class Engine:
             self._intake_options_memo[memo_key] = entry
         feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]
-        index = self._frameworks_free_index[feature_group_class]
 
         if feature not in feature_collection:
-            self._merge_pinned_and_unpinned(feature, feature_collection, index)
-
-        if feature not in feature_collection:
-            index.setdefault(feature.hash_ignoring_compute_frameworks(), []).append(feature)
             self.add_feature_link_to_links(feature)
 
             self.feature_link_parents[feature.uuid] = set()
@@ -654,35 +702,6 @@ class Engine:
                 self._update_feature_link_parents(child_uuid, feature.uuid, existing_feature.uuid, if_index_feature)
 
         return False
-
-    @staticmethod
-    def _merge_pinned_and_unpinned(
-        feature: Feature, feature_collection: set[Feature], index: dict[int, list[Feature]]
-    ) -> None:
-        """A pinned and an unpinned request of one feature share the pinned read: narrow to the nested set."""
-        mine = feature.compute_frameworks
-        if mine is None:
-            return
-        bucket = index.get(feature.hash_ignoring_compute_frameworks(), [])
-        candidates = [
-            f
-            for f in bucket
-            if f.compute_frameworks is not None
-            and f.equals_ignoring_compute_frameworks(feature)
-            and (f.compute_frameworks < mine or mine < f.compute_frameworks)
-        ]
-        if len(candidates) != 1:
-            return
-        other = candidates[0]
-        assert other.compute_frameworks is not None
-        if other.compute_frameworks < mine:
-            feature.compute_frameworks = set(other.compute_frameworks)
-            return
-        feature_collection.remove(other)
-        bucket.remove(other)
-        other.compute_frameworks = set(mine)
-        feature_collection.add(other)
-        bucket.append(other)
 
     def _warn_on_default_equivalent_merge(
         self, feature: Feature, declared_options: Options, existing_feature: Feature

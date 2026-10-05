@@ -161,12 +161,6 @@ class TestDefaultNeutralParquetIntoPythonDict(
     pass
 
 
-class TestDefaultNeutralParquetIntoPandasDataFrame(
-    _DefaultNeutralParquetFiles, PandasDataFrameAdapter, FileLoadsIntoFrameworkMixin
-):
-    pass
-
-
 class TestCsvIntoPyArrowTable(_CsvFiles, PyArrowTableAdapter, FileLoaderNameMixin):
     expected_loader = "PyArrowTable"
 

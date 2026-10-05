@@ -12,7 +12,7 @@ SUPPORTED_FORMATS = ("csv", "parquet", "json", "feather", "orc")
 
 
 class FileSourcePyArrowTransformer(BaseTransformer):
-    """Materialize a ``FileSource`` descriptor into a ``pa.Table`` using PyArrow's csv, parquet, json, feather or orc readers."""
+    """Materialize a ``FileSource`` descriptor into a ``pa.Table`` using PyArrow readers."""
 
     @classmethod
     def framework(cls) -> Any:

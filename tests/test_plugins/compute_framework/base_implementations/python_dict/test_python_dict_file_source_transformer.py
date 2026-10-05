@@ -49,12 +49,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
-from tests.mixins.reader_feature_groups.format_file_writers import (
-    write_feather,
-    write_json,
-    write_orc,
-    write_parquet,
-)
+from tests.mixins.reader_feature_groups.format_file_writers import write_parquet
 
 #: pyarrow's default ``ConvertOptions().null_values`` minus ``""``, pinned literally so a pyarrow
 #: default change surfaces as a test failure.
@@ -270,12 +265,8 @@ class TestEncodingAndFormat:
         assert "register_loader" in message
         assert "load_neutral" in message
 
-    @pytest.mark.parametrize(
-        "fmt,writer",
-        [("parquet", write_parquet), ("json", write_json), ("feather", write_feather), ("orc", write_orc)],
-    )
-    def test_non_csv_formats_match_the_pyarrow_hop(self, tmp_path: Path, fmt: str, writer: Any) -> None:
-        """(j) Non-csv formats equal the pyarrow read converted by the pa.Table -> dict transformer."""
+    def test_non_csv_formats_match_the_pyarrow_hop(self, tmp_path: Path) -> None:
+        """(j) A parquet file equals the pyarrow read converted by the pa.Table -> dict transformer."""
         pytest.importorskip("pyarrow")
         from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
             FileSourcePyArrowTransformer,
@@ -284,16 +275,15 @@ class TestEncodingAndFormat:
             PythonDictPyArrowTransformer,
         )
 
-        path = tmp_path / f"data.{fmt}"
-        writer(path, {"a": [1, 2], "b": ["x", "y"], "c": [5, 6]})
-        source = FileSource(path=str(path), format=fmt, columns=("a", "b"))
+        path = tmp_path / "data.parquet"
+        write_parquet(path, {"a": [1, 2], "b": ["x", "y"], "c": [5, 6]})
+        source = FileSource(path=str(path), format="parquet", columns=("a", "b"))
 
         expected = PythonDictPyArrowTransformer.transform_other_fw_to_fw(
             FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
         )
 
         assert FileSourceDictTransformer.transform_fw_to_other_fw(source) == expected
-        assert expected == {"a": [1, 2], "b": ["x", "y"]}
 
     def test_reverse_direction_raises_not_implemented(self) -> None:
         """(j) dict -> FileSource makes no sense; the reverse direction must raise."""

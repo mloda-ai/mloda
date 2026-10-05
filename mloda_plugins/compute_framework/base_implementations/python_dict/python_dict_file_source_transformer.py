@@ -100,10 +100,7 @@ def _infer_column(cells: list[str | None]) -> list[Any]:
 
 
 class FileSourceDictTransformer(BaseTransformer):
-    """Materialize a ``FileSource`` descriptor into a columnar ``dict[str, list[Any]]``.
-
-    CSV uses only the stdlib ``csv`` module (no pyarrow); other formats go through the PyArrow transformer.
-    """
+    """Materialize a ``FileSource`` into ``dict[str, list[Any]]``; csv needs no pyarrow, other formats use it."""
 
     @classmethod
     def framework(cls) -> Any:

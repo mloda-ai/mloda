@@ -726,6 +726,22 @@ Available join types:
 - Link.inner_on(left, right) - Shorthand using index_columns() definitions
 """.strip()
 
+    @staticmethod
+    def _step_waits_for(
+        start: UUID, goal: UUID, steps_by_uuid: Mapping[UUID, Step], producer_of: Mapping[UUID, UUID]
+    ) -> bool:
+        stack, visited = [start], {start}
+        while stack:
+            step = steps_by_uuid[stack.pop()]
+            if step.uuid == goal:
+                return True
+            for token in step.get_wait_uuids():
+                owner = producer_of.get(token)
+                if owner is not None and owner not in visited:
+                    visited.add(owner)
+                    stack.append(owner)
+        return False
+
     def _order_hop_after_same_framework_parent(
         self,
         consumer: FeatureGroupStep,
@@ -737,8 +753,8 @@ Available join types:
         graph: Graph,
         memo: _LineageMemo,
         join_steps: set[JoinStep],
-    ) -> str | None:
-        """Make the upstream hop that copies the frame `parent` writes into wait for `parent`; an error text if none can."""
+    ) -> str | tuple[TransformFrameworkStep, str] | None:
+        """Order the upstream hop copying `parent`'s frame after it; an error text if none can, or a mirror hop to redirect to."""
         nodes = graph.get_nodes()
         consumer_name = format_feature_group_class(consumer.feature_group)
         parent_name = format_feature_group_class(nodes[parent].feature_group_class)
@@ -782,26 +798,51 @@ Available join types:
         )
         if not targets and joined:
             return None
-        if not targets:
-            return error(
-                f"'{parent_name}' and the hopped frame live in two separate {consumer.compute_framework.get_class_name()} "
-                "frames that nothing merges."
-            )
-
         producer_of = {token: step.uuid for step in plan for token in step.get_uuids()}
 
+        if not targets:
+            hop_owners = {
+                owning_step_of.get(u, u)
+                for req in hop.required_uuids
+                for u in self._same_framework_lineage(req, graph, memo)
+            }
+            mirrors: dict[UUID, TransformFrameworkStep] = {}
+            for owner in parent_owners:
+                owner_step = steps_by_uuid.get(owner)
+                if not isinstance(owner_step, FeatureGroupStep):
+                    continue
+                for hop_uuid in owner_step.tfs_ids:
+                    cand = steps_by_uuid.get(hop_uuid)
+                    if (
+                        isinstance(cand, TransformFrameworkStep)
+                        and cand is not hop
+                        and cand.link_id is None
+                        and cand.from_framework == hop.from_framework
+                        and cand.to_framework == consumer.compute_framework
+                        and hop_owners
+                        & {
+                            owning_step_of.get(u, u)
+                            for req in cand.required_uuids
+                            for u in self._same_framework_lineage(req, graph, memo)
+                        }
+                    ):
+                        mirrors[cand.uuid] = cand
+            if len(mirrors) != 1:
+                return error(
+                    f"'{parent_name}' and the hopped frame live in two separate "
+                    f"{consumer.compute_framework.get_class_name()} frames that nothing merges."
+                )
+            mirror = next(iter(mirrors.values()))
+            source_uuid = hop.source_step_uuid
+            if source_uuid is not None and self._step_waits_for(source_uuid, mirror.uuid, steps_by_uuid, producer_of):
+                return error(f"'{parent_name}' itself depends on that hop, so it cannot be ordered before it.")
+            return mirror, error(
+                f"'{parent_name}' and the hopped frame live in two separate "
+                f"{consumer.compute_framework.get_class_name()} frames that nothing merges."
+            )
+
         def waits_for(start: UUID, goal: UUID) -> bool:
-            stack, visited = [start], {start}
-            while stack:
-                step = steps_by_uuid[stack.pop()]
-                if step.uuid == goal:
-                    return True
-                for token in step.get_wait_uuids():
-                    owner = producer_of.get(token)
-                    if owner is not None and owner not in visited:
-                        visited.add(owner)
-                        stack.append(owner)
-            return False
+            return self._step_waits_for(start, goal, steps_by_uuid, producer_of)
 
         parent_step = owning_step_of.get(parent, parent)
         for target in targets:
@@ -1411,6 +1452,8 @@ Available join types:
             new_execution_plan.append(ep)
 
         pair_errors: list[str] = []
+        tfs_by_uuid = {step.uuid: step for step in new_execution_plan if isinstance(step, TransformFrameworkStep)}
+        redirects: dict[UUID, tuple[FeatureGroupStep, dict[UUID, tuple[TransformFrameworkStep, str]]]] = {}
         steps_by_uuid = {step.uuid: step for step in new_execution_plan}
         for pair_consumer, pair_hop, pair_parent in hop_same_framework_pairs:
             pair_error = self._order_hop_after_same_framework_parent(
@@ -1424,12 +1467,44 @@ Available join types:
                 memo,
                 join_steps=left_join_frameworks,
             )
-            if pair_error is not None:
+            if isinstance(pair_error, tuple):
+                by_hop_entry = redirects.setdefault(pair_consumer.uuid, (pair_consumer, {}))[1]
+                previous = by_hop_entry.get(pair_hop.uuid)
+                if previous is not None:
+                    pair_error = (pair_error[0], min(previous[1], pair_error[1]))
+                by_hop_entry[pair_hop.uuid] = pair_error
+                need_to_upload_collector.add(pair_parent)
+            elif pair_error is not None:
                 pair_errors.append(pair_error)
             else:
                 need_to_upload_collector.add(pair_parent)
+        for redirect_consumer, by_hop in redirects.values():
+            mirror_uuids = {mirror.uuid for mirror, _text in by_hop.values()}
+            ambiguous = any(
+                sum(1 for c, h, _p in hop_same_framework_pairs if c is redirect_consumer and h.uuid == hop_uuid) > 1
+                for hop_uuid in by_hop
+            )
+            if ambiguous or len(mirror_uuids) != 1 or set(by_hop) != set(redirect_consumer.tfs_ids):
+                pair_errors.append(min(text for _mirror, text in by_hop.values()))
         if pair_errors:
             raise ValueError(min(pair_errors))
+        for redirect_consumer, by_hop in redirects.values():
+            mirror = next(iter(by_hop.values()))[0]
+            redirect_consumer.tfs_ids = {mirror.uuid}
+            for dropped_uuid in sorted(by_hop):
+                dropped = tfs_by_uuid[dropped_uuid]
+                mirror.order_after_uuids |= dropped.required_uuids
+                redirect_consumer.required_uuids.discard(dropped.uuid)
+                if not any(
+                    dropped.uuid in step.required_uuids
+                    or dropped.uuid in getattr(step, "order_after_uuids", ())
+                    or (isinstance(step, FeatureGroupStep) and dropped.uuid in step.tfs_ids)
+                    for step in new_execution_plan
+                    if step is not dropped
+                ) and not any(dropped.uuid in served for served in hop_serves.values()):
+                    new_execution_plan.remove(dropped)
+                    self.tfs_collection.pop(dropped, None)
+            redirect_consumer.required_uuids.add(mirror.uuid)
 
         # We define that every parent of a transform framework step needs to be uploaded.
         # This step is only relevant for multi processing.

@@ -439,9 +439,8 @@ class ExecutionPlan:
 
     @staticmethod
     def _parents_linked_by_join(uuid_a: UUID, uuid_b: UUID, join_steps: set[JoinStep], graph: Graph) -> bool:
-        """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides.
-        Each side widens only through same-framework ancestors; a compute-framework hop ends the lineage.
-        The answer is the same in both argument orders."""
+        """Whether two parents are linked, directly or transitively, via JoinSteps' genuine sides, in either order.
+        Sides widen only through same-framework ancestors."""
         if uuid_a == uuid_b:
             return True
 

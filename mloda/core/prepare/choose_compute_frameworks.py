@@ -314,7 +314,7 @@ class ChooseComputeFrameworks:
         return closure
 
     def _side_path_rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
-        """A join merges into its side's framework lineage, so a feature between a side and its consumer must share it."""
+        """A feature between a link side and its join consumer must share the side's framework."""
         if not self.occurrences:
             return []
         ancestors = self._ancestors()

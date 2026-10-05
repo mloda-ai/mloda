@@ -47,7 +47,7 @@ class ReadFileFeature(FeatureGroup):
 
 ### Common BaseInputData Implementations
 - **ReadFile**: For structured file-based data loading (see [access-feature-data](access-feature-data.md#global-scope-data-access))
-- **ReadDocument**: For unstructured document loading (Markdown `.md`, YAML `.yaml`/`.yml`, text `.text`/`.txt`/`.TXT`). Skips file types owned by ReadFile by default.
+- **ReadDocumentFG**: For unstructured document loading (`TextFG`, `MarkdownFG`, `YamlFG`, ...). Skips file types owned by file format groups by default.
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
 - **ReadDBFG**: For database-backed loading, one FeatureGroup per database kind (`SqliteFG` ships)
@@ -78,7 +78,7 @@ Each reader family exposes a recommended hook seam. Overriding `load_data` whole
     assert not is_valid_credentials({"host": "db", "password": "secret"})
     ```
 
-- **ReadDocument**: implement `produce_document` and `suffix`; optionally `document_file_type`.
+- **ReadDocumentFG**: implement `suffixes`; optionally `read_text` and `handover_suffixes`.
 - **ReadFile**: override `load_data` wholesale to return the table. `CsvReader` resolves to a `FileSource` descriptor that the target compute framework materializes into its native type.
 
 Override `data_access_identity` to publish a richer identity than the default.
@@ -87,7 +87,7 @@ CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib 
 
 The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (`" 1 "`), `inf`/`infinity`, uppercase `NAN` (the float value, not the `NaN` null token), hex literals (`0x1f`), and a `true`/`1` mix (pyarrow reads `1`/`0` as bools too).
 
-Readers are classified structurally; no reader code is executed for classification. `is_final_reader()` is True when a class overrides `load_data` wholesale, or when it overrides all hooks named by its family's `_final_reader_requires()` (for example `("produce_rows", "connect")` for a database reader). Family bases (ReadDocument, ReadFile) are never discovered as final readers themselves.
+Readers are classified structurally; no reader code is executed for classification. `is_final_reader()` is True when a class overrides `load_data` wholesale, or when it overrides all hooks named by its family's `_final_reader_requires()` (for example `("produce_rows", "connect")` for a database reader). Family bases (ReadDocumentFG, ReadFile) are never discovered as final readers themselves.
 
 **Warning**: classification is structural (declared is overridden), so an intermediate base that re-declares a hook or `load_data` with a bare `raise NotImplementedError` body is classified as a final reader and enters discovery. Intermediate bases must not re-declare bare hooks; re-anchor the family by declaring `_final_reader_requires` instead.
 
@@ -168,7 +168,7 @@ Rules for reader authors:
 - Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
 - Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
 - Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden `data_access_name()` included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.
-- A `ReadFile` subclass that cannot enumerate columns (no `get_column_names` override, or one raising `NotImplementedError` or `ImportError`), decline a chain- or column-separated feature name while matching. A `ReadDocument` subclass declines such a name on a `DataAccessCollection` (not on a `str` or `Path` access), since a document reader has no columns to confirm such a name. An explicit `column_to_file` pin is exempt.
+- A `ReadFile` subclass that cannot enumerate columns (no `get_column_names` override, or one raising `NotImplementedError` or `ImportError`), decline a chain- or column-separated feature name while matching. A `ReadDocumentFG` subclass declines any name other than its three declared names. An explicit `column_to_file` pin is exempt.
 - In `ReadFile` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file reader needs the file to be readable when features resolve. A pinned file that cannot be read raises instead of falling back to another file. Any other exception from `get_column_names` ends reader selection for that feature group candidate, so no sibling reader is tried (the engine contains it as a non-match for that candidate); a raise marked with `escalate_match_abort` propagates out of matching.
 
 `ReadFile` column validation and the `ReadDBFG` catalog check already record automatically; a custom reader only needs this for its own decline points.

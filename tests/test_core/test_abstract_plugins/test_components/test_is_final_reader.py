@@ -11,9 +11,6 @@
 - A required name missing on the anchor raises ValueError naming the hook and the anchor.
 - Classification is purely structural: it never executes load_data or any hook.
 
-ReadDocument requires ("produce_document", "suffix") and declares a template load_data that probes
-this classification before any lifecycle work.
-
 The synthetic families below are built directly on BaseInputData and expose no
 matching surface (match_subclass_data_access returns None, and their
 data_access_name is just the class name, which no sibling test uses as an
@@ -28,8 +25,6 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.provider import FeatureSet
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader, TextFileReader
 
 
 def _invoke(cls: type[BaseInputData], method_name: str) -> Any:
@@ -272,7 +267,7 @@ class TestAnchorRedeclaration:
 
 
 class TestAnchorResolution:
-    """final_reader_anchor() is the public seam ReadDocument builds their hook seams on."""
+    """final_reader_anchor() is the public seam a family builds its hook seam on."""
 
     def test_base_is_its_own_anchor(self) -> None:
         assert _final_reader_anchor(BaseInputData) is BaseInputData
@@ -293,10 +288,6 @@ class TestAnchorResolution:
         assert _final_reader_anchor(_SubFamilyBase) is _SubFamilyBase
         assert _final_reader_anchor(_SubFamilyChild) is _SubFamilyBase
         assert _final_reader_anchor(_SubFamilyWholesale) is _SubFamilyBase
-
-    def test_real_readers_anchor_to_their_family(self) -> None:
-        assert _final_reader_anchor(TextFileReader) is ReadDocument
-        assert _final_reader_anchor(PyFileReader) is ReadDocument
 
 
 class TestLoudValidation:
@@ -328,31 +319,19 @@ class TestLoudValidation:
 
 
 class TestFamilyDeclarations:
-    """ReadDocument declares a hook seam."""
+    """A family declares a hook seam and a template load_data without defining the classification itself."""
 
-    def test_family_requires_tuples(self) -> None:
-        assert _final_reader_requires(ReadDocument) == ("produce_document", "suffix")
+    def test_family_requires_tuple(self) -> None:
+        assert _final_reader_requires(_FamilyBase) == ("hook_a", "hook_b")
 
-    def test_families_declare_the_anchor_marker_locally(self) -> None:
-        for family in (ReadDocument,):
-            assert "_final_reader_requires" in family.__dict__
+    def test_family_declares_the_anchor_marker_locally(self) -> None:
+        assert "_final_reader_requires" in _FamilyBase.__dict__
 
-    def test_read_document_declares_template_load_data(self) -> None:
-        """The family owns a template load_data yet still classifies as a non-final anchor."""
-        assert "load_data" in ReadDocument.__dict__
-        assert _is_final_reader(ReadDocument) is False
+    def test_family_declares_template_load_data_yet_is_not_final(self) -> None:
+        assert "load_data" in _FamilyBase.__dict__
+        assert _is_final_reader(_FamilyBase) is False
 
-    def test_families_do_not_define_classification_locally(self) -> None:
-        for family in (ReadDocument,):
-            assert "supports_scoped_data_access" not in family.__dict__
-            assert "is_final_reader" not in family.__dict__
-            assert "final_reader_anchor" not in family.__dict__
-
-
-class TestRealFamilyClassification:
-    def test_concrete_readers_are_final(self) -> None:
-        assert _is_final_reader(TextFileReader) is True
-        assert _is_final_reader(PyFileReader) is True
-
-    def test_family_bases_are_not_final(self) -> None:
-        assert _is_final_reader(ReadDocument) is False
+    def test_family_does_not_define_classification_locally(self) -> None:
+        assert "supports_scoped_data_access" not in _FamilyBase.__dict__
+        assert "is_final_reader" not in _FamilyBase.__dict__
+        assert "final_reader_anchor" not in _FamilyBase.__dict__

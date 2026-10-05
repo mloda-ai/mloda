@@ -1,4 +1,4 @@
-"""Compute-framework adapters and loads-into-framework checks for file and database format groups.
+"""Compute-framework adapters and loads-into-framework checks for file, database and document format groups.
 
 Adapters resolve the framework class lazily (after importorskip), never at import, class or parametrize time.
 Combine one adapter with FileLoadsIntoFrameworkMixin or DatabaseLoadsIntoFrameworkMixin in a concrete Test class.
@@ -13,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.user import DataAccessCollection, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
 
 
 class FrameworkAdapterMixin:
@@ -188,3 +188,53 @@ class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
         context = capture.contexts[0]
         assert context.reader_class is self.db_group
         assert context.data_access_loader == self.expected_loader
+
+
+class DocumentLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
+    """A document group loads exactly the requested ``~`` outputs, with their values, into the adapter's framework.
+
+    The concrete class sets ``document_group``, ``suffix`` and, for a handed-over suffix, ``context``.
+    """
+
+    document_group: type[Any]
+    suffix: str
+    context: dict[str, Any] = {}
+    text = "framework loads\nbody\n"
+    expected_text: str | None = None
+
+    def values_of(self, result: Any, column: str) -> list[Any]:
+        raise NotImplementedError
+
+    def _run(self, tmp_path: Path, names: list[str]) -> tuple[list[Any], Path]:
+        framework = self.compute_framework()
+        path = tmp_path / f"fwdoc{self.suffix}"
+        path.write_text(self.text, encoding="utf-8")
+        group_name = self.document_group.get_class_name()
+        features: list[Feature | str] = [
+            Feature(f"{group_name}{name}", Options(context=dict(self.context))) for name in names
+        ]
+        result = mloda.run_all(
+            features,
+            compute_frameworks=[framework],
+            plugin_collector=PluginCollector.enabled_feature_groups({self.document_group}),
+            data_access_collection=DataAccessCollection(files={"fwdoc_handle": os.fspath(path)}),
+        )
+        return result, path
+
+    def test_loads_all_three_outputs_with_their_values(self, tmp_path: Path) -> None:
+        name = self.document_group.get_class_name()
+        result, path = self._run(tmp_path, ["", "~source", "~file_type"])
+
+        assert len(result) == 1
+        assert self.columns_of(result[0]) == {name, f"{name}~source", f"{name}~file_type"}
+        assert self.values_of(result[0], f"{name}~source") == [os.fspath(path)]
+        assert self.values_of(result[0], f"{name}~file_type") == [self.suffix.lstrip(".").lower()]
+        assert self.values_of(result[0], name) == [self.text if self.expected_text is None else self.expected_text]
+
+    def test_loads_only_the_requested_outputs(self, tmp_path: Path) -> None:
+        name = self.document_group.get_class_name()
+        result, path = self._run(tmp_path, ["~source"])
+
+        assert len(result) == 1
+        assert self.columns_of(result[0]) == {f"{name}~source"}
+        assert self.values_of(result[0], f"{name}~source") == [os.fspath(path)]

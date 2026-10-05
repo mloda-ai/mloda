@@ -1,5 +1,5 @@
 """Contract tests for the ``data_access_handle`` Options key flowing through
-the file and document consumers of ``DataAccessCollection`` (databases: the database contract mixin).
+the file and document groups of ``DataAccessCollection`` (databases: the database contract mixin).
 
 In each case, multi-entry without a hint must raise ``ValueError`` naming the
 candidates, the hint must disambiguate, and single-entry behavior is
@@ -17,9 +17,9 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.user import Feature, Options
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
 
 
 # ----------------------------------------------------------------------------
@@ -58,17 +58,6 @@ def csv_and_txt_files(tmp_path: Path) -> tuple[str, str]:
 
 
 # ----------------------------------------------------------------------------
-# Concrete reader subclasses used only by these tests.
-# ----------------------------------------------------------------------------
-
-
-class _TxtDocReader(ReadDocument):
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        return (".txt",)
-
-
-# ----------------------------------------------------------------------------
 # CsvFG: multi-file ambiguity aborts, data_access_handle narrows
 # ----------------------------------------------------------------------------
 
@@ -88,47 +77,33 @@ class TestCsvFGHint:
 
 
 # ----------------------------------------------------------------------------
-# ReadDocument: multi-file ambiguity raises, data_access_handle disambiguates
+# TextFG: multi-file ambiguity aborts, a handle that names a foreign file declines
 # ----------------------------------------------------------------------------
 
 
-class TestReadDocumentHint:
-    def test_multiple_documents_without_hint_raises(self, two_txt_files: tuple[str, str]) -> None:
+class TestTextFGHint:
+    def test_multiple_documents_without_hint_raises_naming_the_paths_and_handles(
+        self, two_txt_files: tuple[str, str]
+    ) -> None:
         path_a, path_b = two_txt_files
+        text_group = load_document_group("text_fg", "TextFG")
         dac = DataAccessCollection(files={"notes_a": path_a, "notes_b": path_b})
         with pytest.raises(ValueError) as excinfo:
-            _TxtDocReader.match_subclass_data_access(dac, feature_names=["content"], options=Options())
+            resolve_or_raise(Feature("TextFG"), {text_group: {PyArrowTable}}, None, dac)
         msg = str(excinfo.value)
+        assert os.path.abspath(path_a) in msg
+        assert os.path.abspath(path_b) in msg
         assert "notes_a" in msg
         assert "notes_b" in msg
 
-    def test_hint_disambiguates_to_named_document(self, two_txt_files: tuple[str, str]) -> None:
-        path_a, path_b = two_txt_files
-        dac = DataAccessCollection(files={"notes_a": path_a, "notes_b": path_b})
-        options = Options(context={"data_access_handle": "notes_a"})
-        resolved = _TxtDocReader.match_subclass_data_access(dac, feature_names=["content"], options=options)
-        assert resolved == path_a
-
-    def test_single_document_no_hint_resolves(self, two_txt_files: tuple[str, str]) -> None:
-        path_a, _ = two_txt_files
-        dac = DataAccessCollection(files={"notes_a": path_a})
-        resolved = _TxtDocReader.match_subclass_data_access(dac, feature_names=["content"], options=Options())
-        assert resolved == path_a
-
     def test_hint_at_foreign_file_declines_instead_of_rescanning(self, csv_and_txt_files: tuple[str, str]) -> None:
-        """A hint naming a "file" handle this reader's own predicate rejects
-        (a .csv file, which ReadDocument excludes as a structured suffix by default) must
-        make the reader decline (None), not fall back to an unhinted rescan that silently
-        binds the .txt file the caller never named.
-        """
+        """A handle naming a .csv file makes TextFG decline, not rescan and bind the .txt file nobody named."""
         csv_path, txt_path = csv_and_txt_files
+        text_group = load_document_group("text_fg", "TextFG")
         dac = DataAccessCollection(files={"notes": txt_path, "data": csv_path})
-        options = Options(context={"data_access_handle": "data"})
-        resolved = _TxtDocReader.match_subclass_data_access(dac, feature_names=["content"], options=options)
-        # Crux of the bug: today this rescans the collection and wrongly returns txt_path
-        # (the OTHER file, which the caller never hinted at) instead of declining.
-        assert resolved != txt_path
-        assert resolved is None
+        feature = Feature("TextFG", Options(context={"data_access_handle": "data"}))
+        result = IdentifyFeatureGroupClass.evaluate(feature, {text_group: {PyArrowTable}}, None, dac)
+        assert text_group not in result.identified
 
 
 class TestDataAccessHandleRejectsCollectionsOutright:

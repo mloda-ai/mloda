@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -529,17 +530,21 @@ class TestUnownedPinGatesTheNameRule:
         assert result.eliminations.get(Vg1454FileFG) is None
 
 
+AUTO_LOAD_GROUP = "feature_group/input_data/document_formats"
+
+
 class TestUnconditionalAutoLoadBeforeOwnershipScan:
     """Bug 1: the ownership scan's bootstrap must not rely on get_all_filtered_subclasses' own
-    emptiness-gated short-circuit. Vg1454CsvReader/Vg1454JsonReader are already imported final readers
-    of a file family in this process, so that short-circuit never fires for it; a fix that still relies
-    on it would leave stock readers invisible to the ownership scan."""
+    emptiness-gated short-circuit. A family with an _auto_load_group is loaded on every ownership scan, even
+    when a file family already has final readers imported in this process."""
 
-    def test_the_no_owner_probe_unconditionally_loads_read_files_auto_load_group(self, tmp_path: Path) -> None:
-        """The post-loop ownership probe triggered by an unowned pin must call
-        PluginLoader.load_group("feature_group/input_data/read_files") (ReadDocument's _auto_load_group)
-        even though a family already has final readers imported in this process. Expected entry point:
-        BaseInputData._all_loadable_readers(), called unconditionally before the ownership scan."""
+    def test_the_no_owner_probe_unconditionally_loads_every_familys_auto_load_group(self, tmp_path: Path) -> None:
+        """The post-loop ownership probe triggered by an unowned pin must call PluginLoader.load_group for a
+        family's _auto_load_group even though another family already has final readers imported."""
+
+        class Vg1454AutoLoadFamily(BaseInputData):
+            _auto_load_group = AUTO_LOAD_GROUP
+
         path = tmp_path / "data.vg1454nobodyowns"
         path.write_text("a,b\n1,2\n", encoding="utf-8")
         dac = DataAccessCollection(files={"vg1454_h": str(path)}, column_to_file={VG1454_FILE_FEATURE: "vg1454_h"})
@@ -548,17 +553,23 @@ class TestUnconditionalAutoLoadBeforeOwnershipScan:
             Vg1454FileFamily.match_data_access([VG1454_FILE_FEATURE], dac, options=Options({}))
 
         called_groups = [arg for call in mock_load_group.call_args_list for arg in call.args]
-        assert "feature_group/input_data/read_files" in called_groups
+        assert AUTO_LOAD_GROUP in called_groups
+        del Vg1454AutoLoadFamily
+        gc.collect()
 
     def test_all_loadable_readers_is_the_expected_bootstrap_entry_point(self) -> None:
-        """Names the exact bootstrap entry point the fix is expected to add on BaseInputData. Round 1 has
-        no such method, so this currently fails with AttributeError; that is the correct failure mode for
-        "this doesn't exist yet", not something to work around here."""
+        """BaseInputData._all_loadable_readers() loads each visible family's own auto-load group."""
+
+        class Vg1454AutoLoadEntryFamily(BaseInputData):
+            _auto_load_group = AUTO_LOAD_GROUP
+
         with patch.object(PluginLoader, "load_group") as mock_load_group:
             BaseInputData._all_loadable_readers()
 
         called_groups = [arg for call in mock_load_group.call_args_list for arg in call.args]
-        assert "feature_group/input_data/read_files" in called_groups
+        assert AUTO_LOAD_GROUP in called_groups
+        del Vg1454AutoLoadEntryFamily
+        gc.collect()
 
 
 class TestUnownedPinKeyDoesNotCollideWithTheCandidatesOwnKey:

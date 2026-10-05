@@ -85,13 +85,11 @@ def _():
     all_features = order_features + payment_features + location_features + categorical_features
 
     from mloda.user import PluginCollector
-    from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 
     mloda.run_all(
         all_features,
         data_access_collection=data_access_collection,
         compute_frameworks=[PyArrowTable],
-        plugin_collector=PluginCollector.disabled_feature_groups({ReadDocumentFeature}),
     )
     return (
         PluginCollector,

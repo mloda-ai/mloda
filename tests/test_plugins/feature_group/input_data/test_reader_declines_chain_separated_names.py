@@ -1,6 +1,6 @@
-"""Unvalidated readers (a suffix file reader family, ReadDocument) must decline chain/column-separated names.
+"""Unvalidated readers (a suffix file reader family) must decline chain/column-separated names.
 
-Database groups: the database contract mixin.
+Database and document groups: their contract mixins.
 
 The reader and feature groups here become global subclasses discovered process-wide, so every
 name carries a "chaindecline" marker to stay inert for other tests under pytest-xdist.
@@ -13,7 +13,6 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
@@ -30,9 +29,8 @@ from mloda.provider import (
 )
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 from tests.helpers.suffix_file_reader import SuffixFileReader
+from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
 
 
 CHAINDECLINE_FILE_SUFFIX = ".chaindeclinecsv"
@@ -43,8 +41,6 @@ CHAINDECLINE_MULTI_OUTPUT_FEATURE = f"{CHAINDECLINE_PLAIN_FEATURE}{COLUMN_SEPARA
 CHAINDECLINE_ABORT_PLAIN_FEATURE = "chaindecline_abort_plain_column"
 
 CHAINDECLINE_GENERIC_SUFFIX = ".chaindeclinegeneric"
-CHAINDECLINE_READDOC_SUFFIX = ".chaindeclinereaddoc"
-CHAINDECLINE_READDOC_UNOWNED_SUFFIX = ".chaindeclinereaddocunowned"
 
 
 class ChainDeclineUnvalidatedReader(SuffixFileReader):
@@ -97,18 +93,6 @@ class ChainDeclineGenericAbortSuffixReader(ChainDeclineGenericPinReader):
         raise escalate_match_abort(NotImplementedError("chaindecline generic suffix abort"))
 
 
-class ChainDeclineDocReader(ReadDocument):
-    """Final document reader owning CHAINDECLINE_READDOC_SUFFIX."""
-
-    @classmethod
-    def suffix(cls) -> tuple[str, ...]:
-        return (CHAINDECLINE_READDOC_SUFFIX,)
-
-    @classmethod
-    def produce_document(cls, file_path: str) -> Any:
-        return {}
-
-
 class ChainDeclineRootFG(FeatureGroup):
     """Root group fronting ChainDeclineUnvalidatedReader; matches whatever the reader accepts."""
 
@@ -148,15 +132,6 @@ class ChainDeclineNamedRootFG(FeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
         return {CHAINDECLINE_CHAIN_FEATURE}
-
-
-def _document_dac(route: str, tmp_path: Path, file_name: str) -> tuple[DataAccessCollection, str]:
-    """A collection exposing one real file directly (route 'files') or through its folder (route 'folders')."""
-    path = tmp_path / file_name
-    path.write_text("chaindecline")
-    if route == "files":
-        return DataAccessCollection(files={str(path)}), str(path)
-    return DataAccessCollection(folders={str(tmp_path)}), str(path)
 
 
 class TestFirstSeparatorName:
@@ -270,152 +245,29 @@ class TestOwnedContentDeclineGatesExplicitNameRule:
         assert CHAINDECLINE_CHAIN_FEATURE in elimination.reason
 
 
-class TestReadDocumentDeclinesChainSeparatedNames:
-    """Only the DataAccessCollection route declines; the str route does not."""
-
-    @pytest.mark.parametrize("route", ["files", "folders"])
-    @pytest.mark.parametrize(
-        "feature_name",
-        [
-            CHAINDECLINE_CHAIN_FEATURE,
-            CHAINDECLINE_MULTI_OUTPUT_FEATURE,  # the '~N' form only reaches a reader by direct call
-        ],
-    )
-    def test_separator_name_declines_and_records(
-        self, route: str, feature_name: str, tmp_path: Path, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        dac, path = _document_dac(route, tmp_path, f"doc{CHAINDECLINE_READDOC_SUFFIX}")
-
-        result = ChainDeclineDocReader.match_subclass_data_access(dac, [feature_name], Options())
-
-        assert result is None
-        assert list(rejection_window) == [ChainDeclineDocReader.get_class_name()]
-        stored = rejection_window[ChainDeclineDocReader.get_class_name()]
-        assert stored.stage == INPUT_DATA_STAGE
-        assert ChainDeclineDocReader.get_class_name() in stored.reason
-        assert feature_name in stored.reason
-        assert path in stored.reason
-
-    @pytest.mark.parametrize("feature_name", [CHAINDECLINE_CHAIN_FEATURE, CHAINDECLINE_MULTI_OUTPUT_FEATURE])
-    def test_hint_at_owned_file_declines_a_separator_name_instead_of_raising(
-        self, feature_name: str, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        """The hint pre-check and resolve's predicate must agree, else resolve raises a predicate mismatch."""
-        dac = DataAccessCollection(files={"notes": f"a{CHAINDECLINE_READDOC_SUFFIX}"})
-        options = Options(context={"data_access_handle": "notes"})
-
-        result = ChainDeclineDocReader.match_subclass_data_access(dac, [feature_name], options)
-
-        assert result is None
-        assert list(rejection_window) == [ChainDeclineDocReader.get_class_name()]
-        assert feature_name in rejection_window[ChainDeclineDocReader.get_class_name()].reason
-
-    def test_hint_at_owned_file_still_matches_a_plain_name_and_records_nothing(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        path = f"a{CHAINDECLINE_READDOC_SUFFIX}"
-        dac = DataAccessCollection(files={"notes": path})
-        options = Options(context={"data_access_handle": "notes"})
-
-        result = ChainDeclineDocReader.match_subclass_data_access(dac, [CHAINDECLINE_PLAIN_FEATURE], options)
-
-        assert result == path
-        assert rejection_window == {}
-
-    @pytest.mark.parametrize("route", ["files", "folders"])
-    def test_plain_name_still_matches_and_records_nothing(
-        self, route: str, tmp_path: Path, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        dac, path = _document_dac(route, tmp_path, f"doc{CHAINDECLINE_READDOC_SUFFIX}")
-
-        result = ChainDeclineDocReader.match_subclass_data_access(dac, [CHAINDECLINE_PLAIN_FEATURE], Options())
-
-        assert result == path
-        assert rejection_window == {}
-
-    @pytest.mark.parametrize("route", ["files", "folders"])
-    def test_unowned_suffix_stays_silent_for_a_separator_name(
-        self, route: str, tmp_path: Path, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        dac, _ = _document_dac(route, tmp_path, f"doc{CHAINDECLINE_READDOC_UNOWNED_SUFFIX}")
-
-        result = ChainDeclineDocReader.match_subclass_data_access(dac, [CHAINDECLINE_CHAIN_FEATURE], Options())
-
-        assert result is None
-        assert rejection_window == {}
-
-    def test_two_matching_files_decline_instead_of_raising_the_resolve_ambiguity(
-        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        paths = {str(tmp_path / f"{stem}{CHAINDECLINE_READDOC_SUFFIX}") for stem in ("first", "second")}
-        for path in paths:
-            Path(path).write_text("chaindecline")
-        dac = DataAccessCollection(files=paths)
-
-        result = ChainDeclineDocReader.match_subclass_data_access(dac, [CHAINDECLINE_CHAIN_FEATURE], Options())
-
-        assert result is None
-        assert list(rejection_window) == [ChainDeclineDocReader.get_class_name()]
-
-    def test_str_route_still_matches_a_separator_shaped_basename(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        """File basenames like '__main__.py' are legitimate feature names on the str route, so it never declines."""
-        path = f"x{CHAINDECLINE_READDOC_SUFFIX}"
-
-        result = ChainDeclineDocReader.match_subclass_data_access(path, ["__main__"], Options({}))
-
-        assert result == path
-        assert rejection_window == {}
-
-
-class TestReadDocumentPinnedNameExemptsSeparatorGuard:
-    def test_pinned_chain_shaped_name_resolves_via_the_pin(self, rejection_window: dict[str, MatchRejection]) -> None:
-        path = f"pinned{CHAINDECLINE_READDOC_SUFFIX}"
-        dac = DataAccessCollection(
-            files={"chaindecline_readdoc_pin_handle": path},
-            column_to_file={CHAINDECLINE_CHAIN_FEATURE: "chaindecline_readdoc_pin_handle"},
-        )
-
-        matched = ChainDeclineDocReader.match_subclass_data_access(dac, [CHAINDECLINE_CHAIN_FEATURE], Options())
-
-        assert matched == path
-        assert rejection_window == {}
-
-    def test_non_pinned_chain_shaped_name_still_declines_via_the_general_path(
-        self, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        path = f"other{CHAINDECLINE_READDOC_SUFFIX}"
-        dac = DataAccessCollection(
-            files={"chaindecline_readdoc_other_handle": path},
-            column_to_file={CHAINDECLINE_PLAIN_FEATURE: "chaindecline_readdoc_other_handle"},
-        )
-
-        matched = ChainDeclineDocReader.match_subclass_data_access(dac, [CHAINDECLINE_CHAIN_FEATURE], Options())
-
-        assert matched is None
-        assert list(rejection_window) == [ChainDeclineDocReader.get_class_name()]
-
-
 class TestChainedFeatureResolvesToSingleFeatureGroupOverDocuments:
+    """TextFG declares only its three names, so a chain-shaped name never reaches it."""
+
     def _accessible_plugins(self) -> FeatureGroupEnvironmentMapping:
-        return {ReadDocumentFeature: {PandasDataFrame}, ChainDeclineChainedFG: {PandasDataFrame}}
+        return {load_document_group("text_fg", "TextFG"): {PandasDataFrame}, ChainDeclineChainedFG: {PandasDataFrame}}
 
-    def test_plain_name_still_resolves_to_document_group_only(self, tmp_path: Path) -> None:
-        dac, _ = _document_dac("files", tmp_path, f"doc{CHAINDECLINE_READDOC_SUFFIX}")
-        feature = Feature(name=CHAINDECLINE_PLAIN_FEATURE)
+    def _dac(self, tmp_path: Path) -> DataAccessCollection:
+        path = tmp_path / "doc.txt"
+        path.write_text("chaindecline")
+        return DataAccessCollection(files={str(path)})
 
-        result = IdentifyFeatureGroupClass.evaluate(feature, self._accessible_plugins(), None, dac)
+    def test_the_group_name_still_resolves_to_the_document_group_only(self, tmp_path: Path) -> None:
+        result = IdentifyFeatureGroupClass.evaluate(
+            Feature(name="TextFG"), self._accessible_plugins(), None, self._dac(tmp_path)
+        )
 
         assert result.failure_kind is None
-        assert result.identified == {ReadDocumentFeature: {PandasDataFrame}}
+        assert set(result.identified) == {load_document_group("text_fg", "TextFG")}
 
-    def test_chain_shaped_name_resolves_to_chained_group_only(self, tmp_path: Path) -> None:
-        dac, _ = _document_dac("files", tmp_path, f"doc{CHAINDECLINE_READDOC_SUFFIX}")
-        feature = Feature(name=CHAINDECLINE_CHAIN_FEATURE)
+    def test_a_chain_shaped_name_resolves_to_the_chained_group_only(self, tmp_path: Path) -> None:
+        feature = Feature(name="TextFG__rebased_chaindeclinechain")
 
-        result = IdentifyFeatureGroupClass.evaluate(feature, self._accessible_plugins(), None, dac)
+        result = IdentifyFeatureGroupClass.evaluate(feature, self._accessible_plugins(), None, self._dac(tmp_path))
 
         assert result.failure_kind is None
         assert result.identified == {ChainDeclineChainedFG: {PandasDataFrame}}
-        assert ReadDocumentFeature not in result.identified

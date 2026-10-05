@@ -13,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
+from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
 class HoistBareInputData(BaseInputData):
@@ -27,13 +27,13 @@ class HoistSentinelReader(BaseInputData):
 class TestInitReaderIsHoistedToBase:
     """After the hoist, the reader families no longer override init_reader."""
 
-    @pytest.mark.parametrize("family", [ReadDocument])
+    @pytest.mark.parametrize("family", [SuffixFileReader])
     def test_family_does_not_override_init_reader(self, family: type[BaseInputData]) -> None:
         # init_reader is a plain instance method; accessing it on the class object yields
         # the plain function, so identity comparison works without __func__ unwrapping.
         assert family.init_reader is BaseInputData.init_reader
 
-    @pytest.mark.parametrize("family", [ReadDocument])
+    @pytest.mark.parametrize("family", [SuffixFileReader])
     def test_family_dict_has_no_init_reader(self, family: type[BaseInputData]) -> None:
         assert "init_reader" not in family.__dict__
 

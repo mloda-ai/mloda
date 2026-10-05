@@ -31,8 +31,6 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_files.text_file_reader import TextFileReader
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     neutral_csv_group,
@@ -934,7 +932,7 @@ class TestDataAccessIdentityOfExistingLocalPaths:
 class TestDataAccessIdentityRegressionGuardForReportedLeak:
     """A credential-shaped value must never come back verbatim from any reader family's data_access_identity."""
 
-    @pytest.mark.parametrize("reader", [TextFileReader, ReadDocument])
+    @pytest.mark.parametrize("reader", [BaseInputData, _DirectLoadReader])
     @pytest.mark.parametrize(
         ("value", "secret"),
         [

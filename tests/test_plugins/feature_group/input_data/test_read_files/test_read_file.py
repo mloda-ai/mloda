@@ -187,12 +187,11 @@ class TestInputData:
     def test_aggregated_load_csv_with_path_given_to_feature(self) -> Any:
         f = Feature(
             name="sum_of_",
-            options={"sum": ("V1", "V2")},
+            options={"sum": ("V1", "V2"), "CsvFG": self.file_path},
         )
         result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(files={self.file_path}),
         )
         assert "SumFeature_V1V2" in result[0].to_pydict()
         for k, v in result[0].to_pydict().items():
@@ -205,13 +204,13 @@ class TestInputData:
             name="sum_of_",
             options={
                 "sum": ("V1", "V2"),
+                "CsvFG": self.file_path,
                 DOUBLING_MARKER: "dummy",
             },
         )
         result = mloda.run_all(
             [f],
             compute_frameworks=["PyArrowTable"],
-            data_access_collection=DataAccessCollection(files={self.file_path}),
         )
         assert "SumFeature_V1V2" in result[0].to_pydict()
         for k, v in result[0].to_pydict().items():

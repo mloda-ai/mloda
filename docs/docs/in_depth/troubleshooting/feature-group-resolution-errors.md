@@ -69,15 +69,16 @@ Use resolve_feature(name, options=...) to debug feature resolution.
 For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 ```
 
-No enabled feature group both declared the requested name and survived every matching gate. It is raised as `FeatureResolutionError` during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it, or follow the message's closing pointer and rerun the request through `resolve_feature`. Pass the same `Feature` and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome.
+No enabled feature group both declared the requested name and survived every matching gate. It is raised as `FeatureResolutionError` during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it, or follow the message's closing pointer and rerun the request through `resolve_feature`. Pass the same `Feature` and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome. When the failing feature is an input of the one you requested, the headline names the chain that needed it, e.g. `No feature groups found for feature name: 'invoice_date' (needed by net_spend_30d -> line_value).`
 
 ### The eliminated candidates block
 
-Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised or whose input-data gate declined is recorded regardless.
+Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised, whose input-data gate declined, or that refused the name itself is recorded regardless.
 
 | Label | What eliminated the candidate | Typical fix |
 | --- | --- | --- |
 | `option value` | The group declined an option value in the request. | Fix the value the reason names. |
+| `feature name` | The group refused the requested feature name itself, for example an unknown output part. | Request a name the group serves; the reason may list them. |
 | `input data` | The input-data gate declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
 | `match hook` | The group's match hook raised; the error is contained and quoted. | Fix the plugin bug it names. |
 | `domain` | The group declares a different domain than the request. | Align the requested domain ([domain solution below](#3-use-domains-to-separate-feature-groups)). |
@@ -85,10 +86,13 @@ Each line names a candidate the matcher considered and dropped: the first gate t
 | `compute framework` | None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run. | Enable a framework the group supports. |
 | `compute framework pin` | The `Feature` pins `compute_frameworks` to one that is not among the group's supported set for this run. | Change or drop the pin. |
 | `links` | No index column of the group matches the run's links. | Align the run's links with the group's index. |
+| `declarations` | A consumer's input or a requested feature requires a declared attribute that the candidate or its reader does not declare, or declares with another value. | Provide a candidate or reader that declares the attribute the reason names. |
+
+A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`.
 
 ### The Did you mean hint
 
-Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). A missing hint therefore means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.
+Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). The hint is also dropped for an input feature whose reader declined at the input-data gate, because the reason line, not a name, is the fix. Otherwise a missing hint means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.
 
 ### Only abstract feature group bases matched
 
@@ -110,6 +114,17 @@ For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubl
 
 For the first shape, import or enable a concrete implementation. For the second, enable one of the named compute frameworks; the list comes from the base's accessible concrete implementations, so check that the one you enable actually serves the name. Eliminated candidates, if any, still render in their block, and the message closes with the same pointer lines as the ordinary form. Only the Did-you-mean suggestion is dropped, because the name already matched a base.
 
+### The skipped plugin modules block
+
+A "No Feature Groups Found" or "Only abstract feature group bases matched" message may end with a block like:
+
+```
+Plugin module(s) skipped for a missing optional dependency, so their feature groups are not loaded:
+  - mloda_plugins.some.module: some_dependency
+```
+
+Each line names a plugin module or entry point `PluginLoader` skipped at import time because one of its optional dependencies is not installed, so the feature group it would have defined never entered the candidate universe. Install the named dependency, or the `mloda` extra that bundles it, then rerun; `PluginLoader.skipped_plugins()` returns the same mapping for programmatic inspection.
+
 ## Multiple Feature Groups Error
 
 ### The Problem
@@ -121,6 +136,8 @@ FeatureResolutionError: Multiple feature groups found for feature '<feature_name
 ```
 
 This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts. It is raised as `FeatureResolutionError` (a `ValueError` subclass) during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it.
+
+When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent.
 
 If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, it points to a real conflict between two distinct classes (different `(module, qualname)`).
 

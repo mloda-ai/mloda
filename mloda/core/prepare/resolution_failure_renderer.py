@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 TROUBLESHOOTING_URL = "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
 
 MAX_SUGGESTIONS = 5
+MAX_SKIPPED_PLUGINS = 10
 
 
 def scope_callout(scope: str | type[FeatureGroup] | None) -> str | None:
@@ -31,6 +32,11 @@ def domain_callout(domain: Domain | None) -> str | None:
     if domain is None:
         return None
     return f"Requested domain: '{domain.name}'."
+
+
+def _needed_by(feature: Feature) -> str:
+    """' (needed by a -> b)' for an input feature, empty for a request."""
+    return f" (needed by {' -> '.join(feature.resolving_path)})" if feature.resolving_path else ""
 
 
 def _candidate_sort_key(feature_group: type[FeatureGroup]) -> tuple[str, str]:
@@ -54,6 +60,7 @@ def _prefix_name(feature_group: type[FeatureGroup]) -> str:
 
 _STAGE_LABELS: dict[EliminationStage, str] = {
     "value_rejection": "option value",
+    "name": "feature name",
     "input_data": "input data",
     "matcher_error": "match hook",
     "domain": "domain",
@@ -62,6 +69,7 @@ _STAGE_LABELS: dict[EliminationStage, str] = {
     "frameworks_not_enabled": "compute framework",
     "framework_pin": "compute framework pin",
     "links": "links",
+    "declarations": "declarations",
 }
 
 
@@ -99,15 +107,31 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
     lines = "\n".join(
         f"  - {fg.__name__} ({fg.__module__})"
         + (f" [domain: {result.facts.domains[fg]}]" if fg in result.facts.domains else "")
+        + (f" [source: {result.facts.sources[fg]}]" if fg in result.facts.sources else "")
         for fg in sorted(result.identified, key=_candidate_sort_key)
     )
     scope_line = f"{callout}\n" if callout else ""
     return (
-        f"Multiple feature groups found for feature '{str(feature.name)}':\n"
+        f"Multiple feature groups found for feature '{str(feature.name)}'{_needed_by(feature)}:\n"
         f"{lines}\n"
         f"{scope_line}"
         f"For troubleshooting guide, see: {TROUBLESHOOTING_URL}"
     )
+
+
+def _render_skipped_plugins_block(skipped_plugins: tuple[tuple[str, str], ...]) -> str | None:
+    """Trailing block naming every plugin module/entry point PluginLoader skipped, capped at MAX_SKIPPED_PLUGINS."""
+    if not skipped_plugins:
+        return None
+    shown = skipped_plugins[:MAX_SKIPPED_PLUGINS]
+    lines = "\n".join(f"  - {name}: {dependency}" for name, dependency in shown)
+    block = (
+        f"Plugin module(s) skipped for a missing optional dependency, so their feature groups are not loaded:\n{lines}"
+    )
+    overflow = len(skipped_plugins) - len(shown)
+    if overflow > 0:
+        block += f"\n  ... and {overflow} more, see PluginLoader.skipped_plugins()."
+    return block
 
 
 def _pointer_lines(callout: str | None) -> str:
@@ -127,14 +151,14 @@ def _render_abstract_only(
     feature_name = str(feature.name)
     if not result.facts.concrete_frameworks:
         msg = (
-            f"No feature groups found for feature name: '{feature_name}'. "
+            f"No feature groups found for feature name: '{feature_name}'{_needed_by(feature)}. "
             f"Only abstract feature group base(s) matched, which cannot be instantiated; "
             f"no concrete implementation is available or enabled."
         )
     else:
         framework_names = sorted(result.facts.concrete_frameworks)
         msg = (
-            f"No feature groups found for feature name: '{feature_name}'. "
+            f"No feature groups found for feature name: '{feature_name}'{_needed_by(feature)}. "
             f"Its concrete implementations require compute framework(s) {framework_names}, "
             f"none of which are available or enabled for this run."
         )
@@ -148,12 +172,17 @@ def _render_abstract_only(
     near_miss = _render_near_miss_block(result, feature)
     if near_miss is not None:
         msg += f"\n{near_miss}"
+
+    skipped_block = _render_skipped_plugins_block(result.facts.skipped_plugins)
+    if skipped_block is not None:
+        msg += f"\n{skipped_block}"
+
     return msg + _pointer_lines(callout)
 
 
 def _render_none(result: EvaluationResult, feature: Feature, callout: str | None, domain_note: str | None) -> str:
     feature_name = str(feature.name)
-    msg = f"No feature groups found for feature name: '{feature_name}'."
+    msg = f"No feature groups found for feature name: '{feature_name}'{_needed_by(feature)}."
 
     for note in (callout, domain_note):
         if note:
@@ -165,11 +194,23 @@ def _render_none(result: EvaluationResult, feature: Feature, callout: str | None
 
     # A suggestion equal to the requested name, echoing an already-named candidate, or reaching only groups this
     # pass killed, carries nothing new. Drop it, and the catalog's repeats, before the cut, so none spends a slot.
-    droppable = {feature_name, *result.facts.eliminated_hints, *result.facts.dead_only_names}
-    known_names = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
-    similar = get_close_matches(feature_name, known_names, n=MAX_SUGGESTIONS, cutoff=0.5)
-    if similar:
-        msg += f"\nDid you mean one of: {similar}?"
+    # An input's name came from its consumer and the reader declined the data, so a name suggestion only misleads.
+    reader_declined_input = bool(feature.resolving_path) and any(
+        elimination.stage == "input_data" for elimination in result.eliminations.values()
+    )
+    if not reader_declined_input:
+        droppable = {feature_name, *result.facts.eliminated_hints, *result.facts.dead_only_names}
+        known_names = [name for name in dict.fromkeys(result.facts.known_names) if name not in droppable]
+        similar = get_close_matches(feature_name, known_names, n=MAX_SUGGESTIONS, cutoff=0.5)
+        if similar:
+            msg += f"\nDid you mean one of: {similar}?"
+
+    if result.facts.scope_suggestions:
+        msg += f"\nDid you mean one of: {list(result.facts.scope_suggestions)}?"
+
+    skipped_block = _render_skipped_plugins_block(result.facts.skipped_plugins)
+    if skipped_block is not None:
+        msg += f"\n{skipped_block}"
 
     return msg + _pointer_lines(callout)
 

@@ -141,13 +141,15 @@ def raise_on_unpicklable_child_bootstrap(child_bootstrap: Callable[[], None] | N
     raise ValueError(_unpicklable_child_bootstrap_error(child_bootstrap))
 
 
-def _unpicklable_extender_error(extender: Extender) -> str:
+def _unpicklable_extender_error(extender: Extender, cause: Exception) -> str:
     return (
         f"Extender {extender!r} cannot be pickled for multiprocessing, so mloda cannot send it to a spawned "
-        "worker process. This happens when an extender instance holds unpicklable state (e.g. a "
-        "threading.Lock, an open connection, or a client handle) set eagerly in __init__.\n"
-        "Resolution: rebuild such state lazily (e.g. inside __call__ or __setstate__) instead of storing it "
-        "eagerly in __init__, or run without ParallelizationMode.MULTIPROCESSING."
+        f"worker process: {type(cause).__name__}: {cause}\n"
+        "Resolution: if the extender builds unpicklable state (e.g. a threading.Lock, an open connection, "
+        "or a client handle) eagerly in __init__, rebuild it lazily instead (e.g. inside __call__ or "
+        "__setstate__); if the caller injects such state (e.g. SomeExtender(client=...)), pass a picklable "
+        "value instead of a live client, or have the extender build its own per-worker handle rather than "
+        "accepting one from the caller; or run without ParallelizationMode.MULTIPROCESSING."
     )
 
 
@@ -157,8 +159,10 @@ def raise_on_unpicklable_extender(function_extender: set[Extender] | None) -> No
         return
 
     for extender in function_extender:
-        if not _is_picklable(extender):
-            raise ValueError(_unpicklable_extender_error(extender))
+        try:
+            pickle.dumps(extender)
+        except _UNPICKLABLE_ERRORS as cause:
+            raise ValueError(_unpicklable_extender_error(extender, cause)) from cause
 
 
 def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]) -> str:

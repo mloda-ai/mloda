@@ -1,4 +1,5 @@
 import sqlite3
+from decimal import Decimal
 from typing import Any
 
 import pyarrow as pa
@@ -218,6 +219,15 @@ class TestSqliteDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
         )
         return SqliteRelation.from_arrow(connection, arrow_table)
+
+    @pytest.mark.skip(reason="SQLite has no decimal storage type; a decimal column cannot be inserted")
+    def test_extract_decimal_column_data_type(self, framework_instance: Any, decimal_sample_data: Any) -> None: ...
+
+    def test_relation_from_decimal_column_raises(self, connection: sqlite3.Connection) -> None:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+
+        with pytest.raises((sqlite3.InterfaceError, sqlite3.ProgrammingError)):
+            SqliteRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
 
     def test_extract_raw_sql_expression_column_data_type_is_numeric(
         self, connection: sqlite3.Connection, framework_instance: SqliteFramework

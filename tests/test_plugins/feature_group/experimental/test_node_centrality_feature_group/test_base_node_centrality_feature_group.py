@@ -4,6 +4,7 @@ Tests for the base NodeCentralityFeatureGroup class.
 
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -38,6 +39,14 @@ class TestNodeCentralityFeatureGroup:
         )
 
         assert NodeCentralityFeatureGroup.match_feature_group_criteria("placeholder", options)
+
+    def test_graph_type_value_in_the_centrality_slot_is_rejected(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={NodeCentralityFeatureGroup.CENTRALITY_TYPE: "degree"})
+        assert NodeCentralityFeatureGroup.match_feature_group_criteria("x__directed_centrality", options) is False
+        assert len(rejection_window) == 1
+        assert "directed" in next(iter(rejection_window.values())).reason
 
     def test_parse_centrality_prefix(self) -> None:
         """Test the parse_centrality_prefix method."""
@@ -83,3 +92,38 @@ class TestNodeCentralityFeatureGroup:
         assert input_features is not None
         assert len(input_features) == 1
         assert Feature("product") in input_features
+
+    @pytest.mark.parametrize(
+        "name",
+        ["x__mean_imputed__degree_centrality", "a__b__c__degree_centrality"],
+    )
+    def test_chained_source_name_parses_from_the_last_suffix(self, name: str) -> None:
+        assert NodeCentralityFeatureGroup.parse_centrality_prefix(name) == "degree"
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "a__foo_bar_centrality",
+            "a__degree_extra_centrality",
+            "a__degree_centrality_extra",
+            "x__mean_imputed__foo_bar_centrality",
+            "__degree_centrality",
+        ],
+    )
+    def test_parse_centrality_prefix_rejects_underscores_inside_the_type(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            NodeCentralityFeatureGroup.parse_centrality_prefix(name)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("x__degree_centr", "degree"), ("x__mean_imputed__pagerank_centr", "pagerank")],
+    )
+    def test_parse_centrality_prefix_follows_an_overridden_prefix_pattern(self, name: str, expected: str) -> None:
+        """Parts are read from PREFIX_PATTERN."""
+
+        class CentrPatternGroup(NodeCentralityFeatureGroup):
+            PREFIX_PATTERN = r".*__(?P<centrality_type>[\w]+)_centr$"
+
+        assert CentrPatternGroup.parse_centrality_prefix(name) == expected
+        with pytest.raises(ValueError):
+            CentrPatternGroup.parse_centrality_prefix("x__degree_centrality")

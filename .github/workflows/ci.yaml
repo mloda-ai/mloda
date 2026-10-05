@@ -4,14 +4,14 @@ name: CI
 # Safe only while CI is not a required status check on main: a skipped required check never reports, blocking docs-only PRs.
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "feat/reader-feature-groups" ]
     paths-ignore: &docs_only
       - CODE_OF_CONDUCT.md
       - NOTICE.md
       - README.md
       - SECURITY.md
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "feat/reader-feature-groups" ]
     paths-ignore: *docs_only
 
 permissions:
@@ -52,12 +52,22 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install uv
-        uv tool install tox --with tox-uv
+        # Same tox pin as release.yaml; see the note there before bumping.
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
     - name: Run tox ${{ matrix.toxenv }}
       env:
         PYTEST_WORKERS: 2
       run: tox ${{ matrix.toxenv }}
       timeout-minutes: 6
+    # Catches a tox bump that brings the redirect file back (e.g. the provisional venv_redirect renamed)
+    # on the PR instead of in the Release job.
+    - name: Check tox left no .venv redirect file
+      run: |
+        if [ -e .venv ] && [ ! -d .venv ]; then
+          echo "::error ::tox left a .venv file; the release job's uv lock would fail on it. Check venv_redirect in tox.ini."
+          cat .venv
+          exit 1
+        fi
 
   notebooks:
     # Runs the marimo example notebooks; slower than the unit-test matrix.
@@ -72,9 +82,30 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         python -m pip install uv
-        uv tool install tox --with tox-uv
+        # Same tox pin as release.yaml; see the note there before bumping.
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
     - name: Run notebooks
       env:
         PYTEST_WORKERS: 2
       run: tox -e notebooks
+      timeout-minutes: 10
+
+  spark:
+    # PYTEST_WORKERS stays at the env's default of 1: each xdist worker would start its own JVM.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install tox
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install uv
+        # Same tox pin as release.yaml; see the note there before bumping.
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+    - name: Run spark
+      # The runner image ships Java 17.
+      run: JAVA_HOME="$JAVA_HOME_17_X64" tox -e spark
       timeout-minutes: 10

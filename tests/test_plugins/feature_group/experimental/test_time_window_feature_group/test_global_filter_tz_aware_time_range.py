@@ -90,7 +90,7 @@ def test_pyarrow_tz_aware_time_range_filter() -> None:
 
     result = mloda.run_all(
         ["temperature", DefaultOptionKeys.reference_time],
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         plugin_collector=plugin_collector,
         global_filter=global_filter,
     )
@@ -152,7 +152,7 @@ def test_pyarrow_tz_aware_time_range_filter_with_validity_window() -> None:
 
     result = mloda.run_all(
         ["temperature", DefaultOptionKeys.reference_time, "valid_time"],
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         plugin_collector=plugin_collector,
         global_filter=global_filter,
     )
@@ -196,7 +196,7 @@ def test_python_dict_tz_aware_time_range_filter() -> None:
 
     result = mloda.run_all(
         ["temperature", DefaultOptionKeys.reference_time],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=plugin_collector,
         global_filter=global_filter,
     )
@@ -247,7 +247,7 @@ def test_polars_tz_aware_time_range_filter() -> None:
 
     result = mloda.run_all(
         ["temperature", DefaultOptionKeys.reference_time],
-        compute_frameworks={PolarsDataFrame},
+        compute_frameworks=[PolarsDataFrame],
         plugin_collector=plugin_collector,
         global_filter=global_filter,
     )

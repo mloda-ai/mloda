@@ -34,7 +34,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.probe_runner import run_probes
-from tests.test_core.test_prepare.join_plan_helpers import feature, trek
+from tests.test_core.test_prepare.join_plan_helpers import feature, join_tokens, trek
 
 
 PAIR_LEFT_INDEX = Index(("resolved_join_pair_left_key",))
@@ -190,7 +190,7 @@ class Built(NamedTuple):
     declared_frameworks: DeclaredFrameworks
 
 
-class Unlinked(NamedTuple):
+class ThirdParent(NamedTuple):
     plan: ExecutionPlan
     link: Link
     left_uuid: UUID
@@ -396,30 +396,43 @@ def _pair_with_declined_orientation() -> Built:
     return _finish(planned, link, Sides(left.uuid, right.uuid, kept.uuid))
 
 
-def _link_with_an_unlinked_third_parent() -> Unlinked:
-    """A right join whose child also has a parent the link never mentions."""
+def _third_parent_the_link_never_mentions(third_cfw: type[ComputeFramework], descends_from_right: bool) -> ThirdParent:
+    """A right join whose child also has a same-framework third parent, descending from one side, the link never mentions."""
     planned = _planned()
     link = _pair_link(Link.right)
 
     left = feature("resolved_join_unlinked_left", PyArrowTable, link.left_index)
     right = feature("resolved_join_unlinked_right", PandasDataFrame, link.right_index)
-    unlinked = feature("resolved_join_unlinked_third", PandasDataFrame)
+    unlinked = feature("resolved_join_unlinked_third", third_cfw)
     child = feature("resolved_join_unlinked_child", PandasDataFrame)
+    ancestor = right if descends_from_right else left
 
     _add_parents(planned, link, left, right)
     planned.graph.add_node(unlinked.uuid, NodeProperties(unlinked, ResolvedJoinUnlinked))
     planned.queue.append((ResolvedJoinUnlinked, {unlinked}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    # The third parent descends from a side on the same framework, so lineage counts through it.
+    planned.graph.adjacency_list[ancestor.uuid].append(unlinked.uuid)
+    planned.graph.adjacency_list[unlinked.uuid] = []
+    planned.graph.parent_to_children_mapping[unlinked.uuid] = {ancestor.uuid}
     _add_child(planned, child, left, right, unlinked)
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
     declared: DeclaredFrameworks = {
         left.uuid: frozenset({PyArrowTable}),
         right.uuid: frozenset({PandasDataFrame}),
-        unlinked.uuid: frozenset({PandasDataFrame, PythonDictFramework}),
+        unlinked.uuid: frozenset({third_cfw, PythonDictFramework}),
     }
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared)
-    return Unlinked(planned.plan, link, left.uuid, right.uuid, unlinked.uuid)
+    return ThirdParent(planned.plan, link, left.uuid, right.uuid, unlinked.uuid)
+
+
+def _link_with_a_third_parent_it_never_mentions() -> ThirdParent:
+    return _third_parent_the_link_never_mentions(PyArrowTable, descends_from_right=False)
+
+
+def _link_with_a_pandas_third_parent_descending_from_the_right_side() -> ThirdParent:
+    return _third_parent_the_link_never_mentions(PandasDataFrame, descends_from_right=True)
 
 
 def _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_parent() -> FrameworkCollision:
@@ -713,8 +726,9 @@ def _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only() 
     planned = _planned()
     link = _pair_link(Link.right)
 
-    left_pandas = feature("resolved_join_right_only_pyarrow_left_pandas", PandasDataFrame, link.left_index)
-    left_pyarrow = feature("resolved_join_right_only_pyarrow_left_pyarrow", PyArrowTable, link.left_index)
+    # One shared name: the scenario is about join-side resolution, and the child reads that name from either step.
+    left_pandas = feature("resolved_join_right_only_pyarrow_left", PandasDataFrame, link.left_index)
+    left_pyarrow = feature("resolved_join_right_only_pyarrow_left", PyArrowTable, link.left_index)
     right = feature("resolved_join_right_only_pyarrow_right", PyArrowTable, link.right_index)
     child = feature("resolved_join_right_only_pyarrow_child", PythonDictFramework)
 
@@ -754,6 +768,9 @@ def _inner_join_ambiguous_split_stays_on_the_tiebreak_answer() -> Built:
     planned.queue.append((ResolvedJoinPairRight, {nearest_right}))
     planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    # The farther left parent descends from the nearest one, so the two are linked by ancestry.
+    planned.graph.adjacency_list[nearest_left.uuid].append(far_left.uuid)
+    planned.graph.parent_to_children_mapping[far_left.uuid] = {nearest_left.uuid}
     _add_child(planned, child, nearest_left, far_left, nearest_right, far_right)
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
@@ -791,7 +808,9 @@ def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
 
 
 def _transform_steps(plan: ExecutionPlan, link: Link) -> list[TransformFrameworkStep]:
-    return [step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id == link.uuid]
+    return [
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
+    ]
 
 
 def _records(plan: ExecutionPlan, link: Link) -> tuple[ResolvedJoin, ...]:
@@ -973,8 +992,15 @@ def test_a_right_joins_destination_stays_right_when_declared_right_is_the_only_p
     assert record.destination_side is JoinSide.RIGHT
 
 
-def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> None:
-    unlinked = _link_with_an_unlinked_third_parent()
+_THIRD_PARENT_BUILDERS = [
+    pytest.param(_link_with_a_third_parent_it_never_mentions, id="pyarrow_from_left"),
+    pytest.param(_link_with_a_pandas_third_parent_descending_from_the_right_side, id="pandas_from_right"),
+]
+
+
+@pytest.mark.parametrize("build", _THIRD_PARENT_BUILDERS)
+def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides(build: Callable[[], ThirdParent]) -> None:
+    unlinked = build()
 
     record = _one_record(unlinked.plan, unlinked.link)
 
@@ -985,8 +1011,9 @@ def test_a_parent_the_link_never_mentions_stays_out_of_the_declared_sides() -> N
     assert record.source_uuids == {unlinked.left_uuid}
 
 
-def test_a_declared_side_keeps_only_the_frameworks_its_own_parents_declared() -> None:
-    unlinked = _link_with_an_unlinked_third_parent()
+@pytest.mark.parametrize("build", _THIRD_PARENT_BUILDERS)
+def test_a_declared_side_keeps_only_the_frameworks_its_own_parents_declared(build: Callable[[], ThirdParent]) -> None:
+    unlinked = build()
 
     record = _one_record(unlinked.plan, unlinked.link)
 
@@ -1115,7 +1142,8 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         _self_join_with_split_declarations,
         _append_pair,
         _two_links,
-        _link_with_an_unlinked_third_parent,
+        _link_with_a_third_parent_it_never_mentions,
+        _link_with_a_pandas_third_parent_descending_from_the_right_side,
         _case_override_inverted,
         _case_override_beats_nearer_wrong_framework_left,
         _case_override_disagrees_with_the_nearest_split,
@@ -1134,6 +1162,7 @@ def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_
         "append",
         "two_links",
         "unlinked_third_parent",
+        "unlinked_pandas_third_parent_from_right",
         "case_override_inverted",
         "case_override_beats_nearer_wrong_framework_left",
         "case_override_disagrees_with_nearest_split",
@@ -1399,12 +1428,13 @@ def test_a_real_engine_plan_carries_one_record_per_planned_join_step() -> None:
         assert record.destination_framework in record.destination.declared_frameworks
 
 
-def test_the_resolver_snapshots_the_frameworks_a_feature_declared_before_the_rewrite() -> None:
+def test_the_resolver_snapshots_the_frameworks_a_feature_declared_and_never_narrows_them() -> None:
     link = _pair_link()
     left = feature("resolved_join_snapshot_left", PyArrowTable, link.left_index)
     right = feature("resolved_join_snapshot_right", PandasDataFrame, link.right_index)
     child = Feature("resolved_join_snapshot_child")
     child.compute_frameworks = {PyArrowTable, PandasDataFrame}
+    child.chosen_compute_framework = PyArrowTable
 
     link_trekker = LinkTrekker()
     trekked = {child.uuid}
@@ -1420,7 +1450,7 @@ def test_the_resolver_snapshots_the_frameworks_a_feature_declared_before_the_rew
     resolver = ResolveComputeFrameworks(Graph())
     resolver.links(queue, link_trekker)
 
-    assert child.compute_frameworks == {PyArrowTable}, "the rewrite has to collapse the child for this to say anything"
+    assert child.compute_frameworks == {PyArrowTable, PandasDataFrame}, "resolution never narrows the allowed set"
     assert resolver.get_declared_frameworks()[child.uuid] == {PyArrowTable, PandasDataFrame}
     assert resolver.get_declared_frameworks()[left.uuid] == {PyArrowTable}
 

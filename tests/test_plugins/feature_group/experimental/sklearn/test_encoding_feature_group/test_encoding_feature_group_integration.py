@@ -57,7 +57,7 @@ class TestEncodingFeatureGroupIntegration:
         # Phase 1: Train and save artifacts
         api1 = mloda(
             [label_feature],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
@@ -86,7 +86,7 @@ class TestEncodingFeatureGroupIntegration:
 
         api2 = mloda(
             [label_feature_reuse],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results2 = api2.run()
@@ -124,7 +124,7 @@ class TestEncodingFeatureGroupIntegration:
         # Phase 1: Train and save artifacts
         api1 = mloda(
             [onehot_feature],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
@@ -170,7 +170,7 @@ class TestEncodingFeatureGroupIntegration:
         # Phase 1: Test individual column access
         api1 = mloda(
             [onehot_feature_0, onehot_feature_1],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results1 = api1.run()
@@ -204,7 +204,7 @@ class TestEncodingFeatureGroupIntegration:
 
         api2 = mloda(
             [onehot_full_feature],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results2 = api2.run()
@@ -262,7 +262,7 @@ class TestEncodingFeatureGroupIntegration:
         # Test configuration-based features with column suffixes
         api = mloda(
             [onehot_config_feature_0, onehot_config_feature_1],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results = api.run()
@@ -291,7 +291,7 @@ class TestEncodingFeatureGroupIntegration:
 
         api_string = mloda(
             [onehot_string_feature_0, onehot_string_feature_1],
-            {PandasDataFrame},
+            [PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         results_string = api_string.run()

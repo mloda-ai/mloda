@@ -45,7 +45,7 @@ class TestChainedFeatures:
                 feature2,
                 f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}identifier2__{ChainedFeatureGroupTest_B.OPERATION_ID}identifier2",
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
         # Currently, we duplicate here the data. This can be changed in the future.
@@ -55,7 +55,7 @@ class TestChainedFeatures:
         with pytest.raises(Exception) as exc_info:
             mloda.run_all(
                 [f"Sales__{ChainedFeatureGroupTest.OPERATION_ID}invalid_suffix"],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=self.plugin_collector,
             )
         assert "invalid_suffix" in str(exc_info.value)

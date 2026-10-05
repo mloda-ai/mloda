@@ -5,13 +5,22 @@ import inspect
 import linecache
 import hashlib
 import weakref
+from enum import Enum
 from typing import Any, Final
 from abc import ABC
 
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.version import get_mloda_version
 
 # Exceptions inspect.getsource raises for dynamically built classes (no source backing / built-in).
 SOURCE_INTROSPECTION_ERRORS: Final = (OSError, TypeError)
+
+
+class ThirdPartyVersionMode(Enum):
+    """Whether implementation_hash reflects the versions of third-party dependencies it reaches."""
+
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
 
 
 # Hash cache keyed by the class OBJECT (never by name): a redefined same-name
@@ -22,6 +31,18 @@ SOURCE_INTROSPECTION_ERRORS: Final = (OSError, TypeError)
 # temporary classes (Jupyter cells, test-local, synthetic dedup classes) are
 # not pinned for the process lifetime and can still be garbage-collected.
 _class_source_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakref.WeakKeyDictionary()
+
+# Failed lookups as (exception type, message). Never the exception itself: its
+# traceback references the class and would keep the weak key alive.
+_class_source_hash_failures: "weakref.WeakKeyDictionary[type[Any], tuple[type[Exception], str]]" = (
+    weakref.WeakKeyDictionary()
+)
+
+# Same caching contract as class_source_hash's pair above, for implementation_hash.
+_implementation_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakref.WeakKeyDictionary()
+_implementation_hash_failures: "weakref.WeakKeyDictionary[type[Any], tuple[type[Exception], str]]" = (
+    weakref.WeakKeyDictionary()
+)
 
 
 class BaseFeatureGroupVersion(ABC):
@@ -44,6 +65,8 @@ class BaseFeatureGroupVersion(ABC):
         ``__code__.co_filename`` when ``inspect.getsource`` cannot resolve the
         class (common for classes defined in long-lived namespaces such as
         Jupyter cells where ``__module__ == '__main__'``).
+
+        Both hashes and lookup failures are cached for the class object's lifetime.
         """
 
         # Import FeatureGroup locally to avoid circular import.
@@ -55,23 +78,16 @@ class BaseFeatureGroupVersion(ABC):
         cached = _class_source_hash_cache.get(target_class)
         if cached is not None:
             return cached
+        failure = _class_source_hash_failures.get(target_class)
+        if failure is not None:
+            error_type, message = failure
+            raise error_type(message)
 
         try:
-            source: str = inspect.getsource(target_class)
-        except SOURCE_INTROSPECTION_ERRORS:
-            fallback = _linecache_source_for_class(target_class)
-            if fallback is None:
-                raise
-            source = fallback
-        else:
-            if not _source_defines_class(source, target_class.__name__):
-                fallback = _linecache_source_for_class(target_class)
-                if fallback is None:
-                    raise OSError(
-                        f"inspect.getsource returned text that does not define {target_class.__name__!r} "
-                        "and no linecache fallback was available"
-                    )
-                source = fallback
+            source = _resolve_class_source_text(target_class)
+        except SOURCE_INTROSPECTION_ERRORS as error:
+            _class_source_hash_failures[target_class] = (type(error), str(error))
+            raise
         source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()
         _class_source_hash_cache[target_class] = source_hash
         return source_hash
@@ -84,6 +100,32 @@ class BaseFeatureGroupVersion(ABC):
         return target_class.__module__
 
     @classmethod
+    def implementation_hash(cls, target_class: type[Any]) -> str:
+        """
+        SHA-256 over target_class's reachable-code closure (see code_closure.closure_parts); third-party inclusion
+        follows version_third_party_mode(). Cached like class_source_hash.
+        """
+        from mloda.core.abstract_plugins.components.code_closure import closure_parts
+
+        cached = _implementation_hash_cache.get(target_class)
+        if cached is not None:
+            return cached
+        failure = _implementation_hash_failures.get(target_class)
+        if failure is not None:
+            error_type, message = failure
+            raise error_type(message)
+
+        mode = safe_field(lambda: target_class.version_third_party_mode(), ThirdPartyVersionMode.INCLUDE)
+        try:
+            parts = closure_parts(target_class, include_dependencies=mode is not ThirdPartyVersionMode.EXCLUDE)
+        except SOURCE_INTROSPECTION_ERRORS as error:
+            _implementation_hash_failures[target_class] = (type(error), str(error))
+            raise
+        digest = hashlib.sha256("\n".join(sorted(parts)).encode("utf-8")).hexdigest()
+        _implementation_hash_cache[target_class] = digest
+        return digest
+
+    @classmethod
     def version(cls, target_class: type[Any]) -> str:
         """
         Returns a composite version string.
@@ -91,7 +133,7 @@ class BaseFeatureGroupVersion(ABC):
         The version string is composed of:
           - the package version (from installed metadata),
           - the module name of the target class, and
-          - a SHA-256 hash of the target class's source code.
+          - the implementation hash (see implementation_hash) of the code target_class can run.
         """
 
         # Import FeatureGroup locally to avoid circular import.
@@ -100,7 +142,31 @@ class BaseFeatureGroupVersion(ABC):
         if not issubclass(target_class, FeatureGroup):
             raise ValueError(f"target_class must be a subclass of FeatureGroup: {target_class}")
 
-        return f"{cls.mloda_version()}-{cls.module_name(target_class)}-{cls.class_source_hash(target_class)}"
+        return f"{cls.mloda_version()}-{cls.module_name(target_class)}-{cls.implementation_hash(target_class)}"
+
+
+def _resolve_class_source_text(target_class: type[Any]) -> str:
+    """
+    Resolves target_class's source text: validates that inspect.getsource actually defines it (Python 3.13+ can return
+    unrelated content via ``__firstlineno__``), else falls back to a linecache lookup.
+    """
+    try:
+        source: str = inspect.getsource(target_class)
+    except SOURCE_INTROSPECTION_ERRORS:
+        fallback = _linecache_source_for_class(target_class)
+        if fallback is None:
+            raise
+        return fallback
+    if not _source_defines_class(source, target_class.__name__):
+        fallback = _linecache_source_for_class(target_class)
+        if fallback is None:
+            message = (
+                f"inspect.getsource returned text that does not define {target_class.__name__!r} "
+                "and no linecache fallback was available"
+            )
+            raise OSError(message)
+        return fallback
+    return source
 
 
 def _source_defines_class(source: str, class_name: str) -> bool:

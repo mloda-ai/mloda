@@ -15,13 +15,7 @@ class ComputeFrameworkTransformer:
 
     This class maintains a registry of available transformers and provides
     methods to add new transformers. It auto-loads transformer files once per
-    process, gated on ``_auto_load_done`` and the disabled-groups set.
-
-    To suppress auto-loading of transformer files:
-        PluginLoader.disable_auto_load("compute_framework")
-
-    Note: "compute_framework" is the group key checked by initilize_transformer.
-    Disabling it prevents any transformer files from being auto-loaded.
+    process, gated on ``_auto_load_done``.
 
     The transformer registry is a mapping from framework pairs to transformer
     classes, allowing the system to find the appropriate transformer for
@@ -114,11 +108,11 @@ class ComputeFrameworkTransformer:
         to the registry. The transformer files from the compute_framework group
         are auto-loaded once per process via load_matching, so a stray
         module-scope import of a single transformer cannot leave the registry
-        partial. Auto-loading is skipped while the group is disabled.
+        partial.
         """
         from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
-        if not ComputeFrameworkTransformer._auto_load_done and "compute_framework" not in PluginLoader._disabled_groups:
+        if not ComputeFrameworkTransformer._auto_load_done:
             PluginLoader().load_matching("compute_framework", "*transformer*")
             ComputeFrameworkTransformer._auto_load_done = True
 

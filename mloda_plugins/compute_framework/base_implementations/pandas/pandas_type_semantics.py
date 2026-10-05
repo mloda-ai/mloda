@@ -1,6 +1,6 @@
 """Column-semantics introspector for pandas DataFrames (epic #518, Phase 1)."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 
@@ -45,3 +45,17 @@ def column_semantics(df: "pd.DataFrame", column: str) -> ColumnSemantics:
         unit=unit,
         is_tz_aware=is_tz_aware,
     )
+
+
+def null_or_nan_mask(series: "pd.Series[Any]") -> Any:
+    """Return a NumPy-bool Series flagging null or NaN rows; isna() misses NaN on
+    ArrowDtype and nullable Float columns, so a float column's values are checked for NaN too.
+    """
+    import numpy as np
+    import pandas as pd
+
+    mask = series.isna().to_numpy(dtype=bool)
+    if pd.api.types.is_float_dtype(series.dtype):
+        values = series.to_numpy(dtype="float64", na_value=np.nan)
+        mask = mask | np.isnan(values)
+    return pd.Series(mask, index=series.index, dtype=bool)

@@ -1,8 +1,8 @@
 from typing import Any, ClassVar
-from mloda.user import DataAccessCollection
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.core.abstract_plugins.components.utils import is_match_abort
+from mloda.user import Credential, DataAccessCollection
 from mloda.provider import (
-    CHAIN_SEPARATOR,
-    COLUMN_SEPARATOR,
     FeatureSet,
     BaseInputData,
     INPUT_DATA_STAGE,
@@ -19,12 +19,9 @@ class ReadDB(BaseInputData):
     _auto_load_group triggers lazy plugin discovery when no ReadDB subclasses
     are found in the process. Only the read_dbs subdirectory is loaded.
 
-    To suppress auto-loading:
-        PluginLoader.disable_auto_load("feature_group/input_data/read_dbs")
-
     load_data is a template method exposing an opt-in lifecycle seam: a new
     backend implements ``produce_rows``, ``connect``, and ``is_valid_credentials``
-    (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``)
+    (optionally ``prepare_credentials``/``build_query``/``check_feature_in_data_access``/``claims_feature_name``)
     instead of overriding ``load_data`` wholesale. Overriding ``load_data`` directly
     is still supported.
 
@@ -43,6 +40,14 @@ class ReadDB(BaseInputData):
             scalar_only=True,
         ),
     }
+
+    @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        """Wraps a plain dict (including dict subclasses) in a redacting RegisteredCredential copy
+        before it is stored/matched."""
+        if isinstance(data_access, dict) and not isinstance(data_access, RegisteredCredential):
+            return RegisteredCredential(data_access)
+        return data_access
 
     @classmethod
     def prepare_credentials(cls, data_access: Any, features: FeatureSet) -> Any:
@@ -92,9 +97,12 @@ class ReadDB(BaseInputData):
     def is_valid_credentials(cls, credentials: dict[str, Any]) -> bool:
         """Checks if the given dictionary is a valid credentials object.
 
-        Matcher exception contract: match_read_db_data_access treats only NotImplementedError
-        as a soft no-match; any other exception propagates and aborts matching for every
-        reader sharing the DataAccessCollection.
+        To check it against PropertySpecs, use mloda.provider.validate_property_values.
+
+        Matcher exception contract: match_read_db_data_access treats only an unmarked
+        NotImplementedError as a soft no-match; anything else, including one marked with
+        escalate_match_abort, propagates and aborts matching for every reader sharing the
+        DataAccessCollection.
 
         match_subclass_data_access also enforces this via the _credentials_predicate wrapper,
         and may invoke it once per registered credentials entry while matching, not only the
@@ -106,21 +114,32 @@ class ReadDB(BaseInputData):
     def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
         """Obligatory function to check if the feature is in the data access.
 
-        Same matcher exception contract as is_valid_credentials: only NotImplementedError
-        is a soft no-match, any other exception propagates.
+        Same matcher exception contract as is_valid_credentials: only an unmarked
+        NotImplementedError is a soft no-match; anything else, including a marked one,
+        propagates.
         """
         raise NotImplementedError
 
     @classmethod
+    def claims_feature_name(cls, feature_name: str) -> bool:
+        """Name-only check run by the default match_subclass_data_access (an override must call it itself)."""
+        return True
+
+    @classmethod
     def _credentials_predicate(cls, credentials: Any) -> bool:
-        """Wraps is_valid_credentials as a predicate, treating NotImplementedError as no match."""
+        """Wraps is_valid_credentials as a predicate, treating an unmarked NotImplementedError as no match."""
         try:
             return cls.is_valid_credentials(credentials)
-        except NotImplementedError:
+        except NotImplementedError as exc:
+            if is_match_abort(exc):
+                raise
             return False
 
     @classmethod
     def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        if not all(cls.claims_feature_name(name) for name in feature_names):
+            return None
+
         data_accesses: list[Any] = []
 
         if isinstance(data_access, DataAccessCollection):
@@ -136,6 +155,8 @@ class ReadDB(BaseInputData):
                 data_accesses.append(creds)
         elif isinstance(data_access, dict):
             data_accesses.append(data_access)
+        elif isinstance(data_access, Credential):
+            data_accesses.append(RegisteredCredential(data_access.data))
 
         if not data_accesses:
             return None
@@ -169,23 +190,28 @@ class ReadDB(BaseInputData):
                             stage=INPUT_DATA_STAGE,
                         )
                         continue
-                    except NotImplementedError:
+                    except NotImplementedError as exc:
+                        if is_match_abort(exc):
+                            raise
                         # COLUMN_SEPARATOR never reaches here in production (get_column_base_feature strips it
                         # first); kept for direct callers of match_read_db_data_access.
-                        if not cls._is_overridden(ReadDB, "check_feature_in_data_access") and (
-                            CHAIN_SEPARATOR in feature_names[0] or COLUMN_SEPARATOR in feature_names[0]
+                        separator_name = cls._first_separator_name(feature_names)
+                        if separator_name is not None and not cls._is_overridden(
+                            ReadDB, "check_feature_in_data_access"
                         ):
                             record_match_rejection(
                                 cls.get_class_name(),
                                 f"{cls.get_class_name()} accepted the credentials but does not override "
                                 f"check_feature_in_data_access, so it cannot confirm the chain/column-separated "
-                                f"feature '{feature_names[0]}'",
+                                f"feature '{separator_name}'",
                                 stage=INPUT_DATA_STAGE,
                             )
                             continue
 
                     return data_access
-            except NotImplementedError:
+            except NotImplementedError as exc:
+                if is_match_abort(exc):
+                    raise
                 continue
         return None
 

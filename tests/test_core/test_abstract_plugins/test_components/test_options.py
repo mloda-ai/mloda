@@ -4,7 +4,8 @@ from typing import Any
 
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.user import Options
+from mloda.user import Credential, Feature, Options
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
 
@@ -14,6 +15,14 @@ class _RaisesOnDeepcopy:
 
     def __deepcopy__(self, memo: dict[int, object]) -> "_RaisesOnDeepcopy":
         raise KeyError("int")
+
+
+class _HoldsUncopyable:
+    """Deep-copies via __reduce_ex__, so copy memoizes an empty instance before copying state fails."""
+
+    def __init__(self, nested: "_HoldsUncopyable | None" = None) -> None:
+        self.nested = nested
+        self.handle = _RaisesOnDeepcopy()
 
 
 class TestOptions:
@@ -269,6 +278,26 @@ class TestPropagateContextKeys:
         assert copied.group["d"] is not opts.group["d"]
         assert copied.group["d"] == {"n": 1}
 
+    def test_value_whose_deepcopy_fails_partway_stays_the_original_across_features(self) -> None:
+        """A failed deepcopy (e.g. a SparkSession) must not leave a half-built copy in the shared memo
+        for a later reference to it, or to an object nested in it, to pick up."""
+        inner = _HoldsUncopyable()
+        outer = _HoldsUncopyable(nested=inner)
+        sibling = {"n": 1}
+        features = [
+            Feature("a", options={"k": outer, "s": sibling}),
+            Feature("b", options={"k": outer}),
+            Feature("c", options={"k": inner}),
+        ]
+
+        copied = deepcopy(features)
+
+        assert copied[0].options.get("k") is outer
+        assert copied[1].options.get("k") is outer
+        assert copied[2].options.get("k") is inner
+        assert copied[0].options.get("s") is not sibling
+        assert copied[0].options.get("s") == sibling
+
 
 class TestContextPropagationIntegration:
     """Integration tests for context propagation through merge_options."""
@@ -506,3 +535,80 @@ class TestOptionsGetInFeaturesUnresolvableTruthyValue:
         """The unsupported-type message keeps naming the type alongside the value."""
         message = self._message(value)
         assert type(value).__name__ in message, message
+
+
+class TestOptionsGetInFeaturesOrdered:
+    """get_in_features returns an ordered tuple: declared order for sequences, name order for sets."""
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            (["a", "b", "c"], ("a", "b", "c")),
+            (["c", "b", "a"], ("c", "b", "a")),
+            (("b", "a"), ("b", "a")),
+            (["a", "a"], ("a", "a")),
+            ("a", ("a",)),
+            ("b, a", ("b", "a")),
+            (Feature("a"), ("a",)),
+            ([Feature("b"), Feature("a")], ("b", "a")),
+            ({"b", "c", "a"}, ("a", "b", "c")),
+            (frozenset({"b", "c", "a"}), ("a", "b", "c")),
+        ],
+        ids=[
+            "list",
+            "reversed_list",
+            "tuple",
+            "duplicates",
+            "single_str",
+            "comma_str",
+            "feature",
+            "feature_list",
+            "set",
+            "frozenset",
+        ],
+    )
+    def test_returns_ordered_tuple_of_features(self, value: Any, expected: tuple[str, ...]) -> None:
+        result = Options(context={IN_FEATURES: value}).get_in_features()
+        assert type(result) is tuple
+        assert tuple(f.name for f in result) == expected
+
+
+class TestOptionsWithCredentialValues:
+    """Options group holding Credential values compares/hashes by value and never leaks it via str()."""
+
+    def test_options_with_equal_credentials_are_equal_and_hash_alike(self) -> None:
+        options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
+        options2 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
+        assert options1 == options2
+        assert hash(options1) == hash(options2)
+
+    def test_options_with_different_credentials_are_not_equal(self) -> None:
+        options1 = Options(group={"SQLITEReader": Credential(sqlite="/x.db")})
+        options2 = Options(group={"SQLITEReader": Credential(sqlite="/y.db")})
+        assert options1 != options2
+
+    def test_str_never_contains_the_secret_value(self) -> None:
+        options = Options(group={"SQLITEReader": Credential(sqlite="/secret/path/analytics.db")})
+        assert "/secret/path/analytics.db" not in str(options)
+
+    def test_str_redacts_a_reader_tuple_in_base_input_data_context(self) -> None:
+        """Only the reserved BaseInputData reader tuple is masked; a plain non-reader dict stays readable."""
+        options = Options(
+            context={"BaseInputData": (SQLITEReader, {"sqlite": "/raw/reader_tuple_marker.db"})},
+        )
+        text = str(options)
+        assert "/raw/reader_tuple_marker.db" not in text
+        assert "BaseInputData" in text
+        assert "sqlite" in text
+
+        plain = Options(group={"cfg": {"a": "b"}})
+        assert "'a': 'b'" in str(plain)
+
+    def test_str_redacts_a_reader_tuple_dsn_string_in_base_input_data_context(self) -> None:
+        """The reserved BaseInputData reader tuple also masks a DSN string second element."""
+        options = Options(
+            context={"BaseInputData": (SQLITEReader, "postgresql://dbuser:cred_marker_q7@dbhost/db")},
+        )
+        text = str(options)
+        assert "cred_marker_q7" not in text
+        assert "BaseInputData" in text

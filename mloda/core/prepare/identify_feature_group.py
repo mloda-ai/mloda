@@ -1,7 +1,9 @@
 import inspect
 from collections.abc import Sequence
 from copy import deepcopy
+from difflib import get_close_matches
 from dataclasses import replace
+from typing import Any
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
@@ -19,16 +21,26 @@ from mloda.core.prepare.resolution_types import (
 )
 from mloda.core.prepare.resolution_failure_renderer import (
     render_resolution_failure,
+    _candidate_sort_key,
     _prefix_name,
     _supported_feature_names,
 )
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.declared_attributes import (
+    DeclarationRequirement,
+    declaration_requirement_scope,
+)
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.domain import Domain
+from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
+    is_match_abort,
     contained_raise_reason,
     safe_exc_str,
     safe_field,
@@ -37,6 +49,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
 import logging
 
@@ -117,6 +130,10 @@ class IdentifyFeatureGroupClass:
     _declared_frameworks: dict[type[FeatureGroup], frozenset[type[ComputeFramework]]]
     _supported_names: dict[type[FeatureGroup], frozenset[str]]
     _prefixes: dict[type[FeatureGroup], str]
+    _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
+    _replaced: set[type[FeatureGroup]]
+    _matched_options: dict[type[FeatureGroup], Options]
+    _input_data_matches: dict[type[FeatureGroup], tuple[type[BaseInputData], Any]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -132,6 +149,10 @@ class IdentifyFeatureGroupClass:
         self._declared_frameworks = {}
         self._supported_names = {}
         self._prefixes = {}
+        self._declarations = {}
+        self._replaced = set()
+        self._matched_options = {}
+        self._input_data_matches = {}
         self._data_access_collection = data_access_collection
 
     @classmethod
@@ -149,12 +170,22 @@ class IdentifyFeatureGroupClass:
         self = cls(data_access_collection)
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
+            # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
+            specialized_from = tuple(sorted(self._replaced, key=_candidate_sort_key)) if len(identified) == 1 else ()
+            if specialized_from:
+                logger.debug(
+                    "Feature %s: %s replaced %s",
+                    feature.name,
+                    ", ".join(c.__qualname__ for c in identified),
+                    ", ".join(c.__qualname__ for c in specialized_from),
+                )
             result = EvaluationResult(
                 identified=identified,
                 criteria_matched=self._criteria_matched_feature_groups,
                 abstract_matched=self._abstract_matched_feature_groups,
                 candidate_frameworks=self._candidate_frameworks,
                 eliminations=self._eliminations,
+                specialized_from=specialized_from,
             )
             if result.failure_kind is not None:
                 # Every elimination (value_rejection included) was already recorded during the single filter pass;
@@ -162,10 +193,13 @@ class IdentifyFeatureGroupClass:
                 result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature, links))
         finally:
             # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
-            # keep both alive until a gc pass. Dropping the outcomes makes each memo's lifetime what it claims,
+            # keep both alive until a gc pass. Dropping the outcomes and option forks (user values) makes each
+            # memo's lifetime what it claims,
             # in a finally because a re-raising gate or an escalated match abort leaves without a return.
             self._domain_outcomes.clear()
             self._links_outcomes.clear()
+            self._matched_options.clear()
+            self._input_data_matches.clear()
         return result
 
     def _capture_render_facts(
@@ -177,7 +211,7 @@ class IdentifyFeatureGroupClass:
     ) -> RenderFacts:
         """Capture the non-elimination facts the messages still need. Only reached when the pass has no winner.
 
-        The renderer alone owns which message wins, so this does not mirror its branch order: the four cheap
+        The renderer alone owns which message wins, so this does not mirror its branch order: the five cheap
         facts are captured whatever the failure kind is. domains feeds the multiple message, concrete_frameworks
         the abstract_only message, and known_names, eliminated_hints and dead_only_names the none message.
         dead_only_names is the one exception, gated on its own kind: its sweep retests the links gate over every
@@ -195,7 +229,43 @@ class IdentifyFeatureGroupClass:
                 if result.failure_kind == "none"
                 else frozenset()
             ),
+            skipped_plugins=tuple(sorted(PluginLoader.skipped_plugins().items())),
+            sources=self._capture_sources(result),
+            scope_suggestions=self._capture_scope_suggestions(result, accessible_plugins, feature),
         )
+
+    @staticmethod
+    def _capture_scope_suggestions(
+        result: EvaluationResult, accessible_plugins: FeatureGroupEnvironmentMapping, feature: Feature
+    ) -> tuple[str, ...]:
+        """Close names for a string scope that no accessible candidate has in its MRO; probes no candidate."""
+        scope = feature.feature_group_scope
+        if result.failure_kind != "none" or not isinstance(scope, str):
+            return ()
+        if any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
+            return ()
+        names = {
+            ancestor.__name__
+            for fg in accessible_plugins
+            for ancestor in fg.__mro__
+            if ancestor is not FeatureGroup and issubclass(ancestor, FeatureGroup)
+        }
+        return tuple(get_close_matches(scope, sorted(names), n=3, cutoff=0.6))
+
+    def _capture_sources(self, result: EvaluationResult) -> dict[type[FeatureGroup], str]:
+        """Credential-free 'Reader: identity' of every identified candidate that matched a data source."""
+        sources: dict[type[FeatureGroup], str] = {}
+        for feature_group in result.identified:
+            pair = self._input_data_matches.get(feature_group)
+            if pair is None:
+                continue
+            reader, access = pair
+            sources[feature_group] = safe_field(
+                lambda: f"{reader.data_access_name()}: {reader.data_access_identity(access)}",
+                "",
+                field=f"{reader.__name__}.data_access_identity",
+            )
+        return {fg: text for fg, text in sources.items() if text}
 
     def _capture_eliminated_hints(self, result: EvaluationResult) -> frozenset[str]:
         """Class name and prefix of every eliminated near-miss, so the none message can suppress a
@@ -437,12 +507,29 @@ class IdentifyFeatureGroupClass:
         _identified_feature_groups: FeatureGroupEnvironmentMapping = {}
 
         for feature_group, compute_frameworks in accessible_plugins.items():
+            # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
+            if not self._filter_feature_group_by_scope(feature_group, feature):
+                continue
+            requirement = self._declaration_requirement(feature_group, feature)
             # A criteria non-match records a value_rejection only when the first pass recorded a reason for it:
             # a plain name mismatch is not a near-miss, but a value the candidate declined (with a reportable
             # reason) is. The criteria call above just recorded any rejection under this candidate's window, so
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
-            # never probed. Recorded regardless of domain/scope or of the overall outcome (a sibling may win).
-            if not self._filter_feature_group_by_criteria(feature_group, feature, data_access_collection):
+            # never probed. Recorded regardless of domain or of the overall outcome (a sibling may win).
+            try:
+                with declaration_requirement_scope(requirement):
+                    criteria_matched = self._filter_feature_group_by_criteria(
+                        feature_group, feature, data_access_collection
+                    )
+            except Exception as exc:  # noqa: BLE001  (only a marked abort of a gated-out candidate is absorbed)
+                if not is_match_abort(exc):
+                    raise
+                if not self._filter_feature_group_by_domain(feature_group, feature):
+                    self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
+                else:
+                    raise
+                continue
+            if not criteria_matched:
                 # A contained matcher raise is always a near-miss: the raise says nothing about name ownership.
                 # Deliberate precedence: a contained crash outranks a recorded decline for the same candidate.
                 matcher_error = self._matcher_errors.get(feature_group)
@@ -461,22 +548,19 @@ class IdentifyFeatureGroupClass:
                 self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
                 continue
 
-            if not self._filter_feature_group_by_scope(feature_group, feature):
-                self._record_elimination(feature_group, "scope", "outside the requested feature group scope")
-                continue
-
-            # Abstract bases can match name+domain+scope but cannot be instantiated; never let one win, and
+            # Abstract bases can match name+domain but cannot be instantiated; never let one win, and
             # never record one as a near-miss: the abstract_only message owns them.
             if inspect.isabstract(feature_group):
                 self._abstract_matched_feature_groups.add(feature_group)
                 continue
 
             self._criteria_matched_feature_groups.add(feature_group)
+            options = self._matched_options[feature_group]
 
             supported_frameworks = {
                 cfw
                 for cfw in compute_frameworks
-                if feature_group.supports_compute_framework(feature.name, feature.options, cfw)
+                if feature_group.supports_compute_framework(feature.name, options, cfw)
             }
 
             # The split the capability hook just produced over this candidate's own accessible frameworks:
@@ -517,10 +601,61 @@ class IdentifyFeatureGroupClass:
                 self._record_elimination(feature_group, "links", "no index column matches the run's links")
                 continue
 
+            if requirement is not None:
+                reader = self._written_reader(feature_group, feature.options.group)
+                unmet = requirement.unmet_reason((reader or feature_group).__name__, reader)
+                if unmet is not None:
+                    self._record_elimination(feature_group, "declarations", unmet)
+                    continue
+
             _identified_feature_groups[feature_group] = supported_frameworks
 
+        candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
+        self._replaced = candidates - set(_identified_feature_groups)
+        if len(_identified_feature_groups) == 1:
+            winner = next(iter(_identified_feature_groups))
+            winner_options = self._matched_options[winner]
+            pair = self._input_data_matches.get(winner)
+            # A winner that wrote no reader inherits the pair of its nearest replaced ancestor that recorded one.
+            if pair is None:
+                for klass in winner.__mro__:
+                    if klass in self._replaced and klass in self._input_data_matches:
+                        pair = self._input_data_matches[klass]
+                        break
+            feature.options._adopt(winner_options)
+            feature.input_data_match = pair
+        elif _identified_feature_groups:
+            # Replaying each survivor's MatchData write raises the conflict when they differ.
+            scratch = feature.options._fork()
+            survivors = {fg: self._matched_options[fg] for fg in _identified_feature_groups}
+            self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
+
+    @staticmethod
+    def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:
+        for feature_group, source in survivors.items():
+            if issubclass(feature_group, MatchData):
+                key = feature_group.get_class_name()
+                if key in source.group:
+                    feature_group.add_base_input_data_to_options(source.group[key], target)
+
+    def _declaration_requirement(
+        self, feature_group: type[FeatureGroup], feature: Feature
+    ) -> DeclarationRequirement | None:
+        """The consumer's requirement with this candidate's own declarations; None when the request carries none."""
+        required = feature.required_declarations
+        if not required:
+            return None
+        consumer = feature.resolving_consumer or f"request for '{feature.name}'"
+        return DeclarationRequirement(consumer, required, feature_group, self._declarations)
+
+    def _written_reader(self, feature_group: type[FeatureGroup], original_group: dict[str, Any]) -> type | None:
+        """The reader of the (ReaderClass, data_access) pair this candidate's criteria match wrote, if it wrote one."""
+        matched = self._input_data_matches.get(feature_group)
+        if matched is original_group.get(RESERVED_READER_OPTION_KEY):
+            return None
+        return matched[0] if matched else None
 
     def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
@@ -599,25 +734,20 @@ class IdentifyFeatureGroupClass:
     ) -> bool:
         """A raise out of the match hook is a non-match for that candidate only, not a run-wide abort (#845).
 
-        The shared probe owns the per-candidate window and the containment; this seam keeps only its own
-        policy: the option rollback on a contained raise and the per-candidate recording, never as an
-        exception object whose traceback would pin the plugin class.
+        The shared probe owns the per-candidate window and the containment. This seam runs each probe on its own
+        fork of the options, so a contained raise leaves nothing behind, and records the per-candidate outcome as
+        text, never as an exception object whose traceback would pin the plugin class.
 
         Mark-or-contain policy: see call_match_hook.
         """
-        # Shallow copies, taken per candidate so an earlier match's write survives a later candidate's raise.
-        group_before = dict(feature.options.group)
-        context_before = dict(feature.options.context)
-        non_forwarded_before = feature.options.non_forwarded_group_keys
-        probe = probe_match_criteria(feature_group, feature.name, feature.options, data_access_collection)
-        if probe.matcher_error is not None or probe.value_rejection is not None:
-            # Only the contained branch rolls back: a matcher that returns True keeps its write,
-            # which is how a matched reader is linked through mloda.
-            feature.options.group.clear()
-            feature.options.group.update(group_before)
-            feature.options.context.clear()
-            feature.options.context.update(context_before)
-            feature.options.non_forwarded_group_keys = non_forwarded_before
+        options = feature.options._fork()
+        probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
+        # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.
+        written = options.group.pop(RESERVED_READER_OPTION_KEY, None)
+        if probe.matched:
+            self._matched_options[feature_group] = options
+            if isinstance(written, tuple) and len(written) == 2:
+                self._input_data_matches[feature_group] = written
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
@@ -626,7 +756,7 @@ class IdentifyFeatureGroupClass:
                 # A plugin-owned read past the hook call's containment, so it degrades instead of escaping the seam.
                 safe_field(lambda: feature_group.get_class_name(), "<unnamed feature group>"),
                 feature.name,
-                safe_exc_str(exc),
+                scrub_credentials(safe_exc_str(exc)),
             )
         elif probe.matcher_error is not None:
             reason = contained_raise_reason(probe.matcher_error)
@@ -671,16 +801,11 @@ class IdentifyFeatureGroupClass:
     def filter_subclasses(
         self, _identified_feature_groups: FeatureGroupEnvironmentMapping
     ) -> FeatureGroupEnvironmentMapping:
-        """
-        This functionality ensures that only subclass feature groups are kept.
-        """
+        """Drop every candidate that another candidate subclasses, whatever their compute-framework sets."""
         fgs_to_pop: set[type[FeatureGroup]] = set()
 
-        for i_feature_group, i_compute_frameworks in _identified_feature_groups.items():
-            for o_feature_group, o_compute_frameworks in _identified_feature_groups.items():
-                if i_compute_frameworks != o_compute_frameworks:
-                    continue
-
+        for i_feature_group in _identified_feature_groups:
+            for o_feature_group in _identified_feature_groups:
                 if i_feature_group == o_feature_group:
                     continue
 

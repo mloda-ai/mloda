@@ -6,14 +6,15 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import context_forwarding_remedy, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
-from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.declaration_surface import DeclarationSurface, validate_property_spec
 from mloda.core.abstract_plugins.components.utils import (
@@ -21,6 +22,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     escalate_match_abort,
     safe_field,
+    safe_value_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,9 +88,9 @@ class FeatureChainParser:
         prefix_patterns: list[Any],
         pattern: str = CHAIN_SEPARATOR,
     ) -> ParsedFeatureName:
-        """Parse a feature name into structured facts, keeping today's matching semantics.
+        """Parse a feature name into structured facts.
 
-        A prefix pattern is anything ``re.match`` accepts: a ``str`` or a compiled ``re.Pattern``.
+        A prefix pattern is a ``str`` or compiled ``re.Pattern`` that must match the whole name (``re.fullmatch``).
         A matched pattern with nothing before the separator raises the historical ValueError;
         ``match_parser_criteria`` and the mixin's standalone rejection diagnostic depend on that raise.
         """
@@ -99,7 +101,7 @@ class FeatureChainParser:
         operation_part = parts[1] if len(parts) > 1 else parts[0]
 
         for suffix_pattern in prefix_patterns:
-            match = re.match(suffix_pattern, _feature_name)
+            match = re.fullmatch(suffix_pattern, _feature_name)
             if match is None:
                 continue
 
@@ -196,7 +198,7 @@ class FeatureChainParser:
             if not verdict:
                 # Contained: a rejected option value is this candidate's own verdict, recorded as its reason.
                 raise PropertyValueRejection(
-                    f"Property value '{found_property_val}' failed validation for '{property_name}'"
+                    f"Property value {safe_value_text(found_property_val)} failed validation for '{property_name}'"
                 ) from raised
         else:
             # Fallback to membership check.
@@ -208,7 +210,7 @@ class FeatureChainParser:
             if not is_member:
                 # Contained: a rejected option value is this candidate's own verdict, recorded as its reason.
                 raise PropertyValueRejection(
-                    f"Property value '{found_property_val}' not found in mapping for '{property_name}'"
+                    f"Property value {safe_value_text(found_property_val)} not found in mapping for '{property_name}'"
                 )
 
     @classmethod
@@ -348,6 +350,13 @@ class FeatureChainParser:
             cls._collect_option_value(options, property_name, property_mapping)
 
     @classmethod
+    def validate_name_bindings(cls, bindings: Mapping[str, str], property_mapping: dict[str, PropertySpec]) -> None:
+        """Validate each name-bound value like an option value; raises PropertyValueRejection on the first invalid."""
+        for key, value in bindings.items():
+            spec = cls._require_spec(cls.__name__, key, property_mapping[key])
+            cls._process_found_property_value(value, cls.extract_property_values(spec), key, spec)
+
+    @classmethod
     def _validate_options_against_property_mapping(
         cls, options: Options, property_mapping: dict[str, PropertySpec]
     ) -> bool:
@@ -367,6 +376,70 @@ class FeatureChainParser:
             for property_name in property_mapping
         }
         return cls._validate_final_properties(property_tracker, property_mapping)
+
+    @classmethod
+    def _first_rejecting_guard(
+        cls, options: Options, property_mapping: dict[str, PropertySpec] | None, log: logging.Logger = logger
+    ) -> tuple[str, Any] | None:
+        """The (key, value) of the first match_guard that rejects (falsy or raises), or None; records go to ``log``."""
+        if property_mapping is None:
+            return None
+
+        for key, mapping_entry in property_mapping.items():
+            guard = mapping_entry.match_guard
+            if guard is None:
+                continue
+            value = options.get(key)
+            # An opted-in explicit None reaches the guard; every flagless spec still skips a None (#768).
+            if not option_key_is_present(mapping_entry, key, options):
+                continue
+            try:
+                rejected = not guard(value)
+            # Swallows: a guard that raises cannot judge the value, so the value counts as rejected.
+            except Exception as exc:
+                level = contained_raise_log_level(exc)
+                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
+                if level == logging.DEBUG:
+                    log.debug("match_guard for '%s' %s for value %r", key, contained_raise_reason(exc), value)
+                else:
+                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
+                    log.warning("match_guard for '%s' %s", key, contained_raise_reason(exc))
+                rejected = True
+            if rejected:
+                return key, value
+        return None
+
+    @classmethod
+    def _guard_rejection_reason(cls, key: str, value: Any, spec: PropertySpec) -> str | None:
+        """The reportable reason for a guard rejection, or None if unreportable."""
+        if spec.expected is not None:
+            shown = safe_value_text(value)
+            return f"option '{key}' must be {spec.expected}, got {shown}"
+        if spec.strict_validation:
+            shown = safe_value_text(value)
+            return f"Property value {shown} rejected by match_guard for '{key}'"
+        return None
+
+    @classmethod
+    def _validate_match_guards(
+        cls,
+        owner_name: str,
+        options: Options,
+        property_mapping: dict[str, PropertySpec] | None,
+        log: logging.Logger = logger,
+    ) -> bool:
+        """Enforce the match_guard constraints of a PROPERTY_MAPPING; a reportable rejection is recorded."""
+        rejection = cls._first_rejecting_guard(options, property_mapping, log)
+        if rejection is None:
+            return True
+
+        key, value = rejection
+        log.debug("match_guard for '%s' rejected value %r", key, value)
+        if property_mapping is not None:
+            reason = cls._guard_rejection_reason(key, value, property_mapping[key])
+            if reason is not None:
+                record_match_rejection(owner_name, reason)
+        return False
 
     @classmethod
     def _name_path_missing_required_keys(
@@ -395,9 +468,14 @@ class FeatureChainParser:
         return missing
 
     @staticmethod
-    def _presence_rejection_reason(missing: list[str]) -> str:
+    def _presence_rejection_reason(missing: list[str], property_mapping: dict[str, PropertySpec]) -> str:
         """The one formatting of the missing-required-keys reason, shared by the matcher and the diagnostic."""
-        return f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+        context_keys = sorted(key for key in missing if property_mapping[key].context)
+        remedy = context_forwarding_remedy(bool(context_keys), context_keys if len(missing) > 1 else None)
+        return (
+            f"required option(s) {', '.join(sorted(missing))} are absent after declared defaults and name bindings"
+            f"{remedy}"
+        )
 
     @classmethod
     def _check_name_path_required_presence(
@@ -413,7 +491,7 @@ class FeatureChainParser:
             return True
 
         if owner_name is not None:
-            record_match_rejection(owner_name, cls._presence_rejection_reason(missing))
+            record_match_rejection(owner_name, cls._presence_rejection_reason(missing, property_mapping))
 
         owner = owner_name or "A feature group"
         keys = ", ".join(sorted(missing))
@@ -440,7 +518,7 @@ class FeatureChainParser:
         missing = cls._name_path_missing_required_keys(effective_options, property_mapping)
         if not missing:
             return None
-        return cls._presence_rejection_reason(missing)
+        return cls._presence_rejection_reason(missing, property_mapping)
 
     @classmethod
     def match_configuration_feature_chain_parser(
@@ -476,11 +554,11 @@ class FeatureChainParser:
         # own parse containment; a raise out of build_effective_options in the author guards'
         # check_required_when now surfaces as a framework defect (see TestBuildEffectiveOptionsRaiseSurfaces).
         if prefix_patterns is not None:
-            parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
-            if cls._name_identifies_group(parsed, property_mapping):
+            resolution = cls.resolve_name(feature_name, prefix_patterns, property_mapping, pattern=pattern)
+            if resolution.owned:
                 if property_mapping is not None:
-                    bindings = cls.bind_name_captures(parsed, property_mapping)
-                    effective_options = cls._merge_bindings(options, bindings, property_mapping)
+                    cls.validate_name_bindings(resolution.bindings, property_mapping)
+                    effective_options = cls._merge_bindings(options, dict(resolution.bindings), property_mapping)
                     cls._validate_present_option_values(effective_options, property_mapping)
                     if not cls._check_name_path_required_presence(
                         owner_name, feature_name, effective_options, property_mapping
@@ -507,7 +585,7 @@ class FeatureChainParser:
     def prefix_patterns_of(cls, owner: type[Any]) -> list[Any]:
         """Collect the name patterns a class matches on. The single implementation the mixin uses too.
 
-        A pattern is whatever ``re.match`` accepts: a ``str`` or an already compiled ``re.Pattern``.
+        A pattern is a ``str`` or compiled ``re.Pattern`` that must match the whole name (``re.fullmatch``).
         Filtering by type would hide a compiled pattern from the guard while the matcher still matches
         on it, and the guard would then reject a feature the matcher accepted.
         """
@@ -575,6 +653,27 @@ class FeatureChainParser:
         return cls._legacy_operation_config(parsed) is not None
 
     @classmethod
+    def resolve_name(
+        cls,
+        feature_name: FeatureName | str,
+        prefix_patterns: list[Any],
+        property_mapping: dict[str, Any] | None,
+        in_feature_separator: str = INPUT_SEPARATOR,
+        pattern: str = CHAIN_SEPARATOR,
+    ) -> NameResolution:
+        """Resolve a name once: ownership, bindings and raw sources; raises like ``parse_name`` on no source."""
+        parsed = cls.parse_name(feature_name, prefix_patterns, pattern)
+        if not parsed.matched:
+            return NameResolution.miss()
+        sources = tuple(parsed.source_feature.split(in_feature_separator)) if parsed.source_feature else ()
+        return NameResolution(
+            parsed=parsed,
+            owned=cls._name_identifies_group(parsed, property_mapping),
+            bindings=cls.bind_name_captures(parsed, property_mapping or {}),
+            sources=sources,
+        )
+
+    @classmethod
     def _merge_bindings(
         cls, options: Options, bindings: dict[str, str], property_mapping: dict[str, Any] | None
     ) -> Options:
@@ -622,15 +721,14 @@ class FeatureChainParser:
         that is no name-parsed value to merge, never an exception out of a matcher. If nothing matches or
         nothing binds, the original options come back by identity.
         """
-        parsed = safe_field(
-            lambda: cls.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR),
-            ParsedFeatureName.no_match(),
+        resolution = safe_field(
+            lambda: cls.resolve_name(feature_name, prefix_patterns, property_mapping),
+            NameResolution.miss(),
             catching=(ValueError,),
         )
-        if not parsed.matched:
+        if not resolution.parsed.matched:
             return options
-        bindings = cls.bind_name_captures(parsed, property_mapping)
-        return cls._merge_bindings(options, bindings, property_mapping)
+        return cls._merge_bindings(options, dict(resolution.bindings), property_mapping)
 
     @classmethod
     def extract_in_feature(cls, feature_name: str, suffix_pattern: str) -> str:
@@ -647,7 +745,7 @@ class FeatureChainParser:
         Raises:
             ValueError: If the feature name doesn't match the expected pattern
         """
-        match = re.match(suffix_pattern, feature_name)
+        match = re.fullmatch(suffix_pattern, feature_name)
         if not match:
             raise ValueError(f"Invalid feature name format: {feature_name}")
 

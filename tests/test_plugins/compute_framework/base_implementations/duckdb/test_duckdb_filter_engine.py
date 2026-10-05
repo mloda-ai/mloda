@@ -1,5 +1,6 @@
 """Unit tests for the DuckDBFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 import logging
 
@@ -35,10 +36,7 @@ except ImportError:
 class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the DuckDBFilterEngine class using shared mixins."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the DuckDBFilterEngine class."""
-        return DuckDBFilterEngine
+    filter_engine_class = DuckDBFilterEngine
 
     @pytest.fixture
     def sample_data(self, connection: Any) -> Any:
@@ -53,15 +51,37 @@ class TestDuckDBFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         )
         return DuckdbRelation.from_arrow(connection, arrow_table)
 
+    @pytest.fixture(params=["arrow", "native"])
+    def nullable_category_sample_data(self, request: Any, connection: Any) -> Any:
+        """Runs on an Arrow scan (the production path) and a materialized native table (DuckDB's own NaN semantics)."""
+        arrow_table = pa.Table.from_pydict(
+            {
+                "id": [1, 2, 3, 4, 5],
+                "category": ["A", None, "B", None, "C"],
+                "score": [1, None, 2, None, 3],
+                "ratio": pa.array([1.0, float("nan"), 2.0, None, 3.0], type=pa.float64()),
+            }
+        )
+        if request.param == "arrow":
+            return DuckdbRelation.from_arrow(connection, arrow_table)
+
+        connection.register("nullable_category_sample_data_src", arrow_table)
+        connection.execute(
+            "CREATE TABLE nullable_category_sample_data_tbl AS SELECT * FROM nullable_category_sample_data_src"
+        )
+        return DuckdbRelation(connection, connection.table("nullable_category_sample_data_tbl"))
+
     @pytest.fixture
-    def nullable_category_sample_data(self, connection: Any) -> Any:
-        """Create a sample DuckDB relation with null categories for testing."""
-        arrow_table = pa.Table.from_pydict({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
-        return DuckdbRelation.from_arrow(connection, arrow_table)
+    def decimal_sample_data(self, connection: Any) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data.types[data.columns.index("d")]
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
-        """Extract column values from DuckDB relation via pandas DataFrame."""
-        return result.df()[column].tolist()  # type: ignore[no-any-return]
+        """Extract column values from DuckDB relation via Arrow."""
+        return result.to_arrow_table()[column].to_pylist()  # type: ignore[no-any-return]
 
     @pytest.fixture
     def sample_time_data(self, connection: Any) -> Any:

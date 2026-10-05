@@ -85,7 +85,7 @@ class TestArtifactSaveWithPrepareRun:
     def test_prepare_run_save(self) -> None:
         session = mloda.prepare(
             ["PrepareRunArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled,
         )
         result = session.run()
@@ -105,7 +105,7 @@ class TestArtifactLoadViaOptionsWithPrepareRun:
         )
         session = mloda.prepare(
             [feat],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled,
         )
         result = session.run()
@@ -121,7 +121,7 @@ class TestArtifactSaveThenLoadSameSession:
     def test_save_then_load_same_session(self) -> None:
         session = mloda.prepare(
             ["PrepareRunArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled,
         )
 
@@ -142,7 +142,7 @@ class TestMultipleSaveRunsIndependent:
     def test_multiple_saves(self) -> None:
         session = mloda.prepare(
             ["PrepareRunArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled,
         )
 
@@ -163,7 +163,7 @@ class TestFullRoundTripSeparateSessions:
         # Session 1: save
         save_session = mloda.prepare(
             ["PrepareRunArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled,
         )
         save_session.run()
@@ -174,7 +174,7 @@ class TestFullRoundTripSeparateSessions:
         feat = Feature(name="PrepareRunArtifactFeature", options=saved)
         load_session = mloda.prepare(
             [feat],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled,
         )
         load_result = load_session.run()
@@ -188,7 +188,7 @@ class TestAlternatingSaveLoadCrossValidation:
     def test_alternating_save_load(self) -> None:
         session = mloda.prepare(
             ["PrepareRunArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled,
         )
 
@@ -223,7 +223,7 @@ class TestArtifactValueAccessibleInCalculateFeature:
         """Save mode: output contains 'no_artifact' sentinel, not a hash."""
         session = mloda.prepare(
             ["VerifiableArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled_verifiable,
         )
         result = session.run()
@@ -238,7 +238,7 @@ class TestArtifactValueAccessibleInCalculateFeature:
         proving calculate_feature actually accessed the artifact."""
         session = mloda.prepare(
             ["VerifiableArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled_verifiable,
         )
 
@@ -258,7 +258,7 @@ class TestArtifactValueAccessibleInCalculateFeature:
         proving the runtime artifact is truly swapped between runs."""
         session = mloda.prepare(
             ["VerifiableArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled_verifiable,
         )
 
@@ -285,7 +285,7 @@ class TestArtifactValueAccessibleInCalculateFeature:
         Verifies the output changes to match whatever artifact was provided."""
         session = mloda.prepare(
             ["VerifiableArtifactFeature"],
-            {PyArrowTable},
+            [PyArrowTable],
             plugin_collector=_enabled_verifiable,
         )
 

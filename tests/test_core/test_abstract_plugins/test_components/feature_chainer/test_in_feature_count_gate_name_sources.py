@@ -6,7 +6,6 @@ in_features option, so the gate must count the same sources the name path would 
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -14,9 +13,10 @@ import pytest
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
+from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, MatchRejection
 from mloda.provider import DefaultOptionKeys, PropertySpec
-from mloda.user import Feature, Options
+from mloda.user import Feature, FeatureName, Options
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 # A dict is uncountable for get_in_features: it raises TypeError instead of yielding features.
 JUNK_IN_FEATURES: dict[str, int] = {"a": 1}
@@ -38,6 +38,28 @@ class _NameSourceGate944(FeatureChainParserMixin):
     }
 
 
+class _NameSourceGuardGate944(FeatureChainParserMixin):
+    """Second key's guard rejects every value; an out-of-range count must win over the guard's own reason."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_guardgate944$"
+    MIN_IN_FEATURES = 2
+    MAX_IN_FEATURES = 3
+    PROPERTY_MAPPING = {
+        "operation": PropertySpec(
+            "Operation to apply",
+            allowed_values={"op1": "Operation 1"},
+            context=True,
+            strict_validation=True,
+        ),
+        "guarded_key_gate944": PropertySpec(
+            "guarded key whose guard rejects every value",
+            allowed_values=("ok_gate944",),
+            strict_validation=True,
+            match_guard=lambda _value: False,
+        ),
+    }
+
+
 def _options(in_features: Any = None) -> Options:
     context: dict[str, Any] = {"operation": "op1"}
     if in_features is not None:
@@ -48,11 +70,25 @@ def _options(in_features: Any = None) -> Options:
 class TestNameSourcesDriveTheGate:
     """The name path counts the name's own sources, not the option value."""
 
-    def test_junk_in_features_option_does_not_reject_a_name_carried_source_count(self) -> None:
-        """The name carries two sources, inside MIN=2 / MAX=3; the uncountable option is not consulted."""
+    def test_junk_in_features_option_does_not_reject_a_name_carried_source_count(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The name carries two sources, inside MIN=2 / MAX=3; the gate reads the name, not the option.
+
+        The env var downgrades the contradiction error so only the count gate is under test.
+        """
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+
         result = _NameSourceGate944.match_feature_group_criteria("f1&f2__op1_gate944", _options(JUNK_IN_FEATURES))
 
         assert result is True
+
+    def test_junk_in_features_option_aborts_a_name_match(self) -> None:
+        """An in_features value the matcher cannot resolve contradicts the name."""
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria("f1&f2__op1_gate944", _options(JUNK_IN_FEATURES))
+
+        assert "in_features" in str(exc_info.value)
 
     def test_name_source_count_below_min_is_a_non_match(self) -> None:
         """One name source is below MIN=2, even though the option value would have passed the gate."""
@@ -77,6 +113,124 @@ class TestNameSourcesDriveTheGate:
         result = _NameSourceGate944.match_feature_group_criteria("f1&f2&f3__op1_gate944", _options())
 
         assert result is True
+
+
+class TestDeclaredInFeaturesAgreeWithName:
+    """A declared in_features must list exactly the name's direct sources."""
+
+    NAME = "f1&f2__op1_gate944"
+
+    def test_equal_list_matches(self) -> None:
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["f1", "f2"])) is True
+
+    def test_reordered_list_aborts(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["f2", "f1"]))
+
+        message = str(exc_info.value)
+        assert "in_features" in message
+        assert "f1" in message
+        assert "f2" in message
+        assert "direct source" in message
+
+    def test_message_does_not_carry_a_long_raw_value(self) -> None:
+        long_value = "n" * 200
+
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options([long_value, "b"]))
+
+        assert long_value not in str(exc_info.value)
+
+    def test_message_omits_the_root_source_hint_for_a_flat_name(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["p1", "p2"]))
+
+        assert "root source" not in str(exc_info.value)
+
+    def test_message_says_the_root_source_when_the_name_sources_are_chained(self) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: ["s"]})
+
+        with pytest.raises(ValueError) as exc_info:
+            AggregatedFeatureGroup.match_feature_group_criteria("s__mean_imputed__sum_aggr", options)
+
+        assert "not the root source" in str(exc_info.value)
+
+    def test_message_says_order_matters_for_the_same_names_reordered(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["f2", "f1"]))
+
+        assert "order" in str(exc_info.value).lower()
+
+    @pytest.mark.parametrize("in_features", [frozenset({"f1", "f2"}), {"f2", "f1"}])
+    def test_set_in_any_order_matches(self, in_features: Any) -> None:
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(in_features)) is True
+
+    @pytest.mark.parametrize("container", [list, set, frozenset])
+    def test_feature_objects_compare_by_name_and_are_the_input_features(self, container: Any) -> None:
+        declared = [
+            Feature("f1", options=Options(context={"k1": 1}), feature_group="ScopeOne944"),
+            Feature("f2", options=Options(context={"k2": 2}), feature_group="ScopeTwo944"),
+        ]
+        options = _options(container(declared))
+
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, options)
+
+        result = _NameSourceGate944().input_features(options, FeatureName(self.NAME))
+        assert result is not None
+        by_name = {str(f.name): f for f in result}
+        assert set(by_name) == {"f1", "f2"}
+        for original in declared:
+            returned = by_name[str(original.name)]
+            assert returned == original
+            assert returned.options == original.options
+            assert returned.feature_group_scope == original.feature_group_scope
+
+    def test_different_names_abort(self) -> None:
+        with pytest.raises(ValueError):
+            _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["a", "b"]))
+
+    def test_empty_list_is_ignored(self) -> None:
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options([])) is True
+
+    def test_env_var_downgrades_to_a_warning(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, _options(["a", "b"])) is True
+
+        declared = [
+            Feature("f2", options=Options(context={"k2": 2}), feature_group="ScopeTwo944"),
+            Feature("f1", options=Options(context={"k1": 1}), feature_group="ScopeOne944"),
+        ]
+        options = _options(declared)
+
+        assert _NameSourceGate944.match_feature_group_criteria(self.NAME, options) is True
+
+        result = _NameSourceGate944().input_features(options, FeatureName(self.NAME))
+        assert result is not None
+        assert {str(f.name) for f in result} == {"f1", "f2"}
+        assert all(f.feature_group_scope is None for f in result)
+        assert all(f.options.get("k1") is None and f.options.get("k2") is None for f in result)
+
+    @pytest.mark.parametrize("case", ["strings", "absent", "inherited"])
+    def test_input_features_are_the_bare_name_sources(self, case: str) -> None:
+        if case == "strings":
+            options = _options(["f1", "f2"])
+        elif case == "absent":
+            options = _options()
+        else:
+            declared = [
+                Feature("f1", options=Options(context={"k1": 1}), feature_group="ScopeOne944"),
+                Feature("f2", options=Options(context={"k2": 2}), feature_group="ScopeTwo944"),
+            ]
+            options = _options(declared)
+            options.inherited_context_keys = frozenset({DefaultOptionKeys.in_features.value})
+
+        result = _NameSourceGate944().input_features(options, FeatureName(self.NAME))
+
+        assert result is not None
+        assert {str(f.name) for f in result} == {"f1", "f2"}
+        assert all(f.feature_group_scope is None for f in result)
+        assert all(f.options.get("k1") is None and f.options.get("k2") is None for f in result)
 
 
 class TestOptionPathGateUnchanged:
@@ -112,15 +266,6 @@ BELOW_MIN_REASON_944 = f"Feature '{BELOW_MIN_NAME_944}' requires at least 2 in_f
 ABOVE_MAX_REASON_944 = f"Feature '{ABOVE_MAX_NAME_944}' allows at most 3 in_feature(s), but found 4"
 
 
-@pytest.fixture
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a per-test recording window and always close it again."""
-    reasons: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
-
-
 class TestNameSourceCountRejectionIsRecorded:
     """A name-carried count outside MIN/MAX is a reportable near-miss, not a silent non-match."""
 
@@ -129,14 +274,27 @@ class TestNameSourceCountRejectionIsRecorded:
         result = _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options())
 
         assert result is False
-        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage="value_rejection")}
+        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage=NAME_STAGE)}
+        assert (
+            _NameSourceGate944._strict_validation_rejection_reason(BELOW_MIN_NAME_944, _options())
+            == BELOW_MIN_REASON_944
+        )
+
+    def test_facade_call_inside_an_open_window_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The facade is a standalone diagnostic: calling it must never write into an active recording window."""
+        reason = _NameSourceGate944._strict_validation_rejection_reason(BELOW_MIN_NAME_944, _options())
+
+        assert reason == BELOW_MIN_REASON_944
+        assert rejection_window == {}
 
     def test_above_max_records_the_actionable_reason(self, rejection_window: dict[str, MatchRejection]) -> None:
         """The reason keeps the pre-gate wording: the declared MAX and the count the name carries."""
         result = _NameSourceGate944.match_feature_group_criteria(ABOVE_MAX_NAME_944, _options())
 
         assert result is False
-        assert rejection_window == {OWNER_944: MatchRejection(reason=ABOVE_MAX_REASON_944, stage="value_rejection")}
+        assert rejection_window == {OWNER_944: MatchRejection(reason=ABOVE_MAX_REASON_944, stage=NAME_STAGE)}
 
     def test_below_min_records_the_name_count_even_with_a_passing_option(
         self, rejection_window: dict[str, MatchRejection]
@@ -144,7 +302,7 @@ class TestNameSourceCountRejectionIsRecorded:
         """The option value would pass the gate, so the reason must report the name's count, not the option's."""
         _NameSourceGate944.match_feature_group_criteria(BELOW_MIN_NAME_944, _options(["a", "b"]))
 
-        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage="value_rejection")}
+        assert rejection_window == {OWNER_944: MatchRejection(reason=BELOW_MIN_REASON_944, stage=NAME_STAGE)}
 
     def test_a_count_inside_the_range_records_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
         result = _NameSourceGate944.match_feature_group_criteria("f1&f2&f3__op1_gate944", _options())
@@ -157,4 +315,143 @@ class TestNameSourceCountRejectionIsRecorded:
         result = _NameSourceGate944.match_feature_group_criteria("any_name", _options("single_feature"))
 
         assert result is False
+        assert rejection_window == {}
+
+    def test_the_count_reason_wins_over_a_rejected_guard(self, rejection_window: dict[str, MatchRejection]) -> None:
+        """A too-few name count AND a guard-rejected key: the recorded reason is the count reason, never the guard's."""
+        context = {"operation": "op1", "guarded_key_gate944": "ok_gate944"}
+        options = Options(context=context)
+        count_reason = "Feature 'f1__op1_guardgate944' requires at least 2 in_feature(s), but found 1"
+
+        result = _NameSourceGuardGate944.match_feature_group_criteria("f1__op1_guardgate944", options)
+
+        assert result is False
+        assert rejection_window == {"_NameSourceGuardGate944": MatchRejection(reason=count_reason, stage=NAME_STAGE)}
+        assert (
+            _NameSourceGuardGate944._strict_validation_rejection_reason("f1__op1_guardgate944", options) == count_reason
+        )
+
+
+EMPTY_OPERAND_NAMES_1716 = ["&f2__op1_gate944", "f1&__op1_gate944", "f1&&f2__op1_gate944"]
+
+
+class TestEmptyOperandIsRejected:
+    """An empty operand in the name is a recorded non-match; an empty config operand is a silent one."""
+
+    @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
+    def test_name_with_an_empty_operand_is_a_recorded_non_match(
+        self, name: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        result = _NameSourceGate944.match_feature_group_criteria(name, _options())
+
+        assert result is False
+        recorded = rejection_window[OWNER_944]
+        assert recorded.stage == NAME_STAGE
+        assert "empty in_feature" in recorded.reason
+
+    @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
+    def test_strict_validation_reason_reports_the_same_reason(
+        self, name: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        _NameSourceGate944.match_feature_group_criteria(name, _options())
+
+        reason = _NameSourceGate944._strict_validation_rejection_reason(name, _options())
+
+        assert reason == rejection_window[OWNER_944].reason
+
+    @pytest.mark.parametrize("name", EMPTY_OPERAND_NAMES_1716)
+    def test_input_features_raises_the_reason(self, name: str, rejection_window: dict[str, MatchRejection]) -> None:
+        _NameSourceGate944.match_feature_group_criteria(name, _options())
+        expected = rejection_window[OWNER_944].reason
+
+        with pytest.raises(ValueError) as exc_info:
+            _NameSourceGate944().input_features(_options(), FeatureName(name))
+
+        assert str(exc_info.value) == expected
+
+    def test_empty_operand_in_features_option_is_a_silent_non_match(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        result = _NameSourceGate944.match_feature_group_criteria("any_name", _options(["", "f2"]))
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_empty_operand_in_features_option_makes_input_features_raise(self) -> None:
+        with pytest.raises(ValueError):
+            _NameSourceGate944().input_features(_options(["", "f2"]), FeatureName("any_name"))
+
+
+class TestSourceFeaturesReason:
+    """source_features_reason checks empty operands first, then the count."""
+
+    def test_empty_operand_reason_names_the_feature_and_says_empty(self) -> None:
+        reason = _NameSourceGate944.source_features_reason("&f2__op1_gate944", ("", "f2"))
+
+        assert reason is not None
+        assert "empty" in reason
+        assert "&f2__op1_gate944" in reason
+
+    def test_empty_operand_wins_over_a_count_violation(self) -> None:
+        reason = _NameSourceGate944.source_features_reason("&__op1_gate944", ("",))
+
+        assert reason is not None
+        assert "empty" in reason
+
+    def test_count_violation_returns_the_count_reason(self) -> None:
+        assert _NameSourceGate944.source_features_reason(BELOW_MIN_NAME_944, ("f1",)) == BELOW_MIN_REASON_944
+
+    def test_valid_sources_have_no_reason(self) -> None:
+        assert _NameSourceGate944.source_features_reason("f1&f2__op1_gate944", ("f1", "f2")) is None
+
+
+class _OptionsOnlyGroupM951(FeatureChainParserMixin):
+    """Options-only group: no in_features key, default MIN_IN_FEATURES."""
+
+    PROPERTY_MAPPING = {"mode_m951": PropertySpec("Mode", allowed_values={"fast_m951": "Fast"}, context=True)}
+
+
+class _AllOptionalGroupM951(FeatureChainParserMixin):
+    """All-optional mapping."""
+
+    PROPERTY_MAPPING = {"tuning_m951": PropertySpec("Tuning", default=None, context=True)}
+
+
+class TestOptionPathZeroSourceRecordsNoRejection:
+    """The option path records no rejection reason for a zero-source non-match."""
+
+    def test_addressed_group_without_in_features_does_not_match_and_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={"mode_m951": "fast_m951"})
+
+        result = _OptionsOnlyGroupM951.match_feature_group_criteria("any_name_m951", options)
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_options_addressing_none_of_the_group_record_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        result = _AllOptionalGroupM951.match_feature_group_criteria("any_name_m951", Options())
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_unrelated_options_record_nothing(self, rejection_window: dict[str, MatchRejection]) -> None:
+        options = Options(context={"unrelated_key_m951": "x"})
+
+        result = _AllOptionalGroupM951.match_feature_group_criteria("any_name_m951", options)
+
+        assert result is False
+        assert rejection_window == {}
+
+    def test_supplied_in_features_still_matches_and_records_nothing(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={"mode_m951": "fast_m951", DefaultOptionKeys.in_features: "src_m951"})
+
+        result = _OptionsOnlyGroupM951.match_feature_group_criteria("any_name_m951", options)
+
+        assert result is True
         assert rejection_window == {}

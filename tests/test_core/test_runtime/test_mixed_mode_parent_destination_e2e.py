@@ -2,8 +2,8 @@
 directions: a worker-owned source feeding a parent-resident destination, and a parent-resident
 join result feeding its own parent-resident child, without leaking a stale or wrong-typed cfw."""
 
+import time
 from typing import Any
-from uuid import UUID
 
 import pytest
 
@@ -58,6 +58,16 @@ def _flight_table_keys(location: str | None) -> set[str]:
         return set()
     raw = FlightServer.list_flight_infos(location)
     return {key.decode("utf-8") if isinstance(key, bytes) else key for key in raw}
+
+
+def _flight_table_keys_once_dropped(location: str | None, key: str, timeout: float = 2.0) -> set[str]:
+    """Poll until ``key`` leaves the flight server or ``timeout`` passes; return the last snapshot."""
+    deadline = time.monotonic() + timeout
+    keys = _flight_table_keys(location)
+    while key in keys and time.monotonic() < deadline:
+        time.sleep(0.01)
+        keys = _flight_table_keys(location)
+    return keys
 
 
 @pytest.fixture(autouse=True)
@@ -316,7 +326,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_doubled")],
-            compute_frameworks={PyArrowTable, DuckDBFramework},
+            compute_frameworks=[PyArrowTable, DuckDBFramework],
             plugin_collector=plugin_collector,
             data_access_collection=dac,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -337,7 +347,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_matchdata_doubled")],
-            compute_frameworks={PyArrowTable, DuckDBFramework},
+            compute_frameworks=[PyArrowTable, DuckDBFramework],
             plugin_collector=plugin_collector,
             data_access_collection=dac,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -366,7 +376,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_doubled_threading")],
-            compute_frameworks={PyArrowTable, destination_framework},
+            compute_frameworks=[PyArrowTable, destination_framework],
             plugin_collector=plugin_collector,
             parallelization_modes=modes,
             flight_server=flight_server,
@@ -381,7 +391,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_root_val")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework},
+            compute_frameworks=[_ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -400,7 +410,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_root_val"), Feature("mixed_mode_root_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -431,7 +441,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("mixed_mode_root_val"), Feature("mixed_mode_root_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -462,7 +472,7 @@ class TestMixedModeParentDestinationE2E:
 
         result = mloda.run_all(
             [Feature("join_sum"), Feature("left_val_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -530,7 +540,7 @@ class TestPureMultiprocessingTransformHopDoesNotLeakFlightTable:
 
         result = mloda.run_all(
             [Feature("mp_transform_doubled")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -790,7 +800,7 @@ class TestCrossFrameworkJoinHopDropTiming:
 
         stream = mloda.stream_all(
             [Feature("xfw_join_sum")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, _ThreadingOnlyPyArrowTable},
+            compute_frameworks=[_ThreadingOnlyPyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -869,7 +879,7 @@ class TestCrossFrameworkJoinHopDropTiming:
 
         stream = mloda.stream_all(
             [Feature("cfw_hop_join_sum"), Feature("cfw_hop_sibling_doubled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, _ThreadingOnlyPyArrowTable},
+            compute_frameworks=[_ThreadingOnlyPyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
@@ -1337,7 +1347,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         stream = mloda.stream_all(
             [Feature("mp_transform_doubled")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -1378,8 +1388,8 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         the destination step's own, ordinary completion is recorded, masking a still-empty
         `owed_tokens`. `ExecutionOrchestrator._drop_tfs_source_if_possible` is spied on directly (no
         public-API hook exists) to capture the flight-server state at that exact moment. The drop
-        itself is async now, so the spy waits for the worker's own drop acknowledgement before
-        snapshotting, rather than asserting an instantaneous state right after the queueing call."""
+        itself is async now, so the spy polls the flight server (bounded) until the source root
+        leaves it, rather than asserting an instantaneous state right after the queueing call."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {
                 _MpTransformSourceFG,
@@ -1415,23 +1425,17 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _spy_drop_tfs(self: Any, step: Any) -> Any:
             result = original_drop_tfs(self, step)
             if step.link_id is None and step.from_framework is PythonDictFramework:
-                # The drop is async now: wait for the worker's own ack of the just-queued drop
-                # before snapshotting, instead of relying on the old synchronous wait.
-                entry = self.worker_manager.process_register.get(UUID(source_root_uuids[0]))
-                if entry is not None:
-                    _, _, result_queue = entry
-                    resolved = self.worker_manager.wait_for_drop_completion(
-                        result_queue, UUID(source_root_uuids[0]), timeout=2.0
-                    )
-                    assert resolved is not None, "no drop ack for the source root within the wait window"
-                keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
+                # The drop is async: wait for the source root to leave the flight server.
+                keys_right_after_hop_drop_check.append(
+                    _flight_table_keys_once_dropped(flight_server.location, source_root_uuids[0])
+                )
             return result
 
         monkeypatch.setattr(ExecutionOrchestrator, "_drop_tfs_source_if_possible", _spy_drop_tfs)
 
         result = mloda.run_all(
             [Feature("mp_transform_doubled"), Feature("fw_class_guard_join_sum")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
@@ -1493,7 +1497,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         stream = mloda.stream_all(
             [Feature("gap1_hop_doubled"), Feature("gap1_sibling_tripled")],
-            compute_frameworks={_ThreadingOnlyPythonDictFramework, _ThreadingOnlyPyArrowTable},
+            compute_frameworks=[_ThreadingOnlyPyArrowTable, _ThreadingOnlyPythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -1536,7 +1540,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         result = mloda.run_all(
             [Feature("diamond_hop_result")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )
@@ -1558,7 +1562,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _run() -> Any:
             return mloda.run_all(
                 [Feature("diamond_hop_result")],
-                compute_frameworks={PythonDictFramework, PyArrowTable},
+                compute_frameworks=[PyArrowTable, PythonDictFramework],
                 plugin_collector=plugin_collector,
                 parallelization_modes={ParallelizationMode.SYNC},
             )
@@ -1577,7 +1581,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         directly, unlike `_DiamondHopDescendantFG` in the survival test above. Same
         `add_compute_framework` / `_drop_tfs_source_if_possible` spy checkpoint pattern as
         `test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join`,
-        including the wait for the worker's own drop acknowledgement, since the drop is async now."""
+        including the bounded poll for the source root to leave the flight server, since the drop is async."""
         plugin_collector = PluginCollector.enabled_feature_groups(
             {_ChainHopRootFG, _ChainHopMidFG, _ChainHopChain2FG, _ChainHopChain3FG}
         )
@@ -1603,23 +1607,17 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _spy_drop_tfs(self: Any, step: Any) -> Any:
             result = original_drop_tfs(self, step)
             if step.link_id is None and step.from_framework is PythonDictFramework:
-                # The drop is async now: wait for the worker's own ack of the just-queued drop
-                # before snapshotting, instead of relying on the old synchronous wait.
-                entry = self.worker_manager.process_register.get(UUID(source_root_uuids[0]))
-                if entry is not None:
-                    _, _, result_queue = entry
-                    resolved = self.worker_manager.wait_for_drop_completion(
-                        result_queue, UUID(source_root_uuids[0]), timeout=2.0
-                    )
-                    assert resolved is not None, "no drop ack for the source root within the wait window"
-                keys_right_after_hop_drop_check.append(_flight_table_keys(flight_server.location))
+                # The drop is async: wait for the source root to leave the flight server.
+                keys_right_after_hop_drop_check.append(
+                    _flight_table_keys_once_dropped(flight_server.location, source_root_uuids[0])
+                )
             return result
 
         monkeypatch.setattr(ExecutionOrchestrator, "_drop_tfs_source_if_possible", _spy_drop_tfs)
 
         result = mloda.run_all(
             [Feature("chain_hop_chain3_val")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
@@ -1684,7 +1682,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         result = mloda.run_all(
             [Feature("coarse_guard_hop_val"), Feature("coarse_guard_join_sum")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             links={link},
             parallelization_modes={ParallelizationMode.SYNC},
@@ -1724,7 +1722,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         def _run() -> Any:
             return mloda.run_all(
                 [Feature("coarse_guard_hop_val"), Feature("coarse_guard_join_sum")],
-                compute_frameworks={PythonDictFramework, PyArrowTable},
+                compute_frameworks=[PyArrowTable, PythonDictFramework],
                 plugin_collector=plugin_collector,
                 links={link},
                 parallelization_modes={ParallelizationMode.SYNC},
@@ -1916,7 +1914,7 @@ class TestChainedJoinSharedSourceSurvivesBothHops:
 
         result = mloda.run_all(
             [Feature("h3_x")],
-            compute_frameworks={PandasDataFrame, PyArrowTable, PythonDictFramework},
+            compute_frameworks=[PandasDataFrame, PyArrowTable, PythonDictFramework],
             plugin_collector=plugin_collector,
             links=links,
             parallelization_modes={ParallelizationMode.SYNC},

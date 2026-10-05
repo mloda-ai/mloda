@@ -4,16 +4,21 @@ PyArrow implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
-import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from mloda.core.optional_dependency import loaded, require
 from mloda.provider import ComputeFramework
 
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+
+if TYPE_CHECKING:
+    import numpy as np
+
+_NUMPY_REASON = "pyarrow row-wise aggregation across multiple columns"
 
 
 def _reduce_without_nan_warning(
@@ -29,11 +34,13 @@ def _reduce_without_nan_warning(
     """
     if not degenerate_rows.any():
         return reducer(stacked)
+    numpy = require("numpy", _NUMPY_REASON)
     patched = stacked.copy()
-    nan_mask = np.isnan(patched)
-    patched[degenerate_rows[:, np.newaxis] & nan_mask] = 0.0
+    nan_mask = numpy.isnan(patched)
+    patched[degenerate_rows[:, numpy.newaxis] & nan_mask] = 0.0
     result = reducer(patched)
-    return np.where(degenerate_rows, np.nan, result)
+    restored: np.ndarray[Any, Any] = numpy.where(degenerate_rows, numpy.nan, result)
+    return restored
 
 
 class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
@@ -51,7 +58,7 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
     @classmethod
     def _get_available_columns(cls, data: pa.Table) -> set[str]:
         """Get the set of available column names from the Table schema."""
-        return set(data.schema.names)
+        return PyArrowTable.extract_column_names(data)
 
     @classmethod
     def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
@@ -65,22 +72,23 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
         Raises:
             ValueError: If none of the resolved features exist in the data
         """
-        schema_names = set(data.schema.names)
-        missing_features = [name for name in feature_names if name not in schema_names]
+        available_columns = cls._get_available_columns(data)
+        missing_features = [name for name in feature_names if name not in available_columns]
         if len(missing_features) == len(feature_names):
             raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(schema_names)}"
+                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
             )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
-        """Add the result to the Table."""
-        if isinstance(result, np.ndarray):
+        """Add the result to the Table. Also accepts plain Python values from overrides."""
+        numpy = loaded("numpy")
+        if numpy is not None and isinstance(result, numpy.ndarray):
             # Multi-column (row-wise) aggregation: one value per row already.
             result_array = pa.array(result)
         else:
             # Single-column (vertical) aggregation: a scalar broadcast to every row.
-            result_array = pa.array([result] * data.num_rows)
+            result_array = pa.repeat(result, data.num_rows)
 
         if feature_name in data.schema.names:
             column_index = data.schema.names.index(feature_name)
@@ -104,9 +112,12 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             in_features: List of source feature names (may be single or multiple columns)
 
         Returns:
-            The result of the aggregation (scalar for single-column, array for multi-column)
+            The result of the aggregation (pa.Scalar for single-column, preserving type on zero-row and
+            all-null input; array for multi-column)
         """
         if len(in_features) > 1:
+            np = require("numpy", _NUMPY_REASON)
+
             # Multi-column: aggregate across columns row-wise
             # PyArrow doesn't have direct horizontal operations, need to implement manually
             columns = [data.column(name) for name in in_features]
@@ -160,24 +171,24 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             column = data.column(in_features[0])
 
             if aggregation_type == "sum":
-                return pc.sum(column).as_py()
+                return pc.sum(column)
             elif aggregation_type == "min":
-                return pc.min(column).as_py()
+                return pc.min(column)
             elif aggregation_type == "max":
-                return pc.max(column).as_py()
+                return pc.max(column)
             elif aggregation_type in ["avg", "mean"]:
-                return pc.mean(column).as_py()
+                return pc.mean(column)
             elif aggregation_type == "count":
-                return pc.count(column).as_py()
+                return pc.count(column)
             elif aggregation_type == "std":
-                return pc.stddev(column, ddof=1).as_py()
+                return pc.stddev(column, ddof=1)
             elif aggregation_type == "var":
-                return pc.variance(column, ddof=1).as_py()
+                return pc.variance(column, ddof=1)
             elif aggregation_type == "median":
                 # PyArrow doesn't have a direct median function
                 # We can approximate it using quantile with q=0.5
                 # quantile returns an array, so we need to extract the first value
                 result = pc.quantile(column, q=0.5)
-                return result[0].as_py()
+                return result[0]
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")

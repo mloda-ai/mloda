@@ -264,7 +264,7 @@ def _run_pair_results(
     return mloda.run_all(
         [Feature(name=child.get_class_name())],
         links={_pair_link(pair, jointype)},
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         plugin_collector=PluginCollector.enabled_feature_groups({left_group, right_group, child}),
         flight_server=flight_server if ParallelizationMode.MULTIPROCESSING in modes else None,
         parallelization_modes=modes,
@@ -360,7 +360,7 @@ def test_chained_join_across_three_frameworks_keeps_left_group_order(
     result = mloda.run_all(
         [Feature(name=OrientCharChainChild.get_class_name())],
         links={Link.inner(first, second), Link.inner(second, third)},
-        compute_frameworks={PandasDataFrame, PyArrowTable, PythonDictFramework},
+        compute_frameworks=[PandasDataFrame, PyArrowTable, PythonDictFramework],
         plugin_collector=PluginCollector.enabled_feature_groups(
             {OrientCharLeftInPandas, OrientCharRightInArrow, OrientCharThirdInDict, OrientCharChainChild}
         ),

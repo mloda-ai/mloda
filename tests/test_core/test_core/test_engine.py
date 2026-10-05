@@ -61,7 +61,7 @@ class TestEngine:
                 BaseTestFeatureGroup2: [BaseTestComputeFramework1],
             }
 
-            features = Features(["BaseTestFeature1", "BaseTestFeature2"])
+            features = Features(["BaseTestFeature1", "BaseTestFeature2", Feature.int32_of("BaseTestFeature1")])
             compute_framework = {BaseTestComputeFramework1, BaseTestComputeFramework2}
 
             # test init
@@ -95,7 +95,7 @@ class TestEngine:
                 BaseTestFeatureGroup2: {BaseTestComputeFramework2},
             }
 
-            features = Features(["BaseTestFeature1", "BaseTestFeature2"])
+            features = Features(["BaseTestFeature1", "BaseTestFeature2", Feature.int32_of("BaseTestFeature1")])
             compute_framework = {BaseTestComputeFramework1, BaseTestComputeFramework2}
 
             links = {
@@ -141,7 +141,7 @@ class TestEngine:
                 BaseTestFeatureGroup2: {BaseTestComputeFramework2},
             }
 
-            features = Features(["BaseTestFeature1", "BaseTestFeature2"])
+            features = Features(["BaseTestFeature1", "BaseTestFeature2", Feature.int32_of("BaseTestFeature1")])
             compute_framework = {BaseTestComputeFramework1, BaseTestComputeFramework2}
 
             links = {

@@ -6,12 +6,16 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
     SqliteRelation,
     _infer_sqlite_type_from_values,
     _sqlite_affinity_to_arrow_type,
 )
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from tests.test_plugins.compute_framework.base_implementations.relation_test_mixin import (
     RelationTestMixin,
 )
@@ -290,6 +294,49 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         assert "val" in result.columns
         assert "score" in result.columns
 
+    # --- Pseudo-columns and exact-case name lookup ---
+
+    @pytest.mark.parametrize("pseudo", ["rowid", "ROWID", "oid", "OID", "_rowid_", "_RowId_"])
+    @pytest.mark.parametrize("as_order_by", [False, True], ids=["str", "orderby"])
+    def test_with_row_number_accepts_pseudo_column_order_by(
+        self, connection: sqlite3.Connection, pseudo: str, as_order_by: bool
+    ) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": ["a", "b", "c"]})
+        item: Any = OrderBy(pseudo) if as_order_by else pseudo
+        result = rel.with_row_number("rn", order_by=[item])
+        arrow = result.to_arrow_table()
+        assert "rn" in result.columns
+        assert arrow.column("v").to_pylist() == ["a", "b", "c"]
+        assert arrow.column("rn").to_pylist() == [1, 2, 3]
+
+    @pytest.mark.parametrize("pseudo", ["rowid", "OID", "_ROWID_"])
+    def test_with_row_number_accepts_pseudo_column_partition_by(
+        self, connection: sqlite3.Connection, pseudo: str
+    ) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": ["a", "b", "c"]})
+        result = rel.with_row_number("rn", partition_by=[pseudo])
+        assert "rn" in result.columns
+        assert result.to_arrow_table().column("rn").to_pylist() == [1, 1, 1]
+
+    @pytest.mark.parametrize("pseudo", ["rowid", "ROWID", "oid", "_rowid_"])
+    def test_window_accepts_pseudo_column(self, connection: sqlite3.Connection, pseudo: str) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": ["a", "b", "c"]})
+        result = rel.window("ROW_NUMBER()", "rn", order_by=[OrderBy(pseudo)])
+        assert "rn" in result.columns
+        assert result.to_arrow_table().column("rn").to_pylist() == [1, 2, 3]
+
+    @pytest.mark.parametrize("bad", ["missing", "V"])
+    def test_select_missing_or_case_mismatched_name_raises(self, connection: sqlite3.Connection, bad: str) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": [1, 2]})
+        with pytest.raises(ValueError, match=bad):
+            rel.select(bad)
+
+    @pytest.mark.parametrize("bad", ["missing", "V"])
+    def test_order_missing_or_case_mismatched_name_raises(self, connection: sqlite3.Connection, bad: str) -> None:
+        rel = SqliteRelation.from_dict(connection, {"v": [1, 2]})
+        with pytest.raises(ValueError, match=bad):
+            rel.order(bad)
+
 
 class TestSqliteRelationTableNameQuoting:
     def test_table_name_with_embedded_quote(self, connection: sqlite3.Connection) -> None:
@@ -372,22 +419,65 @@ class TestInferSqliteType:
         assert result == "TEXT", f"Expected TEXT but got {result}"
 
 
+# Shared precedence coverage for both the arrow-type test and the sqlite_affinity_class test below:
+# declared_type -> (expected sqlite_affinity_class label, expected _sqlite_affinity_to_arrow_type result).
+_AFFINITY_CASES = [
+    ("INTEGER", "INTEGER", pa.int64()),
+    ("INT", "INTEGER", pa.int64()),
+    # Ordering tie: INT is checked before CHAR, so a type containing both resolves to INTEGER.
+    ("INT CHAR", "INTEGER", pa.int64()),
+    ("TEXT BLOB", "TEXT", pa.string()),
+    ("BLOB SUB_TYPE TEXT", "TEXT", pa.string()),
+    ("CHAR DOUBLE", "TEXT", pa.string()),
+    ("CLOB", "TEXT", pa.string()),
+    ("VARCHAR(255)", "TEXT", pa.string()),
+    ("BLOB", "BLOB", pa.large_binary()),
+    # Ordering tie: BLOB is checked before REAL/FLOA/DOUB, so a type containing both resolves to BLOB.
+    ("DOUBLE BLOB", "BLOB", pa.large_binary()),
+    ("REAL", "REAL", pa.float64()),
+    ("FLOAT", "REAL", pa.float64()),
+    ("DOUBLE", "REAL", pa.float64()),
+    ("NUMERIC", "NUMERIC", pa.string()),
+    ("DECIMAL(10,5)", "NUMERIC", pa.string()),
+    # Empty/undeclared type stays at the string fallback here, unlike SQLite's real BLOB-affinity rule.
+    ("", "NUMERIC", pa.string()),
+]
+
+
 class TestSqliteAffinityToArrowType:
-    @pytest.mark.parametrize(
-        "declared_type,expected_arrow_type",
-        [
-            ("TEXT BLOB", pa.string()),
-            ("BLOB SUB_TYPE TEXT", pa.string()),
-            ("CHAR DOUBLE", pa.string()),
-            ("DOUBLE BLOB", pa.large_binary()),
-            ("NUMERIC", pa.string()),
-            # Empty/undeclared type stays at the string fallback here, unlike SQLite's real BLOB-affinity rule.
-            ("", pa.string()),
-        ],
-    )
-    def test_affinity_check_order_matches_sqlite(self, declared_type: str, expected_arrow_type: pa.DataType) -> None:
+    @pytest.mark.parametrize("declared_type,expected_label,expected_arrow_type", _AFFINITY_CASES)
+    def test_affinity_check_order_matches_sqlite(
+        self, declared_type: str, expected_label: str, expected_arrow_type: pa.DataType
+    ) -> None:
         result = _sqlite_affinity_to_arrow_type(declared_type)
         assert result == expected_arrow_type, f"Expected {expected_arrow_type} but got {result}"
+
+    @pytest.mark.parametrize("declared_type,expected_label,expected_arrow_type", _AFFINITY_CASES)
+    def test_sqlite_affinity_class_matches_precedence(
+        self, declared_type: str, expected_label: str, expected_arrow_type: pa.DataType
+    ) -> None:
+        result = sqlite_affinity_class(declared_type)
+        assert result == expected_label, f"Expected {expected_label} but got {result}"
+
+
+_LABEL_TO_DATATYPE: dict[str, DataType | None] = {
+    "INTEGER": DataType.INT64,
+    "TEXT": DataType.STRING,
+    "BLOB": DataType.BINARY,
+    "REAL": DataType.DOUBLE,
+    "NUMERIC": None,
+}
+
+
+class TestAffinityClassMatchesRelationAndReaderCallSites:
+    """Both call sites must agree with sqlite_affinity_class's label for the same declared type,
+    parametrized over the shared _AFFINITY_CASES list rather than a second hardcoded one."""
+
+    @pytest.mark.parametrize("declared_type,expected_label,expected_arrow_type", _AFFINITY_CASES)
+    def test_call_sites_agree(self, declared_type: str, expected_label: str, expected_arrow_type: pa.DataType) -> None:
+        assert sqlite_affinity_class(declared_type) == expected_label
+        assert _sqlite_affinity_to_arrow_type(declared_type) == expected_arrow_type
+        assert SQLITEReader._affinity_to_datatype(declared_type) == _LABEL_TO_DATATYPE[expected_label]
 
 
 class TestSqliteDatetimeAdapter:

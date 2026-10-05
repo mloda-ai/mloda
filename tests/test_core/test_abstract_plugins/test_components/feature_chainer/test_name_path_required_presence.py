@@ -14,22 +14,29 @@ key ``in_features`` (name-satisfied), ``deferred_binding=True``, a key bound by 
 a missing required key is a plain non-match there and ``deferred_binding`` does NOT exempt it.
 
 Every fixture carries an "r769" marker in its class name, keys, and values so it cannot collide with
-other feature groups in the global registry.
+other feature groups in the global registry. Plain (mixin-free) group fixtures carry "Pgp" instead.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import PropertySpec
-from mloda.user import Options
+from mloda.provider import DataCreator, PropertySpec, property_spec
+from mloda.user import FeatureName, Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
 FEATURE_CHAIN_PARSER_LOGGER = "mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser"
@@ -413,7 +420,253 @@ class TestShippedPluginsClean:
             "name-bound captures + in_features exclusion must keep TimeWindowFeatureGroup clean on the name path"
         )
 
-    def test_time_window_binds_name_values_instead_of_deferring(self) -> None:
-        """White-box: window_size and time_unit are name-bound, not deferred_binding."""
-        assert TimeWindowFeatureGroup.PROPERTY_MAPPING["window_size"].deferred_binding is False
-        assert TimeWindowFeatureGroup.PROPERTY_MAPPING["time_unit"].deferred_binding is False
+    @pytest.mark.parametrize(
+        ("plugin_cls", "key"),
+        [
+            (TimeWindowFeatureGroup, "window_size"),
+            (TimeWindowFeatureGroup, "time_unit"),
+            (DimensionalityReductionFeatureGroup, "dimension"),
+            (ClusteringFeatureGroup, "k_value"),
+            (ForecastingFeatureGroup, "horizon"),
+            (ForecastingFeatureGroup, "time_unit"),
+        ],
+        ids=lambda v: v if isinstance(v, str) else v.__name__,
+    )
+    def test_multi_capture_plugin_binds_name_values_instead_of_deferring(self, plugin_cls: Any, key: str) -> None:
+        """White-box: a named capture binds the key, so it is not deferred_binding."""
+        assert plugin_cls.PROPERTY_MAPPING[key].deferred_binding is False
+
+
+PGP_KEY = "threshold_pgp"
+PGP_ROOT_FEATURE = "pgp_root_feature"
+PGP_SUPPORTED_FEATURE = "pgp_supported_feature"
+PGP_MATCH_DATA_FEATURE = "pgp_match_data_feature"
+PGP_OVERRIDE_FEATURE = "pgp_override_feature"
+PGP_MISSING_PREFIX = f"required option(s) {PGP_KEY} are absent after declared defaults and name bindings"
+
+
+class PlainRootPgp(FeatureGroup):
+    """Matches through the DataCreator root rule; the required key has no default."""
+
+    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({PGP_ROOT_FEATURE})
+
+
+class PlainClassNamePgp(FeatureGroup):
+    """Matches through the class-name rule."""
+
+    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
+
+
+class PlainPrefixPgp(FeatureGroup):
+    """Matches through the class-name-prefix rule."""
+
+    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
+
+
+class PlainSupportedPgp(FeatureGroup):
+    """Matches through the feature_names_supported rule."""
+
+    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PGP_SUPPORTED_FEATURE}
+
+
+class PlainMatchDataPgp(FeatureGroup, MatchData):
+    """Matches through the MatchData rule, via the feature-scope connection option."""
+
+    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
+
+    @classmethod
+    def match_data_access(
+        cls,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
+    ) -> Any:
+        return feature_name == PGP_MATCH_DATA_FEATURE
+
+
+class PlainOverridePgp(FeatureGroup):
+    """Overrides the matcher without delegating to the default one."""
+
+    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default")}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == PGP_OVERRIDE_FEATURE
+
+
+class PlainGroupKeyPgp(FeatureGroup):
+    """The required key is a group option, so the reason carries no context remedy."""
+
+    PROPERTY_MAPPING = {PGP_KEY: property_spec("required, no default", context=False)}
+
+
+class PlainExemptPgp(FeatureGroup):
+    """Every key is exempt from the presence rule."""
+
+    PROPERTY_MAPPING = {
+        "defaulted_none_pgp": property_spec("optional", default=None),
+        "cond_pgp": property_spec("conditionally required", default=None, required_when=lambda o: False),
+        "deferred_pgp": property_spec("bound outside the name", deferred_binding=True),
+        DefaultOptionKeys.in_features: property_spec("source"),
+    }
+
+
+class PlainExemptPlusRequiredPgp(FeatureGroup):
+    """The exempt keys sit next to one genuinely required key."""
+
+    PROPERTY_MAPPING = {
+        PGP_KEY: property_spec("required, no default"),
+        "defaulted_none_pgp": property_spec("optional", default=None),
+        "deferred_pgp": property_spec("bound outside the name", deferred_binding=True),
+    }
+
+
+PLAIN_ENTRY_RULES = [
+    pytest.param(PlainRootPgp, PGP_ROOT_FEATURE, {}, id="root_data_creator"),
+    pytest.param(PlainClassNamePgp, PlainClassNamePgp.get_class_name(), {}, id="class_name"),
+    pytest.param(PlainPrefixPgp, f"{PlainPrefixPgp.prefix()}x", {}, id="class_name_prefix"),
+    pytest.param(PlainSupportedPgp, PGP_SUPPORTED_FEATURE, {}, id="feature_names_supported"),
+    pytest.param(
+        PlainMatchDataPgp,
+        PGP_MATCH_DATA_FEATURE,
+        {PlainMatchDataPgp.get_class_name(): "connection_pgp"},
+        id="match_data",
+    ),
+    pytest.param(PlainOverridePgp, PGP_OVERRIDE_FEATURE, {}, id="non_delegating_override"),
+]
+
+
+class TestPlainGroupPresence:
+    """A plain group (no mixin) with a required key needs it on every matching rule."""
+
+    @pytest.mark.parametrize(("group", "feature_name", "group_options"), PLAIN_ENTRY_RULES)
+    def test_missing_required_key_is_non_match(
+        self, group: type[FeatureGroup], feature_name: str, group_options: dict[str, Any]
+    ) -> None:
+        assert group.match_feature_group_criteria(feature_name, Options(group=dict(group_options))) is False
+
+    @pytest.mark.parametrize(("group", "feature_name", "group_options"), PLAIN_ENTRY_RULES)
+    def test_present_required_key_matches(
+        self, group: type[FeatureGroup], feature_name: str, group_options: dict[str, Any]
+    ) -> None:
+        options = Options(group=dict(group_options), context={PGP_KEY: "5"})
+
+        assert group.match_feature_group_criteria(feature_name, options) is True
+
+    @pytest.mark.parametrize("value", [0, "", False], ids=["zero", "empty_string", "false"])
+    def test_present_falsy_value_satisfies_presence(self, value: Any) -> None:
+        options = Options(context={PGP_KEY: value})
+
+        assert PlainRootPgp.match_feature_group_criteria(PGP_ROOT_FEATURE, options) is True
+
+    def test_group_option_satisfies_presence(self) -> None:
+        options = Options(group={PGP_KEY: "5"})
+
+        assert PlainGroupKeyPgp.match_feature_group_criteria(PlainGroupKeyPgp.get_class_name(), options) is True
+
+    def test_rejection_reason_is_recorded_with_the_context_remedy(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        assert PlainRootPgp.match_feature_group_criteria(PGP_ROOT_FEATURE, Options()) is False
+
+        assert list(rejection_window) == [PlainRootPgp.get_class_name()]
+        rejection = rejection_window[PlainRootPgp.get_class_name()]
+        assert rejection.stage == "value_rejection"
+        assert rejection.reason == FeatureChainParser.name_path_presence_rejection_reason(
+            Options(), PlainRootPgp.PROPERTY_MAPPING or {}
+        )
+
+    def test_non_match_stays_quiet_at_warning_level(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Root groups are probed for every feature, so a plain non-match must not warn."""
+        with caplog.at_level(logging.WARNING):
+            result = PlainRootPgp.match_feature_group_criteria(PGP_ROOT_FEATURE, Options())
+
+        assert result is False
+        assert not _required_presence_warnings(caplog, "PlainRootPgp")
+
+
+PGP_UNOWNED_PREFIX_FEATURE = "pgpunowned_abc"
+PGP_UNOWNED_SUFFIX_FEATURE = "abc_pgpunowned"
+
+
+class PlainPatternedPrefixPgp(FeatureGroup):
+    """Plain group whose PREFIX_PATTERN captures the required key, but the name carries no source."""
+
+    PREFIX_PATTERN = r"^pgpunowned_(?P<k_pgp>[a-z]+)$"
+    PROPERTY_MAPPING = {"k_pgp": property_spec("required, no default")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PGP_UNOWNED_PREFIX_FEATURE}
+
+
+class PlainPatternedSuffixPgp(FeatureGroup):
+    """Plain group whose SUFFIX_PATTERN captures the required key, but the name carries no source."""
+
+    SUFFIX_PATTERN = r"^(?P<k_pgp>[a-z]+)_pgpunowned$"
+    PROPERTY_MAPPING = {"k_pgp": property_spec("required, no default")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {PGP_UNOWNED_SUFFIX_FEATURE}
+
+
+class TestPlainPatternedGroupUnownedName:
+    """A plain group with a name pattern keeps the default match for a name its pattern does not own."""
+
+    @pytest.mark.parametrize(
+        ("group", "feature_name"),
+        [
+            pytest.param(PlainPatternedPrefixPgp, PGP_UNOWNED_PREFIX_FEATURE, id="prefix_pattern"),
+            pytest.param(PlainPatternedSuffixPgp, PGP_UNOWNED_SUFFIX_FEATURE, id="suffix_pattern"),
+        ],
+    )
+    def test_unowned_name_keeps_the_default_match(self, group: type[FeatureGroup], feature_name: str) -> None:
+        # Precondition: the pattern does not own the name, because it carries no source feature.
+        with pytest.raises(ValueError, match="no source feature"):
+            FeatureChainParser.resolve_name(feature_name, FeatureChainParser.prefix_patterns_of(group), None)
+
+        assert group.match_feature_group_criteria(feature_name, Options()) is True
+
+    @pytest.mark.parametrize(
+        ("group", "feature_name"),
+        [
+            pytest.param(PlainPatternedPrefixPgp, PGP_UNOWNED_PREFIX_FEATURE, id="prefix_pattern"),
+            pytest.param(PlainPatternedSuffixPgp, PGP_UNOWNED_SUFFIX_FEATURE, id="suffix_pattern"),
+        ],
+    )
+    def test_unowned_name_records_no_rejection(
+        self, group: type[FeatureGroup], feature_name: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        group.match_feature_group_criteria(feature_name, Options())
+
+        assert rejection_window == {}
+
+
+class TestPlainGroupExemptions:
+    """The name-path exemptions carry over: default, required_when, deferred_binding and in_features."""
+
+    def test_exempt_keys_do_not_block_the_match(self) -> None:
+        assert PlainExemptPgp.match_feature_group_criteria(PlainExemptPgp.get_class_name(), Options()) is True
+
+    def test_exempt_keys_do_not_mask_a_missing_required_key(self, rejection_window: dict[str, MatchRejection]) -> None:
+        name = PlainExemptPlusRequiredPgp.get_class_name()
+
+        assert PlainExemptPlusRequiredPgp.match_feature_group_criteria(name, Options()) is False
+        assert rejection_window[name].reason.startswith(PGP_MISSING_PREFIX)
+        assert "deferred_pgp" not in rejection_window[name].reason
+        assert "defaulted_none_pgp" not in rejection_window[name].reason

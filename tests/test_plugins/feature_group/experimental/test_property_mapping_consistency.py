@@ -7,6 +7,7 @@ IS a ``PropertySpec``, documents itself with a non-empty explanation, and enumer
 value spaces opt into strict validation.
 """
 
+import re
 from typing import Any
 
 import pytest
@@ -86,6 +87,31 @@ class TestPropertyMappingConsistency:
             f"{plugin_cls.__name__} PROPERTY_MAPPING entries with enumerated values "
             f"should have strict_validation=True: {violations}"
         )
+
+
+# Plugins migrated to named captures; text_cleaning is captureless.
+NAMED_CAPTURE_PLUGINS: list[type[Any]] = [
+    GeoDistanceFeatureGroup,
+    MissingValueFeatureGroup,
+    ScalingFeatureGroup,
+    AggregatedFeatureGroup,
+    NodeCentralityFeatureGroup,
+    EncodingFeatureGroup,
+    SklearnPipelineFeatureGroup,
+    DimensionalityReductionFeatureGroup,
+    ClusteringFeatureGroup,
+    TimeWindowFeatureGroup,
+    ForecastingFeatureGroup,
+]
+
+
+@pytest.mark.parametrize("plugin_cls", NAMED_CAPTURE_PLUGINS, ids=lambda c: c.__name__)
+def test_prefix_pattern_uses_only_named_captures_that_are_mapping_keys(plugin_cls: type[Any]) -> None:
+    compiled = re.compile(plugin_cls.PREFIX_PATTERN)
+    assert compiled.groups == len(compiled.groupindex), f"{plugin_cls.__name__} has unnamed capture groups"
+    unmapped = [name for name in compiled.groupindex if name not in plugin_cls.PROPERTY_MAPPING]
+    assert unmapped == [], f"{plugin_cls.__name__} named captures that are not PROPERTY_MAPPING keys: {unmapped}"
+    assert compiled.groups >= 1
 
 
 # A feature name that string-parses to (None, None) for every plugin, so matching it can only

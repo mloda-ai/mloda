@@ -5,7 +5,7 @@ This module contains comprehensive tests for the Spark compute framework impleme
 
 Requirements:
 - PySpark must be installed (pip install pyspark)
-- Java 8+ must be installed and JAVA_HOME environment variable must be set
+- Java 17+ must be installed and JAVA_HOME environment variable must be set
 
 Environment Setup:
 - JAVA_HOME: Must point to a valid Java installation
@@ -21,6 +21,7 @@ ensure proper resource management across all test methods.
 """
 
 import os
+from decimal import Decimal
 from typing import Any
 from mloda.user import DataType
 from mloda.user import JoinType
@@ -65,6 +66,7 @@ if PYSPARK_AVAILABLE:
         LongType,
         FloatType,
         DoubleType,
+        DecimalType,
         TimestampType,
     )
     import pyspark
@@ -77,6 +79,7 @@ else:
     LongType = None
     FloatType = None
     DoubleType = None
+    DecimalType = None
     TimestampType = None
     pyspark = None
 
@@ -307,6 +310,34 @@ class TestSparkFrameworkComputeFramework:
         assert sorted(row["__row_num"] for row in rows) == [100, 200, 300]
         assert {by_other["a"]["__row_num"], by_other["b"]["__row_num"], by_other["c"]["__row_num"]} == {100, 200, 300}
 
+    def test_add_column_case_variant_of_existing_raises(self, spark_session: Any) -> None:
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        spark_framework.set_framework_connection_object(spark_session)
+        spark_framework.data = spark_session.createDataFrame([{"Foo": 1}, {"Foo": 2}])
+
+        with pytest.raises(ValueError, match="Foo"):
+            spark_framework.transform([10, 20], ["foo"])
+
+    def test_add_column_case_variant_allowed_when_case_sensitive(self, spark_case_sensitive: Any) -> None:
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        spark_framework.set_framework_connection_object(spark_case_sensitive)
+        spark_framework.data = spark_case_sensitive.createDataFrame([{"Foo": 1}, {"Foo": 2}])
+
+        result = spark_framework.transform([10, 20], ["foo"])
+
+        assert {"Foo", "foo"} <= set(result.columns)
+        assert {(r["Foo"], r["foo"]) for r in result.collect()} == {(1, 10), (2, 20)}
+
+    @pytest.mark.parametrize("feature", ["__mloda_rn0__", "__MLODA_RN0__"])
+    def test_add_column_named_like_row_number_helper_keeps_values(self, spark_session: Any, feature: str) -> None:
+        spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        spark_framework.set_framework_connection_object(spark_session)
+        spark_framework.data = spark_session.createDataFrame([{"other": "a"}, {"other": "b"}, {"other": "c"}])
+
+        result = spark_framework.transform([10, 20, 30], [feature])
+
+        assert {r["other"]: r[feature] for r in result.collect()} == {"a": 10, "b": 20, "c": 30}
+
     def test_infer_spark_type(self, spark_session: Any) -> None:
         """Test Spark type inference."""
         from pyspark.sql.types import BooleanType, IntegerType, DoubleType, StringType
@@ -335,6 +366,11 @@ class TestSparkDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": 3, "str_col": "c", "float_col": 3.0},
         ]
         return spark_session.createDataFrame(data)
+
+    @pytest.fixture
+    def decimal_sample_data(self, spark_session: Any) -> Any:
+        schema = StructType([StructField("d", DecimalType(10, 2))])
+        return spark_session.createDataFrame([(Decimal("12.34"),), (Decimal("5.50"),), (None,)], schema=schema)
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 import pytest
 import pyarrow as pa
@@ -112,6 +113,11 @@ class TestPyArrowDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeE
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
 
     @pytest.fixture
     def dtype_duplicate_column_data(self) -> Any:

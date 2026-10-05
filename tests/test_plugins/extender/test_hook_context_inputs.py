@@ -13,10 +13,11 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext, instrument
-from mloda.provider import FeatureGroup, PropertySpec
-from mloda.user import Feature, FeatureName, Options, ParallelizationMode
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, PropertySpec
+from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 _UTILS_LOGGER = "mloda.core.abstract_plugins.components.utils"
@@ -128,6 +129,7 @@ class TestRootFeatureGroupLogsNoWarning:
         assert not any("Degraded field" in record.message for record in caplog.records)
         assert len(extender.captured) == 3
         assert all(context.input_features is None for context in extender.captured)
+        assert all(context.input_feature_edges is None for context in extender.captured)
 
 
 class TestPlainStringDeclaredInputs:
@@ -154,6 +156,7 @@ class TestPlainStringDeclaredInputs:
 
             assert extender.captured is not None
             assert extender.captured.input_features == frozenset({"base_amount", "currency"})
+            assert extender.captured.input_feature_edges == {"my_feature": ("base_amount", "currency")}
             assert not any("Degraded field" in record.message for record in caplog.records)
         finally:
             del _PlainStrInputsFeatureGroup
@@ -183,6 +186,7 @@ class TestBatchedFeatureSetDeclaredInputsUnion:
 
             assert extender.captured is not None
             assert extender.captured.input_features == frozenset({"src_a", "src_b"})
+            assert extender.captured.input_feature_edges == {"a": ("src_a",), "b": ("src_b",)}
         finally:
             del _BatchedInputFeatureGroup
             gc.collect()
@@ -218,8 +222,33 @@ class TestDeclaredInputsReresolvedAfterOptionDefaultsMaterialize:
 
             captured = extender.captured_by_hook[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE]
             assert captured.input_features == frozenset({"default_source"})
+            assert captured.input_feature_edges == {"my_feature": ("default_source",)}
         finally:
             del _DeclaredInputRematerializesFeatureGroup
+            gc.collect()
+
+    def test_materialize_resets_the_edges_memo_with_the_other_memo_attrs(self) -> None:
+        class _EdgesMemoResetFeatureGroup(FeatureGroup):
+            """PROPERTY_MAPPING declares a concrete default so materialization changes the options."""
+
+            PROPERTY_MAPPING = {"source": PropertySpec("Source column.", context=True, default="default_source")}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = FeatureSet([Feature("my_feature")])
+            feature_set.declared_input_features_resolved = True
+            feature_set.declared_input_feature_names = frozenset({"stale"})
+            feature_set.declared_input_feature_edges = {"my_feature": ("stale",)}
+
+            feature_set.materialize_option_defaults(_EdgesMemoResetFeatureGroup)
+
+            assert feature_set.declared_input_feature_names is None
+            assert feature_set.declared_input_feature_edges is None
+        finally:
+            del _EdgesMemoResetFeatureGroup
             gc.collect()
 
 
@@ -249,8 +278,104 @@ class TestFeatureNamesAndInputFeaturesArePlainStr:
             assert all(type(n) is str for n in extender.captured.feature_names)
             assert extender.captured.input_features is not None
             assert all(type(n) is str for n in extender.captured.input_features)
+            edges = extender.captured.input_feature_edges
+            assert edges == {"a": ("src",), "b": ("src",)}
+            assert edges is not None
+            assert all(type(key) is str for key in edges)
+            assert all(type(name) is str for names in edges.values() for name in names)
         finally:
             del _StrTypedFeatureNamesFeatureGroup
+            gc.collect()
+
+
+class TestInputFeatureEdgesPerOutputFeature:
+    """input_feature_edges maps each output feature to its own declared inputs; input_features stays the union."""
+
+    def test_same_named_features_are_union_merged_and_sorted(self) -> None:
+        class _OptionDrivenInputFeatureGroup(FeatureGroup):
+            """input_features reads the source from the feature's own options."""
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
+                return {options.get("src")}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = FeatureSet(
+                [Feature("twin", options={"src": "z_src"}), Feature("twin", options={"src": "y_src"})]
+            )
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            cfw.run_calculate_feature(_OptionDrivenInputFeatureGroup, feature_set)
+
+            assert extender.captured is not None
+            assert extender.captured.input_feature_edges == {"twin": ("y_src", "z_src")}
+        finally:
+            del _OptionDrivenInputFeatureGroup
+            gc.collect()
+
+    def test_feature_without_declared_inputs_is_absent(self) -> None:
+        class _OnlyOneDeclaresInputFeatureGroup(FeatureGroup):
+            """Only feature 'a' declares an input; 'b' declares none."""
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
+                return {"src_a"} if str(feature_name) == "a" else None
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = FeatureSet([Feature("a"), Feature("b")])
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+
+            cfw.run_calculate_feature(_OnlyOneDeclaresInputFeatureGroup, feature_set)
+
+            assert extender.captured is not None
+            assert extender.captured.input_feature_edges == {"a": ("src_a",)}
+            assert extender.captured.input_features == frozenset({"src_a"})
+        finally:
+            del _OnlyOneDeclaresInputFeatureGroup
+            gc.collect()
+
+    def test_mutating_the_captured_edges_does_not_leak_into_the_memo_or_a_later_context(self) -> None:
+        class _MutationProbeFeatureGroup(FeatureGroup):
+            """input_features declares one source per requested feature_name."""
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
+                return {f"src_{str(feature_name)}"}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = FeatureSet([Feature("a")])
+            extender = _AllHooksContextCapturingExtender()
+            cfw = _build_framework({extender})
+            cfw.data = {"col": [1, 2, 3]}
+            cfw.set_column_names()
+
+            cfw.run_validate_input_features(_MutationProbeFeatureGroup, feature_set)
+            first = extender.captured[0]
+            assert first.input_feature_edges == {"a": ("src_a",)}
+            assert first.input_feature_edges is not None
+            with pytest.raises(TypeError):
+                first.input_feature_edges["mutated"] = ("x",)
+
+            assert feature_set.declared_input_feature_edges == {"a": ("src_a",)}
+            assert first.input_feature_edges is not feature_set.declared_input_feature_edges
+
+            cfw.run_calculate_feature(_MutationProbeFeatureGroup, feature_set)
+            later = extender.captured[-1]
+            assert later.input_feature_edges == {"a": ("src_a",)}
+            assert first.input_feature_edges is not later.input_feature_edges
+        finally:
+            del _MutationProbeFeatureGroup
             gc.collect()
 
 
@@ -556,6 +681,7 @@ class TestDeclaredInputMemoAttributesGuarded:
             feature_set = _build_feature_set()
             del feature_set.declared_input_features_resolved
             del feature_set.declared_input_feature_names
+            del feature_set.declared_input_feature_edges
 
             extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
             cfw = _build_framework({extender})
@@ -566,6 +692,89 @@ class TestDeclaredInputMemoAttributesGuarded:
             assert result == {"col": [1, 2, 3]}
             assert extender.captured is not None
             assert extender.captured.input_features == frozenset({"x"})
+            assert extender.captured.input_feature_edges == {"my_feature": ("x",)}
         finally:
             del _MemolessInputFeatureGroup
             gc.collect()
+
+    def test_resolved_names_memo_without_edges_attribute_does_not_raise(self) -> None:
+        class _EdgesAttrMissingFeatureGroup(FeatureGroup):
+            """input_features declares a plain str name."""
+
+            def input_features(self, options: Options, feature_name: FeatureName) -> set[Any] | None:
+                return {"x"}
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return {"col": [1, 2, 3]}
+
+        try:
+            feature_set = _build_feature_set()
+            feature_set.declared_input_features_resolved = True
+            feature_set.declared_input_feature_names = frozenset({"x"})
+            del feature_set.declared_input_feature_edges
+
+            extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+            cfw = _build_framework({extender})
+            cfw.data = {"col": [1, 2, 3]}
+
+            cfw.run_calculate_feature(_EdgesAttrMissingFeatureGroup, feature_set)
+
+            assert extender.captured is not None
+            assert extender.captured.input_features == frozenset({"x"})
+            assert extender.captured.input_feature_edges is None
+        finally:
+            del _EdgesAttrMissingFeatureGroup
+            gc.collect()
+
+
+_REPL_COL = "ctx_replaced_col"
+
+
+class _ReplParentFeatureGroup(FeatureGroup):
+    """Parent replaced by its subclass at match time."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_REPL_COL})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_REPL_COL: [1, 2, 3]}
+
+
+class _ReplChildFeatureGroup(_ReplParentFeatureGroup):
+    """Winning subclass."""
+
+
+class TestComputeHooksCarrySpecializedFrom:
+    def test_compute_hooks_name_the_replaced_parent(self) -> None:
+        extender = _AllHooksContextCapturingExtender()
+
+        mloda.run_all(
+            [Feature(_REPL_COL)],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({_ReplParentFeatureGroup, _ReplChildFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        parent_name = f"{_ReplParentFeatureGroup.__module__}.{_ReplParentFeatureGroup.__qualname__}"
+        assert ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE in {context.hook for context in extender.captured}
+        assert all(context.specialized_from == (parent_name,) for context in extender.captured)
+
+    def test_hooks_without_replacement_carry_empty_tuple(self) -> None:
+        feature_set = _build_feature_set()
+        extender = _AllHooksContextCapturingExtender()
+        cfw = _build_framework({extender})
+        cfw.data = {"col": [1, 2, 3]}
+
+        cfw.run_validate_input_features(_RootFeatureGroup, feature_set)
+        cfw.run_calculate_feature(_RootFeatureGroup, feature_set)
+
+        assert extender.captured
+        assert all(context.specialized_from == () for context in extender.captured)

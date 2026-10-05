@@ -1,34 +1,33 @@
-"""
-Shared test mixin for all BaseFilterEngine implementations.
+"""Shared filter engine tests for BaseFilterEngine implementations.
 
-This mixin provides common test methods that verify the filter engine contract.
-Each framework-specific test class should inherit from this mixin and provide:
-- filter_engine fixture: Returns the filter engine class
-- sample_data fixture: Returns framework-specific test data
-- get_column_values method: Extracts column values as a list from results
+Consumers set `filter_engine_class`, also read by `tests/test_plugins/test_mixin_consumer_coverage.py`, and
+implement the abstract fixtures and methods their tests need, including `decimal_sample_data` and
+`get_decimal_column_dtype`. A framework that cannot support a test overrides it and skips it with a reason.
 """
 
 from abc import abstractmethod
-from typing import Any
+from decimal import Decimal
+from typing import Any, ClassVar
 
 import pytest
 
+from mloda.provider import BaseFilterEngine
 from mloda.user import Feature
 from mloda.user import SingleFilter
 from mloda.user import FilterType
+from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
+    NON_COLLECTION_VALUES,
+)
 
 
 class FilterEngineTestMixin:
     """Shared tests for all BaseFilterEngine implementations."""
 
-    @pytest.fixture
-    @abstractmethod
-    def filter_engine(self) -> Any:
-        """Return the filter engine class to test.
+    filter_engine_class: ClassVar[type[BaseFilterEngine]]
 
-        Override in framework-specific test class.
-        """
-        raise NotImplementedError
+    @pytest.fixture
+    def filter_engine(self) -> type[BaseFilterEngine]:
+        return self.filter_engine_class
 
     @pytest.fixture
     @abstractmethod
@@ -54,6 +53,10 @@ class FilterEngineTestMixin:
         Data should contain columns:
             id: [1, 2, 3, 4, 5]
             category: ["A", None, "B", None, "C"]
+            score: [1, None, 2, None, 3]
+            ratio: [1.0, NaN, 2.0, None, 3.0]
+        Nulls in category and score sit at ids 2 and 4.
+        ratio has a NaN at id 2 and a null at id 4, so missing rows still sit at ids 2 and 4.
         """
         raise NotImplementedError
 
@@ -117,6 +120,14 @@ class FilterEngineTestMixin:
         self._assert_values_equal(self.get_column_values(result, "age"), [40, 45])
         self._assert_values_equal(self.get_column_values(result, "id"), [4, 5])
 
+    def test_do_min_filter_drops_null_or_nan_rows(self, filter_engine: Any, nullable_category_sample_data: Any) -> None:
+        single_filter = SingleFilter(Feature("ratio"), FilterType.MIN, {"value": 2.0})
+
+        result = filter_engine.do_min_filter(nullable_category_sample_data, single_filter)
+
+        assert self.result_row_count(result) == 2
+        self._assert_values_equal(self.get_column_values(result, "id"), [3, 5])
+
     def test_do_max_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test max filter."""
         feature = Feature("age")
@@ -130,18 +141,32 @@ class FilterEngineTestMixin:
         self._assert_values_equal(self.get_column_values(result, "age"), [25, 30])
         self._assert_values_equal(self.get_column_values(result, "id"), [1, 2])
 
-    def test_do_max_filter_with_tuple(self, filter_engine: Any, sample_data: Any) -> None:
+    @pytest.mark.parametrize(
+        ("max_exclusive", "expected_ages", "expected_ids"),
+        [
+            pytest.param(True, [25, 30], [1, 2], id="exclusive"),
+            pytest.param(False, [25, 30, 35], [1, 2, 3], id="inclusive"),
+        ],
+    )
+    def test_do_max_filter_with_tuple(
+        self,
+        filter_engine: Any,
+        sample_data: Any,
+        max_exclusive: bool,
+        expected_ages: list[int],
+        expected_ids: list[int],
+    ) -> None:
         """Test max filter with tuple parameter."""
         feature = Feature("age")
         filter_type = FilterType.MAX
-        parameter = {"max": 35, "max_exclusive": True}
+        parameter = {"max": 35, "max_exclusive": max_exclusive}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_max_filter(sample_data, single_filter)
 
-        assert self.result_row_count(result) == 2
-        self._assert_values_equal(self.get_column_values(result, "age"), [25, 30])
-        self._assert_values_equal(self.get_column_values(result, "id"), [1, 2])
+        assert self.result_row_count(result) == len(expected_ages)
+        self._assert_values_equal(self.get_column_values(result, "age"), expected_ages)
+        self._assert_values_equal(self.get_column_values(result, "id"), expected_ids)
 
     def test_do_equal_filter(self, filter_engine: Any, sample_data: Any) -> None:
         """Test equal filter."""
@@ -201,6 +226,17 @@ class FilterEngineTestMixin:
         assert set(self.get_column_values(result, "category")) == {"A", "B"}
         assert set(self.get_column_values(result, "id")) == {1, 2, 3, 5}
 
+    @pytest.mark.parametrize("make_values", NON_COLLECTION_VALUES)
+    def test_do_categorical_inclusion_rejects_non_collection_values(
+        self, filter_engine: Any, sample_data: Any, make_values: Any
+    ) -> None:
+        """Building the SingleFilter raises, so no engine ever filters on a non-collection values."""
+        with pytest.raises(TypeError, match="list, tuple, set or frozenset"):
+            single_filter = SingleFilter(
+                Feature("category"), FilterType.CATEGORICAL_INCLUSION, {"values": make_values()}
+            )
+            filter_engine.do_categorical_inclusion_filter(sample_data, single_filter)
+
     def test_do_categorical_inclusion_empty_values(self, filter_engine: Any, sample_data: Any) -> None:
         """An empty allowed-values list must yield an empty result across all frameworks."""
         feature = Feature("category")
@@ -212,18 +248,22 @@ class FilterEngineTestMixin:
 
         assert self.result_row_count(result) == 0
 
+    @pytest.mark.parametrize(
+        ("column", "values"),
+        [
+            pytest.param("category", ["A", None], id="string_category"),
+            pytest.param("score", [1, None], id="numeric_score"),
+            pytest.param("ratio", [1.0, None], id="float_ratio"),
+            pytest.param("ratio", [1.0, float("nan")], id="float_ratio_nan"),
+        ],
+    )
     def test_do_categorical_inclusion_keeps_null_when_none_present(
-        self, filter_engine: Any, nullable_category_sample_data: Any
+        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
     ) -> None:
-        """When None is in the allowed-values list, null rows must be KEPT.
-
-        Data: id=[1,2,3,4,5], category=["A", None, "B", None, "C"].
-        With values ["A", None], keep category == "A" OR category is null -> ids {1, 2, 4}.
-        Asserting on the id column avoids NaN/None comparison issues on the category column.
-        """
-        feature = Feature("category")
+        """When None is in the allowed-values list, null rows must be KEPT."""
+        feature = Feature(column)
         filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": ["A", None]}
+        parameter = {"values": values}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
@@ -231,17 +271,20 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 3
         self._assert_values_equal(self.get_column_values(result, "id"), [1, 2, 4])
 
+    @pytest.mark.parametrize(
+        ("column", "values"),
+        [
+            pytest.param("category", ["A"], id="string_category"),
+            pytest.param("score", [1], id="numeric_score"),
+        ],
+    )
     def test_do_categorical_inclusion_drops_null_when_none_absent(
-        self, filter_engine: Any, nullable_category_sample_data: Any
+        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
     ) -> None:
-        """When None is absent from the allowed-values list, null rows must be DROPPED.
-
-        Data: id=[1,2,3,4,5], category=["A", None, "B", None, "C"].
-        With values ["A"], keep only category == "A"; nulls dropped -> id {1}.
-        """
-        feature = Feature("category")
+        """When None is absent from the allowed-values list, null rows must be DROPPED."""
+        feature = Feature(column)
         filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": ["A"]}
+        parameter = {"values": values}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
@@ -249,13 +292,21 @@ class FilterEngineTestMixin:
         assert self.result_row_count(result) == 1
         self._assert_values_equal(self.get_column_values(result, "id"), [1])
 
+    @pytest.mark.parametrize(
+        ("column", "values"),
+        [
+            pytest.param("category", [None], id="string_category"),
+            pytest.param("score", [None], id="numeric_score"),
+            pytest.param("ratio", [None], id="float_ratio"),
+        ],
+    )
     def test_do_categorical_inclusion_only_none_keeps_only_nulls(
-        self, filter_engine: Any, nullable_category_sample_data: Any
+        self, filter_engine: Any, nullable_category_sample_data: Any, column: str, values: list[Any]
     ) -> None:
         """An allowed-values list of only [None] keeps exactly the null rows."""
-        feature = Feature("category")
+        feature = Feature(column)
         filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": [None]}
+        parameter = {"values": values}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
         result = filter_engine.do_categorical_inclusion_filter(nullable_category_sample_data, single_filter)
@@ -291,12 +342,130 @@ class FilterEngineTestMixin:
         """Test that final_filters returns True."""
         assert filter_engine.final_filters() is True
 
-    def test_do_range_filter_missing_parameters(self, filter_engine: Any, sample_data: Any) -> None:
-        """Test range filter with missing parameters."""
-        feature = Feature("age")
-        filter_type = FilterType.RANGE
-        parameter = {"min": 30}  # Missing max parameter
-        single_filter = SingleFilter(feature, filter_type, parameter)
+    @pytest.mark.parametrize(
+        ("filter_type", "column", "parameter", "match"),
+        [
+            pytest.param(
+                FilterType.RANGE, "age", {"min": 30}, "Filter parameter .* not supported", id="range_missing_max"
+            ),
+            pytest.param(
+                FilterType.MIN, "age", {"invalid": 30}, "Filter parameter 'value' not found", id="min_missing_value"
+            ),
+            pytest.param(
+                FilterType.MIN, "age", {"min": 30}, "Filter parameter 'value' not found", id="min_rejects_min_key"
+            ),
+            pytest.param(
+                FilterType.EQUAL, "age", {"invalid": 30}, "Filter parameter 'value' not found", id="equal_missing_value"
+            ),
+            pytest.param(
+                FilterType.REGEX,
+                "name",
+                {"invalid": "^A"},
+                "Filter parameter 'value' not found",
+                id="regex_missing_value",
+            ),
+            pytest.param(
+                FilterType.CATEGORICAL_INCLUSION,
+                "category",
+                {"invalid": ["A", "B"]},
+                "Filter parameter 'values' not found",
+                id="categorical_inclusion_missing_values",
+            ),
+            pytest.param(
+                FilterType.MAX, "age", {"invalid": 30}, "No valid filter parameter found", id="max_invalid_parameters"
+            ),
+            pytest.param(
+                FilterType.MAX,
+                "age",
+                {"min": 20, "max": 30},
+                "Filter parameter .* not supported as max filter",
+                id="max_with_min_parameter",
+            ),
+        ],
+    )
+    def test_do_filter_rejects_invalid_parameters(
+        self,
+        filter_engine: Any,
+        sample_data: Any,
+        filter_type: FilterType,
+        column: str,
+        parameter: dict[str, Any],
+        match: str,
+    ) -> None:
+        single_filter = SingleFilter(Feature(column), filter_type, parameter)
 
-        with pytest.raises(ValueError, match="Filter parameter .* not supported"):
-            filter_engine.do_range_filter(sample_data, single_filter)
+        with pytest.raises(ValueError, match=match):
+            filter_engine.do_filter(sample_data, single_filter)
+
+    @pytest.fixture
+    @abstractmethod
+    def decimal_sample_data(self) -> Any:
+        """Return a decimal column d, including a null, with precision 10 and scale 2."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        """Return the native dtype of d, or its Python value type for dictionary data."""
+        raise NotImplementedError
+
+    def test_min_filter_decimal(
+        self,
+        filter_engine: Any,
+        decimal_sample_data: Any,
+    ) -> None:
+        single_filter = SingleFilter(Feature("d"), FilterType.MIN, {"value": Decimal("12.34")})
+
+        result = filter_engine.do_min_filter(decimal_sample_data, single_filter)
+
+        values = self.get_column_values(result, "d")
+        assert values == [Decimal("12.34"), Decimal("99.99")]
+        assert all(isinstance(value, Decimal) for value in values)
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
+
+    def test_categorical_inclusion_decimal(
+        self,
+        filter_engine: Any,
+        decimal_sample_data: Any,
+    ) -> None:
+        single_filter = SingleFilter(
+            Feature("d"), FilterType.CATEGORICAL_INCLUSION, {"values": [Decimal("12.34"), Decimal("5.50")]}
+        )
+
+        result = filter_engine.do_categorical_inclusion_filter(decimal_sample_data, single_filter)
+
+        values = self.get_column_values(result, "d")
+        assert values == [Decimal("12.34"), Decimal("5.50")]
+        assert all(isinstance(value, Decimal) for value in values)
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
+
+    def test_categorical_inclusion_decimal_unrepresentable_values_match_nothing(
+        self,
+        filter_engine: Any,
+        decimal_sample_data: Any,
+    ) -> None:
+        """Values that do not survive a round-trip cast to the column's precision/scale must match nothing."""
+        single_filter = SingleFilter(
+            Feature("d"),
+            FilterType.CATEGORICAL_INCLUSION,
+            {"values": [Decimal("12.345"), Decimal("99999999999.99")]},
+        )
+
+        result = filter_engine.do_categorical_inclusion_filter(decimal_sample_data, single_filter)
+
+        assert self.get_column_values(result, "d") == []
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)
+
+    def test_categorical_inclusion_decimal_with_null(
+        self,
+        filter_engine: Any,
+        decimal_sample_data: Any,
+    ) -> None:
+        single_filter = SingleFilter(
+            Feature("d"), FilterType.CATEGORICAL_INCLUSION, {"values": [Decimal("12.34"), None]}
+        )
+
+        result = filter_engine.do_categorical_inclusion_filter(decimal_sample_data, single_filter)
+
+        values = self.get_column_values(result, "d")
+        assert values == [Decimal("12.34"), None]
+        assert self.get_decimal_column_dtype(result) == self.get_decimal_column_dtype(decimal_sample_data)

@@ -58,7 +58,7 @@ def _planned() -> GlobalFilter:
                 ),
             )
         ],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_CFA_ENABLED,
         global_filter=global_filter,
     )

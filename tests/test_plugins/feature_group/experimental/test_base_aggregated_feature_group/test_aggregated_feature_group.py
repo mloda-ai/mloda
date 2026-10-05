@@ -3,6 +3,8 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -13,10 +15,14 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
+    AggregatedZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
     PandasAggregatedTestDataCreator,
     validate_aggregated_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
 
 
 class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
@@ -135,6 +141,14 @@ class TestAggregatedFeatureGroup:
         assert not AggregatedFeatureGroup.match_feature_group_criteria("sum_invalid_sales", options)
         assert not AggregatedFeatureGroup.match_feature_group_criteria("sales__invalid", options)
 
+    def test_bogus_name_aggregation_is_rejected_despite_a_valid_option(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = Options(context={AggregatedFeatureGroup.AGGREGATION_TYPE: "sum"})
+        assert AggregatedFeatureGroup.match_feature_group_criteria("x__bogus_aggr", options) is False
+        assert len(rejection_window) == 1
+        assert "bogus" in next(iter(rejection_window.values())).reason
+
     def test_input_features(self) -> None:
         """Test input_features method."""
         options = Options()
@@ -158,6 +172,15 @@ class TestAggregatedFeatureGroup:
 
         input_features = feature_group.input_features(options, FeatureName("discount__median_aggr"))
         assert input_features == {Feature("discount")}
+
+        child = Feature("sales", options=Options(context={"some_key": 1}), feature_group="SomeReader")
+        declared_options = Options(context={"in_features": [child]})
+        assert feature_group.match_feature_group_criteria("sales__sum_aggr", declared_options)
+        result = feature_group.input_features(declared_options, FeatureName("sales__sum_aggr"))
+        assert result is not None
+        [declared] = result
+        assert declared.options.get("some_key") == 1
+        assert declared.feature_group_scope == "SomeReader"
 
 
 class TestPandasAggregatedFeatureGroup:
@@ -287,6 +310,10 @@ class TestPandasAggregatedFeatureGroup:
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
 
+class TestPandasAggregatedZeroRow(PandasZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PandasAggregatedFeatureGroup
+
+
 class TestAggPandasIntegration:
     """Integration tests for the aggregated feature group using DataCreator."""
 
@@ -311,7 +338,7 @@ class TestAggPandasIntegration:
                 # "sales__std_aggr",
                 # "sales__var_aggr",
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

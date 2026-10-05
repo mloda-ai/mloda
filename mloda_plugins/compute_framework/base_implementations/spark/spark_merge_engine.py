@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import timedelta
 from functools import reduce
 from typing import Any
@@ -7,7 +8,11 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import Index
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.spark import spark_type_semantics
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
+    pick_helper_column_name,
+    pick_rename_prefix,
+)
 
 try:
     from pyspark.sql import DataFrame, Window
@@ -16,6 +21,13 @@ except ImportError:
     DataFrame = None
     Window = None
     F = None
+
+
+def spark_name_fold(data: Any) -> Callable[[str], str]:
+    """Spark resolves names per spark.sql.caseSensitive, folding like str.lower when false."""
+    if str(data.sparkSession.conf.get("spark.sql.caseSensitive")).strip().lower() == "true":
+        return lambda name: name
+    return str.lower
 
 
 class SparkMergeEngine(BaseMergeEngine):
@@ -58,6 +70,13 @@ class SparkMergeEngine(BaseMergeEngine):
                 f"{self.__class__.__name__} ASOF does not support a timedelta tolerance; provide a numeric "
                 "tolerance (e.g. epoch seconds matching the time column)."
             )
+        fold = spark_name_fold(left_data)
+        left_cols = list(left_data.columns)
+        right_cols = list(right_data.columns)
+        # Right columns that survive in the output (left wins on a name collision).
+        right_keep = [c for c in right_cols if c not in left_cols]
+        ensure_distinct_identifiers([*left_cols, *right_keep], "as-of merge", fold)
+
         left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         self.check_import()
         if asof_config.direction == "nearest":
@@ -68,20 +87,18 @@ class SparkMergeEngine(BaseMergeEngine):
         lt = asof_config.left_time_column
         rt = asof_config.right_time_column
 
-        left_cols = list(left_data.columns)
-        right_cols = list(right_data.columns)
-        # Right columns that survive in the output (left wins on a name collision).
-        right_keep = [c for c in right_cols if c not in left_cols]
+        taken = {*left_cols, *right_cols}
+        lid = pick_helper_column_name(taken, "_mloda_lid")
+        rn = pick_helper_column_name({*taken, lid}, "_mloda_rn")
 
         # Rename every right column to a collision-free internal name BEFORE the join so the
         # join predicate, window and final projection never rely on Spark alias ("l."/"r.")
         # resolution surviving a withColumn/filter, which is brittle across Spark versions.
-        prefix = "_mloda_r_"
-        right_renamed = right_data
-        for c in right_cols:
-            right_renamed = right_renamed.withColumnRenamed(c, f"{prefix}{c}")
+        prefix = pick_rename_prefix("_mloda_r", right_cols, [*left_cols, lid, rn], fold)
+        right_renamed = right_data.toDF(*(f"{prefix}{c}" for c in right_cols))
 
-        left_ids = left_data.withColumn("_mloda_lid", F.monotonically_increasing_id())
+        # withColumn would replace a user column that matches loosely (Java equalsIgnoreCase).
+        left_ids = left_data.select("*", F.monotonically_increasing_id().alias(lid))
 
         conditions = [F.col(lk) == F.col(f"{prefix}{rk}") for lk, rk in zip(by_left, by_right)]
         if asof_config.direction == "backward":
@@ -112,8 +129,8 @@ class SparkMergeEngine(BaseMergeEngine):
             order_by = [time_col.asc_nulls_last()]
         order_by += [F.col(f"{prefix}{c}").asc_nulls_last() for c in right_keep]
 
-        window = Window.partitionBy("_mloda_lid").orderBy(*order_by)
-        ranked = joined.withColumn("_mloda_rn", F.row_number().over(window)).filter(F.col("_mloda_rn") == 1)
+        window = Window.partitionBy(lid).orderBy(*order_by)
+        ranked = joined.select("*", F.row_number().over(window).alias(rn)).filter(F.col(rn) == 1)
 
         select_list = [F.col(c) for c in left_cols]
         select_list += [F.col(f"{prefix}{c}").alias(c) for c in right_keep]
@@ -122,10 +139,11 @@ class SparkMergeEngine(BaseMergeEngine):
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
         """Coerce an ISO-8601 string time column to timestamp, failing hard on null introduction.
 
-        to_timestamp silently yields NULL for unparseable values, so an eager count guards first.
+        try_to_timestamp yields NULL for unparseable values (to_timestamp raises under ANSI mode), so an
+        eager count guards first.
         """
         helper = pick_helper_column_name(taken=set(data.columns), prefix="_mloda_coerced")
-        coerced = data.withColumn(helper, F.to_timestamp(F.col(column)))
+        coerced = data.withColumn(helper, F.try_to_timestamp(F.col(column)))
         bad_count = coerced.filter(F.col(column).isNotNull() & F.col(helper).isNull()).count()
         if bad_count > 0:
             raise ValueError(

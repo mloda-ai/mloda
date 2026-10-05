@@ -139,7 +139,7 @@ def _(
 
     all_features = order_features + payment_features + location_features + categorical_features
     _result = mloda.run_all(
-        all_features, data_access_collection=data_access_collection, compute_frameworks={PyArrowTable}
+        all_features, data_access_collection=data_access_collection, compute_frameworks=[PyArrowTable]
     )
     for _data in _result:
         # Retrieve data based on the specified feature list and access collection
@@ -154,7 +154,7 @@ def _(all_features, data_access_collection, mloda):
     from mloda.user.pandas import PandasDataFrame
 
     _result = mloda.run_all(
-        all_features, data_access_collection=data_access_collection, compute_frameworks={PandasDataFrame}
+        all_features, data_access_collection=data_access_collection, compute_frameworks=[PandasDataFrame]
     )
     # Request data using the Pandas compute framework
     for _data in _result:

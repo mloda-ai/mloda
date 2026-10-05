@@ -743,7 +743,19 @@ class _PandasOutputSchemaFeatureGroup(FeatureGroup):
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasOutputSchema:
+class TestPandasOutputSchema(EmptySchemaOutputSchemaTestMixin, DuplicateColumnOutputSchemaTestMixin):
+    @pytest.fixture
+    def framework_instance(self) -> Any:
+        return PandasDataFrame()
+
+    @pytest.fixture
+    def duplicate_column_data(self) -> Any:
+        return pd.DataFrame([[1, 2, 3]], columns=["a", "b", "a"])
+
+    @pytest.fixture
+    def empty_schema_data(self) -> Any:
+        return pd.DataFrame()
+
     def test_sorted_columns_with_pandas_dtypes(self) -> None:
         df = pd.DataFrame({"b": [1.5], "a": [1]})
         assert PandasDataFrame()._output_schema(df) == (("a", "int64"), ("b", "float64"))
@@ -763,6 +775,14 @@ class TestPandasOutputSchema:
         assert captured is not None
         assert captured.output_schema == (("a", "int"),)
         assert captured.status == "success"
+
+    def test_duplicate_column_keeps_the_first_occurrences_dtype(self) -> None:
+        df = pd.DataFrame([[1, 1.5]], columns=["x", "x"])
+        assert PandasDataFrame()._output_schema(df) == (("x", "int64"),)
+
+    def test_duplicate_column_keeps_the_first_occurrences_dtype_reversed(self) -> None:
+        df = pd.DataFrame([[1.5, 1]], columns=["x", "x"])
+        assert PandasDataFrame()._output_schema(df) == (("x", "float64"),)
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

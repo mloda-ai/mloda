@@ -7,7 +7,11 @@ from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda_plugins.compute_framework.base_implementations.duckdb import duckdb_type_semantics
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine import SqlBaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    pick_helper_column_name,
+    pick_rename_prefix,
+    quote_ident,
+)
 
 try:
     import duckdb
@@ -41,28 +45,33 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         right_index: Index,
         asof_config: AsOfJoinConfig,
     ) -> Any:
+        left_by = left_index.index if left_index.is_multi_index() else (left_index.index[0],)
+        right_by = right_index.index if right_index.is_multi_index() else (right_index.index[0],)
+        left_cols, right_cols, right_extra = self._check_asof_columns(
+            left_data, right_data, left_by, right_by, asof_config
+        )
+
         left_data, right_data = self.validate_asof_time_columns(left_data, right_data, asof_config)
         if self.framework_connection is None:
             raise ValueError("Framework connection not set. SQL merge engine requires a connection from the framework.")
         if asof_config.direction == "nearest":
             raise ValueError("DuckDBMergeEngine asof does not support direction='nearest'.")
 
-        left_by = left_index.index if left_index.is_multi_index() else (left_index.index[0],)
-        right_by = right_index.index if right_index.is_multi_index() else (right_index.index[0],)
-
         if asof_config.direction == "backward":
             op, time_order = (">=" if asof_config.allow_exact_matches else ">"), "DESC"
         else:
             op, time_order = ("<=" if asof_config.allow_exact_matches else "<"), "ASC"
 
-        left_cols = self.get_column_names(left_data)
-        right_cols = self.get_column_names(right_data)
-        right_extra = [c for c in right_cols if c not in left_cols]
+        taken = {*left_cols, *right_cols}
+        lid_name = pick_helper_column_name(taken)
+        rn_name = pick_helper_column_name({*taken, lid_name})
+        prefix = pick_rename_prefix("_mloda_r", right_cols, [*left_cols, lid_name, rn_name])
+        lid, rn = quote_ident(lid_name), quote_ident(rn_name)
 
         lt, rt = asof_config.left_time_column, asof_config.right_time_column
 
-        rmap = {c: f"_mloda_r_{c}" for c in right_cols}
-        left_rel = left_data._relation.project("*, ROW_NUMBER() OVER () AS _mloda_lid").set_alias("L")
+        rmap = {c: f"{prefix}{c}" for c in right_cols}
+        left_rel = left_data._relation.project(f"*, ROW_NUMBER() OVER () AS {lid}").set_alias("L")
         right_proj = ", ".join(f"{quote_ident(c)} AS {quote_ident(rmap[c])}" for c in right_cols)
         right_rel = right_data._relation.project(right_proj).set_alias("R")
 
@@ -83,10 +92,8 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         qrt = quote_ident(rmap[rt])
         order_keys = [f"({qrt} IS NULL)", f"{qrt} {time_order}"]
         order_keys += [f"{quote_ident(rmap[c])} ASC" for c in right_extra]
-        ranked = joined.project(
-            f"*, ROW_NUMBER() OVER (PARTITION BY _mloda_lid ORDER BY {', '.join(order_keys)}) AS _mloda_rn"
-        )
-        picked = ranked.filter("_mloda_rn = 1")
+        ranked = joined.project(f"*, ROW_NUMBER() OVER (PARTITION BY {lid} ORDER BY {', '.join(order_keys)}) AS {rn}")
+        picked = ranked.filter(f"{rn} = 1")
 
         final_proj = [f"{quote_ident(c)} AS {quote_ident(c)}" for c in left_cols]
         final_proj += [f"{quote_ident(rmap[c])} AS {quote_ident(c)}" for c in right_extra]

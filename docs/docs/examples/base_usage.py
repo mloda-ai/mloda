@@ -66,7 +66,7 @@ def _():
     PluginLoader.all()
     # Load plugins into namespace so compute frameworks register.
     _result = mloda.run_all(
-        ["age", "weight", "state", "gender"], compute_frameworks=["PyArrowTable", "PandasDataFrame"]
+        ["age", "weight", "state", "gender"], compute_frameworks=["PandasDataFrame", "PyArrowTable"]
     )
     print(_result)
     return (mloda,)

@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.global_filter import GlobalFilter
+from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.resolution_failure_renderer import _STAGE_LABELS, render_resolution_failure
 from mloda.core.prepare.resolution_types import Elimination, EliminationStage, EvaluationResult
 
@@ -139,12 +140,27 @@ GLOBAL_FILTER_LOGGER = "mloda.core.filter.global_filter"
 WARNING_PROBE_CLASS_NAME = "NearMissWarningProbeFG"
 WARNING_HOST_FEATURE = "near_miss_warning_probe_host"
 WARNING_FILTER_FEATURE = "near_miss_warning_probe_filter"
-WARNING_MISSING_SCOPE = "NearMissWarningNoSuchScope"  # names no class, so the scope gate drops the filter
-WARNING_STAGE: EliminationStage = "scope"
+WARNING_FILTER_DOMAIN = "near_miss_warning_filter_domain"  # differs from the host's, so the domain gate drops it
+WARNING_HOST_DOMAIN = "near_miss_warning_host_domain"
+WARNING_STAGE: EliminationStage = "domain"
 
-# The scope gate's own wording, in GlobalFilter.identify_matched_filters. Asserted against the live warning
-# below and against the page pinned in DOC_WARNING_STAGES, so rewording it there names the stale page.
-WARNING_SCOPE_REASON = "outside the requested feature group scope"
+# The domain pair filter_data.md's example warning quotes: a 'finance' filter column against a 'sales' feature.
+DOC_FILTER_DOMAIN = "finance"
+DOC_HOST_DOMAIN = "sales"
+
+# The filter seam skips an out-of-scope candidate silently, so no unmatched-filter warning can carry this label.
+NEVER_RENDERED_WARNING_STAGE: EliminationStage = "scope"
+
+
+def _live_domain_reason(filter_domain: str, host_domain: str) -> str:
+    """The domain gate's own wording, read off GlobalFilter so a reword there names the stale page."""
+    single = SingleFilter(Feature(WARNING_FILTER_FEATURE, domain=filter_domain), FilterType.EQUAL, {"value": 1})
+    # The host declares a domain, so the group's get_domain() is never read and the base class suffices.
+    return GlobalFilter._domain_reason(single, Feature(WARNING_HOST_FEATURE, domain=host_domain), FeatureGroup)
+
+
+WARNING_DOMAIN_REASON = _live_domain_reason(WARNING_FILTER_DOMAIN, WARNING_HOST_DOMAIN)
+DOC_DOMAIN_REASON = _live_domain_reason(DOC_FILTER_DOMAIN, DOC_HOST_DOMAIN)
 
 
 def _unmatched_filter_warnings(text: str) -> Iterator[tuple[int, re.Match[str]]]:
@@ -186,16 +202,18 @@ def _make_warning_probe_fg() -> type[FeatureGroup]:
 
 
 def _emit_unmatched_filter_warning(caplog: pytest.LogCaptureFixture) -> tuple[str, ...]:
-    """Drive one scope drop through GlobalFilter and return the warnings it logged, leaking no class."""
+    """Drive one domain drop through GlobalFilter and return the warnings it logged, leaking no class."""
     feature_group = _make_warning_probe_fg()
     global_filter = GlobalFilter()
     global_filter.add_filter(
-        Feature(WARNING_FILTER_FEATURE, feature_group=WARNING_MISSING_SCOPE), FilterType.EQUAL, {"value": 1}
+        Feature(WARNING_FILTER_FEATURE, domain=WARNING_FILTER_DOMAIN), FilterType.EQUAL, {"value": 1}
     )
     try:
         with caplog.at_level(logging.WARNING, logger=GLOBAL_FILTER_LOGGER):
             # The returned set stays unbound: nothing of this drive may outlive it.
-            global_filter.identify_matched_filters(feature_group, Feature(WARNING_HOST_FEATURE))
+            global_filter.identify_matched_filters(
+                feature_group, Feature(WARNING_HOST_FEATURE, domain=WARNING_HOST_DOMAIN)
+            )
             global_filter.warn_on_unmatched_filters()
         return tuple(record.getMessage() for record in caplog.records if record.name == GLOBAL_FILTER_LOGGER)
     finally:
@@ -214,13 +232,26 @@ def test_the_scanner_pattern_matches_a_rendered_unmatched_filter_warning(caplog:
     assert match.group("filter_feature") == WARNING_FILTER_FEATURE
     assert match.group("candidate") == WARNING_PROBE_CLASS_NAME
     assert match.group("label") == _STAGE_LABELS[WARNING_STAGE]
-    assert match.group("reason") == WARNING_SCOPE_REASON
+    assert match.group("reason") == WARNING_DOMAIN_REASON
+
+
+@pytest.mark.parametrize("fpath", doc_files(), ids=doc_id)
+def test_no_page_renders_an_unmatched_filter_warning_the_filter_seam_never_emits(fpath: Path) -> None:
+    """An out-of-scope candidate is skipped silently, so a scope nearest miss is a warning no run can produce."""
+    never = _STAGE_LABELS[NEVER_RENDERED_WARNING_STAGE]
+    stale = [
+        f"{fpath.relative_to(REPO_ROOT)}:{number} renders an unmatched-filter warning labelled '{never}'"
+        for number, match in _unmatched_filter_warnings(fpath.read_text(encoding="utf-8"))
+        if match.group("label") == never
+    ]
+
+    assert not stale, "Doc page(s) quote a nearest miss the filter seam never records:\n" + "\n".join(stale)
 
 
 # The same floor as DOC_BULLET_STAGES, for the warning form: pages reproducing it, pinned to their stage and
 # to the gate's own reason wording, which no label table covers.
 DOC_WARNING_STAGES: dict[str, tuple[EliminationStage, str]] = {
-    "in_depth/filter_data.md": ("scope", WARNING_SCOPE_REASON),
+    "in_depth/filter_data.md": ("domain", DOC_DOMAIN_REASON),
 }
 
 
@@ -254,13 +285,15 @@ def test_a_registered_page_still_renders_the_warning_of_its_own_stage(
 
 # data-access-patterns.md is in this table AND in DOC_BULLET_STAGES on purpose: its prose mention sits far
 # from its rendered bullet, so the bullet's failure names a line that leaves the prose mention stale.
-# filter_data.md is pinned twice: its example renders the scope label, its prose also names the capability one.
+# filter_data.md is pinned twice: its example renders the domain label, its prose also names the capability one.
 PROSE_LABEL_PAGES: tuple[tuple[str, EliminationStage], ...] = (
     ("in_depth/data-access-patterns.md", "input_data"),
     ("in_depth/feature-chain-parser.md", "matcher_error"),
     ("in_depth/feature-group-matching.md", "matcher_error"),
+    ("in_depth/feature-group-matching.md", "name"),
+    ("in_depth/feature-group-matching.md", "value_rejection"),
     ("in_depth/filter_data.md", "capability"),
-    ("in_depth/filter_data.md", "scope"),
+    ("in_depth/filter_data.md", "domain"),
 )
 
 

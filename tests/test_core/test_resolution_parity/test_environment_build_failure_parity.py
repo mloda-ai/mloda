@@ -269,7 +269,7 @@ def test_diagnose_projects_the_environment_build_failure() -> None:
     broken_fg = _make_broken_rule_fg()
     identity = f"{broken_fg.__module__}:{broken_fg.__qualname__}"
     try:
-        diagnosis = mlodaAPI.diagnose([ENV_BUILD_FAILURE_FEATURE], compute_frameworks={PandasDataFrame})
+        diagnosis = mlodaAPI.diagnose([ENV_BUILD_FAILURE_FEATURE], compute_frameworks=[PandasDataFrame])
         complete = diagnosis.complete
         message = diagnosis.message
         records = diagnosis.records
@@ -278,7 +278,7 @@ def test_diagnose_projects_the_environment_build_failure() -> None:
         del diagnosis
         prepare_error: str | None = None
         try:
-            mlodaAPI.prepare([ENV_BUILD_FAILURE_FEATURE], compute_frameworks={PandasDataFrame})
+            mlodaAPI.prepare([ENV_BUILD_FAILURE_FEATURE], compute_frameworks=[PandasDataFrame])
         except FrameworkDeclarationError:
             prepare_error = str(sys.exc_info()[1])
     finally:
@@ -475,7 +475,7 @@ def test_diagnose_projects_the_collector_precondition_failure() -> None:
     collector = _collector_that_filters_everything()
 
     diagnosis = mlodaAPI.diagnose(
-        [COLLECTOR_FILTERED_FEATURE_850], compute_frameworks={PandasDataFrame}, plugin_collector=collector
+        [COLLECTOR_FILTERED_FEATURE_850], compute_frameworks=[PandasDataFrame], plugin_collector=collector
     )
 
     assert isinstance(diagnosis, ResolutionDiagnosis)
@@ -486,7 +486,7 @@ def test_diagnose_projects_the_collector_precondition_failure() -> None:
 
     with pytest.raises(EnvironmentPreconditionError) as exc_info:
         mlodaAPI.prepare(
-            [COLLECTOR_FILTERED_FEATURE_850], compute_frameworks={PandasDataFrame}, plugin_collector=collector
+            [COLLECTOR_FILTERED_FEATURE_850], compute_frameworks=[PandasDataFrame], plugin_collector=collector
         )
 
     message = diagnosis.message

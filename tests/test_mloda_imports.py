@@ -125,6 +125,7 @@ def test_import_provider_base_classes() -> None:
         ComputeFramework,
         # Versioning
         BaseFeatureGroupVersion,
+        ThirdPartyVersionMode,
         # Feature set
         FeatureSet,
         # Input data
@@ -157,6 +158,7 @@ def test_import_provider_base_classes() -> None:
         # Match rejection recording
         record_match_rejection,
         INPUT_DATA_STAGE,
+        NAME_STAGE,
         # Transformers
         BaseTransformer,
         ComputeFrameworkTransformer,
@@ -165,6 +167,8 @@ def test_import_provider_base_classes() -> None:
         # Engines
         BaseFilterEngine,
         BaseMergeEngine,
+        # Credential scrubbing
+        scrub_credentials,
     )
 
     # Base classes
@@ -172,6 +176,7 @@ def test_import_provider_base_classes() -> None:
     assert ComputeFramework is not None
     # Versioning
     assert BaseFeatureGroupVersion is not None
+    assert ThirdPartyVersionMode is not None
     # Feature set
     assert FeatureSet is not None
     # Input data
@@ -204,6 +209,7 @@ def test_import_provider_base_classes() -> None:
     # Match rejection recording
     assert callable(record_match_rejection)
     assert INPUT_DATA_STAGE == "input_data"
+    assert NAME_STAGE == "name"
     # Transformers
     assert BaseTransformer is not None
     assert ComputeFrameworkTransformer is not None
@@ -213,6 +219,9 @@ def test_import_provider_base_classes() -> None:
     # Engines
     assert BaseFilterEngine is not None
     assert BaseMergeEngine is not None
+    # Credential scrubbing
+    assert callable(scrub_credentials)
+    assert "scrub_credentials" in provider_module.__all__
 
 
 # =============================================================================
@@ -235,10 +244,22 @@ def test_import_steward_governance() -> None:
         # Function extenders (audit, monitoring, observability)
         Extender,
         ExtenderHook,
+        CloseContext,
         # Optional-dependency import guards
         traceback_blames_root,
+        # Pickle safety
+        pickle_failure_reason,
+        is_picklable,
+        WarnOncePerInstance,
         # Resolved execution plan
         PlanStep,
+        # Credential scrubbing
+        scrub_credentials,
+        # Plan/run lifecycle
+        LifecycleOutcome,
+        PlanContext,
+        RunContext,
+        AsOfJoinConfig,
     )
 
     # Plugin inspection
@@ -254,9 +275,38 @@ def test_import_steward_governance() -> None:
     # Function extenders
     assert Extender is not None
     assert ExtenderHook is not None
+    assert CloseContext is not None
+    assert "CloseContext" in steward_module.__all__
+    assert "GateBypassError" in steward_module.__all__
+    from mloda.steward import GateBypassError
+
+    assert issubclass(GateBypassError, RuntimeError)
     # Optional-dependency import guards
     assert callable(traceback_blames_root)
     assert "traceback_blames_root" in steward_module.__all__
+    # Pickle safety
+    assert callable(pickle_failure_reason)
+    assert callable(is_picklable)
+    assert WarnOncePerInstance is not None
+    assert "pickle_failure_reason" in steward_module.__all__
+    assert "is_picklable" in steward_module.__all__
+    assert "WarnOncePerInstance" in steward_module.__all__
+    # Credential scrubbing
+    assert callable(scrub_credentials)
+    assert "scrub_credentials" in steward_module.__all__
+    # Plan/run lifecycle
+    for lifecycle_name, lifecycle_type in (
+        ("LifecycleOutcome", LifecycleOutcome),
+        ("PlanContext", PlanContext),
+        ("RunContext", RunContext),
+    ):
+        assert lifecycle_type is not None
+        assert lifecycle_name in steward_module.__all__
+    # JOIN hook as-of configuration
+    from mloda.core.abstract_plugins.components.link import AsOfJoinConfig as CoreAsOfJoinConfig
+
+    assert AsOfJoinConfig is CoreAsOfJoinConfig
+    assert "AsOfJoinConfig" in steward_module.__all__
 
 
 # =============================================================================

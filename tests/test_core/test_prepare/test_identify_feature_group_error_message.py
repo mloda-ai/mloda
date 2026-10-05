@@ -300,7 +300,7 @@ class TestStrictValidationRejectionHint:
 
     The match pass records each candidate's strict-validation rejection as it happens,
     and the no-feature-group-found error surfaces the recorded reason (e.g. "Property
-    value '14' failed validation for 'window_size'") together with the culprit class
+    value int 14 failed validation for 'window_size'") together with the culprit class
     name(s).
     """
 

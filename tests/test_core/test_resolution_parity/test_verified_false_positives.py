@@ -207,43 +207,61 @@ def test_resolve_feature_unavailable_only_framework_fails_closed() -> None:
 
 
 # ---------------------------------------------------------------------------
-# False positive #3: framework capability unioned across candidates, credited to the winner
+# False positive #3: a child is preferred over its parent whatever their framework sets; credit is per winner
 # ---------------------------------------------------------------------------
 
 
-def test_engine_parent_child_differing_framework_sets_stays_ambiguous() -> None:
-    """The engine keeps the differing-framework-set parent/child pair ambiguous."""
-    feature = Feature(PARENT_CHILD_FEATURE)
+RUNS_753 = [
+    pytest.param({CfwP753}, None, ChildProbe753, (ParentProbe753,), id="p_only"),
+    pytest.param({CfwQ753}, None, ParentProbe753, (), id="q_only"),
+    pytest.param({CfwP753, CfwQ753}, None, ChildProbe753, (ParentProbe753,), id="p_and_q_no_pin"),
+    pytest.param({CfwP753, CfwQ753}, "CfwP753", ChildProbe753, (ParentProbe753,), id="p_and_q_pinned_p"),
+    pytest.param({CfwP753, CfwQ753}, "CfwQ753", ParentProbe753, (), id="p_and_q_pinned_q"),
+]
+
+
+def _feature_753(pin: str | None) -> Feature:
+    return Feature(PARENT_CHILD_FEATURE, compute_framework=pin) if pin else Feature(PARENT_CHILD_FEATURE)
+
+
+@pytest.mark.parametrize("enabled, pin, winner, specialized_from", RUNS_753)
+def test_engine_parent_child_prefers_child_when_it_can_run(
+    enabled: set[type[ComputeFramework]],
+    pin: str | None,
+    winner: type[FeatureGroup],
+    specialized_from: tuple[type[FeatureGroup], ...],
+) -> None:
+    """The engine prefers the child over its parent whenever the child can run, whatever the framework sets."""
     accessible_plugins: FeatureGroupEnvironmentMapping = {
-        ParentProbe753: {CfwP753, CfwQ753},
-        ChildProbe753: {CfwP753},
+        ParentProbe753: enabled & {CfwP753, CfwQ753},
+        ChildProbe753: enabled & {CfwP753},
     }
 
-    with pytest.raises(ValueError, match="Multiple feature groups found") as exc_info:
-        evaluate_or_raise(
-            feature=feature,
-            accessible_plugins=accessible_plugins,
-            links=None,
-            data_access_collection=None,
-        )
-    message = str(exc_info.value)
-    assert "ParentProbe753" in message
-    assert "ChildProbe753" in message
+    result = evaluate_or_raise(
+        feature=_feature_753(pin),
+        accessible_plugins=accessible_plugins,
+        links=None,
+        data_access_collection=None,
+    )
+    assert set(result.identified) == {winner}
+    expected = {CfwP753} if winner is ChildProbe753 else enabled & {CfwP753, CfwQ753}
+    assert result.identified[winner] == expected
+    assert result.specialized_from == specialized_from
 
 
-def test_resolve_feature_parent_child_stays_ambiguous() -> None:
-    """resolve_feature keeps the differing-framework-set parent/child pair ambiguous, like the engine."""
+@pytest.mark.parametrize("enabled, pin, winner, specialized_from", RUNS_753)
+def test_resolve_feature_parent_child_prefers_child_when_it_can_run(
+    enabled: set[type[ComputeFramework]],
+    pin: str | None,
+    winner: type[FeatureGroup],
+    specialized_from: tuple[type[FeatureGroup], ...],
+) -> None:
+    """resolve_feature agrees with the engine and credits frameworks per winner only."""
     collector = PluginCollector.enabled_feature_groups({ParentProbe753, ChildProbe753})
-    result = resolve_feature(PARENT_CHILD_FEATURE, plugin_collector=collector)
+    result = resolve_feature(_feature_753(pin), plugin_collector=collector, compute_frameworks=enabled)
 
-    # #755 target: resolve_feature delegates to the engine seam. The parent and child declare differing
-    # framework sets ({CfwP753, CfwQ753} vs {CfwP753}), which blocks the seam's subclass collapse, so the
-    # pair stays ambiguous. The debug path no longer collapses to the child nor unions CfwQ753 (the
-    # parent-only framework) into the winner's attribution. Framework credit is per winner only.
-    assert result.feature_group is None
-    assert result.error is not None
-    assert "Multiple feature groups found" in result.error
-    assert "ParentProbe753" in result.error
-    assert "ChildProbe753" in result.error
+    assert result.error is None
+    assert result.feature_group is winner
     assert set(result.candidates) == {ParentProbe753, ChildProbe753}
-    assert CfwQ753.get_class_name() not in result.supported_compute_frameworks
+    if winner is ChildProbe753:
+        assert CfwQ753.get_class_name() not in result.supported_compute_frameworks

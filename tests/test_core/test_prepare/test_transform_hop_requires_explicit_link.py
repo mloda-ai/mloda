@@ -1,9 +1,9 @@
-"""A FeatureGroupStep whose parents live on two different, unlinked source-framework instances
+"""A FeatureGroupStep whose parents live on different, unlinked source-framework instances
 must raise a "missing Links" ValueError at plan-build time, not silently bind only one hop's data.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -72,7 +72,7 @@ def test_two_unlinked_source_framework_instances_raise_missing_links_error_at_pr
         mloda.prepare(
             features=[Feature("unlinked_consumer_result")],
             links=set(),
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=PluginCollector.enabled_feature_groups({UnlinkedRootA, UnlinkedRootB, UnlinkedConsumer}),
         )
 
@@ -132,19 +132,12 @@ def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed() -> Non
         )
 
 
-# #1426's fix widens a subclass-clustered hop's required_uuids to the union of every member's
-# parent in the cluster (execution_plan.py), so the set can now name parents owned by DIFFERENT
-# steps and frameworks. `prepare_tfs_right_cfw` (compute_framework_executor.py) and
-# `_drop_tfs_source_if_possible` (run.py) still grab a single arbitrary
-# `next(iter(step.required_uuids))` member instead of looping through candidates like
-# `prepare_execute_step` already does, so a hash-order-dependent pick can name the SIBLING hop's
-# parent and crash with "cfw_uuid should not be none in prepare_tfs" - worse than the pre-#1426-fix
-# behavior, which degraded gracefully into a "missing Links" ValueError instead (still wrong, since
-# ScRootA/ScRootB share no physical lineage at all and only one hop's column survives, but not a
-# crash). Same-framework roots never reach the buggy pick (both candidate uuids resolve against the
-# same from_framework class name, so an arbitrary pick still resolves to *a* valid cfw); only the
-# cross-framework variant is hash-seed-dependent. Both are pinned here: cross-framework must stop
-# crashing, same-framework must keep NOT crashing.
+# ScRootA and ScRootB(ScRootA) are related only by subclassing for code reuse: each is its own
+# independent DataCreator root with zero shared physical lineage. Since the two parents share no
+# ancestor, the plan must reject this shape deterministically at plan-build time with a "missing
+# Links" ValueError under every hash seed, for both the cross-framework and same-framework variants,
+# never a crash (from the candidate loop in `prepare_tfs_right_cfw` / `_drop_tfs_source_if_possible`
+# resolving to the wrong sibling's physical instance) and never a silently-wrong result.
 _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE = Path(__file__).with_name(
     "subclass_unrelated_roots_cross_framework_probe.py"
 )
@@ -155,7 +148,7 @@ _SUBCLASS_UNRELATED_ROOTS_SEEDS = [0, 1, 3, 4, 6]
 
 
 @pytest.mark.timeout(60)
-def test_subclass_unrelated_roots_hop_widening_does_not_crash_under_every_hash_seed() -> None:
+def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -> None:
     cross_outputs = run_probes(
         _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE,
         len(_SUBCLASS_UNRELATED_ROOTS_SEEDS),
@@ -171,11 +164,352 @@ def test_subclass_unrelated_roots_hop_widening_does_not_crash_under_every_hash_s
     assert len(same_outputs) == len(_SUBCLASS_UNRELATED_ROOTS_SEEDS)
 
     for seed, output in zip(_SUBCLASS_UNRELATED_ROOTS_SEEDS, cross_outputs):
-        assert output["outcome"] != "crashed", (
-            f"cross-framework PYTHONHASHSEED={seed} crashed instead of degrading gracefully: {output}"
+        assert output["outcome"] == "rejected", (
+            f"cross-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
+        assert "depends on parents from" in output["error"], (
+            f"cross-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime "
+            f"KeyError: {output}"
+        )
+        assert "unlinked sources (missing Links)" in output["error"], (
+            f"cross-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime "
+            f"KeyError: {output}"
+        )
+        assert "ScRootA" in output["error"], f"cross-framework PYTHONHASHSEED={seed}: {output}"
+        assert "ScRootB" in output["error"], f"cross-framework PYTHONHASHSEED={seed}: {output}"
 
     for seed, output in zip(_SUBCLASS_UNRELATED_ROOTS_SEEDS, same_outputs):
-        assert output["outcome"] != "crashed", (
-            f"same-framework PYTHONHASHSEED={seed} crashed instead of degrading gracefully: {output}"
+        assert output["outcome"] == "rejected", (
+            f"same-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
+        assert "depends on parents from" in output["error"], (
+            f"same-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime KeyError: {output}"
+        )
+        assert "unlinked sources (missing Links)" in output["error"], (
+            f"same-framework PYTHONHASHSEED={seed} should hit the plan-time rejection, not a runtime KeyError: {output}"
+        )
+        assert "ScRootA" in output["error"], f"same-framework PYTHONHASHSEED={seed}: {output}"
+        assert "ScRootB" in output["error"], f"same-framework PYTHONHASHSEED={seed}: {output}"
+
+
+# Unlinked parents must be rejected whatever frameworks run, not only when a transform hop is involved.
+
+
+class _Root(FeatureGroup):
+    """Data-creator root: DATA maps column name to values, built in FRAMEWORK's native type."""
+
+    DATA: ClassVar[dict[str, list[int]]] = {}
+    FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(set(cls.DATA))
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if cls.FRAMEWORK is PandasDataFrame:
+            import pandas as pd
+
+            return pd.DataFrame(cls.DATA)
+        import pyarrow as pa
+
+        return pa.table(cls.DATA)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {cls.FRAMEWORK}
+
+
+class _Consumer(FeatureGroup):
+    """Consumer: OUTPUT is the sum of the INPUTS columns plus ADD, computed in FRAMEWORK's native type."""
+
+    INPUTS: ClassVar[tuple[str, ...]] = ()
+    OUTPUT: ClassVar[str] = ""
+    ADD: ClassVar[int] = 0
+    FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(name) for name in self.INPUTS}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if cls.FRAMEWORK is PandasDataFrame:
+            total = sum(data[name] for name in cls.INPUTS) + cls.ADD
+            data[cls.OUTPUT] = total
+            return data
+        import pyarrow.compute as pc
+
+        total = data[cls.INPUTS[0]]
+        for name in cls.INPUTS[1:]:
+            total = pc.add(total, data[name])
+        return data.append_column(cls.OUTPUT, pc.add(total, cls.ADD))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {cls.FRAMEWORK}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.OUTPUT} if cls.OUTPUT else set()
+
+
+class UnlinkedPaRootA(_Root):
+    DATA = {"unlinked_pa_root_a": [1, 2, 3]}
+
+
+class UnlinkedPaRootB(_Root):
+    DATA = {"unlinked_pa_root_b": [10, 20, 30]}
+
+
+class UnlinkedPaRootC(_Root):
+    DATA = {"unlinked_pa_root_c": [100, 200, 300]}
+
+
+class UnlinkedPaConsumer(_Consumer):
+    INPUTS = ("unlinked_pa_root_a", "unlinked_pa_root_b")
+    OUTPUT = "unlinked_pa_consumer_result"
+
+
+class UnlinkedPaTripleConsumer(_Consumer):
+    INPUTS = ("unlinked_pa_root_a", "unlinked_pa_root_b", "unlinked_pa_root_c")
+    OUTPUT = "unlinked_pa_triple_result"
+
+
+class UnlinkedMixPandasRoot(_Root):
+    DATA = {"unlinked_mix_pd_root": [10, 20, 30]}
+    FRAMEWORK = PandasDataFrame
+
+
+class UnlinkedMixConsumer(_Consumer):
+    INPUTS = ("unlinked_pa_root_a", "unlinked_mix_pd_root")
+    OUTPUT = "unlinked_mix_result"
+
+
+class SubPaRootA(_Root):
+    DATA = {"sub_pa_root_a": [1, 2, 3]}
+
+
+class SubPaRootB(SubPaRootA):
+    DATA = {"sub_pa_root_b": [10, 20, 30]}
+
+
+class SubMixPdRootB(SubPaRootA):
+    DATA = {"sub_mix_pd_root_b": [10, 20, 30]}
+    FRAMEWORK = PandasDataFrame
+
+
+class SubPaConsumer(_Consumer):
+    INPUTS = ("sub_pa_root_a", "sub_pa_root_b")
+    OUTPUT = "sub_pa_result"
+
+
+class SubMixConsumer(_Consumer):
+    INPUTS = ("sub_pa_root_a", "sub_mix_pd_root_b")
+    OUTPUT = "sub_mix_result"
+
+
+_UNLINKED_CASES: list[tuple[str, set[type[FeatureGroup]], list[type[ComputeFramework]], list[str]]] = [
+    (
+        "unlinked_pa_consumer_result",
+        {UnlinkedPaRootA, UnlinkedPaRootB, UnlinkedPaConsumer},
+        [PyArrowTable],
+        ["UnlinkedPaRootA", "UnlinkedPaRootB"],
+    ),
+    (
+        "unlinked_pa_triple_result",
+        {UnlinkedPaRootA, UnlinkedPaRootB, UnlinkedPaRootC, UnlinkedPaTripleConsumer},
+        [PyArrowTable],
+        ["UnlinkedPaRootA", "UnlinkedPaRootB", "UnlinkedPaRootC"],
+    ),
+    (
+        "unlinked_mix_result",
+        {UnlinkedPaRootA, UnlinkedMixPandasRoot, UnlinkedMixConsumer},
+        [PandasDataFrame, PyArrowTable],
+        ["UnlinkedPaRootA", "UnlinkedMixPandasRoot"],
+    ),
+    (
+        "sub_pa_result",
+        {SubPaRootA, SubPaRootB, SubPaConsumer},
+        [PyArrowTable],
+        ["SubPaRootA", "SubPaRootB"],
+    ),
+    (
+        "sub_mix_result",
+        {SubPaRootA, SubMixPdRootB, SubMixConsumer},
+        [PandasDataFrame, PyArrowTable],
+        ["SubPaRootA", "SubMixPdRootB"],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "feature_name,groups,frameworks,named",
+    _UNLINKED_CASES,
+    ids=[
+        "one_framework_two_roots",
+        "one_framework_three_roots",
+        "mixed_hop_and_no_hop",
+        "subclass_roots_one_framework",
+        "subclass_roots_mixed",
+    ],
+)
+def test_unlinked_parents_raise_missing_links_error_regardless_of_framework(
+    feature_name: str,
+    groups: set[type[FeatureGroup]],
+    frameworks: list[type[ComputeFramework]],
+    named: list[str],
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        mloda.prepare(
+            features=[Feature(feature_name)],
+            links=set(),
+            compute_frameworks=frameworks,
+            plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        )
+
+    error_message = str(exc_info.value)
+    assert "depends on parents from" in error_message
+    assert "unlinked sources (missing Links)" in error_message
+    assert f"{len(named)} unlinked sources" in error_message
+    assert "two different" not in error_message
+    assert "Link" in error_message
+    for name in named:
+        assert name in error_message
+
+
+# Regression guards: shapes that share one root or one class must keep planning and running.
+def _column_values(results: list[Any], column: str) -> list[int]:
+    for res in results:
+        names = list(res.column_names) if hasattr(res, "column_names") else list(res.columns)
+        if column in names:
+            col = res[column]
+            return [int(v) for v in (col.to_pylist() if hasattr(col, "to_pylist") else col.tolist())]
+    raise AssertionError(f"column {column} not found in results")
+
+
+def _run(feature_name: str, groups: set[type[FeatureGroup]], frameworks: list[type[ComputeFramework]]) -> list[Any]:
+    return mloda.run_all(
+        [Feature(feature_name)],
+        compute_frameworks=frameworks,
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
+
+
+class DiamondRoot(_Root):
+    DATA = {"diamond_a": [1, 2, 3]}
+
+
+class DiamondD1(_Consumer):
+    INPUTS = ("diamond_a",)
+    OUTPUT = "diamond_d1"
+    ADD = 100
+
+
+class DiamondD2(_Consumer):
+    INPUTS = ("diamond_a",)
+    OUTPUT = "diamond_d2"
+    ADD = 200
+
+
+class DiamondConsumer(_Consumer):
+    INPUTS = ("diamond_d1", "diamond_d2")
+    OUTPUT = "diamond_result"
+
+
+def test_same_root_diamond_in_one_framework_plans_and_runs() -> None:
+    results = _run("diamond_result", {DiamondRoot, DiamondD1, DiamondD2, DiamondConsumer}, [PyArrowTable])
+    assert _column_values(results, "diamond_result") == [302, 304, 306]
+
+
+class RootDerivedRoot(_Root):
+    DATA = {"rd_x": [1, 2, 3], "rd_y": [10, 20, 30]}
+
+
+class RootDerivedDX(_Consumer):
+    INPUTS = ("rd_x",)
+    OUTPUT = "rd_dx"
+    ADD = 1000
+
+
+class RootDerivedConsumer(_Consumer):
+    INPUTS = ("rd_dx", "rd_y")
+    OUTPUT = "rd_result"
+
+
+def test_root_plus_derived_in_one_framework_plans_and_runs() -> None:
+    results = _run("rd_result", {RootDerivedRoot, RootDerivedDX, RootDerivedConsumer}, [PyArrowTable])
+    assert _column_values(results, "rd_result") == [1011, 1022, 1033]
+
+
+class HopRoot(_Root):
+    DATA = {"hop_x": [1, 2, 3], "hop_y": [10, 20, 30]}
+    FRAMEWORK = PandasDataFrame
+
+
+class HopDX(_Consumer):
+    INPUTS = ("hop_x",)
+    OUTPUT = "hop_dx"
+    ADD = 1000
+
+
+class HopConsumer(_Consumer):
+    INPUTS = ("hop_dx", "hop_y")
+    OUTPUT = "hop_result"
+    FRAMEWORK = PandasDataFrame
+
+
+def test_same_root_with_one_hop_plans_and_runs() -> None:
+    results = _run("hop_result", {HopRoot, HopDX, HopConsumer}, [PandasDataFrame, PyArrowTable])
+    assert _column_values(results, "hop_result") == [1011, 1022, 1033]
+
+
+class FanInRoot(_Root):
+    DATA = {"fan_p": [1, 2, 3], "fan_q": [10, 20, 30]}
+
+
+class FanInConsumer(_Consumer):
+    INPUTS = ("fan_p", "fan_q")
+    OUTPUT = "fan_result"
+
+
+def test_same_class_fan_in_in_one_framework_plans_and_runs() -> None:
+    results = _run("fan_result", {FanInRoot, FanInConsumer}, [PyArrowTable])
+    assert _column_values(results, "fan_result") == [11, 22, 33]
+
+
+# A parent that reaches a join side only through a compute-framework hop is not join-bridged, so the
+# consumer must hit the plan-time missing-Links error under every hash seed, never a runtime crash.
+_LINK_SIDE_PATHS_PROBE = Path(__file__).with_name("link_side_paths_probe.py")
+_LINK_SIDE_PATHS_SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+
+@pytest.fixture(scope="module")
+def link_side_paths_outputs() -> list[dict[str, str]]:
+    return run_probes(_LINK_SIDE_PATHS_PROBE, len(_LINK_SIDE_PATHS_SEEDS), seeds=_LINK_SIDE_PATHS_SEEDS)
+
+
+@pytest.mark.timeout(60)
+def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed(
+    link_side_paths_outputs: list[dict[str, str]],
+) -> None:
+    outputs = link_side_paths_outputs
+
+    assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
+    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):
+        assert output["hop_parent_outcome"] == "rejected", f"PYTHONHASHSEED={seed}: {output}"
+        assert "depends on parents from 2 unlinked sources" in output["hop_parent_error"], (
+            f"PYTHONHASHSEED={seed} should hit the plan-time rejection: {output}"
+        )
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("shape", ["twin_sibling", "twin_chain"])
+def test_consumers_of_a_join_side_plan_and_run_correctly_under_every_hash_seed(
+    shape: str, link_side_paths_outputs: list[dict[str, str]]
+) -> None:
+    outputs = link_side_paths_outputs
+
+    assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
+    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):
+        assert output[f"{shape}_outcome"] == "accepted", f"PYTHONHASHSEED={seed}: {output}"
+        assert output.get(f"{shape}_values") == "[[21, 42, 63]]", f"PYTHONHASHSEED={seed}: {output}"

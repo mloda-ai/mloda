@@ -6,12 +6,37 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.feature_set_validator import FeatureSetValidator
+from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
 from mloda.core.filter.single_filter import SingleFilter
 
 if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
+
+
+def merge_input_feature_edges(pairs: Iterable[tuple[str, Iterable[str]]]) -> dict[str, tuple[str, ...]] | None:
+    """Fold (feature name, declared input names) pairs into output name -> sorted inputs; None when empty."""
+    merged: dict[str, set[str]] = {}
+    for name, inputs in pairs:
+        declared = {str(entry) for entry in inputs}
+        if declared:
+            merged.setdefault(str(name), set()).update(declared)
+    return {name: tuple(sorted(inputs)) for name, inputs in sorted(merged.items())} or None
+
+
+def option_split_paragraph(hint: tuple[str, frozenset[Any]] | None) -> str:
+    """Error-message paragraph naming the root whose option split likely caused a missing-Link failure."""
+    if hint is None:
+        return ""
+    split_feature_group_name, differing_keys = hint
+    differing_keys_str = ", ".join(sorted((str(k) for k in differing_keys), key=str))
+    return f"""
+'{split_feature_group_name}' also ran as a separate step with differing option(s) ({differing_keys_str})
+in this run, which is the likely cause. Align the differing option(s) across the requests, or add
+a Link if the split is intentional.
+"""
 
 
 class FeatureSet:
@@ -29,6 +54,12 @@ class FeatureSet:
         self.mask_engine: type[BaseMaskEngine] | None = None
         self.declared_input_feature_names: frozenset[str] | None = None
         self.declared_input_features_resolved: bool = False
+        self.declared_input_feature_edges: dict[str, tuple[str, ...]] | None = None
+        self.specialized_from: tuple[str, ...] = ()
+        self.option_split_hint: tuple[str, frozenset[Any]] | None = None
+        # Columns a Link reads from this step's data, stamped by the planner.
+        self.link_index_columns: frozenset[str] = frozenset()
+        self._load_marker: InputDataLoadMarker | None = current_input_data_load_marker.get()
 
         if features is not None:
             for feature in features:
@@ -83,6 +114,10 @@ class FeatureSet:
 
         self.artifact_to_load = None
         self.artifact_to_save = self.get_name_of_one_feature()
+
+    @property
+    def input_data_match(self) -> "tuple[type[BaseInputData], Any] | None":
+        return next((f.input_data_match for f in self.features if f.input_data_match is not None), None)
 
     def add(self, feature: Feature) -> None:
         self.features.add(feature)
@@ -140,6 +175,7 @@ class FeatureSet:
         if rebound or self.options is not options_before:
             self.declared_input_features_resolved = False
             self.declared_input_feature_names = None
+            self.declared_input_feature_edges = None
 
     def get_all_feature_ids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features}

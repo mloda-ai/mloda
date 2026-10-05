@@ -59,3 +59,19 @@ def test_an_extender_with_unpicklable_instance_state_is_rejected() -> None:
     assert repr(extender) in message, f"the offending extender must be named; got: {message}"
     assert "cannot be pickled for multiprocessing" in message, f"the problem must be named; got: {message}"
     assert "Resolution" in message, f"a resolution must be offered; got: {message}"
+
+    cause = excinfo.value.__cause__
+    assert cause is not None, f"the raise must chain the original pickling exception via `from cause`; got: {message}"
+    assert isinstance(cause, TypeError), f"pickling a threading.Lock raises TypeError; got {type(cause)!r}"
+    assert "cannot pickle" in message, f"the original exception's text must be embedded in the message; got: {message}"
+    assert str(cause) in message, f"the original exception's text must be embedded in the message; got: {message}"
+    assert f"{type(cause).__name__}:" in message, (
+        f"the original exception's type name must be embedded in the message; got: {message}"
+    )
+
+    assert "__init__" in message or "lazily" in message, (
+        f"the message must cover state the extender builds eagerly itself; got: {message}"
+    )
+    assert "inject" in message or "client=" in message, (
+        f"the message must cover state the caller injects; got: {message}"
+    )

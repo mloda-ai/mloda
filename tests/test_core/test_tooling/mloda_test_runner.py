@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -65,7 +66,7 @@ class MlodaTestRunner:
     @staticmethod
     def run_api(
         features: Features,
-        compute_frameworks: set[type[ComputeFramework]] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         parallelization_modes: set[ParallelizationMode] | None = None,
         flight_server: Any = None,
         function_extender: set[Extender] | None = None,
@@ -84,7 +85,7 @@ class MlodaTestRunner:
 
         Args:
             features: The feature set to compute
-            compute_frameworks: Set of compute frameworks to use (default: {PyArrowTable})
+            compute_frameworks: Ordered compute frameworks to use (default: [PyArrowTable])
             parallelization_modes: Set of parallelization modes (default: {SYNC})
             flight_server: Flight server instance for MULTIPROCESSING mode
             function_extender: Optional function extenders
@@ -99,7 +100,7 @@ class MlodaTestRunner:
             RunResult containing results, artifacts, and the runner
         """
         if compute_frameworks is None:
-            compute_frameworks = {PyArrowTable}
+            compute_frameworks = [PyArrowTable]
         if parallelization_modes is None:
             parallelization_modes = {ParallelizationMode.SYNC}
 
@@ -111,11 +112,11 @@ class MlodaTestRunner:
             api_data=api_data,
             plugin_collector=plugin_collector,
             strict_type_enforcement=strict_type_enforcement,
+            function_extender=function_extender,
         )
         results = api.run(
             parallelization_modes=parallelization_modes,
             flight_server=flight_server,
-            function_extender=function_extender,
         )
         artifacts = api.get_artifacts()
 
@@ -127,7 +128,7 @@ class MlodaTestRunner:
     @staticmethod
     def run_api_simple(
         features: Features,
-        compute_frameworks: set[type[ComputeFramework]] | None = None,
+        compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         parallelization_modes: set[ParallelizationMode] | None = None,
         flight_server: Any = None,
         function_extender: set[Extender] | None = None,
@@ -139,7 +140,7 @@ class MlodaTestRunner:
 
         Args:
             features: The feature set to compute
-            compute_frameworks: Set of compute frameworks to use (default: {PyArrowTable})
+            compute_frameworks: Ordered compute frameworks to use (default: [PyArrowTable])
             parallelization_modes: Set of parallelization modes (default: {SYNC})
             flight_server: Flight server instance for MULTIPROCESSING mode
             function_extender: Optional function extenders
@@ -148,7 +149,7 @@ class MlodaTestRunner:
             List of result data
         """
         if compute_frameworks is None:
-            compute_frameworks = {PyArrowTable}
+            compute_frameworks = [PyArrowTable]
         if parallelization_modes is None:
             parallelization_modes = {ParallelizationMode.SYNC}
 
@@ -165,7 +166,7 @@ class MlodaTestRunner:
     @staticmethod
     def run_engine(
         features: Features,
-        compute_frameworks: set[type[ComputeFramework]] | None = None,
+        compute_frameworks: list[type[ComputeFramework]] | None = None,
         parallelization_modes: set[ParallelizationMode] | None = None,
         flight_server: Any = None,
         function_extender: set[Extender] | None = None,
@@ -180,7 +181,7 @@ class MlodaTestRunner:
 
         Args:
             features: The feature set to compute
-            compute_frameworks: Set of compute frameworks to use (default: {PyArrowTable})
+            compute_frameworks: Compute frameworks to use (default: [PyArrowTable])
             parallelization_modes: Set of parallelization modes (default: {SYNC})
             flight_server: Flight server instance for MULTIPROCESSING mode
             function_extender: Optional function extenders
@@ -192,11 +193,19 @@ class MlodaTestRunner:
             ExecutionOrchestrator instance after execution
         """
         if compute_frameworks is None:
-            compute_frameworks = {PyArrowTable}
+            compute_frameworks = [PyArrowTable]
         if parallelization_modes is None:
             parallelization_modes = {ParallelizationMode.SYNC}
 
-        engine = Engine(features, compute_frameworks, links, global_filter=global_filter)
+        positions = {framework: index for index, framework in reversed(list(enumerate(compute_frameworks)))}
+        engine = Engine(
+            features,
+            set(compute_frameworks),
+            links,
+            global_filter=global_filter,
+            function_extender=function_extender,
+            framework_preference=positions,
+        )
 
         use_flight = ParallelizationMode.MULTIPROCESSING in parallelization_modes
         runner = engine.compute(flight_server if use_flight else None)
@@ -204,10 +213,8 @@ class MlodaTestRunner:
         try:
             runner.__enter__(parallelization_modes, function_extender, api_data)
             runner.compute()
-            runner.__exit__(None, None, None)
         finally:
-            if runner.manager is not None:
-                runner.manager.shutdown()
+            runner.__exit__(None, None, None)
 
         return runner
 

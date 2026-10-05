@@ -1,6 +1,9 @@
 """Tests for _resolve_pinned_file suffix handling on base vs concrete classes."""
 
+import pytest
+
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.user import DataAccessCollection
 
 
@@ -28,12 +31,30 @@ class ConcreteNoSuffix(BaseInputData):
         return True
 
 
+class ConcreteMarkedAbortSuffix(BaseInputData):
+    """Subclass whose suffix() raises a marked abort instead of declaring one."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        raise escalate_match_abort(NotImplementedError("marked abort"))
+
+    @classmethod
+    def validate_columns(cls, file_path: str, feature_names: list[str]) -> bool:
+        return True
+
+
 class TestHasSuffix:
     def test_concrete_with_suffix_returns_true(self) -> None:
         assert ConcreteWithSuffix._has_suffix() is True
 
     def test_base_without_suffix_returns_false(self) -> None:
         assert ConcreteNoSuffix._has_suffix() is False
+
+    def test_marked_abort_suffix_reraises(self) -> None:
+        with pytest.raises(NotImplementedError) as excinfo:
+            ConcreteMarkedAbortSuffix._has_suffix()
+
+        assert is_match_abort(excinfo.value)
 
 
 class TestMatchesSuffix:
@@ -82,3 +103,13 @@ class TestResolvePinnedFile:
         )
         result = ConcreteWithSuffix._resolve_pinned_file(dac, ["customer_id"])
         assert result is None
+
+    def test_marked_abort_suffix_reraises(self) -> None:
+        dac = DataAccessCollection(
+            files={"/data/customers.csv"},
+            column_to_file={"customer_id": "/data/customers.csv"},
+        )
+        with pytest.raises(NotImplementedError) as excinfo:
+            ConcreteMarkedAbortSuffix._resolve_pinned_file(dac, ["customer_id"])
+
+        assert is_match_abort(excinfo.value)

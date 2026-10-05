@@ -6,7 +6,7 @@ JVM conflicts and ensure proper resource management across test sessions.
 
 Requirements:
 - PySpark must be installed (pip install pyspark)
-- Java 8+ must be installed and JAVA_HOME environment variable must be set
+- Java 17+ must be installed and JAVA_HOME environment variable must be set
 
 Environment Setup:
 - JAVA_HOME: Must point to a valid Java installation
@@ -16,12 +16,16 @@ across all test files, preventing JVM conflicts and resource issues.
 """
 
 import os
+import sys
 import pytest
 from typing import Any
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Spark workers must run the driver's interpreter, else PYTHON_VERSION_MISMATCH outside tox.
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
 
 # Check PySpark availability and Java environment
 try:
@@ -105,5 +109,14 @@ def spark_session() -> Any:
         logger.warning(f"Error during SparkSession cleanup: {e}")
 
 
+@pytest.fixture
+def spark_case_sensitive(spark_session: Any) -> Any:
+    """Run the test with spark.sql.caseSensitive=true and restore the previous value afterwards."""
+    previous = spark_session.conf.get("spark.sql.caseSensitive")
+    spark_session.conf.set("spark.sql.caseSensitive", "true")
+    yield spark_session
+    spark_session.conf.set("spark.sql.caseSensitive", previous)
+
+
 # Export availability flags for use in test files
-__all__ = ["spark_session", "PYSPARK_AVAILABLE", "SKIP_REASON"]
+__all__ = ["spark_session", "spark_case_sensitive", "PYSPARK_AVAILABLE", "SKIP_REASON"]

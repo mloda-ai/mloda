@@ -105,7 +105,7 @@ class TestGeoDistancePandasIntegration:
                 "point1&point2__euclidean_distance",  # Euclidean distance between point1 and point2
                 "point1&point2__manhattan_distance",  # Manhattan distance between point1 and point2
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -174,7 +174,7 @@ class TestGeoDistancePandasIntegration:
                 euclidean_config,  # Euclidean distance between point1 and point2
                 manhattan_config,  # Manhattan distance between point1 and point2
             ],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

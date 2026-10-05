@@ -11,10 +11,14 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_la
     PolarsLazyAggregatedFeatureGroup,
 )
 
+from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
+    AggregatedZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.test_aggregated_utils import (
     AggregatedTestDataCreator,
     validate_aggregated_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PolarsLazyZeroRowAdapter
 
 try:
     import polars as pl
@@ -286,6 +290,12 @@ class TestPolarsLazyAggregatedFeatureGroupMultiColumnDdofAndNullSkip:
 
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")
+class TestPolarsLazyAggregatedZeroRow(PolarsLazyZeroRowAdapter, AggregatedZeroRowTestMixin):
+    feature_group_class = PolarsLazyAggregatedFeatureGroup
+    unsupported_multi_column_aggregations = {"median": "Median aggregation across multiple columns is not supported"}
+
+
+@pytest.mark.skipif(pl is None, reason="Polars not available")
 class TestPolarsLazyAggregationIntegration:
     """Integration tests for the Polars Lazy aggregated feature group using DataCreator."""
 
@@ -310,7 +320,7 @@ class TestPolarsLazyAggregationIntegration:
                 # "sales__std_aggr",
                 # "sales__var_aggr",
             ],
-            compute_frameworks={PolarsLazyDataFrame},
+            compute_frameworks=[PolarsLazyDataFrame],
             plugin_collector=plugin_collector,
         )
 

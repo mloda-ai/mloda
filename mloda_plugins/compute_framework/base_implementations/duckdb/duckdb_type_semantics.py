@@ -42,3 +42,17 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
         unit=unit,
         is_tz_aware=is_tz_aware,
     )
+
+
+def nan_condition(data: Any, column: str) -> str | None:
+    """Return an isnan() condition for a FLOAT/DOUBLE column, else None (isnan fails to bind on VARCHAR).
+
+    The column is looked up by exact name; a missing or differently-cased name raises ``ValueError``.
+    """
+    from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident, require_exact_columns
+
+    require_exact_columns(data.columns, [column])
+    type_str = str(data.types[data.columns.index(column)])
+    if type_str in ("FLOAT", "DOUBLE"):
+        return f"isnan({quote_ident(column)})"
+    return None

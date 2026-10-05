@@ -67,7 +67,7 @@ class TestGeoDistanceModernization:
         # Run the mloda
         api = mloda(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -128,7 +128,7 @@ class TestGeoDistanceModernization:
         # Run the mloda
         api = mloda(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -148,7 +148,8 @@ class TestGeoDistanceModernization:
         haversine_distances = result_df["geo_distance_haversine"]
         assert all(distance > 500 and distance < 650 for distance in haversine_distances)
 
-    def test_both_approaches_produce_equivalent_results(self) -> None:
+    @pytest.mark.parametrize("config_name", ["config_euclidean", "my&name__custom"], ids=["plain", "amp_dunder"])
+    def test_both_approaches_produce_equivalent_results(self, config_name: str) -> None:
         """Test that both string-based and configuration-based approaches produce equivalent functionality."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
@@ -160,7 +161,7 @@ class TestGeoDistanceModernization:
 
         # Create configuration-based feature with same parameters
         config_feature = Feature(
-            name="config_euclidean",
+            name=config_name,
             options=Options(
                 context={
                     GeoDistanceFeatureGroup.DISTANCE_TYPE: "euclidean",
@@ -170,22 +171,22 @@ class TestGeoDistanceModernization:
         )
 
         # Run both approaches
-        api1 = mloda([string_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([string_feature], [PandasDataFrame], plugin_collector=plugin_collector)
         results1 = api1.run()
 
-        api2 = mloda([config_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api2 = mloda([config_feature], [PandasDataFrame], plugin_collector=plugin_collector)
         results2 = api2.run()
 
         # Both should produce results with their respective feature names
         assert "point_a&point_b__euclidean_distance" in results1[0].columns
-        assert "config_euclidean" in results2[0].columns
+        assert config_name in results2[0].columns
 
         # Results should have the same structure and values (same calculation)
         assert len(results1[0]) == len(results2[0])
 
         # The calculated distances should be identical
         string_distances = results1[0]["point_a&point_b__euclidean_distance"].values
-        config_distances = results2[0]["config_euclidean"].values
+        config_distances = results2[0][config_name].values
 
         # Allow for small floating point differences
         assert all(abs(s - c) < 1e-10 for s, c in zip(string_distances, config_distances))
@@ -208,7 +209,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
         # Test invalid number of source features (only 1 instead of 2)
@@ -222,7 +223,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
         # Test invalid number of source features (3 instead of 2)
@@ -236,7 +237,7 @@ class TestGeoDistanceModernization:
                     }
                 ),
             )
-            api = mloda([feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+            api = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector)
             api.run()
 
     def test_multiple_distance_types_configuration_based(self) -> None:
@@ -273,7 +274,7 @@ class TestGeoDistanceModernization:
             features.append(feature)
 
         # Run the mloda with multiple features
-        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda(features, [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # Verify all features were created
@@ -316,7 +317,7 @@ class TestGeoDistanceModernization:
         )
 
         # Run the mloda with both features
-        api = mloda([feature1, feature2], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda([feature1, feature2], [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # Both features should be processed together (same Feature Group resolution)
@@ -399,7 +400,7 @@ class TestGeoDistanceModernization:
         ]
 
         # Run the mloda with mixed features
-        api = mloda(features, {PandasDataFrame}, plugin_collector=plugin_collector)
+        api = mloda(features, [PandasDataFrame], plugin_collector=plugin_collector)
         results = api.run()
 
         # All features should be processed successfully

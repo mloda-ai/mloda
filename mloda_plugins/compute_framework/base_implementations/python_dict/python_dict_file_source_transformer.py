@@ -72,7 +72,7 @@ def _infer_column(cells: list[str | None]) -> list[Any]:
     if not typed:
         return [None] * len(cells)
 
-    if all(_INT_RE.match(c) for c in typed):
+    if all(_INT_RE.fullmatch(c) for c in typed):
         # Break on the first out-of-range value: the column degrades to float below.
         parsed: list[Any] = []
         for c in cells:
@@ -90,7 +90,7 @@ def _infer_column(cells: list[str | None]) -> list[Any]:
         # From the source string: float(int(...)) would raise on huge values.
         return [None if c is None or c in _NULL_TOKENS else float(c) for c in cells]
 
-    if all(_FLOAT_RE.match(c) for c in typed):
+    if all(_FLOAT_RE.fullmatch(c) for c in typed):
         return [None if c is None or c in _NULL_TOKENS else float(c) for c in cells]
 
     if all(c in _BOOL_MAP for c in typed):

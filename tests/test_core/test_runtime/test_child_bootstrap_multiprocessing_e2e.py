@@ -79,11 +79,11 @@ class TestChildBootstrapFiresInsideSpawnedWorkerBeforeFirstCommand:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={extender},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-            function_extender={extender},
             flight_server=flight_server,
             child_bootstrap=bootstrap,
         )

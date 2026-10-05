@@ -199,7 +199,7 @@ class TestClassIdentityIntegration:
 
         results = mloda.run_all(
             features=[sales_feature, finance_feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

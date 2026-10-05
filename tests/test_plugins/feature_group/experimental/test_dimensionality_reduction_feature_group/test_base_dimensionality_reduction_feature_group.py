@@ -4,6 +4,7 @@ Tests for the base DimensionalityReductionFeatureGroup class.
 
 import pytest
 
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -16,6 +17,23 @@ from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas im
 
 class TestDimensionalityReductionFeatureGroup:
     """Tests for the DimensionalityReductionFeatureGroup class."""
+
+    def test_extract_config_feature_with_double_underscore_name(self) -> None:
+        options = Options(
+            context={
+                DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
+                DimensionalityReductionFeatureGroup.DIMENSION: 2,
+                DefaultOptionKeys.in_features: frozenset([Feature("x1"), Feature("x2")]),
+            }
+        )
+        algorithm, dimension, source_features, _ = (
+            DimensionalityReductionFeatureGroup._extract_algorithm_dimension_and_source_features(
+                Feature("a__b", options=options)
+            )
+        )
+        assert algorithm == "pca"
+        assert dimension == 2
+        assert sorted(source_features) == ["x1", "x2"]
 
     def test_match_feature_group_criteria(self) -> None:
         """Test the match_feature_group_criteria method."""
@@ -34,6 +52,30 @@ class TestDimensionalityReductionFeatureGroup:
         assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria(
             "customer_metrics_pca_2d", Options()
         )
+
+    def test_chained_source_name_matches_and_extracts_the_chained_source(self) -> None:
+        """The pattern parses from the last suffix, so a chained source is the whole prefix."""
+        name = "s__mean_imputed__pca_2d"
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria(name, Options())
+        assert DimensionalityReductionFeatureGroup._extract_source_features(Feature(name)) == ["s__mean_imputed"]
+
+    def test_zero_dimension_is_a_recorded_non_match_naming_the_dimension(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        assert not DimensionalityReductionFeatureGroup.match_feature_group_criteria("x__pca_0d", Options())
+        recorded = rejection_window["DimensionalityReductionFeatureGroup"]
+        assert "dimension" in recorded.reason
+
+    def test_valid_name_records_no_rejection(self, rejection_window: dict[str, MatchRejection]) -> None:
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("x__pca_2d", Options())
+        assert rejection_window == {}
+
+    @pytest.mark.parametrize("name", ["x__pca_2d", "s__mean_imputed__pca_2d"])
+    def test_extract_dim_reduction_params_reads_the_named_captures(self, name: str) -> None:
+        algorithm, dimension, _ = DimensionalityReductionFeatureGroup._extract_dim_reduction_params(Feature(name))
+        assert algorithm == "pca"
+        assert dimension == 2
+        assert isinstance(dimension, int)
 
     def test_parse_reduction_suffix(self) -> None:
         """Test the parse_reduction_suffix method."""
@@ -55,6 +97,42 @@ class TestDimensionalityReductionFeatureGroup:
 
         with pytest.raises(ValueError):
             DimensionalityReductionFeatureGroup.parse_reduction_suffix("customer_metrics_pca_2d")
+
+    @pytest.mark.parametrize("name", ["x__mean_imputed__pca_2d", "a__b__c__pca_2d", "a,b__mean_imputed__pca_2d"])
+    def test_chained_source_name_parses_from_the_last_suffix(self, name: str) -> None:
+        assert DimensionalityReductionFeatureGroup.parse_reduction_suffix(name) == ("pca", 2)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "x__pca_2_3d",
+            "x__pc_a_2d",
+            "x__pca_0d",
+            "x__mean_imputed__pca_2_3d",
+            "x__mean_imputed__pca_0d",
+            "__pca_2d",
+            "x__pca_+2d",
+        ],
+    )
+    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            DimensionalityReductionFeatureGroup.parse_reduction_suffix(name)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("x__pca_2dim", ("pca", 2)), ("x__mean_imputed__tsne_3dim", ("tsne", 3))],
+    )
+    def test_parse_reduction_suffix_follows_an_overridden_prefix_pattern(
+        self, name: str, expected: tuple[str, int]
+    ) -> None:
+        """Parts are read from PREFIX_PATTERN."""
+
+        class DimPatternGroup(DimensionalityReductionFeatureGroup):
+            PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_(?P<dimension>\d+)dim$"
+
+        assert DimPatternGroup.parse_reduction_suffix(name) == expected
+        with pytest.raises(ValueError):
+            DimPatternGroup.parse_reduction_suffix("x__pca_2d")
 
     def test_umap_is_not_declared(self) -> None:
         """umap is not implemented by any compute framework, so it must not be declared."""

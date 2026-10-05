@@ -1,5 +1,6 @@
 """Unit tests for the PolarsFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 import logging
 
@@ -32,10 +33,7 @@ except ImportError:
 class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PolarsFilterEngine class using shared mixins."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the PolarsFilterEngine class."""
-        return PolarsFilterEngine
+    filter_engine_class = PolarsFilterEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -52,7 +50,22 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
     @pytest.fixture
     def nullable_category_sample_data(self) -> Any:
         """Create a sample Polars DataFrame with null categories for testing."""
-        return pl.DataFrame({"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]})
+        return pl.DataFrame(
+            {
+                "id": [1, 2, 3, 4, 5],
+                "category": ["A", None, "B", None, "C"],
+                "score": [1, None, 2, None, 3],
+                "ratio": pl.Series([1.0, float("nan"), 2.0, None, 3.0], dtype=pl.Float64),
+            }
+        )
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pl.DataFrame({"d": values}, schema={"d": pl.Decimal(10, 2)})
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data.schema["d"]
 
     def get_column_values(self, result: Any, column: str) -> list[Any]:
         """Extract column values from Polars DataFrame."""
@@ -87,3 +100,13 @@ class TestPolarsFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMix
         ages = result["age"].to_list()
         assert None not in ages
         assert ages == [30, 35, 40, 45]
+
+    def test_do_min_filter_missing_column_raises_column_not_found(self) -> None:
+        """A missing column must surface polars' own error, not an AttributeError from the NaN check."""
+        data = pl.DataFrame({"a": [1.0, 2.0]})
+        single_filter = SingleFilter(Feature("missing"), FilterType.MIN, {"value": 1.0})
+
+        with pytest.raises(pl.exceptions.ColumnNotFoundError):
+            result = PolarsFilterEngine.do_min_filter(data, single_filter)
+            if hasattr(result, "collect"):
+                result.collect()

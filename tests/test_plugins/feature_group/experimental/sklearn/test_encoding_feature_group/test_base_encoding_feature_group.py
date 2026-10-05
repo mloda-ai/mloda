@@ -6,7 +6,9 @@ from typing import Any
 import pytest
 from unittest.mock import Mock, patch
 
+from mloda.user import Feature
 from mloda.user import FeatureName
+from mloda.provider import DefaultOptionKeys
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
@@ -14,6 +16,16 @@ from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import Pan
 
 class TestEncodingFeatureGroup:
     """Test cases for the base EncodingFeatureGroup class."""
+
+    def test_extract_config_feature_with_double_underscore_name(self) -> None:
+        options = Options(
+            context={
+                EncodingFeatureGroup.ENCODER_TYPE: "label",
+                DefaultOptionKeys.in_features: frozenset([Feature("category")]),
+            }
+        )
+        result = EncodingFeatureGroup._extract_encoder_type_and_source_feature(Feature("a__b", options=options))
+        assert result == ("label", "category")
 
     @pytest.mark.parametrize(
         "valid_names",
@@ -45,6 +57,30 @@ class TestEncodingFeatureGroup:
             assert not EncodingFeatureGroup.match_feature_group_criteria(FeatureName(name), Options({})), (
                 f"Feature name '{name}' should not match criteria"
             )
+
+    def test_column_suffixed_name_matches_declared_base_in_features(self) -> None:
+        """The declared column base matches and is returned with its options and scope."""
+        plain = Options(context={DefaultOptionKeys.in_features: ["x"]})
+        assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), plain) is True
+
+        declared = Feature("x", options=Options(context={"some_key": 1}), feature_group="SomeReader")
+        options = Options(context={DefaultOptionKeys.in_features: [declared]})
+
+        assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options) is True
+
+        result = PandasEncodingFeatureGroup().input_features(options, FeatureName("x~1__onehot_encoded"))
+
+        assert result is not None
+        [returned] = result
+        assert returned.name == "x"
+        assert returned.options.get("some_key") == 1
+        assert returned.feature_group_scope == "SomeReader"
+
+    def test_column_suffixed_name_aborts_on_other_in_features(self) -> None:
+        options = Options(context={DefaultOptionKeys.in_features: ["y"]})
+
+        with pytest.raises(ValueError, match="in_features"):
+            EncodingFeatureGroup.match_feature_group_criteria(FeatureName("x~1__onehot_encoded"), options)
 
     def test_match_feature_group_criteria_unsupported_encoder(self) -> None:
         """Test that unsupported encoder types do not match the criteria."""
@@ -113,8 +149,14 @@ class TestEncodingFeatureGroup:
 
     def test_prefix_pattern(self) -> None:
         """Test that prefix pattern is properly defined."""
-        expected_pattern = r".*__(onehot|label|ordinal)_encoded(~\d+)?$"
+        expected_pattern = r".*__(?P<encoder_type>onehot|label|ordinal)_encoded(?:~\d+)?$"
         assert EncodingFeatureGroup.PREFIX_PATTERN == expected_pattern
+
+    @pytest.mark.parametrize("name", ["x__onehot_encoded~1", "x__onehot_encoded"])
+    def test_input_features_read_the_source_through_the_column_base(self, name: str) -> None:
+        input_features = PandasEncodingFeatureGroup().input_features(Options({}), FeatureName(name))
+        assert input_features is not None
+        assert {f.name for f in input_features} == {"x"}
 
     def test_input_features(self) -> None:
         """Test input_features method extracts correct source features."""

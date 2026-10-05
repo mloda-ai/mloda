@@ -118,7 +118,7 @@ def collect() -> dict[str, str]:
     try:
         result = mloda.run_all(
             [Feature("p3_x")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups({P3Root, P3GateA, P3GateB, P3A, P3B, P3Consumer}),
             parallelization_modes={ParallelizationMode.SYNC},
         )

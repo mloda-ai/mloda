@@ -31,15 +31,15 @@ from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_SYNC_THREADING
 
 
-COMPUTE_FRAMEWORKS: set[type[ComputeFramework]] = {
-    PyArrowTable,
-    SecondCfw,
-    ThirdCfw,
+COMPUTE_FRAMEWORKS: list[type[ComputeFramework]] = [
     FourthCfw,
     PandasDataFrame,
     PolarsLazyDataFrame,
+    PyArrowTable,
     PythonDictFramework,
-}
+    SecondCfw,
+    ThirdCfw,
+]
 
 
 class JoinCfwTest1(FeatureGroup):

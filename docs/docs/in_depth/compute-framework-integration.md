@@ -92,7 +92,7 @@ class RankFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         parametric_families={"ntile": "N-tile bucketing"},
         supported={"PythonDictFramework": {"dense", "ordinal"}},
     )
-    PREFIX_PATTERN = r".*__([\w]+)_rank$"
+    PREFIX_PATTERN = r".*__(?P<rank_type>[\w]+)_rank$"
     PROPERTY_MAPPING = {
         "rank_type": property_spec(
             "Rank subtype.",
@@ -159,12 +159,13 @@ are never subject to this check.
 #### The schema-presence gate
 
 The guard detects a missing schema via the framework's existing
-`ComputeFramework._extract_column_names(self, data) -> set[str]`: an empty set
+`ComputeFramework.extract_column_names(data) -> set[str]` (a classmethod): an empty set
 means no schema, which is the error condition. Every framework already implements
 this off schema metadata, so it works on a zero-row frame and costs nothing extra
 (no row scan, collect, or count). No per-framework opt-in is needed when you
-implement a new compute framework, as long as `_extract_column_names` returns the
-columns for a zero-row frame.
+implement a new compute framework, as long as `extract_column_names` returns the
+columns for a zero-row frame. Feature groups can call
+`<Framework>.extract_column_names(data)` without an instance to resolve available columns.
 
 There is one representational caveat. The schema-bearing frameworks (PyArrow,
 Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata
@@ -186,6 +187,14 @@ Filtering an empty result is a no-op, so neither the column check nor row
 elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.
+
+### Column name case sensitivity
+
+mloda matches column and feature names exactly (case-sensitive) in every lookup, match and presence check; engines that resolve names differently add the rules below.
+
+-   DuckDB and SQLite compare identifiers ignoring ASCII case only (`val` and `VAL` are one column; `é` and `É` are two), and mloda's checks for new and helper column names fold case the same way. A join, as-of merge, union, append, `from_arrow` or `from_dict` whose output names differ only in case, or repeat a name exactly, raises `ValueError`; rename one side upstream.
+-   On those engines, mask primitives, the `partition_by` / `order_by` columns of `with_row_number` / `window`, merge keys, as-of `by` and time columns, `select` names and SQLite `order` names must be exact column names. SQLite also accepts its `rowid` / `oid` / `_rowid_` pseudo-columns in `select`, `order`, `with_row_number` and `window`. Raw SQL fragments (`filter` conditions, `project` expressions, the `window` function, DuckDB `order`) bind through the engine and stay case-insensitive; on SQLite an unresolvable quoted name there is read as a string literal, not an error.
+-   Spark column resolution follows `spark.sql.caseSensitive` (default `false`, folding like Python's `str.lower`, Unicode included). The Spark as-of merge and adding a feature column in `transform` raise `ValueError` on names that collide under that setting; Spark joins, union and append are not checked. Spark as-of time columns must match exactly; other Spark lookups (keys, masks, filters) bind through Spark's resolver.
 
 ### Row count for observability
 
@@ -266,15 +275,24 @@ class PandasMyFeatureGroup(MyFeatureGroup):
 
 ## Framework Selection Process
 
-When a feature is requested:
+mloda picks one compute framework per step group (the features of one FeatureGroup that run as one step) in one planning step, before link joins are resolved.
 
-1. The system identifies the appropriate feature group
-2. It checks which compute frameworks are supported by:
-   - The feature definition
-   - The feature group
-   - The mloda request
-3. It selects a compatible compute framework
-4. It uses the framework-specific implementation for calculations
+- **Allowed set**: the framework must fit the FeatureGroup (`compute_framework_rule`, `supports_compute_framework`), any pin via `Feature(compute_framework=...)`, and the run's enabled frameworks.
+- **Connection skip**: a `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with `compute_frameworks=[DuckDBFramework]`.
+- **Joins**: a link's child runs on one of its two sides. RIGHT joins run on the right side, APPEND and UNION on the left. Children of one link agree on the side.
+- **Filters**: a filter pinned to a framework moves its host feature onto that framework.
+- **Conversions**: a transformer chain must exist between every parent and child on different frameworks.
+- **Choice among valid plans**: lowest cost first (one point per conversion), then the order of the run's `compute_frameworks` list, then the default order. The default order puts Pandas, Polars, PyArrow before `SELF_MANAGED` frameworks (Spark, Iceberg), before `REQUIRED` ones (DuckDB, SQLite), then class name.
+- **Reason**: each step records why it got its framework: `pinned`, `only allowed framework`, `rules exclude preferred frameworks`, `saves N conversion(s)`, `your list order` or `default order`. "saves N conversions" counts the conversions added by moving only that step to a preferred framework.
+- **Equal-cost plans**: blocks are settled in a fixed order (by FeatureGroup and feature names), each taking the most preferred framework still possible.
+- **Both ways**: a Polars-only consumer pulls its unrestricted source onto Polars, and a Polars-only source pulls its unrestricted consumers, so no transform step is needed.
+- **No valid plan**: planning raises an error naming the features and their allowed sets.
+
+List order is a tie-break after cost, not "first listed wins". To force a framework, pin the feature or restrict the run's list.
+
+`Feature.get_compute_framework()` returns the chosen framework. On a feature that allows several frameworks and was never planned, it raises.
+
+Framework authors declare the connection rule by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`).
 
 ## Data Transformation
 
@@ -288,8 +306,8 @@ For more details on how data transformation works between compute frameworks, se
 
 ## Framework Notes
 
-- **DuckDB**: feature groups need a connection object supplied via the data access collection; mloda validates it and pins its session timezone to UTC but never opens or closes it. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
-- **Spark**: requires PySpark and a Java 8+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
+- **DuckDB**: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
+- **Spark**: requires PySpark and a Java 17+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
 - **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 
 A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these frameworks at setup; a run left with no usable framework, or a feature pinned to a dropped one, raises. Request `{SYNC, MULTIPROCESSING}` or `{THREADING, MULTIPROCESSING}` to combine them with worker-dispatched frameworks.
@@ -312,7 +330,7 @@ relation.types     # backend-specific dtype objects, same order as columns
 
 ### Window functions
 
-`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column.
+`with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column (the comparison ignores ASCII case) or if a `partition_by` / `order_by` column is not an exact column name.
 
 ```py
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (

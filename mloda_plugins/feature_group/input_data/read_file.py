@@ -6,8 +6,6 @@ from mloda.user import DataAccessCollection
 from mloda.provider import FeatureSet
 from mloda.provider import (
     BaseInputData,
-    CHAIN_SEPARATOR,
-    COLUMN_SEPARATOR,
     INPUT_DATA_STAGE,
     PropertySpec,
     record_match_rejection,
@@ -24,9 +22,6 @@ class ReadFile(BaseInputData):
     are found in the process (i.e. when the user has not imported CsvReader etc.).
     Only the read_files subdirectory is loaded, not the entire feature_group tree.
 
-    To suppress auto-loading:
-        PluginLoader.disable_auto_load("feature_group/input_data/read_files")
-
     This class should be inherited by all classes that are responsible for reading files.
 
     _structured_suffixes lists file extensions that ReadFile owns by default.
@@ -39,6 +34,7 @@ class ReadFile(BaseInputData):
     - suffix
     - get_column_names
     - describe_columns (optional; default wraps get_column_names with unknown types)
+    - count_rows (optional; default None)
 
     A ReadFile subclass classifies as a final reader by overriding ``load_data``
     wholesale. It may return its table directly, or a descriptor materialized by
@@ -48,7 +44,8 @@ class ReadFile(BaseInputData):
     or ImportError) assumes plain columns are present but declines a chain- or column-separated name while
     matching; an explicit column_to_file pin is exempt. An unpinned file whose columns cannot be read
     (OSError, ValueError) is declined; a pinned one raises. A match_subclass_data_access override should
-    route through _file_matches to keep these rules.
+    route through _file_matches, and through _pin_applies/_resolve_pinned_file for pinned requests, to
+    keep these rules.
     """
 
     _auto_load_group: str = "feature_group/input_data/read_files"
@@ -109,7 +106,7 @@ class ReadFile(BaseInputData):
         """Coerce a str or Path data_access to a plain path string; anything else is a caller error."""
         if isinstance(data_access, (str, Path)):
             return str(data_access)
-        raise ValueError(f"describe_columns requires a file path (str or Path), got {type(data_access).__name__}.")
+        raise ValueError(f"A file reader requires a file path (str or Path), got {type(data_access).__name__}.")
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
@@ -121,10 +118,8 @@ class ReadFile(BaseInputData):
         document_suffixes: "frozenset[str]" = cls.reader_option("document_suffixes", options)
 
         if isinstance(data_access, DataAccessCollection):
-            if data_access.column_to_file is not None:
-                pinned = cls._resolve_pinned_file(data_access, feature_names)
-                if pinned is not None:
-                    return pinned
+            if cls._pin_applies(data_access, feature_names):
+                return cls._resolve_pinned_file(data_access, feature_names)
             hint = options.get("data_access_handle")
             if hint is not None:
                 handle_kind = data_access.handles().get(hint)
@@ -169,7 +164,8 @@ class ReadFile(BaseInputData):
             if is_match_abort(exc):
                 raise
             # An unreadable unpinned file declines so sibling readers still match; a pinned file is read
-            # first by _resolve_pinned_file through validate_columns, so its error propagates before any fallback.
+            # first by _resolve_pinned_file through validate_columns, and once a pin applies there is no
+            # fallback path for its error to bypass.
             record_match_rejection(
                 cls.get_class_name(),
                 f"{cls.get_class_name()} matched the suffix of {path} but could not read its columns: {exc}",
@@ -180,7 +176,7 @@ class ReadFile(BaseInputData):
     @classmethod
     def _declines_unvalidated_separator_name(cls, file_name: str, feature_names: list[str]) -> bool:
         """Declines a chain/column-separated name this reader cannot confirm by enumerating columns."""
-        feature = next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
+        feature = cls._first_separator_name(feature_names)
         if feature is None:
             return False
         if cls._column_names_or_none(file_name) is not None:

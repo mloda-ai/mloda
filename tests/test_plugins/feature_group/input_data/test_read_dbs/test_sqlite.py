@@ -8,7 +8,6 @@ import pyarrow as pa
 
 from mloda.user import DataType
 from mloda.user import Feature
-from mloda.user import Options
 from mloda.provider import FeatureSet
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
@@ -22,14 +21,10 @@ class MockFeatureSet:
         return self._feature_names
 
 
-class MockOptions:
-    def __init__(self, base_input_data: Any) -> None:
-        self.base_input_data = base_input_data
-
-    def get(self, key: Any, default: Any = None) -> Any:
-        if key == "BaseInputData":
-            return self.base_input_data
-        return default
+def _matched_feature(name: str, access: dict[str, Any]) -> Feature:
+    feature = Feature(name)
+    feature.input_data_match = (SQLITEReader, access)
+    return feature
 
 
 class TestSQLITEReader:
@@ -119,18 +114,25 @@ class TestSQLITEReader:
         assert SQLITEReader.is_valid_credentials(valid_credentials)
 
     def test_is_valid_credentials_nonexistent(self, tmp_path: Any) -> None:
-        credentials = {"sqlite": str(tmp_path / "nonexistent.db")}
-        with pytest.raises(
-            ValueError,
-            match=f"Database file {re.escape(credentials['sqlite'])} does not exist, but key is given.",
-        ):
+        """The error must not echo the database path or file name."""
+        db_path = str(tmp_path / "nonexistent.db")
+        credentials = {"sqlite": db_path}
+        expected_message = (
+            f"{SQLITEReader.__name__}: the database file under the "
+            f"'{SQLITEReader.db_path()}' credential key does not exist or is not a file."
+        )
+        with pytest.raises(ValueError, match=re.escape(expected_message)) as exc_info:
             SQLITEReader.is_valid_credentials(credentials)
+
+        assert db_path not in str(exc_info.value)
+        assert "nonexistent.db" not in str(exc_info.value)
 
     def test_load_data(self, valid_credentials: Any, mock_read_db: Any, mock_read_as_pa_data: Any) -> None:
         feature_set = FeatureSet()
         features = {Feature("id"), Feature("name"), Feature("age")}
         for feature in features:
             feature.options = MagicMock()
+            feature.input_data_match = (SQLITEReader, {"table_name": "test_table"})
             feature_set.add(feature)
         # Mock the read_db to return dummy data
         mock_read_db.return_value = ([(1, "Alice", 30), (2, "Bob", 25)], ["id", "name", "age"])
@@ -157,12 +159,7 @@ class TestSQLITEReader:
         # PYTHONHASHSEED reorders the underlying set against the sorted expectation.
         names = ["c_col", "a_col", "f_col", "b_col", "e_col", "d_col"]
         for name in names:
-            feature_set.add(
-                Feature(
-                    name,
-                    options=Options(context={"BaseInputData": (SQLITEReader, {"table_name": "test_table"})}),
-                )
-            )
+            feature_set.add(_matched_feature(name, {"table_name": "test_table"}))
 
         query = SQLITEReader.build_query(feature_set)
 
@@ -197,12 +194,7 @@ class TestSQLITEReader:
 
         malicious = "name FROM test_table UNION SELECT api_key FROM secrets --"
         feature_set = FeatureSet()
-        feature_set.add(
-            Feature(
-                malicious,
-                options=Options(context={"BaseInputData": (SQLITEReader, {"table_name": "test_table"})}),
-            )
-        )
+        feature_set.add(_matched_feature(malicious, {"table_name": "test_table"}))
 
         query = SQLITEReader.build_query(feature_set)
 
@@ -218,14 +210,22 @@ class TestSQLITEReader:
         leaked = {cell for row in result for cell in row}
         assert "SUPER_SECRET_KEY" not in leaked
 
-    def test_get_table_missing_options(self) -> None:
-        with pytest.raises(ValueError, match="Options were not set."):
-            SQLITEReader.get_table(None)
+    def test_get_table_without_match_raises(self) -> None:
+        feature_set = FeatureSet()
+        feature_set.add(Feature("id"))
+        with pytest.raises(ValueError):
+            SQLITEReader.get_table(feature_set)
 
     def test_get_table_missing_table_name(self) -> None:
-        options = MockOptions(("BaseInputData", {}))
+        feature_set = FeatureSet()
+        feature_set.add(_matched_feature("id", {}))
         with pytest.raises(KeyError, match="'table_name'"):
-            SQLITEReader.get_table(options)  # type: ignore
+            SQLITEReader.get_table(feature_set)
+
+    def test_get_table_reads_the_feature_set_match(self) -> None:
+        feature_set = FeatureSet()
+        feature_set.add(_matched_feature("id", {"table_name": "test_table"}))
+        assert SQLITEReader.get_table(feature_set) == "test_table"
 
     def test_describe_columns_happy_path(self, temp_sqlite_db: Any) -> None:
         result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "test_table"})
@@ -251,7 +251,7 @@ class TestSQLITEReader:
         assert result["notes"] == DataType.STRING  # CLOB, not just plain TEXT
         # No declared type at all (PRAGMA table_info reports an empty string) must map to None, not raise.
         assert result["untyped_col"] is None
-        # Diverges from _sqlite_affinity_to_arrow_type, which defaults an unmatched type to TEXT; here it's None.
+        # Diverges from _sqlite_affinity_to_arrow_type, whose NUMERIC fallback maps to pa.string(); here it's None.
         assert result["amount"] is None
         assert result["precise"] is None
         # A declared type with several keywords must resolve by SQLite's affinity precedence
@@ -261,14 +261,15 @@ class TestSQLITEReader:
         assert result["char_then_double"] == DataType.STRING
         assert result["double_then_blob"] == DataType.BINARY
 
-    def test_describe_columns_nonexistent_db_does_not_create_file_and_error_mentions_path(self, tmp_path: Any) -> None:
-        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast, naming the path."""
+    def test_describe_columns_nonexistent_db_does_not_create_file_and_error_omits_path(self, tmp_path: Any) -> None:
+        """sqlite3.connect would otherwise create the file; is_valid_credentials must fail fast, omitting the path."""
         nonexistent_path = tmp_path / "nonexistent.db"
         assert not nonexistent_path.exists()
 
-        with pytest.raises(ValueError, match=re.escape(str(nonexistent_path))):
+        with pytest.raises(ValueError, match=re.escape("credential key does not exist or is not a file")) as exc_info:
             SQLITEReader.describe_columns({"sqlite": str(nonexistent_path), "table_name": "t"})
 
+        assert str(nonexistent_path) not in str(exc_info.value)
         assert not nonexistent_path.exists()
 
     def test_describe_columns_path_credential_rejected(self, tmp_path: Any) -> None:
@@ -291,6 +292,11 @@ class TestSQLITEReader:
 
         with pytest.raises(ValueError):
             SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": malicious_table_name})
+
+        # The matcher path quotes a preset table_name too and declines instead of running the injection.
+        assert not SQLITEReader.check_feature_in_data_access(
+            "id", {"sqlite": temp_sqlite_db, "table_name": malicious_table_name}
+        )
 
         # test_table must still exist and be intact: the injected DROP never executed.
         result = SQLITEReader.describe_columns({"sqlite": temp_sqlite_db, "table_name": "test_table"})

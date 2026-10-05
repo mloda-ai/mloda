@@ -70,7 +70,7 @@ def collect() -> dict[str, str]:
     try:
         result = mloda.run_all(
             [Feature("sc_x")],
-            compute_frameworks={PythonDictFramework, PyArrowTable},
+            compute_frameworks=[PyArrowTable, PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups({ScRootA, ScRootB, ScConsumer}),
             parallelization_modes={ParallelizationMode.SYNC},
         )

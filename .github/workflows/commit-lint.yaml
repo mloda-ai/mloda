@@ -5,7 +5,7 @@ name: Commit Lint
 # need a conforming commit.
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "feat/reader-feature-groups" ]
     types: [ opened, synchronize, reopened, edited ]
 
 permissions:

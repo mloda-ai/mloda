@@ -527,6 +527,7 @@ class TestPropertySpecPassthroughOmission:
         assert plain.element_validator is None
         assert plain.required_when is None
         assert plain.match_guard is None
+        assert plain.expected is None
 
         with_required_when = property_spec("d", required_when=_always_required)
         assert with_required_when.element_validator is None
@@ -535,6 +536,10 @@ class TestPropertySpecPassthroughOmission:
         with_match_guard = property_spec("d", match_guard=_is_list_of_strings)
         assert with_match_guard.element_validator is None
         assert with_match_guard.required_when is None
+        assert with_match_guard.expected is None
+
+        with_expected = property_spec("d", match_guard=_is_list_of_strings, expected="a list of strings")
+        assert with_expected.expected == "a list of strings"
 
 
 class TestPropertySpecElementValidatorRoundTrip:
@@ -658,6 +663,19 @@ class TestPropertySpecPassthroughRegressionGuards:
             context=True,
             strict_validation=False,
             match_guard=_is_list_of_strings,
+        )
+        assert built == hand_constructed
+
+    def test_match_guard_with_expected_spec_equals_direct_construction(self) -> None:
+        """A ``match_guard`` plus ``expected`` spec is exactly the ``PropertySpec`` an author would construct."""
+        built = property_spec("d", match_guard=_is_list_of_strings, expected="a list of strings")
+
+        hand_constructed = PropertySpec(
+            "d",
+            context=True,
+            strict_validation=False,
+            match_guard=_is_list_of_strings,
+            expected="a list of strings",
         )
         assert built == hand_constructed
 

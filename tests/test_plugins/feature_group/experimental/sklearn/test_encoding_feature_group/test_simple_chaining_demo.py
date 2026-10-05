@@ -52,7 +52,7 @@ class TestSimpleChaining:
         print("Step 1: Creating OneHot encoding...")
         # L→R: category__onehot_encoded~0__standard_scaled
         onehot_feature = Feature("category__onehot_encoded~0__standard_scaled")
-        api1 = mloda([onehot_feature], {PandasDataFrame}, plugin_collector=plugin_collector)
+        api1 = mloda([onehot_feature], [PandasDataFrame], plugin_collector=plugin_collector)
         results1 = api1.run()
         df1 = results1[0]
 

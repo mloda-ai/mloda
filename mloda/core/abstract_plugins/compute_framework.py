@@ -1,27 +1,37 @@
 import contextlib
 import pickle  # nosec B403
 from abc import ABC
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, final
 from uuid import UUID, uuid4
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
+from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
     ExtenderHook,
-    CompositeExtender,
     _invoke_extender,
+    build_hook_extenders,
 )
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.hook_context import HookContext, OutputSchema, instrument
-from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
+from mloda.core.abstract_plugins.input_data_load_marker import InputDataLoadMarker, current_input_data_load_marker
+from mloda.core.abstract_plugins.hook_context import (
+    HookContext,
+    OutputSchema,
+    _no_rows,
+    input_data_load_gate_scope,
+    instrument,
+)
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMaskEngine
@@ -35,9 +45,22 @@ _current_compute_framework: ContextVar["ComputeFramework | None"] = ContextVar(
 )
 
 
-def _no_rows(data: Any) -> int | None:
-    """row_count stand-in for hooks whose return value carries no row semantics."""
-    return None
+def framework_rank_key(
+    positions: Mapping[type["ComputeFramework"], int],
+) -> Callable[[type["ComputeFramework"]], tuple[int, int, str, str, str]]:
+    """Total-order key: listed position, connection rank, then class name, module, qualname."""
+    unlisted = max(positions.values(), default=-1) + 1
+
+    def key(framework: type["ComputeFramework"]) -> tuple[int, int, str, str, str]:
+        return (
+            positions.get(framework, unlisted),
+            _CONNECTION_RANK[framework.connection_requirement()],
+            framework.get_class_name(),
+            framework.__module__,
+            framework.__qualname__,
+        )
+
+    return key
 
 
 def _python_dtype(values: Any) -> str | None:
@@ -55,9 +78,20 @@ def _dict_output_schema(data: dict[Any, Any]) -> OutputSchema | None:
     return tuple((str(key), safe_field(lambda: _python_dtype(data[key]), None)) for key in sorted(data, key=str))
 
 
+_SEAL_FLAG = "_run_context_sealed"
+_SEALED_ATTRS = frozenset({"run_context", "worker_index", "function_extender", "_hook_extenders", _SEAL_FLAG})
+
+
 class EmptyResultError(ValueError):
     """Raised when a final requested feature's result carries no schema (zero columns);
     zero rows with a schema is valid."""
+
+
+_CONNECTION_RANK = {
+    ConnectionRequirement.NONE: 0,
+    ConnectionRequirement.SELF_MANAGED: 1,
+    ConnectionRequirement.REQUIRED: 2,
+}
 
 
 class ComputeFramework(ABC):
@@ -87,6 +121,7 @@ class ComputeFramework(ABC):
     # Class-level default so the attribute exists even when a subclass's __getstate__
     # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
     _pending_extender_payload: bytes | None = None
+    _hook_extenders: dict[ExtenderHook, Extender] | None = None
 
     def __init__(
         self,
@@ -101,12 +136,12 @@ class ComputeFramework(ABC):
         self.children_if_root = children_if_root
         self.already_calculated_children_tracker: set[UUID] = set()
         self.column_names: set[str] = set()
-        self.function_extender = function_extender if function_extender is not None else set()
+        self.function_extender: AbstractSet[Extender] = function_extender if function_extender is not None else set()
         # Raw pickled payload attached by the worker dispatch path; materialized into
         # function_extender only by __setstate__, i.e. only on the actual unpickle in the worker.
         self._pending_extender_payload: bytes | None = None
         # Set post-construction so a subclass's fixed __init__ signature isn't broken.
-        # RunContext is internal; hook authors should read run_id/carrier off HookContext instead.
+        # RunContext is exported from mloda.steward for on_run_start/on_run_complete.
         self.run_context: RunContext = RunContext()
         self.worker_index: int | None = None
 
@@ -121,13 +156,44 @@ class ComputeFramework(ABC):
         self.framework_connection_object: Any | None = None
 
     @final
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError(f"{name!r} cannot be reassigned on a framework attached to a run")
+        object.__setattr__(self, name, value)
+
+    @final
+    def __delattr__(self, name: str) -> None:
+        if name in _SEALED_ATTRS and self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError(f"{name!r} cannot be deleted on a framework attached to a run")
+        object.__delattr__(self, name)
+
+    @final
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Materialize a deferred worker extender payload on the actual unpickle, so an
         extender's own __setstate__ (e.g. building a live handle) fires in the worker's pid."""
+        if self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError("__setstate__ cannot be called on a framework attached to a run")
         self.__dict__.update(state)
+        restored = self.__dict__.get("run_context")
+        if restored is not None and restored.run_id:
+            object.__setattr__(self, _SEAL_FLAG, True)
         if self._pending_extender_payload is not None:
-            self.function_extender = pickle.loads(self._pending_extender_payload)  # nosec B301
+            extender, hooks = pickle.loads(self._pending_extender_payload)  # nosec B301
+            object.__setattr__(self, "function_extender", extender)
+            object.__setattr__(self, "_hook_extenders", hooks)
             self._pending_extender_payload = None
+        if self.__dict__.get(_SEAL_FLAG):
+            self._seal_extenders()
+
+    @final
+    def _seal_extenders(self) -> None:
+        """Seal on read-only copies, so neither the session's set nor the shared hook table is aliased."""
+        if "function_extender" in self.__dict__:
+            object.__setattr__(self, "function_extender", frozenset(self.__dict__["function_extender"] or ()))
+        hooks = self.__dict__.get("_hook_extenders")
+        if hooks is not None:
+            object.__setattr__(self, "_hook_extenders", _frozen_dict(hooks))
+        object.__setattr__(self, _SEAL_FLAG, True)
 
     @classmethod
     def expected_data_framework(cls) -> Any:
@@ -255,6 +321,11 @@ class ComputeFramework(ABC):
         subclasses that need to provide a connection object.
         """
         self.framework_connection_object = None
+
+    @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        """Whether this framework runs on its own, manages its own session, or needs a supplied connection."""
+        return ConnectionRequirement.NONE
 
     @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
@@ -532,12 +603,17 @@ class ComputeFramework(ABC):
             return True
         return any(dtype_str.startswith(p) for p in ComputeFramework._NUMERIC_PREFIXES)
 
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
+        """Column names of framework-native data, callable without an instance."""
+        raise NotImplementedError(f"{cls.__name__} must implement the extract_column_names classmethod")
+
     def _extract_column_names(self, data: Any) -> set[str]:
         """Extract column names from the framework's data after transform.
 
         Also called via _output_schema with a non-dict raw calculate_feature result, where a raise degrades to None.
         """
-        raise NotImplementedError
+        return type(self).extract_column_names(data)
 
     def _is_schemaless_empty(self, data: Any) -> bool:
         """Framework-representational hook: return True only when ``data`` is this
@@ -664,19 +740,39 @@ class ComputeFramework(ABC):
                 )
 
         fetch_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
-        if extender is None and fetch_extender is None:
-            return method(self.data, features)
+        gated = fetch_extender is not None and fetch_extender.never_fall_back
+        marker = InputDataLoadMarker(fetch_extender is not None, gated)
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
-        context = self._build_hook_context(hook, feature_group, features)
-        with self.activate(), context.activate():
-            if extender is None:
+        stamped = isinstance(features, FeatureSet)
+        prior_marker = features._load_marker if stamped else None
+        if stamped:
+            features._load_marker = marker
+        token = current_input_data_load_marker.set(marker)
+        try:
+            if extender is None and fetch_extender is None:
                 return method(self.data, features)
-            return _invoke_extender(
-                extender,
-                instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
-                self.data,
-                features,
-            )
+
+            context = self._build_hook_context(hook, feature_group, features)
+            marker.active = (self, context)
+            with (
+                self.activate(),
+                context.activate(),
+                input_data_load_gate_scope() if gated else contextlib.nullcontext(),
+            ):
+                if extender is None:
+                    return method(self.data, features)
+                return _invoke_extender(
+                    extender,
+                    instrument(context, method, row_count=self._row_count, output_schema=self._output_schema),
+                    self.data,
+                    features,
+                )
+        finally:
+            marker.active = None
+            current_input_data_load_marker.reset(token)
+            if stamped and prior_marker is not None and prior_marker.active is not None:
+                features._load_marker = prior_marker
 
     @final
     def run_validate_input_features(self, feature_group: Any, features: Any) -> None:
@@ -724,17 +820,15 @@ class ComputeFramework(ABC):
 
     @staticmethod
     @final
-    def select_deterministic(frameworks: Iterable[type["ComputeFramework"]]) -> type["ComputeFramework"]:
-        """Set iteration over class objects is id-based, so reduce by a total name key instead."""
+    def select_deterministic(
+        frameworks: Iterable[type["ComputeFramework"]],
+        positions: Mapping[type["ComputeFramework"], int] | None = None,
+    ) -> type["ComputeFramework"]:
+        """Pick by the run's preference, connection requirement, then a total name key (set iteration is id-based)."""
         candidates = list(frameworks)
         if not candidates:
             raise ValueError("Cannot select a compute framework from an empty collection.")
-
-        # Module and qualname break ties between frameworks sharing a class name; the name alone leaves those to id order.
-        def key(framework: type["ComputeFramework"]) -> tuple[str, str, str]:
-            return (framework.get_class_name(), framework.__module__, framework.__qualname__)
-
-        return min(candidates, key=key)
+        return min(candidates, key=framework_rank_key({} if positions is None else positions))
 
     @final
     def __eq__(self, other: object) -> bool:
@@ -792,18 +886,14 @@ class ComputeFramework(ABC):
 
     @final
     def get_function_extender(self, wrapper_function_enum: ExtenderHook) -> Extender | None:
-        matching_extenders = []
-        for extender in self.function_extender:
-            if wrapper_function_enum in extender.wraps():
-                matching_extenders.append(extender)
-
-        if len(matching_extenders) == 0:
-            return None
-        if len(matching_extenders) == 1:
-            return matching_extenders[0]
-
-        sorted_extenders = sorted(matching_extenders, key=lambda e: e.priority)
-        return CompositeExtender(sorted_extenders, wrapper_function_enum)
+        # Built once on first lookup (or attached by the executor); not rebuilt if function_extender is reassigned.
+        hooks = self._hook_extenders
+        if hooks is None:
+            hooks = build_hook_extenders(self.function_extender)
+            if self.__dict__.get(_SEAL_FLAG):
+                hooks = _frozen_dict(hooks)
+            object.__setattr__(self, "_hook_extenders", hooks)
+        return hooks.get(wrapper_function_enum)
 
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
@@ -816,9 +906,13 @@ class ComputeFramework(ABC):
 
         feature_names: tuple[str, ...] = ()
         input_features: frozenset[str] | None = None
+        input_feature_edges: dict[str, tuple[str, ...]] | None = None
+        specialized_from: tuple[str, ...] = ()
         if isinstance(features, FeatureSet):
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
+            input_feature_edges = getattr(features, "declared_input_feature_edges", None)
+            specialized_from = getattr(features, "specialized_from", ())
 
         return HookContext(
             hook=hook,
@@ -829,12 +923,21 @@ class ComputeFramework(ABC):
                 field=f"{feature_group_class}.version",
                 warn_once_for=feature_group_cls,
             ),
-            plugin_version=resolve_plugin_version(feature_group_cls.__module__),
+            plugin_version=(self.run_context.plugin_versions or {}).get(feature_group_cls.__module__),
+            declared_attributes=safe_field(
+                lambda: read_declared_attributes(feature_group_cls, features),
+                None,
+                field=f"{feature_group_class}.declared_attributes",
+                warn_once_for=feature_group_cls,
+            ),
             feature_names=feature_names,
+            specialized_from=specialized_from,
             input_features=input_features,
+            input_feature_edges=input_feature_edges,
             compute_framework_name=self.get_class_name(),
             rows_in=safe_field(lambda: self._row_count(self.data), None),
             run_id=self.run_context.run_id,
+            plan_id=self.run_context.plan_id,
             carrier=self.run_context.carrier,
             tenant_id=self.run_context.tenant_id,
             project_id=self.run_context.project_id,
@@ -849,12 +952,15 @@ class ComputeFramework(ABC):
 
         A root feature group or an unreadable options/instance degrades silently to None.
         """
+        from mloda.core.abstract_plugins.components.feature_set import merge_input_feature_edges
+
         resolved: bool = getattr(features, "declared_input_features_resolved", False)
         memoized: frozenset[str] | None = getattr(features, "declared_input_feature_names", None)
         if resolved:
             return memoized
 
         result: frozenset[str] | None = None
+        pairs: list[tuple[str, list[str]]] = []
         if features.options is not None:
             instance = safe_field(lambda: feature_group(), None)
             if instance is not None:
@@ -868,11 +974,13 @@ class ComputeFramework(ABC):
 
                     declared = safe_field(_read, None)
                     if declared:
-                        for entry in declared:
-                            names.add(str(entry) if isinstance(entry, str) else str(entry.name))
+                        entries = [str(entry) if isinstance(entry, str) else str(entry.name) for entry in declared]
+                        names.update(entries)
+                        pairs.append((str(feature.name), entries))
                 result = frozenset(names) or None
 
         features.declared_input_feature_names = result
+        features.declared_input_feature_edges = merge_input_feature_edges(pairs)
         features.declared_input_features_resolved = True
         return result
 
@@ -891,18 +999,25 @@ class ComputeFramework(ABC):
             )
         except KeyError as e:
             # Provide helpful error message for missing columns
-            self._raise_helpful_missing_column_error(feature_group, e)
+            self._raise_helpful_missing_column_error(feature_group, e, features)
 
-    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError) -> None:
+    def _raise_helpful_missing_column_error(self, feature_group: Any, error: KeyError, features: Any) -> None:
         """
         Raises a helpful ValueError suggesting the KeyError might be due to missing Links.
         """
+        # Local import: feature_set -> feature -> compute_framework would cycle at module level.
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet, option_split_paragraph
+
         feature_name = feature_group.get_class_name()
         error_str = str(error)
 
+        paragraph = ""
+        if isinstance(features, FeatureSet):
+            paragraph = option_split_paragraph(features.option_split_hint)
+
         error_message = f"""
 Feature '{feature_name}' failed with a KeyError: {error_str}
-
+{paragraph}
 This might be caused by missing Links when your feature has multiple dependencies.
 
 When a feature depends on multiple input features, you must provide explicit Links to specify

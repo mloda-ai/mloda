@@ -160,6 +160,14 @@ class TestNamePathStillAcceptsValidOptions:
 
         assert result is True
 
+    def test_out_of_range_positional_capture_with_a_valid_option_still_matches(self) -> None:
+        """Legacy positional captures bind only an in-range value; an out-of-range one stays owned-but-unbound."""
+        result = NamePathFeatureGroup.match_feature_group_criteria(
+            "f0__bogus_2d", Options(context={"algorithm": "pca"})
+        )
+
+        assert result is True
+
     def test_plain_name_match_without_options_still_matches(self) -> None:
         """No options still matches: the name carries algorithm, defaults and deferred_binding cover the rest."""
         result = NamePathFeatureGroup.match_feature_group_criteria("f0__pca_2d", Options())
@@ -185,7 +193,7 @@ class TestConfigPathPresenceUnchanged:
     def test_config_path_matches_when_required_keys_present(self) -> None:
         """All required keys present with valid values: the config path matches."""
         result = NamePathFeatureGroup.match_feature_group_criteria(
-            "placeholder", Options(context={"algorithm": "pca", "size": 2})
+            "placeholder", Options(context={"algorithm": "pca", "size": 2, "in_features": "src"})
         )
 
         assert result is True

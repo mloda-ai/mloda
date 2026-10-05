@@ -275,3 +275,50 @@ class RelationTestMixin:
         right_aliased = right.set_alias("right_rel")
         result = left_aliased.join(right_aliased, "order", how="inner")
         assert len(result) == 2
+
+    # --- Exact-case identifiers ---
+
+    def test_append_column_non_ascii_case_variant_is_distinct(self, connection: Any, relation_class: Any) -> None:
+        rel = relation_class.from_dict(connection, {"É": [1, 2, 3]})
+        result = rel.append_column("é", [7, 8, 9])
+        arrow = result.to_arrow_table()
+        assert arrow.column("É").to_pylist() == [1, 2, 3]
+        assert arrow.column("é").to_pylist() == [7, 8, 9]
+
+    @pytest.mark.parametrize("how", ["inner", "left", "right", "outer"])
+    def test_join_case_only_output_collision_raises(self, connection: Any, relation_class: Any, how: str) -> None:
+        left = relation_class.from_dict(connection, {"id": [1, 2], "Val": [10, 20]}).set_alias("l")
+        right = relation_class.from_dict(connection, {"id": [1, 2], "val": [30, 40]}).set_alias("r")
+        with pytest.raises(ValueError, match="rename"):
+            left.join(right, "l.id = r.id", how=how)
+
+    def test_join_keys_differing_only_by_case_raises(self, connection: Any, relation_class: Any) -> None:
+        left = relation_class.from_dict(connection, {"ID": [1, 2], "x": [10, 20]}).set_alias("l")
+        right = relation_class.from_dict(connection, {"id": [1, 2], "y": [30, 40]}).set_alias("r")
+        with pytest.raises(ValueError, match="rename"):
+            left.join(right, "l.ID = r.id", how="inner")
+
+    @pytest.mark.parametrize("bad", ["missing", "VAL"])
+    def test_select_missing_or_case_mismatched_name_raises(
+        self, connection: Any, relation_class: Any, bad: str
+    ) -> None:
+        rel = relation_class.from_dict(connection, {"id": [1, 2], "val": [10, 20]})
+        with pytest.raises(ValueError, match=bad):
+            rel.select("id", bad)
+
+    def test_join_non_ascii_case_variants_are_distinct(self, connection: Any, relation_class: Any) -> None:
+        left = relation_class.from_dict(connection, {"id": [1, 2], "é": [10, 20]}).set_alias("l")
+        right = relation_class.from_dict(connection, {"id": [1, 2], "É": [30, 40]}).set_alias("r")
+        result = left.join(right, "l.id = r.id", how="inner")
+        arrow = result.to_arrow_table()
+        assert arrow.column("é").to_pylist() == [10, 20]
+        assert arrow.column("É").to_pylist() == [30, 40]
+
+    def test_from_arrow_case_only_collision_raises(self, connection: Any, relation_class: Any) -> None:
+        table = pa.Table.from_arrays([pa.array([1, 2]), pa.array([3, 4])], names=["a", "A"])
+        with pytest.raises(ValueError, match="rename"):
+            relation_class.from_arrow(connection, table)
+
+    def test_from_dict_case_only_collision_raises(self, connection: Any, relation_class: Any) -> None:
+        with pytest.raises(ValueError, match="rename"):
+            relation_class.from_dict(connection, {"a": [1, 2], "A": [3, 4]})

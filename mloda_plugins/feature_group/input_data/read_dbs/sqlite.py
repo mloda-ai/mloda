@@ -1,13 +1,15 @@
 import os
+from collections.abc import Mapping
 from typing import Any
 
 import pyarrow as pa
 import sqlite3
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.provider import FeatureSet
 from mloda.user import DataType
-from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 
 
@@ -53,10 +55,7 @@ class SQLITEReader(ReadDB):
         name="customer_name",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "/path/to/database.db"}
-                )
+                SQLITEReader: {"sqlite": "/path/to/database.db"}
             }
         )
     )
@@ -74,10 +73,7 @@ class SQLITEReader(ReadDB):
         name="user_email",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "users.db"}
-                )
+                SQLITEReader: {"sqlite": "users.db"}
             }
         )
     )
@@ -91,10 +87,7 @@ class SQLITEReader(ReadDB):
         name="customer_id",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "sales.db"}
-                )
+                SQLITEReader: {"sqlite": "sales.db"}
             }
         )
     )
@@ -103,10 +96,7 @@ class SQLITEReader(ReadDB):
         name="purchase_amount",
         options=Options(
             context={
-                "BaseInputData": (
-                    SQLITEReader,
-                    {"sqlite": "sales.db"}
-                )
+                SQLITEReader: {"sqlite": "sales.db"}
             }
         )
     )
@@ -131,7 +121,7 @@ class SQLITEReader(ReadDB):
     ### Context Parameters (Default)
     These parameters don't affect Feature Group resolution/splitting:
     - `sqlite`: File path to the SQLite database file
-    - `table_name`: Automatically determined based on feature name lookup
+    - `table_name`: Found per feature while matching; a preset value restricts the lookup to that table
 
     ### Group Parameters
     Currently none for SQLITEReader. Parameters that affect Feature Group
@@ -151,12 +141,24 @@ class SQLITEReader(ReadDB):
     - Built queries use SELECT statements for requested columns
     - Results are converted to PyArrow Table format for efficient processing
     - Connection validation occurs before attempting to read data
-    - Table names are automatically cached after first feature lookup
+    - Each feature's table is bound to its own match result, so one credential serves several tables
     """
 
     @classmethod
     def db_path(cls) -> str:
         return "sqlite"
+
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        """`path::table` (or the path alone) when db_path() names an existing file, never other values."""
+        if isinstance(data_access, Mapping):
+            path = data_access.get(cls.db_path())
+            if isinstance(path, str) and os.path.isfile(path):
+                table = data_access.get("table_name")
+                if isinstance(table, str) and table:
+                    return f"{path}::{table}"
+                return path
+        return super().data_access_identity(data_access)
 
     @classmethod
     def connect(cls, credentials: Any) -> Any:
@@ -179,7 +181,7 @@ class SQLITEReader(ReadDB):
           arrive through reader auto-discovery cannot hit this, because
           ``check_feature_in_data_access`` has already matched the name against
           ``PRAGMA table_info``. It is reachable when the caller pre-sets
-          ``BaseInputData``/``table_name`` in Options and so skips that lookup.
+          ``Feature.input_data_match`` with a ``table_name`` and so skips that lookup.
         - A schema-qualified table name (``main.test_table``) is quoted as one identifier
           and will not resolve. Every table name produced by discovery is a bare name from
           ``sqlite_master``, so this only affects a caller passing a qualified name
@@ -188,24 +190,17 @@ class SQLITEReader(ReadDB):
         """
         query = "select "
 
-        options = None
         for feature in features.get_sorted_features():
             # Quote the column identifier so a crafted feature name cannot break out
             # of the identifier position and inject SQL (CWE-89). Consistent with the
             # quote_ident-based identifier handling in the SQL compute frameworks.
             query += f"{quote_ident(str(feature.name))}, "
-            options = feature.options
 
         query = query[:-2] + " "  # last comma is removed
 
         query += "from "
 
-        if options is None:
-            raise ValueError(
-                "Options were not set. Call this after adding a feature to ensure Options are initialized."
-            )
-
-        query += f"{quote_ident(str(cls.get_table(options)))};"
+        query += f"{quote_ident(str(cls.get_table(features)))};"
 
         if query is None:
             raise ValueError("query cannot be None")
@@ -226,7 +221,10 @@ class SQLITEReader(ReadDB):
             return False
 
         if not os.path.isfile(db_path):
-            raise ValueError(f"Database file {db_path} does not exist, but key is given.")
+            raise ValueError(
+                f"{cls.__name__}: the database file under the '{cls.db_path()}' credential key "
+                "does not exist or is not a file."
+            )
         return True
 
     @classmethod
@@ -254,35 +252,40 @@ class SQLITEReader(ReadDB):
         return table
 
     @classmethod
-    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
-        # get tables in the database
-        result, _ = cls.read_db(data_access, query="SELECT name FROM sqlite_master WHERE type='table';")
-        table_names = [table[0] for table in result]
+    def _find_table(cls, feature_name: str, data_access: Any) -> str | None:
+        preset = data_access.get("table_name")
+        if preset:
+            table_names = [preset]
+        else:
+            result, _ = cls.read_db(data_access, query="SELECT name FROM sqlite_master WHERE type='table';")
+            table_names = [table[0] for table in result]
 
-        # check if the feature_name is in the tables
         for table in table_names:
-            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({table});")
-            column_names = [column[1] for column in result]
-            if feature_name in column_names:
-                cls.set_table_name(data_access, table)
-                return True
-        return False
+            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(str(table))});")
+            if feature_name in [column[1] for column in result]:
+                return str(table)
+        return None
 
     @classmethod
-    def set_table_name(cls, data_access: Any, table_name: str) -> None:
-        data = data_access
-        if data.get("table_name"):
-            if data["table_name"] != table_name:
-                raise ValueError(f"Table name is already set to {data['table_name']} and not {table_name}.")
-            return
-
-        data["table_name"] = table_name
+    def check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:
+        return cls._find_table(feature_name, data_access) is not None
 
     @classmethod
-    def get_table(cls, options: Options | None) -> Any:
-        if options is None:
-            raise ValueError("Options were not set.")
-        return options.get("BaseInputData")[1]["table_name"]
+    def match_read_db_data_access(cls, data_accesses: list[Any], feature_names: list[str]) -> Any:
+        matched = super().match_read_db_data_access(data_accesses, feature_names)
+        if matched is None:
+            return None
+        table = cls._find_table(feature_names[0], matched)
+        if table is None:
+            return matched
+        return RegisteredCredential({**matched, "table_name": table})
+
+    @classmethod
+    def get_table(cls, features: FeatureSet) -> Any:
+        match = features.input_data_match
+        if match is None:
+            raise ValueError("No input_data_match was set on the feature set, so the table name is unknown.")
+        return match[1]["table_name"]
 
     @classmethod
     def describe_columns(cls, data_access: Any) -> dict[str, DataType | None]:
@@ -305,15 +308,15 @@ class SQLITEReader(ReadDB):
 
     @staticmethod
     def _affinity_to_datatype(declared_type: str) -> DataType | None:
-        # Shares its affinity precedence with the compute framework's _sqlite_affinity_to_arrow_type, but
-        # falls back to None instead of pa.string() and targets DataType instead of pa.DataType.
-        upper = declared_type.upper()
-        if "INT" in upper:
+        # Shares its affinity precedence with sqlite_affinity_class, but falls back to
+        # None instead of NUMERIC/string, and targets DataType instead of pa.DataType.
+        label = sqlite_affinity_class(declared_type)
+        if label == "INTEGER":
             return DataType.INT64
-        if "CHAR" in upper or "CLOB" in upper or "TEXT" in upper:
+        if label == "TEXT":
             return DataType.STRING
-        if "BLOB" in upper:
+        if label == "BLOB":
             return DataType.BINARY
-        if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
+        if label == "REAL":
             return DataType.DOUBLE
         return None

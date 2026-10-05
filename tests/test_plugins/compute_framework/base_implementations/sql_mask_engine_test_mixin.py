@@ -4,12 +4,18 @@ Extends MaskEngineTestMixin with SQL-specific unit tests that verify
 condition strings and their structure.
 
 Each framework-specific test class should inherit from this mixin and provide:
-- engine fixture: Returns the SQL mask engine class
+- mask_engine_class attribute: The SQL mask engine class, served by the engine fixture
 - sample_data fixture: Returns framework-specific test data
+- empty_data fixture: Returns the same schema as sample_data, typed, with zero rows
+- null_data fixture: Returns the same schema as sample_data, typed, with null values
 - evaluate_mask method: Executes a SQL condition against data, returns list[bool]
+- apply_mask method: Filters data by a SQL condition, returns column -> values
 """
 
+from decimal import Decimal
 from typing import Any
+
+import pytest
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine import (
     SqlBaseMaskEngine,
@@ -25,6 +31,10 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
     These unit tests verify that individual engine methods return SQL condition
     strings with the expected structure.
     """
+
+    def is_boolean_mask(self, mask: Any, data: Any) -> bool:
+        """SQL masks are condition strings, so this only checks the string form; override for a real type check."""
+        return isinstance(mask, str)
 
     def test_all_true_returns_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.all_true(sample_data)
@@ -45,6 +55,10 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert isinstance(result, str)
         assert '"value"' in result
         assert "10" in result
+
+    def test_equal_decimal_value(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.equal(sample_data, "value", Decimal("12.34"))
+        assert result == '"value" = 12.34'
 
     def test_greater_equal_returns_condition_string(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.greater_equal(sample_data, "value", 20)
@@ -82,6 +96,35 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
         assert "'active'" in result
         assert "'inactive'" in result
 
+    def test_is_in_decimal_values(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        result = engine.is_in(sample_data, "value", [Decimal("12.34"), Decimal("5.50")])
+        assert result == '"value" IN (12.34, 5.50)'
+
+    @pytest.mark.parametrize("bad_column", ["STATUS", "missing"], ids=["case_mismatch", "missing"])
+    @pytest.mark.parametrize(
+        "primitive, value",
+        [
+            ("equal", "active"),
+            ("greater_equal", 20),
+            ("less_equal", 30),
+            ("less_than", 30),
+            ("greater_than", 20),
+            ("is_in", ["active"]),
+            ("is_in", []),
+        ],
+        ids=["equal", "greater_equal", "less_equal", "less_than", "greater_than", "is_in", "is_in_empty"],
+    )
+    def test_primitive_inexact_column_raises(
+        self,
+        engine: type[SqlBaseMaskEngine],
+        sample_data: Any,
+        primitive: str,
+        value: Any,
+        bad_column: str,
+    ) -> None:
+        with pytest.raises(ValueError, match=bad_column):
+            getattr(engine, primitive)(sample_data, bad_column, value)
+
     def test_combine_and_joins_conditions(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         cond1 = engine.greater_equal(sample_data, "value", 20)
         cond2 = engine.less_equal(sample_data, "value", 30)
@@ -110,3 +153,18 @@ class SqlMaskEngineTestMixin(MaskEngineTestMixin):
     def test_all_of_empty_returns_all_true(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
         result = engine.all_of(sample_data, [])
         assert result == "1 = 1"
+
+    @pytest.mark.parametrize("values", [[], (), set(), frozenset()], ids=["list", "tuple", "set", "frozenset"])
+    def test_is_in_empty_values_condition(
+        self,
+        engine: type[SqlBaseMaskEngine],
+        sample_data: Any,
+        values: list[Any] | tuple[Any, ...] | set[Any] | frozenset[Any],
+    ) -> None:
+        result = engine.is_in(sample_data, "status", values)
+        assert result == "1 = 0"
+
+    def test_is_in_set_values_deterministic_order(self, engine: type[SqlBaseMaskEngine], sample_data: Any) -> None:
+        """A mixed-type set has no inherent order; pin that rendering sorts by repr for deterministic SQL."""
+        result = engine.is_in(sample_data, "status", {"b", 1, Decimal("2.5"), "a", 3.0})
+        assert result == "\"status\" IN ('a', 'b', 1, 3.0, 2.5)"

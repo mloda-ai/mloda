@@ -7,6 +7,10 @@ class BaseMaskEngine(ABC):
 
     Each compute framework provides a subclass implementing these primitives
     and wires it via ComputeFramework.mask_engine().
+    A null or NaN row never matches (a mask holds False there) unless the call targets them, as
+    ``equal(..., None)`` and ``is_in`` with None do; a NaN value counts as None. SQL conditions
+    yield NULL, which WHERE and CASE WHEN treat as no match.
+    ``data`` is the frame or relation being masked, never None.
     """
 
     @classmethod
@@ -18,7 +22,7 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def all_true(cls, data: Any) -> Any:
-        """Return a mask of all True with length matching the number of rows in data."""
+        """Return an all-True mask matching data's row count, boolean-typed even at zero rows."""
         ...
 
     @classmethod
@@ -30,7 +34,7 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def equal(cls, data: Any, column: str, value: Any) -> Any:
-        """Return a boolean mask where data[column] == value."""
+        """Return a boolean mask where data[column] == value; None or NaN matches null/NaN rows."""
         ...
 
     @classmethod
@@ -60,8 +64,16 @@ class BaseMaskEngine(ABC):
     @classmethod
     @abstractmethod
     def is_in(cls, data: Any, column: str, values: Any) -> Any:
-        """Return a boolean mask where data[column] is in the values collection."""
+        """Boolean mask of data[column] in values (list/tuple/set/frozenset, else TypeError); empty matches
+        nothing, a None or NaN in values matches null/NaN rows."""
         ...
+
+    @classmethod
+    def _require_data(cls, data: Any, method: str) -> None:
+        """Raise TypeError if data is None, naming the caller method and expected type."""
+        if data is None:
+            type_name = cls.supported_data_type().__name__
+            raise TypeError(f"{cls.__name__}.{method} needs the {type_name} being masked as data, got None")
 
     # -- Convenience methods (concrete, built from primitives above) ----------
 

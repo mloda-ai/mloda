@@ -1,6 +1,9 @@
 import uuid
+
+import pytest
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
+from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.core.prepare.resolve_graph import ResolveGraph
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
@@ -16,6 +19,10 @@ from tests.test_core.test_abstract_plugins.test_abstract_compute_framework impor
 
 
 class BaseLinkTestFeatureGroup1(BaseTestFeatureGroup1):
+    pass
+
+
+class LinkChildFeatureGroup(FeatureGroup):
     pass
 
 
@@ -43,7 +50,7 @@ class TestResolveGraph:
         f3.compute_frameworks = {BaseTestComputeFramework1}
         f4 = Feature("GraphFeature4")
         f4.uuid = uuid_4
-        f4.compute_frameworks = {BaseTestComputeFramework2}
+        f4.compute_frameworks = {BaseTestComputeFramework1, BaseTestComputeFramework2}
         f5 = Feature("GraphFeature5")
         f5.uuid = uuid_5
         f5.compute_frameworks = {BaseTestComputeFramework3}
@@ -122,7 +129,9 @@ class TestResolveGraph:
         )
         return graph
 
-    def test_base_link(self) -> None:
+    def test_base_link(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # The synthetic frameworks have no transformer; this test is about link keys, not conversion paths.
+        monkeypatch.setattr(ChooseComputeFrameworks, "_convertible", lambda self, source, target: True)
         links = {
             Link.inner(
                 JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
@@ -147,11 +156,10 @@ class TestResolveGraph:
         assert child_roots[uuid_7] == {uuid_1, uuid_6}
 
         link_trekker = resolver.resolver_links.get_link_trekker().data
-        assert len(link_trekker) == 2
-
         result_link = links.pop()
         expected_link_tuple = (result_link, BaseTestComputeFramework1, BaseTestComputeFramework1)
-        assert link_trekker[expected_link_tuple] == {uuid_7, uuid_3, uuid_4}
+        assert len(link_trekker) == 1
+        assert link_trekker[expected_link_tuple] == {uuid_7}
 
         collector = []
         for e in queue_with_links_and_features:
@@ -166,3 +174,45 @@ class TestResolveGraph:
                         collector.append(feature.uuid)  # type: ignore
                 continue
             raise ValueError("Not a valid type")
+
+    @staticmethod
+    def node(graph: Graph, uid: uuid.UUID, name: str, fg: type[FeatureGroup]) -> None:
+        feature = Feature(name)
+        feature.uuid = uid
+        feature.compute_frameworks = {BaseTestComputeFramework1}
+        graph.add_node(uid, NodeProperties(feature, fg))
+
+    @staticmethod
+    def recorded_link_consumers(graph: Graph) -> set[uuid.UUID]:
+        """Resolve the Index1 link between the two test root groups; return all uuids the trekker recorded."""
+        link = Link.inner(
+            JoinSpec(BaseLinkTestFeatureGroup1, Index(tuple(["Index1"]))),
+            JoinSpec(BaseTestGraphFeatureGroup3, Index(tuple(["Index1"]))),
+        )
+        resolver = ResolveGraph(graph, {link})
+        resolver.create_initial_queue()
+        resolver.set_nodes_per_feature_group()
+        resolver.resolve_links()
+        return set().union(*resolver.resolver_links.get_link_trekker().data.values())
+
+    def test_link_child_recorded_but_not_its_grandchild(self) -> None:
+        graph = Graph()
+        self.node(graph, uuid_1, "LeftRoot", BaseLinkTestFeatureGroup1)
+        self.node(graph, uuid_2, "RightRoot", BaseTestGraphFeatureGroup3)
+        self.node(graph, uuid_3, "LinkChild", LinkChildFeatureGroup)
+        self.node(graph, uuid_4, "Grandchild", LinkChildFeatureGroup)
+        for parent, child in [(uuid_1, uuid_3), (uuid_2, uuid_3), (uuid_3, uuid_4)]:
+            graph.add_edge(parent, child, EdgeProperties(LinkChildFeatureGroup, LinkChildFeatureGroup))
+
+        assert self.recorded_link_consumers(graph) == {uuid_3}
+
+    def test_consumer_reading_both_sides_directly_stays_recorded_when_one_is_the_others_ancestor(self) -> None:
+        graph = Graph()
+        self.node(graph, uuid_1, "A", BaseLinkTestFeatureGroup1)
+        self.node(graph, uuid_2, "D", BaseTestGraphFeatureGroup3)
+        self.node(graph, uuid_3, "C", LinkChildFeatureGroup)
+        edge = EdgeProperties(LinkChildFeatureGroup, LinkChildFeatureGroup)
+        for parent, child in [(uuid_1, uuid_2), (uuid_1, uuid_3), (uuid_2, uuid_3)]:
+            graph.add_edge(parent, child, edge)
+
+        assert self.recorded_link_consumers(graph) == {uuid_3}

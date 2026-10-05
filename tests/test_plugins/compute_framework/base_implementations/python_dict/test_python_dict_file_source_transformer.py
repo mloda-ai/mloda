@@ -276,6 +276,15 @@ class TestCsvInferenceParityWithPyArrow:
     leading-``+`` int64 refusal (m).
     """
 
+    def test_quoted_trailing_newline_keeps_int_and_float_columns_string(self, tmp_path: Path) -> None:
+        """A quoted cell ending in a newline is not a number, so the column stays string."""
+        _parity(
+            tmp_path,
+            'a,b\n"12\n","1.5\n"\n3,2.5\n',
+            ("a", "b"),
+            {"a": ["12\n", "3"], "b": ["1.5\n", "2.5"]},
+        )
+
     def test_null_token_in_int_column_becomes_none(self, tmp_path: Path) -> None:
         """(k) ``NA`` in an otherwise-int column is a null: ``[1, 2, None]``, not all-string."""
         _parity(tmp_path, "a\n1\n2\nNA\n", ("a",), {"a": [1, 2, None]})
@@ -366,7 +375,7 @@ class TestEndToEndPythonDictCsv:
 
         result = mloda.run_all(
             ["a", "b", "c"],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             data_access_collection=DataAccessCollection(files={str(path)}),
         )
 

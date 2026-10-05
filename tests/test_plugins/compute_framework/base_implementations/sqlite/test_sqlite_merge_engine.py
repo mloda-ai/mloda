@@ -293,6 +293,53 @@ class TestSqliteMergeEngine:
         assert len(result_df) == 3, f"Expected 3 rows but got {len(result_df)}"
         assert set(result_df["idx"].tolist()) == {2, 3, 4}
 
+    @pytest.mark.parametrize("method", ["merge_union", "merge_append"])
+    def test_set_operation_case_only_collision_raises(self, connection: sqlite3.Connection, method: str) -> None:
+        left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [1], "Val": [10]}))
+        right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [2], "val": [20]}))
+        index_obj = Index(("id",))
+        engine = SqliteMergeEngine(connection)
+        with pytest.raises(ValueError, match="rename"):
+            getattr(engine, method)(left, right, index_obj, index_obj)
+
+    @pytest.mark.parametrize(
+        "method,empty_side",
+        [("merge_inner", "right"), ("merge_inner", "left"), ("merge_left", "left"), ("merge_right", "right")],
+    )
+    def test_join_case_only_collision_raises_with_empty_side(
+        self, connection: sqlite3.Connection, method: str, empty_side: str
+    ) -> None:
+        full_left = pa.Table.from_pydict({"id": [1], "Val": [10]})
+        full_right = pa.Table.from_pydict({"id": [1], "val": [20]})
+        empty_left = pa.table({"id": pa.array([], pa.int64()), "Val": pa.array([], pa.int64())})
+        empty_right = pa.table({"id": pa.array([], pa.int64()), "val": pa.array([], pa.int64())})
+        left = SqliteRelation.from_arrow(connection, empty_left if empty_side == "left" else full_left)
+        right = SqliteRelation.from_arrow(connection, empty_right if empty_side == "right" else full_right)
+        index_obj = Index(("id",))
+        engine = SqliteMergeEngine(connection)
+        with pytest.raises(ValueError, match="rename"):
+            getattr(engine, method)(left, right, index_obj, index_obj)
+
+    @pytest.mark.parametrize("method", ["merge_inner", "merge_left"])
+    @pytest.mark.parametrize("bad_side", ["left", "right"])
+    def test_join_key_case_mismatch_raises(self, connection: sqlite3.Connection, method: str, bad_side: str) -> None:
+        left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [1], "a": [10]}))
+        right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [1], "b": [20]}))
+        left_index, right_index = (
+            (Index(("ID",)), Index(("id",))) if bad_side == "left" else (Index(("id",)), Index(("ID",)))
+        )
+        engine = SqliteMergeEngine(connection)
+        with pytest.raises(ValueError, match="ID"):
+            getattr(engine, method)(left, right, left_index, right_index)
+
+    @pytest.mark.parametrize("method", ["merge_inner", "merge_left"])
+    def test_join_multi_index_key_case_mismatch_raises(self, connection: sqlite3.Connection, method: str) -> None:
+        left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [1], "ts": [5], "a": [10]}))
+        right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"id": [1], "ts": [5], "b": [20]}))
+        engine = SqliteMergeEngine(connection)
+        with pytest.raises(ValueError, match="TS"):
+            getattr(engine, method)(left, right, Index(("id", "TS")), Index(("id", "ts")))
+
 
 class TestSqliteMergeEngineViewLeak:
     """Regression tests for issue #475: SQL merge engines must not leak per-merge temp views.

@@ -117,6 +117,27 @@ class TestNamePathElementValidatorAndPresence:
         assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("f0__isomap_2d", options) is False
 
 
+class TestDeclaredSecondaryCaptureAgreesWithName:
+    """On the secondary capture, a declared dimension must equal the name's."""
+
+    def test_declared_dimension_contradicting_the_name_aborts(self) -> None:
+        options = Options(context={DimensionalityReductionFeatureGroup.DIMENSION: 3})
+
+        with pytest.raises(ValueError) as exc_info:
+            DimensionalityReductionFeatureGroup.match_feature_group_criteria("x__pca_2d", options)
+
+        message = str(exc_info.value)
+        assert DimensionalityReductionFeatureGroup.DIMENSION in message
+        assert "3" in message
+        assert "2" in message
+
+    @pytest.mark.parametrize("declared", [2, "2", [2]])
+    def test_declared_dimension_agreeing_with_the_name_matches(self, declared: int | str | list[int]) -> None:
+        options = Options(context={DimensionalityReductionFeatureGroup.DIMENSION: declared})
+
+        assert DimensionalityReductionFeatureGroup.match_feature_group_criteria("x__pca_2d", options) is True
+
+
 def _forwarded_child_options(algorithm: str) -> Options:
     """Child options as the engine builds them: the consumer's group option flows onto the child."""
     child = Options()

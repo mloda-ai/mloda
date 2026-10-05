@@ -36,13 +36,13 @@ def test_parse_multi_level_chained_feature() -> None:
 
     Multi-level chained features follow the pattern: source_feature__op2__op1
     (e.g., "age__mean_imputed__standard_scaled").
-    This test verifies that the parser correctly extracts the in_features
-    from deeply nested chained operations.
+    This test verifies that the parser keeps the in_features of a multi-level
+    chained name, which lists the name's direct source ("age__mean_imputed").
     """
     config_str = """[
         {
             "name": "age__mean_imputed__standard_scaled",
-            "in_features": ["age"]
+            "in_features": ["age__mean_imputed"]
         }
     ]"""
 
@@ -51,7 +51,7 @@ def test_parse_multi_level_chained_feature() -> None:
     assert len(result) == 1
     assert isinstance(result[0], FeatureConfig)
     assert result[0].name == "age__mean_imputed__standard_scaled"
-    assert result[0].in_features == ["age"]
+    assert result[0].in_features == ["age__mean_imputed"]
 
 
 def test_load_chained_feature_as_string() -> None:
@@ -64,7 +64,7 @@ def test_load_chained_feature_as_string() -> None:
     This test verifies that:
     1. The loader processes FeatureConfig.in_features field
     2. The resulting Feature has in_features in its options
-    3. The in_features value is correctly passed as a frozenset
+    3. The in_features value is correctly passed as an ordered tuple
     """
     from mloda.user import Feature
     from mloda.core.api.feature_config.loader import load_features_from_config
@@ -87,10 +87,10 @@ def test_load_chained_feature_as_string() -> None:
     assert feature.name == "age__scale"
 
     # The in_features should be added to options as in_features
-    # It should be in the context section, not group, as a frozenset
+    # It should be in the context section, not group, as an ordered tuple
     in_features_value = feature.options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert isinstance(in_features_value, tuple)
+    assert in_features_value == ("age",)
 
     # Original options should still be preserved in group
     assert feature.options.group.get("param") == "value"
@@ -146,7 +146,7 @@ def test_load_chained_feature_from_config() -> None:
     assert isinstance(result[2], Feature)
     assert result[2].name == "age__scale"
     in_features_value = result[2].options.context.get(DefaultOptionKeys.in_features)
-    assert isinstance(in_features_value, frozenset)
-    assert in_features_value == frozenset({"age"})
+    assert isinstance(in_features_value, tuple)
+    assert in_features_value == ("age",)
     # Original options should be preserved in group
     assert result[2].options.group.get("method") == "standard"

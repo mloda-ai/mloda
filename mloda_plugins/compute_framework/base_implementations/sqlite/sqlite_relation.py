@@ -9,8 +9,12 @@ from collections.abc import Sequence
 from typing import Any
 
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
-from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
+    ensure_distinct_identifiers,
+    quote_ident,
+)
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 
 try:
     import pyarrow as pa
@@ -72,15 +76,14 @@ def _assert_window_supported() -> None:
 
 
 def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
-    # Precedence order per SQLite's rules: INT, then CHAR/CLOB/TEXT, then BLOB, then REAL/FLOA/DOUB, else string.
-    upper = affinity.upper()
-    if "INT" in upper:
+    label = sqlite_affinity_class(affinity)
+    if label == "INTEGER":
         return pa.int64()
-    if "CHAR" in upper or "CLOB" in upper or "TEXT" in upper:
+    if label == "TEXT" or label == "NUMERIC":
         return pa.string()
-    if "BLOB" in upper:
+    if label == "BLOB":
         return pa.large_binary()
-    if "REAL" in upper or "FLOA" in upper or "DOUB" in upper:
+    if label == "REAL":
         return pa.float64()
     return pa.string()
 
@@ -167,6 +170,8 @@ class SqliteRelation(SqlBaseRelation):
     - ``_raw_sql`` on ``select()`` bypasses quoting; callers must not pass
       user-controlled input.
     """
+
+    _PSEUDO_COLUMNS = frozenset({"rowid", "oid", "_rowid_"})
 
     def __init__(
         self,
@@ -309,6 +314,8 @@ class SqliteRelation(SqlBaseRelation):
 
     def select(self, *columns: str, _raw_sql: str | None = None) -> "SqliteRelation":
         """Project columns. _raw_sql bypasses quoting: never pass user-controlled input."""
+        if _raw_sql is None:
+            self._require_columns(*columns)
         new_name = _next_table_name()
         if _raw_sql is not None:
             projection = _raw_sql
@@ -348,6 +355,7 @@ class SqliteRelation(SqlBaseRelation):
 
     def order(self, *columns: str) -> "SqliteRelation":
         """Return a new relation sorted by the given columns."""
+        self._require_columns(*columns)
         new_name = _next_table_name()
         order_clause = ", ".join(quote_ident(c) for c in columns)
         sql = (
@@ -382,6 +390,7 @@ class SqliteRelation(SqlBaseRelation):
         self_cols = self.columns
         other_cols = other.columns
         shared = set(self_cols) & set(other_cols)
+        ensure_distinct_identifiers([*self_cols, *(c for c in other_cols if c not in shared)], "join")
 
         if how == "outer":
             return self._full_outer_join(other, condition, new_table, self_alias, other_alias, shared)
@@ -587,8 +596,9 @@ class SqliteRelation(SqlBaseRelation):
 
     @classmethod
     def from_arrow(cls, connection: sqlite3.Connection, arrow_table: pa.Table) -> "SqliteRelation":
-        table_name = _next_table_name()
         cols = arrow_table.column_names
+        ensure_distinct_identifiers(cols, "from_arrow")
+        table_name = _next_table_name()
 
         col_defs = ", ".join(
             f"{quote_ident(c)} {_arrow_type_to_sqlite(arrow_table.schema.field(c).type)}" for c in cols
@@ -615,6 +625,7 @@ class SqliteRelation(SqlBaseRelation):
 
         if not cols:
             raise ValueError("Cannot create relation from empty dictionary")
+        ensure_distinct_identifiers(cols, "from_dict")
 
         sqlite_types = {column: _infer_sqlite_type_from_values(data[column]) for column in cols}
         col_defs = ", ".join(f"{quote_ident(c)} {sqlite_types[c]}" for c in cols)

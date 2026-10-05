@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -7,13 +8,20 @@ import sqlite3
 
 import pytest
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda.user import Credential
 from mloda.user import DataAccessCollection
+from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
@@ -31,6 +39,9 @@ class TestInputDataDB:
 
         self.cursor.execute("CREATE TABLE test_table_2 (id INTEGER PRIMARY KEY, name TEXT)")
 
+        self.cursor.execute("CREATE TABLE orders (order_amount INTEGER)")
+        self.cursor.execute("INSERT INTO orders (order_amount) VALUES (5)")
+
         self.conn.commit()
 
     def teardown_method(self) -> None:
@@ -38,10 +49,15 @@ class TestInputDataDB:
         os.close(self.db_fd)
         os.remove(self.db_path)
 
-    def test_load_csv_local_feature_scope_data_access_with_a_concrete_file(self) -> Any:
+    @pytest.mark.parametrize(
+        "wrap",
+        [lambda mapping: mapping, lambda mapping: Credential(mapping)],
+        ids=["plain_dict", "credential"],
+    )
+    def test_load_csv_local_feature_scope_data_access_with_a_concrete_file(self, wrap: Any) -> Any:
         f = Feature(
             name="id",
-            options={SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}},
+            options={SQLITEReader.__name__: wrap({SQLITEReader.db_path(): self.db_path, "table_name": "test_table"})},
         )
 
         result = mloda.run_all(
@@ -73,6 +89,44 @@ class TestInputDataDB:
             plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, SumFeature}),
         )
         assert "SumFeature_idid" in result[0].to_pydict()
+
+    @pytest.mark.parametrize(
+        "batches",
+        [[["name", "order_amount"]], [["name"], ["order_amount"]]],
+        ids=["one_run", "two_runs"],
+    )
+    def test_tables_per_match_leave_shared_credential_untouched(self, batches: list[list[Feature | str]]) -> None:
+        dac = DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}])
+        seen: dict[str, list[Any]] = {}
+        for batch in batches:
+            results = mloda.run_all(
+                batch,
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=dac,
+                plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            )
+            for res in results:
+                seen.update(res.to_pydict())
+        assert {str(name) for batch in batches for name in batch} <= seen.keys()
+        assert seen["order_amount"] == [5]
+        assert seen["name"] == ["Alice", "Bob"]
+        assert all("table_name" not in cred for cred in dac.credentials.values())
+
+    @pytest.mark.parametrize(
+        "preset, feature, expected",
+        [("test_table_2", "name", "test_table_2"), ("test_table", "order_amount", None)],
+        ids=["preset_has_column", "preset_lacks_column"],
+    )
+    def test_match_with_preset_table_name_checks_only_that_table(
+        self, preset: str, feature: str, expected: str | None
+    ) -> None:
+        credential = Credential(sqlite=self.db_path, table_name=preset)
+        result = SQLITEReader.match_subclass_data_access(credential, [feature], options=Options({}))
+        if expected is None:
+            assert not result
+        else:
+            assert result["table_name"] == expected
+        assert credential.data == {"sqlite": self.db_path, "table_name": preset}
 
 
 class TestSqliteConnectionLifecycle:
@@ -158,16 +212,21 @@ class TestReadDB:
         with pytest.raises(NotImplementedError):
             ReadDB.describe_columns(None)
 
-    def test_init_reader_no_options(self) -> None:
-        read_db = ReadDB()
-        with pytest.raises(ValueError):
-            read_db.init_reader(None)
+    def test_count_rows_not_overridden(self) -> None:
+        """ReadDB does not override count_rows, so this pins BaseInputData's own default of None."""
+        assert ReadDB.count_rows(None, PythonDictFramework) is None
 
-    def test_init_reader_no_data_access(self) -> None:
-        read_db = ReadDB()
-        options = Options()
+    def test_load_without_input_data_match_raises(self) -> None:
+        features = FeatureSet()
+        features.add(Feature("read_db_unmatched_col"))
         with pytest.raises(ValueError):
-            read_db.init_reader(options)
+            ReadDB().load(features)
+
+    def test_init_reader_takes_the_pair(self) -> None:
+        access = {SQLITEReader.db_path(): "unused.db"}
+        reader, returned_access = ReadDB().init_reader((SQLITEReader, access))
+        assert isinstance(reader, SQLITEReader)
+        assert returned_access is access
 
     def test_match_subclass_data_access(self) -> None:
         data_access = DataAccessCollection(credentials=[{SQLITEReader.db_path(): self.db_path}])
@@ -175,35 +234,74 @@ class TestReadDB:
         result = ReadDB.match_subclass_data_access(data_access, feature_names, options=Options({}))
         assert not result
 
+    def test_match_subclass_data_access_with_bare_credential(self) -> None:
+        """A bare Credential (not wrapped in DataAccessCollection) matches and returns a
+        RegisteredCredential with the raw path and table_name filled in, leaving the
+        caller's Credential unchanged."""
+        credential = Credential(sqlite=self.db_path)
+        feature_names = ["name"]
+        result = SQLITEReader.match_subclass_data_access(credential, feature_names, options=Options({}))
+        assert type(result) is RegisteredCredential
+        assert result[SQLITEReader.db_path()] == self.db_path
+        assert result["table_name"] == "test_table"
+        assert credential.data == {"sqlite": self.db_path}
+
+    def test_feature_scope_data_access_wraps_plain_dict_and_masks_db_path(self) -> None:
+        """A feature-scoped plain dict addressed to SQLITEReader ends up stored as a RegisteredCredential, masking the db path, without mutating the caller's own dict."""
+        call_dict = {SQLITEReader.db_path(): self.db_path}
+        options = Options(group={SQLITEReader.__name__: call_dict})
+
+        matched = SQLITEReader.feature_scope_data_access(options, "name")
+
+        assert matched is True
+        assert type(options.get(SQLITEReader.__name__)) is RegisteredCredential
+        assert type(options.get("BaseInputData")[1]) is RegisteredCredential
+        assert self.db_path not in str(options)
+        assert "table_name" not in call_dict
+        assert "table_name" not in options.get(SQLITEReader.__name__)
+        assert options.get("BaseInputData")[1]["table_name"] == "test_table"
+
+        first = options.get(SQLITEReader.__name__)
+        matched_again = SQLITEReader.feature_scope_data_access(options, "name")
+        assert matched_again is True
+        assert options.get(SQLITEReader.__name__) is first
+
+    def test_feature_scope_data_access_does_not_wrap_read_file_reader_value(self) -> None:
+        """A ReadFile-family reader (CsvReader) is not wrapped into a RegisteredCredential; only DB readers get the stored-value wrap."""
+        options = Options(group={CsvReader.__name__: {"k": "v"}})
+
+        CsvReader.feature_scope_data_access(options, "some_column")
+
+        assert type(options.get(CsvReader.__name__)) is dict
+
+    def test_wrap_feature_scoped_access_wraps_dict_subclass(self) -> None:
+        """A dict subclass (not exactly dict) still ends up wrapped as a RegisteredCredential."""
+        wrapped = SQLITEReader.wrap_feature_scoped_access(OrderedDict(sqlite=self.db_path))
+        assert type(wrapped) is RegisteredCredential
+        assert wrapped == {"sqlite": self.db_path}
+
+    def test_wrap_feature_scoped_access_returns_same_registered_credential(self) -> None:
+        """An already-wrapped RegisteredCredential is returned unchanged, not re-wrapped."""
+        credential = RegisteredCredential({"sqlite": self.db_path})
+        assert SQLITEReader.wrap_feature_scoped_access(credential) is credential
+
     def test_get_connection_no_credentials(self) -> None:
         with pytest.raises(NotImplementedError):
             ReadDB.get_connection(None)
 
-    def test_init_reader_none_options_message(self) -> None:
-        """When init_reader is called with None, the error should mention the class name.
-
-        Currently the message is a generic 'Options were not set.' without indicating
-        which ReadDB subclass encountered the problem.
-        """
+    def test_load_without_match_message_names_the_class_and_the_attribute(self) -> None:
+        """The error for an unmatched FeatureSet names the reader class and input_data_match."""
 
         class CustomReadDB(ReadDB):
             @classmethod
             def connect(cls, credentials: Any) -> Any:
                 return None
 
-        reader = CustomReadDB()
-        with pytest.raises(ValueError, match=r"CustomReadDB"):
-            reader.init_reader(None)
-
-    def test_init_reader_missing_base_input_data_message(self) -> None:
-        """When options lack BaseInputData key, the error should mention 'BaseInputData'.
-
-        Currently the message is a generic 'Reader data access was not set.' without
-        telling the user which key is missing from options.
-        """
-        read_db = ReadDB()
-        with pytest.raises(ValueError, match=r"BaseInputData"):
-            read_db.init_reader(Options())
+        features = FeatureSet()
+        features.add(Feature("read_db_unmatched_col"))
+        with pytest.raises(ValueError, match=r"CustomReadDB") as excinfo:
+            CustomReadDB().load(features)
+        assert "input_data_match" in str(excinfo.value)
 
     def test_match_read_db_data_access_multiple_features_message(self) -> None:
         """When match_read_db_data_access receives multiple feature names, the error

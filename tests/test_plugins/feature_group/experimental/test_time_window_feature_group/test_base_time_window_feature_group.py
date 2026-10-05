@@ -8,7 +8,9 @@ from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 from mloda.provider import FeatureChainParser
 
 
@@ -98,6 +100,61 @@ class TestTimeWindowFeatureGroup:
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("invalid_feature_name", options)
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("avg_day_window_temperature", options)
         assert not TimeWindowFeatureGroup.match_feature_group_criteria("avg_3_invalid_window_temperature", options)
+
+    def test_invalid_named_value_is_rejected_despite_valid_explicit_options(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """Valid window options no longer hide a bogus window function carried by the name."""
+        options = Options(
+            context={
+                TimeWindowFeatureGroup.WINDOW_FUNCTION: "avg",
+                TimeWindowFeatureGroup.WINDOW_SIZE: 7,
+                TimeWindowFeatureGroup.TIME_UNIT: "day",
+            }
+        )
+        result = TimeWindowFeatureGroup.match_feature_group_criteria("x__bogus_7_day_window", options)
+
+        assert result is False
+        recorded = [r.reason for r in rejection_window.values()]
+        assert len(recorded) == 1
+        assert "bogus" in recorded[0]
+
+    def test_declared_window_function_contradicting_the_name_aborts(self) -> None:
+        """On a secondary-free named capture, the name says sum, the option says max."""
+        options = Options(context={TimeWindowFeatureGroup.WINDOW_FUNCTION: "max"})
+
+        with pytest.raises(ValueError) as exc_info:
+            TimeWindowFeatureGroup.match_feature_group_criteria("x__sum_7_day_window", options)
+
+        message = str(exc_info.value)
+        assert TimeWindowFeatureGroup.WINDOW_FUNCTION in message
+        assert "max" in message
+        assert "sum" in message
+
+    def test_declared_window_values_agreeing_with_the_name_match(self) -> None:
+        options = Options(
+            context={
+                TimeWindowFeatureGroup.WINDOW_FUNCTION: "sum",
+                TimeWindowFeatureGroup.WINDOW_SIZE: 7,
+                TimeWindowFeatureGroup.TIME_UNIT: "day",
+            }
+        )
+
+        assert TimeWindowFeatureGroup.match_feature_group_criteria("x__sum_7_day_window", options) is True
+
+    def test_name_path_source_count_above_max_is_a_recorded_non_match(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The name path validates the source count via the mixin (MAX_IN_FEATURES = 1)."""
+        name = "a&b__sum_7_day_window"
+        assert not TimeWindowFeatureGroup.match_feature_group_criteria(name, Options())
+        reason = rejection_window["TimeWindowFeatureGroup"].reason
+        assert "at most 1" in reason
+        assert "found 2" in reason
+
+        with pytest.raises(ValueError) as exc_info:
+            PandasTimeWindowFeatureGroup().input_features(Options(), FeatureName(name))
+        assert str(exc_info.value) == reason
 
     def test_input_features(self) -> None:
         """Test input_features method."""
@@ -298,6 +355,10 @@ class TestTimeWindowFeatureGroup:
         result = TimeWindowFeatureGroup._extract_time_window_params(feature)
         assert result == ("avg", 3, "day")
 
+    def test_extract_time_window_params_chained_name(self) -> None:
+        feature = Feature("price__mean_imputed__sum_7_day_window")
+        assert TimeWindowFeatureGroup._extract_time_window_params(feature) == ("sum", 7, "day")
+
     def test_extract_time_window_params_config_fallback(self) -> None:
         """Test _extract_time_window_params falls back to configuration-based options."""
         options = Options()
@@ -307,3 +368,46 @@ class TestTimeWindowFeatureGroup:
         feature = Feature("some_feature", options)
         result = TimeWindowFeatureGroup._extract_time_window_params(feature)
         assert result == ("sum", 5, "hour")
+
+    @pytest.mark.parametrize("name", ["x__mean_imputed__sum_7_day_window", "a__b__c__sum_7_day_window"])
+    def test_chained_source_name_parses_from_the_last_suffix(self, name: str) -> None:
+        assert TimeWindowFeatureGroup.parse_time_window_prefix(name) == ("sum", 7, "day")
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "x__sum_7_day_extra_window",
+            "x__su_m_7_day_window",
+            "x__sum_7_da_y_window",
+            "x__sum_0_day_window",
+            "x__mean_imputed__sum_7_day_extra_window",
+        ],
+    )
+    def test_names_the_hand_parser_rejected_are_still_rejected(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            TimeWindowFeatureGroup.parse_time_window_prefix(name)
+        assert TimeWindowFeatureGroup._has_valid_time_window_suffix(name) is False
+
+    def test_empty_source_raises(self) -> None:
+        name = "__sum_7_day_window"
+        with pytest.raises(ValueError):
+            TimeWindowFeatureGroup.parse_time_window_prefix(name)
+        with pytest.raises(ValueError):
+            TimeWindowFeatureGroup._has_valid_time_window_suffix(name)
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [("x__sum_7_day_win", ("sum", 7, "day")), ("x__mean_imputed__max_3_hour_win", ("max", 3, "hour"))],
+    )
+    def test_parse_time_window_prefix_follows_an_overridden_prefix_pattern(
+        self, name: str, expected: tuple[str, int, str]
+    ) -> None:
+        """Parts are read from PREFIX_PATTERN."""
+
+        class WinPatternGroup(TimeWindowFeatureGroup):
+            PREFIX_PATTERN = r".*__(?P<window_function>[\w]+)_(?P<window_size>\d+)_(?P<time_unit>[\w]+)_win$"
+
+        assert WinPatternGroup.parse_time_window_prefix(name) == expected
+        assert WinPatternGroup._has_valid_time_window_suffix(name) is True
+        with pytest.raises(ValueError):
+            WinPatternGroup.parse_time_window_prefix("x__sum_7_day_window")

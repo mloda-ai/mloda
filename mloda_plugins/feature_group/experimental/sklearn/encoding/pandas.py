@@ -48,7 +48,7 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
             if result.shape[1] > 1:
                 # Multi-column result (e.g., from OneHotEncoder)
                 # Check if a specific column is requested via ~N suffix
-                column_match = re.match(r"^(.+)~(\d+)$", feature_name)
+                column_match = re.fullmatch(r"(.+)~(\d+)", feature_name)
                 if column_match:
                     requested_column_index = int(column_match.group(2))
                     if requested_column_index < result.shape[1]:

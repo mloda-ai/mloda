@@ -1,24 +1,26 @@
 """Tests wiring FEATURE_GROUP_MATCHED into Engine's matching path.
 
 Covers mlodaAPI.prepare/run_all threading function_extender into Engine, Engine.get_function_extender,
-HookContext population (run_id/carrier/worker_index/plan_*), and deny-before-match / deny-with-fallback.
+HookContext population (plan_id/run_id/carrier/worker_index/plan_*), and deny-before-match / deny-with-fallback.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+from mloda.core.abstract_plugins.plan_context import PlanContext
 
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.core.engine import Engine
+from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Features, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import BaseTestComputeFramework1
 from tests.test_core.test_abstract_plugins.test_abstract_feature_group import BaseTestFeatureGroup1
 
@@ -129,6 +131,22 @@ class _MatchDepthDerivedFeatureGroup(FeatureGroup):
         return data
 
 
+class _MatchMultiColRootFeatureGroup(FeatureGroup):
+    """Root serving three columns, all requested in one prepare call."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({f"{_MARKER}_multi_col_{i}" for i in range(3)})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_MARKER}_multi_col_{i}": [1, 2, 3] for i in range(3)}
+
+
 class _MatchContextCapturingExtender(Extender):
     """Calls func like a real extender, then reads HookContext.current() afterward."""
 
@@ -151,11 +169,15 @@ class _MatchListCapturingExtender(Extender):
     def __init__(self, priority: int = 100) -> None:
         self.priority = priority
         self.captured: list[HookContext] = []
+        self.pre_call_feature_group_classes: list[str | None] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_MATCHED}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        pre_context = HookContext.current()
+        assert pre_context is not None
+        self.pre_call_feature_group_classes.append(pre_context.feature_group_class)
         result = func(*args, **kwargs)
         context = HookContext.current()
         assert context is not None
@@ -180,9 +202,10 @@ def _feature_name_from_args(args: tuple[Any, ...], kwargs: dict[str, Any]) -> st
 class _MatchVetoExtender(Extender):
     """raise_on_error selects deny-before-match (True, default) vs deny-with-fallback (False)."""
 
-    def __init__(self, veto_feature_name: str, raise_on_error: bool = True) -> None:
+    def __init__(self, veto_feature_name: str, raise_on_error: bool = True, never_fall_back: bool = False) -> None:
         self.priority = 100
         self.raise_on_error = raise_on_error
+        self.never_fall_back = never_fall_back
         self.name = "match_veto"
         self._veto_feature_name = veto_feature_name
 
@@ -193,6 +216,23 @@ class _MatchVetoExtender(Extender):
         if _feature_name_from_args(args, kwargs) == self._veto_feature_name:
             raise RuntimeError(f"denied match for {self._veto_feature_name}")
         return func(*args, **kwargs)
+
+
+class _MatchTamperingExtender(Extender):
+    """Calls func for the real resolution, then returns a DIFFERENT EvaluationResult instead of it."""
+
+    def __init__(self, wrong_feature_group: type, raise_on_error: bool = True) -> None:
+        self.priority = 100
+        self.raise_on_error = raise_on_error
+        self.name = "match_tamper"
+        self._wrong_feature_group = wrong_feature_group
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_MATCHED}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        func(*args, **kwargs)
+        return EvaluationResult(identified={self._wrong_feature_group: {PythonDictFramework}})
 
 
 class TestFeatureGroupMatchedHookFiresOnResolve:
@@ -214,9 +254,24 @@ class TestFeatureGroupMatchedHookFiresOnResolve:
         )
         assert extender.captured.feature_names == (f"{_MARKER}_root_col",)
 
+    def test_absent_identity_fields_are_none_not_empty_strings(self) -> None:
+        extender = _MatchListCapturingExtender()
 
-class TestRunIdConsistentAcrossMatches:
-    def test_run_id_is_non_empty_and_equal_to_session_run_id_across_matches(self) -> None:
+        mloda.prepare(
+            [Feature(f"{_MARKER}_root_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchHookRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.pre_call_feature_group_classes == [None]
+        assert extender.captured[0].feature_group_version is None
+        assert extender.captured[0].compute_framework_name is None
+
+
+class TestPlanIdConsistentAcrossMatches:
+    def test_plan_id_is_session_plan_id_and_run_id_is_none_across_matches(self) -> None:
         extender = _MatchListCapturingExtender()
 
         session = mloda.prepare(
@@ -230,10 +285,10 @@ class TestRunIdConsistentAcrossMatches:
         )
 
         assert len(extender.captured) == 2
-        assert isinstance(session.run_id, str)
-        assert session.run_id
-        run_ids = {context.run_id for context in extender.captured}
-        assert run_ids == {session.run_id}
+        assert isinstance(session.plan_id, str)
+        assert session.plan_id
+        assert {context.plan_id for context in extender.captured} == {session.plan_id}
+        assert {context.run_id for context in extender.captured} == {None}
 
 
 class TestCarrierAndWorkerIndexNoneDuringMatch:
@@ -279,6 +334,7 @@ class TestTenantProjectPrincipalSurfaceDuringMatchWhenScopeIsActive:
         assert all(context.tenant_id == "acme" for context in extender.captured)
         assert all(context.project_id == "proj1" for context in extender.captured)
         assert all(context.principal == "hash123" for context in extender.captured)
+        assert all(context.plan_id is not None and context.run_id is None for context in extender.captured)
 
 
 class TestStreamAllForwardsFunctionExtenderIntoMatchTimeHooks:
@@ -332,6 +388,21 @@ class TestDenyBeforeMatch:
                 function_extender={extender},
             )
 
+    def test_diagnose_does_not_project_the_extender_refusal_and_lets_it_propagate(self) -> None:
+        veto_name = f"{_MARKER}_veto_col_a"
+        extender = _MatchVetoExtender(veto_name)
+
+        with pytest.raises(RuntimeError, match="denied match"):
+            mloda.diagnose(
+                [Feature(veto_name)],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {_MatchVetoFeatureGroupA, _MatchVetoFeatureGroupB}
+                ),
+                parallelization_modes={ParallelizationMode.SYNC},
+                function_extender={extender},
+            )
+
     def test_veto_does_not_affect_an_unrelated_sibling_feature_requested_alone(self) -> None:
         veto_name = f"{_MARKER}_veto_col_a"
         sibling_name = f"{_MARKER}_veto_col_b"
@@ -370,6 +441,25 @@ class TestDenyWithFallback:
         assert any(record.levelno == logging.WARNING and "denied match" in record.message for record in caplog.records)
 
 
+class TestNeverFallBackDeniesMatch:
+    """A never_fall_back extender denies the match even with raise_on_error=False."""
+
+    def test_never_fall_back_veto_raises_instead_of_falling_back(self) -> None:
+        veto_name = f"{_MARKER}_veto_col_a"
+        extender = _MatchVetoExtender(veto_name, raise_on_error=False, never_fall_back=True)
+
+        with pytest.raises(RuntimeError, match="denied match"):
+            mloda.run_all(
+                [Feature(veto_name)],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {_MatchVetoFeatureGroupA, _MatchVetoFeatureGroupB}
+                ),
+                parallelization_modes={ParallelizationMode.SYNC},
+                function_extender={extender},
+            )
+
+
 class TestPlanCountsAndDepthOnMatchContext:
     def test_plan_fields_are_ints_and_depth_reflects_the_input_features_chain(self) -> None:
         extender = _MatchListCapturingExtender()
@@ -403,11 +493,57 @@ class TestPlanCountsAndDepthOnMatchContext:
         feature_counts = [_require_int(context.plan_feature_count) for context in extender.captured]
         assert feature_counts[0] < feature_counts[1]
 
+        first, second = extender.captured
+        assert (first.feature_group_class, first.plan_depth) == (derived_key, 0)
+        assert (first.plan_feature_count, first.plan_node_count) == (0, 0)
+        assert (second.feature_group_class, second.plan_depth) == (root_key, 1)
+        assert (second.plan_feature_count, second.plan_node_count) == (1, 1)
+
+    def test_node_count_counts_plan_nodes_not_feature_group_classes(self) -> None:
+        extender = _MatchListCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_multi_col_{i}") for i in range(3)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchMultiColRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert len(extender.captured) == 3
+        third = extender.captured[2]
+        assert third.plan_feature_count == 2
+        assert third.plan_node_count == 2
+
+    def test_duplicate_root_resolution_is_not_double_counted_in_node_count(self) -> None:
+        extender = _MatchListCapturingExtender()
+
+        mloda.prepare(
+            [
+                Feature(_MatchDepthDerivedFeatureGroup.get_class_name(), options=Options({"variant": 1})),
+                Feature(_MatchDepthDerivedFeatureGroup.get_class_name(), options=Options({"variant": 2})),
+            ],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchDepthRootFeatureGroup, _MatchDepthDerivedFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        root_key = f"{_MatchDepthRootFeatureGroup.__module__}.{_MatchDepthRootFeatureGroup.__qualname__}"
+        root_contexts = [c for c in extender.captured if c.feature_group_class == root_key]
+        assert len(root_contexts) == 2
+        last = extender.captured[-1]
+        assert len(extender.captured) == 4
+        assert last.plan_feature_count == 3
+        assert last.plan_node_count == 3
+
 
 class TestEngineFunctionExtenderAndRunIdConstruction:
-    """Engine stores function_extender/run_id on a RunContext; get_function_extender delegates to the free function."""
+    """Engine stores function_extender/plan_id on a RunContext and selects extenders from its own table."""
 
-    def test_engine_accepts_kwargs_and_get_function_extender_delegates(self) -> None:
+    def test_engine_accepts_kwargs_and_selects_extenders_from_its_own_table(self) -> None:
         with (
             patch(
                 "mloda.core.prepare.accessible_plugins.PreFilterPlugins.resolve_feature_group_compute_framework_limitations"
@@ -426,9 +562,176 @@ class TestEngineFunctionExtenderAndRunIdConstruction:
                 compute_framework,
                 None,
                 function_extender={extender},
-                run_id="fgmatch051-direct-run-id",
+                plan_context=PlanContext(
+                    plan_id="fgmatch051-direct-plan-id",
+                    tenant_id=None,
+                    project_id=None,
+                    principal=None,
+                    created_at=datetime.now(timezone.utc),
+                ),
             )
 
             assert engine.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED) is extender
             assert engine.get_function_extender(ExtenderHook.JOIN) is None
-            assert engine.run_context == RunContext(run_id="fgmatch051-direct-run-id")
+            assert engine.run_context == RunContext(plan_id="fgmatch051-direct-plan-id")
+
+
+class TestExtenderCannotSubstituteTheMatchedFeatureGroup:
+    """An extender that calls func for the real match, then returns a different EvaluationResult, must not win."""
+
+    def test_tampered_evaluation_result_is_discarded_in_favor_of_the_real_match(self) -> None:
+        veto_name = f"{_MARKER}_veto_col_a"
+        extender = _MatchTamperingExtender(_MatchVetoFeatureGroupB)
+
+        result = mloda.run_all(
+            [veto_name],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchVetoFeatureGroupA, _MatchVetoFeatureGroupB}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert result[0][veto_name] == [1, 2, 3], (
+            "The real match (_MatchVetoFeatureGroupA) must win, not the tampered one"
+        )
+
+
+class _MatchWrapsCountingExtender(Extender):
+    """Counts wraps() calls while wrapping FEATURE_GROUP_MATCHED and FEATURE_GROUP_CALCULATE_FEATURE."""
+
+    def __init__(self) -> None:
+        self.wraps_calls = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        self.wraps_calls += 1
+        return {ExtenderHook.FEATURE_GROUP_MATCHED, ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+
+class TestEngineSelectsExtenderOncePerRun:
+    def test_wraps_is_called_once_while_planning_multiple_features(self) -> None:
+        extender = _MatchWrapsCountingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_col_one"), Feature(f"{_MARKER}_col_two")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchHookColOneFeatureGroup, _MatchHookColTwoFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.wraps_calls == 1
+
+    def test_wraps_is_called_once_in_engine_and_once_at_run_entry_across_frameworks(self) -> None:
+        extender = _MatchWrapsCountingExtender()
+
+        session = mloda.prepare(
+            [Feature(f"{_MARKER}_col_one"), Feature(f"{_MARKER}_col_two")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchHookColOneFeatureGroup, _MatchHookColTwoFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert extender.wraps_calls == 2
+
+
+class _MatchReplacedParentFeatureGroup(FeatureGroup):
+    """Parent that a subclass replaces at match time."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({f"{_MARKER}_replaced_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {f"{_MARKER}_replaced_col": [1, 2, 3]}
+
+
+class _MatchReplacingSubclassFeatureGroup(_MatchReplacedParentFeatureGroup):
+    """Subclass that wins over its parent."""
+
+
+class TestSpecializedFromOnMatchContext:
+    def test_match_context_names_the_replaced_parent(self) -> None:
+        extender = _MatchContextCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_replaced_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_MatchReplacedParentFeatureGroup, _MatchReplacingSubclassFeatureGroup}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.feature_group_class == (
+            f"{_MatchReplacingSubclassFeatureGroup.__module__}.{_MatchReplacingSubclassFeatureGroup.__qualname__}"
+        )
+        assert extender.captured.specialized_from == (
+            f"{_MatchReplacedParentFeatureGroup.__module__}.{_MatchReplacedParentFeatureGroup.__qualname__}",
+        )
+
+    def test_match_context_without_replacement_is_empty(self) -> None:
+        extender = _MatchContextCapturingExtender()
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_root_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_MatchHookRootFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.specialized_from == ()
+
+
+class _ZzQualnameHolder:
+    """Namespace whose nested class sorts by qualname after, but by name before, a top-level sibling."""
+
+    class AlphaAncestorFeatureGroup(_MatchReplacedParentFeatureGroup):
+        """Grandparent: __name__ sorts first, qualname sorts last."""
+
+
+class _MatchMidAncestorFeatureGroup(_ZzQualnameHolder.AlphaAncestorFeatureGroup):
+    """Parent: __name__ sorts last, qualname sorts first."""
+
+
+class _MatchQualnameWinnerFeatureGroup(_MatchMidAncestorFeatureGroup):
+    """Wins over both ancestors."""
+
+
+class TestSpecializedFromOrderMatchesComputeHooks:
+    def test_specialized_from_is_sorted_by_the_qualified_string(self) -> None:
+        extender = _MatchContextCapturingExtender()
+        alpha = _ZzQualnameHolder.AlphaAncestorFeatureGroup
+        mid = _MatchMidAncestorFeatureGroup
+        expected = tuple(sorted(f"{c.__module__}.{c.__qualname__}" for c in (alpha, mid)))
+        assert expected != tuple(
+            f"{c.__module__}.{c.__qualname__}" for c in sorted((alpha, mid), key=lambda c: c.__name__)
+        )
+
+        mloda.prepare(
+            [Feature(f"{_MARKER}_replaced_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({alpha, mid, _MatchQualnameWinnerFeatureGroup}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        assert extender.captured is not None
+        assert extender.captured.specialized_from == expected

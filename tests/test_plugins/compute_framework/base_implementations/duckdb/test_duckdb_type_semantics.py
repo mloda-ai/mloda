@@ -11,7 +11,10 @@ import logging
 
 import pytest
 
-from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_type_semantics import column_semantics
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_type_semantics import (
+    column_semantics,
+    nan_condition,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,3 +32,15 @@ class TestDuckdbIntervalSemantics:
         sem = column_semantics(relation, "c")
         assert sem.is_temporal is True
         assert sem.is_numeric is False
+
+
+@pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
+class TestDuckdbNanConditionExactLookup:
+    def test_case_mismatched_name_raises(self, connection: Any) -> None:
+        relation = connection.sql("SELECT 1.5::DOUBLE AS Ratio")
+        with pytest.raises(ValueError, match="ratio"):
+            nan_condition(relation, "ratio")
+
+    def test_exact_name_resolves(self, connection: Any) -> None:
+        relation = connection.sql("SELECT 1.5::DOUBLE AS Ratio")
+        assert nan_condition(relation, "Ratio") == 'isnan("Ratio")'

@@ -32,7 +32,7 @@ class TestStreamRunReturnsGenerator:
         """Calling stream_run on an mlodaAPI instance must return a Generator."""
         session = mlodaAPI(
             Features([Feature(name="EngineRunnerTest1", initial_requested_data=True)]),
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
         )
         result = session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
 
@@ -42,7 +42,7 @@ class TestStreamRunReturnsGenerator:
         """stream_run must NOT return a list (distinguishing it from run)."""
         session = mlodaAPI(
             Features([Feature(name="EngineRunnerTest1", initial_requested_data=True)]),
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
         )
         result = session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
 

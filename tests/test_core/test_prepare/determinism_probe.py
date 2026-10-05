@@ -28,10 +28,12 @@ def collect() -> dict[str, str]:
     both: set[type[ComputeFramework]] = {PythonDictFramework, PyArrowTable}
 
     link = Link.inner(JoinSpec(ProbeLeftFeatureGroup, "idx"), JoinSpec(ProbeRightFeatureGroup, "idx"))
-    _, trekker_left, trekker_right = ResolveLinks(Graph()).create_link_trekker_key(link, set(both), set(both))
+    picked = ComputeFramework.select_deterministic(both)
+    _, trekker_left, trekker_right = ResolveLinks(Graph()).create_link_trekker_key(link, picked, picked)
 
     feature = Feature("determinism_probe_feature")
     feature.compute_frameworks = set(both)
+    feature.chosen_compute_framework = ComputeFramework.select_deterministic(feature.compute_frameworks)
 
     return {
         "feature": feature.get_compute_framework().get_class_name(),

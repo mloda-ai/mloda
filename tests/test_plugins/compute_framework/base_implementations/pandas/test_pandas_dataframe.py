@@ -1,13 +1,12 @@
-import pytest
-import pyarrow as pa
+import logging
+from decimal import Decimal
 from typing import Any
+
+import pyarrow as pa
+import pytest
+
+from mloda.user import FeatureName, ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda.user import FeatureName
-from mloda.user import ParallelizationMode
-from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
-from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
-    assert_unavailable_when_import_blocked,
-)
 from tests.test_plugins.compute_framework.base_implementations.datatype_validator_test_mixin import (
     DataTypeValidatorFrameworkTestMixin,
 )
@@ -16,12 +15,15 @@ from tests.test_plugins.compute_framework.base_implementations.dict_interchange_
 )
 from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_test_mixin import (
     DtypeExtractionTestMixin,
+    DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
     EmptyResultFrameworkTestMixin,
 )
-
-import logging
+from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
+    assert_unavailable_when_import_blocked,
+)
+from tests.test_plugins.compute_framework.test_tooling.dataframe_test_base import DataFrameTestBase
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +136,7 @@ class TestPandasDataFrameMerge(DataFrameTestBase):
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
+class TestPandasDtypeExtraction(DtypeExtractionTestMixin, DuplicateColumnDtypeExtractionTestMixin):
     """Test PandasDataFrame._extract_column_dtype using shared mixin."""
 
     @pytest.fixture
@@ -144,6 +146,34 @@ class TestPandasDtypeExtraction(DtypeExtractionTestMixin):
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pd.DataFrame({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pd.DataFrame({"d": pd.Series(values, dtype=pd.ArrowDtype(pa.decimal128(10, 2)))})
+
+    def test_extract_object_decimal_column_data_type_is_none(self, framework_instance: Any) -> None:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        data = pd.DataFrame({"d": pd.Series(values)})
+        assert framework_instance._extract_column_data_type(data, "d") is None
+
+    # Dtypes are declared explicitly because pandas 2.x infers `object` where pandas 3.x infers `str`,
+    # which would make the first-occurrence assertions depend on the installed pandas version.
+    @pytest.fixture
+    def dtype_duplicate_column_data(self) -> Any:
+        frame = pd.DataFrame(
+            {"first": pd.Series([1, 2, 3], dtype="int64"), "second": pd.Series(["x", "y", "z"], dtype="string")}
+        )
+        frame.columns = ["dup_col", "dup_col"]
+        return frame
+
+    @pytest.fixture
+    def dtype_duplicate_column_data_reversed(self) -> Any:
+        frame = pd.DataFrame(
+            {"first": pd.Series(["x", "y", "z"], dtype="string"), "second": pd.Series([1, 2, 3], dtype="int64")}
+        )
+        frame.columns = ["dup_col", "dup_col"]
+        return frame
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")

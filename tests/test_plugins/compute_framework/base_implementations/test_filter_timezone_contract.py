@@ -60,12 +60,16 @@ except ImportError:
 try:
     import pyarrow as pa
     from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
+    from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import (
+        IcebergFilterEngine,
+    )
 
     PYARROW_AVAILABLE = True
 except ImportError:
     logger.warning("PyArrow is not installed. PyArrow framework cases will not be parametrized.")
     pa = None  # type: ignore[assignment, unused-ignore]
     PyArrowFilterEngine = None  # type: ignore
+    IcebergFilterEngine = None  # type: ignore
     PYARROW_AVAILABLE = False
 
 
@@ -189,6 +193,9 @@ SPECS: list[FrameworkSpec] = [
 if PYARROW_AVAILABLE:
     SPECS.append(
         FrameworkSpec("pyarrow", PyArrowFilterEngine, _pyarrow_aware, _pyarrow_naive, _pyarrow_numeric, _pyarrow_ids)
+    )
+    SPECS.append(
+        FrameworkSpec("iceberg", IcebergFilterEngine, _pyarrow_aware, _pyarrow_naive, _pyarrow_numeric, _pyarrow_ids)
     )
 
 if POLARS_AVAILABLE:

@@ -106,7 +106,7 @@ class TestPropertySpecValidationFunctionE2E:
 
         result = mloda.run_all(
             [feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
         )
 
@@ -138,7 +138,7 @@ class TestPropertySpecValidationFunctionE2E:
         with pytest.raises(ValueError) as exc_info:
             mloda.run_all(
                 [feature],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=self.plugin_collector,
             )
 

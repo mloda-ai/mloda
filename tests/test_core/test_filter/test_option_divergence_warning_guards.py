@@ -166,6 +166,46 @@ def test_the_surviving_none_warning_names_the_value_intake_materializes(caplog: 
     ]
 
 
+@pytest.mark.parametrize(
+    "host_value,filter_value,host_marker,filter_marker",
+    [
+        (
+            {"sqlite": "/raw/host_marker.db"},
+            {"sqlite": "/raw/filter_marker.db"},
+            "/raw/host_marker.db",
+            "/raw/filter_marker.db",
+        ),
+        (
+            "postgresql://dbuser:cred_marker_q7@dbhost1/db",
+            "postgresql://dbuser:cred_marker_q7@dbhost2/db",
+            "cred_marker_q7",
+            "cred_marker_q7",
+        ),
+    ],
+    ids=["dict", "dsn_str"],
+)
+def test_diverging_option_values_are_masked_but_warning_still_fires(
+    caplog: pytest.LogCaptureFixture,
+    host_value: object,
+    filter_value: object,
+    host_marker: str,
+    filter_marker: str,
+) -> None:
+    """Diverging option values still trigger the warning, but neither value leaks into the message."""
+    with caplog.at_level(logging.WARNING):
+        _emit(
+            None,
+            Options(group={DWG_KEY: host_value}),
+            Options(group={DWG_KEY: filter_value}),
+        )
+
+    messages = _messages(caplog, DWG_KEY)
+    assert messages, "a diverging option must still warn"
+    joined = " ".join(messages)
+    assert host_marker not in joined
+    assert filter_marker not in joined
+
+
 def test_the_plain_divergence_message_is_unchanged(caplog: pytest.LogCaptureFixture) -> None:
     """Two explicit values reach compute time as declared, so their message keeps its original wording."""
     with caplog.at_level(logging.WARNING):

@@ -12,8 +12,10 @@ from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
@@ -35,12 +37,14 @@ _STAGE_DEPTH: dict[EliminationStage, int] = {
     "matcher_error": 0,
     "input_data": 1,
     "value_rejection": 2,
+    "name": 2,  # same criteria hook as value_rejection
     "domain": 3,
     "scope": 4,
     "capability": 5,
     "frameworks_not_enabled": 5,
     "framework_pin": 6,
     "links": 7,
+    "declarations": 8,
 }
 
 
@@ -169,25 +173,38 @@ class GlobalFilter:
             -   we consult the capability hook over the frameworks the filter would ride (its pin, else the feature's),
             -   we do not check links, as this is done earlier already and not needed anymore.
 
-        Each gate records why it closed at its own `continue`, so the gate predicates stay pure for other callers.
+        The scope gate runs first and skips silently; every later gate records why it closed at its own
+        `continue`, so the gate predicates stay pure for other callers.
         """
 
         matched_filters: set[SingleFilter] = set()
         for filter in self.filters:
             # We are making a deepcopy so that, we do not change the original filter.
             _filter = deepcopy(filter)
+            # Host keys imported below are never the filter feature's own declaration.
+            _filter.filter_feature.options.lock_own_keys()
             _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
 
+            # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
+            if self.feature_group_scope(_filter, feature_group) is False:
+                continue
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
             if not self.criteria(feature_group, _filter, data_access_collection):
+                continue
+            host_key = feat._input_data_match_key()
+            filter_key = _filter.filter_feature._input_data_match_key()
+            if host_key is not None and filter_key is not None and host_key != filter_key:
+                self._record_near_miss(
+                    feature_group,
+                    _filter,
+                    "input_data",
+                    f"filter column is served by {filter_key[1]}, the feature by {host_key[1]}",
+                )
                 continue
             if self.domain(_filter, feat.domain, feature_group) is False:
                 self._record_near_miss(
                     feature_group, _filter, "domain", self._domain_reason(_filter, feat, feature_group)
                 )
-                continue
-            if self.feature_group_scope(_filter, feature_group) is False:
-                self._record_near_miss(feature_group, _filter, "scope", "outside the requested feature group scope")
                 continue
             supported = self.capability(_filter, feat, feature_group)
             if supported is not None and not supported:
@@ -266,12 +283,15 @@ class GlobalFilter:
             fill = self._intake_fill(feature_group, key, filter_options)
             if self._converges_at_intake(fill, value):
                 continue
+            masked_declared, masked_value = redact_option_value(declared), redact_option_value(value)
             if fill is None:
-                message = f"Options are not the same. {key} is different. {declared} != {value}"
+                message = f"Options are not the same. {key} is different. {masked_declared} != {masked_value}"
             else:
                 # Name the spec default, which is what the filter feature will actually compute with.
+                masked_fill = redact_option_value(fill)
                 message = (
-                    f"Options are not the same. {key} is different. {declared!r} (intake fills {fill!r}) != {value!r}"
+                    f"Options are not the same. {key} is different. "
+                    f"{masked_declared!r} (intake fills {masked_fill!r}) != {masked_value!r}"
                 )
             if message in self._warned_divergences:
                 continue
@@ -330,6 +350,10 @@ class GlobalFilter:
             filter.filter_feature.options,
             data_access_collection,
         )
+        # The pair carries credentials: it moves off the options onto the filter feature.
+        written = filter.filter_feature.options.group.pop(RESERVED_READER_OPTION_KEY, None)
+        if probe.matched and isinstance(written, tuple) and len(written) == 2:
+            filter.filter_feature.input_data_match = written
         if probe.matcher_error is not None:
             reason = contained_raise_reason(probe.matcher_error)
             self._record_dropped_filter(feature_group, filter, reason)
@@ -513,20 +537,16 @@ class GlobalFilter:
             filter.filter_feature.compute_frameworks = set(adopted) if adopted is not None else None
             return True
 
-        # case that the filter feature has an cf -> the feature framework must be one of the pinned ones.
-        # Cardinality is validated at add_filter, so membership degenerates to the single pin's equality.
-        if feat.get_compute_framework() in filter.filter_feature.compute_frameworks:
-            return True
-
-        return False
+        # A pinned filter must name one of the host's allowed frameworks.
+        pin = filter.filter_feature.get_compute_framework()
+        return pin in (feat.compute_frameworks or set())
 
     @staticmethod
     def _framework_pin_reason(filter: SingleFilter, feat: Feature) -> str:
-        """Name the filter's pinned framework and the one the feature resolved to."""
-        # The pin degenerates to one entry, validated at add_filter.
+        """Name the filter's pinned framework and the host's allowed set."""
         pinned = filter.filter_feature.get_compute_framework().get_class_name()
-        resolved = feat.get_compute_framework().get_class_name()
-        return f"pinned compute framework '{pinned}' is not the feature's resolved '{resolved}'"
+        allowed = sorted(cfw.get_class_name() for cfw in feat.compute_frameworks or ())
+        return f"pinned compute framework '{pinned}' is not in the feature's allowed set {allowed}"
 
     def add_time_and_time_travel_filters(
         self,

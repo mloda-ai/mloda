@@ -30,6 +30,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.helpers.probe_runner import run_probes
+from tests.test_core.test_prepare.join_plan_helpers import single_join_step
 
 
 SHARED_LEFT_KEY = "link_plan_shared_left_key"
@@ -288,7 +289,7 @@ def _trek(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[Co
 
 def _run(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework]) -> JoinStep | None:
     link_fw: LinkFrameworkTrekker = (planned.link, left_cfw, right_cfw)
-    return planned.plan.run_link(link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
+    return single_join_step(planned.plan, link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
 
 
 def _pair_scenario(
@@ -372,7 +373,7 @@ class TestSharedLinkServingTwoChildren:
         results = mloda.run_all(
             [Feature(name=child.get_class_name()) for child in children],
             links={link},
-            compute_frameworks=["PyArrowTable", "PandasDataFrame"],
+            compute_frameworks=["PandasDataFrame", "PyArrowTable"],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {LinkPlanSharedLeft, LinkPlanSharedRight, *children}
             ),
@@ -461,12 +462,13 @@ def test_planner_follows_swapped_discriminators_without_complaint() -> None:
 
 
 @pytest.mark.parametrize("link_factory", STACK_FACTORIES)
-def test_a_pinned_consumer_inverts_the_stack_link_orientation(
+def test_a_pinned_consumer_does_not_invert_the_stack_link_orientation(
     link_factory: Callable[[JoinSpec, JoinSpec], Link],
 ) -> None:
+    """APPEND and UNION never flip, so the declared orientation survives a consumer on the right framework."""
     planned = _stack_scenario(link_factory, same_feature_group=False)
 
-    assert _orientations(planned) == [("PandasDataFrame", "PyArrowTable")]
+    assert _orientations(planned) == [("PyArrowTable", "PandasDataFrame")]
 
 
 @pytest.mark.parametrize("link_factory", STACK_FACTORIES)

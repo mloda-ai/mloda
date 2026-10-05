@@ -5,11 +5,18 @@
 credential dict for a ``{handle: value}`` registry.
 """
 
+import json
+import pickle  # nosec B403
+import pprint
+from typing import Any
+
 import pytest
 
-from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
+
+_LEAK_MARKER = "leak-marker-7f3a"
 
 
 class TestCredentialConstruction:
@@ -69,6 +76,26 @@ class TestCredentialDataIsDefensiveCopy:
         assert cred.data == {"sqlite": "/data/x.db"}
 
 
+class TestCredentialEqualityAndHash:
+    """Credential compares and hashes by value, like HashableDict."""
+
+    def test_equal_credentials_from_kwargs_and_mapping_compare_equal(self) -> None:
+        assert Credential(a=1) == Credential({"a": 1})
+
+    def test_equal_credentials_hash_alike(self) -> None:
+        assert hash(Credential(a=1)) == hash(Credential({"a": 1}))
+
+    def test_different_value_credentials_compare_unequal(self) -> None:
+        assert Credential(a=1) != Credential(a=2)
+
+    def test_credential_does_not_equal_plain_dict_with_same_content(self) -> None:
+        assert Credential(a=1) != {"a": 1}
+        assert {"a": 1} != Credential(a=1)
+
+    def test_equal_credentials_with_nested_dict_values_hash_alike(self) -> None:
+        assert hash(Credential(a={"nested": 1})) == hash(Credential(a={"nested": 1}))
+
+
 class TestCredentialReprRedactsValues:
     """``repr()`` must never leak secret values; it shows keys with redacted values."""
 
@@ -78,6 +105,11 @@ class TestCredentialReprRedactsValues:
         assert "sqlite" in rendered
         assert "/secret/path.db" not in rendered
         assert "***" in rendered
+
+    def test_repr_exact_output_pinned(self) -> None:
+        """Pins the exact repr output."""
+        rendered = repr(Credential(host="db1", password="hunter2"))  # nosec B106
+        assert rendered == "Credential(host='***', password='***')"
 
 
 class TestCredentialPublicSurface:
@@ -97,13 +129,14 @@ class TestCredentialPublicSurface:
 class TestDataAccessCollectionUnwrapsCredential:
     """DataAccessCollection unwraps Credential at registration time.
 
-    Downstream consumers keep seeing plain dicts, never Credential instances.
+    Downstream consumers keep seeing redacting-repr RegisteredCredential dicts, never Credential instances.
     """
 
-    def test_single_credential_registers_one_auto_named_plain_dict(self) -> None:
+    def test_single_credential_registers_one_auto_named_registered_credential(self) -> None:
         dac = DataAccessCollection(credentials=Credential(sqlite="/data/x.db"))
         resolved = dac.resolve("credentials")
-        assert type(resolved) is dict
+        assert isinstance(resolved, dict)
+        assert type(resolved) is RegisteredCredential
         assert resolved == {"sqlite": "/data/x.db"}
         registered = dac.handles()
         assert len(registered) == 1
@@ -111,17 +144,19 @@ class TestDataAccessCollectionUnwrapsCredential:
         assert kind == "credentials"
         assert handle.startswith("_auto_credentials_")
 
-    def test_list_mixing_credential_and_plain_dict_registers_two_plain_dicts(self) -> None:
+    def test_list_mixing_credential_and_plain_dict_registers_two_registered_credentials(self) -> None:
         dac = DataAccessCollection(credentials=[Credential(sqlite="/a.db"), {"pg": {"host": "h"}}])
         assert len(dac.credentials) == 2
         for value in dac.credentials.values():
-            assert type(value) is dict
+            assert isinstance(value, dict)
+            assert type(value) is RegisteredCredential
         assert list(dac.credentials.values()) == [{"sqlite": "/a.db"}, {"pg": {"host": "h"}}]
 
-    def test_named_form_with_credential_value_stores_plain_dict(self) -> None:
+    def test_named_form_with_credential_value_stores_registered_credential(self) -> None:
         dac = DataAccessCollection(credentials={"prod": Credential(sqlite="/a.db")})
         assert dac.credentials["prod"] == {"sqlite": "/a.db"}
-        assert type(dac.credentials["prod"]) is dict
+        assert isinstance(dac.credentials["prod"], dict)
+        assert type(dac.credentials["prod"]) is RegisteredCredential
 
     def test_add_credentials_single_arg_unwraps_credential(self) -> None:
         dac = DataAccessCollection()
@@ -130,19 +165,22 @@ class TestDataAccessCollectionUnwrapsCredential:
         (only_handle,) = dac.credentials.keys()
         assert only_handle.startswith("_auto_credentials_")
         assert dac.credentials[only_handle] == {"sqlite": "/a.db"}
-        assert type(dac.credentials[only_handle]) is dict
+        assert isinstance(dac.credentials[only_handle], dict)
+        assert type(dac.credentials[only_handle]) is RegisteredCredential
 
     def test_add_credentials_two_arg_unwraps_credential(self) -> None:
         dac = DataAccessCollection()
         dac.add_credentials("named", Credential(sqlite="/a.db"))
         assert dac.credentials == {"named": {"sqlite": "/a.db"}}
-        assert type(dac.credentials["named"]) is dict
+        assert isinstance(dac.credentials["named"], dict)
+        assert type(dac.credentials["named"]) is RegisteredCredential
 
-    def test_dict_positional_credential_registers_one_auto_named_plain_dict(self) -> None:
+    def test_dict_positional_credential_registers_one_auto_named_registered_credential(self) -> None:
         """Dict-positional form Credential({...}) flows through the collection like the kwargs form."""
         dac = DataAccessCollection(credentials=Credential({"sqlite": "/data/x.db"}))
         resolved = dac.resolve("credentials")
-        assert type(resolved) is dict
+        assert isinstance(resolved, dict)
+        assert type(resolved) is RegisteredCredential
         assert resolved == {"sqlite": "/data/x.db"}
         registered = dac.handles()
         assert len(registered) == 1
@@ -196,15 +234,25 @@ class TestNamedFormRejectsNonMappingValues:
 class TestNamedFormAcceptsMappingValues:
     """Legitimate named-form mapping values (plain dict, Credential) keep working."""
 
-    def test_plain_dict_value_does_not_raise_and_is_stored_as_is(self) -> None:
+    def test_plain_dict_value_does_not_raise_and_is_stored_as_registered_credential(self) -> None:
         dac = DataAccessCollection(credentials={"pg-prod": {"host": "h"}})
         assert dac.credentials == {"pg-prod": {"host": "h"}}
-        assert type(dac.credentials["pg-prod"]) is dict
+        assert isinstance(dac.credentials["pg-prod"], dict)
+        assert type(dac.credentials["pg-prod"]) is RegisteredCredential
 
     def test_add_credentials_two_arg_mapping_value_still_works(self) -> None:
         dac = DataAccessCollection()
         dac.add_credentials("h", {"sqlite": "/x.db"})
         assert dac.credentials == {"h": {"sqlite": "/x.db"}}
+        assert isinstance(dac.credentials["h"], dict)
+        assert type(dac.credentials["h"]) is RegisteredCredential
+
+    def test_mutating_caller_dict_after_named_registration_does_not_show_through(self) -> None:
+        original = {"host": "h"}
+        dac = DataAccessCollection(credentials={"pg-prod": original})
+        original["host"] = "tampered"
+        original["extra"] = "injected"
+        assert dac.credentials["pg-prod"] == {"host": "h"}
 
 
 class TestCredentialsPathRejectsHashableDict:
@@ -302,6 +350,50 @@ class TestTopLevelCredentialsRejectsScalarValues:
         assert self.SECRET not in msg
 
 
+_LIST_ENTRY_SECRET = "dsn-string-value-not-a-mapping"  # nosec B105
+
+
+class TestListFormCredentialsRejectsNonMappingEntries:
+    """A non-mapping list entry raises ValueError naming the offending index and type, never the value."""
+
+    def _assert_entry_shape_error(self, msg: str, index: int, type_name: str) -> None:
+        lowered = msg.lower()
+        assert str(index) in msg
+        assert type_name in lowered
+        assert "Credential" in msg
+        assert "dict" in lowered
+        assert "list" in lowered
+
+    def test_list_form_str_entry_raises_value_error_naming_index_and_type(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=[_LIST_ENTRY_SECRET, {"host": "h"}])
+        msg = str(excinfo.value)
+        self._assert_entry_shape_error(msg, 0, "str")
+        assert _LIST_ENTRY_SECRET not in msg
+
+    def test_list_form_int_entry_raises_value_error_naming_index_and_type(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=[{"host": "h"}, 42])
+        msg = str(excinfo.value)
+        self._assert_entry_shape_error(msg, 1, "int")
+        assert "42" not in msg
+
+    def test_list_form_bytes_entry_raises_value_error_naming_index_and_type(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(credentials=[_LIST_ENTRY_SECRET.encode(), {"host": "h"}])
+        msg = str(excinfo.value)
+        self._assert_entry_shape_error(msg, 0, "bytes")
+        assert _LIST_ENTRY_SECRET not in msg
+
+    def test_list_form_credential_entry_keeps_working(self) -> None:
+        dac = DataAccessCollection(credentials=[Credential(sqlite="/a.db")])
+        assert len(dac.credentials) == 1
+
+    def test_list_form_dict_entry_keeps_working(self) -> None:
+        dac = DataAccessCollection(credentials=[{"sqlite": "/a.db"}])
+        assert len(dac.credentials) == 1
+
+
 class TestResolveAmbiguityRedactsCredentialValues:
     """Cycle 3, Finding A (security): the all-auto ambiguity error in ``resolve()``
     must not print stored credential values verbatim.
@@ -325,6 +417,31 @@ class TestResolveAmbiguityRedactsCredentialValues:
         assert "host" in msg
         assert "password" in msg
         assert "data_access_handle" in msg
+
+    def test_ambiguity_bullet_line_exact_output_pinned(self) -> None:
+        """Pins the exact bullet-line output."""
+        dac = DataAccessCollection(
+            credentials=[
+                Credential(host="db1", password="hunter2"),  # nosec B106
+                Credential(host="db2", password="swordfish"),  # nosec B106
+            ]
+        )
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("credentials")
+        msg = str(excinfo.value)
+        assert "  - {'host': '***', 'password': '***'}" in msg
+
+    def test_list_form_non_dict_entry_renders_as_star_star_star(self) -> None:
+        """A registered entry that is not a dict (bypassing entry validation post-registration)
+        falls back to the scalar '***' rendering."""
+        dac = DataAccessCollection(credentials=[{"host": "a"}, {"host": "b"}])
+        (overwritten_handle,) = [handle for handle, value in dac.credentials.items() if value == {"host": "a"}]
+        dac.credentials[overwritten_handle] = "dsn-string-value"
+        with pytest.raises(ValueError) as excinfo:
+            dac.resolve("credentials")
+        msg = str(excinfo.value)
+        assert "'***'" in msg
+        assert "dsn-string-value" not in msg
 
     def test_auto_named_files_ambiguity_still_shows_values(self) -> None:
         """Guardrail: redaction is credentials-only; file paths stay visible in the listing."""
@@ -366,3 +483,146 @@ class TestMisWrapErrorSuggestionsAreSafeAndComplete:
             DataAccessCollection(credentials={"pg-prod": "dsn-string"})
         msg = str(excinfo.value)
         assert "dsn-string" not in msg
+
+
+def _via_top_level_credential_kwargs(value: Any) -> DataAccessCollection:
+    return DataAccessCollection(credentials=Credential(user="u", password=value))
+
+
+def _via_top_level_credential_dict_positional(value: Any) -> DataAccessCollection:
+    return DataAccessCollection(credentials=Credential({"user": "u", "password": value}))
+
+
+def _via_list_plain_dict(value: Any) -> DataAccessCollection:
+    return DataAccessCollection(credentials=[{"user": "u", "password": value}])
+
+
+def _via_list_credential(value: Any) -> DataAccessCollection:
+    return DataAccessCollection(credentials=[Credential(user="u", password=value)])
+
+
+def _via_named_dict(value: Any) -> DataAccessCollection:
+    return DataAccessCollection(credentials={"db": {"user": "u", "password": value}})
+
+
+def _via_named_credential(value: Any) -> DataAccessCollection:
+    return DataAccessCollection(credentials={"db": Credential(user="u", password=value)})
+
+
+def _via_add_credentials_one_arg_dict(value: Any) -> DataAccessCollection:
+    dac = DataAccessCollection()
+    dac.add_credentials({"user": "u", "password": value})
+    return dac
+
+
+def _via_add_credentials_one_arg_credential(value: Any) -> DataAccessCollection:
+    dac = DataAccessCollection()
+    dac.add_credentials(Credential(user="u", password=value))
+    return dac
+
+
+def _via_add_credentials_two_arg_dict(value: Any) -> DataAccessCollection:
+    dac = DataAccessCollection()
+    dac.add_credentials("db", {"user": "u", "password": value})
+    return dac
+
+
+def _via_add_credentials_two_arg_credential(value: Any) -> DataAccessCollection:
+    dac = DataAccessCollection()
+    dac.add_credentials("db", Credential(user="u", password=value))
+    return dac
+
+
+_REGISTRATION_PATHS = [
+    pytest.param(_via_top_level_credential_kwargs, id="top_level_credential_kwargs"),
+    pytest.param(_via_top_level_credential_dict_positional, id="top_level_credential_dict_positional"),
+    pytest.param(_via_list_plain_dict, id="list_plain_dict"),
+    pytest.param(_via_list_credential, id="list_credential"),
+    pytest.param(_via_named_dict, id="named_dict"),
+    pytest.param(_via_named_credential, id="named_credential"),
+    pytest.param(_via_add_credentials_one_arg_dict, id="add_credentials_one_arg_dict"),
+    pytest.param(_via_add_credentials_one_arg_credential, id="add_credentials_one_arg_credential"),
+    pytest.param(_via_add_credentials_two_arg_dict, id="add_credentials_two_arg_dict"),
+    pytest.param(_via_add_credentials_two_arg_credential, id="add_credentials_two_arg_credential"),
+]
+
+
+@pytest.mark.parametrize("build", _REGISTRATION_PATHS)
+class TestRegisteredCredentialRendering:
+    """RegisteredCredential redacts in every text rendering, on every registration path."""
+
+    def test_collection_repr_never_leaks_secret_but_keeps_keys(self, build: Any) -> None:
+        dac = build(_LEAK_MARKER)
+        rendered = repr(dac.credentials)
+        assert _LEAK_MARKER not in rendered
+        assert "user" in rendered
+        assert "password" in rendered
+
+    def test_entry_repr_str_fstring_and_pformat_never_leak_secret(self, build: Any) -> None:
+        dac = build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        assert _LEAK_MARKER not in repr(entry)
+        assert _LEAK_MARKER not in str(entry)
+        assert _LEAK_MARKER not in f"{entry}"
+        assert _LEAK_MARKER not in pprint.pformat(entry)
+        assert "user" in repr(entry)
+        assert "password" in repr(entry)
+
+    def test_entry_repr_exact_output_pinned(self, build: Any) -> None:
+        dac = build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        assert repr(entry) == "{'user': '***', 'password': '***'}"
+
+    def test_nested_mapping_value_renders_star_star_star(self, build: Any) -> None:
+        dac = build({"inner": _LEAK_MARKER})
+        (entry,) = dac.credentials.values()
+        rendered = repr(entry)
+        assert _LEAK_MARKER not in rendered
+        assert "***" in rendered
+
+
+class TestRegisteredCredentialStoredType:
+    """RegisteredCredential behaves like a plain dict for access, equality, and (de)serialization."""
+
+    def _build(self, value: Any) -> DataAccessCollection:
+        return _via_top_level_credential_kwargs(value)
+
+    def test_item_access_returns_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        assert entry["password"] == _LEAK_MARKER
+
+    def test_get_returns_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        assert entry.get("password") == _LEAK_MARKER
+
+    def test_double_star_unpacking_yields_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        unpacked = {**entry}
+        assert unpacked["password"] == _LEAK_MARKER
+        assert type(unpacked) is dict
+
+    def test_resolve_returns_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
+        entry = dac.resolve("credentials")
+        assert entry["password"] == _LEAK_MARKER
+
+    def test_entry_equals_plain_dict(self) -> None:
+        dac = self._build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        assert entry == {"user": "u", "password": _LEAK_MARKER}
+
+    def test_pickle_round_trip_keeps_type_equality_and_redacting_repr(self) -> None:
+        dac = self._build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        restored = pickle.loads(pickle.dumps(entry))  # nosec B301
+        assert type(restored) is RegisteredCredential
+        assert restored == entry
+        assert _LEAK_MARKER not in repr(restored)
+
+    def test_json_dumps_contains_raw_secret(self) -> None:
+        dac = self._build(_LEAK_MARKER)
+        (entry,) = dac.credentials.values()
+        assert _LEAK_MARKER in json.dumps(entry)

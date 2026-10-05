@@ -136,6 +136,7 @@ class TestElementValidatorSemantics:
         validator = _PositiveIntRecorder()
 
         class Unified694ElementFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "window_size": PropertySpec(
                     "Sizes of time windows",
@@ -155,6 +156,7 @@ class TestElementValidatorSemantics:
         validator = _PositiveIntRecorder()
 
         class Unified694RejectingElementFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "window_size": PropertySpec(
                     "Sizes of time windows",
@@ -190,6 +192,7 @@ class TestElementValidatorSemantics:
         """The discarded ``ValueError`` message reaches the user diagnostic hook."""
 
         class Unified694SurfacedElementFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "window_size": PropertySpec(
                     "Size of time window",
@@ -218,6 +221,7 @@ class TestMatchGuardSemantics:
         guard = _ListOfStringsRecorder()
 
         class Unified694GuardedFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "partition_by": PropertySpec(
                     "List of columns to partition by",
@@ -237,6 +241,7 @@ class TestMatchGuardSemantics:
         guard = _ListOfStringsRecorder()
 
         class Unified694RejectingGuardFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "partition_by": PropertySpec(
                     "List of columns to partition by",
@@ -255,6 +260,7 @@ class TestMatchGuardSemantics:
         """A guard non-match is not an option-value rejection, so it has no rejection reason."""
 
         class Unified694QuietGuardFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "partition_by": PropertySpec(
                     "List of columns to partition by",
@@ -273,6 +279,7 @@ class TestMatchGuardSemantics:
         guard = _RaisingRecorder()
 
         class Unified694RaisingGuardFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "items": PropertySpec(
                     "A list of items",
@@ -297,6 +304,7 @@ class TestElementValidatorAndMatchGuardPrecedence:
         guard = _Recorder(verdict=True)
 
         class Unified694BothFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "window_size": PropertySpec(
                     "Size of time window",
@@ -319,6 +327,7 @@ class TestElementValidatorAndMatchGuardPrecedence:
         guard = _Recorder(verdict=False)
 
         class Unified694BothPassFeatureGroup(FeatureChainParserMixin):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "window_size": PropertySpec(
                     "Size of time window",

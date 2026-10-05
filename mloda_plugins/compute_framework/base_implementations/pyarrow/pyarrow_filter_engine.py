@@ -1,9 +1,11 @@
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.mask.null_or_nan import split_null_or_nan
 from mloda.provider import BaseFilterEngine
 from mloda.user import SingleFilter
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_value_set import value_set
 
 try:
     import pyarrow as pa
@@ -110,12 +112,9 @@ class PyArrowFilterEngine(BaseFilterEngine):
         if values is None:
             raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
 
-        non_null = [v for v in values if v is not None]
-        if non_null:
-            values_array = pa.array(values)
-        else:
-            column_type = data[column_name].type
-            target_type = column_type.value_type if pa.types.is_dictionary(column_type) else column_type
-            values_array = pa.array(values, type=target_type)
+        present, has_null_or_nan = split_null_or_nan(values)
+        values_array = value_set(data[column_name], present)
         mask = pc.is_in(data[column_name], values_array)
+        if has_null_or_nan:
+            mask = pc.or_(mask, pc.is_null(data[column_name], nan_is_null=True))
         return data.filter(mask)

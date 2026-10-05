@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.provider import BaseInputData, FeatureSet
 from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.feature_group.input_data.read_document import ReadDocument
@@ -48,6 +49,52 @@ class TestReadDocumentMatchSubclass:
         assert result is None
 
 
+class MarkedAbortSuffixReader(ReadDocument):
+    """suffix() raises a marked NotImplementedError instead of declaring one. Not a final reader:
+    ReadDocument needs BOTH produce_document and suffix overridden (or load_data wholesale) to
+    qualify, and this fixture overrides only suffix, so it stays excluded from global discovery."""
+
+    @classmethod
+    def suffix(cls) -> tuple[str, ...]:
+        raise escalate_match_abort(NotImplementedError("read_document marked abort"))
+
+
+class TestReadDocumentMatchDocumentDataAccessMarkedAbort:
+    """A marked NotImplementedError from suffix() must escape match_document_data_access, not decline silently."""
+
+    def test_marked_abort_from_suffix_reraises(self) -> None:
+        with pytest.raises(NotImplementedError) as excinfo:
+            MarkedAbortSuffixReader.match_document_data_access(["/path/to/doc.json"], ["content"])
+
+        assert is_match_abort(excinfo.value)
+
+    def test_marked_abort_suffix_reader_is_not_a_final_reader(self) -> None:
+        assert MarkedAbortSuffixReader.is_final_reader() is False
+
+    @pytest.mark.parametrize(
+        ("data_access", "options"),
+        [
+            pytest.param(
+                DataAccessCollection(files={"handle": "/path/to/doc.json"}),
+                Options({"data_access_handle": "handle"}),
+                id="hint_branch",
+            ),
+            pytest.param(
+                DataAccessCollection(files={"/path/to/doc.json"}),
+                Options({}),
+                id="resolve_predicate_branch",
+            ),
+        ],
+    )
+    def test_marked_abort_from_suffix_reraises_via_file_handle_branch(
+        self, data_access: DataAccessCollection, options: Options
+    ) -> None:
+        with pytest.raises(NotImplementedError) as excinfo:
+            MarkedAbortSuffixReader.match_subclass_data_access(data_access, ["content"], options=options)
+
+        assert is_match_abort(excinfo.value)
+
+
 class TestReadDocumentAbstractMethods:
     def test_load_data_raises_not_implemented(self) -> None:
         with pytest.raises(NotImplementedError):
@@ -59,25 +106,24 @@ class TestReadDocumentAbstractMethods:
 
 
 class TestReadDocumentLoad:
-    def _make_feature_set(self, options: Options) -> FeatureSet:
+    def _make_feature_set(self, pair: tuple[type[BaseInputData], Any]) -> FeatureSet:
         fs = FeatureSet()
-        fs.add(Feature("doc_content", options=options))
+        feature = Feature("doc_content")
+        feature.input_data_match = pair
+        fs.add(feature)
         return fs
 
     def test_load_delegates_to_reader(self) -> None:
-        options = Options(group={"BaseInputData": (ConcreteReadDocument, "/path/doc.json")})
-        features = self._make_feature_set(options)
+        features = self._make_feature_set((ConcreteReadDocument, "/path/doc.json"))
 
         instance = ConcreteReadDocument()
         result = instance.load(features)
 
         assert result == {"content": "test_data"}
 
-    def test_load_raises_when_options_none(self) -> None:
+    def test_load_raises_when_no_input_data_match(self) -> None:
         features = FeatureSet()
-        feature = Feature("doc_content")
-        feature.options = None  # type: ignore[assignment]
-        features.add(feature)
+        features.add(Feature("doc_content"))
 
         instance = ConcreteReadDocument()
         with pytest.raises(ValueError):
@@ -93,9 +139,10 @@ class TestReadDocumentLoad:
             def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
                 return None
 
-        options = Options(group={"BaseInputData": (NoneReturningReader, "/path/doc.json")})
         features = FeatureSet()
-        features.add(Feature("doc_content", options=options))
+        feature = Feature("doc_content")
+        feature.input_data_match = (NoneReturningReader, "/path/doc.json")
+        features.add(feature)
 
         instance = NoneReturningReader()
         with pytest.raises(ValueError):
@@ -103,23 +150,9 @@ class TestReadDocumentLoad:
 
 
 class TestReadDocumentInitReader:
-    def test_init_reader_extracts_from_options(self) -> None:
-        options = Options(group={"BaseInputData": (ConcreteReadDocument, "/data/doc.json")})
-
+    def test_init_reader_extracts_from_the_pair(self) -> None:
         instance = ConcreteReadDocument()
-        reader, data_access = instance.init_reader(options)
+        reader, data_access = instance.init_reader((ConcreteReadDocument, "/data/doc.json"))
 
         assert isinstance(reader, ConcreteReadDocument)
         assert data_access == "/data/doc.json"
-
-    def test_init_reader_raises_when_options_none(self) -> None:
-        instance = ConcreteReadDocument()
-        with pytest.raises(ValueError):
-            instance.init_reader(None)
-
-    def test_init_reader_raises_when_base_input_data_missing(self) -> None:
-        options = Options(group={"some_other_key": "value"})
-
-        instance = ConcreteReadDocument()
-        with pytest.raises(ValueError):
-            instance.init_reader(options)

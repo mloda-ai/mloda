@@ -16,3 +16,7 @@ class DuckDBFilterEngine(SqlBaseFilterEngine):
     @classmethod
     def _build_regex_condition(cls, column_name: str, value: str) -> tuple[str, tuple[Any, ...]]:
         return f"regexp_matches({quote_ident(column_name)}, ?)", (value,)
+
+    @classmethod
+    def _nan_condition(cls, data: Any, column: str) -> str | None:
+        return duckdb_type_semantics.nan_condition(data, column)

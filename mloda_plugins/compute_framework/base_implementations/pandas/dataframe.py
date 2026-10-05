@@ -1,13 +1,12 @@
 from collections.abc import Sequence
 from typing import Any
+
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.provider import BaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
+from mloda.provider import BaseFilterEngine, BaseMaskEngine, BaseMergeEngine, ComputeFramework, OutputSchema
 from mloda.user import FeatureName
-from mloda.provider import ComputeFramework
-from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_filter_engine import PandasFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pandas.pandas_mask_engine import PandasMaskEngine
+from mloda_plugins.compute_framework.base_implementations.pandas.pandas_merge_engine import PandasMergeEngine
 
 try:
     import pandas as pd
@@ -47,18 +46,32 @@ class PandasDataFrame(ComputeFramework):
         )
         return data[[f for f in _selected_feature_names]]
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.columns)
 
-    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
-        if column_name in data.columns:
-            return str(data[column_name].dtype)
+    def _first_column_dtype(self, data: Any, column_name: str) -> Any | None:
+        """Return column_name's dtype from its first occurrence; indexing by a duplicated label
+        returns a DataFrame, which has no .dtype.
+        """
+        for name, dtype in zip(data.columns, data.dtypes):
+            if name == column_name:
+                return dtype
         return None
 
-    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
-        if column_name not in data.columns:
+    def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
+        dtype = self._first_column_dtype(data, column_name)
+        if dtype is None:
             return None
-        dtype = data[column_name].dtype
+        return str(dtype)
+
+    def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
+        dtype = self._first_column_dtype(data, column_name)
+        if dtype is None:
+            return None
+
+        if isinstance(dtype, pd.ArrowDtype) and DataType.from_arrow_type_safe(dtype.pyarrow_dtype) == DataType.DECIMAL:
+            return DataType.DECIMAL
         if isinstance(dtype, pd.StringDtype):
             return DataType.STRING
         if isinstance(dtype, pd.BooleanDtype):
@@ -75,7 +88,22 @@ class PandasDataFrame(ComputeFramework):
             dtype_str = str(dtype)
             unit = dtype_str[len("datetime64[") : -1] if "[" in dtype_str else "ns"
             return DataType.TIMESTAMP_MILLIS if unit == "ms" else DataType.TIMESTAMP_MICROS
+
         return None
+
+    def _output_schema(self, data: Any) -> OutputSchema | None:
+        """Zip columns/dtypes positionally (indexing by name breaks on duplicates); first
+        occurrence's dtype wins for duplicate names.
+        """
+        if isinstance(data, dict):
+            return super()._output_schema(data)
+        columns = data.columns
+        if len(columns) == 0:
+            return None
+        seen: dict[str, str] = {}
+        for name, dtype in zip(columns, data.dtypes):
+            seen.setdefault(str(name), str(dtype))
+        return tuple((name, seen[name]) for name in sorted(seen, key=str))
 
     @classmethod
     def pd_dataframe(cls) -> Any:

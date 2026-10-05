@@ -31,11 +31,17 @@ Contract under test:
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * Compute steps carry ``feature_set_options`` (a deep-copied, group-only snapshot of the step's
     ``FeatureSet.options``) and ``step_uuid``; both stay out of equality.
+  * ``PlanStep.reader_data_access`` is a dataclass field (``compare=False``, default ``None``): the
+    ``(ReaderClass, data_access)`` pair a compute step resolved for reading its input file, or ``None``
+    for join/transform steps or a compute step with no reader.
+  * ``PlanStep.data_access_identity`` is a read-only ``str | None`` property: the reader's credential-free
+    projection of ``reader_data_access``, ``None`` when there is none.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
-    and after ``run()``, in execution-plan order, and matches the plan that actually executed.
+    and after ``run()``, in dependency order (independent steps sorted by content), and matches the plan that actually executed.
   * ``mlodaAPI.explain(features, ...)`` mirrors the ``prepare`` parameter shape with keyword-only
     parameters after ``features``, prepares without executing and returns the same records as
     ``prepare(...).resolved_plan()``.
+  * ``PlanStep.specialized_from`` lists the parent feature groups a compute step's winner replaced, else ``()``.
   * ``PlanStep`` is exported from both ``mloda.user`` and ``mloda.steward``.
 
 A caller must reach all of this without importing anything from the internal execution-step
@@ -48,26 +54,41 @@ claim is registry-wide, so generic names like ``sales`` would leak into every ot
 import ast
 import copy
 import dataclasses
-from collections import Counter
+import itertools
+import json
+import sqlite3
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal, get_args, get_origin
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import pytest
 
 # Aliased: a bare ``import mloda.user`` would bind the name ``mloda`` to the package and collide
 # with the ``mloda`` mlodaAPI alias imported below.
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
-from mloda.core.api.plan_info import build_plan_steps
+from mloda.core.api.plan_info import _dependency_order, build_plan_steps
+from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.steward import Extender, ExtenderHook, HookContext
+from mloda.steward import (
+    Extender,
+    ExtenderHook,
+    HookContext,
+    PlanLockMismatchError,
+    check_plan_lock,
+    write_plan_lock,
+)
+from tests.helpers.probe_runner import run_probes
 from mloda.user import (
+    Credential,
+    DataAccessCollection,
     Feature,
     FeatureName,
     Index,
@@ -81,8 +102,12 @@ from mloda.user import (
 )
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
-
+from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
+from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader  # noqa: F401
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
+from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
 
 # ---------------------------------------------------------------------------
 # Test feature groups
@@ -304,6 +329,65 @@ class PlanInfoNestedOptionsSource(FeatureGroup):
         return {PandasDataFrame}
 
 
+class PlanInfoParentSource(FeatureGroup):
+    """Parent root source; its subclass PlanInfoChildSource replaces it during resolution."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"plan_info_specialized_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"plan_info_specialized_value": [1, 2, 3]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class PlanInfoChildSource(PlanInfoParentSource):
+    """Subclass matching the same feature name as its parent."""
+
+
+class PlanInfoScopedSpecializedConsumer(FeatureGroup):
+    """Consumes the specialized feature scoped to the child, so the parent is gated out."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_info_specialized_value", feature_group=PlanInfoChildSource)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["plan_info_specialized_value"]
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
+class PlanInfoPlainSpecializedConsumer(PlanInfoScopedSpecializedConsumer):
+    """Consumes the same feature unscoped, so the child replaces the parent."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_info_specialized_value")}
+
+
+class PlanInfoAnyFrameworkSource(FeatureGroup):
+    """Root source without a compute_framework_rule, so the framework choice is the planner's."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"plan_info_any_framework_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"plan_info_any_framework_value": [1, 2, 3]}
+
+
 class PlanInfoUnknownStep:
     """Not a FeatureGroupStep/TransformFrameworkStep/JoinStep: build_plan_steps must reject it."""
 
@@ -324,9 +408,15 @@ class PlanInfoCalculateHookRecorder(Extender):
         self.captured.append(context)
         return result
 
-    def input_features_by_step(self) -> dict[tuple[str, tuple[str, ...]], frozenset[str]]:
+    def input_features_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], frozenset[str]]:
         return {
             (context.feature_group_class, context.feature_names): context.input_features or frozenset()
+            for context in self.captured
+        }
+
+    def input_feature_edges_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], dict[str, tuple[str, ...]]]:
+        return {
+            (context.feature_group_class, context.feature_names): dict(context.input_feature_edges or {})
             for context in self.captured
         }
 
@@ -342,6 +432,11 @@ _INVERTED_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow, PlanInfoInvertedConsumer}
 )
 _NESTED_OPTIONS_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNestedOptionsSource})
+_ANY_FRAMEWORK_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoAnyFrameworkSource})
+_PLAN_LOCK_PROBE = Path(__file__).with_name("plan_lock_probe.py")
+_SPECIALIZED_PLUGINS = PluginCollector.enabled_feature_groups(
+    {PlanInfoParentSource, PlanInfoChildSource, PlanInfoScopedSpecializedConsumer, PlanInfoPlainSpecializedConsumer}
+)
 
 # The chained request from the issue: an aggregated feature over a source feature.
 _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
@@ -350,7 +445,7 @@ _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
 def _prepare_chained_session() -> mlodaAPI:
     return mloda.prepare(
         _CHAINED_FEATURES,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_AGGREGATION_PLUGINS,
     )
 
@@ -358,7 +453,7 @@ def _prepare_chained_session() -> mlodaAPI:
 def _prepare_chained_session_with(recorder: PlanInfoCalculateHookRecorder) -> mlodaAPI:
     return mloda.prepare(
         _CHAINED_FEATURES,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_AGGREGATION_PLUGINS,
         function_extender={recorder},
     )
@@ -369,7 +464,7 @@ def _prepare_single_framework_join_session() -> mlodaAPI:
 
     return mloda.prepare(
         ["PlanInfoJoinConsumer"],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         links={link},
         plugin_collector=_JOIN_PLUGINS,
     )
@@ -385,7 +480,7 @@ def _cross_link() -> Link:
 def _prepare_cross_join(consumer: str, plugins: PluginCollector) -> mlodaAPI:
     return mloda.prepare(
         [consumer],
-        compute_frameworks={PandasDataFrame, PyArrowTable},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
         links={_cross_link()},
         plugin_collector=plugins,
     )
@@ -403,7 +498,7 @@ def _prepare_inverted_cross_framework_join_session() -> mlodaAPI:
 def _prepare_nested_options_session() -> mlodaAPI:
     return mloda.prepare(
         [Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}})],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_NESTED_OPTIONS_PLUGINS,
     )
 
@@ -417,8 +512,8 @@ def _raw_steps_by_kind(session: mlodaAPI) -> dict[str, list[Any]]:
     raw_steps: list[Any] = list(session.engine.execution_planner)
 
     grouped: dict[str, list[Any]] = {"compute": [], "join": [], "transform": []}
-    for raw_step, record in zip(raw_steps, build_plan_steps(raw_steps)):
-        grouped[record.step_kind].append(raw_step)
+    for raw_step in raw_steps:
+        grouped[build_plan_steps([raw_step])[0].step_kind].append(raw_step)
     return grouped
 
 
@@ -468,6 +563,11 @@ class TestPlanStepDataclass:
             "declared_right_frameworks",
             "feature_set_options",
             "step_uuid",
+            "input_feature_edges",
+            "specialized_from",
+            "reader_data_access",
+            "compute_framework_reason",
+            "result_framework",
         ]
 
     def test_join_type_defaults_to_none(self) -> None:
@@ -644,6 +744,85 @@ class TestPlanStepInputFeatureNamesField:
         assert with_inputs == dataclasses.replace(base, input_feature_names=("plan_info_sales",))
 
 
+class TestPlanStepSpecializedFromField:
+    """specialized_from is an optional tuple of replaced parent classes, last on the dataclass."""
+
+    @staticmethod
+    def _compute_step() -> PlanStep:
+        return PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_specialized_value",),
+            feature_group=PlanInfoChildSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+
+    def test_specialized_from_defaults_to_an_empty_tuple(self) -> None:
+        assert self._compute_step().specialized_from == ()
+
+        fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert fields_by_name["specialized_from"].default == ()
+
+    def test_specialized_from_participates_in_equality(self) -> None:
+        base = self._compute_step()
+        replaced = dataclasses.replace(base, specialized_from=(PlanInfoParentSource,))
+
+        assert base != replaced
+        assert replaced == dataclasses.replace(base, specialized_from=(PlanInfoParentSource,))
+
+
+class TestPlanStepInputFeatureEdgesField:
+    """input_feature_edges is an optional per-output-feature mapping appended after step_uuid."""
+
+    @staticmethod
+    def _compute_step() -> PlanStep:
+        return PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales__mean_aggr",),
+            feature_group=PandasAggregatedFeatureGroup,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+
+    def test_input_feature_edges_defaults_to_an_empty_mapping(self) -> None:
+        step = self._compute_step()
+
+        assert step.input_feature_edges == {}
+
+        fields_by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert fields_by_name["input_feature_edges"].default_factory is not dataclasses.MISSING
+
+    def test_input_feature_edges_default_is_not_shared_between_steps(self) -> None:
+        first = self._compute_step()
+        second = self._compute_step()
+
+        assert first.input_feature_edges is not second.input_feature_edges
+
+    def test_input_feature_edges_is_annotated_as_a_mapping_of_string_tuples(self) -> None:
+        annotation = PlanStep.__annotations__["input_feature_edges"]
+
+        origin: Any = get_origin(annotation)
+        assert origin is Mapping, f"input_feature_edges must be a Mapping type, got {annotation!r}"
+        assert get_args(annotation) == (str, tuple[str, ...])
+
+    def test_input_feature_edges_follows_step_uuid(self) -> None:
+        field_names = [field.name for field in dataclasses.fields(PlanStep)]
+
+        assert field_names.index("input_feature_edges") == field_names.index("step_uuid") + 1
+
+    def test_input_feature_edges_participates_in_equality_but_not_hashing(self) -> None:
+        base = self._compute_step()
+        replaced = dataclasses.replace(base, input_feature_edges={"plan_info_sales__mean_aggr": ("plan_info_sales",)})
+
+        assert base != replaced
+        assert replaced == dataclasses.replace(
+            base, input_feature_edges={"plan_info_sales__mean_aggr": ("plan_info_sales",)}
+        )
+        assert hash(base) == hash(replaced)
+
+
 class TestJoinOrientationFieldsOnTheDataclass:
     """join_destination_side, join_token, declared_left_frameworks and declared_right_frameworks are
     optional, typed dataclass fields; join_inverted is a derived read-only property, not a field."""
@@ -776,6 +955,131 @@ class TestPlanStepFeatureSetOptions:
 
 
 # ---------------------------------------------------------------------------
+# reader_data_access
+# ---------------------------------------------------------------------------
+
+
+class TestPlanStepReaderDataAccess:
+    """reader_data_access is a compare=False dataclass field snapshotted from the step's FeatureSet match."""
+
+    def test_compute_step_reading_a_file_reports_reader_and_data_access(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "plan_info_rows.parquet"
+        table = pa.table({"plan_info_rows_a": [1, 2, 3]})
+        pq.write_table(table, str(file_path))
+        dac = DataAccessCollection(files={str(file_path)})
+
+        explained = mloda.explain(
+            ["plan_info_rows_a"],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=dac,
+        )
+
+        compute_steps = [step for step in explained if step.step_kind == "compute"]
+        assert len(compute_steps) == 1
+        step = compute_steps[0]
+
+        assert step.reader_data_access == (ParquetReader, str(file_path))
+        assert step.feature_set_options is not None
+        assert "BaseInputData" not in step.feature_set_options.group
+        assert step.data_access_identity == str(file_path)
+        assert step.data_access_identity_is_fallback is False
+
+        reader, access = step.reader_data_access
+        assert step.compute_framework is not None
+        assert reader.count_rows(access, step.compute_framework) == 3
+
+    def test_reader_data_access_is_a_non_comparing_defaulted_field(self) -> None:
+        by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
+        assert by_name["reader_data_access"].compare is False
+        assert by_name["reader_data_access"].default is None
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales",),
+            feature_group=PlanInfoPandasSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+        assert step == dataclasses.replace(step, reader_data_access=(ParquetReader, "x"))
+        assert hash(step) == hash(dataclasses.replace(step, reader_data_access=(ParquetReader, "x")))
+
+    def test_identity_properties_are_not_dataclass_fields(self) -> None:
+        assert "data_access_identity" not in {field.name for field in dataclasses.fields(PlanStep)}
+        assert "data_access_identity_is_fallback" not in {field.name for field in dataclasses.fields(PlanStep)}
+
+    def test_data_creator_backed_compute_step_reports_none(self) -> None:
+        session = _prepare_chained_session()
+        step = next(s for s in session.resolved_plan() if s.feature_group is PlanInfoPandasSource)
+        assert step.reader_data_access is None
+        assert step.data_access_identity is None
+        assert step.data_access_identity_is_fallback is None
+
+    def test_join_and_transform_steps_report_none(self) -> None:
+        prepared = _prepare_cross_framework_join_session().resolved_plan()
+        non_compute_steps = [step for step in prepared if step.step_kind in ("join", "transform")]
+        assert non_compute_steps, "the fixture must plan a join or transform step"
+        for step in non_compute_steps:
+            assert step.reader_data_access is None
+            assert step.data_access_identity is None
+            assert step.data_access_identity_is_fallback is None
+
+    @staticmethod
+    def _explain_sqlite_plan(tmp_path: Path) -> tuple[str, list[PlanStep]]:
+        db = str(tmp_path / "plan_info.db")
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE t (plan_info_db_col INTEGER)")
+        conn.execute("INSERT INTO t VALUES (1)")
+        conn.commit()
+        conn.close()
+        dac = DataAccessCollection(credentials=Credential(sqlite=db, password="hunter2"))  # nosec B106
+
+        explained = mloda.explain(
+            ["plan_info_db_col"],
+            compute_frameworks=[PythonDictFramework],
+            data_access_collection=dac,
+            plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
+        )
+        return db, explained
+
+    def test_sqlite_password_stays_out_of_the_safe_fields(self, tmp_path: Path) -> None:
+        db, explained = self._explain_sqlite_plan(tmp_path)
+
+        step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
+        assert step.reader_data_access is not None
+        assert "hunter2" in json.dumps(dict(step.reader_data_access[1]))
+        assert step.data_access_identity == f"{db}::t"
+        assert step.data_access_identity_is_fallback is False
+
+        omitted = {"feature_set_options", "reader_data_access"}
+        safe = {f.name: getattr(step, f.name) for f in dataclasses.fields(step) if f.name not in omitted}
+        safe["data_access_identity"] = step.data_access_identity
+        assert "hunter2" not in json.dumps(safe, default=str)
+
+    def test_sqlite_plan_lock_keeps_credentials_and_path_out_and_names_the_reader(self, tmp_path: Path) -> None:
+        db, explained = self._explain_sqlite_plan(tmp_path)
+
+        text = _lock_text(explained)
+
+        assert "hunter2" not in text
+        assert db not in text
+        records = json.loads(text)["compute"]
+        assert [record["reader"] for record in records] == [f"{SQLITEReader.__module__}:{SQLITEReader.__qualname__}"]
+
+    def test_non_string_access_falls_back_to_the_type_name(self) -> None:
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=("plan_info_sales",),
+            feature_group=PlanInfoPandasSource,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+            reader_data_access=(BaseInputData, 42),
+        )
+        assert step.data_access_identity == "int"
+        assert step.data_access_identity_is_fallback is True
+
+
+# ---------------------------------------------------------------------------
 # build_plan_steps rejects unknown steps
 # ---------------------------------------------------------------------------
 
@@ -834,6 +1138,8 @@ class TestResolvedPlanForChainedFeature:
         assert aggregation_step.feature_group_name == "PandasAggregatedFeatureGroup"
         assert aggregation_step.compute_framework_name == "PandasDataFrame"
 
+        assert all(step.specialized_from == () for step in plan)
+
     def test_compute_steps_carry_no_source_or_join_fields(self) -> None:
         """source_* and join_type are transform/join specific and stay None on compute steps."""
         plan = _prepare_chained_session().resolved_plan()
@@ -850,7 +1156,7 @@ class TestResolvedPlanForChainedFeature:
         """
         session = mloda.prepare(
             ["plan_info_sales", "plan_info_price"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
@@ -864,8 +1170,8 @@ class TestResolvedPlanForChainedFeature:
         assert names == ("plan_info_price", "plan_info_sales")
         assert list(names) == sorted(names)
 
-    def test_plan_is_in_execution_order(self) -> None:
-        """The source must be planned before the aggregation that consumes it."""
+    def test_plan_is_in_dependency_order(self) -> None:
+        """Every step comes after the steps it needs; independent steps are sorted by content."""
         plan = _prepare_chained_session().resolved_plan()
 
         groups = [step.feature_group for step in plan if step.step_kind == "compute"]
@@ -937,7 +1243,7 @@ class TestExplain:
     def test_explain_matches_prepare_resolved_plan(self) -> None:
         explained = mlodaAPI.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
         prepared = _prepare_chained_session().resolved_plan()
@@ -945,23 +1251,73 @@ class TestExplain:
         assert explained == prepared
 
     def test_explain_matches_prepare_resolved_plan_for_a_join_request(self) -> None:
-        """The join token is fresh per planning run and plan order across sessions is not pinned, so this
-        compares multisets rather than requiring the two resolutions to match exactly."""
+        """The order is dependency order with independent steps sorted by content, so two sessions match."""
         explained = mlodaAPI.explain(
             ["PlanInfoCrossConsumer"],
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             links={_cross_link()},
             plugin_collector=_CROSS_JOIN_PLUGINS,
         )
         prepared = _prepare_cross_framework_join_session().resolved_plan()
 
         assert [step for step in explained if step.step_kind == "join"], "the fixture must plan a join"
-        assert Counter(explained) == Counter(prepared)
+        assert explained == prepared
+
+    def test_pinned_steps_report_pinned_and_free_steps_report_a_reason(self) -> None:
+        pinned = mlodaAPI.explain(
+            [Feature("plan_info_any_framework_value", compute_framework="PyArrowTable")],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+        )
+        assert [step.compute_framework_reason for step in pinned] == ["pinned"]
+
+        free = mlodaAPI.explain(
+            ["plan_info_any_framework_value"],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+        )
+        assert [step.compute_framework_reason for step in free] == ["your list order"]
+
+    def test_a_cross_framework_join_plan_is_in_dependency_order(self) -> None:
+        cross = mlodaAPI.explain(
+            ["PlanInfoCrossConsumer"],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            links={_cross_link()},
+            plugin_collector=_CROSS_JOIN_PLUGINS,
+        )
+        kinds = [step.step_kind for step in cross]
+        consumer = max(i for i, step in enumerate(cross) if step.feature_group is PlanInfoCrossConsumer)
+        sources = [
+            i
+            for i, step in enumerate(cross)
+            if step.feature_group in (PlanInfoCrossLeftPandas, PlanInfoCrossRightArrow) and step.step_kind == "compute"
+        ]
+        assert len(sources) == 2
+        for i, kind in enumerate(kinds):
+            if kind in ("join", "transform"):
+                assert i > min(sources)
+                assert i < consumer
+        assert all(i < consumer for i in sources)
+        assert all(i < kinds.index("join") for i in sources)
+
+    def test_independent_steps_are_ordered_the_same_whichever_pin_is_requested_first(self) -> None:
+        def independent(first: str, second: str) -> list[tuple[str | None, str | None]]:
+            steps = mlodaAPI.explain(
+                [
+                    Feature("plan_info_any_framework_value", compute_framework=first),
+                    Feature("plan_info_any_framework_value", compute_framework=second),
+                ],
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+            )
+            return [(step.compute_framework_name, step.compute_framework_reason) for step in steps]
+
+        assert independent("PandasDataFrame", "PyArrowTable") == independent("PyArrowTable", "PandasDataFrame")
 
     def test_explain_returns_plan_steps(self) -> None:
         explained = mlodaAPI.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
@@ -969,11 +1325,43 @@ class TestExplain:
         assert all(isinstance(step, PlanStep) for step in explained)
         assert [step.feature_group for step in explained] == [PlanInfoPandasSource, PandasAggregatedFeatureGroup]
 
+    def test_explain_reports_the_parent_a_subclass_winner_replaced(self) -> None:
+        explained = mlodaAPI.explain(
+            ["plan_info_specialized_value"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_SPECIALIZED_PLUGINS,
+        )
+
+        compute_steps = [step for step in explained if step.step_kind == "compute"]
+        assert len(compute_steps) == 1
+        assert compute_steps[0].feature_group is PlanInfoChildSource
+        assert compute_steps[0].specialized_from == (PlanInfoParentSource,)
+
+    @pytest.mark.parametrize(
+        "consumers",
+        [
+            pytest.param(["PlanInfoScopedSpecializedConsumer", "PlanInfoPlainSpecializedConsumer"], id="scoped_first"),
+            pytest.param(["PlanInfoPlainSpecializedConsumer", "PlanInfoScopedSpecializedConsumer"], id="plain_first"),
+        ],
+    )
+    def test_merged_input_features_keep_specialized_from_in_either_request_order(
+        self, consumers: list[Feature | str]
+    ) -> None:
+        explained = mlodaAPI.explain(
+            consumers,
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_SPECIALIZED_PLUGINS,
+        )
+
+        source_steps = [step for step in explained if step.feature_group is PlanInfoChildSource]
+        assert len(source_steps) == 1
+        assert source_steps[0].specialized_from == (PlanInfoParentSource,)
+
     def test_explain_does_not_execute_the_plan(self) -> None:
         """PlanInfoNeverExecutes.calculate_feature raises. explain() must still succeed."""
         explained = mlodaAPI.explain(
             ["plan_info_never_executed"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_NEVER_EXECUTES_PLUGINS,
         )
 
@@ -984,7 +1372,7 @@ class TestExplain:
     def test_explain_is_reachable_from_the_mloda_alias(self) -> None:
         explained = mloda.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
@@ -1007,11 +1395,155 @@ class TestExplain:
     def test_explain_still_accepts_its_parameters_by_keyword(self) -> None:
         explained = mlodaAPI.explain(
             _CHAINED_FEATURES,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_AGGREGATION_PLUGINS,
         )
 
         assert len(explained) == 2
+
+
+# ---------------------------------------------------------------------------
+# plan lock
+# ---------------------------------------------------------------------------
+
+
+def _class_path(cls: type) -> str:
+    return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def _explain_any_framework(frameworks: list[type[ComputeFramework]]) -> list[PlanStep]:
+    return mloda.explain(
+        ["plan_info_any_framework_value"],
+        compute_frameworks=frameworks,
+        plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+    )
+
+
+def _explain_nested_options_twice() -> list[PlanStep]:
+    return mloda.explain(
+        [
+            Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}}),
+            Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "mutated"}}),
+        ],
+        compute_frameworks=[PandasDataFrame],
+        plugin_collector=_NESTED_OPTIONS_PLUGINS,
+    )
+
+
+def _explain_any_framework_twice() -> list[PlanStep]:
+    return mloda.explain(
+        [
+            Feature("plan_info_any_framework_value", compute_framework="PandasDataFrame"),
+            Feature("plan_info_any_framework_value", compute_framework="PyArrowTable"),
+        ],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=_ANY_FRAMEWORK_PLUGINS,
+    )
+
+
+class TestPlanLock:
+    def test_a_specialization_change_is_caught(self, tmp_path: Path) -> None:
+        lock = tmp_path / "plan.lock"
+        parent_only = mloda.explain(
+            ["plan_info_specialized_value"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoParentSource}),
+        )
+        specialized = mloda.explain(
+            ["plan_info_specialized_value"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_SPECIALIZED_PLUGINS,
+        )
+        write_plan_lock(parent_only, lock)
+
+        assert [record["specialized_from"] for record in json.loads(lock.read_text())["compute"]] == [[]]
+        assert json.loads(_lock_text(specialized))["compute"][0]["specialized_from"] == [
+            _class_path(PlanInfoParentSource)
+        ]
+
+        with pytest.raises(PlanLockMismatchError) as excinfo:
+            check_plan_lock(specialized, lock)
+
+        assert "PlanInfoChildSource" in str(excinfo.value)
+        assert "PlanInfoParentSource" in str(excinfo.value)
+
+    def test_a_framework_tie_break_change_is_caught(self, tmp_path: Path) -> None:
+        lock = tmp_path / "plan.lock"
+        write_plan_lock(_explain_any_framework([PyArrowTable]), lock)
+
+        both = _explain_any_framework([PandasDataFrame, PyArrowTable])
+        assert [step.compute_framework for step in both] == [PandasDataFrame], "the tie-break must pick pandas"
+
+        with pytest.raises(PlanLockMismatchError, match="PandasDataFrame"):
+            check_plan_lock(both, lock)
+
+    @pytest.mark.parametrize("kind", ["join", "transform"])
+    def test_a_join_or_transform_framework_swap_is_caught(self, tmp_path: Path, kind: str) -> None:
+        lock = tmp_path / "plan.lock"
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+        write_plan_lock(plan, lock)
+        swapped = [
+            dataclasses.replace(step, compute_framework=PyArrowTable) if step.step_kind == kind else step
+            for step in plan
+        ]
+        assert swapped != plan
+
+        with pytest.raises(PlanLockMismatchError):
+            check_plan_lock(swapped, lock)
+
+    def test_a_fresh_session_of_the_same_request_passes(self, tmp_path: Path) -> None:
+        lock = tmp_path / "plan.lock"
+        first = _prepare_cross_framework_join_session().resolved_plan()
+        second = _prepare_cross_framework_join_session().resolved_plan()
+        write_plan_lock(first, lock)
+
+        first_token = next(step.join_token for step in first if step.step_kind == "join")
+        second_token = next(step.join_token for step in second if step.step_kind == "join")
+        assert first_token != second_token
+
+        check_plan_lock(second, lock)
+
+    @pytest.mark.parametrize(
+        ("explain_plan", "differing_key"),
+        [
+            pytest.param(_explain_nested_options_twice, None, id="options"),
+            pytest.param(_explain_any_framework_twice, "compute_framework", id="framework"),
+        ],
+    )
+    def test_duplicate_steps_keep_one_record_each(
+        self, tmp_path: Path, explain_plan: Callable[[], list[PlanStep]], differing_key: str | None
+    ) -> None:
+        lock = tmp_path / "plan.lock"
+        plan = explain_plan()
+        write_plan_lock(plan, lock)
+
+        records = json.loads(lock.read_text())["compute"]
+        assert len(records) == 2
+        if differing_key is not None:
+            assert records[0][differing_key] != records[1][differing_key]
+
+        check_plan_lock(explain_plan(), lock)
+
+    # Fresh interpreters are slow, so this needs more than the suite-wide timeout.
+    @pytest.mark.timeout(60)
+    def test_plan_lock_text_is_stable_across_hash_seeds(self) -> None:
+        outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=[0, 1, 2])
+
+        assert len(outputs) == 3
+        assert outputs[0] == outputs[1] == outputs[2]
+
+        order = json.loads(outputs[0]["order"])
+        assert [row[3] for row in order if row[0] == "compute" and row[2] in ("PandasDataFrame", "PyArrowTable")]
+        assert all(row[3] is not None for row in order if row[0] == "compute")
+        assert [row for row in order if row[1] == "LockProbeAnyFramework"] == sorted(
+            row for row in order if row[1] == "LockProbeAnyFramework"
+        )
+        assert {row[3] for row in order if row[1] == "LockProbeAnyFramework"} == {"pinned"}
+
+        content = json.loads(outputs[0]["lock"])
+        assert len(content["compute"]) > 1
+        assert len(content["joins"]) >= 1
+        assert len(content["transforms"]) >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -1025,7 +1557,7 @@ class TestTransformStepMapping:
     def test_transform_step_maps_from_and_to_group_and_framework(self) -> None:
         session = mloda.prepare(
             ["plan_info_arrow_sales__mean_aggr"],
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=_TRANSFORM_PLUGINS,
         )
 
@@ -1050,7 +1582,7 @@ class TestTransformStepMapping:
     def test_transform_step_sits_between_its_compute_steps(self) -> None:
         session = mloda.prepare(
             ["plan_info_arrow_sales__mean_aggr"],
-            compute_frameworks={PandasDataFrame, PyArrowTable},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=_TRANSFORM_PLUGINS,
         )
 
@@ -1380,6 +1912,41 @@ class TestRequestedAndInjectedForJoinPlans:
 # ---------------------------------------------------------------------------
 
 
+class _Stub:
+    def __init__(self, token: UUID, requires: set[UUID]) -> None:
+        self._token = token
+        self.required_uuids = requires
+
+    def get_uuids(self) -> set[UUID]:
+        return {self._token}
+
+
+def _compute(name: str) -> PlanStep:
+    return PlanStep("compute", (name,), FeatureGroup, PandasDataFrame, None, None)
+
+
+def _join(left: tuple[type[ComputeFramework], ...] = ()) -> PlanStep:
+    return PlanStep(
+        "join",
+        (),
+        FeatureGroup,
+        PandasDataFrame,
+        FeatureGroup,
+        PyArrowTable,
+        join_type="inner",
+        declared_left_frameworks=left,
+    )
+
+
+def _orders(nodes: dict[str, tuple[PlanStep, set[str]]], project: Callable[[PlanStep], Any]) -> set[tuple[Any, ...]]:
+    tokens = {name: uuid4() for name in nodes}
+    pairs = [(_Stub(tokens[n], {tokens[r] for r in reqs}), record) for n, (record, reqs) in nodes.items()]
+    return {
+        tuple(project(r) for r in _dependency_order([s for s, _ in perm], [r for _, r in perm]))
+        for perm in itertools.permutations(pairs)
+    }
+
+
 class TestBuildPlanStepsInputFeatureNames:
     """build_plan_steps reads a compute step's FeatureSet.declared_input_feature_names, sorted."""
 
@@ -1424,6 +1991,134 @@ class TestBuildPlanStepsInputFeatureNames:
 
         for step in raw_steps["join"] + raw_steps["transform"]:
             assert build_plan_steps([step])[0].input_feature_names == ()
+            assert build_plan_steps([step])[0].input_feature_edges == {}
+
+    def test_equal_content_steps_with_different_inputs_keep_one_order_whichever_raw_order(self) -> None:
+        first = self._source_compute_step()
+        second = self._source_compute_step()
+        first.features.declared_input_feature_names = frozenset({"x"})
+        second.features.declared_input_feature_names = frozenset({"y"})
+
+        forward = [step.step_uuid for step in build_plan_steps([first, second])]
+        backward = [step.step_uuid for step in build_plan_steps([second, first])]
+
+        assert forward == backward
+
+    def test_dependency_order_with_tied_content_is_independent_of_raw_order(self) -> None:
+        tokens = {name: uuid4() for name in ("r1", "r2", "j1", "j2", "w1", "w2")}
+        pairs = [
+            (_Stub(tokens["r1"], set()), _compute("r1")),
+            (_Stub(tokens["r2"], set()), _compute("r2")),
+            (_Stub(tokens["j1"], {tokens["r1"]}), _join()),
+            (_Stub(tokens["j2"], {tokens["r2"]}), _join()),
+            (_Stub(tokens["w1"], {tokens["j1"]}), _compute("w1")),
+            (_Stub(tokens["w2"], {tokens["j2"]}), _compute("w2")),
+        ]
+
+        orders = set()
+        for permutation in itertools.permutations(pairs):
+            raw_steps = [stub for stub, _ in permutation]
+            plan = [record for _, record in permutation]
+            orders.add(tuple((r.step_kind, r.feature_names) for r in _dependency_order(raw_steps, plan)))
+
+        assert len(orders) == 1
+
+    def test_tied_joins_differing_only_in_declared_frameworks_get_one_order(self) -> None:
+        nodes = {
+            "r": (_compute("r"), set()),
+            "j1": (_join((PandasDataFrame,)), {"r"}),
+            "j2": (_join((PyArrowTable,)), {"r"}),
+            "w1": (_compute("w"), {"j1"}),
+            "w2": (_compute("w"), {"j2"}),
+        }
+
+        orders = _orders(nodes, lambda r: (r.step_kind, r.feature_names, r.declared_left_frameworks))
+
+        assert len(orders) == 1
+
+    def test_edge_direction_separates_joins_with_mirrored_neighbours(self) -> None:
+        nodes = {
+            "x1": (_compute("x"), set()),
+            "y2": (_compute("y"), set()),
+            "a": (_join(), {"x1"}),
+            "b": (_join(), {"y2"}),
+            "y1": (_compute("y"), {"a"}),
+            "x2": (_compute("x"), {"b"}),
+        }
+
+        orders = _orders(nodes, lambda r: (r.step_kind, r.feature_names))
+
+        assert len(orders) == 1
+
+
+class TestBuildPlanStepsReason:
+    """build_plan_steps joins a compute step's distinct feature reasons, sorted, with "; "."""
+
+    @pytest.mark.parametrize(
+        ("reasons", "expected"),
+        [
+            (("default order",), "default order"),
+            (("saves 1 conversion", "pinned"), "pinned; saves 1 conversion"),
+        ],
+    )
+    def test_reasons_are_reported_sorted_and_joined(self, reasons: tuple[str, ...], expected: str) -> None:
+        step = TestBuildPlanStepsInputFeatureNames._source_compute_step()
+        first = next(iter(step.features.features))
+        features = [first, Feature("plan_info_price")][: len(reasons)]
+        step.features.features = set(features)
+        for feature, reason in zip(features, reasons):
+            feature.chosen_compute_framework = step.compute_framework
+            feature.chosen_compute_framework_reason = reason
+
+        assert build_plan_steps([step])[0].compute_framework_reason == expected
+
+    def test_no_reasons_yield_none_and_join_steps_carry_none(self) -> None:
+        step = TestBuildPlanStepsInputFeatureNames._source_compute_step()
+        for feature in step.features.features:
+            feature.chosen_compute_framework_reason = None
+
+        assert build_plan_steps([step])[0].compute_framework_reason is None
+        for raw in _raw_steps_by_kind(_prepare_cross_framework_join_session())["join"]:
+            assert build_plan_steps([raw])[0].compute_framework_reason is None
+
+
+class TestBuildPlanStepsInputFeatureEdges:
+    """build_plan_steps copies a compute step's FeatureSet.declared_input_feature_edges."""
+
+    def test_declared_edges_are_reported(self) -> None:
+        step = TestBuildPlanStepsInputFeatureNames._source_compute_step()
+        step.features.declared_input_feature_edges = {"plan_info_sales": ("a", "b")}
+
+        assert build_plan_steps([step])[0].input_feature_edges == {"plan_info_sales": ("a", "b")}
+
+    def test_edge_values_are_reported_sorted(self) -> None:
+        step = TestBuildPlanStepsInputFeatureNames._source_compute_step()
+        step.features.declared_input_feature_edges = {"plan_info_sales": ("b", "a")}
+
+        assert build_plan_steps([step])[0].input_feature_edges == {"plan_info_sales": ("a", "b")}
+
+    def test_edges_are_copied_and_mutation_does_not_leak(self) -> None:
+        step = TestBuildPlanStepsInputFeatureNames._source_compute_step()
+        original = {"plan_info_sales": ("a",)}
+        step.features.declared_input_feature_edges = original
+
+        record = build_plan_steps([step])[0]
+        assert record.input_feature_edges is not original
+        record.input_feature_edges["mutated"] = ("x",)  # type: ignore[index]
+
+        assert "mutated" not in original
+        assert "mutated" not in build_plan_steps([step])[0].input_feature_edges
+
+    def test_root_or_undeclared_edges_yield_an_empty_mapping(self) -> None:
+        """PlanInfoPandasSource is a root group, so the planner leaves its declared edges at None."""
+        step = TestBuildPlanStepsInputFeatureNames._source_compute_step()
+
+        assert getattr(step.features, "declared_input_feature_edges", None) is None
+        assert build_plan_steps([step])[0].input_feature_edges == {}
+
+        step.features.declared_input_feature_edges = None
+
+        assert build_plan_steps([step])[0].input_feature_edges == {}
 
 
 class TestInputFeatureNamesForChainedFeature:
@@ -1435,6 +2130,7 @@ class TestInputFeatureNamesForChainedFeature:
         aggregation_step = next(step for step in plan if step.feature_group is PandasAggregatedFeatureGroup)
 
         assert aggregation_step.input_feature_names == ("plan_info_sales",)
+        assert aggregation_step.input_feature_edges == {"plan_info_sales__mean_aggr": ("plan_info_sales",)}
 
     def test_root_step_reports_no_input_features(self) -> None:
         plan = _prepare_chained_session().resolved_plan()
@@ -1442,16 +2138,21 @@ class TestInputFeatureNamesForChainedFeature:
         source_step = next(step for step in plan if step.feature_group is PlanInfoPandasSource)
 
         assert source_step.input_feature_names == ()
+        assert source_step.input_feature_edges == {}
 
     def test_input_feature_names_are_unchanged_by_run(self) -> None:
         session = _prepare_chained_session()
 
         before_run = [step.input_feature_names for step in session.resolved_plan()]
+        edges_before_run = [dict(step.input_feature_edges) for step in session.resolved_plan()]
         session.run()
         after_run = [step.input_feature_names for step in session.resolved_plan()]
+        edges_after_run = [dict(step.input_feature_edges) for step in session.resolved_plan()]
 
         assert after_run == before_run
         assert ("plan_info_sales",) in after_run
+        assert edges_after_run == edges_before_run
+        assert {"plan_info_sales__mean_aggr": ("plan_info_sales",)} in edges_after_run
 
 
 class TestInputFeatureNamesMatchTheRuntimeHookContext:
@@ -1466,8 +2167,10 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
         compute_steps = [step for step in session.resolved_plan() if step.step_kind == "compute"]
         assert len(compute_steps) == 2
         assert any(step.input_feature_names for step in compute_steps), "an all-empty comparison proves nothing"
+        assert any(step.input_feature_edges for step in compute_steps), "an all-empty comparison proves nothing"
 
         hook_inputs = recorder.input_features_by_step()
+        hook_edges = recorder.input_feature_edges_by_step()
         assert len(hook_inputs) == len(compute_steps), "every compute step must be hooked exactly once"
 
         for step in compute_steps:
@@ -1475,6 +2178,34 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
             key = (f"{step.feature_group.__module__}.{step.feature_group.__qualname__}", step.feature_names)
             assert key in hook_inputs, f"no calculate hook captured for {key}"
             assert frozenset(step.input_feature_names) == hook_inputs[key]
+            assert dict(step.input_feature_edges) == hook_edges[key]
+
+
+class TestInputFeatureEdgesExcludeInjectedFeatures:
+    """Injected link-index features have no engine entry: absent from the edges, union unchanged."""
+
+    def test_link_index_feature_is_absent_from_the_edges(self) -> None:
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+
+        left_step = next(step for step in plan if step.feature_group is PlanInfoCrossLeftPandas)
+        assert "plan_info_xjid" in left_step.injected_feature_names
+        assert "plan_info_xjid" not in left_step.input_feature_edges
+
+        consumer_step = next(step for step in plan if step.feature_group is PlanInfoCrossConsumer)
+        assert consumer_step.input_feature_edges == {
+            "PlanInfoCrossConsumer": ("plan_info_xleft_val", "plan_info_xright_val")
+        }
+        for step in plan:
+            assert "plan_info_xjid" not in step.input_feature_edges
+            assert all("plan_info_xjid" not in inputs for inputs in step.input_feature_edges.values())
+
+    def test_union_of_declared_inputs_is_still_present(self) -> None:
+        plan = _prepare_cross_framework_join_session().resolved_plan()
+
+        consumer_step = next(step for step in plan if step.feature_group is PlanInfoCrossConsumer)
+
+        assert consumer_step.input_feature_names == ("plan_info_xleft_val", "plan_info_xright_val")
+        assert consumer_step.input_feature_edges  # non-vacuity
 
 
 # ---------------------------------------------------------------------------
@@ -1513,3 +2244,65 @@ class TestCallerNeedsNoInternalImport:
     def test_public_entry_points_exist_on_the_public_api(self) -> None:
         assert hasattr(mlodaAPI, "resolved_plan")
         assert hasattr(mlodaAPI, "explain")
+
+
+class TestPlanStepResultFramework:
+    """result_framework is the type a step's requested output comes back in."""
+
+    @staticmethod
+    def _chained_plan(**options: Any) -> list[PlanStep]:
+        return mloda.explain(
+            _CHAINED_FEATURES,
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=_AGGREGATION_PLUGINS,
+            **options,
+        )
+
+    def test_result_framework_name_is_the_class_name(self) -> None:
+        step = PlanStep(
+            step_kind="compute",
+            feature_names=(),
+            feature_group=None,
+            compute_framework=PandasDataFrame,
+            source_feature_group=None,
+            source_compute_framework=None,
+        )
+        assert step.result_framework is None
+        assert step.result_framework_name is None
+
+        assert dataclasses.replace(step, result_framework=PyArrowTable).result_framework_name == "PyArrowTable"
+
+    def test_without_the_option_a_requested_step_reports_its_own_framework(self) -> None:
+        source, requested = [step for step in self._chained_plan() if step.step_kind == "compute"]
+
+        assert requested.result_framework is requested.compute_framework
+        assert source.result_framework is None
+
+    @pytest.mark.parametrize("via", ["explain", "resolved_plan"])
+    def test_the_option_sets_result_framework_on_requested_steps_only(self, via: str) -> None:
+        if via == "explain":
+            plan = self._chained_plan(output_framework="PyArrowTable")
+        else:
+            session = mloda.prepare(
+                _CHAINED_FEATURES,
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=_AGGREGATION_PLUGINS,
+                output_framework="PyArrowTable",
+            )
+            plan = session.resolved_plan()
+        source, requested = [step for step in plan if step.step_kind == "compute"]
+
+        assert requested.result_framework is PyArrowTable
+        assert source.result_framework is None
+
+    def test_join_and_transform_steps_report_no_result_framework(self) -> None:
+        plan = mloda.explain(
+            ["PlanInfoCrossConsumer"],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            links={_cross_link()},
+            plugin_collector=_CROSS_JOIN_PLUGINS,
+            output_framework=PandasDataFrame,
+        )
+
+        assert {step.step_kind for step in plan} >= {"join", "compute"}
+        assert all(step.result_framework is None for step in plan if step.step_kind != "compute")

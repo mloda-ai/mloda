@@ -20,6 +20,7 @@ from tests.test_plugins.feature_group.input_data.test_read_files.column_discover
 class TestFeatherColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
     reader_cls = FeatherReader
     dependency_module = "pyarrow.ipc"
+    row_count_module = "pyarrow.dataset"
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:
@@ -49,6 +50,7 @@ class TestOrcColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
 class TestJsonColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):
     reader_cls = JsonReader
     dependency_module = "pyarrow.json"
+    expected_row_count = None
 
     @pytest.fixture
     def data_file(self, tmp_path: Path) -> str:

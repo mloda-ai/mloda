@@ -41,28 +41,17 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 
 from tests.test_plugins.compute_framework.test_tooling.asof.asof_scenarios import ASOF_SCENARIOS
+from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 try:
-    import polars as pl
-except ImportError:
-    logger.warning("Polars is not installed. Some tests will be skipped.")
-    pl = None  # type: ignore[assignment]
-
-try:
     import duckdb
 except ImportError:
     logger.warning("DuckDB is not installed. Some tests will be skipped.")
     duckdb = None  # type: ignore[assignment]
-
-try:
-    import pyarrow as pa
-except ImportError:
-    logger.warning("PyArrow is not installed. Some tests will be skipped.")
-    pa = None  # type: ignore[assignment, unused-ignore]
 
 
 _SCENARIO = ASOF_SCENARIOS["backward_single_key"]
@@ -78,32 +67,6 @@ def _columns_to_lists(rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
     """Convert a list of row dicts into a column-oriented dict for DataCreator."""
     keys = rows[0].keys()
     return {key: [row[key] for row in rows] for key in keys}
-
-
-def _records_from_frame(data: Any) -> list[dict[str, Any]]:
-    """Extract native frame rows to plain Python row dicts across backends."""
-    if pl is not None and isinstance(data, pl.LazyFrame):
-        records = data.collect().to_dicts()
-    elif pl is not None and isinstance(data, pl.DataFrame):
-        records = data.to_dicts()
-    elif pa is not None and isinstance(data, pa.Table):
-        records = data.to_pylist()
-    elif isinstance(data, dict):
-        # PythonDict columnar frame: {"col": [v0, v1, ...]}.
-        if not data:
-            records = []
-        else:
-            length = len(next(iter(data.values())))
-            records = [{k: data[k][i] for k in data} for i in range(length)]
-    elif isinstance(data, list):
-        records = data
-    elif hasattr(data, "to_dicts"):
-        records = data.to_dicts()
-    elif hasattr(data, "to_dict"):
-        records = data.to_dict("records")
-    else:
-        records = data.df().to_dict("records")
-    return records
 
 
 def _encode_records(records: list[dict[str, Any]]) -> list[str]:
@@ -199,7 +162,7 @@ class AsofJoinedFeature(FeatureGroup, _AsofMatchData):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        records = _records_from_frame(data)
+        records = records_from_frame(data)
         return {cls.get_class_name(): _encode_records(records)}
 
     @classmethod
@@ -255,7 +218,7 @@ class AsofRunAllTestBase(ABC):
         )
 
         assert len(result) == 1
-        records = _records_from_frame(result[0])
+        records = records_from_frame(result[0])
         return sorted(str(r["AsofJoinedFeature"]) for r in records)
 
     @pytest.mark.parametrize("modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])

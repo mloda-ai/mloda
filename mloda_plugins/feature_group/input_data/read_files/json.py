@@ -46,7 +46,7 @@ class JsonReader(ReadFile):
         name="user_name",
         options=Options(
             context={
-                "BaseInputData": (JsonReader, "/path/to/data.json")
+                JsonReader: "/path/to/data.json"
             }
         )
     )
@@ -65,7 +65,7 @@ class JsonReader(ReadFile):
         name="customer_email",
         options=Options(
             context={
-                "BaseInputData": (JsonReader, "customers.json")
+                JsonReader: "customers.json"
             }
         )
     )
@@ -77,14 +77,14 @@ class JsonReader(ReadFile):
     feature1 = Feature(
         name="order_id",
         options=Options(
-            context={"BaseInputData": (JsonReader, "orders.json")}
+            context={JsonReader: "orders.json"}
         )
     )
 
     feature2 = Feature(
         name="order_total",
         options=Options(
-            context={"BaseInputData": (JsonReader, "orders.json")}
+            context={JsonReader: "orders.json"}
         )
     )
     ```

@@ -8,6 +8,8 @@ These tests define the contract for a two-phase execution model:
 
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import mloda, mlodaAPI, Feature, PluginCollector
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, ApiInputDataFeature
@@ -59,7 +61,7 @@ class TestPrepareReturnsInstance:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
@@ -83,7 +85,7 @@ class TestRunReturnsResults:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
@@ -114,14 +116,14 @@ class TestRunMatchesRunAllOutput:
 
         run_all_result = mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
@@ -153,7 +155,7 @@ class TestMultipleSequentialRuns:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=initial_api_data,
             plugin_collector=_enabled,
         )
@@ -183,6 +185,75 @@ class TestMultipleSequentialRuns:
         assert df_second["PrepareRunApiFeature"].tolist() == ["10_x", "20_y", "30_z"]
 
 
+class _RefuseSecondRunStartExtender(Extender):
+    """Raises from on_run_start on the second run only."""
+
+    raise_on_error = True
+
+    def __init__(self) -> None:
+        self.starts = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        self.starts += 1
+        if self.starts == 2:
+            raise RuntimeError("refuse second run")
+
+
+def _rerun(session: Any, path: str, api_data: dict[str, Any]) -> None:
+    if path == "batch":
+        session.run(api_data=api_data)
+    else:
+        list(session.stream_run(api_data=api_data))
+
+
+class TestFailedRerunDoesNotExposeStaleResults:
+    """After a re-run raises, get_result()/get_artifacts() never return a previous run's data."""
+
+    _first = {"PrepareExample": {"api_id": [1, 2], "api_value": ["a", "b"]}}
+
+    def _prepare(self, function_extender: Any = None) -> Any:
+        features: list[Feature | str] = [Feature(name="PrepareRunApiFeature")]
+        return mloda.prepare(
+            features,
+            compute_frameworks=[PandasDataFrame],
+            api_data={"PrepareExample": {"api_id": [1], "api_value": ["initial"]}},
+            plugin_collector=_enabled,
+            function_extender=function_extender,
+        )
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_rerun_failing_in_computation_hides_first_run_data(self, path: str) -> None:
+        session = self._prepare()
+        first = session.run(api_data=self._first)
+        assert first[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
+
+        bad = {"PrepareExample": {"api_id": [1, 2], "api_value": [3, 4]}}
+        with pytest.raises(TypeError):
+            _rerun(session, path, bad)
+
+        with pytest.raises(ValueError, match="No results found"):
+            session.get_result()
+
+    @pytest.mark.parametrize("path", ["batch", "stream"])
+    def test_rerun_refused_at_start_clears_previous_runner(self, path: str) -> None:
+        session = self._prepare(function_extender={_RefuseSecondRunStartExtender()})
+        session.run(api_data=self._first)
+
+        with pytest.raises(RuntimeError, match="refuse second run"):
+            _rerun(session, path, self._first)
+
+        with pytest.raises(ValueError, match="You need to run any run function beforehand."):
+            session.get_result()
+        with pytest.raises(ValueError, match="You need to run any run function beforehand."):
+            session.get_artifacts()
+
+
 class TestStepStateDoesNotLeakBetweenRuns:
     """Test 5: Internal step state does not leak between runs."""
 
@@ -203,7 +274,7 @@ class TestStepStateDoesNotLeakBetweenRuns:
 
         session = mloda.prepare(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             api_data=api_data,
             plugin_collector=_enabled,
         )
@@ -259,10 +330,10 @@ class _CalculateHookRecordingExtender(Extender):
 _pfext_enabled = PluginCollector.enabled_feature_groups({_PrepareRunExtenderFeatureGroup})
 
 
-class TestRunFallsBackToPrepareTimeFunctionExtender:
-    """Fix: run() with no function_extender of its own must still fire the extender passed to prepare()."""
+class TestRunUsesSessionFunctionExtender:
+    """function_extender is session-level: set once at prepare(), reused by every run()."""
 
-    def test_run_without_its_own_function_extender_uses_the_one_from_prepare(self) -> None:
+    def test_run_fires_the_extender_passed_to_prepare(self) -> None:
         recorder = _CalculateHookRecordingExtender()
 
         session = mloda.prepare(
@@ -276,29 +347,11 @@ class TestRunFallsBackToPrepareTimeFunctionExtender:
         assert recorder.call_count == 1
 
 
-class TestRunOwnFunctionExtenderOverridesPrepareTimeOne:
-    """An explicit run()-time function_extender replaces (does not merge with) prepare()'s."""
+class TestRunAndStreamRunRejectFunctionExtender:
+    """run()/stream_run() no longer accept function_extender; it is session-level, set only via prepare()."""
 
-    def test_explicit_run_function_extender_replaces_prepare_time_one(self) -> None:
-        recorder_a = _CalculateHookRecordingExtender()
-        recorder_b = _CalculateHookRecordingExtender()
-
-        session = mloda.prepare(
-            [Feature(f"{_PFEXT_MARKER}_col")],
-            compute_frameworks=["PythonDictFramework"],
-            plugin_collector=_pfext_enabled,
-            function_extender={recorder_a},
-        )
-        session.run(function_extender={recorder_b})
-
-        assert recorder_b.call_count == 1
-        assert recorder_a.call_count == 0
-
-
-class TestRunWithNoPrepareTimeExtenderRegressionGuard:
-    """Baseline guard: run()'s own function_extender still fires when prepare() had none."""
-
-    def test_run_function_extender_fires_when_prepare_had_none(self) -> None:
+    @pytest.mark.parametrize("name", ["run", "stream_run"])
+    def test_function_extender_kwarg_raises_type_error(self, name: str) -> None:
         recorder = _CalculateHookRecordingExtender()
 
         session = mloda.prepare(
@@ -306,6 +359,6 @@ class TestRunWithNoPrepareTimeExtenderRegressionGuard:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_pfext_enabled,
         )
-        session.run(function_extender={recorder})
 
-        assert recorder.call_count == 1
+        with pytest.raises(TypeError, match="unexpected keyword argument 'function_extender'"):
+            getattr(session, name)(**{"function_extender": {recorder}})

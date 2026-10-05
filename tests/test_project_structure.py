@@ -1,3 +1,5 @@
+import configparser
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -220,3 +222,33 @@ class TestPackagingConfig:
         assert "build-system" in data, "pyproject.toml must have a [build-system] section"
         assert "requires" in data["build-system"], "pyproject.toml [build-system] must specify 'requires'"
         assert "build-backend" in data["build-system"], "pyproject.toml [build-system] must specify 'build-backend'"
+
+
+class TestToxConfig:
+    """Validate the tox settings the CI and release workflows depend on."""
+
+    TOX_INSTALL = re.compile(r"\binstall\b.*(?<![\w-])tox(?![\w-])")
+    TOX_PIN = re.compile(r"uv tool install tox==\S+ --with tox-uv==\S+$")
+
+    def test_tox_opts_out_of_venv_redirect(self) -> None:
+        """tox >= 4.64 otherwise writes a .venv redirect file that makes the release job's `uv lock` fail."""
+        parser = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
+        assert parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8"), "tox.ini not found"
+        assert not parser.getboolean("tox", "venv_redirect", fallback=True), (
+            "tox.ini must set `venv_redirect = false` under [tox]"
+        )
+
+    def test_workflows_pin_the_same_tox(self) -> None:
+        pins: dict[str, set[str]] = {}
+        for workflow in sorted((PROJECT_ROOT / ".github" / "workflows").glob("*.y*ml")):
+            for line in _read_text(workflow).splitlines():
+                command = line.strip()
+                if command.startswith("#") or not self.TOX_INSTALL.search(command):
+                    continue
+                match = self.TOX_PIN.search(command)
+                assert match, (
+                    f"{workflow.name} must install `uv tool install tox==X --with tox-uv==Y`, found: {command}"
+                )
+                pins.setdefault(workflow.name, set()).add(match.group(0))
+        assert {"ci.yaml", "release.yaml"} <= pins.keys(), f"ci.yaml and release.yaml must install tox: {pins}"
+        assert len(set().union(*pins.values())) == 1, f"workflows must install the same tox and tox-uv: {pins}"

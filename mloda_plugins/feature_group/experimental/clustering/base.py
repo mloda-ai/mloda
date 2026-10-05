@@ -5,12 +5,12 @@ Base implementation for clustering feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
+    FeatureChainParser,
     FeatureChainParserMixin,
 )
 from mloda.provider import COLUMN_DISCOVERY_HOOKS
@@ -111,7 +111,7 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r".*__cluster_([\w]+)_([\w]+)$"
+    PREFIX_PATTERN = r".*__cluster_(?P<algorithm>[\w]+)_(?P<k_value>[\w]+)$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -133,7 +133,6 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             context=True,
             strict_validation=True,
             element_validator=lambda value: value == "auto" or is_positive_int(value),
-            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source features to use for clustering",
@@ -154,18 +153,6 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     }
 
     @classmethod
-    def _validate_string_match(cls, feature_name: str, operation_config: str, source_feature: str) -> bool:
-        """Validate clustering-specific string patterns using parse_clustering_prefix()."""
-        if FeatureChainParser.is_chained_feature(feature_name):
-            try:
-                # Use existing validation logic that validates algorithm and k_value
-                cls.parse_clustering_prefix(feature_name)
-            except ValueError:
-                # If validation fails, this feature doesn't match
-                return False
-        return True
-
-    @classmethod
     def parse_clustering_prefix(cls, feature_name: str) -> tuple[str, str]:
         """
         Parse the clustering suffix into its components.
@@ -179,24 +166,16 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the double underscore)
-        suffix_start = feature_name.find(CHAIN_SEPARATOR)
-        if suffix_start == -1:
-            raise ValueError(
-                f"Invalid clustering feature name format: {feature_name}. Missing double underscore separator."
-            )
-
-        suffix = feature_name[suffix_start + 2 :]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) != 3 or parts[0] != "cluster":
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid clustering feature name format: {feature_name}. "
                 f"Expected format: {{in_features}}__cluster_{{algorithm}}_{{k_value}}"
             )
 
-        algorithm, k_value = parts[1], parts[2]
+        captures = cast(dict[str, str], parsed.named_captures)
+        algorithm = captures[cls.ALGORITHM]
+        k_value = captures[cls.K_VALUE]
 
         # Validate algorithm
         if algorithm not in cls.CLUSTERING_ALGORITHMS:
@@ -225,14 +204,12 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         k_value = cls.parse_clustering_prefix(feature_name)[1]
         return k_value if k_value == "auto" else int(k_value)
 
-    # Custom validation done via _validate_string_match() hook
-
     @classmethod
     def _extract_clustering_params(cls, feature: Feature) -> tuple[str | None, int | str | None]:
         """
         Extract algorithm and k_value from a feature.
 
-        Tries string-based approach first, falls back to configuration-based.
+        Each value comes from the feature name when it owns the match, otherwise from options.
 
         Args:
             feature: The feature to extract parameters from
@@ -243,16 +220,8 @@ class ClusteringFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Raises:
             ValueError: If string-based parsing fails due to invalid format
         """
-        # Try string-based parsing first
-        algorithm_str, source_features_str = FeatureChainParser.parse_feature_name(feature.name, [cls.PREFIX_PATTERN])
-        if algorithm_str is not None and source_features_str is not None:
-            algorithm, k_value_str = cls.parse_clustering_prefix(feature.name)
-            k_value: int | str = "auto" if k_value_str == "auto" else int(k_value_str)
-            return algorithm, k_value
-
-        # Fall back to configuration-based
-        algorithm = feature.options[cls.ALGORITHM]
-        k_value_raw = feature.options.get(cls.K_VALUE)
+        algorithm = cls._resolve_operation(feature, cls.ALGORITHM)
+        k_value_raw = cls._resolve_operation(feature, cls.K_VALUE)
 
         if k_value_raw is None:
             return algorithm, None

@@ -75,8 +75,7 @@ join `Index`) drive the equi match; the time columns drive the inequality match.
 join: every left row survives, with null right columns when no match is found.
 
 **Backend support.** Implemented for `pandas`, `polars` (eager and lazy), `duckdb`, `python_dict`,
-`pyarrow`, and `sqlite`. A `spark` implementation exists but is **experimental and not exercised in
-CI** (requires `JAVA_HOME`); validate it yourself before relying on it. `iceberg` has no merge
+`pyarrow`, `sqlite`, and `spark` (requires Java 17+ on `JAVA_HOME`). `iceberg` has no merge
 engine and does not support joins.
 
 Cross-backend caveats to be aware of:
@@ -338,12 +337,16 @@ mloda.run_all(
 
 mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed.
 
+A feature between a join side and the feature consuming the join runs on that side's compute framework; pinning it elsewhere fails at plan time. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join.
+
 In the following section, we will see how this can look like.
 
 #### Merging Data in the Compute Framework
 
 The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.
+
+On DuckDB and SQLite (and the Spark as-of merge under the default `spark.sql.caseSensitive=false`), a merge whose output column names differ only in case raises `ValueError`; see [Column name case sensitivity](compute-framework-integration.md#column-name-case-sensitivity).
 
 ```py
 class PandasDataFrame(ComputeFramework):

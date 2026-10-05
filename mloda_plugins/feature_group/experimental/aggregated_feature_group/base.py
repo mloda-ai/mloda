@@ -10,7 +10,6 @@ from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -104,7 +103,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "median": "Median value",
     }
 
-    PREFIX_PATTERN = r".*__([\w]+)_aggr$"
+    PREFIX_PATTERN = r".*__(?P<aggregation_type>[\w]+)_aggr$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -131,7 +130,7 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def get_aggregation_type(cls, feature_name: str) -> str:
         """Extract the aggregation type from the feature name."""
-        prefix_part, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
+        prefix_part = cls.resolve_feature_name(feature_name).value_for(cls.AGGREGATION_TYPE)
         if prefix_part is None:
             raise ValueError(f"Could not extract aggregation type from feature name: {feature_name}")
         return prefix_part

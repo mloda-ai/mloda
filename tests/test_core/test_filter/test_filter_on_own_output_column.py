@@ -66,7 +66,7 @@ def test_filter_by_name_on_own_output_column_with_context_options(flight_server:
 
     result = MlodaTestRunner.run_api(
         features,
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         parallelization_modes={ParallelizationMode.SYNC},
         flight_server=flight_server,
         global_filter=global_filter,
@@ -97,7 +97,7 @@ def test_filter_feature_with_matching_options_keeps_requested_column(flight_serv
 
     result = MlodaTestRunner.run_api(
         features,
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         parallelization_modes={ParallelizationMode.SYNC},
         flight_server=flight_server,
         global_filter=global_filter,

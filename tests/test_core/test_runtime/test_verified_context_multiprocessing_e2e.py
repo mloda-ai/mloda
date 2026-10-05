@@ -1,5 +1,5 @@
-"""E2E: tenant_id/project_id/principal set via verified_context() reach HookContext inside a
-real spawned MULTIPROCESSING worker process.
+"""E2E: tenant_id/project_id/principal set via verified_context(), and plugin_version resolved
+at plan time, reach HookContext inside a real spawned MULTIPROCESSING worker process.
 
 An Extender's own instance state does not propagate back from a spawned child via the manager
 proxy, so the recording extender here writes captured values to a file instead, read back by
@@ -43,7 +43,7 @@ _ENABLED = PluginCollector.enabled_feature_groups({_VerifiedContextMultiprocessi
 
 
 class _VerifiedContextRecordingExtender(Extender):
-    """Writes tenant_id/project_id/principal to output_path as JSON."""
+    """Writes tenant_id/project_id/principal/plugin_version to output_path as JSON."""
 
     def __init__(self, output_path: Path, priority: int = 100) -> None:
         self.priority = priority
@@ -64,6 +64,7 @@ class _VerifiedContextRecordingExtender(Extender):
                     "principal": context.principal,
                     "worker_index": context.worker_index,
                     "pid": os.getpid(),
+                    "plugin_version": context.plugin_version,
                 }
             )
         )
@@ -72,24 +73,28 @@ class _VerifiedContextRecordingExtender(Extender):
 
 @pytest.mark.timeout(30)
 class TestVerifiedContextReachesHookContextUnderMultiprocessing:
-    def test_tenant_project_principal_survive_the_pickle_boundary_into_a_spawned_worker(
-        self, tmp_path: Path, flight_server: Any
+    def test_tenant_project_principal_and_plan_time_plugin_version_survive_the_pickle_boundary_into_a_spawned_worker(
+        self, tmp_path: Path, flight_server: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         output_path = tmp_path / "verified_context.txt"
         extender = _VerifiedContextRecordingExtender(output_path)
         parent_pid = os.getpid()
 
+        monkeypatch.setattr(
+            "mloda.core.core.engine.resolve_plugin_version",
+            lambda module_name: f"v:{module_name}",
+        )
         session = mloda.prepare(
             [Feature(name="verified_context_mp_e2e_col")],
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={extender},
         )
 
         with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
             session.run(
                 parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-                function_extender={extender},
                 flight_server=flight_server,
             )
 
@@ -103,3 +108,5 @@ class TestVerifiedContextReachesHookContextUnderMultiprocessing:
         # in-process degradation that would write the same JSON regardless.
         assert recorded["worker_index"] is not None
         assert recorded["pid"] != parent_pid
+        expected_plugin_version = f"v:{_VerifiedContextMultiprocessingFeatureGroup.__module__}"
+        assert recorded["plugin_version"] == expected_plugin_version, "must be resolved in the parent at plan time"

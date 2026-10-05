@@ -20,26 +20,20 @@ and because ``MlodaRunError`` does not yet exist.
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData
-from mloda.provider import DataCreator
-from mloda.provider import FeatureGroup
-from mloda.provider import FeatureSet
-from mloda.user import Feature
-from mloda.user import ParallelizationMode
-from mloda.user import PluginCollector
-from mloda.user import mloda
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
 # Importing the framework registers it as a ComputeFramework subclass so
 # ``compute_frameworks=["PythonDictFramework"]`` resolves during ``run_all``.
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
-
 
 # --------------------------------------------------------------------------- #
 # Minimal root FeatureGroups whose calculate_feature raises a chosen error type
@@ -104,15 +98,220 @@ _ENABLED_CAUSE_CHAIN = PluginCollector.enabled_feature_groups({CauseChainFeature
 
 
 # --------------------------------------------------------------------------- #
+# Credential scrubbing: failure logs and MlodaRunError must never carry secrets,
+# while the exception raised to the caller keeps its raw, unscrubbed message.
+#
+# The secret value itself, not "secret"/"leak", is the only string the assertions
+# below search for, so it must never also appear in an identifier, comment or
+# source line: a raw traceback embeds the source line of the raise statement,
+# and an identifier match there would be a false positive, not a real leak.
+# --------------------------------------------------------------------------- #
+
+_LEAK_MARKER = "hunter2z9"
+_LEAK_PRESIGNED_URL = f"https://bucket.s3.amazonaws.com/key?X-Amz-Signature={_LEAK_MARKER}"
+_LEAK_USERINFO_URL = f"postgres://user:{_LEAK_MARKER}@host:5432/db"
+_LEAK_DSN = f"host=h password={_LEAK_MARKER} dbname=d"
+_LEAK_MESSAGE = f"failed for {_LEAK_PRESIGNED_URL} and {_LEAK_USERINFO_URL} and {_LEAK_DSN}"
+
+
+class SecretLeakFeatureGroup(FeatureGroup):
+    """Root FG whose ``calculate_feature`` raises an ``OSError`` carrying three credential shapes."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_secret_leak_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise OSError(_LEAK_MESSAGE)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_secret_leak_col"}
+
+
+class SecretLeakChainedFeatureGroup(FeatureGroup):
+    """Root FG that raises ``RuntimeError`` from an ``OSError`` carrying the same credential shapes."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_secret_leak_chained_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise RuntimeError("load failed") from OSError(_LEAK_MESSAGE)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_secret_leak_chained_col"}
+
+
+class UnpicklableSecretLeakError(RuntimeError):
+    """A RuntimeError with a non-picklable payload whose message also carries a secret."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.lock = threading.Lock()  # not picklable
+
+
+class UnpicklableSecretLeakFeatureGroup(FeatureGroup):
+    """Root FG whose ``calculate_feature`` raises a non-picklable, secret-bearing exception."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_unpicklable_secret_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise UnpicklableSecretLeakError(_LEAK_MESSAGE)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_unpicklable_secret_col"}
+
+
+_ENABLED_SECRET_LEAK = PluginCollector.enabled_feature_groups({SecretLeakFeatureGroup})
+_ENABLED_SECRET_LEAK_CHAINED = PluginCollector.enabled_feature_groups({SecretLeakChainedFeatureGroup})
+_ENABLED_UNPICKLABLE_SECRET_LEAK = PluginCollector.enabled_feature_groups({UnpicklableSecretLeakFeatureGroup})
+
+
+_ROW_LEAK_MARKER = "Jane Doe, DOB 1990"
+
+
+class RowLeakError(ValueError):
+    """A specific error type for testing row leakage."""
+
+
+class RowLeakFeatureGroup(FeatureGroup):
+    """Root FG whose ``calculate_feature`` raises an error carrying row values."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_row_leak_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise RowLeakError(f"Failed parsing row: {_ROW_LEAK_MARKER}")
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_row_leak_col"}
+
+
+class RowLeakChainedFeatureGroup(FeatureGroup):
+    """Root FG that raises ``RuntimeError`` from a ``RowLeakError``."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"exc_row_leak_chained_col"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise RuntimeError("Calculation failed") from RowLeakError(f"Inner row error: {_ROW_LEAK_MARKER}")
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"exc_row_leak_chained_col"}
+
+
+_ENABLED_ROW_LEAK = PluginCollector.enabled_feature_groups({RowLeakFeatureGroup})
+_ENABLED_ROW_LEAK_CHAINED = PluginCollector.enabled_feature_groups({RowLeakChainedFeatureGroup})
+
+
+def test_sync_secret_leak_direct_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """The caller keeps the raw secret-bearing message; ERROR log records never carry the secret."""
+    with pytest.raises(OSError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert _LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_sync_secret_leak_chained_raw_to_caller_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """The chained cause keeps its raw secret-bearing message; ERROR log records never carry the secret."""
+    with pytest.raises(RuntimeError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_chained_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK_CHAINED,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert isinstance(excinfo.value.__cause__, OSError)
+    assert _LEAK_MARKER in str(excinfo.value.__cause__)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_threading_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    with pytest.raises(OSError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.THREADING},
+            flight_server=flight_server,
+        )
+
+    assert _LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_multiprocessing_secret_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    with pytest.raises(OSError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_secret_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+    assert _LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+@pytest.mark.timeout(15)
+def test_multiprocessing_unpicklable_secret_leak_message_is_scrubbed(flight_server: Any) -> None:
+    """The MlodaRunError fallback message for a non-picklable exception must not carry the secret."""
+    from mloda.core.abstract_plugins.components.error_utils import MlodaRunError
+
+    with pytest.raises(MlodaRunError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_unpicklable_secret_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_UNPICKLABLE_SECRET_LEAK,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+    assert _LEAK_MARKER not in str(excinfo.value)
+    assert "UnpicklableSecretLeakError" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------- #
 # 1. SYNC mode type preservation
 # --------------------------------------------------------------------------- #
 
 
-def test_sync_preserves_import_error_type() -> None:
+def test_sync_preserves_import_error_type(caplog: pytest.LogCaptureFixture) -> None:
     """SYNC ``run_all`` must surface the original ``ImportError`` type, not a bare Exception.
 
     FAILS today: ``_check_for_error`` raises a bare ``Exception`` so
     ``pytest.raises(ImportError)`` does not match and the Exception propagates.
+    It also logs the traceback exactly once, on an mloda logger, never on the root logger.
     """
     with pytest.raises(ImportError, match="bm25s"):
         mloda.run_all(
@@ -121,6 +320,10 @@ def test_sync_preserves_import_error_type() -> None:
             plugin_collector=_ENABLED_IMPORT_ERROR,
             parallelization_modes={ParallelizationMode.SYNC},
         )
+
+    assert [r.name for r in caplog.records if r.name == "root"] == []
+    traceback_records = [r for r in caplog.records if "Traceback" in r.getMessage()]
+    assert [r.name for r in traceback_records] == ["mloda.core.runtime.run"]
 
 
 # --------------------------------------------------------------------------- #
@@ -317,3 +520,53 @@ def test_multiprocessing_unpicklable_exception_does_not_hang(flight_server: Any)
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
             flight_server=flight_server,
         )
+
+
+def test_sync_row_leak_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """Row values in the exception message must not be logged to ERROR records."""
+    with pytest.raises(RowLeakError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_row_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ROW_LEAK,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert _ROW_LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_multiprocessing_row_leak_scrubbed_in_logs(flight_server: Any, caplog: pytest.LogCaptureFixture) -> None:
+    """Row values in the exception message must not be logged to ERROR records in MULTIPROCESSING."""
+    with pytest.raises(RowLeakError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_row_leak_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ROW_LEAK,
+            parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            flight_server=flight_server,
+        )
+
+    assert _ROW_LEAK_MARKER in str(excinfo.value)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+def test_sync_row_leak_chained_scrubbed_in_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """Row values in chained exception messages must not be logged to ERROR records."""
+    with pytest.raises(RuntimeError) as excinfo:
+        mloda.run_all(
+            [Feature(name="exc_row_leak_chained_col")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED_ROW_LEAK_CHAINED,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+    assert isinstance(excinfo.value.__cause__, RowLeakError)
+    assert _ROW_LEAK_MARKER in str(excinfo.value.__cause__)
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records
+    assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)

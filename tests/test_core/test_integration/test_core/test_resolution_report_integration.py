@@ -52,7 +52,7 @@ def _prepared_session() -> mlodaAPI:
         Options(context={AggregatedFeatureGroup.AGGREGATION_TYPE: "avg", DefaultOptionKeys.in_features: REVENUE_COL}),
     )
     plugins = PluginCollector.enabled_feature_groups({ResReportE2ESource_811, PandasAggregatedFeatureGroup})
-    return mloda.prepare([f_sum, f_avg], compute_frameworks={PandasDataFrame}, plugin_collector=plugins)
+    return mloda.prepare([f_sum, f_avg], compute_frameworks=[PandasDataFrame], plugin_collector=plugins)
 
 
 class TestResolutionReportEndToEnd_811:

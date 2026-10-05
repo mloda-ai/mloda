@@ -43,7 +43,7 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
     @classmethod
     def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
         """Get the set of available column names from the DataFrame."""
-        return set(data.columns)
+        return PandasDataFrame.extract_column_names(data)
 
     @classmethod
     def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
@@ -57,10 +57,11 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         Raises:
             ValueError: If none of the resolved features exist in the data
         """
-        missing_features = [name for name in feature_names if name not in data.columns]
+        available_columns = cls._get_available_columns(data)
+        missing_features = [name for name in feature_names if name not in available_columns]
         if len(missing_features) == len(feature_names):
             raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {list(data.columns)}"
+                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
             )
 
     @classmethod

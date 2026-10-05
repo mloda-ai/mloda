@@ -37,6 +37,7 @@ class MockWithConditionalRequired(FeatureChainParserMixin):
     """Feature group with a conditionally required order_by in PROPERTY_MAPPING."""
 
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "aggregation_type": PropertySpec(
@@ -160,6 +161,7 @@ class TestRequiredWhenUnit:
 
         class MockWithBothDefaultAndRequiredWhen(FeatureChainParserMixin):
             PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "aggregation_type": PropertySpec(
                     "Aggregation to apply",
@@ -248,6 +250,7 @@ class ConditionalRequiredFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     """Full FeatureGroup with required_when for mloda.run_all integration testing."""
 
     PREFIX_PATTERN = r".*__([\w]+)_windowed$"
+    MIN_IN_FEATURES = 0
 
     PROPERTY_MAPPING = {
         "aggregation_type": PropertySpec(
@@ -294,7 +297,7 @@ class TestRequiredWhenRunAll:
         )
         results = mloda.run_all(
             features=[feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         assert len(results) == 1
@@ -309,7 +312,7 @@ class TestRequiredWhenRunAll:
         )
         results = mloda.run_all(
             features=[feature],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
         assert len(results) == 1
@@ -322,9 +325,15 @@ class TestRequiredWhenRunAll:
             "result_feature",
             Options(context={"aggregation_type": "first"}),
         )
-        with pytest.raises(ValueError, match="No feature groups found"):
+        with pytest.raises(ValueError, match="No feature groups found") as exc_info:
             mloda.run_all(
                 features=[feature],
-                compute_frameworks={PandasDataFrame},
+                compute_frameworks=[PandasDataFrame],
                 plugin_collector=plugin_collector,
             )
+        assert (
+            "required option 'order_by' is absent, but ConditionalRequiredFeatureGroup declares it required "
+            "(required_when predicate _run_all_needs_order_by is satisfied); pass it in Options(context=...), "
+            "and for an input feature, such as the child of a chained name, "
+            "list it in the consumer's propagate_context_keys"
+        ) in str(exc_info.value)

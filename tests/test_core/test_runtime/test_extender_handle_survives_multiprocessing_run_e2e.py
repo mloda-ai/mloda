@@ -74,11 +74,11 @@ class TestCallersOwnExtenderRunsInParentForASyncOnlyFramework:
             compute_frameworks=["_SyncOnlyExtenderSurvivalFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
+            function_extender={probe},
         )
 
         results = session.run(
             parallelization_modes={ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING},
-            function_extender={probe},
             flight_server=flight_server,
         )
 

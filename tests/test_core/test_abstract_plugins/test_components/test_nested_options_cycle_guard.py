@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
+from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.options import Options
+
+_NODE_KINDS = [HashableDict, Credential]
+_NODE_KIND_IDS = ["HashableDict", "Credential"]
 
 
 def _options_cycle(marker: Any = None) -> Options:
@@ -141,13 +147,15 @@ class TestNestedNodeTypeIdentityPreserved:
         assert Options(group={"k": Options(group={"a": 1})}) != Options(group={"k": {"a": 1}})
         assert Options(group={"k": {"a": 1}}) != Options(group={"k": Options(group={"a": 1})})
 
-    def test_a_nested_options_is_not_equal_to_a_hashable_dict(self) -> None:
-        assert Options(group={"k": Options(group={"a": 1})}) != Options(group={"k": HashableDict({"a": 1})})
-        assert Options(group={"k": HashableDict({"a": 1})}) != Options(group={"k": Options(group={"a": 1})})
+    @pytest.mark.parametrize("node_cls", _NODE_KINDS, ids=_NODE_KIND_IDS)
+    def test_a_nested_options_is_not_equal_to_a_node(self, node_cls: type) -> None:
+        assert Options(group={"k": Options(group={"a": 1})}) != Options(group={"k": node_cls({"a": 1})})
+        assert Options(group={"k": node_cls({"a": 1})}) != Options(group={"k": Options(group={"a": 1})})
 
-    def test_a_nested_hashable_dict_is_not_equal_to_a_plain_dict(self) -> None:
-        assert Options(group={"k": HashableDict({"a": 1})}) != Options(group={"k": {"a": 1}})
-        assert HashableDict({"k": HashableDict({"a": 1})}) != HashableDict({"k": {"a": 1}})
+    @pytest.mark.parametrize("node_cls", _NODE_KINDS, ids=_NODE_KIND_IDS)
+    def test_a_nested_node_is_not_equal_to_a_plain_dict(self, node_cls: type) -> None:
+        assert Options(group={"k": node_cls({"a": 1})}) != Options(group={"k": {"a": 1}})
+        assert node_cls({"k": node_cls({"a": 1})}) != node_cls({"k": {"a": 1}})
 
 
 class TestAcyclicNestedNodesUnchanged:
@@ -180,12 +188,14 @@ class TestAcyclicNestedNodesUnchanged:
 
 
 class TestChildOptionsKeepsNestedNodeTypeIdentity:
-    def test_a_hashable_dict_child_option_is_not_equal_to_a_plain_dict(self) -> None:
-        assert _feature_with_child_option(HashableDict({"a": 1})) != _feature_with_child_option({"a": 1})
-        assert _feature_with_child_option({"a": 1}) != _feature_with_child_option(HashableDict({"a": 1}))
+    @pytest.mark.parametrize("node_cls", _NODE_KINDS, ids=_NODE_KIND_IDS)
+    def test_a_node_child_option_is_not_equal_to_a_plain_dict(self, node_cls: type) -> None:
+        assert _feature_with_child_option(node_cls({"a": 1})) != _feature_with_child_option({"a": 1})
+        assert _feature_with_child_option({"a": 1}) != _feature_with_child_option(node_cls({"a": 1}))
 
-    def test_a_hashable_dict_and_a_plain_dict_child_option_do_not_collapse_in_a_set(self) -> None:
-        features = {_feature_with_child_option(HashableDict({"a": 1})), _feature_with_child_option({"a": 1})}
+    @pytest.mark.parametrize("node_cls", _NODE_KINDS, ids=_NODE_KIND_IDS)
+    def test_a_node_and_a_plain_dict_child_option_do_not_collapse_in_a_set(self, node_cls: type) -> None:
+        features = {_feature_with_child_option(node_cls({"a": 1})), _feature_with_child_option({"a": 1})}
         assert len(features) == 2
 
     def test_an_options_child_option_is_not_equal_to_a_plain_dict(self) -> None:
@@ -203,15 +213,17 @@ class TestChildOptionsKeepsNestedNodeTypeIdentity:
         }
         assert len(features) == 2
 
-    def test_equal_hashable_dict_child_options_compare_equal_and_hash_alike(self) -> None:
-        left = _feature_with_child_option(HashableDict({"a": [1, {"b": 2}]}))
-        right = _feature_with_child_option(HashableDict({"a": [1, {"b": 2}]}))
+    @pytest.mark.parametrize("node_cls", _NODE_KINDS, ids=_NODE_KIND_IDS)
+    def test_equal_node_child_options_compare_equal_and_hash_alike(self, node_cls: type) -> None:
+        left = _feature_with_child_option(node_cls({"a": [1, {"b": 2}]}))
+        right = _feature_with_child_option(node_cls({"a": [1, {"b": 2}]}))
 
         assert left == right
         assert hash(left) == hash(right)
 
-    def test_differing_hashable_dict_child_options_compare_unequal(self) -> None:
-        assert _feature_with_child_option(HashableDict({"a": 1})) != _feature_with_child_option(HashableDict({"a": 2}))
+    @pytest.mark.parametrize("node_cls", _NODE_KINDS, ids=_NODE_KIND_IDS)
+    def test_differing_node_child_options_compare_unequal(self, node_cls: type) -> None:
+        assert _feature_with_child_option(node_cls({"a": 1})) != _feature_with_child_option(node_cls({"a": 2}))
 
     def test_a_cycle_in_a_hashable_dict_child_option_does_not_raise(self) -> None:
         feature = _feature_with_child_option(_hashable_dict_cycle())

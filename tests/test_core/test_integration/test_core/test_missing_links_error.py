@@ -13,18 +13,22 @@ This prevents confusing KeyError messages at runtime and educates users about
 the requirement for explicit Links when merging multiple dependencies.
 """
 
-from typing import Any
+from typing import Any, cast
 
 import pyarrow.compute as pc
 import pytest
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
+from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
+from mloda.user import JoinSpec
+from mloda.user import Link
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -88,15 +92,624 @@ class MultiDependencyFeature(FeatureGroup):
         return {cls.get_class_name(): pc.add(col_a, col_b)}
 
 
+class SplitMetricSource(FeatureGroup):
+    """Root feature group producing two columns from one DataCreator; requested with
+    differing Options it plans as two separate option buckets."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"metric_a", "metric_b"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = {"metric_a": [10, 20, 30], "metric_b": [100, 200, 300]}
+        return {"id": [1, 2, 3], **{name: values[name] for name in features.get_all_names() if name in values}}
+
+
+class MetricConverter(FeatureGroup):
+    """Requests metric_a with an extra group option, splitting SplitMetricSource into a
+    second option bucket relative to a sibling requesting metric_b without it."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("metric_a", options={"unit": "x"})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("metric_a")}
+
+
+class MetricCombiner(FeatureGroup):
+    """Declares inputs spanning both option buckets of SplitMetricSource (via MetricConverter
+    and directly via metric_b) with no Link, which is rejected at plan time."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature.int32_of("MetricConverter"),
+            Feature.int32_of("metric_b"),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        col_conv = data.column("MetricConverter")
+        col_b = data.column("metric_b")
+        return {cls.get_class_name(): pc.add(col_conv, col_b)}
+
+
+class MetricConverterScale(FeatureGroup):
+    """Requests metric_a with unit AND scale, giving SplitMetricSource a third option bucket that
+    MetricCombiner never spans (it only spans the {unit: 'x'} and {} buckets)."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("metric_a", options={"unit": "x", "scale": 2})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("metric_a")}
+
+
+class SplitSourceDtype(FeatureGroup):
+    """Root feature group producing two columns, requested with differing data types (no options)."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"d_a", "d_b"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = {"d_a": [10, 20, 30], "d_b": [100, 200, 300]}
+        return {"id": [1, 2, 3], **{name: values[name] for name in features.get_all_names() if name in values}}
+
+
+class DtypeCombiner(FeatureGroup):
+    """Requests d_a as int32 and d_b as int64 with no Link: a data-type-only split of
+    SplitSourceDtype, unrelated to any option."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("d_a"), Feature.int64_of("d_b")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("d_a"), data.column("d_b"))}
+
+
+class DtypeOptionSibling(FeatureGroup):
+    """Requests d_a with an unrelated option, giving SplitSourceDtype a third, option-differing
+    bucket elsewhere in the plan (unrelated to DtypeCombiner's dtype-only split)."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("d_a", options={"unit": "x"})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("d_a")}
+
+
+class R5Root(FeatureGroup):
+    """Single root feature; X5Intermediate splits on top of it without ever breaking anything."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"r5"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"id": [1, 2, 3], "r5": [1, 2, 3]}
+
+
+def _non_forwarded_k(value: int) -> Options:
+    options = Options(group={"k": value})
+    options.mark_non_forwarded("k")
+    return options
+
+
+class X5Intermediate(FeatureGroup):
+    """Non-root feature group: forwards r5 unchanged under two names. Requesting it with two
+    different (non-forwarded) values of 'k' splits it into two option buckets, but since 'k' is
+    never forwarded to r5, both buckets compute the exact same r5 values and merging them succeeds
+    without any Link."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("r5", forward_group=False)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(str(features.get_all_names()[0]), data.column("r5"))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"x5_a", "x5_b"}
+
+
+class Z5UnrelatedTypo(FeatureGroup):
+    """Merges the two X5Intermediate option buckets (which succeeds, since 'k' never forwards),
+    then hits an unrelated KeyError from a typo'd column access."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("x5_a", options=_non_forwarded_k(1), data_type=DataType.INT32),
+            Feature("x5_b", options=_non_forwarded_k(2), data_type=DataType.INT32),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        base = pc.add(data.column("x5_a"), data.column("x5_b"))
+        data.column("column_that_does_not_exist")
+        return data.append_column(cls.get_class_name(), base)
+
+
+class LinkedSplitSource(FeatureGroup):
+    """Root feature group split into two option buckets that the user already Linked."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"l_a", "l_b"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        values = {"l_a": [10, 20, 30], "l_b": [100, 200, 300]}
+        return {"id": [1, 2, 3], **{name: values[name] for name in features.get_all_names() if name in values}}
+
+
+class LinkedConverter(FeatureGroup):
+    """Requests l_a with an extra option, splitting LinkedSplitSource into a second bucket."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("l_a", options={"unit": "x"})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), data.column("l_a"))
+
+
+class LinkedCombiner(FeatureGroup):
+    """Merges the two (already-Linked) LinkedSplitSource buckets, then hits an unrelated
+    KeyError from a typo'd column access."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature.int32_of("LinkedConverter"),
+            Feature.int32_of("l_b", options={"unit": "y"}),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        base = pc.add(data.column("LinkedConverter"), data.column("l_b"))
+        data.column("column_that_does_not_exist")
+        return data.append_column(cls.get_class_name(), base)
+
+
+class MixedKeySource(FeatureGroup):
+    """Root feature group split by two option keys of different types (int and str)."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"m_x"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"id": [1, 2, 3], "m_x": [10, 20, 30]}
+
+
+class ConvIntKey(FeatureGroup):
+    """Requests m_x with an int option key (1), one of the two MixedKeySource buckets."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature(
+                "m_x",
+                options=Options(group=cast("dict[str, Any]", {1: "a"})),
+                data_type=DataType.INT32,
+            )
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("m_x")}
+
+
+class ConvStrKey(FeatureGroup):
+    """Requests m_x with a str option key ('unit'), the other MixedKeySource bucket."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("m_x", options={"unit": "b"})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("m_x")}
+
+
+class CombMixedKeys(FeatureGroup):
+    """Merges the two MixedKeySource buckets (int key vs str key) with no Link."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("ConvIntKey"), Feature.int32_of("ConvStrKey")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("ConvIntKey"), data.column("ConvStrKey"))}
+
+
+class DirectSplitConsumer(FeatureGroup):
+    """Reads metric_a with an option and metric_b without one, both directly from SplitMetricSource."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("metric_a", options={"unit": "x"}), Feature.int32_of("metric_b")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("metric_a"), data.column("metric_b"))}
+
+
+class NonRootMetricRelay(FeatureGroup):
+    """Non-root feature group serving two names, each reading one SplitMetricSource column."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        source = {"relay_a": "metric_a", "relay_b": "metric_b"}[str(feature_name)]
+        return {Feature.int32_of(source)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        source = {"relay_a": "metric_a", "relay_b": "metric_b"}
+        name = str(features.get_all_names()[0])
+        return data.append_column(name, data.column(source[name]))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"relay_a", "relay_b"}
+
+
+class NonRootSplitConsumer(FeatureGroup):
+    """Reads relay_a with an option and relay_b without, splitting NonRootMetricRelay over two root steps."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("relay_a", options={"unit": "x"}), Feature.int32_of("relay_b")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("relay_a"), data.column("relay_b"))}
+
+
+class LinkedDirectConsumer(FeatureGroup):
+    """Reads l_a and l_b directly from LinkedSplitSource, split by option and joined by a Link."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("l_a", options={"unit": "x"}), Feature.int32_of("l_b", options={"unit": "y"})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("l_a"), data.column("l_b"))}
+
+
+class SameNameOptionConsumer(FeatureGroup):
+    """Reads metric_a twice, with and without a group option, from SplitMetricSource."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("metric_a", options={"unit": "x"}), Feature.int32_of("metric_a")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("metric_a")}
+
+
+class SameNameDtypeConsumer(FeatureGroup):
+    """Reads d_a twice, as int32 and as int64, from SplitSourceDtype."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int32_of("d_a"), Feature.int64_of("d_a")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): data.column("d_a")}
+
+
+class ScalingSource(FeatureGroup):
+    """Root feature group serving pm, scaled by 1000 when requested with option unit == 'x'."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"pm"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        scaled = any(feature.options.get("unit") == "x" for feature in features.features)
+        return {"id": [1, 2, 3], "pm": [1000, 2000, 3000] if scaled else [1, 2, 3]}
+
+
+class ScalingConsumer(FeatureGroup):
+    """cons_x reads the scaled variant of pm, cons_plain the plain one; both live in one feature group."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == "cons_x":
+            return {Feature.int64_of("pm", options={"unit": "x"})}
+        return {Feature.int64_of("pm")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(name): data.column("pm") for name in features.get_all_names()}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cons_x", "cons_plain"}
+
+
+class ScalingDownstream(FeatureGroup):
+    """Reads both ScalingConsumer features, which span two differing variants of ScalingSource."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int64_of("cons_x"), Feature.int64_of("cons_plain")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("cons_x"), data.column("cons_plain"))}
+
+
+class IntraDepConsumer(FeatureGroup):
+    """iq_x and iq_plain read differing pm variants; iq_dep reads iq_plain from this same feature group."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        name = str(feature_name)
+        if name == "iq_x":
+            return {Feature.int64_of("pm", options={"unit": "x"})}
+        if name == "iq_plain":
+            return {Feature.int64_of("pm")}
+        return {Feature.int64_of("iq_plain")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for name in features.get_all_names():
+            if name in ("iq_x", "iq_plain"):
+                data = data.append_column(str(name), data.column("pm"))
+            elif name == "iq_dep":
+                data = data.append_column(str(name), pc.add(data.column("iq_plain"), 1))
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"iq_x", "iq_plain", "iq_dep"}
+
+
+class LinkSideConsumer(FeatureGroup):
+    """Like ScalingConsumer (features read differing pm variants) but keeps the id column so it can be a Link side."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == "ls_x":
+            return {Feature.int64_of("pm", options={"unit": "x"})}
+        return {Feature.int64_of("pm")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for name in features.get_all_names():
+            data = data.append_column(str(name), data.column("pm"))
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"ls_x", "ls_plain"}
+
+
+class LinkSideOther(FeatureGroup):
+    """Second root joined to LinkSideConsumer on id."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"ls_o"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"id": [3, 2, 1], "ls_o": [10, 20, 30]}
+
+
+class LinkSideDownstream(FeatureGroup):
+    """Reads one LinkSideConsumer feature plus the other root."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature.int64_of("ls_x"), Feature.int64_of("ls_o")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data.column("ls_x"), data.column("ls_o"))}
+
+
 class TestMissingLinksError:
     """Test suite for missing Links validation"""
+
+    def test_data_type_split_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of("DtypeCombiner")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({SplitSourceDtype, DtypeCombiner}),
+            )
+
+        error_message = str(exc_info.value)
+        assert "DtypeCombiner" in error_message
+        assert "SplitSourceDtype" in error_message
+        assert "missing Links" in error_message
+        assert "separate steps" in error_message
+        assert "Link.inner_on(SplitSourceDtype, SplitSourceDtype)" not in error_message
+        # Discriminators match options only, so they cannot resolve a data-type split.
+        assert "left_discriminator" not in error_message
+        assert "data type" in error_message
+
+    def test_direct_option_split_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of("DirectSplitConsumer")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({SplitMetricSource, DirectSplitConsumer}),
+            )
+
+        error_message = str(exc_info.value)
+        assert "DirectSplitConsumer" in error_message
+        assert "unit" in error_message
+        assert "left_discriminator" in error_message
+        # The example must pass discriminators to Link.inner, not inside JoinSpec.
+        assert '"shared_column", left_discriminator' not in error_message
+        assert "left_discriminator={" in error_message
+        assert "right_discriminator={" in error_message
+
+    def test_non_root_split_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of("NonRootSplitConsumer")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SplitMetricSource, NonRootMetricRelay, NonRootSplitConsumer}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+        assert "NonRootSplitConsumer" in error_message
+        assert "NonRootMetricRelay" in error_message
+        assert "missing Links" in error_message
+
+    def test_linked_direct_split_still_runs(self) -> None:
+        link = Link.inner(
+            JoinSpec(LinkedSplitSource, "id"),
+            JoinSpec(LinkedSplitSource, "id"),
+            left_discriminator={"unit": "x"},
+            right_discriminator={"unit": "y"},
+        )
+
+        results = mloda.run_all(
+            features=[Feature.int32_of("LinkedDirectConsumer")],
+            links={link},
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({LinkedSplitSource, LinkedDirectConsumer}),
+        )
+
+        values = [table.column("LinkedDirectConsumer").to_pylist() for table in results]
+        assert values == [[110, 220, 330]]
 
     def test_missing_links_raises_helpful_error(self) -> None:
         """
         Test that a helpful error is raised when a feature has multiple dependencies
         but no Links are provided.
 
-        Expected Error Location: During runtime
+        Expected Error Location: At plan time (mloda.prepare)
         Expected Error Type: Exception (wraps ValueError)
         Expected Error Content:
             - Mentions "Links" or "multiple dependencies"
@@ -109,7 +722,7 @@ class TestMissingLinksError:
             mloda.run_all(
                 features=[Feature.int32_of("MultiDependencyFeature")],
                 links=set(),  # EMPTY - this should trigger the error
-                compute_frameworks={PyArrowTable},
+                compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {RootFeatureA, RootFeatureB, MultiDependencyFeature}
                 ),
@@ -133,3 +746,251 @@ class TestMissingLinksError:
         assert any(join_type in error_message for join_type in ["inner", "left", "right", "outer"]), (
             "Error should list available join types"
         )
+
+    def test_missing_links_error_has_no_option_split_hint_when_no_split_occurred(self) -> None:
+        """Regression pin: without an option-split root, the error must not carry the new hint."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("MultiDependencyFeature")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {RootFeatureA, RootFeatureB, MultiDependencyFeature}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+        assert "differing option" not in error_message.lower(), (
+            "Error should not mention a differing-option split when the root feature groups never split by options"
+        )
+
+    def test_missing_links_error_hints_option_split_when_root_splits_by_options(self) -> None:
+        """When a downstream step's ancestors span two option buckets of one root feature group,
+        the error must name that root and the differing option key."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("MetricCombiner")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SplitMetricSource, MetricConverter, MetricCombiner}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "differing option" in error_message.lower(), "Error should mention the differing-option split hint"
+        assert "SplitMetricSource" in error_message, (
+            "Error should name the feature group whose option-based split caused the mismatch"
+        )
+        assert "unit" in error_message, "Error should name the differing option key that caused the split"
+
+    def test_option_split_hint_only_names_keys_differing_across_the_spanned_buckets(self) -> None:
+        """Bug 1: SplitMetricSource has three buckets ({unit: 'x'}, {}, {unit: 'x', scale: 2}), but
+        MetricCombiner's ancestors only span the first two. The hint must name only 'unit', the key
+        that actually differs between those two buckets, not 'scale', which only differs because of
+        the unrelated third bucket."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("MetricCombiner"), Feature.int32_of("MetricConverterScale")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SplitMetricSource, MetricConverter, MetricConverterScale, MetricCombiner}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "unit" in error_message, "Error should still name 'unit', which differs across the spanned buckets"
+        assert "scale" not in error_message, (
+            "Error should not name 'scale': it only differs in an unrelated third bucket MetricCombiner never spans"
+        )
+
+    def test_option_split_hint_silent_when_spanned_buckets_differ_only_by_data_type(self) -> None:
+        """Bug 1 (related false positive): DtypeCombiner splits SplitSourceDtype into two buckets
+        that differ only by data type (no option at all). An unrelated third bucket of the same
+        class (DtypeOptionSibling) differs by 'unit' elsewhere in the plan, but DtypeCombiner never
+        spans that bucket, so its error must not claim a differing-option cause."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("DtypeCombiner"), Feature.int32_of("DtypeOptionSibling")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SplitSourceDtype, DtypeCombiner, DtypeOptionSibling}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "differing option" not in error_message.lower(), (
+            "The two buckets DtypeCombiner spans differ only by data type, not by any option; the "
+            "unrelated 'unit' split elsewhere must not be blamed"
+        )
+        assert "unlinked sources (missing Links)" in error_message
+
+    def test_option_split_hint_does_not_blame_a_harmless_intermediate_split(self) -> None:
+        """Bug 2: X5Intermediate (non-root) splits into two option buckets, but that split causes no
+        actual problem since the option is never forwarded (both buckets compute identical data and
+        merge without a Link). The real failure is an unrelated typo'd column access. The error must
+        not blame X5Intermediate's harmless split."""
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("Z5UnrelatedTypo")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({R5Root, X5Intermediate, Z5UnrelatedTypo}),
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "differing option" not in error_message.lower(), (
+            "X5Intermediate's harmless option split (never forwarded, buckets compute identical "
+            "data) must not be blamed for the unrelated typo'd column access"
+        )
+        assert "X5Intermediate" not in error_message
+
+    def test_option_split_hint_does_not_blame_an_already_linked_split(self) -> None:
+        """Bug 3: LinkedSplitSource splits into two option buckets, but the user already added a
+        Link that resolves the split (the run succeeds for that part). The real failure is an
+        unrelated typo'd column access. The error must not claim the already-linked split is the
+        likely cause."""
+        link = Link.inner(
+            JoinSpec(LinkedSplitSource, "id"),
+            JoinSpec(LinkedSplitSource, "id"),
+            left_discriminator={"unit": "x"},
+            right_discriminator={"unit": "y"},
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("LinkedCombiner")],
+                links={link},
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {LinkedSplitSource, LinkedConverter, LinkedCombiner}
+                ),
+            )
+
+        error_message = str(exc_info.value)
+
+        assert "differing option" not in error_message.lower(), (
+            "The split of LinkedSplitSource is already resolved by an explicit Link; it must not be "
+            "named as the likely cause of the unrelated typo'd column access"
+        )
+        assert "is the likely cause" not in error_message
+
+    def test_option_split_hint_does_not_crash_on_non_str_option_key(self) -> None:
+        """Bug 4: MixedKeySource splits by an int option key (1) and a str option key ('unit'). The
+        diagnostic must not let a TypeError from sorting mixed-type keys mask the intended, helpful
+        ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            mloda.run_all(
+                features=[Feature.int32_of("CombMixedKeys")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {MixedKeySource, ConvIntKey, ConvStrKey, CombMixedKeys}
+                ),
+            )
+
+        assert "CombMixedKeys" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "consumer, source, fragments",
+        [
+            (SameNameOptionConsumer, SplitMetricSource, ["metric_a", "unit"]),
+            (SameNameDtypeConsumer, SplitSourceDtype, ["d_a", "INT32", "INT64"]),
+        ],
+    )
+    def test_same_name_variants_read_by_one_consumer_raise_at_plan_time(
+        self, consumer: type[FeatureGroup], source: type[FeatureGroup], fragments: list[str]
+    ) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int32_of(consumer.get_class_name())],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({source, consumer}),
+            )
+
+        error_message = str(exc_info.value)
+        for fragment in [consumer.get_class_name(), source.get_class_name(), *fragments]:
+            assert fragment in error_message
+        assert "Link.inner" not in error_message
+        assert "missing Links" not in error_message
+
+    def test_different_consumer_features_read_their_own_source_variant(self) -> None:
+        results = mloda.run_all(
+            features=[Feature.int64_of("cons_x"), Feature.int64_of("cons_plain")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({ScalingSource, ScalingConsumer}),
+        )
+
+        by_name = {name: table.column(name).to_pylist() for table in results for name in table.column_names}
+        assert by_name["cons_x"] == [1000, 2000, 3000]
+        assert by_name["cons_plain"] == [1, 2, 3]
+
+    def test_consumer_features_reading_differing_variants_plan_as_separate_steps(self) -> None:
+        session = mloda.prepare(
+            features=[Feature.int64_of("cons_x"), Feature.int64_of("cons_plain")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({ScalingSource, ScalingConsumer}),
+        )
+
+        assert session.engine is not None
+        plan = session.engine.execution_planner.execution_plan
+        consumer_steps = [
+            step for step in plan if isinstance(step, FeatureGroupStep) and step.feature_group is ScalingConsumer
+        ]
+        assert len(consumer_steps) == 2
+
+    def test_downstream_reading_both_consumer_features_raises_at_plan_time(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[Feature.int64_of("ScalingDownstream")],
+                links=set(),
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {ScalingSource, ScalingConsumer, ScalingDownstream}
+                ),
+            )
+
+        assert "ScalingConsumer" in str(exc_info.value)
+        assert "differing variants" in str(exc_info.value)
+
+    def test_consumer_member_reading_a_sibling_member_of_a_split_consumer_runs(self) -> None:
+        results = mloda.run_all(
+            features=[Feature.int64_of("iq_x"), Feature.int64_of("iq_plain"), Feature.int64_of("iq_dep")],
+            links=set(),
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({ScalingSource, IntraDepConsumer}),
+        )
+
+        by_name = {name: table.column(name).to_pylist() for table in results for name in table.column_names}
+        assert by_name["iq_x"] == [1000, 2000, 3000]
+        assert by_name["iq_plain"] == [1, 2, 3]
+        assert by_name["iq_dep"] == [2, 3, 4]
+
+    def test_split_consumer_that_is_a_link_side_raises_at_plan_time(self) -> None:
+        link = Link.inner(JoinSpec(LinkSideConsumer, "id"), JoinSpec(LinkSideOther, "id"))
+
+        with pytest.raises(ValueError) as exc_info:
+            mloda.prepare(
+                features=[
+                    Feature.int64_of("LinkSideDownstream"),
+                    Feature.int64_of("ls_x"),
+                    Feature.int64_of("ls_plain"),
+                ],
+                links={link},
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {ScalingSource, LinkSideConsumer, LinkSideOther, LinkSideDownstream}
+                ),
+            )
+
+        assert "LinkSideConsumer" in str(exc_info.value)
+        assert "cannot be split" in str(exc_info.value)

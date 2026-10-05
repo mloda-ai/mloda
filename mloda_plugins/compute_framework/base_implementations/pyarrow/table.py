@@ -18,11 +18,6 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
-try:
-    import pandas as pd
-except ImportError:
-    pd = None
-
 
 def arrow_schema_output_schema(schema: Any) -> OutputSchema | None:
     """Read a pyarrow Schema's names/types once and zip them, rather than calling schema.field()
@@ -87,7 +82,8 @@ class PyArrowTable(ComputeFramework):
         )
         return data.select([f for f in _selected_feature_names])
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.schema.names)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:

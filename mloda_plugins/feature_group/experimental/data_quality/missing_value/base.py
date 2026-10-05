@@ -9,7 +9,6 @@ from typing import Any
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -160,7 +159,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "bfill": "Backward fill (use the next valid value)",
     }
 
-    PREFIX_PATTERN = r".*__([\w]+)_imputed$"
+    PREFIX_PATTERN = r".*__(?P<imputation_method>[\w]+)_imputed$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -198,15 +197,9 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def get_imputation_method(cls, feature_name: str) -> str:
         """Extract the imputation method from the feature name."""
-        # parse_feature_name returns (operation_config, source_feature)
-        # The operation_config contains the imputation method extracted from the suffix pattern
-        operation_config, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
-        if operation_config is None:
+        imputation_method = cls.resolve_feature_name(feature_name).value_for(cls.IMPUTATION_METHOD)
+        if imputation_method is None:
             raise ValueError(f"Invalid missing value feature name format: {feature_name}")
-
-        # The PREFIX_PATTERN captures the method name (e.g., "mean" from "mean_imputed")
-        # So operation_config already contains just the method name
-        imputation_method = operation_config
 
         # Validate imputation method
         if imputation_method not in cls.IMPUTATION_METHODS:
@@ -230,15 +223,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         Returns:
             Imputation method name or None if not found
         """
-        feature_name = feature.name
-
-        # Try string-based parsing first
-        if FeatureChainParser.is_chained_feature(feature_name):
-            # Use get_imputation_method which handles parse_feature_name correctly
-            return cls.get_imputation_method(feature_name)
-
-        # Fall back to configuration-based approach
-        imputation_method = feature.options.get(cls.IMPUTATION_METHOD)
+        imputation_method = cls._resolve_operation(feature, cls.IMPUTATION_METHOD)
 
         # Validate imputation method if found
         if imputation_method is not None and imputation_method not in cls.IMPUTATION_METHODS:
@@ -247,7 +232,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                 f"Supported methods: {', '.join(cls.IMPUTATION_METHODS.keys())}"
             )
 
-        return str(imputation_method) if imputation_method is not None else None
+        return imputation_method
 
     @classmethod
     def _extract_imputation_method_and_source_feature(cls, feature: Feature) -> tuple[str, str]:

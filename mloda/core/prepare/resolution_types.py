@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_OWNED_STAGE, INPUT_DATA_STAGE
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_OWNED_STAGE,
+    INPUT_DATA_STAGE,
+    NAME_STAGE,
+)
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -19,6 +23,7 @@ class CandidateFrameworks:
 
 EliminationStage = Literal[
     "value_rejection",
+    "name",
     "input_data",
     "matcher_error",
     "domain",
@@ -27,6 +32,7 @@ EliminationStage = Literal[
     "frameworks_not_enabled",
     "framework_pin",
     "links",
+    "declarations",
 ]
 
 # A stage belongs here when its gate's hook cannot receive the feature name, so the outcome is the same for
@@ -36,10 +42,12 @@ NAME_INDEPENDENT_STAGES: frozenset[EliminationStage] = frozenset({"domain", "sco
 
 def rejection_elimination_stage(recorded_stage: str) -> EliminationStage:
     """The elimination stage a recorded rejection's free-form stage hint maps onto."""
-    # Only the two input-data hints are engine-known; every other hint is provider text this side never
+    # Only the input-data and name hints are engine-known; every other hint is provider text this side never
     # validates, so it falls back. Shared, so the two seams cannot drift into two taxonomies.
     if recorded_stage in (INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE):
         return "input_data"
+    if recorded_stage == NAME_STAGE:
+        return "name"
     return "value_rejection"
 
 
@@ -67,6 +75,12 @@ class RenderFacts:
     # Names that no live accessible group declares and that no live group's class-name prefix covers, so no
     # surviving candidate is known to own them.
     dead_only_names: frozenset[str] = frozenset()
+    # Every plugin module/entry point PluginLoader skipped for a missing optional dependency, sorted.
+    skipped_plugins: tuple[tuple[str, str], ...] = ()
+    # "Reader: credential-free identity" of each identified candidate that matched a data source.
+    sources: dict[type[FeatureGroup], str] = field(default_factory=dict)
+    # Close class names for a string scope no accessible candidate has in its MRO.
+    scope_suggestions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +93,8 @@ class EvaluationResult:
     candidate_frameworks: dict[type[FeatureGroup], CandidateFrameworks] = field(default_factory=dict)
     eliminations: dict[type[FeatureGroup], Elimination] = field(default_factory=dict)
     facts: RenderFacts = field(default_factory=RenderFacts)
+    # The classes the single winner replaced (subclass preference), empty without a single winner.
+    specialized_from: tuple[type[FeatureGroup], ...] = ()
 
     @property
     def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:

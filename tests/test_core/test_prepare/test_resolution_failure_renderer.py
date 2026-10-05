@@ -47,6 +47,7 @@ from mloda.core.prepare.resolution_types import (
     EvaluationResult,
     RenderFacts,
 )
+from mloda.provider import NAME_STAGE, record_match_rejection
 from tests.helpers.plugin_stubs import CountingStubFeatureGroup, HookCounter, StubFeatureGroup, StubHookError, make_fg
 
 
@@ -81,6 +82,8 @@ SHARED_LIVE_NAME_791 = "renderer_shared_name_791"
 SHARED_DEAD_NAME_791 = "renderer_shared_dead_791"
 VALUE_STAGE_FEATURE_791 = "renderer_value_stage_791"
 VALUE_STAGE_SPARE_791 = "renderer_value_stage_spare_791"
+NAME_STAGE_FEATURE_791 = "renderer_name_stage_791"
+NAME_STAGE_SPARE_791 = "renderer_name_stage_spare_791"
 CAPABILITY_STAGE_FEATURE_791 = "renderer_capability_stage_791"
 CAPABILITY_STAGE_SPARE_791 = "renderer_capability_stage_spare_791"
 RAISING_DEAD_NAMES_FEATURE_791 = "renderer_raising_dead_names_791"
@@ -139,11 +142,12 @@ DEAD_CLASS_PREFIX_791 = "RendererCrossDomainNameFG791_"
 DEAD_CLASS_NAME_TYPO_791 = "RendererCrossDoaminNameFG791"
 
 VALUE_STAGE_REJECTION_REASON_791 = "renderer_value_stage_791 declines every value of this option"
+NAME_STAGE_REJECTION_REASON_791 = "renderer_name_stage_791 is not a part this group returns"
 
 # The stages whose gate CAN see the feature name, so a sibling name of a candidate eliminated there may still
-# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a tenth stage fails the partition test.
+# resolve. Pinned here as the complement of NAME_INDEPENDENT_STAGES: a new stage fails the partition test.
 NAME_DEPENDENT_STAGES_791: frozenset[EliminationStage] = frozenset(
-    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin"}
+    {"value_rejection", "input_data", "matcher_error", "capability", "framework_pin", "name", "declarations"}
 )
 
 # The label each stage renders, stated here independently of the renderer: EliminationStage is checked against
@@ -160,13 +164,15 @@ EXPECTED_STAGE_LABELS_791: dict[EliminationStage, str] = {
     "frameworks_not_enabled": "compute framework",
     "framework_pin": "compute framework pin",
     "links": "links",
+    "name": "feature name",
+    "declarations": "declarations",
 }
 
 # One synthetic near-miss, rendered once per stage, so every label is read back off a real rendered line.
 STAGE_LABEL_FEATURE_791 = "renderer_stage_label_791"
 STAGE_LABEL_REASON_791 = "eliminated at this stage"
 
-# Stands in for a tenth stage shipped without a near-miss label: no entry of the label table covers this token.
+# Stands in for a new stage shipped without a near-miss label: no entry of the label table covers this token.
 UNLABELED_STAGE_791 = "renderer_unlabeled_stage_791"
 UNLABELED_STAGE_FEATURE_791 = "renderer_unlabeled_stage_feature_791"
 UNLABELED_STAGE_REASON_791 = "eliminated at a stage this build has no label for"
@@ -462,7 +468,7 @@ class RendererStrictFG791(FeatureChainParserMixin, FeatureGroup):
         return None
 
 
-WINDOW_REJECTION_REASON = "Property value '14' failed validation for 'window_size'"
+WINDOW_REJECTION_REASON = "Property value int 14 failed validation for 'window_size'"
 
 
 class RendererMissingOptionFG791(FeatureChainParserMixin, FeatureGroup):
@@ -479,7 +485,11 @@ class RendererMissingOptionFG791(FeatureChainParserMixin, FeatureGroup):
         return None
 
 
-MISSING_OPTION_REASON_791 = "required option(s) some_key_791m are absent after declared defaults and name bindings"
+MISSING_OPTION_REASON_791 = (
+    "required option(s) some_key_791m are absent after declared defaults and name bindings"
+    "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+    "list it in the consumer's propagate_context_keys"
+)
 
 
 # Declares two available frameworks; the run enables only the one this candidate rejects.
@@ -591,6 +601,27 @@ class RendererValueStageFG791(CountingFeatureGroup791):
         if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
             return False
         raise PropertyValueRejection(VALUE_STAGE_REJECTION_REASON_791)
+
+
+class RendererNameStageFG791(CountingFeatureGroup791):
+    """Eliminated at name, a name-DEPENDENT stage: it refused THIS name, not its sibling's."""
+
+    MATCHED_NAMES = frozenset({NAME_STAGE_FEATURE_791})
+    SUPPORTED_NAMES = frozenset({NAME_STAGE_SPARE_791})
+    FRAMEWORK_RULE = {RendererFwOne791}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        # Name-guarded, so this globally visible class stays inert for every other name it is asked about.
+        if not super().match_feature_group_criteria(feature_name, options, data_access_collection):
+            return False
+        record_match_rejection(cls.__name__, NAME_STAGE_REJECTION_REASON_791, stage=NAME_STAGE)
+        return False
 
 
 # Eliminated at capability: the per-feature hook rejected the one framework the run enabled.
@@ -1259,6 +1290,11 @@ def value_stage_scenario() -> Scenario:
     return Feature(VALUE_STAGE_FEATURE_791), {RendererValueStageFG791: {RendererFwOne791}}
 
 
+def name_stage_scenario() -> Scenario:
+    """A name near-miss that keeps an enabled framework, so a sibling name could still resolve to it."""
+    return Feature(NAME_STAGE_FEATURE_791), {RendererNameStageFG791: {RendererFwOne791}}
+
+
 def value_stage_without_frameworks_scenario() -> Scenario:
     """The same value_rejection candidate minus every enabled framework: no name can resolve to it."""
     return Feature(VALUE_STAGE_FEATURE_791), {RendererValueStageFG791: set()}
@@ -1762,6 +1798,48 @@ class TestRenderResolutionFailureMessages:
         assert "Scoped to feature group: 'RendererAbstractBaseFG791'." in message
         assert "Use resolve_feature(name, options=..., feature_group=...) to debug feature resolution." in message
         assert message.endswith(TROUBLESHOOTING_LINE)
+
+    @pytest.mark.parametrize(
+        "build",
+        [multiple_scenario, abstract_bare_scenario, abstract_with_frameworks_scenario, ordinary_none_scenario],
+    )
+    def test_nested_input_headline_names_the_resolving_path(self, build: Callable[[], Scenario]) -> None:
+        """A non-empty resolving_path puts '(needed by a -> b)' right after the quoted name in the headline."""
+        scenario = build()
+        feature, _ = scenario
+        feature.resolving_path = ("outer_791", "inner_791")
+
+        message = _render(scenario)
+
+        assert f"'{feature.name}' (needed by outer_791 -> inner_791)" in message.split("\n")[0]
+
+    def test_input_data_decline_drops_the_hint_only_for_a_nested_input(self) -> None:
+        """Only an input_data decline on a nested input loses 'Did you mean'; top-level and other stages keep it."""
+        result = EvaluationResult(
+            identified={},
+            eliminations={RendererSuccessFG791: Elimination(stage="input_data", reason=STAGE_LABEL_REASON_791)},
+            facts=RenderFacts(known_names=(KNOWN_FEATURE_791,)),
+        )
+        top_level = Feature(TYPO_FEATURE_791)
+        nested = Feature(TYPO_FEATURE_791)
+        nested.resolving_path = ("outer_791", "inner_791")
+
+        top_level_message = render_resolution_failure(result, top_level)
+        nested_message = render_resolution_failure(result, nested)
+
+        assert top_level_message is not None
+        assert nested_message is not None
+        assert _suggestions(top_level_message) == [KNOWN_FEATURE_791]
+        assert _suggestions(nested_message) is None
+
+        rejected = EvaluationResult(
+            identified={},
+            eliminations={RendererSuccessFG791: Elimination(stage="value_rejection", reason=STAGE_LABEL_REASON_791)},
+            facts=RenderFacts(known_names=(KNOWN_FEATURE_791,)),
+        )
+        rejected_message = render_resolution_failure(rejected, nested)
+        assert rejected_message is not None
+        assert _suggestions(rejected_message) == [KNOWN_FEATURE_791]
 
     def test_ordinary_none_renders_rejections_suggestion_and_pointers(self) -> None:
         """The near-miss block, then 'Did you mean', then the resolve_feature and troubleshooting lines."""
@@ -2494,6 +2572,21 @@ class TestSuggestionsNeverPointAtADeadGroupsSiblingName:
         assert message is not None
         assert _suggestions(message) == [VALUE_STAGE_SPARE_791]
 
+    def test_a_name_stage_candidates_sibling_name_is_still_suggested(self) -> None:
+        """name is name-DEPENDENT: the candidate refused this name, not the sibling's."""
+        scenario = name_stage_scenario()
+        feature, _ = scenario
+        result = _evaluate(scenario)
+
+        assert result.eliminations == {
+            RendererNameStageFG791: Elimination(stage="name", reason=NAME_STAGE_REJECTION_REASON_791)
+        }
+        assert NAME_STAGE_SPARE_791 not in result.facts.dead_only_names
+
+        message = render_resolution_failure(result, feature)
+        assert message is not None
+        assert _suggestions(message) == [NAME_STAGE_SPARE_791]
+
     def test_a_capability_candidates_sibling_name_is_still_suggested(self) -> None:
         """capability comes from supports_compute_framework(feature.name, ...), so a sibling name may pass it."""
         scenario = capability_stage_scenario()
@@ -2691,7 +2784,7 @@ class TestANameBlindGateKillsEveryNameItsCandidateDeclares:
         # Suppression is resolution, not just text: requesting the sibling fails at the same gate.
         sibling = _evaluate(scope_gate_sibling_scenario())
         assert sibling.failure_kind == "none"
-        assert sibling.eliminations[OutsideScopeDeclarerFG791].stage == "scope"
+        assert OutsideScopeDeclarerFG791 not in sibling.eliminations
 
         assert SCOPE_GATE_SIBLING_791 in result.facts.dead_only_names
         # The in-scope group is untouched by the gate, so its own name stays suggestible.
@@ -3289,7 +3382,7 @@ class TestAMalformedDomainReturnIsDecidedLikeTheGateDecidesIt:
 
 
 class TestEveryEliminationStageIsClassified:
-    """A tenth stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
+    """A new stage must be classified and labelled before it ships, or it silently misrenders or misdrops names."""
 
     def test_the_two_stage_sets_partition_the_stage_literal(self) -> None:
         """NAME_INDEPENDENT_STAGES and its name-dependent complement cover EliminationStage exactly once."""
@@ -3307,7 +3400,7 @@ class TestEveryEliminationStageIsClassified:
 class TestEveryStageLabelIsPinned:
     """TestEveryEliminationStageIsClassified pins the label table's KEYS; this one pins its VALUES as rendered text.
 
-    Every stage shipping today also has a hand-written rendered line: seven in
+    Every stage shipping today also has a hand-written rendered line: eight in
     tests/test_core/test_prepare/test_candidate_elimination_reasons.py, input_data in
     tests/test_plugins/feature_group/input_data/test_reader_match_rejections.py, matcher_error in
     tests/test_core/test_prepare/test_raising_matcher_containment.py, so a RENAME is already caught per stage.
@@ -3315,7 +3408,7 @@ class TestEveryStageLabelIsPinned:
     """
 
     def test_the_expected_table_names_every_stage(self) -> None:
-        """A tenth stage fails here until someone states the label it renders."""
+        """A new stage fails here until someone states the label it renders."""
         assert frozenset(EXPECTED_STAGE_LABELS_791) == frozenset(get_args(EliminationStage))
 
     @pytest.mark.parametrize(
@@ -3407,3 +3500,91 @@ class TestAnUnlabeledStageStillRenders:
             "Use resolve_feature(name, options=...) to debug feature resolution.\n"
             f"{TROUBLESHOOTING_LINE}"
         )
+
+
+SKIPPED_PLUGINS_BLOCK_HEADING = (
+    "Plugin module(s) skipped for a missing optional dependency, so their feature groups are not loaded:"
+)
+
+
+def _skipped_plugins_791(count: int) -> tuple[tuple[str, str], ...]:
+    return tuple((f"pkg.skiptest_module_{i:02d}", f"skiptest_dep_{i:02d}") for i in range(count))
+
+
+class TestSkippedPluginsRenderBlock:
+    def test_none_message_appends_skipped_plugins_block(self) -> None:
+        feature = Feature("skiptest_none_feature_791")
+        result = EvaluationResult(identified={}, facts=RenderFacts(skipped_plugins=_skipped_plugins_791(2)))
+
+        assert result.failure_kind == "none"
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        assert (
+            f"{SKIPPED_PLUGINS_BLOCK_HEADING}\n"
+            "  - pkg.skiptest_module_00: skiptest_dep_00\n"
+            "  - pkg.skiptest_module_01: skiptest_dep_01"
+        ) in message
+
+    def test_abstract_only_message_appends_skipped_plugins_block(self) -> None:
+        feature = Feature("skiptest_abstract_feature_791")
+        result = EvaluationResult(
+            identified={},
+            abstract_matched={FeatureGroup},
+            facts=RenderFacts(skipped_plugins=_skipped_plugins_791(1)),
+        )
+
+        assert result.failure_kind == "abstract_only"
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        assert f"{SKIPPED_PLUGINS_BLOCK_HEADING}\n  - pkg.skiptest_module_00: skiptest_dep_00" in message
+
+    def test_block_sits_before_the_resolve_feature_pointer_line(self) -> None:
+        feature = Feature("skiptest_order_feature_791")
+        result = EvaluationResult(identified={}, facts=RenderFacts(skipped_plugins=_skipped_plugins_791(1)))
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        block_index = message.index(SKIPPED_PLUGINS_BLOCK_HEADING)
+        pointer_index = message.index("Use resolve_feature(")
+        assert block_index < pointer_index
+
+    def test_empty_skipped_plugins_renders_no_block(self) -> None:
+        feature = Feature("skiptest_empty_feature_791")
+        result = EvaluationResult(identified={}, facts=RenderFacts())
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        assert SKIPPED_PLUGINS_BLOCK_HEADING not in message
+
+    def test_multiple_message_never_carries_the_block(self) -> None:
+        result = EvaluationResult(
+            identified={
+                RendererMultipleAFG791: {RendererFwOne791},
+                RendererMultipleBFG791: {RendererFwOne791},
+            },
+            facts=RenderFacts(skipped_plugins=_skipped_plugins_791(1)),
+        )
+
+        assert result.failure_kind == "multiple"
+        message = render_resolution_failure(result, Feature(MULTIPLE_FEATURE_791))
+
+        assert message is not None
+        assert SKIPPED_PLUGINS_BLOCK_HEADING not in message
+
+    def test_overflow_truncates_at_max_and_appends_more_line(self) -> None:
+        from mloda.core.prepare.resolution_failure_renderer import MAX_SKIPPED_PLUGINS
+
+        feature = Feature("skiptest_overflow_feature_791")
+        entries = _skipped_plugins_791(MAX_SKIPPED_PLUGINS + 2)
+        result = EvaluationResult(identified={}, facts=RenderFacts(skipped_plugins=entries))
+
+        message = render_resolution_failure(result, feature)
+
+        assert message is not None
+        bullet_lines = [line for line in message.split("\n") if line.startswith("  - pkg.skiptest_module_")]
+        assert len(bullet_lines) == MAX_SKIPPED_PLUGINS
+        assert "  ... and 2 more, see PluginLoader.skipped_plugins()." in message

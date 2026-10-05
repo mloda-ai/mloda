@@ -50,7 +50,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation
 
 # Mirrors docs/docs/in_depth/join_data.md; update both together.
 # True = the capability succeeds, False = merge_asof raises ValueError.
-# spark is intentionally excluded (not exercised in CI); it mirrors duckdb/sqlite:
+# spark is excluded (its tests run only in the spark tox env); it mirrors duckdb/sqlite:
 # nearest=False, timedelta=False, exclude_exact=True.
 ASOF_CAPABILITY_MATRIX: dict[str, dict[str, bool]] = {
     "pandas": {"nearest": True, "timedelta": True, "exclude_exact": True},

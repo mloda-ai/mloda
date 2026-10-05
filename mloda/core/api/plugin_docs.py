@@ -150,7 +150,6 @@ def get_feature_group_docs(
         fg_name = safe_field(lambda: as_str(fg_class.get_class_name()), cls_name, field=f"{cls_name}.get_class_name")
         doc_fallback = (fg_class.__doc__ or "").strip() or cls_name
         description = safe_field(lambda: as_str(fg_class.description()), doc_fallback, field=f"{cls_name}.description")
-        version = _safe_version(fg_class)
         module = fg_class.__module__
         compute_frameworks: list[str] = safe_field(
             lambda: [cfw.__name__ for cfw in fg_class.compute_framework_definition()],
@@ -173,6 +172,8 @@ def get_feature_group_docs(
             if cfw_name.lower() not in {c.lower() for c in compute_frameworks}:
                 continue
 
+        # Read after the cheap filters: version() hashes the class source.
+        version = _safe_version(fg_class)
         if version_contains is not None and version_contains not in version:
             continue
 
@@ -362,7 +363,7 @@ def resolve_feature(
 
     Engine inputs now covered: name, options, domain and compute-framework pin (carried on the Feature),
     scope (via the Feature's feature_group_scope or the feature_group argument for the string form), and
-    the ``links`` / ``data_access_collection`` arguments threaded into the seam. No engine input is left out.
+    the ``links`` / ``data_access_collection`` arguments threaded into the seam, plus the Feature's ``required_declarations``. No engine input is left out.
 
     Args:
         feature: A feature name string, or a Feature object used directly as the single source of truth for
@@ -388,6 +389,9 @@ def resolve_feature(
                 "resolve_feature(Feature(...)) is the single source of truth for name, options and scope; "
                 "set them on the Feature, do not also pass 'options' or 'feature_group'"
             )
+        # A standalone resolution is a request, so it drops what an earlier engine run stamped.
+        feature.resolving_consumer = None
+        feature.resolving_path = ()
         feature_obj: Feature | None = feature
         feature_name = str(feature.name)
         scope = feature.feature_group_scope

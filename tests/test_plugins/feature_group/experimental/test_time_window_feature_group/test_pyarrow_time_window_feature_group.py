@@ -13,6 +13,10 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.conftest import EXPECTED_VALUES
+from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.time_window_zero_row_test_mixin import (
+    TimeWindowZeroRowTestMixin,
+)
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PyArrowZeroRowAdapter
 
 
 class TestPyArrowTimeWindowFeatureGroup:
@@ -161,3 +165,7 @@ class TestPyArrowTimeWindowFeatureGroup:
             match=f"Column '{DefaultOptionKeys.reference_time}' must be temporal.*",
         ):
             PyArrowTimeWindowFeatureGroup.calculate_feature(table, feature_set)
+
+
+class TestPyArrowTimeWindowZeroRow(PyArrowZeroRowAdapter, TimeWindowZeroRowTestMixin):
+    feature_group_class = PyArrowTimeWindowFeatureGroup

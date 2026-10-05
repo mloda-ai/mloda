@@ -35,7 +35,7 @@
 | matplotlib-inline       | 0.2.2           | BSD-3-Clause                                       |
 | mdurl                   | 0.1.2           | MIT License                                        |
 | mktestdocs              | 0.2.5           | MIT                                                |
-| mloda                   | 0.13.0          | Apache-2.0                                         |
+| mloda                   | 0.15.0          | Apache-2.0                                         |
 | mmh3                    | 5.2.1           | MIT License                                        |
 | mypy                    | 2.1.0           | MIT                                                |
 | mypy_extensions         | 1.1.0           | MIT                                                |
@@ -84,7 +84,7 @@
 | strictyaml              | 1.7.3           | MIT License                                        |
 | tenacity                | 9.1.4           | Apache Software License                            |
 | threadpoolctl           | 3.6.0           | BSD License                                        |
-| tornado                 | 6.5.8           | Apache Software License                            |
+| tornado                 | 6.5.10          | Apache Software License                            |
 | tqdm                    | 4.67.3          | MPL-2.0 AND MIT                                    |
 | traitlets               | 5.15.0          | BSD License                                        |
 | typeguard               | 4.5.2           | MIT                                                |
@@ -94,6 +94,6 @@
 | typing-inspect          | 0.9.0           | MIT License                                        |
 | typing-inspection       | 0.4.2           | MIT                                                |
 | typing_extensions       | 4.15.0          | PSF-2.0                                            |
-| urllib3                 | 2.7.0           | MIT                                                |
+| urllib3                 | 2.8.0           | MIT                                                |
 | webencodings            | 0.5.1           | BSD License                                        |
 | zstandard               | 0.25.0          | BSD-3-Clause                                       |

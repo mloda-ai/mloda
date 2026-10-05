@@ -86,7 +86,7 @@ def test_inverted_link_keeps_left_group_as_left_merge_side(modes: set[Paralleliz
     result = mloda.run_all(
         [Feature(name=AsymJoinChild.get_class_name())],
         links={link},
-        compute_frameworks=["PyArrowTable", "PandasDataFrame"],
+        compute_frameworks=["PandasDataFrame", "PyArrowTable"],
         plugin_collector=PluginCollector.enabled_feature_groups({AsymLeftSource, AsymRightSource, AsymJoinChild}),
         flight_server=flight_server,
         parallelization_modes=modes,

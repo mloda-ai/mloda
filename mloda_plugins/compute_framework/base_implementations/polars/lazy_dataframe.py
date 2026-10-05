@@ -51,7 +51,8 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         lazy_result = data.select(list(_selected_feature_names))
         return lazy_result.collect()
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.collect_schema().names())
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:

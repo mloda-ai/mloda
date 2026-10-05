@@ -111,28 +111,28 @@ def _failure_features() -> list[Feature | str]:
 
 
 def _diagnose_success() -> ResolutionDiagnosis:
-    return mloda.diagnose(_success_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_DIAGNOSE_PLUGINS)
+    return mloda.diagnose(_success_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_DIAGNOSE_PLUGINS)
 
 
 def _prepare_success() -> mlodaAPI:
-    return mloda.prepare(_success_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_DIAGNOSE_PLUGINS)
+    return mloda.prepare(_success_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_DIAGNOSE_PLUGINS)
 
 
 def _diagnose_failure() -> ResolutionDiagnosis:
-    return mloda.diagnose(_failure_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_DIAGNOSE_PLUGINS)
+    return mloda.diagnose(_failure_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_DIAGNOSE_PLUGINS)
 
 
 def _raised_failure_error() -> FeatureResolutionError:
     """Catch the typed error the raising path produces for the same failing request."""
     with pytest.raises(FeatureResolutionError) as exc_info:
-        mloda.prepare(_failure_features(), compute_frameworks={PandasDataFrame}, plugin_collector=_DIAGNOSE_PLUGINS)
+        mloda.prepare(_failure_features(), compute_frameworks=[PandasDataFrame], plugin_collector=_DIAGNOSE_PLUGINS)
     return exc_info.value
 
 
 def _diagnose_config_error() -> ResolutionDiagnosis:
     return mloda.diagnose(
         _success_features(),
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=_DIAGNOSE_PLUGINS,
         column_ordering=BOGUS_ORDERING,
     )
@@ -143,7 +143,7 @@ def _raised_config_error() -> ValueError:
     with pytest.raises(ValueError) as exc_info:
         mloda.prepare(
             _success_features(),
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=_DIAGNOSE_PLUGINS,
             column_ordering=BOGUS_ORDERING,
         )
@@ -314,6 +314,17 @@ class TestDiagnoseConfigurationError:
     def test_configuration_error_is_incomplete(self) -> None:
         assert _diagnose_config_error().complete is False
 
+    def test_set_of_compute_frameworks_is_incomplete_with_the_ordered_list_hint(self) -> None:
+        diagnosis = mloda.diagnose(
+            _success_features(),
+            compute_frameworks={"PandasDataFrame"},  # type: ignore[arg-type]
+            plugin_collector=_DIAGNOSE_PLUGINS,
+        )
+
+        assert diagnosis.complete is False
+        assert diagnosis.message is not None
+        assert "ordered list" in diagnosis.message
+
     def test_configuration_error_has_empty_records(self) -> None:
         assert _diagnose_config_error().records == []
 
@@ -361,7 +372,7 @@ class TestDiagnoseDoesNotSwallowPlanningErrors:
         plugins = PluginCollector.enabled_feature_groups({DiagnoseRaisingInputs_812})
         with pytest.raises(ValueError) as exc_info:
             mloda.diagnose(
-                ["DiagnoseRaisingInputs_812"], compute_frameworks={PandasDataFrame}, plugin_collector=plugins
+                ["DiagnoseRaisingInputs_812"], compute_frameworks=[PandasDataFrame], plugin_collector=plugins
             )
         # It is the planning-time error, not a resolution failure projected into a diagnosis.
         assert not isinstance(exc_info.value, FeatureResolutionError)
@@ -377,7 +388,7 @@ class TestDiagnoseEmptyRequest:
     """An empty request resolves to a trivially complete diagnosis with no records."""
 
     def test_empty_request_is_trivially_complete(self) -> None:
-        diagnosis = mloda.diagnose([], compute_frameworks={PandasDataFrame}, plugin_collector=_DIAGNOSE_PLUGINS)
+        diagnosis = mloda.diagnose([], compute_frameworks=[PandasDataFrame], plugin_collector=_DIAGNOSE_PLUGINS)
         assert diagnosis.complete is True
         assert diagnosis.records == []
         assert diagnosis.feature_name is None

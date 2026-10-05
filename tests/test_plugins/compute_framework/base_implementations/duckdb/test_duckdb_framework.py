@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
@@ -290,6 +291,11 @@ class TestDuckDBDtypeExtraction(DtypeExtractionTestMixin):
             {"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]}
         )
         return DuckdbRelation.from_arrow(connection, arrow_table)
+
+    @pytest.fixture
+    def decimal_sample_data(self, connection: Any) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return DuckdbRelation.from_arrow(connection, pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))}))
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")

@@ -9,6 +9,8 @@ from multiprocessing.process import BaseProcess
 from typing import Any, Callable
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
 from mloda.core.runtime.mp_context import mp_spawn_context, spawn_daemon_process
 
 logger = logging.getLogger(__name__)
@@ -23,10 +25,6 @@ class WorkerManager:
         self.process_register: dict[UUID, tuple[Any, Any, Any]] = {}
         self.result_queues_collection: set[Any] = set()
         self.result_uuids_collection: set[UUID] = set()
-        # cfw_uuid -> resolved flag, for DROP_COMPLETE tuples drained by poll_result_queues
-        # before wait_for_drop_completion reads them. resolved is True once the worker's own
-        # children_if_root is fully satisfied (it drops its data and exits).
-        self.completed_drops: dict[UUID, bool] = {}
         # cfw_uuid -> step uuids dispatched to that worker. Needed because a worker that
         # exits cleanly is invisible to find_dead_workers, so the only way to notice the
         # loss is that steps were assigned to it and no result ever arrived.
@@ -73,19 +71,19 @@ class WorkerManager:
         command_queue.put(command)
 
     def poll_result_queues(self) -> None:
-        """Non-blocking poll of all result queues; collects step-UUID strings and drains DROP_COMPLETE tuples into
-        completed_drops."""
+        """Non-blocking poll of all result queues; collects step-UUID strings. Drains each queue to
+        empty per call; a message still in flight through the queue's feeder thread may not appear
+        until a later poll."""
         for r_queue in self.result_queues_collection:
-            try:
-                msg = r_queue.get(block=False)
-            except queue.Empty:
-                continue
-            if isinstance(msg, str):
+            # Safe to drain unbounded: a worker puts at most one step-uuid per step command it
+            # processes, so a queue's backlog is bounded by commands already dispatched to that
+            # worker, never unbounded.
+            while True:
+                try:
+                    msg = r_queue.get(block=False)
+                except queue.Empty:
+                    break
                 self.result_uuids_collection.add(UUID(msg))
-            elif isinstance(msg, tuple) and len(msg) >= 2 and msg[0] == "DROP_COMPLETE":
-                # A 2-tuple (no resolved flag) is treated as resolved, matching the meaning a
-                # bare ack always had before the flag was added.
-                self.completed_drops[msg[1]] = bool(msg[2]) if len(msg) >= 3 else True
 
     def record_assignment(self, cfw_uuid: UUID, step_uuids: set[UUID]) -> None:
         """Remember that these steps were dispatched to this worker."""
@@ -127,32 +125,24 @@ class WorkerManager:
         """Return step_uuid in result_uuids_collection."""
         return step_uuid in self.result_uuids_collection
 
-    def clear_completed_drop(self, cfw_uuid: UUID) -> None:
-        """Discard a stale drop flag; a cfw goes through multiple drop cycles, and a late completion
-        drained for an earlier cycle must not be mistaken for a later one."""
-        self.completed_drops.pop(cfw_uuid, None)
-
-    def wait_for_drop_completion(self, result_queue: Any, cfw_uuid: UUID, timeout: float = 5.0) -> bool | None:
-        """Poll queue until ("DROP_COMPLETE", cfw_uuid, resolved) is received or timeout, checking
-        completed_drops first. Returns the worker's own resolved flag, or None on timeout (no ack
-        ever arrived)."""
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            if cfw_uuid in self.completed_drops:
-                return self.completed_drops.pop(cfw_uuid)
+    def join_all(self, graceful_timeout: float = 2.0) -> None:
+        """Sends STOP to alive workers and waits up to graceful_timeout for them to exit
+        (running their close() teardown) before terminating any that remain. Raises an
+        Exception if any task fails to join or terminate."""
+        for process, command_queue, _ in self.process_register.values():
             try:
-                msg = result_queue.get(block=False)
-                if isinstance(msg, tuple) and len(msg) >= 2 and msg[0] == "DROP_COMPLETE" and msg[1] == cfw_uuid:
-                    return bool(msg[2]) if len(msg) >= 3 else True
-                result_queue.put(msg, block=False)
-                time.sleep(0.001)
-            except queue.Empty:
-                time.sleep(0.001)
-        logger.warning(f"Drop operation for CFW {cfw_uuid} timed out after {timeout}s")
-        return None
+                if process.is_alive():
+                    command_queue.put("STOP", block=False)
+            except Exception as e:
+                logger.error("Error sending graceful STOP: %s", contained_raise_reason(e))
 
-    def join_all(self) -> None:
-        """Terminate processes (not threads), join all tasks, raise Exception if any fail."""
+        deadline = time.time() + graceful_timeout
+        for process, _, _ in self.process_register.values():
+            try:
+                process.join(timeout=max(0.0, deadline - time.time()))
+            except Exception as e:
+                logger.error("Error joining process during graceful shutdown: %s", contained_raise_reason(e))
+
         failures: list[str] = []
         for task in self.tasks:
             try:
@@ -160,8 +150,8 @@ class WorkerManager:
                     task.terminate()
                 task.join()
             except Exception as e:
-                logger.error(f"Error joining task: {e}")
-                failures.append(f"{getattr(task, 'name', None) or task}: {e}")
+                logger.error("Error joining task: %s", contained_raise_reason(e))
+                failures.append(f"{getattr(task, 'name', None) or task}: {scrub_credentials(safe_exc_str(e))}")
 
         if failures:
             raise Exception(

@@ -99,6 +99,7 @@ class TestPropertySpecMappingBehavesAsBefore:
         """A strict PropertySpec matches a declared value and non-matches an undeclared one."""
 
         class HardBreak694StrictFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "hardbreak694_operation": PropertySpec(
                     "The arithmetic operation to apply",
@@ -153,6 +154,7 @@ class TestPropertySpecMappingBehavesAsBefore:
         """``required_when`` on a PropertySpec behaves exactly like the dict form did."""
 
         class HardBreak694RequiredWhenFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "hardbreak694_agg": PropertySpec(
                     "The aggregation to apply",
@@ -192,6 +194,7 @@ class TestPropertySpecMappingBehavesAsBefore:
         """``match_guard`` on a PropertySpec behaves exactly like the dict form did."""
 
         class HardBreak694MatchGuardFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "hardbreak694_window": PropertySpec(
                     "Size of the time window",

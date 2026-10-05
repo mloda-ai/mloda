@@ -29,7 +29,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     @classmethod
     def _get_available_columns(cls, data: dict[str, list[Any]]) -> set[str]:
         """Get the set of available column names from the data."""
-        return set(data.keys())
+        return PythonDictFramework.extract_column_names(data)
 
     @classmethod
     def _check_source_features_exist(cls, data: dict[str, list[Any]], feature_names: list[str]) -> None:
@@ -44,7 +44,7 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
         missing_features = [f for f in feature_names if f not in available_features]
         if missing_features:
             raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(available_features)}"
+                f"Source features not found in data: {missing_features}. Available columns: {sorted(available_features, key=str)}"
             )
 
     @classmethod

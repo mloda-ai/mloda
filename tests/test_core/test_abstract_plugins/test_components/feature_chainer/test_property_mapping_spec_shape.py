@@ -152,6 +152,7 @@ class TestWellFormedSpecsStillDefine:
         """Every shape-checked field, correctly shaped, defines and enforces at match time."""
 
         class Shape694WellFormedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+            MIN_IN_FEATURES = 0
             PROPERTY_MAPPING = {
                 "shape694_operation": PropertySpec(
                     "The arithmetic operation to apply",

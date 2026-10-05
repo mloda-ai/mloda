@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import datetime
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser
 from mloda.provider import (
+    FeatureChainParser,
     FeatureChainParserMixin,
 )
 from mloda.provider import COLUMN_DISCOVERY_HOOKS
@@ -132,52 +132,30 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
     REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
-    # Custom input_features needed to add time_filter_feature
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract source feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(str(feature_name), [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            time_filter_feature = Feature(self.get_reference_time_column(options))
-            return {Feature(source_feature), time_filter_feature}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
-
-        time_filter_feature = Feature(self.get_reference_time_column(options))
-        return set(source_features) | {time_filter_feature}
+        """Source features from the shared resolution plus the reference-time feature."""
+        source_features = super().input_features(options, feature_name) or set()
+        return source_features | {Feature(self.get_reference_time_column(options))}
 
     @classmethod
     def _has_valid_time_window_suffix(cls, feature_name: str) -> bool:
         """Check if feature_name has a suffix matching the time window pattern."""
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             return False
-        suffix = feature_name[suffix_start + 2 :]
-        parts = suffix.split("_")
-        if len(parts) != 4 or parts[3] != "window":
+        captures = cast(dict[str, str], parsed.named_captures)
+        if captures[cls.WINDOW_FUNCTION] not in cls.WINDOW_FUNCTIONS:
             return False
-        if parts[0] not in cls.WINDOW_FUNCTIONS:
+        if captures[cls.TIME_UNIT] not in cls.TIME_UNITS:
             return False
-        if parts[2] not in cls.TIME_UNITS:
-            return False
-        if not parts[1].isdigit() or int(parts[1]) <= 0:
-            return False
-        return True
+        return int(captures[cls.WINDOW_SIZE]) > 0
 
     @classmethod
     def _extract_time_window_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:
         """
         Extract time window parameters (window_function, window_size, time_unit) from a feature.
 
-        Tries string-based parsing first using parse_time_window_prefix, falls back to configuration.
+        Resolves each parameter from the feature name first, then from options.
 
         Args:
             feature: The feature to extract parameters from
@@ -185,20 +163,11 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         Returns:
             Tuple of (window_function, window_size, time_unit), where any value may be None if not found
         """
-        feature_name = feature.name
+        window_function = cls._resolve_operation(feature, cls.WINDOW_FUNCTION)
+        window_size: Any = cls._resolve_operation(feature, cls.WINDOW_SIZE)
+        time_unit = cls._resolve_operation(feature, cls.TIME_UNIT)
 
-        # Try string-based parsing first
-        if cls._has_valid_time_window_suffix(feature_name):
-            window_function, window_size, time_unit = cls.parse_time_window_prefix(feature_name)
-            return window_function, window_size, time_unit
-
-        # Fall back to configuration
-        window_function = feature.options.get(cls.WINDOW_FUNCTION)
-        window_size = feature.options.get(cls.WINDOW_SIZE)
-        time_unit = feature.options.get(cls.TIME_UNIT)
-
-        # Convert window_size to int if it's a string
-        if window_size is not None and isinstance(window_size, str):
+        if window_size is not None:
             window_size = int(window_size)
 
         return window_function, window_size, time_unit
@@ -240,25 +209,17 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the last double underscore before the window pattern)
-        # Use rfind to support chained features in L->R format (e.g., price__mean_imputed__sum_7_day_window)
-        suffix_start = feature_name.rfind(CHAIN_SEPARATOR)
-        if suffix_start == -1:
-            raise ValueError(
-                f"Invalid time window feature name format: {feature_name}. Missing double underscore separator."
-            )
-
-        suffix = feature_name[suffix_start + 2 :]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) != 4 or parts[3] != "window":
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid time window feature name format: {feature_name}. "
                 f"Expected format: {{in_features}}__{{window_function}}_{{window_size}}_{{time_unit}}_window"
             )
 
-        window_function, window_size_str, time_unit = parts[0], parts[1], parts[2]
+        captures = cast(dict[str, str], parsed.named_captures)
+        window_function = captures[cls.WINDOW_FUNCTION]
+        window_size_str = captures[cls.WINDOW_SIZE]
+        time_unit = captures[cls.TIME_UNIT]
 
         # Validate window function
         if window_function not in cls.WINDOW_FUNCTIONS:
@@ -272,7 +233,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
             raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
 
         # Convert window size to integer
-        if not window_size_str.isdigit() or int(window_size_str) <= 0:
+        if int(window_size_str) <= 0:
             raise ValueError(f"Invalid window size: {window_size_str}. Must be a positive integer.")
         window_size = int(window_size_str)
 

@@ -8,7 +8,7 @@ from typing import Any, Generator
 from uuid import UUID
 import logging
 
-from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -26,6 +26,7 @@ from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 from mloda.core.abstract_plugins.feature_group import format_feature_group_class
 from mloda.core.runtime.validate_multiprocessing_link import (
     raise_on_multiprocessing_connection_conflict,
@@ -93,6 +94,9 @@ class ExecutionOrchestrator:
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
         tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
+        run_context: RunContext | None = None,
+        output_framework: type[ComputeFramework] | None = None,
+        output_connection: Any = None,
     ) -> None:
         """
         Initializes the ExecutionOrchestrator with an execution plan and optional flight server.
@@ -100,6 +104,7 @@ class ExecutionOrchestrator:
         Args:
             execution_planner: The execution plan that defines the steps to be executed.
             flight_server: An optional flight server for data transfer.
+            run_context: The default run context used when __enter__ is called without one.
         """
         self.execution_planner = execution_planner
 
@@ -107,6 +112,9 @@ class ExecutionOrchestrator:
         self.manager: Any = None
         self.function_extender: set[Extender] | None = None
         self.worker_extender_payload: bytes | None = None
+        self._hook_extenders: dict[ExtenderHook, Extender] | None = None
+        self._default_run_context: RunContext = run_context if run_context is not None else RunContext()
+        self._graceful_shutdown_timeout: float = self._default_run_context.graceful_shutdown_timeout
 
         # multiprocessing - delegate to WorkerManager
         self.location: str | None = None
@@ -114,7 +122,10 @@ class ExecutionOrchestrator:
 
         # Data lifecycle - delegate to DataLifecycleManager
         self.data_lifecycle_manager = DataLifecycleManager(
-            column_ordering=column_ordering, request_feature_order=request_feature_order
+            column_ordering=column_ordering,
+            request_feature_order=request_feature_order,
+            output_framework=output_framework,
+            output_connection=output_connection,
         )
 
         self._step_lock = threading.Lock()
@@ -152,7 +163,6 @@ class ExecutionOrchestrator:
             cfw.drop_last_data(self.location)
             return
 
-        self.worker_manager.clear_completed_drop(cfw_uuid)
         command_queue.put(set(cfw.children_if_root))
 
     def _init_run(self) -> tuple[set[UUID], set[UUID], set[UUID]]:
@@ -168,6 +178,7 @@ class ExecutionOrchestrator:
             tfs_connection_map=self.tfs_connection_map,
             function_extender=self.function_extender,
             worker_extender_payload=self.worker_extender_payload,
+            hook_extenders=self._hook_extenders,
         )
         self._register_modes = self.cfw_register.get_parallelization_modes()
 
@@ -247,8 +258,10 @@ class ExecutionOrchestrator:
         )
 
     def _finalize(self) -> None:
-        self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
-        self.join()
+        try:
+            self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
+        finally:
+            self.join()
         self._drop_all_uploaded_flight_tables()
 
     def _drop_all_uploaded_flight_tables(self) -> None:
@@ -264,7 +277,7 @@ class ExecutionOrchestrator:
         except Exception as e:
             # Best-effort cleanup runs inside a finally: raising here would replace whatever
             # real exception is propagating (e.g. a dead flight server) with this one.
-            logger.warning(f"Failed to drop uploaded flight tables during finalize: {e}")
+            logger.warning("Failed to drop uploaded flight tables during finalize: %s", contained_raise_reason(e))
 
     def _check_for_error(self) -> bool:
         """Return True if the run loop should stop (compute framework manager gone).
@@ -405,16 +418,16 @@ class ExecutionOrchestrator:
         self._mark_children_and_track(cfw, feature_uuids_to_possible_drop)
 
     def _drop_join_source_if_possible(self, step: JoinStep) -> None:
-        """Marks the join's destination-registered cfw with the link's own uuid; applies to both
+        """Marks the join's destination-registered cfw with the join's own token; applies to both
         same- and cross-framework joins, since only the join's own completion can supply it."""
         link_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
-            step.destination_framework.get_class_name(), step.link.uuid
+            step.destination_framework.get_class_name(), step.uuid
         )
         if link_cfw_uuid is None:
             return
 
         link_cfw = self.executor.cfw_collection[link_cfw_uuid]
-        self._mark_children_and_track(link_cfw, {step.link.uuid})
+        self._mark_children_and_track(link_cfw, {step.uuid})
 
     def _drop_tfs_source_if_possible(self, step: TransformFrameworkStep) -> None:
         """Marks a hop's SOURCE-side cfw with its owed tokens once the hop itself finishes, for both
@@ -445,8 +458,8 @@ class ExecutionOrchestrator:
         """
         Records newly-finished children on a CFW and, if not yet fully satisfied, tracks the
         remaining wait-condition so a later `_drop_data_for_finished_cfws` pass can flush it. The
-        worker-owned branch always tracks, without awaiting the drop ack, since that later flush
-        is a safe no-op if the worker already resolved and exited on its own.
+        worker-owned branch always tracks, since that later flush is a safe no-op if the worker
+        already resolved and exited on its own.
         """
         _, command_queue, _ = self.worker_manager.process_register.get(cfw.uuid, (None, None, None))
 
@@ -455,7 +468,6 @@ class ExecutionOrchestrator:
             if isinstance(data_to_drop, frozenset):
                 self.data_lifecycle_manager.track_data_to_drop[cfw.uuid] = set(data_to_drop)
         else:
-            self.worker_manager.clear_completed_drop(cfw.uuid)
             command_queue.put(children)
 
             flyway_datasets = self.cfw_register.get_uuid_flyway_datasets(cfw.uuid) or set(cfw.children_if_root)
@@ -475,7 +487,7 @@ class ExecutionOrchestrator:
         """
         Joins all tasks (threads or processes) and terminates multiprocessing processes.
         """
-        self.worker_manager.join_all()
+        self.worker_manager.join_all(graceful_timeout=self._graceful_shutdown_timeout)
 
     def add_to_result_data_collection(self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID) -> None:
         """
@@ -506,8 +518,11 @@ class ExecutionOrchestrator:
         """
         Enters the context of the ExecutionOrchestrator.
         """
-        run_context = run_context if run_context is not None else RunContext()
+        run_context = run_context if run_context is not None else self._default_run_context
         self.function_extender = function_extender
+        hook_extenders = build_hook_extenders(function_extender or ())
+        self._hook_extenders = hook_extenders
+        self._graceful_shutdown_timeout = run_context.graceful_shutdown_timeout
 
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             self.cfw_register = CfwManager(parallelization_modes)
@@ -520,8 +535,10 @@ class ExecutionOrchestrator:
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
             raise_on_unpicklable_extender(function_extender)
             # Snapshot right after the preflight, once, in this process: workers get this exact
-            # bytes payload, never a fetch through the register/proxy.
-            self.worker_extender_payload = pickle.dumps(function_extender) if function_extender is not None else None
+            # (extenders, hook table) bytes payload, never a fetch through the register/proxy.
+            self.worker_extender_payload = (
+                pickle.dumps((function_extender, hook_extenders)) if function_extender is not None else None
+            )
 
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_spawn_context()).__enter__()
@@ -549,7 +566,7 @@ class ExecutionOrchestrator:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """
-        Exits the context of the ExecutionOrchestrator.
+        Exits the context of the ExecutionOrchestrator, shutting the manager down; safe if __enter__ raised.
 
         Args:
             exc_type: The exception type.

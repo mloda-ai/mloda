@@ -45,7 +45,7 @@ class TestTheConstructorIsTheSchema:
     """The dataclass field set is the whole schema; an unknown field cannot exist."""
 
     def test_field_set_is_exactly_the_schema(self) -> None:
-        """The schema is these twelve fields, nothing more: there is no key set to drift from."""
+        """The schema is these thirteen fields, nothing more: there is no key set to drift from."""
         assert {field.name for field in dataclasses.fields(PropertySpec)} == {
             "explanation",
             "allowed_values",
@@ -59,6 +59,7 @@ class TestTheConstructorIsTheSchema:
             "deferred_binding",
             "framework_set",
             "scalar_only",
+            "expected",
         }
 
     def test_typo_field_is_a_constructor_type_error_naming_the_offender(self) -> None:

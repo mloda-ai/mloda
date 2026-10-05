@@ -25,13 +25,14 @@ This means, depending on your needs, you can run them all at once (**batch run**
 #### Configuration for mlodaAPI
 
 -   **requested_features**: Specify the features to process (as names, Feature objects, or a Features container).
--   **compute_frameworks** (optional): Limit the compute frameworks using framework types or names.
+-   **compute_frameworks** (optional): Limit the compute frameworks using an ordered list of framework types or names. When several can run a feature, the cheapest plan wins first, then list order. A set or an unknown name raises.
 -   **links** (optional): Define dataset merging links with Link objects.
 -   **data_access_collection** (optional): Provide data sources for feature identification.
+-   **function_extender** (optional): Add function extenders to customize computations. Session-level: accepted by every call that plans (the constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, `diagnose()`) and snapshotted then; not accepted by `run()`/`stream_run()`, so changing the set afterwards has no effect.
+-   **output_framework** (optional): Name or class of the compute framework results come back in. Session-level like `function_extender`: not accepted by `run()`/`stream_run()`. Converted once at the end of the run; without it, results stay in the chosen framework.
 
 #### Runner & Execution Configuration
 
--   **function_extender** (optional): Add function extenders to customize computations.
 -   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)
 -   flight_server (optional): Specify a flight server for multiprocessing only.
 -   **column_ordering** (optional): Control the ordering of result columns.
@@ -103,7 +104,7 @@ from mloda.steward import (
 
 ##### resolve_feature
 
-Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks`, and returns a `ResolvedFeature` (8 fields, including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
+Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks` (a set that only restricts candidates), and returns a `ResolvedFeature` (8 fields, including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
 
 ```python
 from mloda.steward import resolve_feature
@@ -119,7 +120,7 @@ See [Discover Plugins](discover-plugins.md#resolving-feature-names) for the full
 
 ##### explain and resolved_plan
 
-The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in execution-plan order. Every `explain` parameter after `features` is keyword-only.
+The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in dependency order (independent steps sorted by content, so every process reports the same order). Every `explain` parameter after `features` is keyword-only.
 
 `explain` re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior `run_all` execution. For the plan of a run that actually happened, use the return value directly: `run_all` returns a `RunResult` (a `list` with a read-only `plan` property) and `stream_all` returns a `ResultStream` (generator-compatible, `plan` available before consuming). One planning pass serves both the results and the plan, unlike `explain`, which re-resolves.
 
@@ -134,6 +135,8 @@ for step in results.plan:
 ```
 
 `RunResult.frames()` pairs each result frame with the compute `PlanStep` that produced it, by `step_uuid`; the list itself is in plan order, one element per step that produced requested output.
+
+To pin a resolved plan, see [Plan Lock](plan-lock.md).
 
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
 
@@ -152,6 +155,8 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **requested_feature_names** (`tuple[str, ...]`): The user-requested subset of `feature_names` on a compute step, empty for join and transform steps.
 - **injected_feature_names** (`tuple[str, ...]`): The engine-injected/dependency remainder of `feature_names` on a compute step, empty for join and transform steps.
 - **input_feature_names** (`tuple[str, ...]`): The sorted, deduplicated names a compute step's FeatureGroup declares as input, empty for a root step and for join and transform steps. It is the prepare-time twin of the run-time `HookContext.input_features`, which reads the same FeatureSet attribute.
+- **input_feature_edges** (`Mapping[str, tuple[str, ...]]`): Each output feature name of a compute step mapped to its sorted declared input names (empty for root, join and transform steps; injected features and features declaring no inputs are absent; same-named features in one step merge into one entry). Prepare-time twin of `HookContext.input_feature_edges`.
+- **specialized_from** (`tuple[type[FeatureGroup], ...]`): the parent FeatureGroup classes a compute step's FeatureGroup replaced through subclass preference for at least one of its features, sorted by class name; empty when nothing was replaced and for join and transform steps.
 - **feature_group** (`type[FeatureGroup] | None`): Resolved FeatureGroup; the destination for a transform step; the link's declared left side for a join.
 - **compute_framework** (`type[ComputeFramework] | None`): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.
 - **source_feature_group** / **source_compute_framework**: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.
@@ -160,10 +165,17 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **join_inverted** (`bool | None`, property): `join_destination_side == "right"`, None without a side.
 - **join_token** (`UUID | None`): the join's completion token, the uuid the scheduler tracks, for a join step; None otherwise. Excluded from equality (fresh per planning run).
 - **declared_left_frameworks** / **declared_right_frameworks** (`tuple[type[ComputeFramework], ...]`): the compute frameworks each declared side's parent features declared as candidates, sorted by class name, for a join step; empty otherwise, and empty when the plan recorded no candidates for the side. APPEND/UNION sides carry only the index-bearing parent.
-- **feature_set_options** (`Options | None`): a group-only, deep-copied snapshot of a compute step's `FeatureSet.options`; None otherwise. Excluded from equality.
+- **feature_set_options** (`Options | None`): a group-only, deep-copied snapshot of a compute step's `FeatureSet.options`, without the reader pair; None otherwise. Excluded from equality.
+- **compute_framework_reason** (`str | None`): why the central choice put a compute step on its framework (for example `pinned` or `saves 1 conversion`); None for join and transform steps.
+- **result_framework** (`type[ComputeFramework] | None`): the framework a compute step's requested features come back in, the `output_framework` if set, else the step's own framework; None without requested features and for join and transform steps.
+- **reader_data_access** (`tuple[type[BaseInputData], Any] | None`, field, excluded from equality): the `(ReaderClass, data_access)` pair a compute step resolved for reading its input data; None otherwise.
+- **data_access_identity** (`str | None`, property): the reader's `data_access_identity(data_access)` for a compute step's reader pair, None otherwise, the same value `HookContext.data_access_identity` carries. Core readers keep credentials out of it; a reader whose paths carry tokens must override `data_access_identity` (see [Extenders](../chapter1/extender.md)).
+- **data_access_identity_is_fallback** (`bool | None`, property): True when that identity is a fallback (the type name or bare key names) that names no source, False otherwise, None without a reader pair.
 - **step_uuid** (`UUID | None`): the compute step's uuid, the key `RunResult.frames()` and `ResultStream.frames()` pair by; None otherwise. Excluded from equality (fresh per planning run).
-- **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** (`str | None`): Class names of the above, None when unset.
+- **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** / **result_framework_name** (`str | None`): Class names of the above, None when unset.
 - **declared_left_framework_names** / **declared_right_framework_names** (`tuple[str, ...]`): class names of the two tuples above, same order.
+
+`reader_data_access` may hold credentials, so never log or serialize it raw; `dataclasses.asdict(step)` includes it, and `feature_set_options` no longer holds the pair. Use `data_access_identity` instead; the other fields hold names, classes and uuids.
 
 Join semantics: for a join step the `*_feature_group` fields are the link's declared left/right sides, while `compute_framework`/`source_compute_framework` are the merge destination and the framework merged in, which may belong to the declared right side. `join_destination_side` is resolved from the two declared sides' framework candidates for every join type except APPEND and UNION, which always report `"left"`; a right join queues its destination on the declared right side, so it reports `"right"` in the common case. When declared-side membership doesn't decide (both sides silent, both claim the destination framework, or, for a RIGHT join, one side's nearest-only answer is contradicted by the other side's widened any-distance candidates, excluding that other side's own nearest uuids, also touching the destination framework), a RIGHT join always resolves to the declared right side. For any other join type, a differing destination/source framework instead breaks the tie by identity against the trekker key; matching frameworks fall back to the link's trekker-key flip flag.
 
@@ -187,7 +199,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 
 `diagnose` and `resolution_report()` are the non-raising counterparts to `explain` and `resolved_plan()`: where the plan-based pair returns `PlanStep` records, these return the resolution facts a failing request would otherwise raise.
 
-`mlodaAPI.diagnose(features, ...)` runs the whole-request preflight without raising and returns a single `ResolutionDiagnosis`. It takes the same arguments as `explain` (every parameter after `features` is keyword-only). On success its `records` equal `session.resolution_report()` and `complete` is `True`; on a resolution failure it carries the records resolved before the failing feature plus `feature_name`, `failed_result`, and `message`; on an environment or config failure (redefinition conflict, framework-declaration error, compute-framework pin) it returns `records=[]`, `complete=False`, and only `message`.
+`mlodaAPI.diagnose(features, ...)` runs the whole-request preflight without raising and returns a single `ResolutionDiagnosis`. It takes the same arguments as `explain` (every parameter after `features` is keyword-only). On success its `records` equal `session.resolution_report()` and `complete` is `True`; on a resolution failure it carries the records resolved before the failing feature plus `feature_name`, `failed_result`, and `message`; on an environment or config failure (redefinition conflict, framework-declaration error, compute-framework pin) it returns `records=[]`, `complete=False`, and only `message`. Any other error, including an exception a breaking extender raises (unless it is one of the projected types), still propagates.
 
 `session.resolution_report()` returns the `list[ResolutionRecord]` captured while `prepare()` planned the request, one per feature, available before or after `run()`.
 
@@ -216,7 +228,7 @@ from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, Resoluti
 - **`ResolutionDiagnosis`** (frozen dataclass): the return value of `diagnose`, never raised. Fields: `records` (`list[ResolutionRecord]`), `complete` (`bool`), `feature_name` (`str | None`), `failed_result` (`EvaluationResult | None`), `message` (`str | None`).
 - **`ResolutionRecord`** (frozen dataclass): one per feature, returned inside `resolution_report()`, `ResolutionDiagnosis.records`, and `FeatureResolutionError.partial_records`; never raised. Fields: `feature_name` (`str`), `requested` (`bool`), `result` (`EvaluationResult`).
 
-`EvaluationResult` is the captured matcher outcome carried by the fields above; it is defined in `mloda.core.prepare.resolution_types` and is not part of the public `__init__` exports.
+`EvaluationResult` is the captured matcher outcome carried by the fields above; it is defined in `mloda.core.prepare.resolution_types` and is not part of the public `__init__` exports. `EvaluationResult.specialized_from` carries, per feature, the parent classes the single winner replaced through subclass preference.
 
 ##### get_feature_group_docs
 

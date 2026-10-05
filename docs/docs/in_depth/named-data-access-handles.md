@@ -95,12 +95,13 @@ DataAccessCollection(credentials={"pg-prod": Credential(host="h")})     # named 
 dac.add_credentials(Credential(host="h"))                               # mutators too
 ```
 
-`Credential` is unwrapped to a plain dict at registration time, so feature groups and `is_valid_credentials` implementations keep receiving plain dicts. Nothing changes downstream.
+Registered credentials are stored as `RegisteredCredential`, a `dict` subclass, so `isinstance(x, dict)`, item access and `**` unpacking see raw values.
 
 Two safety behaviors come with it:
 
 - **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
-- **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Note that the registered credential itself is a plain dict, so code that prints `dac.credentials` directly still sees raw values.
+- **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Mapping credentials registered through the constructor or `add_credentials` print (print, f-strings, logging, pprint) with values `***`. Copies (`dict(cred)`, `{**cred}`, `.copy()`), `.items()`/`.values()` and `json.dumps` see raw values; `yaml.safe_dump` rejects the subclass, so convert with `dict(cred)` first. Direct assignment into `dac.credentials` stores the value as-is and prints raw; registration copies the caller's dict. A plain dict under a DB reader key gets swapped for a redacting `RegisteredCredential` copy when mloda probes it; the caller's own dict stays untouched. Option conflict errors and filter divergence warnings mask mapping values and scrub credential-shaped strings (URI user info, query and fragment, `password=` values) inside nested lists, tuples and sets (mapping keys print as given). `str(Options)` renders the whole `(Reader, value)` `BaseInputData` tuple through the same masking (a mapping masked, a DSN string scrubbed); everything else prints as given, including the caller's own `Options` (mloda works on copies), so `Credential(...)` (e.g. `options={"SQLITEReader": Credential(sqlite="/x.db")}`) stays the recommended form.
+- **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`.
 
 ### Why a typed class: four kinds of users
 
@@ -108,7 +109,7 @@ The design serves four user groups that hit credentials differently:
 
 1. **Notebook users** (one data source) write the obvious shape from an example. For them the bare dict either has to work or fail loudly at construction; `Credential(sqlite="/data/x.db")` gives them a form with no nesting decision to get wrong, and the early error catches the legacy shape.
 2. **Production users** (multiple sources) live in the named-handle registry and disambiguate per feature via `data_access_handle`. For them `Credential` keeps the registry values homogeneous, so ambiguity errors and `handles()` introspection stay trustworthy.
-3. **Plugin authors** implement `is_valid_credentials` and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: whatever the end user typed, the plugin receives a plain dict.
+3. **Plugin authors** implement `is_valid_credentials` and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: the plugin receives a dict for every mapping credential.
 4. **Ops and data stewards** care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values, so credential candidates are rendered with redacted values (keys only), keeping passwords out of those messages and the logs that capture them.
 
 ## Resolution rule
@@ -197,7 +198,7 @@ DataAccessCollection(
 )
 ```
 
-For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`).
+For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong reader, missing column), the feature is declined rather than falling back to another file. When no registered reader anywhere owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.
 
 See [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the full example.
 
@@ -214,7 +215,8 @@ Named handles collapse that bug class to one invariant: *if the registry has mor
 - **"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"**: you set `data_access_handle='X'`, but the registry has `X` under a different kind. A connection consumer cannot bind to a file handle even if the names match.
 - **"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"**: more than one entry of the requested kind matched. Set `data_access_handle` on the feature's `Options` to pick one, or remove the extras from the DAC.
 - **"credentials value for handle 'X' is not a mapping"**: you passed a bare `{connector_id: slot}` dict as `credentials`, which the named form reads as `{handle: credential}`. Use `credentials=Credential(...)`, the list form `credentials=[{...}]`, or the named form `{handle: {connector_id: slot}}`. See [Typed credentials](#typed-credentials-credential).
-- **"HashableDict is no longer accepted as a credential value"**: pre-0.7 call sites wrapped credentials in `HashableDict`. The credentials path no longer accepts it; pass `Credential(...)` or a plain dict instead. `HashableDict` is not removed from the library: it still backs hashability-required internals (for example `Options` hashing and `ApiInputDataCollection`). It is simply no longer unwrapped anywhere on the database credential / data-access path, so the `Options(group={"BaseInputData": (Reader, ...)})` route also expects a plain dict now.
+- **"credentials list entry N has type T, not a mapping"**: each list entry must be a dict or `Credential`; wrap a bare value such as a DSN as `Credential(dsn=...)`.
+- **"HashableDict is no longer accepted as a credential value"**: pre-0.7 call sites wrapped credentials in `HashableDict`. The credentials path no longer accepts it; pass `Credential(...)` or a plain dict instead. `HashableDict` is not removed from the library: it still backs hashability-required internals (for example `Options` hashing and `ApiInputDataCollection`). It is simply no longer unwrapped anywhere on the database credential / data-access path.
 
 ## Related
 

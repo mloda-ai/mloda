@@ -1,8 +1,12 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
-from mloda.core.abstract_plugins.components.credential import Credential
+from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
+from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping, scrub_credentials
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
+
+_MIN_REDACT_LENGTH = 8
+_PLACEHOLDER = "MLODAREDACTED"
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -42,7 +46,8 @@ class DataAccessCollection:
             ``Credential`` entries in the list/dict forms). A credential is
             itself a dict, so the bare ``{connector_id: slot}`` shape would be
             read as ``{handle: value}``; the typed form removes that ambiguity
-            and is unwrapped to a plain dict at registration. Named-form
+            and is stored as a ``RegisteredCredential`` (a dict whose repr
+            redacts values) at registration. List-form and named-form
             credential values must be mappings (``dict`` or ``Credential``);
             anything else raises an early mis-wrap ``ValueError``.
             ``HashableDict`` is no longer accepted on the credentials path; the
@@ -81,7 +86,7 @@ class DataAccessCollection:
         if credentials is None:
             return None
         if isinstance(credentials, Credential):
-            return [credentials.data]
+            return [cls._unwrap_credential(credentials)]
         if isinstance(credentials, dict):
             context_keys = tuple(credentials.keys())
             return {
@@ -95,7 +100,17 @@ class DataAccessCollection:
                 f"credentials must be a Credential, a dict of {{handle: credential}}, or a list of credentials; "
                 f"got {type(credentials).__name__}."
             )
-        return [cls._unwrap_credential(entry) for entry in credentials]
+        return [cls._validated_list_entry(index, entry) for index, entry in enumerate(credentials)]
+
+    @classmethod
+    def _validated_list_entry(cls, index: int, entry: Any) -> Any:
+        unwrapped = cls._unwrap_credential(entry)
+        if isinstance(unwrapped, dict):
+            return unwrapped
+        raise ValueError(
+            f"credentials list entry {index} has type {type(entry).__name__}, not a mapping. Each list entry "
+            f"must be a dict or a Credential, e.g. credentials=[Credential(dsn=...)]."
+        )
 
     @staticmethod
     def _unwrap_credential(value: Any) -> Any:
@@ -108,6 +123,8 @@ class DataAccessCollection:
                 "(HashableDict itself is not removed; it stays for hashability-required "
                 "internals such as Options hashing.)"
             )
+        if isinstance(value, dict):
+            return RegisteredCredential(value)
         return value
 
     @classmethod
@@ -304,5 +321,76 @@ class DataAccessCollection:
     @staticmethod
     def _redacted_credential(value: Any) -> str:
         if isinstance(value, dict):
-            return "{" + ", ".join(f"'{key}': '***'" for key in value) + "}"
+            return "{" + ", ".join(f"'{key}': {redacted!r}" for key, redacted in redact_mapping(value).items()) + "}"
         return "'***'"
+
+    def redact(self, text: str) -> str:
+        """Exact-match every registered credential string value of 8+ chars, then ``scrub_credentials``."""
+        spans = self._merge_spans(self._literal_spans(text, self._credential_str_leaves()))
+        text = self._replace_spans_with_placeholder(text, spans)
+        text = scrub_credentials(text)
+        return text.replace(_PLACEHOLDER, "***")
+
+    @staticmethod
+    def _literal_spans(text: str, literals: set[str]) -> list[tuple[int, int]]:
+        spans: list[tuple[int, int]] = []
+        for literal in literals:
+            start = 0
+            while True:
+                index = text.find(literal, start)
+                if index == -1:
+                    break
+                spans.append((index, index + len(literal)))
+                start = index + 1
+        return spans
+
+    @staticmethod
+    def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        if not spans:
+            return []
+        ordered = sorted(spans)
+        merged = [ordered[0]]
+        for start, end in ordered[1:]:
+            last_start, last_end = merged[-1]
+            if start <= last_end:
+                merged[-1] = (last_start, max(last_end, end))
+            else:
+                merged.append((start, end))
+        return merged
+
+    @staticmethod
+    def _replace_spans_with_placeholder(text: str, spans: list[tuple[int, int]]) -> str:
+        if not spans:
+            return text
+        parts: list[str] = []
+        cursor = 0
+        for start, end in spans:
+            parts.append(text[cursor:start])
+            parts.append(_PLACEHOLDER)
+            cursor = end
+        parts.append(text[cursor:])
+        return "".join(parts)
+
+    def _credential_str_leaves(self) -> set[str]:
+        leaves: set[str] = set()
+        visited: set[int] = set()
+        for value in self.credentials.values():
+            self._collect_str_leaves(value, leaves, visited)
+        return leaves
+
+    @classmethod
+    def _collect_str_leaves(cls, value: Any, leaves: set[str], visited: set[int]) -> None:
+        if isinstance(value, Credential):
+            value = value.data
+        if isinstance(value, str):
+            if len(value) >= _MIN_REDACT_LENGTH and value.strip():
+                leaves.add(value)
+            return
+        if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+            container_id = id(value)
+            if container_id in visited:
+                return
+            visited.add(container_id)
+            iterable: Iterable[Any] = value.values() if isinstance(value, Mapping) else value
+            for nested in iterable:
+                cls._collect_str_leaves(nested, leaves, visited)

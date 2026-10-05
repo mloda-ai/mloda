@@ -1,4 +1,4 @@
-"""E2E: worker_index, run_id, and carrier reach HookContext inside a real spawned
+"""E2E: worker_index, run_id, carrier, and specialized_from reach HookContext inside a real spawned
 MULTIPROCESSING worker process, for two independent root FeatureGroups (two workers).
 
 An Extender's own instance state does not propagate back from a spawned child via the manager
@@ -37,7 +37,7 @@ class _WorkerIndexFeatureGroupOne(FeatureGroup):
         return {"worker_index_e2e_col_one": [1, 2, 3]}
 
 
-class _WorkerIndexFeatureGroupTwo(FeatureGroup):
+class _WorkerIndexFeatureGroupTwoParent(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
         return DataCreator({"worker_index_e2e_col_two"})
@@ -51,11 +51,17 @@ class _WorkerIndexFeatureGroupTwo(FeatureGroup):
         return {"worker_index_e2e_col_two": [4, 5, 6]}
 
 
-_ENABLED = PluginCollector.enabled_feature_groups({_WorkerIndexFeatureGroupOne, _WorkerIndexFeatureGroupTwo})
+class _WorkerIndexFeatureGroupTwo(_WorkerIndexFeatureGroupTwoParent):
+    """Subclass that replaces its parent via subclass preference."""
+
+
+_ENABLED = PluginCollector.enabled_feature_groups(
+    {_WorkerIndexFeatureGroupOne, _WorkerIndexFeatureGroupTwoParent, _WorkerIndexFeatureGroupTwo}
+)
 
 
 class _WorkerIndexRecordingExtender(Extender):
-    """Writes worker_index/run_id/carrier to output_path as JSON, filtered to target_feature_group."""
+    """Writes worker_index/run_id/carrier/specialized_from to output_path as JSON, filtered to target_feature_group."""
 
     def __init__(self, output_path: Path, target_feature_group: type[FeatureGroup], priority: int = 100) -> None:
         self.priority = priority
@@ -71,7 +77,15 @@ class _WorkerIndexRecordingExtender(Extender):
         assert context is not None
         if context.feature_group_class == self._target_feature_group_name:
             self._output_path.write_text(
-                json.dumps({"worker_index": context.worker_index, "run_id": context.run_id, "carrier": context.carrier})
+                json.dumps(
+                    {
+                        "worker_index": context.worker_index,
+                        "run_id": context.run_id,
+                        "plan_id": context.plan_id,
+                        "carrier": context.carrier,
+                        "specialized_from": list(context.specialized_from),
+                    }
+                )
             )
         return result
 
@@ -94,11 +108,11 @@ class TestWorkerIndexReachesHookContextUnderMultiprocessing:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+            function_extender={extender_one, extender_two},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-            function_extender={extender_one, extender_two},
             flight_server=flight_server,
             carrier=_CARRIER,
         )
@@ -113,7 +127,15 @@ class TestWorkerIndexReachesHookContextUnderMultiprocessing:
         assert seen_indices == {0, 1}
 
         # run_id/carrier must survive the real pickle boundary into the spawned child unchanged.
-        assert recorded_one["run_id"] == session.run_id
-        assert recorded_two["run_id"] == session.run_id
+        assert recorded_one["plan_id"] == session.plan_id
+        assert recorded_two["plan_id"] == session.plan_id
+        assert recorded_one["run_id"] is not None
+        assert recorded_one["run_id"] == recorded_two["run_id"]
+        assert recorded_one["run_id"] != session.plan_id
         assert recorded_one["carrier"] == _CARRIER
         assert recorded_two["carrier"] == _CARRIER
+
+        # specialized_from must also survive the boundary: the subclass names its replaced parent.
+        parent = _WorkerIndexFeatureGroupTwoParent
+        assert recorded_two["specialized_from"] == [f"{parent.__module__}.{parent.__qualname__}"]
+        assert recorded_one["specialized_from"] == []

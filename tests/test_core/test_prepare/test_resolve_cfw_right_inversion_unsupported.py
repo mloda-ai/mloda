@@ -1,16 +1,13 @@
-"""RIGHT-jointype inversion must not resolve a feature onto a framework it never declared."""
-
-from typing import Any
-from uuid import UUID
+"""A RIGHT join whose child cannot run on the right side is infeasible for the chooser."""
 
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.core.prepare.graph.graph import Graph
-from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
-from mloda.core.prepare.resolve_links import LinkTrekker
+from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -27,30 +24,34 @@ class RightInversionChildFG(FeatureGroup):
     pass
 
 
-def _make_right_trekker(trekked_uuids: set[UUID]) -> tuple[LinkTrekker, Any]:
+def test_right_join_onto_an_undeclared_framework_is_infeasible() -> None:
+    """The child declares only PandasDataFrame, but a RIGHT join lands on its right side, PyArrowTable."""
+    left = Feature("right_inversion_left")
+    right = Feature("right_inversion_right")
+    child = Feature("right_inversion_feature")
+    left.compute_frameworks = {PandasDataFrame}
+    right.compute_frameworks = {PyArrowTable}
+    child.compute_frameworks = {PandasDataFrame}
+
+    graph = Graph()
+    graph.add_node(left.uuid, NodeProperties(left, RightInversionLeftFG))
+    graph.add_node(right.uuid, NodeProperties(right, RightInversionRightFG))
+    graph.add_node(child.uuid, NodeProperties(child, RightInversionChildFG))
+    graph.add_edge(left.uuid, child.uuid, EdgeProperties(RightInversionLeftFG, RightInversionChildFG))
+    graph.add_edge(right.uuid, child.uuid, EdgeProperties(RightInversionRightFG, RightInversionChildFG))
+
     link = Link.right(JoinSpec(RightInversionLeftFG, "idx"), JoinSpec(RightInversionRightFG, "idx"))
-    trekker = (link, PandasDataFrame, PyArrowTable)
+    nodes: dict[type[FeatureGroup], set[Feature]] = {
+        RightInversionLeftFG: {left},
+        RightInversionRightFG: {right},
+        RightInversionChildFG: {child},
+    }
+    occurrences = [(link, left.uuid, right.uuid, child.uuid)]
 
-    link_trekker = LinkTrekker()
-    # Production shares one set object between data and data_ordered, and invert_link relies on that.
-    shared_uuids = set(trekked_uuids)
-    link_trekker.data[trekker] = shared_uuids
-    link_trekker.data_ordered[trekker] = shared_uuids
-    return link_trekker, trekker
-
-
-def test_right_join_inversion_onto_undeclared_framework_raises() -> None:
-    """The feature declares only PandasDataFrame, but the RIGHT-branch inversion resolves it to PyArrowTable."""
-    feature = Feature("right_inversion_feature")
-    feature.compute_frameworks = {PandasDataFrame}
-
-    link_trekker, _ = _make_right_trekker({feature.uuid})
-    planned_queue: list[Any] = [(RightInversionChildFG, {feature})]
-
-    with pytest.raises(ValueError, match="declares the compute framework") as excinfo:
-        ResolveComputeFrameworks(Graph()).links(planned_queue, link_trekker)
+    with pytest.raises(ValueError, match="No compute framework assignment") as excinfo:
+        ChooseComputeFrameworks(graph, nodes, occurrences, [], {}).choose()
 
     message = str(excinfo.value)
-    assert str(feature.name) in message, message
+    assert str(child.name) in message, message
     assert PandasDataFrame.get_class_name() in message, message
-    assert PyArrowTable.get_class_name() in message, message
+    assert "join right" in message, message

@@ -1,5 +1,8 @@
 from collections import defaultdict
+from collections.abc import Mapping
 from uuid import UUID
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, ResolveLinks
@@ -14,8 +17,18 @@ PlannedQueue = list[LinkFrameworkTrekker | tuple[type[FeatureGroup], set[Feature
 
 
 class ResolveGraph:
-    def __init__(self, graph: Graph, links: set[Link] | None = None):
+    def __init__(
+        self,
+        graph: Graph,
+        links: set[Link] | None = None,
+        filter_ties: list[tuple[UUID, UUID]] | None = None,
+        positions: Mapping[type[ComputeFramework], int] | None = None,
+        output_framework: type[ComputeFramework] | None = None,
+    ):
+        self.output_framework = output_framework
         self.graph = graph
+        self.filter_ties = filter_ties or []
+        self.positions: Mapping[type[ComputeFramework], int] = positions or {}
         self.nodes_per_feature_group: dict[type[FeatureGroup], set[Feature]] = {}
         self.resolver_compute_framework = ResolveComputeFrameworks(self.graph)
         self.resolver_links = ResolveLinks(self.graph, links)
@@ -28,6 +41,15 @@ class ResolveGraph:
 
     def resolve_links(self) -> PlannedQueue:
         # we create feature link relation
+        self.resolver_links.match_links()
+        ChooseComputeFrameworks(
+            self.graph,
+            self.nodes_per_feature_group,
+            self.resolver_links.occurrences,
+            self.filter_ties,
+            self.positions,
+            output_framework=self.output_framework,
+        ).choose()
         self.resolver_links.resolve_links()
         # we put link into queue depending on feature link relation
         self.links_with_queue = self.resolver_links.add_links_to_queue()

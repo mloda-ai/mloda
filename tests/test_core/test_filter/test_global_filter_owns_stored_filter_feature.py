@@ -43,7 +43,7 @@ def _prepared() -> tuple[set[Feature], GlobalFilter]:
 
     session = mloda.prepare(
         [GFO_HOST],
-        compute_frameworks={PythonDictFramework},
+        compute_frameworks=[PythonDictFramework],
         plugin_collector=_ENABLED,
         global_filter=global_filter,
     )

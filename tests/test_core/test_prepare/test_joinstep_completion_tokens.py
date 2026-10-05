@@ -37,7 +37,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
-from tests.test_core.test_prepare.join_plan_helpers import feature, trek
+from tests.test_core.test_prepare.join_plan_helpers import feature, join_tokens, trek
 
 
 TOKEN_LEFT_INDEX = Index(("token_left_key",))
@@ -593,7 +593,9 @@ def test_cross_framework_join_hop_owed_tokens_equal_its_destination_consumers_ow
 
     plan = _create_execution_plan(planned)
 
-    hop = next(step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id == link.uuid)
+    hop = next(
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
+    )
 
     assert hop.owed_tokens == branch.consumer.get_uuids()
 
@@ -606,7 +608,9 @@ def test_cross_framework_append_join_hop_owed_tokens_stay_empty() -> None:
 
     plan = _create_execution_plan(planned)
 
-    hop = next(step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id == link.uuid)
+    hop = next(
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in join_tokens(plan, link)
+    )
 
     assert hop.owed_tokens == frozenset()
 
@@ -854,13 +858,22 @@ def _plan_two_plain_hops_share_one_source_framework() -> TwoPlainHopsPlanned:
     graph.parent_to_children_mapping[gate_two.uuid] = {root.uuid}
     graph.add_node(branch_a.uuid, NodeProperties(branch_a, TokenPlainBranchA))
     graph.adjacency_list[branch_a.uuid] = [consumer_feature.uuid]
-    graph.parent_to_children_mapping[branch_a.uuid] = {gate_one.uuid}
+    # Full transitive closure, as Graph.set_all_parents_for_each_child would compute in a real graph
+    # (this fixture bypasses that call): branch_a and branch_b share ancestor root.uuid, which is
+    # what makes the two hops genuinely linked.
+    graph.parent_to_children_mapping[branch_a.uuid] = {gate_one.uuid, root.uuid}
     graph.add_node(branch_b.uuid, NodeProperties(branch_b, TokenPlainBranchB))
     graph.adjacency_list[branch_b.uuid] = [consumer_feature.uuid]
-    graph.parent_to_children_mapping[branch_b.uuid] = {gate_two.uuid}
+    graph.parent_to_children_mapping[branch_b.uuid] = {gate_two.uuid, root.uuid}
     graph.add_node(consumer_feature.uuid, NodeProperties(consumer_feature, TokenPlainConsumer))
     graph.adjacency_list[consumer_feature.uuid] = []
-    graph.parent_to_children_mapping[consumer_feature.uuid] = {branch_a.uuid, branch_b.uuid}
+    graph.parent_to_children_mapping[consumer_feature.uuid] = {
+        branch_a.uuid,
+        branch_b.uuid,
+        gate_one.uuid,
+        gate_two.uuid,
+        root.uuid,
+    }
 
     planned.queue.append((TokenPlainRoot, {root}))
     planned.queue.append((TokenPlainGateOne, {gate_one}))

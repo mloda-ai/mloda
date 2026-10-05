@@ -1,10 +1,12 @@
 import gc
 import os
+from collections.abc import Iterator
 from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components import utils
+from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
@@ -72,6 +74,17 @@ def set_acero_alignment_handling() -> Any:
     yield
     # Optionally, unset the variable or reset it after the test
     del os.environ["ACERO_ALIGNMENT_HANDLING"]
+
+
+@pytest.fixture
+def rejection_window() -> Iterator[dict[str, MatchRejection]]:
+    """Open a MATCH_REJECTION_REASONS window around one matcher call, mirroring the engine's per-candidate window."""
+    window: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(window)
+    try:
+        yield window
+    finally:
+        MATCH_REJECTION_REASONS.reset(token)
 
 
 @pytest.fixture(scope="session")

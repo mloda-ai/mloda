@@ -32,6 +32,10 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 
 
 ROE_FEATURE_NAME = "roe_enforced_column"
+ROE_CONTEXT_REMEDY = (
+    "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
+    "list it in the consumer's propagate_context_keys"
+)
 
 ROE_STRICT_ACCESS = "roe_strict_access"
 ROE_STRICT_HANDLE = "roe_strict_handle"
@@ -394,15 +398,6 @@ def _roe_nullable_reader(tag: str) -> type[BaseInputData]:
 
 
 @pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a recording window around one selection call, mirroring the engine's per-candidate window."""
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
-
-
-@pytest.fixture()
 def collect_after() -> Iterator[None]:
     """Reclaim test-local RoeLocal* readers out of __subclasses__ before the next test on this worker."""
     yield
@@ -429,6 +424,33 @@ class TestFeatureScopeStrictValues:
         assert owner in stored.reason
         assert ROE_FORMAT_KEY in stored.reason
         assert "roe_bogus" in stored.reason
+
+    @pytest.mark.parametrize(
+        "value,safe_text",
+        [
+            ({"payload": "roe_hidden"}, "dict"),
+            (10**5000, "int"),
+        ],
+        ids=["dict", "huge_int"],
+    )
+    def test_a_composite_or_oversized_value_is_rendered_via_safe_value_text(
+        self, value: Any, safe_text: str, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        """The recorded reason renders the value through safe_value_text, never verbatim, never raising."""
+        options = Options({RoeStrictValuesReader.__name__: ROE_STRICT_ACCESS, ROE_FORMAT_KEY: value})
+
+        matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
+
+        assert matched is False
+        owner = RoeStrictValuesReader.get_class_name()
+        stored = rejection_window[owner]
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
+        assert (
+            stored.reason == f"reader option '{ROE_FORMAT_KEY}' value {safe_text} is rejected by the "
+            f"declaration of {owner}"
+        )
+        if safe_text == "dict":
+            assert "roe_hidden" not in stored.reason
 
     def test_valid_membership_value_still_matches_and_pins_the_pair(
         self, rejection_window: dict[str, MatchRejection]
@@ -653,6 +675,10 @@ class TestRequiredness:
         assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert owner in stored.reason
         assert ROE_COND_KEY in stored.reason
+        assert stored.reason == (
+            f"required reader option '{ROE_COND_KEY}' is absent, but {owner} declares it required "
+            f"(required_when predicate {_roe_trigger_required.__name__} is satisfied)" + ROE_CONTEXT_REMEDY
+        )
 
     def test_conditionally_required_key_absent_without_trigger_stays_optional(
         self, rejection_window: dict[str, MatchRejection]
@@ -679,17 +705,22 @@ class TestRequiredness:
         assert matched is True
         assert rejection_window == {}
 
-    def test_a_raising_required_when_predicate_is_a_silent_non_match(
+    def test_a_raising_required_when_predicate_is_contained_and_reported_as_a_pin(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
-        """A predicate that raises makes the reader a non-match WITHOUT a recorded rejection."""
+        """A raising predicate is contained as a non-match, reported only as a generic pin rejection."""
         options = Options({RoeRaisingPredicateReader.__name__: ROE_FUSSY_ACCESS})
 
         matched = BaseInputData.feature_scope_data_access(options, ROE_FEATURE_NAME)
 
         assert matched is False
         assert "BaseInputData" not in options
-        assert rejection_window == {}
+        owner = RoeRaisingPredicateReader.get_class_name()
+        assert list(rejection_window) == [owner]
+        stored = rejection_window[owner]
+        assert stored.stage == INPUT_DATA_OWNED_STAGE
+        assert "pinned" in stored.reason
+        assert "roe required_when predicate crash" not in stored.reason
 
     def test_unconditionally_required_key_absent_is_rejected(
         self, rejection_window: dict[str, MatchRejection], collect_after: None
@@ -707,6 +738,10 @@ class TestRequiredness:
         assert stored.stage == INPUT_DATA_OWNED_STAGE
         assert owner in stored.reason
         assert ROE_REQUIRED_KEY in stored.reason
+        assert stored.reason == (
+            f"required reader option '{ROE_REQUIRED_KEY}' is absent, but {owner} declares it required "
+            "(no default declared)" + ROE_CONTEXT_REMEDY
+        )
 
     def test_unconditionally_required_key_present_matches(
         self, rejection_window: dict[str, MatchRejection], collect_after: None
@@ -940,7 +975,8 @@ class TestEngineIntegration:
 
         assert RoeEnforcementFG in result.identified
         assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (RoeEngineReader, ROE_ENGINE_ACCESS)
+        assert feature.input_data_match == (RoeEngineReader, ROE_ENGINE_ACCESS)
+        assert "BaseInputData" not in feature.options
 
 
 class TestModuleLeakPolicy:

@@ -39,11 +39,11 @@ first (during property mapping validation) on each parsed element, then
 element, the match fails with a ``ValueError`` before ``match_guard`` is
 reached.
 
-A guard rejection on a spec that also sets ``strict_validation=True`` is
-reportable: the match pass records it as it happens, and the recorded reason
-feeds the resolution-failure report. ``_strict_validation_rejection_reason``
-remains a standalone diagnostic facade producing the same message. A guard on
-a non-strict spec keeps its "not mine" meaning and reports nothing.
+A guard rejection on a spec that also sets ``strict_validation=True``, or that declares
+``expected``, is reportable: the match pass records it as it happens, and the recorded
+reason feeds the resolution-failure report. ``_strict_validation_rejection_reason``
+remains a standalone diagnostic facade producing the same message. A guard on a
+non-strict spec with no ``expected`` keeps its "not mine" meaning and reports nothing.
 
 Validators must be pure functions with no side effects. They may be called
 multiple times during feature group resolution (once per candidate feature
@@ -56,8 +56,9 @@ from __future__ import annotations
 import inspect
 import logging
 import os
-from collections.abc import Callable
-from typing import Any, cast
+from copy import copy
+from collections.abc import Callable, Sequence
+from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -67,23 +68,24 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author
     install_required_when_guard,
     validate_name_binding,
     warn_captureless_without_binding,
+    warn_missing_in_features_declaration,
     warn_universal_optional_matcher,
 )
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
     FeatureChainParser,
-    CHAIN_SEPARATOR,
     INPUT_SEPARATOR,
     PropertyValueRejection,
-    option_key_is_present,
 )
-from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution
+from mloda.core.abstract_plugins.components.match_rejection import NAME_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.utils import (
-    contained_raise_log_level,
     contained_raise_reason,
     escalate_match_abort,
     is_match_abort,
+    safe_field,
+    safe_value_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,7 +108,9 @@ class FeatureChainParserMixin:
     - PREFIX_PATTERN or SUFFIX_PATTERN: Regex patterns for matching
     - PROPERTY_MAPPING: Property validation mapping (see docs/in_depth/property-mapping.md)
     - IN_FEATURE_SEPARATOR: Optional custom separator (default: "&")
-    - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1)
+    - MIN_IN_FEATURES: Optional minimum in_feature count (default: 1);
+      a group with no in_features key in PROPERTY_MAPPING and a minimum of 1 draws a definition-time warning
+      (exempt: a name pattern, an input_features override, a custom matcher)
     - MAX_IN_FEATURES: Optional maximum in_feature count (default: None)
     - RECOGNITION_ONLY_PATTERN: Optional marker for a recognition-only pattern that binds no key
       from the name (all values come from options); default False (#772)
@@ -137,13 +141,15 @@ class FeatureChainParserMixin:
     See docs/in_depth/property-mapping.md for full details and examples.
     """
 
+    # Lets the class-definition guards tell a mixin group from a plain one without importing this module.
+    IS_CHAIN_PARSER_MIXIN: ClassVar[bool] = True
     IN_FEATURE_SEPARATOR: str = INPUT_SEPARATOR
     MIN_IN_FEATURES: int = 1
     MAX_IN_FEATURES: int | None = None
     # A recognition-only pattern binds no key from the name; all values come from options (#772).
     RECOGNITION_ONLY_PATTERN: bool = False
-    # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name with
-    # empty options; set True to declare that universal match intentional and silence the #771 warning.
+    # An all-optional PROPERTY_MAPPING that inherits the config matcher matches any feature name once
+    # in_features supplies a source; set True to declare that universal match intentional and silence the #771 warning.
     ALLOW_UNIVERSAL_MATCHER: bool = False
     # The column-wise hooks a family's calculate_feature calls; a family base declares it so its
     # framework implementations can be checked against it with missing_columnwise_hooks below.
@@ -158,6 +164,7 @@ class FeatureChainParserMixin:
         install_name_path_presence_guard(cls)
         install_required_when_guard(cls)
         warn_universal_optional_matcher(cls)
+        warn_missing_in_features_declaration(cls, FeatureChainParserMixin)
 
     @classmethod
     def _validate_string_match(cls, _feature_name: str, _operation_config: str, _in_feature: str) -> bool:
@@ -178,7 +185,8 @@ class FeatureChainParserMixin:
         """
         Parse input features from feature name or options.
 
-        First attempts to parse in_features from the feature name string.
+        First attempts to parse in_features from the feature name string; an agreeing declared in_features
+        supplies them instead, keeping its options and feature_group scope.
         Falls back to options.get_in_features() if string parsing fails.
 
         Chained children are left at the default forward_group, which forwards all
@@ -195,47 +203,57 @@ class FeatureChainParserMixin:
         Raises:
             ValueError: If in_feature constraints are violated
         """
-        prefix_patterns = self._get_prefix_patterns()
-        property_mapping = self._get_property_mapping()
-        parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
+        resolution = self.resolve_feature_name(feature_name)
 
         # The name is authoritative only when it identifies this group (a captureless recognition match
         # or a participating capture). An optional-first positional group that did not participate does
         # not identify the group, so its source comes from options, not the name (#772 / #769).
-        if FeatureChainParser._name_identifies_group(parsed, property_mapping) and parsed.source_feature:
-            in_features = parsed.source_feature.split(self.IN_FEATURE_SEPARATOR)
-            self._validate_in_feature_count(in_features, feature_name)
-            return {Feature(f) for f in in_features}
+        if resolution.owned and resolution.sources:
+            self._raise_source_features_reason(feature_name, resolution.sources)
+            declared = self._agreeing_declared_in_features(options, list(resolution.sources))
+            if declared is not None:
+                return {copy(f) for f in declared}  # copies: the engine mutates returned features in place
+            return {Feature(n) for n in self.declared_source_names(list(resolution.sources))}
 
         # Configuration-based fallback using get_in_features()
-        in_features_set = options.get_in_features()
-        self._validate_in_feature_count(list(in_features_set), feature_name)
-        return set(in_features_set)
+        in_features = options.get_in_features()
+        self._raise_source_features_reason(feature_name, tuple(str(f.name) for f in in_features))
+        return {copy(f) for f in in_features}
 
     @classmethod
-    def _in_feature_count_reason(cls, feature_name: str | FeatureName, count: int) -> str | None:
-        """The one home for the MIN/MAX in_feature wording; None when the count is inside the declared range.
+    def resolve_feature_name(cls, name: str | FeatureName) -> NameResolution:
+        """Resolve ``name`` against this class's patterns, mapping and in_feature separator."""
+        return FeatureChainParser.resolve_name(
+            name, cls._get_prefix_patterns(), cls._get_property_mapping(), cls.IN_FEATURE_SEPARATOR
+        )
 
-        Shared by the raising build-time path and the match-time recording site, so the two cannot drift.
-        """
+    @classmethod
+    def source_features_reason(cls, feature_name: str | FeatureName, sources: Sequence[str]) -> str | None:
+        """The reason these sources cannot serve the feature: an empty operand first, then the MIN/MAX count."""
+        if any(source == "" for source in sources):
+            return f"Feature '{feature_name}' has an empty in_feature operand"
+        return cls.in_feature_count_reason(feature_name, len(sources))
+
+    @classmethod
+    def _raise_source_features_reason(cls, feature_name: str | FeatureName, sources: Sequence[str]) -> None:
+        reason = cls.source_features_reason(feature_name, sources)
+        if reason is not None:
+            # Contained: sources this group cannot serve mean it cannot serve the feature.
+            raise ValueError(reason)
+
+    @classmethod
+    def in_feature_count_reason(cls, feature_name: str | FeatureName, count: int) -> str | None:
+        """The MIN/MAX in_feature error message, or None when the count is in range."""
         if count < cls.MIN_IN_FEATURES:
             return f"Feature '{feature_name}' requires at least {cls.MIN_IN_FEATURES} in_feature(s), but found {count}"
         if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
             return f"Feature '{feature_name}' allows at most {cls.MAX_IN_FEATURES} in_feature(s), but found {count}"
         return None
 
-    def _validate_in_feature_count(self, in_features: list[Any], feature_name: str) -> None:
-        """
-        Validate that in_feature count meets min/max constraints.
-
-        Args:
-            in_features: List of in_features (strings or Feature objects)
-            feature_name: Original feature name for error messages
-
-        Raises:
-            ValueError: If constraints are violated
-        """
-        reason = self._in_feature_count_reason(feature_name, len(in_features))
+    @classmethod
+    def validate_in_feature_count(cls, feature_name: str | FeatureName, count: int) -> None:
+        """Raise ValueError with in_feature_count_reason's message, if any."""
+        reason = cls.in_feature_count_reason(feature_name, count)
         if reason is not None:
             # Contained: an in_feature count outside the declared MIN/MAX means this group cannot serve the feature.
             raise ValueError(reason)
@@ -262,7 +280,8 @@ class FeatureChainParserMixin:
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES, counting the sources the name
         carries when it identifies the group, else the in_features option value. A
         name-carried count outside the range is recorded as a reportable rejection; an
-        in_features option value the matcher cannot resolve is a silent non-match.
+        in_features option value the matcher cannot resolve is a silent non-match. An
+        absent in_features counts as zero on the configuration path. This gate runs before ``match_guard``.
 
         ``required_when`` is NOT evaluated here. The guard installed at class definition
         runs the predicates after this method (or any override of it) returns True.
@@ -286,7 +305,6 @@ class FeatureChainParserMixin:
         Returns:
             True if feature matches criteria, False otherwise
         """
-        prefix_patterns = cls._get_prefix_patterns()
         property_mapping = cls._get_property_mapping()
 
         result = cls.match_parser_criteria(feature_name, options)
@@ -298,13 +316,14 @@ class FeatureChainParserMixin:
         # The sources input_features would read off the name, so the in_feature gate counts the same ones.
         name_sources: list[str] | None = None
         if result:
-            parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
-            if FeatureChainParser._name_identifies_group(parsed, property_mapping):
-                if parsed.source_feature:
-                    name_sources = parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
+            resolution = cls.resolve_feature_name(feature_name)
+            parsed = resolution.parsed
+            if resolution.owned:
+                if resolution.sources:
+                    name_sources = list(resolution.sources)
                 # Bound once and reused: the merge and the guards must see the name-derived value even
                 # when the legacy operation value is absent (a named-optional-first pattern).
-                bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping or {})
+                bindings = dict(resolution.bindings)
                 operation_config = FeatureChainParser._legacy_operation_config(parsed)
                 # _validate_string_match needs a str operation, so it stays behind its own gate; the
                 # merge and forwarded-mismatch protection do not.
@@ -312,12 +331,15 @@ class FeatureChainParserMixin:
                     if not cls._validate_string_match(feature_name, operation_config, parsed.source_feature):
                         return False
                 effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
-                cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
-
-        if not cls._validate_match_guards(result, effective_options, property_mapping):
-            return False
 
         if not cls._validate_in_features(result, options, name_sources, feature_name):
+            return False
+
+        if result and resolution.owned:
+            cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
+            cls._validate_name_agreement(feature_name, bindings, name_sources, options)
+
+        if not cls._validate_match_guards(result, effective_options, property_mapping):
             return False
 
         return result
@@ -364,15 +386,15 @@ class FeatureChainParserMixin:
 
         1. A ValueError raised by option-value validation (a strict_validation rejection). Present
            option values are validated on both match paths, the string-named one included.
-        2. A match_guard rejection on a spec that also declares strict_validation, which the match
-           path turns into a silent non-match.
+        2. A match_guard rejection on a spec that also declares strict_validation or ``expected``,
+           which the match path would otherwise turn into a silent non-match.
 
-        A guard on a non-strict spec means "this feature group does not match", not "this value is
-        wrong", so it stays unreported. A ValueError raised while parsing a PREFIX_PATTERN match
-        (malformed feature name, no chain separator) is a parse error, not an option-value
-        rejection, and is likewise nothing to report. Returns None when nothing was rejected (the
-        match succeeded, or the candidate is unrelated). Diagnostic-only: does not affect
-        match_feature_group_criteria's behavior.
+        A guard on a non-strict spec with no ``expected`` means "this feature group does not
+        match", not "this value is wrong", so it stays unreported. A ValueError raised while
+        parsing a PREFIX_PATTERN match (malformed feature name, no chain separator) is a parse
+        error, not an option-value rejection, and is likewise nothing to report. Returns None
+        when nothing was rejected (the match succeeded, or the candidate is unrelated).
+        Diagnostic-only: does not affect match_feature_group_criteria's behavior.
         """
         property_mapping = cls._get_property_mapping()
         if property_mapping is None:
@@ -380,19 +402,24 @@ class FeatureChainParserMixin:
 
         name_matched = False
         effective_options = options
+        name_sources: list[str] | None = None
         prefix_patterns = cls._get_prefix_patterns()
         if prefix_patterns:
             try:
-                parsed = FeatureChainParser.parse_name(feature_name, prefix_patterns, CHAIN_SEPARATOR)
+                resolution = cls.resolve_feature_name(feature_name)
             except ValueError:
                 return None
-            name_matched = FeatureChainParser._name_identifies_group(parsed, property_mapping)
+            name_matched = resolution.owned
             if name_matched:
-                bindings = FeatureChainParser.bind_name_captures(parsed, property_mapping)
-                effective_options = FeatureChainParser._merge_bindings(options, bindings, property_mapping)
+                if resolution.sources:
+                    name_sources = list(resolution.sources)
+                effective_options = FeatureChainParser._merge_bindings(
+                    options, dict(resolution.bindings), property_mapping
+                )
 
         try:
             if name_matched:
+                FeatureChainParser.validate_name_bindings(resolution.bindings, property_mapping)
                 # The name relates the feature group to the feature, so the values of the present
                 # options (name-derived bindings included) are judged here; the name-path presence
                 # reason follows below. Judging the effective options keeps the diagnostic in step with the match.
@@ -413,14 +440,20 @@ class FeatureChainParserMixin:
             if reason is not None:
                 return reason
 
+        # Mirrors the matcher's gate order: a name-carried count is reported, the options-path gate is a silent non-match.
+        if name_sources is not None:
+            reason = cls.source_features_reason(feature_name, name_sources)
+            if reason is not None:
+                return reason
+        elif not cls._validate_in_features(True, options, None, feature_name):
+            return None
+
         rejection = cls._first_rejecting_guard(effective_options, property_mapping)
         if rejection is None:
             return None
 
         key, value = rejection
-        if not property_mapping[key].strict_validation:
-            return None
-        return f"Property value '{value}' rejected by match_guard for '{key}'"
+        return cls._guard_rejection_reason(key, value, property_mapping[key])
 
     @classmethod
     def _validate_forwarded_name_mismatch(
@@ -466,66 +499,128 @@ class FeatureChainParserMixin:
                 f"takes precedence, so the forwarded value would be silently ignored. {remedy} Set "
                 f"MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this error to a warning."
             )
-            if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() in ("1", "true"):
-                logger.warning(message)
+            if cls._name_mismatch_downgraded(message):
                 continue
             # Marked: user misconfiguration; containing it would let a rival group win with the value ignored (#845).
             raise escalate_match_abort(ValueError(message))
 
     @classmethod
+    def _name_mismatch_downgraded(cls, message: str) -> bool:
+        """Warn and return True when MLODA_ALLOW_FORWARDED_NAME_MISMATCH downgrades the mismatch error."""
+        if os.environ.get("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "").lower() not in ("1", "true"):
+            return False
+        logger.warning(message)
+        return True
+
+    @classmethod
+    def _validate_name_agreement(
+        cls,
+        feature_name: str | FeatureName,
+        bindings: dict[str, str],
+        name_sources: list[str] | None,
+        options: Options,
+    ) -> None:
+        """Abort when a declared option or in_features contradicts what the name binds."""
+        inherited_keys = options.inherited_group_keys | options.inherited_context_keys
+        env_hint = "Set MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this error to a warning."
+        for key, name_value in bindings.items():
+            declared = options.get(key)
+            if declared is None or key in inherited_keys or not options.is_own(key):
+                continue
+            unpacked = FeatureChainParser._unpack_property_value(declared)
+            if len(unpacked) == 1 and str(unpacked[0]) == name_value:
+                continue
+            message = (
+                f"Feature '{feature_name}': option '{key}' is {safe_value_text(declared)}, but the feature name encodes "
+                f"'{name_value}'. The name is authoritative: remove the option or change it to match. {env_hint}"
+            )
+            if cls._name_mismatch_downgraded(message):
+                continue
+            # Marked: a declared value contradicting the name is user misconfiguration.
+            raise escalate_match_abort(ValueError(message))
+
+        view = cls._declared_in_features_view(options, name_sources)
+        if view is None:
+            return
+        declared_in_features, features, expected = view
+        declared_names = None if features is None else [str(f.name) for f in features]
+        if declared_names != expected:
+            shown = (
+                safe_value_text(declared_in_features)
+                if declared_names is None
+                else [safe_value_text(name) for name in declared_names]
+            )
+            hints = ""
+            if declared_names is not None and sorted(declared_names) == sorted(expected):
+                hints += " Order matters: list them in the name's order."
+            if any("__" in source for source in name_sources or []):
+                hints += (
+                    " in_features must list the name's direct sources, not the root source: drop it or make it match."
+                )
+            message = (
+                f"Feature '{feature_name}': in_features is {shown}, "
+                f"but the feature name's direct sources are {expected}.{hints} {env_hint}"
+            )
+            if not cls._name_mismatch_downgraded(message):
+                # Marked: a declared in_features contradicting the name is user misconfiguration.
+                raise escalate_match_abort(ValueError(message))
+
+    @classmethod
+    def _declared_in_features_view(
+        cls, options: Options, name_sources: list[str] | None
+    ) -> tuple[Any, list[Feature] | None, list[str]] | None:
+        """Return (declared value, declared Features or None, expected names) for an own in_features, else None."""
+        in_features_key = DefaultOptionKeys.in_features.value
+        declared = options.get(in_features_key)
+        inherited_keys = options.inherited_group_keys | options.inherited_context_keys
+        if name_sources is None or not declared or in_features_key in inherited_keys:
+            return None
+        if not options.is_own(in_features_key):
+            return None
+        features = safe_field(lambda: list(options.get_in_features()), None, catching=(TypeError, ValueError))
+        expected = cls.declared_source_names(name_sources)
+        if isinstance(declared, (set, frozenset)):
+            expected = sorted(expected)
+        return declared, features, expected
+
+    @classmethod
+    def _agreeing_declared_in_features(
+        cls, options: Options, name_sources: list[str] | None
+    ) -> tuple[Feature, ...] | None:
+        """Return the declared in_features when their names equal the name's declared sources, else None."""
+        view = cls._declared_in_features_view(options, name_sources)
+        if view is None:
+            return None
+        _, features, expected = view
+        if features is None:
+            return None
+        return tuple(features) if [str(f.name) for f in features] == expected else None
+
+    @classmethod
+    def declared_source_names(cls, name_sources: list[str]) -> list[str]:
+        """Map the name's sources to the source names this group declares; identity by default."""
+        return list(name_sources)
+
+    @classmethod
     def _first_rejecting_guard(
         cls, options: Options, property_mapping: dict[str, PropertySpec] | None
     ) -> tuple[str, Any] | None:
-        """Return the (key, value) of the first match_guard that rejects its option value, or None.
+        """The first (key, value) a match_guard rejects, or None; see ``FeatureChainParser._first_rejecting_guard``."""
+        return FeatureChainParser._first_rejecting_guard(options, property_mapping, logger)
 
-        A guard rejects by returning a falsy value or by raising. Shared by the match decision
-        (_validate_match_guards) and the diagnostic (_strict_validation_rejection_reason), so the
-        two can never disagree on what a guard rejected.
-        """
-        if property_mapping is None:
-            return None
-
-        for key, mapping_entry in property_mapping.items():
-            guard = mapping_entry.match_guard
-            if guard is None:
-                continue
-            value = options.get(key)
-            # An opted-in explicit None reaches the guard; every flagless spec still skips a None (#768).
-            if not option_key_is_present(mapping_entry, key, options):
-                continue
-            try:
-                rejected = not guard(value)
-            # Swallows: a guard that raises cannot judge the value, so the value counts as rejected.
-            except Exception as exc:
-                level = contained_raise_log_level(exc)
-                # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
-                if level == logging.DEBUG:
-                    logger.debug("match_guard for '%s' %s for value %r", key, contained_raise_reason(exc), value)
-                else:
-                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
-                    logger.warning("match_guard for '%s' %s", key, contained_raise_reason(exc))
-                rejected = True
-            if rejected:
-                return key, value
-        return None
+    @classmethod
+    def _guard_rejection_reason(cls, key: str, value: Any, spec: PropertySpec) -> str | None:
+        """The reportable reason for a guard rejection, or None; see ``FeatureChainParser._guard_rejection_reason``."""
+        return FeatureChainParser._guard_rejection_reason(key, value, spec)
 
     @classmethod
     def _validate_match_guards(
         cls, result: bool, options: Options, property_mapping: dict[str, PropertySpec] | None
     ) -> bool:
-        # Enforce match_guard constraints from PROPERTY_MAPPING
+        """Enforce the match_guard constraints once the parser matched; see ``FeatureChainParser``."""
         if not result:
             return True
-
-        rejection = cls._first_rejecting_guard(options, property_mapping)
-        if rejection is None:
-            return True
-
-        key, value = rejection
-        logger.debug("match_guard for '%s' rejected value %r", key, value)
-        if property_mapping is not None and property_mapping[key].strict_validation:
-            record_match_rejection(cls.__name__, f"Property value '{value}' rejected by match_guard for '{key}'")
-        return False
+        return FeatureChainParser._validate_match_guards(cls.__name__, options, property_mapping, logger)
 
     @classmethod
     def _validate_in_features(
@@ -542,24 +637,32 @@ class FeatureChainParserMixin:
         if name_sources is not None:
             # The name relates this group to the feature, so a count it cannot serve is an actionable
             # near-miss rather than a silent non-match; the option path keeps its "not mine" meaning.
-            reason = cls._in_feature_count_reason(feature_name, len(name_sources))
+            reason = cls.source_features_reason(feature_name, name_sources)
             if reason is None:
                 return True
-            record_match_rejection(cls.__name__, reason)
+            record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)
             return False
 
         in_features_raw = options.get(DefaultOptionKeys.in_features)
         if in_features_raw is None:
-            return True
-        if isinstance(in_features_raw, (list, tuple, set, frozenset)) and not in_features_raw:
-            # Present but empty: zero in_features, a non-match rather than an error.
+            property_mapping = cls._get_property_mapping()
+            declared = property_mapping.get(DefaultOptionKeys.in_features.value) if property_mapping else None
+            if declared is not None and not is_no_default(declared.default) and declared.default is not None:
+                # A declared in_features default is supplied at intake, so the group keeps matching without it.
+                return True
+
+        if in_features_raw is None or (
+            isinstance(in_features_raw, (list, tuple, set, frozenset)) and not in_features_raw
+        ):
+            # None counts as absent; absent or empty is zero in_features, a non-match rather than an error.
             count = 0
         else:
             # An in_features value this matcher cannot count is a non-match, not an error:
             # skipping MIN/MAX would let the group win a resolution its own cap says it must lose.
             # The catch is narrow on purpose; another exception class is a defect to surface, not a value.
             try:
-                count = len(options.get_in_features())
+                in_features = options.get_in_features()
+                count = len(in_features)
             except (TypeError, ValueError) as exc:
                 if is_match_abort(exc):
                     raise
@@ -571,12 +674,10 @@ class FeatureChainParserMixin:
                     contained_raise_reason(exc),
                 )
                 return False
+            if any(str(f.name) == "" for f in in_features):
+                return False
 
-        if count < cls.MIN_IN_FEATURES:
-            return False
-        if cls.MAX_IN_FEATURES is not None and count > cls.MAX_IN_FEATURES:
-            return False
-        return True
+        return cls.in_feature_count_reason(feature_name, count) is None
 
     @classmethod
     def _get_prefix_patterns(cls) -> list[Any]:
@@ -607,19 +708,15 @@ class FeatureChainParserMixin:
         Returns:
             List of source feature names
         """
-        prefix_patterns = cls._get_prefix_patterns()
-        property_mapping = cls._get_property_mapping()
-
-        parsed = FeatureChainParser.parse_name(feature.name, prefix_patterns, CHAIN_SEPARATOR)
+        resolution = cls.resolve_feature_name(feature.name)
 
         # Same identification gate as input_features: the name owns the source only when it identifies
         # the group (#772 / #769).
-        if FeatureChainParser._name_identifies_group(parsed, property_mapping) and parsed.source_feature:
-            return parsed.source_feature.split(cls.IN_FEATURE_SEPARATOR)
+        if resolution.owned and resolution.sources:
+            return list(resolution.sources)
 
         # Configuration-based fallback using get_in_features()
-        in_features_set = feature.options.get_in_features()
-        return [f.name for f in in_features_set]
+        return [str(f.name) for f in feature.options.get_in_features()]
 
     @classmethod
     def _extract_single_source_feature(cls, feature: Feature) -> str:
@@ -629,9 +726,7 @@ class FeatureChainParserMixin:
             ValueError: if the resolved source count is not exactly one
         """
         source_features = cls._extract_source_features(feature)
-        reason = cls._in_feature_count_reason(feature.name, len(source_features))
-        if reason is not None:
-            raise ValueError(reason)
+        cls.validate_in_feature_count(feature.name, len(source_features))
         if len(source_features) != 1:
             raise ValueError(
                 f"Feature '{feature.name}' resolved {len(source_features)} source feature(s), expected exactly 1"
@@ -684,9 +779,10 @@ class FeatureChainParserMixin:
         2. ``cls._resolve_operation(feature_name, options, config_key)``
            Uses the provided name (str or FeatureName) and Options separately.
 
-        The string-based path always takes precedence. If the feature name matches
-        PREFIX_PATTERN, the captured group is returned. Otherwise, falls back to
-        ``options.get(config_key)`` and converts to string.
+        The string-based path takes precedence. If the feature name owns the match:
+        with named captures, the capture for ``config_key`` is returned; with a
+        positional pattern, the first capture. Otherwise, falls back to
+        ``options.get(config_key)`` as a string (a singleton collection is unpacked).
 
         Args:
             feature_or_name: A Feature object (convention 1) or a feature name
@@ -708,13 +804,15 @@ class FeatureChainParserMixin:
             _options = options_or_key
             _key = config_key if config_key is not None else ""
 
-        prefix_patterns = cls._get_prefix_patterns()
-        operation_config, _ = FeatureChainParser.parse_feature_name(_name, prefix_patterns, CHAIN_SEPARATOR)
-        if operation_config is not None:
-            return operation_config
+        resolution = cls.resolve_feature_name(_name)
+        if resolution.owned:
+            operation_config = resolution.value_for(_key)
+            if operation_config is not None:
+                return operation_config
         value = _options.get(_key)
         if value is not None:
-            return str(value)
+            unpacked = FeatureChainParser._unpack_property_value(value)
+            return str(unpacked[0] if len(unpacked) == 1 else value)
         return None
 
     # Column-wise data hooks: the concrete compute-framework subclass (pandas, pyarrow, ...) implements

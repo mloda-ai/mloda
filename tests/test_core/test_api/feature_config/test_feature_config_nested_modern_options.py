@@ -432,7 +432,7 @@ def test_loader_does_not_write_in_features_into_parsed_context_options(monkeypat
     }
     outer = _single_feature(config)
 
-    assert outer.options.context.get(DefaultOptionKeys.in_features) == frozenset({"age"})
+    assert outer.options.context.get(DefaultOptionKeys.in_features) == ("age",)
 
     parsed = captured[0]
     assert isinstance(parsed, FeatureConfig)
@@ -511,7 +511,7 @@ def test_propagate_context_keys_still_threaded_into_options() -> None:
 
 
 def test_top_level_in_features_with_group_options_still_lands_in_context() -> None:
-    """The top-level in_features field keeps landing in context as a frozenset next to group options."""
+    """The top-level in_features field keeps landing in context as an ordered tuple next to group options."""
     config: dict[str, Any] = {
         "name": "scale__age",
         "in_features": ["age"],
@@ -523,7 +523,7 @@ def test_top_level_in_features_with_group_options_still_lands_in_context() -> No
 
     assert outer.options.group == {"threshold": 0.5}
     assert outer.options.context.get("metadata") == "test"
-    assert outer.options.context.get(DefaultOptionKeys.in_features) == frozenset({"age"})
+    assert outer.options.context.get(DefaultOptionKeys.in_features) == ("age",)
 
 
 def test_column_index_suffix_still_applied_with_group_options() -> None:
@@ -567,7 +567,7 @@ def test_in_features_branch_with_options_still_loads() -> None:
     outer = _single_feature(config)
 
     assert outer.options.group == {"method": "standard"}
-    assert outer.options.context.get(DefaultOptionKeys.in_features) == frozenset({"age"})
+    assert outer.options.context.get(DefaultOptionKeys.in_features) == ("age",)
 
 
 def test_options_branch_collision_with_top_level_in_features_still_raises() -> None:
@@ -668,7 +668,7 @@ def test_end2end_nested_group_options_feature_is_resolved_into_a_dependency() ->
     results: list[Any] = list(
         mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {NestedConfigEngineSource, NestedConfigEngineDoubler}
             ),

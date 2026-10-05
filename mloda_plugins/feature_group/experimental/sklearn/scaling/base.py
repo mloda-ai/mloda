@@ -11,7 +11,6 @@ from typing import Any
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
-from mloda.provider import FeatureChainParser
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -82,7 +81,7 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "normalizer": "Normalizer",
     }
 
-    PREFIX_PATTERN = r".*__(standard|minmax|robust|normalizer)_scaled$"
+    PREFIX_PATTERN = r".*__(?P<scaler_type>standard|minmax|robust|normalizer)_scaled$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -115,12 +114,10 @@ class ScalingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     @classmethod
     def get_scaler_type(cls, feature_name: str) -> str:
         """Extract the scaler type from the feature name."""
-        scaler_type, _ = FeatureChainParser.parse_feature_name(feature_name, [cls.PREFIX_PATTERN])
+        scaler_type = cls.resolve_feature_name(feature_name).value_for(cls.SCALER_TYPE)
         if scaler_type is None:
             raise ValueError(f"Invalid scaling feature name format: {feature_name}")
 
-        # Remove the "_scaled" suffix to get just the scaler type
-        scaler_type = scaler_type.replace("_scaled", "").strip("_")
         if scaler_type not in cls.SUPPORTED_SCALERS:
             raise ValueError(
                 f"Unsupported scaler type: {scaler_type}. Supported types: {', '.join(cls.SUPPORTED_SCALERS.keys())}"

@@ -32,6 +32,7 @@ _SOURCE_MODULES: dict[str, str] = {
     "plugin_docs": "mloda.core.api.plugin_docs",
     "core_policy": "mloda.core.abstract_plugins.plugin_registry.plugin_policy",
     "plan_info": "mloda.core.api.plan_info",
+    "plan_lock": "mloda.core.api.plan_lock",
     "verified_context": "mloda.core.abstract_plugins.verified_context",
 }
 
@@ -55,6 +56,9 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     # Resolved execution plan (issue #647): the same PlanStep record for users and stewards.
     ("user", "PlanStep", "plan_info"),
     ("steward", "PlanStep", "plan_info"),
+    ("steward", "write_plan_lock", "plan_lock"),
+    ("steward", "check_plan_lock", "plan_lock"),
+    ("steward", "PlanLockMismatchError", "plan_lock"),
     # Verified context seam: steward-only, platform-integrator surface.
     ("steward", "verified_context", "verified_context"),
 ]

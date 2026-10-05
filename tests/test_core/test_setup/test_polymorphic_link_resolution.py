@@ -164,7 +164,7 @@ class TestPolymorphicLinkResolution:
 
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {AssemblerWithConcreteLinks, ConcreteFeatureGroupA, ConcreteFeatureGroupB}
             ),
@@ -179,7 +179,7 @@ class TestPolymorphicLinkResolution:
 
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {AssemblerWithPolymorphicLinks, ConcreteFeatureGroupA, ConcreteFeatureGroupB}
             ),
@@ -235,7 +235,7 @@ class TestAsymmetricPolymorphicLinkResolution:
 
         results = mloda.run_all(
             [feature],
-            compute_frameworks={PythonDictFramework},
+            compute_frameworks=[PythonDictFramework],
             api_data={"UserQuery": {"_idx": [0], "user_query": ["test query"]}},
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {AssemblerWithMixedLink, ConcreteFeatureGroupA, ApiInputDataFeature}

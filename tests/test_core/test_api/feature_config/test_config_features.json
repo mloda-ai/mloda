@@ -35,7 +35,7 @@
   },
   {
     "name": "age__max_aggr",
-    "in_features": ["minmaxscaledage"]
+    "in_features": ["age"]
   },
   {
     "name": "min_max",

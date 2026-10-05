@@ -3,9 +3,12 @@ from collections.abc import Sequence
 from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
-from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import SparkMergeEngine
+from mloda_plugins.compute_framework.base_implementations.spark.spark_merge_engine import (
+    SparkMergeEngine,
+    spark_name_fold,
+)
 from mloda.user import FeatureName, ParallelizationMode
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
@@ -58,6 +61,10 @@ class SparkFramework(ComputeFramework):
                 )
 
     @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        return ConnectionRequirement.SELF_MANAGED
+
+    @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
         return SparkSession is not None and isinstance(conn, SparkSession)
 
@@ -97,7 +104,8 @@ class SparkFramework(ComputeFramework):
         )
         return data.select(*list(_selected_feature_names))
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.columns)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
@@ -237,8 +245,10 @@ class SparkFramework(ComputeFramework):
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
 
-                if feature_name in self.data.columns:
-                    raise ValueError(f"Feature {feature_name} already exists in the DataFrame")
+                fold = spark_name_fold(self.data)
+                for existing in self.data.columns:
+                    if fold(existing) == fold(feature_name):
+                        raise ValueError(f"Feature {feature_name!r} collides with existing column {existing!r}")
 
                 # Convert data to list if it's not already
                 data_list = list(data) if hasattr(data, "__iter__") else [data]
@@ -248,7 +258,7 @@ class SparkFramework(ComputeFramework):
 
                 window_spec = Window.orderBy(F.monotonically_increasing_id())
 
-                rn = pick_helper_column_name(taken=set(self.data.columns))
+                rn = pick_helper_column_name(taken={*self.data.columns, feature_name})
 
                 # Add row numbers to existing DataFrame
                 existing_with_row_num = self.data.withColumn(rn, F.row_number().over(window_spec))

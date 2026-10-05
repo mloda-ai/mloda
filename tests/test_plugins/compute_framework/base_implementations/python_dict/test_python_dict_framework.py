@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 from mloda.user import ParallelizationMode
@@ -189,6 +190,10 @@ class TestPythonDictDtypeExtraction(DtypeExtractionTestMixin):
             "str_col": ["a", "b", "c"],
             "float_col": [1.0, 2.0, 3.0],
         }
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
 
 
 class TestPythonDictDataTypeValidator(DataTypeValidatorFrameworkTestMixin):

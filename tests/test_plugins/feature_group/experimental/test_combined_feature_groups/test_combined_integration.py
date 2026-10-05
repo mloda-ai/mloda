@@ -58,7 +58,7 @@ class TestCombinedFeatureGroupsPandas:
         # Run the mloda with the feature chain
         result = mloda.run_all(
             features,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -67,7 +67,7 @@ class TestCombinedFeatureGroupsPandas:
 
         result2 = mloda.run_all(
             ["price__mean_imputed__sum_7_day_window__max_aggr"],
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 
@@ -117,7 +117,7 @@ class TestCombinedFeatureGroupsPyArrow:
         # Run the mloda with the feature chain
         result = mloda.run_all(
             features,
-            compute_frameworks={PyArrowTable},
+            compute_frameworks=[PyArrowTable],
             plugin_collector=plugin_collector,
         )
 

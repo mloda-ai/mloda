@@ -9,6 +9,7 @@ That however means that a data project typically contains multiple filters. For 
 -    filter_feature: It can be a Feature or a feature name as string.
 -    parameter: A dictionary of parameters to filter. Example: {"min": 2, "max": 3}
     Parameter values must be hashable (scalars, or lists, sets or tuples of hashables); anything else raises `ValueError`.
+    The `values` key must be a list, tuple, set or frozenset; anything else (a string, a range, a generator) raises `TypeError`.
 -    filter_type: It can be a str or a FilterType.
 
 #### FilterType
@@ -24,6 +25,9 @@ class FilterType(Enum):
     REGEX = "regex"
     CATEGORICAL_INCLUSION = "categorical_inclusion"
 ```
+
+A null or NaN row never passes a range, min, max or equal filter, and categorical inclusion keeps null and
+NaN rows only when its `values` contain `None` (a NaN value counts as `None`).
 
 #### GlobalFilter
 
@@ -190,9 +194,9 @@ clears these gates, in the order they run:
 
 | Gate | Shared with feature resolution | Filter policy |
 |------|--------------------------------|---------------|
+| scope | `matches_feature_group_scope`: the named class and its subclasses, class-object and string forms alike | a FeatureGroup outside the filter feature's `feature_group=` is skipped before its matcher runs and records nothing in `dropped_filters`, as in feature resolution |
 | criteria | [one shared probe](feature-group-matching.md#modern-unified-matching) | asked about the filter feature's name and its enriched options, plus the run's `DataAccessCollection` |
 | domain | `Domain` equality only: resolution compares the FeatureGroup's domain to the feature's, and passes any candidate for a domainless feature | the filter feature's domain must equal the resolved feature's, or the FeatureGroup's when the feature declares none; a domainless filter copy adopts that domain, though never a default group domain |
-| scope | `matches_feature_group_scope`: the named class and its subclasses, class-object and string forms alike | none, beyond reading the filter feature's own `feature_group=` |
 | capability (`compute framework`) | the `supports_compute_framework` hook and its narrowing | asked over the frameworks the filter would ride (its own pin, else the resolved feature's), skipped when neither carries one; nothing accepted detaches the filter, and an unpinned copy rides the accepted subset, or the feature's frameworks when the hook was never consulted |
 | compute framework pin | only the pin-cardinality validator, which raises `ComputeFrameworkPinError` at `add_filter`, not at this gate | the resolved feature's framework must be the filter feature's pin; resolution instead tests the feature's pin against the candidate's supported frameworks |
 
@@ -270,13 +274,14 @@ as `for (feature_group, name), elimination in ...` must now unpack three parts.
 
 A filter that matches no FeatureGroup at all is reported once after setup, with its nearest miss
 appended when one was recorded: across FeatureGroups the deepest gate wins, and a matcher defect
-ranks last.
+ranks last. A FeatureGroup outside the filter feature's `feature_group=` scope is skipped silently and
+is never named as the nearest miss.
 
 ```text
-Filter feature 'price' matched no feature group. Nearest miss: SalesTotal (scope): outside the requested feature group scope
+Filter feature 'price' matched no feature group. Nearest miss: SalesTotal (domain): the filter feature's domain 'finance' does not match 'sales'
 ```
 
-The parenthesized label, `(scope)` here, names the gate in the vocabulary of the "No feature groups
+The parenthesized label, `(domain)` here, names the gate in the vocabulary of the "No feature groups
 found" error's
 [near-miss bullets](troubleshooting/feature-group-resolution-errors.md#the-eliminated-candidates-block).
 
@@ -319,7 +324,7 @@ def final_filters(cls) -> bool | None:
 
 | Return value | Meaning |
 |:------------:|---------|
-| `None` | Defer to the FilterEngine tied to the ComputeFramework. Most engines (Pandas, PyArrow, Polars, Spark) default to `True` (eliminate rows). Iceberg defaults to `False` (predicate pushdown handles it). |
+| `None` | Defer to the FilterEngine tied to the ComputeFramework. Every built-in engine defaults to `True` (eliminate rows). |
 | `False` | Skip row elimination. Use this when your FeatureGroup fully handles the filter itself. |
 | `True` | Force row elimination, even if the FilterEngine would skip it. |
 
@@ -334,7 +339,7 @@ filter is applied, not *where* the computation runs physically:
 | Eager | Pandas, PyArrow | Post-hoc filter in memory after full materialization |
 | Lazy (SQL) | DuckDB, SQLite | `.filter()` adds WHERE to query plan; optimizer may push to scan time |
 | Lazy (dataframe) | Polars, Spark | `.filter()` adds node to lazy plan; optimizer decides physical order |
-| Scan-time | Iceberg | Predicates pushed into scan expressions (`final_filters()=False`) |
+| Scan-time, then eager | Iceberg | For a `Table` result, range, min, max, equal and categorical inclusion push into the scan when the value's type converts exactly to the column type; every filter then reruns on the scan result, returning a `pa.Table`; a `pa.Table` result is filtered as PyArrow |
 
 All frameworks that return `True` produce the same logical result (non-matching rows
 absent from output), but the physical execution path differs.
@@ -361,15 +366,16 @@ For patterns that use `features.mask_engine` to build boolean masks inside
 
 #### Pattern 4: Force elimination on a non-eliminating engine
 
-Some engines skip row elimination by default (e.g. Iceberg, which uses predicate pushdown
-at scan time). If your FeatureGroup computes derived columns that the scan could not
-filter, override `final_filters()` to force elimination:
+A custom FilterEngine can skip row elimination by returning `False` from
+`final_filters()` (e.g. an engine that applies filters at scan time). If your
+FeatureGroup computes derived columns that the scan could not filter, override
+`final_filters()` to force elimination:
 
 ```
-class DerivedIcebergFeature(FeatureGroup):
+class DerivedFeature(FeatureGroup):
     @classmethod
     def final_filters(cls) -> bool:
-        return True  # override Iceberg's default of False
+        return True  # override the engine's default of False
 ```
 
 ### The overlap contract

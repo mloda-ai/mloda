@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import multiprocessing  # noqa: F401
 import threading
-import traceback
 import logging
 from dataclasses import replace
 from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
-from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -37,6 +37,7 @@ class ComputeFrameworkExecutor:
         tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
         function_extender: set[Extender] | None = None,
         worker_extender_payload: bytes | None = None,
+        hook_extenders: dict[ExtenderHook, Extender] | None = None,
     ) -> None:
         """
         Initialize the executor with dependencies.
@@ -48,12 +49,13 @@ class ComputeFrameworkExecutor:
                 framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
                 Engine builds this once from the DataAccessCollection at setup; the
                 executor only does a dict lookup per TFS step on the run path.
-            function_extender: The caller's own extenders, used for a framework staying resident
-                in this process.
-            worker_extender_payload: Pickled snapshot of the extenders for a framework dispatched
+            function_extender: The caller's extenders; a resident framework gets a read-only
+                copy at attach time.
+            worker_extender_payload: Pickled (extenders, hook table) snapshot for a framework dispatched
                 to a spawned worker. Never unpickled here; attached to the new instance as
                 `_pending_extender_payload` and materialized by `ComputeFramework.__setstate__`
                 only once the instance is actually unpickled in the worker.
+            hook_extenders: The run's hook table; a resident framework gets a read-only copy at attach time.
         """
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
@@ -61,6 +63,7 @@ class ComputeFrameworkExecutor:
         self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
         self.function_extender = function_extender
         self.worker_extender_payload = worker_extender_payload
+        self.hook_extenders = hook_extenders
         self._cfw_lock = threading.Lock()
 
     def init_compute_framework(
@@ -90,7 +93,7 @@ class ComputeFrameworkExecutor:
             # below, after construction, as the still-pickled _pending_extender_payload.
             function_extender = None
         else:
-            # Framework stays resident in this process: use the caller's own extenders directly.
+            # Framework stays resident in this process: it receives read-only copies at attach time.
             function_extender = self.function_extender
 
         # init framework
@@ -104,8 +107,11 @@ class ComputeFrameworkExecutor:
             # Materialization happens only in ComputeFramework.__setstate__, once this instance is
             # actually unpickled in the worker; never here in the parent that dispatches it.
             new_cfw._pending_extender_payload = self.worker_extender_payload
+        if not dispatched_to_worker and self.hook_extenders is not None:
+            new_cfw._hook_extenders = self.hook_extenders
         # replace() re-runs __post_init__, so each framework owns its carrier copy.
-        new_cfw.run_context = replace(self.cfw_register.get_run_context())
+        object.__setattr__(new_cfw, "run_context", replace(self.cfw_register.get_run_context()))
+        new_cfw._seal_extenders()
 
         # add to register
         self.cfw_register.add_cfw_to_compute_frameworks(new_cfw.get_uuid(), cf_class.get_class_name(), children_if_root)
@@ -283,7 +289,7 @@ class ComputeFrameworkExecutor:
         elif isinstance(step, JoinStep):
             # Both join sides are destination-framework cfws, whose modes kept this join in the
             # parent, so neither can be worker-owned.
-            from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.destination_framework.get_class_name(), step.link.uuid)
+            from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.destination_framework.get_class_name(), step.uuid)
 
             if from_cfw_uuid is None:
                 from_cfw_uuid = self.cfw_register.get_cfw_uuid(
@@ -292,7 +298,8 @@ class ComputeFrameworkExecutor:
 
             if from_cfw_uuid is None:
                 raise ValueError(
-                    f"from_cfw_uuid should not be none: {step.destination_framework.get_class_name()}, {step.link.uuid}"
+                    f"from_cfw_uuid should not be none: {step.destination_framework.get_class_name()}, "
+                    f"join token {step.uuid}"
                 )
 
             from_cfw = self.cfw_collection[from_cfw_uuid]
@@ -326,10 +333,7 @@ class ComputeFrameworkExecutor:
             step.step_is_done = True
 
         except Exception as e:
-            error_message = f"An error occurred: {e}"
-            msg = f"{error_message}\nFull traceback:\n{traceback.format_exc()}"
-            logging.error(msg)
-            exc_info = traceback.format_exc()
+            msg, exc_info = failure_report(e)
             self.cfw_register.set_error(msg, exc_info, exception=e)
 
     def thread_execute_step(self, step: Any) -> None:

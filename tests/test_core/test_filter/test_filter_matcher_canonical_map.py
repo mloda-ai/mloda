@@ -38,9 +38,9 @@ OWN_INDEX_CLASS_NAME = "OwnIndexMatcherFG728"
 SCOPE_BASE_CLASS_NAME = "ScopeBaseMatcherFG728"
 SCOPE_TARGET_A_CLASS_NAME = "ScopeTargetAMatcherFG728"
 SCOPE_TARGET_B_CLASS_NAME = "ScopeTargetBMatcherFG728"
+COUNTING_MATCHER_CLASS_NAME = "CountingMatcherFG728"
 
 MISSING_SCOPE_728 = "CmapNoSuchScope728"  # a scope string naming no accessible class
-SCOPE_REASON = "outside the requested feature group scope"
 PIN_MESSAGE_PART = "more than one compute framework"
 CAPABILITY_REASON_PART = "supports_compute_framework rejected"
 CAPABILITY_RAISE_TEXT = "cmap capability hook raise 728"  # carried by the raising hook's RuntimeError
@@ -168,6 +168,31 @@ def _make_group_domain_fg() -> type[FeatureGroup]:
             return Domain(GROUP_DOMAIN_728)
 
     return GroupDomainMatcherFG728
+
+
+def _make_counting_matcher_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
+    """A throwaway matcher whose match hook counts the asks about FILTER_FEATURE."""
+    gc.collect()
+
+    class CountingMatcherFG728(FeatureGroup):
+        calls: ClassVar[int] = 0
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE, FILTER_FEATURE}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            if str(feature_name) == FILTER_FEATURE:
+                cls.calls += 1
+            return str(feature_name) in cls.feature_names_supported()
+
+    return CountingMatcherFG728, lambda: CountingMatcherFG728.calls
 
 
 def _make_capability_reject_fg() -> tuple[type[FeatureGroup], Callable[[], int]]:
@@ -616,6 +641,41 @@ def _drive_canonical(build: Callable[[], type[FeatureGroup]], scope: str | None 
         gc.collect()
 
 
+def _drive_both_seams_scoped(scope: str) -> tuple[_MatchingSnapshot, _CanonicalSnapshot]:
+    """Ask both seams about FILTER_FEATURE scoped to `scope`, each against its own fresh counting matcher."""
+    fg, read_calls = _make_counting_matcher_fg()
+    global_filter = GlobalFilter()
+    global_filter.add_filter(Feature(FILTER_FEATURE, feature_group=scope), FilterType.EQUAL, {"value": 1})
+    matched = None
+    try:
+        matched, escaped = _capture(partial(global_filter.identify_matched_filters, fg, Feature(HOST_FEATURE), None))
+        drops, drops_error = _capture(partial(_drop_rows, global_filter))
+        filter_side = _MatchingSnapshot(
+            escaped=escaped,
+            names=() if matched is None else tuple(sorted(single.name for single in matched)),
+            calls=read_calls(),
+            drops=drops or (),
+            drops_error=drops_error,
+        )
+    finally:
+        del fg, read_calls, global_filter, matched
+        gc.collect()
+
+    fg, read_calls = _make_counting_matcher_fg()
+    plugins: FeatureGroupEnvironmentMapping = {fg: {PythonDictFramework}}
+    result = None
+    try:
+        feature = Feature(FILTER_FEATURE, feature_group=scope)
+        result, escaped = _capture(partial(IdentifyFeatureGroupClass.evaluate, feature, plugins, None))
+        canonical = _canonical_snapshot(result, escaped, read_calls())
+        del result
+        result = None
+        return filter_side, canonical
+    finally:
+        del fg, read_calls, plugins, result
+        gc.collect()
+
+
 def _drive_canonical_counted(make: _CounterFactory, with_links: bool) -> _CanonicalSnapshot:
     """Evaluate FILTER_FEATURE against a counting probe, optionally under links naming only unknown columns."""
     fg, read_calls = make()
@@ -878,27 +938,34 @@ class TestScopeGate:
             f"probing B must attach exactly the B-scoped filter, got: {snapshot.scopes_by_probe[1]}"
         )
 
-    def test_the_canonical_seam_eliminates_the_same_scope_at_the_scope_gate(self) -> None:
+    def test_the_canonical_seam_skips_an_out_of_scope_candidate_silently(self) -> None:
         snapshot = _drive_canonical(_make_plain_matcher_fg, scope=MISSING_SCOPE_728)
 
         assert snapshot.escaped is None, f"nothing may cross evaluate: {snapshot.escaped}"
         assert snapshot.identified == (), f"a scope naming no class must win nothing, got: {snapshot.identified}"
-        assert snapshot.eliminations == ((PLAIN_CLASS_NAME, "scope", SCOPE_REASON),), (
-            f"exactly one scope elimination, got: {snapshot.eliminations}"
+        assert snapshot.eliminations == (), (
+            f"an out-of-scope candidate records no elimination, got: {snapshot.eliminations}"
         )
 
-    def test_the_filter_seam_records_the_stage_the_canonical_seam_eliminates_at(self) -> None:
-        """Same candidate, same gate, same words: one shared fact rather than two seams describing a scope drop."""
-        filter_side = _drive_scoped_matching(_make_plain_matcher_fg, _fixed_scope(MISSING_SCOPE_728))
-        canonical = _drive_canonical(_make_plain_matcher_fg, scope=MISSING_SCOPE_728)
+    def test_both_seams_skip_an_out_of_scope_candidate_silently(self) -> None:
+        """Parity: neither seam asks the out-of-scope candidate's matcher, and neither records a fact for it."""
+        filter_side, canonical = _drive_both_seams_scoped(MISSING_SCOPE_728)
 
+        assert filter_side.escaped is None, f"nothing may cross identify_matched_filters: {filter_side.escaped}"
+        assert canonical.escaped is None, f"nothing may cross evaluate: {canonical.escaped}"
+        assert filter_side.calls == 0, f"the filter seam must not ask the matcher, got {filter_side.calls} calls"
+        assert canonical.calls == 0, f"the canonical seam must not ask the matcher, got {canonical.calls} calls"
         assert filter_side.drops_error is None, f"a recorded drop must carry a stage: {filter_side.drops_error}"
-        assert filter_side.drops == ((PLAIN_CLASS_NAME, "scope", SCOPE_REASON),), (
-            f"the filter seam must record the scope drop, got: {filter_side.drops}"
-        )
-        assert filter_side.drops == canonical.eliminations, (
-            f"both seams must name one stage and one reason, got: {filter_side.drops} vs {canonical.eliminations}"
-        )
+        assert filter_side.drops == (), f"the filter seam must record no drop, got: {filter_side.drops}"
+        assert canonical.eliminations == (), f"the canonical seam must record none, got: {canonical.eliminations}"
+
+    def test_both_seams_ask_an_in_scope_candidates_matcher(self) -> None:
+        """Control for the parity test: the counter does count on both seams."""
+        filter_side, canonical = _drive_both_seams_scoped(COUNTING_MATCHER_CLASS_NAME)
+
+        assert filter_side.names == (FILTER_FEATURE,), f"the in-scope filter must attach, got: {filter_side.names}"
+        assert filter_side.calls >= 1, "the filter seam must ask the in-scope matcher"
+        assert canonical.calls >= 1, "the canonical seam must ask the in-scope matcher"
 
 
 class TestFrameworkPinCardinality:

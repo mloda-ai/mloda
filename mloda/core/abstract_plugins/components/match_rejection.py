@@ -22,6 +22,9 @@ class MatchRejection:
 INPUT_DATA_STAGE = "input_data"
 INPUT_DATA_OWNED_STAGE = "input_data_owned"
 
+# The candidate refused the feature name itself, not an option value.
+NAME_STAGE = "name"
+
 
 # Active for one candidate's match call: the engine opens a window per candidate. Maps the recording
 # site's owner name to the first structured rejection the real match pass produced, and the
@@ -59,9 +62,33 @@ def restamp_match_rejections_since(known_owners: frozenset[str], from_stage: str
         reasons[owner_name] = MatchRejection(rejection.reason, to_stage)
 
 
+def drop_match_rejections_since(known_owners: frozenset[str]) -> None:
+    """Drop every owner recorded after the snapshot; no-op outside a window."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return
+    for owner_name in list(reasons):
+        if owner_name not in known_owners:
+            del reasons[owner_name]
+
+
 def has_match_rejection(stage: str) -> bool:
     """True iff the active window holds a rejection with exactly this stage; False without an active window."""
     reasons = MATCH_REJECTION_REASONS.get()
     if reasons is None:
         return False
     return any(rejection.stage == stage for rejection in reasons.values())
+
+
+def context_forwarding_remedy(context: bool, keys: list[str] | None = None) -> str:
+    """Remedy clause for an absent-option reason; empty for context=False keys. `keys` names them instead of "it"."""
+    if not context:
+        return ""
+    subject, pronoun = "it", "it"
+    if keys:
+        subject = ", ".join(keys)
+        pronoun = "them" if len(keys) > 1 else "it"
+    return (
+        f"; pass {subject} in Options(context=...), and for an input feature, such as the child of a chained name, "
+        f"list {pronoun} in the consumer's propagate_context_keys"
+    )

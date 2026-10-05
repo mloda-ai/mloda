@@ -17,15 +17,21 @@ import pytest
 
 from mloda.user import ParallelizationMode
 from mloda.provider import ComputeFramework
-from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, build_hook_extenders
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
+from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+
+# Only this token, never an identifier or comment, must be searched for in scrub assertions below.
+_LEAK_MARKER = "hunter2z9"
+_LEAK_MESSAGE = f"failed for https://u:p@h/db?sig={_LEAK_MARKER}"
 
 
 class _StateHoldingExtender(Extender):
@@ -263,7 +269,8 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
         worker_manager = Mock(spec=WorkerManager)
         caller_extender = _StateHoldingExtender("caller")
         provided_function_extender: set[Extender] = {caller_extender}
-        payload = pickle.dumps({_StateHoldingExtender("payload")})
+        payload_extender = _StateHoldingExtender("payload")
+        payload = pickle.dumps(({payload_extender}, build_hook_extenders({payload_extender})))
         executor = ComputeFrameworkExecutor(
             cfw_register,
             worker_manager,
@@ -299,7 +306,8 @@ class TestInitComputeFrameworkWithDirectFunctionExtender:
         worker_manager = Mock(spec=WorkerManager)
         caller_extender = _StateHoldingExtender("caller")
         provided_function_extender: set[Extender] = {caller_extender}
-        payload = pickle.dumps({_StateHoldingExtender("payload")})
+        payload_extender = _StateHoldingExtender("payload")
+        payload = pickle.dumps(({payload_extender}, build_hook_extenders({payload_extender})))
         executor = ComputeFrameworkExecutor(
             cfw_register,
             worker_manager,
@@ -817,16 +825,16 @@ class TestPrepareTfsAndJoinStep:
         assert result is from_cfw_uuid
         worker_manager.get_process_queues.assert_called_once_with(from_cfw_uuid)
 
-    def test_returns_from_cfw_for_join_step_with_link_uuid(self) -> None:
-        """Should return from_cfw for JoinStep using link UUID."""
+    def test_returns_from_cfw_for_join_step_keyed_by_its_own_uuid(self) -> None:
+        """Should return from_cfw for a JoinStep, looked up by the step uuid."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
-        link_uuid = uuid4()
+        step.uuid = uuid4()
         step.link = Mock()
-        step.link.uuid = link_uuid
+        step.link.uuid = uuid4()
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
         step.source_framework_uuids = {uuid4()}
@@ -840,20 +848,20 @@ class TestPrepareTfsAndJoinStep:
         result = executor.prepare_tfs_and_joinstep(step)
 
         assert result is from_cfw
-        # Should first try link.uuid
-        assert cfw_register.get_cfw_uuid.call_args_list[0] == call("DestinationCFW", link_uuid)
+        # Should first look up by the step uuid
+        assert cfw_register.get_cfw_uuid.call_args_list[0] == call("DestinationCFW", step.uuid)
 
     def test_falls_back_to_source_framework_uuids_for_join_step(self) -> None:
-        """Should fallback to source_framework_uuids if link UUID not found."""
+        """Should fall back to source_framework_uuids if the step uuid is not registered."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
-        link_uuid = uuid4()
+        step.uuid = uuid4()
         source_uuid = uuid4()
         step.link = Mock()
-        step.link.uuid = link_uuid
+        step.link.uuid = uuid4()
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
         step.source_framework_uuids = {source_uuid}
@@ -877,6 +885,7 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
+        step.uuid = uuid4()
         step.link = Mock()
         step.link.uuid = uuid4()
         step.destination_framework = Mock()
@@ -907,9 +916,9 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
-        link_uuid = uuid4()
+        step.uuid = uuid4()
         step.link = Mock()
-        step.link.uuid = link_uuid
+        step.link.uuid = uuid4()
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
         step.source_framework_uuids = {uuid4()}
@@ -1009,6 +1018,39 @@ class TestSyncExecuteStep:
         error_msg, exc_info = cfw_register.set_error.call_args[0]
         assert "Test error" in error_msg
 
+    def test_handles_exception_scrubs_secret_and_preserves_exception_object(self) -> None:
+        """A secret in the raised exception's text must not reach set_error's msg/exc_info."""
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+
+        cfw_uuid = uuid4()
+        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = cfw_uuid
+
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+
+        boom = RuntimeError(_LEAK_MESSAGE)
+        step.execute.side_effect = boom
+
+        executor.sync_execute_step(step)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
+        assert call_args.kwargs["exception"] is boom
+        assert _LEAK_MARKER in str(boom)
+
 
 class TestThreadExecuteStep:
     """Tests for thread_execute_step method."""
@@ -1096,6 +1138,50 @@ class TestThreadExecuteStep:
         executor.thread_execute_step(step)
 
         worker_manager.add_thread_task.assert_called_once_with(mock_thread)
+
+    def test_thread_worker_reports_error_without_reraising(self) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        step = Mock(spec=FeatureGroupStep)
+        boom = RuntimeError("Test error")
+        step.execute.side_effect = boom
+
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+
+        cfw_register.set_error.assert_called_once()
+        assert cfw_register.set_error.call_args.kwargs["exception"] is boom
+
+    def test_thread_worker_scrubs_secret_and_preserves_exception_object(self) -> None:
+        """A secret in the raised exception's text must not reach set_error's msg/exc_info."""
+        cfw_register = Mock(spec=CfwManager)
+        step = Mock(spec=FeatureGroupStep)
+        boom = RuntimeError(_LEAK_MESSAGE)
+        step.execute.side_effect = boom
+
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
+        assert call_args.kwargs["exception"] is boom
+
+    def test_thread_worker_scrubs_secret_in_chained_cause(self) -> None:
+        """A secret in the exception's __cause__ must not reach set_error's msg/exc_info either."""
+        cfw_register = Mock(spec=CfwManager)
+        step = Mock(spec=FeatureGroupStep)
+        boom = RuntimeError("load failed")
+        boom.__cause__ = RuntimeError(_LEAK_MESSAGE)
+        step.execute.side_effect = boom
+
+        thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)
+
+        cfw_register.set_error.assert_called_once()
+        call_args = cfw_register.set_error.call_args
+        error_msg, exc_info = call_args.args
+        assert _LEAK_MARKER not in error_msg
+        assert _LEAK_MARKER not in exc_info
+        assert call_args.kwargs["exception"] is boom
 
 
 class TestMultiExecuteStep:
@@ -1392,3 +1478,172 @@ class TestMultiExecuteStep:
         args_tuple = call_args.args[2]
         assert len(args_tuple) == 3
         assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid)
+
+
+class _DropsFunctionExtenderFramework(PythonDictFramework):
+    def __getstate__(self) -> dict[str, Any]:
+        state = dict(self.__dict__)
+        state.pop("function_extender", None)
+        return state
+
+
+class TestExecutorSealsTheAttachedFramework:
+    def _attached(
+        self,
+        function_extender: set[Extender] | None = None,
+        hook_extenders: dict[ExtenderHook, Extender] | None = None,
+        framework_class: type[ComputeFramework] = PythonDictFramework,
+    ) -> ComputeFramework:
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_run_context.return_value = RunContext(run_id="run-1", carrier={"k": "v"})
+        executor = ComputeFrameworkExecutor(
+            cfw_register,
+            Mock(spec=WorkerManager),
+            function_extender=function_extender,
+            hook_extenders=hook_extenders,
+        )
+        cfw_uuid = executor.init_compute_framework(framework_class, ParallelizationMode.SYNC, set())
+        return executor.cfw_collection[cfw_uuid]
+
+    def test_unpickled_framework_without_function_extender_state_does_not_invent_one(self) -> None:
+        restored = pickle.loads(pickle.dumps(self._attached(framework_class=_DropsFunctionExtenderFramework)))  # nosec B301
+
+        with pytest.raises(AttributeError):
+            restored.function_extender
+
+    def test_attached_framework_has_the_run_context(self) -> None:
+        cfw = self._attached()
+
+        assert cfw.run_context.run_id == "run-1"
+        assert cfw.run_context.carrier == {"k": "v"}
+
+    @pytest.mark.parametrize(
+        "name,value",
+        [
+            ("run_context", RunContext(run_id="forged")),
+            ("worker_index", 5),
+            ("function_extender", set()),
+            ("_hook_extenders", {}),
+        ],
+    )
+    def test_attached_framework_rejects_assignment(self, name: str, value: Any) -> None:
+        cfw = self._attached()
+        cfw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        function_extender = cfw.function_extender
+        hook_extenders = cfw._hook_extenders
+
+        with pytest.raises(AttributeError):
+            setattr(cfw, name, value)
+
+        assert cfw.run_context.run_id == "run-1"
+        assert cfw.worker_index is None
+        assert cfw.function_extender is function_extender
+        assert cfw._hook_extenders is hook_extenders
+
+    @pytest.mark.parametrize(
+        "name", ["run_context", "worker_index", "_run_context_sealed", "function_extender", "_hook_extenders"]
+    )
+    def test_attached_framework_rejects_deletion(self, name: str) -> None:
+        cfw = self._attached()
+        cfw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+
+        with pytest.raises(AttributeError):
+            delattr(cfw, name)
+
+        assert "function_extender" in cfw.__dict__
+        assert "_hook_extenders" in cfw.__dict__
+
+        assert cfw.run_context.run_id == "run-1"
+        assert cfw.worker_index is None
+        assert cfw.__dict__["_run_context_sealed"] is True
+        with pytest.raises(AttributeError):
+            cfw.run_context = RunContext(run_id="forged")
+
+    @pytest.mark.parametrize(
+        "name,value",
+        [
+            ("run_context", RunContext(run_id="forged")),
+            ("worker_index", 5),
+            ("function_extender", set()),
+            ("_hook_extenders", {}),
+        ],
+    )
+    def test_sealed_framework_stays_sealed_after_pickle_round_trip(self, name: str, value: Any) -> None:
+        restored = pickle.loads(pickle.dumps(self._attached()))  # nosec B301
+
+        assert restored.run_context.run_id == "run-1"
+        with pytest.raises(AttributeError):
+            setattr(restored, name, value)
+
+    @pytest.mark.parametrize("name,error", [("function_extender", AttributeError), ("_hook_extenders", TypeError)])
+    def test_sealed_framework_rejects_in_place_clear_after_pickle_round_trip(
+        self, name: str, error: type[Exception]
+    ) -> None:
+        restored = pickle.loads(pickle.dumps(self._attached({_StateHoldingExtender("a")})))  # nosec B301
+        restored.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        target: Any = getattr(restored, name)
+
+        with pytest.raises(error):
+            target.clear()
+
+        assert len(restored.function_extender) == 1
+        assert ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE in restored._hook_extenders
+
+    @pytest.mark.parametrize(
+        "name,method,error",
+        [
+            ("function_extender", "clear", AttributeError),
+            ("function_extender", "add", AttributeError),
+            ("_hook_extenders", "clear", TypeError),
+            ("_hook_extenders", "pop", TypeError),
+            ("_hook_extenders", "__setitem__", TypeError),
+        ],
+    )
+    def test_attached_framework_rejects_in_place_mutation(self, name: str, method: str, error: type[Exception]) -> None:
+        hook = ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
+        caller_set: set[Extender] = {_StateHoldingExtender("a")}
+        caller_table = build_hook_extenders(caller_set)
+        table_before = dict(caller_table)
+        cfw = self._attached(caller_set, caller_table)
+        target: Any = getattr(cfw, name)
+        args: tuple[Any, ...] = {
+            "clear": (),
+            "add": (_StateHoldingExtender("b"),),
+            "pop": (hook,),
+            "__setitem__": (hook, _StateHoldingExtender("b")),
+        }[method]
+
+        with pytest.raises(error):
+            getattr(target, method)(*args)
+
+        assert len(caller_set) == 1
+        assert caller_table == table_before
+        assert cfw.function_extender is not caller_set
+        assert cfw._hook_extenders is not caller_table
+
+    def test_direct_setstate_on_attached_framework_is_rejected(self) -> None:
+        cfw = self._attached({_StateHoldingExtender("a")})
+        cfw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        run_context = cfw.run_context
+        function_extender = cfw.function_extender
+        hook_extenders = cfw._hook_extenders
+        state = dict(cfw.__dict__)
+        state.update(run_context=RunContext(run_id="forged"), function_extender=set(), _hook_extenders={})
+
+        with pytest.raises(AttributeError):
+            cfw.__setstate__(state)
+
+        assert cfw.run_context is run_context
+        assert cfw.function_extender is function_extender
+        assert cfw._hook_extenders is hook_extenders
+
+    def test_unattached_framework_pickle_round_trip_stays_assignable(self) -> None:
+        cfw = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        restored = pickle.loads(pickle.dumps(cfw))  # nosec B301
+        restored.run_context = RunContext(run_id="free")
+        restored.worker_index = 1
+        restored.function_extender = set()
+
+        assert restored.function_extender == set()
+        assert restored.run_context.run_id == "free"

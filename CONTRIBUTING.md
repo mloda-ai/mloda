@@ -57,6 +57,7 @@ All code must pass the automated checks enforced by tox. The toolchain includes:
 - No code in `__init__.py` files.
 - Avoid `try/except` blocks unless absolutely necessary.
 - Keep documentation to the necessary minimum.
+- Adding an illustrative ```` ```py ```` block to a page under `docs/docs/` may need its `ILLUSTRATIVE_BLOCK_ALLOWLIST` entry in `tests/test_docs_fences.py` raised in the same PR.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (`fix:`, `feat:`, `chore:`, etc.).
 
 ### Documentation fences
@@ -105,6 +106,10 @@ The easiest way to extend mloda is by creating plugins. The [mloda-registry](htt
 Start with the [Plugin Journey overview](https://github.com/mloda-ai/mloda-registry/blob/main/docs/guides/index.md) to find the right guide for your level.
 
 To scaffold a new standalone plugin package with pre-configured CI/CD, use the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
+
+#### Adding a plugin module that imports an optional backend
+
+Guard optional-backend imports in the same way as neighboring plugin modules. Add every new backend-importing module to `MODULE_EXTRA` in [`test_plugin_module_import_policy.py`](tests/test_core/test_optional_dependency/test_plugin_module_import_policy.py), under the extra that provides that backend. If the module also reaches a second backend, record that dependency in `ALSO_NEEDS`.
 
 ### Core Development
 

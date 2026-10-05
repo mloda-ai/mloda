@@ -1,12 +1,7 @@
-"""
-Shared test mixin for _extract_column_dtype implementations.
+"""Shared dtype extraction tests for compute frameworks.
 
-This mixin verifies that each compute framework's _extract_column_dtype method
-returns dtype strings that are correctly classified by the _is_string_dtype and
-_is_numeric_dtype static methods. Each framework-specific test class should
-inherit from this mixin and provide:
-- framework_instance fixture: Returns a compute framework instance
-- dtype_sample_data fixture: Returns framework-specific data with int_col, str_col, float_col
+The default suite covers decimal data; frameworks that cannot support a test override it and skip it with a reason.
+Fixture contract: `framework_instance`, `dtype_sample_data` (`int_col`, `str_col`, `float_col`), `decimal_sample_data`.
 """
 
 from abc import abstractmethod
@@ -84,13 +79,24 @@ class DtypeExtractionTestMixin:
             f"string dtype '{dtype}' incorrectly classified as numeric"
         )
 
+    @pytest.fixture
+    @abstractmethod
+    def decimal_sample_data(self) -> Any:
+        """Return a decimal column named d, including a null where supported."""
+        raise NotImplementedError
+
+    def test_extract_decimal_column_data_type(self, framework_instance: Any, decimal_sample_data: Any) -> None:
+        assert framework_instance._extract_column_data_type(decimal_sample_data, "d") == DataType.DECIMAL
+
 
 class DuplicateColumnDtypeExtractionTestMixin:
     """Shared tests for _extract_column_dtype/_extract_column_data_type on duplicate-column data.
 
-    Opt-in, not part of DtypeExtractionTestMixin's abstract fixture contract: only frameworks
-    that can represent two columns sharing a name (PyArrow, and Iceberg's post-transform
-    PyArrow branch) mix this in. Pandas/Polars/DuckDB/Sqlite/Spark cannot construct this shape.
+    Opt-in, not part of DtypeExtractionTestMixin's abstract fixture contract: frameworks whose
+    _extract_column_dtype resolves the name positionally mix this in (Pandas, PyArrow, and
+    Iceberg's post-transform PyArrow branch). DuckDB and Spark are already first-occurrence safe
+    and could be mixed in too; frameworks that pin duplicate-column behavior at the
+    _output_schema level cover it in test_output_schema_hook.py instead.
 
     The mixin is intentionally named without a ``Test`` prefix so pytest does not collect it
     standalone. Framework subclasses pick up the test methods by inheritance.

@@ -1,25 +1,9 @@
-"""
-Spark Filter Engine Tests
+"""Unit tests for the SparkFilterEngine class.
 
-This module contains comprehensive tests for the Spark filter engine implementation.
-
-Requirements:
-- PySpark must be installed (pip install pyspark)
-- Java 8+ must be installed and JAVA_HOME environment variable must be set
-
-Environment Setup:
-- JAVA_HOME: Must point to a valid Java installation
-
-Test Coverage:
-- All filter types (range, min, max, equal, regex, categorical)
-- Parameter validation and error handling
-- Edge cases and boundary conditions
-- Integration with Spark DataFrames
-
-The tests use a shared SparkSession fixture to avoid Java gateway conflicts and
-ensure proper resource management across all test methods.
+Requires PySpark installed and JAVA_HOME set; see conftest.py for the shared SparkSession.
 """
 
+from decimal import Decimal
 from typing import Any
 import pytest
 from mloda.user import Feature
@@ -31,6 +15,9 @@ from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_eng
 from tests.test_plugins.compute_framework.base_implementations.spark.conftest import (
     PYSPARK_AVAILABLE,
     SKIP_REASON,
+)
+from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import (
+    FilterEngineTestMixin,
 )
 
 import logging
@@ -50,7 +37,7 @@ else:
 
 
 @pytest.fixture
-def sample_data(spark_session: Any) -> Any:
+def spark_sample_data(spark_session: Any) -> Any:
     """Create sample data for testing filters."""
     if not PYSPARK_AVAILABLE:
         pytest.skip(SKIP_REASON or "PySpark is not available")
@@ -67,165 +54,59 @@ def sample_data(spark_session: Any) -> Any:
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkFilterEngine:
-    def test_final_filters(self) -> None:
-        """Test that final_filters returns True."""
-        assert SparkFilterEngine.final_filters() is True
+class TestSparkFilterEngine(FilterEngineTestMixin):
+    filter_engine_class = SparkFilterEngine
 
-    def test_range_filter_inclusive(self, sample_data: Any) -> None:
-        """Test range filter with inclusive bounds."""
-        feature = Feature("age")
-        filter_type = FilterType.RANGE
-        parameter = {"min": 25, "max": 35, "max_exclusive": False}
-        single_filter = SingleFilter(feature, filter_type, parameter)
+    @pytest.fixture
+    def sample_data(self, spark_session: Any) -> Any:
+        return spark_session.createDataFrame(
+            [
+                (1, 25, "Alice", "A"),
+                (2, 30, "Bob", "B"),
+                (3, 35, "Charlie", "A"),
+                (4, 40, "David", "C"),
+                (5, 45, "Eve", "B"),
+            ],
+            "id bigint, age bigint, name string, category string",
+        )
 
-        result = SparkFilterEngine.do_range_filter(sample_data, single_filter)
-        result_data = result.collect()
+    @pytest.fixture
+    def nullable_category_sample_data(self, spark_session: Any) -> Any:
+        return spark_session.createDataFrame(
+            [
+                (1, "A", 1, 1.0),
+                (2, None, None, float("nan")),
+                (3, "B", 2, 2.0),
+                (4, None, None, None),
+                (5, "C", 3, 3.0),
+            ],
+            "id bigint, category string, score bigint, ratio double",
+        )
 
-        # Should include ages 25, 28, 30, 35 (inclusive)
-        assert len(result_data) == 4
-        ages = sorted([row["age"] for row in result_data])
-        assert ages == [25, 28, 30, 35]
+    @pytest.fixture
+    def decimal_sample_data(self, spark_session: Any) -> Any:
+        rows = [(Decimal("12.34"),), (Decimal("5.50"),), (Decimal("99.99"),), (None,)]
+        return spark_session.createDataFrame(rows, "d decimal(10,2)")
 
-    def test_range_filter_exclusive_max(self, sample_data: Any) -> None:
-        """Test range filter with exclusive max bound."""
-        feature = Feature("age")
-        filter_type = FilterType.RANGE
-        parameter = {"min": 25, "max": 35, "max_exclusive": True}
-        single_filter = SingleFilter(feature, filter_type, parameter)
+    def get_column_values(self, result: Any, column: str) -> list[Any]:
+        return [row[column] for row in result.collect()]
 
-        result = SparkFilterEngine.do_range_filter(sample_data, single_filter)
-        result_data = result.collect()
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return data.schema["d"].dataType
 
-        # Should include ages 25, 28, 30 but not 35 (exclusive)
-        assert len(result_data) == 3
-        ages = sorted([row["age"] for row in result_data])
-        assert ages == [25, 28, 30]
+    def result_row_count(self, result: Any) -> int:
+        """Spark DataFrames have no ``__len__``."""
+        count: int = result.count()
+        return count
 
-    def test_range_filter_missing_parameters(self, sample_data: Any) -> None:
-        """Test range filter with missing parameters."""
-        feature = Feature("age")
-        filter_type = FilterType.RANGE
-        parameter = {"min": 25}  # Missing max parameter
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter .* not supported"):
-            SparkFilterEngine.do_range_filter(sample_data, single_filter)
-
-    def test_min_filter(self, sample_data: Any) -> None:
-        """Test minimum value filter."""
-        feature = Feature("age")
-        filter_type = FilterType.MIN
-        parameter = {"value": 30}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        result = SparkFilterEngine.do_min_filter(sample_data, single_filter)
-        result_data = result.collect()
-
-        # Should include ages >= 30
-        assert len(result_data) == 3
-        ages = [row["age"] for row in result_data]
-        assert all(age >= 30 for age in ages)
-        assert sorted(ages) == [30, 35, 42]
-
-    def test_min_filter_missing_value(self, sample_data: Any) -> None:
-        """Test min filter with missing value parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.MIN
-        parameter = {"invalid": 30}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            SparkFilterEngine.do_min_filter(sample_data, single_filter)
-
-    def test_max_filter_simple(self, sample_data: Any) -> None:
-        """Test maximum value filter with simple value parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.MAX
-        parameter = {"value": 30}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        result = SparkFilterEngine.do_max_filter(sample_data, single_filter)
-        result_data = result.collect()
-
-        # Should include ages <= 30
-        assert len(result_data) == 4
-        ages = sorted([row["age"] for row in result_data])
-        assert ages == [22, 25, 28, 30]
-
-    def test_max_filter_complex_inclusive(self, sample_data: Any) -> None:
-        """Test maximum value filter with complex max parameter (inclusive)."""
-        feature = Feature("age")
-        filter_type = FilterType.MAX
-        parameter = {"max": 30, "max_exclusive": False}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        result = SparkFilterEngine.do_max_filter(sample_data, single_filter)
-        result_data = result.collect()
-
-        # Should include ages <= 30
-        assert len(result_data) == 4
-        ages = sorted([row["age"] for row in result_data])
-        assert ages == [22, 25, 28, 30]
-
-    def test_max_filter_complex_exclusive(self, sample_data: Any) -> None:
-        """Test maximum value filter with complex max_exclusive parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.MAX
-        parameter = {"max": 30, "max_exclusive": True}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        result = SparkFilterEngine.do_max_filter(sample_data, single_filter)
-        result_data = result.collect()
-
-        # Should include ages < 30
-        assert len(result_data) == 3
-        ages = sorted([row["age"] for row in result_data])
-        assert ages == [22, 25, 28]
-
-    def test_max_filter_invalid_parameters(self, sample_data: Any) -> None:
-        """Test max filter with invalid parameters."""
-        feature = Feature("age")
-        filter_type = FilterType.MAX
-        parameter = {"invalid": 30}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="No valid filter parameter found"):
-            SparkFilterEngine.do_max_filter(sample_data, single_filter)
-
-    def test_max_filter_with_min_parameter(self, sample_data: Any) -> None:
-        """Test max filter with min parameter (should raise error)."""
-        feature = Feature("age")
-        filter_type = FilterType.MAX
-        parameter = {"min": 20, "max": 30}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter .* not supported as max filter"):
-            SparkFilterEngine.do_max_filter(sample_data, single_filter)
-
-    def test_equal_filter(self, sample_data: Any) -> None:
-        """Test equality filter."""
-        feature = Feature("age")
-        filter_type = FilterType.EQUAL
-        parameter = {"value": 30}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        result = SparkFilterEngine.do_equal_filter(sample_data, single_filter)
-        result_data = result.collect()
-
-        # Should include only age == 30
-        assert len(result_data) == 1
-        assert result_data[0]["age"] == 30
-        assert result_data[0]["name"] == "Bob"
-
-    def test_equal_filter_string(self, sample_data: Any) -> None:
+    def test_equal_filter_string(self, spark_sample_data: Any) -> None:
         """Test equality filter on string column."""
         feature = Feature("name")
         filter_type = FilterType.EQUAL
         parameter = {"value": "Alice"}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
-        result = SparkFilterEngine.do_equal_filter(sample_data, single_filter)
+        result = SparkFilterEngine.do_equal_filter(spark_sample_data, single_filter)
         result_data = result.collect()
 
         # Should include only name == "Alice"
@@ -233,14 +114,14 @@ class TestSparkFilterEngine:
         assert result_data[0]["name"] == "Alice"
         assert result_data[0]["age"] == 25
 
-    def test_equal_filter_boolean(self, sample_data: Any) -> None:
+    def test_equal_filter_boolean(self, spark_sample_data: Any) -> None:
         """Test equality filter on boolean column."""
         feature = Feature("is_active")
         filter_type = FilterType.EQUAL
         parameter = {"value": True}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
-        result = SparkFilterEngine.do_equal_filter(sample_data, single_filter)
+        result = SparkFilterEngine.do_equal_filter(spark_sample_data, single_filter)
         result_data = result.collect()
 
         # Should include only is_active == True
@@ -248,38 +129,14 @@ class TestSparkFilterEngine:
         for row in result_data:
             assert row["is_active"] is True
 
-    def test_equal_filter_missing_value(self, sample_data: Any) -> None:
-        """Test equal filter with missing value parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.EQUAL
-        parameter = {"invalid": 30}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            SparkFilterEngine.do_equal_filter(sample_data, single_filter)
-
-    def test_regex_filter(self, sample_data: Any) -> None:
-        """Test regex filter."""
-        feature = Feature("name")
-        filter_type = FilterType.REGEX
-        parameter = {"value": "^A.*"}  # Names starting with 'A'
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        result = SparkFilterEngine.do_regex_filter(sample_data, single_filter)
-        result_data = result.collect()
-
-        # Should include only "Alice"
-        assert len(result_data) == 1
-        assert result_data[0]["name"] == "Alice"
-
-    def test_regex_filter_multiple_matches(self, sample_data: Any) -> None:
+    def test_regex_filter_multiple_matches(self, spark_sample_data: Any) -> None:
         """Test regex filter with multiple matches."""
         feature = Feature("name")
         filter_type = FilterType.REGEX
         parameter = {"value": ".*e$"}  # Names ending with 'e'
         single_filter = SingleFilter(feature, filter_type, parameter)
 
-        result = SparkFilterEngine.do_regex_filter(sample_data, single_filter)
+        result = SparkFilterEngine.do_regex_filter(spark_sample_data, single_filter)
         result_data = result.collect()
 
         # Should include "Alice", "Charlie", and "Eve"
@@ -287,39 +144,14 @@ class TestSparkFilterEngine:
         names = sorted([row["name"] for row in result_data])
         assert names == ["Alice", "Charlie", "Eve"]
 
-    def test_regex_filter_missing_value(self, sample_data: Any) -> None:
-        """Test regex filter with missing value parameter."""
-        feature = Feature("name")
-        filter_type = FilterType.REGEX
-        parameter = {"invalid": "^A.*"}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            SparkFilterEngine.do_regex_filter(sample_data, single_filter)
-
-    def test_categorical_inclusion_filter(self, sample_data: Any) -> None:
-        """Test categorical inclusion filter."""
-        feature = Feature("category")
-        filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"values": ["A", "B"]}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        result = SparkFilterEngine.do_categorical_inclusion_filter(sample_data, single_filter)
-        result_data = result.collect()
-
-        # Should include categories A and B
-        assert len(result_data) == 5  # 3 A's + 2 B's
-        categories = [row["category"] for row in result_data]
-        assert all(cat in ["A", "B"] for cat in categories)
-
-    def test_categorical_inclusion_filter_single_value(self, sample_data: Any) -> None:
+    def test_categorical_inclusion_filter_single_value(self, spark_sample_data: Any) -> None:
         """Test categorical inclusion filter with single value."""
         feature = Feature("category")
         filter_type = FilterType.CATEGORICAL_INCLUSION
         parameter = {"values": ["C"]}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
-        result = SparkFilterEngine.do_categorical_inclusion_filter(sample_data, single_filter)
+        result = SparkFilterEngine.do_categorical_inclusion_filter(spark_sample_data, single_filter)
         result_data = result.collect()
 
         # Should include only category C
@@ -327,24 +159,14 @@ class TestSparkFilterEngine:
         assert result_data[0]["category"] == "C"
         assert result_data[0]["name"] == "David"
 
-    def test_categorical_inclusion_filter_missing_values(self, sample_data: Any) -> None:
-        """Test categorical inclusion filter with missing values parameter."""
-        feature = Feature("category")
-        filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"invalid": ["A", "B"]}
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'values' not found"):
-            SparkFilterEngine.do_categorical_inclusion_filter(sample_data, single_filter)
-
-    def test_filter_on_float_column(self, sample_data: Any) -> None:
+    def test_filter_on_float_column(self, spark_sample_data: Any) -> None:
         """Test filters on float/double columns."""
         feature = Feature("score")
         filter_type = FilterType.RANGE
         parameter = {"min": 80.0, "max": 90.0, "max_exclusive": False}
         single_filter = SingleFilter(feature, filter_type, parameter)
 
-        result = SparkFilterEngine.do_range_filter(sample_data, single_filter)
+        result = SparkFilterEngine.do_range_filter(spark_sample_data, single_filter)
         result_data = result.collect()
 
         # Should include scores between 80.0 and 90.0
@@ -353,20 +175,20 @@ class TestSparkFilterEngine:
         assert all(80.0 <= score <= 90.0 for score in scores)
         assert sorted(scores) == [85.5, 88.0]
 
-    def test_filter_empty_result(self, sample_data: Any) -> None:
+    def test_filter_empty_result(self, spark_sample_data: Any) -> None:
         """Test filter that returns empty result."""
         feature = Feature("age")
         filter_type = FilterType.EQUAL
         parameter = {"value": 100}  # No one is 100 years old
         single_filter = SingleFilter(feature, filter_type, parameter)
 
-        result = SparkFilterEngine.do_equal_filter(sample_data, single_filter)
+        result = SparkFilterEngine.do_equal_filter(spark_sample_data, single_filter)
         result_data = result.collect()
 
         # Should return empty result
         assert len(result_data) == 0
 
-    def test_filter_nonexistent_column(self, sample_data: Any) -> None:
+    def test_filter_nonexistent_column(self, spark_sample_data: Any) -> None:
         """Test filter on nonexistent column."""
         feature = Feature("nonexistent")
         filter_type = FilterType.EQUAL
@@ -375,7 +197,7 @@ class TestSparkFilterEngine:
 
         # This should raise an exception when Spark tries to access the column
         with pytest.raises(Exception):  # Could be AnalysisException or similar
-            result = SparkFilterEngine.do_equal_filter(sample_data, single_filter)
+            result = SparkFilterEngine.do_equal_filter(spark_sample_data, single_filter)
             result.collect()  # Force evaluation
 
     def test_complex_regex_patterns(self, spark_session: Any) -> None:
@@ -426,6 +248,42 @@ class TestSparkFilterEngine:
         ages = [row["age"] for row in result_data]
         assert None not in ages
         assert sorted(ages) == [30, 35]
+
+    @pytest.mark.parametrize(
+        ("filter_type", "parameter", "expected_ids"),
+        [
+            pytest.param(FilterType.MIN, {"value": 2.0}, [3, 5], id="min_drops_null_and_nan"),
+            pytest.param(FilterType.CATEGORICAL_INCLUSION, {"values": [None]}, [2, 4], id="only_none_keeps_nulls"),
+            pytest.param(
+                FilterType.CATEGORICAL_INCLUSION,
+                {"values": [1.0, float("nan")]},
+                [1, 2, 4],
+                id="nan_in_values_keeps_null_and_nan",
+            ),
+        ],
+    )
+    def test_null_or_nan_rows(
+        self, spark_session: Any, filter_type: FilterType, parameter: Any, expected_ids: list[int]
+    ) -> None:
+        data = [
+            (1, 1.0),
+            (2, float("nan")),
+            (3, 2.0),
+            (4, None),
+            (5, 3.0),
+        ]
+        ratio_data = spark_session.createDataFrame(data, "id int, ratio double")
+
+        feature = Feature("ratio")
+        single_filter = SingleFilter(feature, filter_type, parameter)
+
+        if filter_type == FilterType.MIN:
+            result = SparkFilterEngine.do_min_filter(ratio_data, single_filter)
+        else:
+            result = SparkFilterEngine.do_categorical_inclusion_filter(ratio_data, single_filter)
+
+        result_data = result.collect()
+        assert sorted(row["id"] for row in result_data) == expected_ids
 
     def test_filter_with_empty_data(self, spark_session: Any) -> None:
         """Test filtering with empty Spark DataFrame."""

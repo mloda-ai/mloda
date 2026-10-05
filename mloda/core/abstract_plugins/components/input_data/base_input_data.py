@@ -1,16 +1,27 @@
 import logging
+import os
+import weakref
 from abc import ABC
-from typing import Any, ClassVar
+from collections.abc import Iterable, Mapping
+from pathlib import PurePath
+from typing import TYPE_CHECKING, Any, ClassVar
 
+from mloda.core.abstract_plugins.components.credential_scrub import _URI_PATTERN, _uri_projection
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    CHAIN_SEPARATOR,
+    COLUMN_SEPARATOR,
+)
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
-from mloda.core.abstract_plugins.hook_context import HookContext, instrument
+from mloda.core.abstract_plugins.function_extender import ExtenderHook, GateBypassError, _invoke_extender
+from mloda.core.abstract_plugins.hook_context import HookContext, input_data_load_gate_scopes_active, instrument
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
+    context_forwarding_remedy,
+    drop_match_rejections_since,
     match_rejection_owners,
     record_match_rejection,
     restamp_match_rejections_since,
@@ -29,34 +40,42 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_reason,
     escalate_match_abort,
     get_all_subclasses,
+    is_match_abort,
+    safe_field,
+    safe_value_text,
 )
+from mloda.core.abstract_plugins.components.declared_attributes import (
+    current_declaration_requirement,
+    read_declared_attributes,
+)
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 logger = logging.getLogger(__name__)
 
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
-def _data_access_identity(data_access: Any) -> str:
-    """Build a data_access_identity string that never leaks credential values.
+def _format_keys(keys: Iterable[str]) -> str:
+    return "{" + ", ".join(sorted(set(keys))) + "}"
 
-    A dict (e.g. DB credentials) is identified by its sorted key names only. A URI-shaped
-    string with a user[:pass]@ userinfo segment has that segment stripped before the host.
-    """
-    if isinstance(data_access, dict):
-        return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
-    if isinstance(data_access, str) and "://" in data_access:
-        scheme, _, rest = data_access.partition("://")
-        if "@" in rest:
-            host_and_path = rest.rpartition("@")[2]
-            return f"{scheme}://{host_and_path}"
-    return str(data_access)
+
+_fallback_identity_warned: "weakref.WeakSet[type]" = weakref.WeakSet()
+
+
+def _is_fallback_identity(data_access: Any, identity: str) -> bool:
+    """True when identity is the access's type name or its bare mapping key names."""
+    if identity == type(data_access).__name__:
+        return True
+    return isinstance(data_access, Mapping) and identity == _format_keys(str(key) for key in data_access)
 
 
 class BaseInputData(ABC):
     READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
         RESERVED_READER_OPTION_KEY: PropertySpec(
-            "The matched (ReaderClass, data_access) pair, written by add_base_input_data_to_options "
-            "and read back by init_reader.",
+            "The matched (ReaderClass, data_access) pair, written transiently while matching and "
+            "never kept in options; it lives on Feature.input_data_match.",
             default=None,
             framework_set=True,
         ),
@@ -159,6 +178,14 @@ class BaseInputData(ABC):
         return True
 
     @classmethod
+    def _unmet_current_declaration(cls) -> str | None:
+        """Reason this reader's declarations miss the consumer requirement in scope, else None."""
+        requirement = current_declaration_requirement()
+        if requirement is None:
+            return None
+        return requirement.unmet_reason(cls.get_class_name(), cls)
+
+    @classmethod
     def _absent_reader_option_admits(
         cls, key: str, spec: PropertySpec, options: Options | None, record_absence: bool
     ) -> bool:
@@ -186,7 +213,8 @@ class BaseInputData(ABC):
                     record_match_rejection(
                         owner,
                         f"required reader option '{key}' is absent, but {owner} declares it required "
-                        f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)",
+                        f"(required_when predicate {getattr(predicate, '__name__', repr(predicate))} is satisfied)"
+                        f"{context_forwarding_remedy(spec.context)}",
                         stage=INPUT_DATA_OWNED_STAGE,
                     )
                 return False
@@ -195,7 +223,8 @@ class BaseInputData(ABC):
             if record_absence:
                 record_match_rejection(
                     owner,
-                    f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)",
+                    f"required reader option '{key}' is absent, but {owner} declares it required (no default declared)"
+                    f"{context_forwarding_remedy(spec.context)}",
                     stage=INPUT_DATA_OWNED_STAGE,
                 )
             return False
@@ -222,7 +251,7 @@ class BaseInputData(ABC):
             owner = cls.get_class_name()
             record_match_rejection(
                 owner,
-                f"reader option '{key}' value {element!r} is rejected by the declaration of {owner}",
+                f"reader option '{key}' value {safe_value_text(element)} is rejected by the declaration of {owner}",
                 stage=INPUT_DATA_OWNED_STAGE if owned else INPUT_DATA_STAGE,
             )
             return False
@@ -231,29 +260,40 @@ class BaseInputData(ABC):
     @classmethod
     def _reader_option_element_admits(cls, key: str, spec: PropertySpec, element: Any) -> bool:
         """One element's verdict: a declared element_validator REPLACES membership."""
-        validator = spec.element_validator
-        if validator is not None:
-            try:
-                return bool(validator(element))
-            except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
-                logger.log(
-                    contained_raise_log_level(exc),
-                    "element_validator for reader option '%s' of %s %s; treating value as rejected.",
-                    key,
-                    cls.get_class_name(),
-                    contained_raise_reason(exc),
-                )
-                return False
-        try:
-            return spec.allowed_values is not None and element in spec.allowed_values
-        # Swallows: an unhashable element can never be a member, so the TypeError is a clean rejection.
-        except TypeError:
-            return False
+
+        def on_raise(exc: Exception) -> None:
+            logger.log(
+                contained_raise_log_level(exc),
+                "element_validator for reader option '%s' of %s %s; treating value as rejected.",
+                key,
+                cls.get_class_name(),
+                contained_raise_reason(exc),
+            )
+
+        return element_admitted(spec, element, on_raise)
 
     @classmethod
     def data_access_name(cls) -> str:
         """This function should return the name of the data access."""
         return cls.__name__
+
+    @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        """Normalize a feature-scoped data access before matching; default is identity."""
+        return data_access
+
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        """Mapping keys, a parsed URI's projection, an existing local path, else the type name."""
+        if isinstance(data_access, Mapping):
+            return _format_keys(str(key) for key in data_access)
+        if isinstance(data_access, str):
+            match = _URI_PATTERN.fullmatch(data_access)
+            if match is not None:
+                return _uri_projection(match) or type(data_access).__name__
+        if isinstance(data_access, (str, PurePath)) and os.path.exists(data_access):
+            return str(data_access)
+        return type(data_access).__name__
 
     @staticmethod
     def _underlying(member: Any) -> Any:
@@ -264,6 +304,11 @@ class BaseInputData(ABC):
     def _is_overridden(cls, base: type, method_name: str) -> bool:
         """Structurally check whether cls overrides method_name relative to base."""
         return cls._underlying(getattr(cls, method_name)) is not cls._underlying(getattr(base, method_name))
+
+    @staticmethod
+    def _first_separator_name(feature_names: list[str]) -> str | None:
+        """The first chain- or column-separated name, or None; the one definition of a separator name."""
+        return next((name for name in feature_names if CHAIN_SEPARATOR in name or COLUMN_SEPARATOR in name), None)
 
     def matches(
         self,
@@ -284,29 +329,89 @@ class BaseInputData(ABC):
             return True
         return False
 
+    @staticmethod
+    def _drop_replaced_parents(
+        accepted: list[tuple[type["BaseInputData"], Any]],
+    ) -> list[tuple[type["BaseInputData"], Any]]:
+        """Drop a reader when a strict subclass in the list accepted an equal access."""
+        return [
+            (reader, access)
+            for reader, access in accepted
+            if not any(
+                other is not reader and issubclass(other, reader) and (other_access == access) is True
+                for other, other_access in accepted
+            )
+        ]
+
     @classmethod
     def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
-        """
-        We check for the feature scope data access if any child classes match the data access.
-        """
+        """Pinned readers are probed in name order; the single accepting pin (after subclass
+        replacement) serves the feature, several raise."""
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
+        subclasses = sorted(
+            subclasses,
+            key=lambda sub: (
+                sub.data_access_name().casefold(),
+                sub.data_access_name(),
+                sub.__module__,
+                sub.__qualname__,
+            ),
+        )
+        entry_owners = match_rejection_owners()
+        accepting: list[tuple[type[BaseInputData], Any]] = []
         for subclass in subclasses:
             for key, value in options.items():
                 _key = cls.deal_with_base_input_data_name_as_cls_or_str(key)
 
                 if _key == subclass.data_access_name():
                     # The user addressed this reader family by name (ownership), so vetoes record as owned.
-                    if not subclass._reader_options_admit(options, record_absence=True):
-                        break
-                    known_owners = match_rejection_owners()
-                    matched_data_access = subclass.match_subclass_data_access(value, [feature_name], options=options)  # type: ignore[attr-defined]
-                    if matched_data_access:
-                        cls.add_base_input_data_to_options(subclass, matched_data_access, options)
-                        return True
-                    # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
-                    restamp_match_rejections_since(known_owners, INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
+                    before_checks = match_rejection_owners()
+                    if subclass._reader_options_admit(options, record_absence=True):
+                        wrapped = subclass.wrap_feature_scoped_access(value)
+                        if wrapped is not value:
+                            options.set(key, wrapped)
+                            value = wrapped
+                        known_owners = match_rejection_owners()
+                        matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
+                            value, [feature_name], options=options
+                        )
+                        if matched_data_access:
+                            unmet = subclass._unmet_current_declaration()
+                            if unmet is None:
+                                accepting.append((subclass, matched_data_access))
+                                break
+                            record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
+                        else:
+                            # The addressed probe matched nothing, so whatever content decline it recorded becomes owned.
+                            restamp_match_rejections_since(known_owners, INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE)
+                    if match_rejection_owners() <= before_checks:
+                        name = subclass.get_class_name()
+                        record_match_rejection(
+                            name,
+                            f"{name} is pinned for feature '{feature_name}' but matched nothing; "
+                            f"a pinned reader is final",
+                            stage=INPUT_DATA_OWNED_STAGE,
+                        )
                     break  # This case is if a feature requests an input feature, which should have scoped access.
-        return False
+        accepting = cls._drop_replaced_parents(accepting)
+        if not accepting:
+            return False
+        if len(accepting) > 1:
+            short = [sub.data_access_name() for sub, _ in accepting]
+            labels = [
+                f"{sub.__module__}.{sub.__qualname__}" if short.count(name) > 1 else name
+                for (sub, _), name in zip(accepting, short)
+            ]
+            names = ", ".join(sorted(labels, key=lambda label: (label.casefold(), label)))
+            # Contained: several accepting pinned readers is a user-fixable config error, not an engine abort.
+            raise ValueError(
+                f"Feature '{feature_name}' pins several readers that accept it: {names}. "
+                "A pinned reader is final, so pin each reader on its own feature."
+            )
+        # Records from this call (declining pins, the winner's discarded declines) must not mask a later failure reason.
+        drop_match_rejections_since(entry_owners)
+        cls.add_base_input_data_to_options(accepting[0][0], accepting[0][1], options)
+        return True
 
     @classmethod
     def deal_with_base_input_data_name_as_cls_or_str(cls, key: Any) -> str:
@@ -335,6 +440,10 @@ class BaseInputData(ABC):
         if options.get(cls.data_access_name()):
             return False
 
+        # A pinned reader is final: its decline must not fall back to a sibling or the collection.
+        if any(sub.data_access_name() in options for sub in get_all_filtered_subclasses(BaseInputData, cls)):
+            return False
+
         data_access_cls, matched_data_access = cls.match_data_access(
             [feature_name], data_access_collection, options=options
         )
@@ -356,6 +465,7 @@ class BaseInputData(ABC):
         """
         subclasses = get_all_filtered_subclasses(BaseInputData, cls)
 
+        accepted: list[tuple[Any, Any]] = []
         for subclass in subclasses:
             # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
             if not subclass._reader_options_admit(options, record_absence=False):
@@ -364,8 +474,76 @@ class BaseInputData(ABC):
                 data_access_collection, feature_names, options=options
             )
             if matched_data_access:
-                return (subclass, matched_data_access)
+                unmet = subclass._unmet_current_declaration()
+                if unmet is not None:
+                    record_match_rejection(subclass.get_class_name(), unmet, stage=INPUT_DATA_OWNED_STAGE)
+                    continue
+                accepted.append((subclass, matched_data_access))
+
+        # A subclass replaces its parent when both accept an equal access; different accesses stay ambiguous.
+        accepted = cls._drop_replaced_parents(accepted)
+        if len(accepted) == 1:
+            return accepted[0]
+        if accepted:
+            names = sorted((reader.data_access_name() for reader, _ in accepted), key=str.casefold)
+            feature_list = ", ".join(repr(str(n)) for n in feature_names)
+            reader_list = ", ".join(names)
+            # Contained: an ambiguous reader match is a user-fixable config error, not an engine abort.
+            raise ValueError(
+                f"Several readers accept the data access for feature(s) {feature_list}: {reader_list}. "
+                f"Pin one by its option key, e.g. Feature({str(feature_names[0])!r}, "
+                f"options={{{names[0]!r}: <data access>}})."
+            )
+
+        cls._record_unowned_pin(data_access_collection, feature_names)
         return None, None
+
+    @classmethod
+    def _record_unowned_pin(cls, data_access_collection: DataAccessCollection, feature_names: list[str]) -> None:
+        """Records one attributable elimination when no reader this process can load owns the pinned
+        file's suffix. Recorded at the owned stage since a plain-stage recording is never harvested once a
+        name rule matches. Keyed apart from the candidate's own data_access_name() so an earlier plain
+        rejection recorded under that same key in this window cannot silently absorb this one.
+        """
+        column_to_file = data_access_collection.column_to_file
+        if column_to_file is None or not all(name in column_to_file for name in feature_names):
+            return
+        pinned_paths = {data_access_collection.files[column_to_file[name]] for name in feature_names}
+        if len(pinned_paths) != 1:
+            return
+        pinned_path = next(iter(pinned_paths))
+        if any(cls._reader_owns_suffix(reader, pinned_path) for reader in cls._all_loadable_readers()):
+            return
+        record_match_rejection(
+            f"{cls.data_access_name()} (unowned pin)",
+            f"pinned file {pinned_path} has a suffix no registered reader owns",
+            stage=INPUT_DATA_OWNED_STAGE,
+        )
+
+    @classmethod
+    def _all_loadable_readers(cls) -> list[type["BaseInputData"]]:
+        """Forces every already-visible family's own auto-load group once before collecting, since
+        get_all_filtered_subclasses only auto-loads a family whose OWN filtered list is currently empty;
+        a family with even one final reader already defined (e.g. a user's own custom subclass) would
+        otherwise never load its siblings (the stock CsvReader alongside a user's own ReadFile subclass,
+        say).
+        """
+        from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
+
+        for family in BaseInputData.__subclasses__():
+            auto_load_group = family.__dict__.get("_auto_load_group")
+            if auto_load_group is not None:
+                PluginLoader().load_group(auto_load_group)
+        return list(get_all_subclasses(BaseInputData))
+
+    @staticmethod
+    def _reader_owns_suffix(reader: type["BaseInputData"], path: str) -> bool:
+        try:
+            return reader.is_final_reader() and reader._has_suffix() and reader._matches_suffix(path)
+        # Swallows: this probes readers OUTSIDE the current candidate's own family; a mark meant to
+        # abort that reader's own family's matching must not abort a different, unrelated candidate's.
+        except Exception:
+            return False
 
     @classmethod
     def add_base_input_data_to_options(
@@ -397,43 +575,19 @@ class BaseInputData(ABC):
             )
         options.add_to_group(RESERVED_READER_OPTION_KEY, (cls_to_be_added, matched_data_access))
 
-    def init_reader(self, options: Options | None) -> tuple["BaseInputData", Any]:
-        if options is None:
-            raise ValueError(
-                f"Options were not set for {self.__class__.__name__}.init_reader().\n"
-                "Provide an Options object with a 'BaseInputData' key mapping to a tuple of "
-                "(ReaderClass, data_access).\n"
-                "Example:\n"
-                "  options = Options(context={\n"
-                "      'BaseInputData': (ReaderClass, data_access)\n"
-                "  })"
-            )
-
-        reader_data_access = options.get(RESERVED_READER_OPTION_KEY)
-
-        if reader_data_access is None:
-            raise ValueError(
-                f"'BaseInputData' key is missing in the provided Options for {self.__class__.__name__}.\n"
-                "The 'BaseInputData' key in Options must map to a tuple of "
-                "(ReaderClass, data_access).\n"
-                "Example:\n"
-                "  options = Options(context={\n"
-                "      'BaseInputData': (ReaderClass, data_access)\n"
-                "  })"
-            )
-
+    def init_reader(self, reader_data_access: tuple[type["BaseInputData"], Any]) -> tuple["BaseInputData", Any]:
         reader, data_access = reader_data_access
         return reader(), data_access
 
     def load(self, features: FeatureSet) -> Any:
-        _options = None
-        for feature in features.features:
-            if _options:
-                if _options != feature.options:
-                    raise ValueError("All features must have the same options.")
-            _options = feature.options
+        match = features.input_data_match
+        if match is None:
+            raise ValueError(
+                f"{self.__class__.__name__}.load() found no input_data_match on the feature set; "
+                "the reader match is set while the feature group is identified."
+            )
 
-        reader, data_access = self.init_reader(_options)
+        reader, data_access = self.init_reader(match)
         data = self._load_data_via_hook(reader, data_access, features)
 
         if data is None:
@@ -449,6 +603,24 @@ class BaseInputData(ABC):
 
         cfw = ComputeFramework.current()
         if cfw is None:
+            marker = features._load_marker
+            if marker is not None:
+                active = marker.active
+                if active is not None and marker.has_extender:
+                    with active[0].activate(), active[1].activate():
+                        return BaseInputData._load_data_via_hook(reader, data_access, features)
+                if marker.gate:
+                    raise GateBypassError(
+                        f"{type(reader).__qualname__}.load_data ran after its calculation finished under an "
+                        "INPUT_DATA_LOAD gate."
+                    )
+                return reader.load_data(data_access, features)
+            if input_data_load_gate_scopes_active() > 0:
+                raise GateBypassError(
+                    f"{type(reader).__qualname__}.load_data ran outside the calculation context while an "
+                    "INPUT_DATA_LOAD gate is active (a thread hop lost it); run the thread's work with "
+                    "contextvars.copy_context().run."
+                )
             return reader.load_data(data_access, features)
 
         extender = cfw.get_function_extender(ExtenderHook.INPUT_DATA_LOAD)
@@ -457,7 +629,24 @@ class BaseInputData(ABC):
 
         calc_context = HookContext.current()
         if calc_context is None:
+            if extender.never_fall_back:
+                raise GateBypassError(
+                    f"{type(reader).__qualname__}.load_data ran without a calculate-phase HookContext under an "
+                    "INPUT_DATA_LOAD gate; run the thread's work with contextvars.copy_context().run."
+                )
             return reader.load_data(data_access, features)
+
+        identity = reader.data_access_identity(data_access)
+        is_fallback = _is_fallback_identity(data_access, identity)
+        if is_fallback and type(reader) not in _fallback_identity_warned:
+            _fallback_identity_warned.add(type(reader))
+            logger.warning(
+                "%s.data_access_identity fell back to %r, which names no source, so INPUT_DATA_LOAD extenders "
+                "cannot tell its sources apart; override data_access_identity on %s.",
+                type(reader).__qualname__,
+                identity,
+                type(reader).__qualname__,
+            )
 
         context = HookContext(
             hook=ExtenderHook.INPUT_DATA_LOAD,
@@ -465,22 +654,38 @@ class BaseInputData(ABC):
             feature_group_version=calc_context.feature_group_version,
             plugin_version=calc_context.plugin_version,
             feature_names=calc_context.feature_names,
+            specialized_from=calc_context.specialized_from,
             input_features=calc_context.input_features,
+            input_feature_edges=calc_context.input_feature_edges,
             compute_framework_name=cfw.get_class_name(),
-            run_id=cfw.run_context.run_id,
-            carrier=cfw.run_context.carrier,
-            tenant_id=cfw.run_context.tenant_id,
-            project_id=cfw.run_context.project_id,
-            principal=cfw.run_context.principal,
-            worker_index=cfw.worker_index,
-            data_access_identity=_data_access_identity(data_access),
+            run_id=calc_context.run_id,
+            plan_id=calc_context.plan_id,
+            carrier=calc_context.carrier,
+            tenant_id=calc_context.tenant_id,
+            project_id=calc_context.project_id,
+            principal=calc_context.principal,
+            worker_index=calc_context.worker_index,
+            data_access_identity=identity,
+            data_access_identity_is_fallback=is_fallback,
             data_access_format=reader.data_access_name(),
             data_access_dataset_version=None,
+            declared_attributes=safe_field(
+                lambda: read_declared_attributes(reader, features),
+                None,
+                field=f"{type(reader).__qualname__}.declared_attributes",
+                warn_once_for=type(reader),
+            ),
+            reader_class=type(reader),
         )
         with context.activate():
             return _invoke_extender(
                 extender, instrument(context, reader.load_data, row_count=cfw._row_count), data_access, features
             )
+
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        """Scalar attributes this reader declares on its extender hooks; empty by default."""
+        return {}
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
@@ -544,13 +749,23 @@ class BaseInputData(ABC):
         raise NotImplementedError
 
     @classmethod
+    def count_rows(cls, data_access: Any, compute_framework: "type[ComputeFramework]") -> int | None:
+        """Rows of data_access without loading its data; None when only a read can tell.
+        Raises ImportError (backend missing), or OSError/ValueError (non-path, missing or unreadable source)."""
+        return None
+
+    @classmethod
     def _has_suffix(cls) -> bool:
-        """Check if this class implements suffix() (concrete subclass vs abstract base)."""
+        """Check if this class implements suffix() (concrete subclass vs abstract base).
+
+        A raise marked with escalate_match_abort propagates instead of being read as "no suffix".
+        """
         try:
             cls.suffix()  # type: ignore[attr-defined]
             return True
-        # Swallows: the probe asks whether suffix() is implemented, and both classes ARE that answer.
-        except (NotImplementedError, AttributeError):
+        except (NotImplementedError, AttributeError) as exc:
+            if is_match_abort(exc):
+                raise
             return False
 
     @classmethod
@@ -591,6 +806,12 @@ class BaseInputData(ABC):
         # Marked: same as the mixed batch above.
         raise escalate_match_abort(ValueError(f"Features in batch are pinned to different files: {pinned_paths}"))
 
+    @classmethod
+    def _pin_applies(cls, data_access: Any, feature_names: list[str]) -> bool:
+        """True once any requested feature is pinned; then _resolve_pinned_file's result, including None, is final."""
+        column_map: dict[str, str] | None = data_access.column_to_file
+        return column_map is not None and any(name in column_map for name in feature_names)
+
 
 def _collect_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseInputData]]:
     result = []
@@ -609,7 +830,6 @@ def get_all_filtered_subclasses(cls: Any, parent_class: Any) -> list[type[BaseIn
         if auto_load_group is not None:
             from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
-            if auto_load_group not in PluginLoader._disabled_groups:
-                PluginLoader().load_group(auto_load_group)
-                filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
+            PluginLoader().load_group(auto_load_group)
+            filtered_subclasses = _collect_filtered_subclasses(cls, parent_class)
     return filtered_subclasses

@@ -6,7 +6,7 @@ from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_mask_engine import DuckDBMaskEngine
@@ -78,6 +78,10 @@ class DuckDBFramework(ComputeFramework):
         self.framework_connection_object = framework_connection_object
 
     @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        return ConnectionRequirement.REQUIRED
+
+    @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
         return duckdb is not None and isinstance(conn, duckdb.DuckDBPyConnection)
 
@@ -121,7 +125,8 @@ class DuckDBFramework(ComputeFramework):
         selected_columns = list(_selected_feature_names)
         return data.select(*selected_columns).to_arrow_table()
 
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.columns)
 
     def _row_count(self, data: Any) -> int | None:
@@ -199,8 +204,6 @@ class DuckDBFramework(ComputeFramework):
         if hasattr(data, "__iter__") and not isinstance(data, (str, bytes)):
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
-                if hasattr(self.data, "columns") and feature_name in self.data.columns:
-                    raise ValueError(f"Feature {feature_name} already exists in the relation")
                 return self.data.append_column(feature_name, list(data))
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 

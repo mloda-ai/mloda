@@ -32,6 +32,8 @@ def _source_options() -> Options:
     for name, value in list(vars(options).items()):
         if isinstance(value, frozenset) and not value:
             setattr(options, name, frozenset({name}))
+        elif isinstance(value, bool) and not value:
+            setattr(options, name, True)
     return options
 
 
@@ -41,6 +43,10 @@ def _carried_state(options: Options) -> dict[str, Any]:
 
 def _rebuild(options: Options) -> Options:
     return options.rebuild(dict(REBUILT_GROUP), dict(REBUILT_CONTEXT))
+
+
+def _fork(options: Options) -> Options:
+    return options._fork()
 
 
 def _options_with_defaults(options: Options) -> Options:
@@ -65,6 +71,7 @@ def _build_effective_options(options: Options) -> Options:
         pytest.param(_rebuild, REBUILT_GROUP, REBUILT_CONTEXT, id="rebuild"),
         pytest.param(copy.copy, SOURCE_GROUP, SOURCE_CONTEXT, id="copy"),
         pytest.param(copy.deepcopy, SOURCE_GROUP, SOURCE_CONTEXT, id="deepcopy"),
+        pytest.param(_fork, SOURCE_GROUP, SOURCE_CONTEXT, id="fork"),
         pytest.param(
             _options_with_defaults, SOURCE_GROUP, {**SOURCE_CONTEXT, DEFAULT_KEY: "filled"}, id="options_with_defaults"
         ),
@@ -88,3 +95,43 @@ def test_new_options_carries_all_state_but_group_and_context(
     assert result.group == expected_group
     assert result.context == expected_context
     assert _carried_state(result) == _carried_state(source)
+
+
+def test_fork_owns_its_dicts() -> None:
+    source = _source_options()
+    fork = source._fork()
+
+    fork.group["fork_only_grp_rebuild1408"] = 1
+    fork.context["fork_only_ctx_rebuild1408"] = 2
+
+    assert source.group == SOURCE_GROUP
+    assert source.context == SOURCE_CONTEXT
+
+
+def test_fork_keeps_the_options_subclass() -> None:
+    class ForkedOptions_rebuild1408(Options):
+        pass
+
+    source = ForkedOptions_rebuild1408(group=dict(SOURCE_GROUP), context=dict(SOURCE_CONTEXT))
+
+    assert type(source._fork()) is ForkedOptions_rebuild1408
+
+
+def test_adopt_takes_over_all_state_in_place() -> None:
+    source = _source_options()
+    target = Options(group={"target_grp_rebuild1408": "t"}, context={"target_ctx_rebuild1408": "t"})
+    target_group, target_context = target.group, target.context
+
+    target._adopt(source)
+
+    assert target.group is target_group
+    assert target.context is target_context
+    assert target.group == source.group
+    assert target.context == source.context
+    assert _carried_state(target) == _carried_state(source)
+
+
+def test_every_non_dict_attribute_is_immutable_so_forks_may_share_it() -> None:
+    carried = _carried_state(Options())
+
+    assert all(isinstance(value, (frozenset, bool)) for value in carried.values()), carried

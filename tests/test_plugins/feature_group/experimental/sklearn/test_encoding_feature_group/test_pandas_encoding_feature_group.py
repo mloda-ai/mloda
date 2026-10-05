@@ -223,6 +223,15 @@ class TestPandasEncodingFeatureGroup:
         assert "category__onehot_encoded~0" not in updated_data.columns
         assert "category__onehot_encoded~2" not in updated_data.columns
 
+    def test_add_result_to_data_rejects_trailing_newline_in_column_request(self) -> None:
+        """A requested name with a trailing newline is not a ~N specific-column request."""
+        data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
+        result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded~1\n", result)
+
+        assert "category__onehot_encoded~1\n" not in updated_data.columns
+
     def test_add_result_to_data_column_index_out_of_range(self) -> None:
         """Test that requesting a column index out of range raises ValueError."""
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})

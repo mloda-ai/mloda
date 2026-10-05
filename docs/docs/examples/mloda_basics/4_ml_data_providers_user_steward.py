@@ -91,7 +91,7 @@ def _():
     mloda.run_all(
         all_features,
         data_access_collection=data_access_collection,
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         plugin_collector=PluginCollector.disabled_feature_groups({ReadDocumentFeature}),
     )
     return (
@@ -237,7 +237,7 @@ def _(
     result = mloda.run_all(
         order_features,
         data_access_collection=data_access_collection,
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature2}),
     )
     return
@@ -325,7 +325,7 @@ def _(mo):
         def __init__(
             self,
             requested_features: Features | list[Feature | str],
-            compute_frameworks: set[type[ComputeFramework]] | list[str] | None = None,
+            compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
             links: set[Link] | None = None,
             data_access_collection: DataAccessCollection | None = None,
             global_filter: GlobalFilter | None = None,

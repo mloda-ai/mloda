@@ -6,18 +6,47 @@ and instrument's timing/status bookkeeping around a wrapped call.
 
 import contextlib
 import functools
+import threading
 import time
 from collections.abc import Callable, Generator
 from contextvars import ContextVar
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import FrozenInstanceError, dataclass
+from typing import TYPE_CHECKING, Any
 
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+    from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
 OutputSchema = tuple[tuple[str, str | None], ...]
+
+_WRITABLE_FIELDS = frozenset({"rows_out", "output_schema", "duration_seconds", "status"})
+
+_gate_scopes = 0
+_gate_scopes_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def input_data_load_gate_scope() -> Generator[None, None, None]:
+    """Count one active INPUT_DATA_LOAD gate calculation process-wide, exception-safe."""
+    global _gate_scopes
+    with _gate_scopes_lock:
+        _gate_scopes += 1
+    try:
+        yield
+    finally:
+        with _gate_scopes_lock:
+            _gate_scopes -= 1
+
+
+def input_data_load_gate_scopes_active() -> int:
+    with _gate_scopes_lock:
+        return _gate_scopes
 
 
 @dataclass(kw_only=True)
@@ -25,19 +54,23 @@ class HookContext:
     """Ambient, per-call context describing an Extender hook invocation."""
 
     hook: ExtenderHook
-    feature_group_class: str
-    feature_group_version: str
+    feature_group_class: str | None
+    feature_group_version: str | None
     plugin_version: str | None = None
     feature_names: tuple[str, ...] = ()
+    specialized_from: tuple[str, ...] = ()
     input_features: frozenset[str] | None = None
-    compute_framework_name: str
+    input_feature_edges: dict[str, tuple[str, ...]] | None = None
+    compute_framework_name: str | None
     rows_in: int | None = None
     rows_out: int | None = None
     output_schema: OutputSchema | None = None
     duration_seconds: float | None = None
     status: str | None = None
     run_id: str | None = None
+    plan_id: str | None = None
     data_access_identity: str | None = None
+    data_access_identity_is_fallback: bool | None = None
     tenant_id: str | None = None
     project_id: str | None = None
     principal: str | None = None
@@ -47,14 +80,32 @@ class HookContext:
     data_access_dataset_version: str | None = None
     join_type: str | None = None
     join_keys: tuple[str, ...] | None = None
+    asof_config: "AsOfJoinConfig | None" = None
     plan_feature_count: int | None = None
     plan_node_count: int | None = None
     plan_depth: int | None = None
+    declared_attributes: dict[str, str | int | float | bool] | None = None
+    reader_class: "type[BaseInputData] | None" = None
 
     def __post_init__(self) -> None:
-        # Copy on ingest so a hook mutating the carrier never reaches the caller's dict.
+        if self.declared_attributes is not None:
+            self.declared_attributes = _frozen_dict(self.declared_attributes)
+        # Copy on ingest so a hook mutating the carrier or input_feature_edges never reaches the caller's dict.
         if self.carrier is not None:
-            self.carrier = dict(self.carrier)
+            self.carrier = _frozen_dict(self.carrier)
+        if self.input_feature_edges is not None:
+            self.input_feature_edges = _frozen_dict(self.input_feature_edges)
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if self.__dict__.get("_sealed") and name not in _WRITABLE_FIELDS:
+            raise FrozenInstanceError(f"cannot assign to field {name!r}")
+        object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if self.__dict__.get("_sealed"):
+            raise FrozenInstanceError(f"cannot delete field {name!r}")
+        object.__delattr__(self, name)
 
     @staticmethod
     def row_count(data: Any) -> int | None:
@@ -92,6 +143,11 @@ class HookContext:
 
 def _no_schema(data: Any) -> OutputSchema | None:
     """output_schema stand-in for hooks whose return value carries no schema semantics."""
+    return None
+
+
+def _no_rows(data: Any) -> int | None:
+    """row_count stand-in for hooks whose return value carries no row semantics."""
     return None
 
 

@@ -39,17 +39,32 @@ class TestPandasNodeCentralityFeatureGroup:
         with pytest.raises(ValueError):
             PandasNodeCentralityFeatureGroup._check_source_features_exist(sample_data, ["invalid_feature"])
 
-    def test_add_result_to_data(self, sample_data: pd.DataFrame) -> None:
-        """Test the _add_result_to_data method."""
-        # Create a result Series
-        nodes = pd.Series([0.5, 0.3, 0.2, 0.1, 0.0], index=["A", "B", "C", "D", "E"])
+    @pytest.mark.parametrize(
+        "name, mapped_column",
+        [
+            ("a__degree_centrality", "a"),
+            ("a__b", "source"),
+            ("centrality_result", "source"),
+            ("x__a__degree_centrality", "x__a"),
+        ],
+    )
+    def test_add_result_to_data_maps_through_column_only_for_prefix_pattern(
+        self, name: str, mapped_column: str
+    ) -> None:
+        """Only names matching PREFIX_PATTERN map through the column before the last separator."""
+        data = pd.DataFrame(
+            {
+                "source": ["A", "B", "C", "D"],
+                "target": ["B", "C", "D", "E"],
+                "a": ["B", "C", "D", "E"],
+                "x__a": ["C", "D", "E", "A"],
+            }
+        )
+        scores = pd.Series([0.5, 0.3, 0.2, 0.1, 0.0], index=["A", "B", "C", "D", "E"])
 
-        # Add the result to the data
-        updated_data = PandasNodeCentralityFeatureGroup._add_result_to_data(sample_data, "centrality_result", nodes)
+        updated = PandasNodeCentralityFeatureGroup._add_result_to_data(data.copy(), name, scores)
 
-        # Check that the result was added
-        assert "centrality_result" in updated_data.columns
-        assert len(updated_data["centrality_result"]) == len(sample_data)
+        assert updated[name].tolist() == data[mapped_column].map(scores).tolist()
 
     def test_create_adjacency_matrix(self, sample_data: pd.DataFrame) -> None:
         """Test the _create_adjacency_matrix method."""

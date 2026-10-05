@@ -1,9 +1,9 @@
-"""Regression coverage for add_tfs: a deduped TransformFrameworkStep must still wire its uuid
-into every consuming step, not just the one that first created it (Scenario A), and that two
-same-shaped hops from genuinely different parents must not dedup into one (Scenario B).
+"""Regression coverage for add_tfs: each JoinStep of one link owns its own hop, keyed by the join
+token (Scenario A), and two same-shaped hops from genuinely different parents must not dedup
+into one (Scenario B).
 """
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from uuid import UUID, uuid4
 
 import pytest
@@ -18,6 +18,7 @@ from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
+from mloda.user import DataType
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import JoinSpec
@@ -73,7 +74,7 @@ def _feature(name: str, cfw: type[ComputeFramework]) -> Feature:
 # ---------------------------------------------------------------------------
 
 
-class JoinStepDedupScenario(NamedTuple):
+class JoinStepsOfOneLink(NamedTuple):
     js1: JoinStep
     js2: JoinStep
     graph: Graph
@@ -90,31 +91,28 @@ def _join_step(link: Link, source_framework_uuid: UUID, destination_framework_uu
     )
 
 
-def _join_step_dedup_scenario() -> JoinStepDedupScenario:
+def _two_join_steps_of_one_link() -> JoinStepsOfOneLink:
     """Two JoinSteps over the same link, frameworks, and orientation, so ``fill_tfs_by_joinstep``
-    builds two equal ``TransformFrameworkStep``s. Each carries its own distinct, non-empty
+    would build two equal hops, but each join owns its own. Each carries its own distinct, non-empty
     source/destination framework uuids, as real JoinSteps do."""
     link = Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id"))
     js1 = _join_step(link, uuid4(), uuid4())
     js2 = _join_step(link, uuid4(), uuid4())
-    return JoinStepDedupScenario(js1, js2, Graph())
+    return JoinStepsOfOneLink(js1, js2, Graph())
 
 
-def test_both_joinsteps_of_a_deduped_hop_depend_on_the_surviving_transform_step() -> None:
-    scenario = _join_step_dedup_scenario()
+def test_each_joinstep_of_one_link_owns_its_own_transform_hop() -> None:
+    scenario = _two_join_steps_of_one_link()
 
     new_plan = ExecutionPlan().add_tfs([scenario.js1, scenario.js2], scenario.graph)
 
     tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
-    assert len(tfs_steps) == 1, f"expected the two equal hops to dedup into one, got: {tfs_steps}"
-    tfs_uuid = tfs_steps[0].uuid
+    assert len(tfs_steps) == 2, f"expected one hop per join, got: {tfs_steps}"
 
-    assert tfs_uuid in scenario.js1.required_uuids
-    assert tfs_uuid in scenario.js2.required_uuids
-
-    # Pins current dedup behavior: the survivor is js1's hop verbatim (first-inserted wins),
-    # not a blend of both JoinSteps' source_framework_uuids.
-    assert tfs_steps[0].source_framework_uuid == next(iter(scenario.js1.source_framework_uuids))
+    for join_step in (scenario.js1, scenario.js2):
+        hop = next(step for step in tfs_steps if step.link_id == join_step.uuid)
+        assert join_step.required_uuids == {hop.uuid}
+        assert hop.source_framework_uuid == next(iter(join_step.source_framework_uuids))
 
 
 # ---------------------------------------------------------------------------
@@ -237,31 +235,158 @@ def test_two_feature_group_steps_with_different_parents_get_separate_transform_h
 # ---------------------------------------------------------------------------
 
 
-def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
-    """One FeatureGroup class commonly splits into multiple steps by (framework, options,
-    dependency level); two such steps feeding one consumer share one conceptual source and
-    must not be mistaken for the missing-Link case."""
+def _split_root_steps_scenario(
+    name_a: str,
+    name_b: str,
+    *,
+    data_type_a: DataType | None = None,
+    data_type_b: DataType | None = None,
+    options_a: dict[str, Any] | Options | None = None,
+    options_b: dict[str, Any] | Options | None = None,
+    separate_consumers: bool = False,
+    extra_name: str | None = None,
+    source_b: type[FeatureGroup] = DedupUpstreamFG,
+) -> tuple[list[FeatureGroupStep], FeatureGroupStep, Graph]:
+    """Root steps of one class feeding one consumer step, each providing the given feature name.
+
+    With ``separate_consumers`` each of the two parents is read by its own consumer feature in the
+    dest step; ``extra_name`` adds a third parent, read by the first consumer feature; ``source_b`` is the
+    feature group class of the second parent."""
     graph = Graph()
 
-    parent_a = _feature("dedup_shared_a", PyArrowTable)
-    parent_b = _feature("dedup_shared_b", PyArrowTable)
-    _root_node(graph, parent_a, DedupUpstreamFG)
-    _root_node(graph, parent_b, DedupUpstreamFG)
+    parent_a = Feature(name_a, options=options_a, data_type=data_type_a)
+    parent_a.compute_frameworks = {PyArrowTable}
+    parent_b = Feature(name_b, options=options_b, data_type=data_type_b)
+    parent_b.compute_frameworks = {PyArrowTable}
+    parents = [parent_a, parent_b]
+    if extra_name is not None:
+        parents.append(_feature(extra_name, PyArrowTable))
 
-    producer_a = _producer_step(DedupUpstreamFG, parent_a, PyArrowTable)
-    producer_b = _producer_step(DedupUpstreamFG, parent_b, PyArrowTable)
+    producers = []
+    for parent in parents:
+        source = source_b if parent is parent_b else DedupUpstreamFG
+        _root_node(graph, parent, source)
+        producers.append(_producer_step(source, parent, PyArrowTable))
 
     dest_feature = _feature("dedup_dest_multi", PandasDataFrame)
     feature_set = FeatureSet()
     feature_set.add(dest_feature)
-    graph.parent_to_children_mapping[dest_feature.uuid] = {parent_a.uuid, parent_b.uuid}
+    if separate_consumers:
+        other_dest_feature = _feature("dedup_dest_multi_other", PandasDataFrame)
+        feature_set.add(other_dest_feature)
+        graph.parent_to_children_mapping[dest_feature.uuid] = {
+            parent.uuid for parent in parents if parent is not parent_b
+        }
+        graph.parent_to_children_mapping[other_dest_feature.uuid] = {parent_b.uuid}
+    else:
+        graph.parent_to_children_mapping[dest_feature.uuid] = {parent.uuid for parent in parents}
     dest_step = FeatureGroupStep(DedupDestFG, feature_set, set(), PandasDataFrame)
 
-    new_plan = ExecutionPlan().add_tfs([producer_a, producer_b, dest_step], graph)
+    return producers, dest_step, graph
+
+
+def _forwarded_context(value: str) -> Options:
+    options = Options(context={"fwd_key": value})
+    options.inherited_context_keys = frozenset({"fwd_key"})
+    return options
+
+
+class _SameNameCase(NamedTuple):
+    kwargs: dict[str, Any]
+    fragments: list[str]
+
+
+_SAME_NAME_RAISE_CASES = {
+    "option_differs": _SameNameCase({"options_a": {"unit": "x"}}, ["unit"]),
+    "data_type_differs": _SameNameCase(
+        {"data_type_a": DataType.INT32, "data_type_b": DataType.INT64}, ["INT32", "INT64"]
+    ),
+    "forwarded_context_differs": _SameNameCase(
+        {"options_a": _forwarded_context("x"), "options_b": _forwarded_context("y")}, ["fwd_key"]
+    ),
+    "conflict_plus_different_name_split": _SameNameCase(
+        {"options_a": {"unit": "x"}, "extra_name": "dedup_shared_other"}, ["unit"]
+    ),
+    "separate_consumers_option_differs": _SameNameCase(
+        {"options_a": {"unit": "x"}, "separate_consumers": True}, ["unit"]
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(_SAME_NAME_RAISE_CASES.values()), ids=list(_SAME_NAME_RAISE_CASES))
+def test_one_consumer_reading_one_name_in_two_unlinked_variants_raises(case: _SameNameCase) -> None:
+    """A single consumer feature reading the same name from two unlinked same-class steps with differing
+    data type or group options would silently use one variant for both, so planning must reject it."""
+    producers, dest_step, graph = _split_root_steps_scenario("dedup_shared", "dedup_shared", **case.kwargs)
+
+    with pytest.raises(ValueError) as exc_info:
+        ExecutionPlan().add_tfs([*producers, dest_step], graph)
+
+    message = str(exc_info.value)
+    for fragment in ["DedupDestFG", "DedupUpstreamFG", "dedup_shared", *case.fragments]:
+        assert fragment in message
+    assert "Link.inner" not in message
+    assert "missing Links" not in message
+
+
+def test_one_consumer_reading_one_name_from_two_different_classes_raises_missing_links() -> None:
+    """Differently-classed sources are a missing Link, not the same-name variant conflict."""
+    producers, dest_step, graph = _split_root_steps_scenario(
+        "dedup_shared", "dedup_shared", options_a={"unit": "x"}, source_b=DedupLeftFG
+    )
+
+    with pytest.raises(ValueError, match="unlinked sources \\(missing Links\\)") as exc_info:
+        ExecutionPlan().add_tfs([*producers, dest_step], graph)
+
+    assert "differ in" not in str(exc_info.value)
+
+
+def test_two_hops_from_the_same_feature_group_class_do_not_raise() -> None:
+    """Two root steps of one class that provide the same feature name feed one consumer: either
+    step supplies every needed column, so this must not be mistaken for the missing-Link case."""
+    producers, dest_step, graph = _split_root_steps_scenario("dedup_shared", "dedup_shared")
+
+    new_plan = ExecutionPlan().add_tfs([*producers, dest_step], graph)
 
     tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
     assert len(tfs_steps) == 2, f"expected two distinct hops (different producer instances), got: {tfs_steps}"
     assert dest_step.tfs_ids == {step.uuid for step in tfs_steps}
+
+
+def test_two_non_root_steps_of_one_class_over_one_shared_root_step_do_not_raise() -> None:
+    """Split non-root steps (different names) that descend from one shared root step stay linked."""
+    graph = Graph()
+
+    root = _feature("dedup_shared_root", PyArrowTable)
+    _root_node(graph, root, DedupLeftFG)
+    producer_root = _producer_step(DedupLeftFG, root, PyArrowTable)
+
+    mid_a = _feature("dedup_mid_a", PyArrowTable)
+    mid_b = _feature("dedup_mid_b", PyArrowTable)
+    graph.add_node(mid_a.uuid, NodeProperties(mid_a, DedupUpstreamFG))
+    graph.add_node(mid_b.uuid, NodeProperties(mid_b, DedupUpstreamFG))
+    graph.parent_to_children_mapping[mid_a.uuid] = {root.uuid}
+    graph.parent_to_children_mapping[mid_b.uuid] = {root.uuid}
+    producer_a = _producer_step(DedupUpstreamFG, mid_a, PyArrowTable)
+    producer_b = _producer_step(DedupUpstreamFG, mid_b, PyArrowTable)
+
+    dest_feature = _feature("dedup_dest_non_root", PyArrowTable)
+    feature_set = FeatureSet()
+    feature_set.add(dest_feature)
+    graph.parent_to_children_mapping[dest_feature.uuid] = {mid_a.uuid, mid_b.uuid}
+    dest_step = FeatureGroupStep(DedupDestFG, feature_set, set(), PyArrowTable)
+
+    ExecutionPlan().add_tfs([producer_root, producer_a, producer_b, dest_step], graph)
+
+
+def test_two_root_steps_of_one_class_providing_different_names_raise_missing_links() -> None:
+    """Only one of the split steps is ever bound, so a consumer reading a different name from each loses a column."""
+    producers, dest_step, graph = _split_root_steps_scenario("dedup_shared_a", "dedup_shared_b")
+
+    with pytest.raises(ValueError, match="unlinked sources \\(missing Links\\)") as exc_info:
+        ExecutionPlan().add_tfs([*producers, dest_step], graph)
+
+    assert "DedupUpstreamFG" in str(exc_info.value)
 
 
 def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
@@ -283,14 +408,14 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     )
 
     graph = Graph()
-    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is False
-    assert ExecutionPlan._parents_linked_by_join(dest, src, {join_step}, graph) is True
+    _assert_linked_both_orders(a, b, join_step, graph, expected=False)
+    _assert_linked_both_orders(dest, src, join_step, graph, expected=True)
 
     # (a) A derived feature's own ancestor is a genuine join side (src); widening must bridge it
     # to the join's other genuine side (dest) through that ancestor, not just through its own uuid.
     derived = uuid4()
     graph.parent_to_children_mapping[derived] = {src}
-    assert ExecutionPlan._parents_linked_by_join(derived, dest, {join_step}, graph) is True
+    _assert_linked_both_orders(derived, dest, join_step, graph, expected=True)
 
     # (b) Both sides have a populated, but genuinely unrelated, ancestor set: widening must not
     # over-widen a link out of thin air.
@@ -298,7 +423,76 @@ def test_parents_linked_by_join_requires_genuine_opposite_sides() -> None:
     unrelated_b, unrelated_b_ancestor = uuid4(), uuid4()
     graph.parent_to_children_mapping[unrelated_a] = {unrelated_a_ancestor}
     graph.parent_to_children_mapping[unrelated_b] = {unrelated_b_ancestor}
-    assert ExecutionPlan._parents_linked_by_join(unrelated_a, unrelated_b, {join_step}, graph) is False
+    _assert_linked_both_orders(unrelated_a, unrelated_b, join_step, graph, expected=False)
+
+
+def _assert_linked_both_orders(a: UUID, b: UUID, join_step: JoinStep, graph: Graph, expected: bool) -> None:
+    assert ExecutionPlan._parents_linked_by_join(a, b, {join_step}, graph) is expected
+    assert ExecutionPlan._parents_linked_by_join(b, a, {join_step}, graph) is expected
+
+
+def _framework_graph(*nodes: tuple[UUID, str, type[ComputeFramework]]) -> Graph:
+    graph = Graph()
+    for uuid, name, cfw in nodes:
+        graph.add_node(uuid, NodeProperties(_feature(name, cfw), DedupUpstreamFG))
+    return graph
+
+
+def _pandas_join(dest: UUID, src: UUID) -> JoinStep:
+    return JoinStep(
+        link=Link.inner(JoinSpec(DedupLeftFG, "id"), JoinSpec(DedupRightFG, "id")),
+        destination_framework=PandasDataFrame,
+        source_framework=PandasDataFrame,
+        required_uuids={dest, src},
+        destination_framework_uuids={dest},
+        source_framework_uuids={src},
+    )
+
+
+def test_parent_reaching_a_join_side_only_through_a_framework_hop_is_not_linked() -> None:
+    """A hop reads its parent into a new frame, so lineage behind it is not join-bridged."""
+    dest, src, hop, same_frame = uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "fh_dest", PandasDataFrame),
+        (src, "fh_src", PandasDataFrame),
+        (hop, "fh_hop", PyArrowTable),
+        (same_frame, "fh_same", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[hop] = {src}
+    graph.parent_to_children_mapping[same_frame] = {dest}
+
+    _assert_linked_both_orders(hop, same_frame, _pandas_join(dest, src), graph, expected=False)
+
+
+def test_parents_sharing_an_ancestor_without_a_join_path_are_not_linked() -> None:
+    """Sharing an ancestor is not a join bridge."""
+    dest, src, shared, a, b = uuid4(), uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "so_dest", PandasDataFrame),
+        (src, "so_src", PandasDataFrame),
+        (shared, "so_shared", PandasDataFrame),
+        (a, "so_a", PandasDataFrame),
+        (b, "so_b", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[a] = {shared}
+    graph.parent_to_children_mapping[b] = {shared}
+
+    _assert_linked_both_orders(a, b, _pandas_join(dest, src), graph, expected=False)
+
+
+def test_linked_answer_does_not_depend_on_which_side_already_holds_a_join_side() -> None:
+    """One lineage holds both join sides, the other only one: the join between them still links both ways."""
+    dest, src, both, only_src = uuid4(), uuid4(), uuid4(), uuid4()
+    graph = _framework_graph(
+        (dest, "as_dest", PandasDataFrame),
+        (src, "as_src", PandasDataFrame),
+        (both, "as_both", PandasDataFrame),
+        (only_src, "as_only_src", PandasDataFrame),
+    )
+    graph.parent_to_children_mapping[both] = {dest, src}
+    graph.parent_to_children_mapping[only_src] = {src}
+
+    _assert_linked_both_orders(both, only_src, _pandas_join(dest, src), graph, expected=True)
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +674,7 @@ def test_join_served_parent_linked_to_only_one_hop_still_raises() -> None:
     not merely be present, for the missing-Links check to stand down."""
     scenario = _bridge_scenario(bridged=False)
 
-    with pytest.raises(ValueError, match="two different, unlinked source feature"):
+    with pytest.raises(ValueError, match="depends on parents from .* unlinked sources \\(missing Links\\)"):
         ExecutionPlan().add_tfs(
             [scenario.producer_x, scenario.producer_y, scenario.join_step, scenario.dest_step], scenario.graph
         )
@@ -565,7 +759,7 @@ def test_join_served_sibling_parent_does_not_bridge_two_unrelated_declared_side_
     unrelated sibling subclass's hop into its group; the two hops share no genuine Link."""
     scenario = _sibling_bridge_scenario()
 
-    with pytest.raises(ValueError, match="two different, unlinked source feature"):
+    with pytest.raises(ValueError, match="depends on parents from .* unlinked sources \\(missing Links\\)"):
         ExecutionPlan().add_tfs(
             [scenario.producer_s1, scenario.producer_s2, scenario.join_step, scenario.consumer_step],
             scenario.graph,

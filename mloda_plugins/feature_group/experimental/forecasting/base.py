@@ -5,12 +5,12 @@ Base implementation for forecasting feature groups.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from mloda.provider import FeatureGroup
 from mloda.provider import BaseArtifact
 from mloda.user import Feature
-from mloda.provider import CHAIN_SEPARATOR, FeatureChainParser, FeatureChainParserMixin, FeatureSet
+from mloda.provider import FeatureChainParser, FeatureChainParserMixin, FeatureSet
 from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -23,6 +23,10 @@ from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeRe
 def _is_bool(value: Any) -> bool:
     """Accept only a real bool, so 1 or "true" is rejected rather than silently coerced."""
     return isinstance(value, bool)
+
+
+# Selector tail of PREFIX_PATTERN: excludes the reserved names lower/upper and `_`.
+_SELECTOR_TAIL = r"(?!(?:lower|upper)\Z)[^~_\n]+"
 
 
 class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
@@ -80,6 +84,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     Currently none for ForecastingFeatureGroup. Parameters that affect Feature Group
     resolution/splitting would be placed here.
 
+    Multi-column (`~`) sources produce one forecast per column as `name~<suffix>` (bounds as
+    `name~<suffix>~lower/~upper`), with one model per column. Request `name~<suffix>` for a
+    single column; a forecast chained on `name` skips the bounds.
+
     ## Supported Forecasting Algorithms
 
     - `linear`: Linear regression
@@ -124,7 +132,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = r".*__([\w]+)_forecast_(\d+)([\w]+)$"
+    PREFIX_PATTERN = rf".*__(?P<algorithm>[\w]+)_forecast_(?P<horizon>\d+)(?P<time_unit>[\w]+)(?:~{_SELECTOR_TAIL})?$"
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -146,14 +154,12 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             context=True,
             strict_validation=True,
             element_validator=is_positive_int,
-            deferred_binding=True,  # parsed from the name by this group, not a framework-bound capture (#769)
         ),
         TIME_UNIT: PropertySpec(
             "Time unit of the forecast horizon",
             allowed_values=TimeReferenceMixin.TIME_UNITS,
             context=True,
             strict_validation=True,
-            deferred_binding=True,
         ),
         DefaultOptionKeys.in_features: PropertySpec(
             "Source feature to generate forecasts for",
@@ -185,26 +191,9 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         return ForecastingArtifact
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        """Extract source feature and time filter feature from either configuration-based options or string parsing."""
-
-        source_feature: str | None = None
-
-        # Try string-based parsing first
-        _, source_feature = FeatureChainParser.parse_feature_name(feature_name, [self.PREFIX_PATTERN])
-        if source_feature is not None:
-            time_filter_feature = Feature(self.get_reference_time_column(options))
-            return {Feature(source_feature), time_filter_feature}
-
-        # Fall back to configuration-based approach
-        source_features = options.get_in_features()
-        if len(source_features) != 1:
-            raise ValueError(
-                f"Expected exactly one source feature, but found {len(source_features)}: {source_features}"
-            )
-
-        source_feature_obj = next(iter(source_features))
-        time_filter_feature = Feature(self.get_reference_time_column(options))
-        return {source_feature_obj, time_filter_feature}
+        """Source features from the shared resolution plus the reference-time feature."""
+        source_features = super().input_features(options, feature_name) or set()
+        return source_features | {Feature(self.get_reference_time_column(options))}
 
     @classmethod
     def parse_forecast_suffix(cls, feature_name: str) -> tuple[str, int, str]:
@@ -220,35 +209,17 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         Raises:
             ValueError: If the suffix doesn't match the expected pattern
         """
-        # Extract the suffix part (everything after the double underscore)
-        suffix_start = feature_name.find(CHAIN_SEPARATOR)
-        if suffix_start == -1:
-            raise ValueError(
-                f"Invalid forecast feature name format: {feature_name}. Missing double underscore separator."
-            )
-
-        suffix = feature_name[suffix_start + 2 :]
-
-        # Parse the suffix components
-        parts = suffix.split("_")
-        if len(parts) < 3 or parts[1] != "forecast":
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             raise ValueError(
                 f"Invalid forecast feature name format: {feature_name}. "
                 f"Expected format: {{in_features}}__{{algorithm}}_forecast_{{horizon}}{{time_unit}}"
             )
 
-        algorithm = parts[0]
-        horizon_time = parts[2]
-
-        # Find where the digits end and the time unit begins
-        for i, char in enumerate(horizon_time):
-            if not char.isdigit():
-                break
-        else:
-            raise ValueError(f"Invalid horizon format: {horizon_time}. Must include time unit.")
-
-        horizon_str = horizon_time[:i]
-        time_unit = horizon_time[i:]
+        captures = cast(dict[str, str], parsed.named_captures)
+        algorithm = captures[cls.ALGORITHM]
+        horizon_str = captures[cls.HORIZON]
+        time_unit = captures[cls.TIME_UNIT]
 
         # Validate algorithm
         if algorithm not in cls.FORECASTING_ALGORITHMS:
@@ -262,31 +233,11 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             raise ValueError(f"Unsupported time unit: {time_unit}. Supported units: {', '.join(cls.TIME_UNITS.keys())}")
 
         # Convert horizon to integer
-        if not horizon_str.isdigit() or int(horizon_str) <= 0:
+        if int(horizon_str) <= 0:
             raise ValueError(f"Invalid horizon: {horizon_str}. Must be a positive integer.")
         horizon = int(horizon_str)
 
         return algorithm, horizon, time_unit
-
-    @classmethod
-    def _validate_string_match(cls, feature_name: str, _operation_config: str, _source_feature: str) -> bool:
-        """
-        Validate that a string-based feature name has valid forecasting components.
-
-        Validates algorithm, horizon, and time_unit using parse_forecast_suffix().
-
-        Args:
-            feature_name: The full feature name to validate
-            _operation_config: The operation config extracted by the regex (unused)
-            _source_feature: The source feature extracted by the regex (unused)
-
-        Returns:
-            True if valid, False otherwise
-        """
-        if FeatureChainParser.is_chained_feature(feature_name):
-            if not cls._has_valid_forecast_suffix(feature_name):
-                return False
-        return True
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -325,11 +276,15 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         for feature in features.get_sorted_features():
             algorithm, horizon, time_unit, in_features = cls._extract_forecasting_parameters(feature)
 
-            # Resolve multi-column features automatically
-            # If in_features is "onehot_encoded__product", this discovers
-            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
+            # A "~" source such as "product__onehot_encoded" expands to ["...~0", "...~1", ...]
             available_columns = cls._get_available_columns(original_data)
             resolved_columns = cls.resolve_multi_column_feature(in_features, available_columns)
+            # Chaining skips bound columns such as "~0~lower" or "~0~upper"
+            resolved_columns = [
+                c
+                for c in resolved_columns
+                if c == in_features or not c.removeprefix(f"{in_features}~").endswith(("~lower", "~upper"))
+            ]
 
             # Check that resolved columns exist
             cls._check_source_features_exist(original_data, resolved_columns)
@@ -341,54 +296,106 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
                 if model_artifact is None:
                     raise ValueError("No artifact to load although it was requested.")
 
-            # Check if we should output confidence intervals
             output_confidence_intervals = feature.options.get(cls.OUTPUT_CONFIDENCE_INTERVALS)
 
-            # Perform forecasting using the original clean data
-            if output_confidence_intervals:
-                # Get forecast, lower bound, and upper bound
-                result, lower_bound, upper_bound, updated_artifact = cls._perform_forecasting_with_confidence(
-                    original_data,
-                    algorithm,
-                    horizon,
-                    time_unit,
-                    resolved_columns,
-                    reference_time_column,
-                    model_artifact,
-                )
+            # Suffix per resolved column: None for the literal source, else the part after "<in_features>~"
+            expanded_prefix = f"{in_features}~"
+            suffixes: list[str | None] = [
+                None if column == in_features else column.removeprefix(expanded_prefix) for column in resolved_columns
+            ]
+            selector = cls._extract_selector(feature.name)
+            if selector is not None:
+                if all(suffix is None for suffix in suffixes):
+                    raise ValueError(f"Source '{in_features}' is a single column and takes no selector '~{selector}'.")
+                if selector not in suffixes:
+                    available = sorted(str(s) for s in suffixes if s is not None)
+                    raise ValueError(
+                        f"Unknown selector '~{selector}' for source '{in_features}'. Available suffixes: {available}"
+                    )
+                resolved_columns = [f"{in_features}~{selector}"]
+                suffixes = [None]
+            expanded = any(suffix is not None for suffix in suffixes)
+            column_artifacts = cls._column_artifacts(model_artifact, suffixes, expanded, selector)
 
-                # Save the updated artifact if needed
-                if features.artifact_to_save is not None and updated_artifact and features.artifact_to_load is None:
-                    features.save_artifact = updated_artifact
+            new_artifacts: dict[str, Any] = {}
+            for column, suffix in zip(resolved_columns, suffixes):
+                output_name = feature.name if suffix is None else f"{feature.name}~{suffix}"
+                column_artifact = column_artifacts.get(suffix) if column_artifacts is not None else None
 
-                # Store the results for later addition (main forecast + confidence bounds)
-                results.append((feature.name, result))
-                results.append((f"{feature.name}~lower", lower_bound))
-                results.append((f"{feature.name}~upper", upper_bound))
-            else:
-                # Original behavior: only output point forecast
-                result, updated_artifact = cls._perform_forecasting(
-                    original_data,
-                    algorithm,
-                    horizon,
-                    time_unit,
-                    resolved_columns,
-                    reference_time_column,
-                    model_artifact,
-                )
+                if output_confidence_intervals:
+                    result, lower_bound, upper_bound, updated_artifact = cls._perform_forecasting_with_confidence(
+                        original_data,
+                        algorithm,
+                        horizon,
+                        time_unit,
+                        column,
+                        reference_time_column,
+                        column_artifact,
+                    )
+                    results.append((output_name, result))
+                    results.append((f"{output_name}~lower", lower_bound))
+                    results.append((f"{output_name}~upper", upper_bound))
+                else:
+                    result, updated_artifact = cls._perform_forecasting(
+                        original_data,
+                        algorithm,
+                        horizon,
+                        time_unit,
+                        column,
+                        reference_time_column,
+                        column_artifact,
+                    )
+                    results.append((output_name, result))
 
-                # Save the updated artifact if needed
-                if features.artifact_to_save is not None and updated_artifact and features.artifact_to_load is None:
-                    features.save_artifact = updated_artifact
+                if updated_artifact:
+                    new_artifacts["" if suffix is None else suffix] = updated_artifact
 
-                # Store the result for later addition
-                results.append((feature.name, result))
+            owns_artifact = features.artifact_to_save == feature.name
+            if owns_artifact and new_artifacts and features.artifact_to_load is None:
+                features.save_artifact = {"columns": new_artifacts} if expanded else new_artifacts[""]
 
         # Add all results to the data at once
         for feature_name, result in results:
             data = cls._add_result_to_data(data, feature_name, result)
 
         return data
+
+    @classmethod
+    def _extract_selector(cls, feature_name: str) -> str | None:
+        """Return the trailing `~<selector>` of a string-based forecast name, else None."""
+        if not cls._has_valid_forecast_suffix(feature_name):
+            return None
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        return cast(str, parsed.operation_part).partition("~")[2] or None
+
+    @classmethod
+    def _column_artifacts(
+        cls, model_artifact: Any | None, suffixes: list[str | None], expanded: bool, selector: str | None = None
+    ) -> dict[str | None, Any] | None:
+        """Split a loaded artifact per column suffix, raising ValueError when its shape does not match the source."""
+        if model_artifact is None:
+            return None
+        nested = "columns" in model_artifact
+        if selector is not None and nested:
+            if selector not in model_artifact["columns"]:
+                raise ValueError(
+                    f"The loaded artifact has no model for selector '~{selector}'. "
+                    f"Artifact columns: {sorted(model_artifact['columns'])}"
+                )
+            return {None: model_artifact["columns"][selector]}
+        if not expanded:
+            if nested:
+                raise ValueError("The loaded artifact holds per-column models but the source is a single column.")
+            return {None: model_artifact}
+        if not nested:
+            raise ValueError("The loaded artifact is for a single column but the source expands to multiple columns.")
+        columns: dict[str, Any] = model_artifact["columns"]
+        if set(columns) != {suffix for suffix in suffixes if suffix is not None}:
+            raise ValueError(
+                f"The loaded artifact columns {sorted(columns)} do not match the source columns "
+                f"{sorted(str(suffix) for suffix in suffixes)}."
+            )
+        return {suffix: artifact for suffix, artifact in columns.items()}
 
     @classmethod
     def _extract_forecasting_parameters(cls, feature: Feature) -> tuple[str, int, str, str]:
@@ -414,40 +421,22 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     @classmethod
     def _has_valid_forecast_suffix(cls, feature_name: str) -> bool:
         """Check if feature_name has a suffix matching the forecast pattern."""
-        suffix_start = feature_name.find(CHAIN_SEPARATOR)
-        if suffix_start == -1:
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if not parsed.matched:
             return False
-        suffix = feature_name[suffix_start + 2 :]
-        parts = suffix.split("_")
-        if len(parts) < 3 or parts[1] != "forecast":
+        captures = cast(dict[str, str], parsed.named_captures)
+        if captures[cls.ALGORITHM] not in cls.FORECASTING_ALGORITHMS:
             return False
-        if parts[0] not in cls.FORECASTING_ALGORITHMS:
+        if captures[cls.TIME_UNIT] not in cls.TIME_UNITS:
             return False
-        horizon_time = parts[2]
-        # Find where digits end and time unit begins
-        digit_end = 0
-        for i, char in enumerate(horizon_time):
-            if not char.isdigit():
-                digit_end = i
-                break
-        else:
-            return False
-        if digit_end == 0:
-            return False
-        time_unit = horizon_time[digit_end:]
-        if time_unit not in cls.TIME_UNITS:
-            return False
-        horizon_str = horizon_time[:digit_end]
-        if int(horizon_str) <= 0:
-            return False
-        return True
+        return int(captures[cls.HORIZON]) > 0
 
     @classmethod
     def _extract_forecast_params(cls, feature: Feature) -> tuple[str | None, int | None, str | None]:
         """
         Extract forecast-specific parameters (algorithm, horizon, time_unit) from a feature.
 
-        Tries string-based parsing first using parse_forecast_suffix, falls back to configuration-based approach.
+        Each value comes from the feature name when it owns the match, otherwise from options.
 
         Args:
             feature: The feature to extract parameters from
@@ -455,16 +444,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         Returns:
             Tuple of (algorithm, horizon, time_unit), where any value may be None if not found
         """
-        # Try string-based first using parse_forecast_suffix
-        feature_name_str = feature.name
-        if cls._has_valid_forecast_suffix(feature_name_str):
-            algorithm, horizon, time_unit = cls.parse_forecast_suffix(feature_name_str)
-            return algorithm, horizon, time_unit
-        # Fall back to config
-        algorithm = feature.options.get(cls.ALGORITHM)
-        horizon = feature.options.get(cls.HORIZON)
-        time_unit = feature.options.get(cls.TIME_UNIT)
-        if horizon is not None and isinstance(horizon, str):
+        algorithm = cls._resolve_operation(feature, cls.ALGORITHM)
+        horizon: Any = cls._resolve_operation(feature, cls.HORIZON)
+        time_unit = cls._resolve_operation(feature, cls.TIME_UNIT)
+        if horizon is not None:
             horizon = int(horizon)
         return algorithm, horizon, time_unit
 
@@ -506,23 +489,21 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: list[str],
+        source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
     ) -> tuple[Any, Any | None]:
         """
         Method to perform the forecasting. Should be implemented by subclasses.
 
-        Supports both single-column and multi-column forecasting:
-        - Single column: [feature_name] - forecasts a single time series
-        - Multi-column: [feature~0, feature~1, ...] - forecasts multiple time series
+        Forecasts one source column per call; the caller loops over multi-column sources.
 
         Args:
             data: The input data
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            in_features: List of resolved source feature names to forecast
+            source_column: The single source column to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 
@@ -539,21 +520,21 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         algorithm: str,
         horizon: int,
         time_unit: str,
-        in_features: list[str],
+        source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
     ) -> tuple[Any, Any, Any, Any | None]:
         """
         Method to perform forecasting and return point forecast plus confidence intervals.
 
-        Should be implemented by subclasses to provide confidence intervals for forecasts.
+        Forecasts one source column per call.
 
         Args:
             data: The input data
             algorithm: The forecasting algorithm to use
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
-            in_features: List of resolved source feature names to forecast
+            source_column: The single source column to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
 

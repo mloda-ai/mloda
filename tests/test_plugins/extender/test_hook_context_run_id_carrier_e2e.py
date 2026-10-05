@@ -3,6 +3,8 @@ down to HookContext."""
 
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -83,7 +85,7 @@ class _MultiCaptureExtender(Extender):
 
 
 class TestCarrierParameterAcceptedAtEveryEntryPoint:
-    """carrier follows exactly the call path function_extender already takes."""
+    """carrier is accepted at every entry point: run_all/stream_all and session.run()/stream_run()."""
 
     def test_run_all_accepts_carrier_kwarg(self) -> None:
         result = mloda.run_all(
@@ -135,7 +137,7 @@ class TestCarrierParameterAcceptedAtEveryEntryPoint:
 
 
 class TestChildBootstrapParameterAcceptedAtEveryEntryPoint:
-    """child_bootstrap follows exactly the call path function_extender/carrier already take."""
+    """child_bootstrap is accepted at every entry point, like carrier."""
 
     def test_run_all_accepts_child_bootstrap_kwarg(self) -> None:
         result = mloda.run_all(
@@ -198,17 +200,19 @@ class TestRunIdAndCarrierSurfaceOnHookContext:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={extender},
             carrier=_CARRIER,
         )
 
-        assert_valid_uuid7(session.run_id)
         assert extender.captured is not None
-        assert extender.captured.run_id == session.run_id
+        assert extender.captured.run_id is not None
+        assert_valid_uuid7(extender.captured.run_id)
+        assert extender.captured.plan_id == session.plan_id
+        assert extender.captured.run_id != session.plan_id
         assert extender.captured.carrier == _CARRIER
 
 
@@ -223,21 +227,23 @@ class TestCarrierIsCopiedOnIngestNotAliased:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
         )
 
         session.run(
             parallelization_modes={ParallelizationMode.SYNC},
-            function_extender={extender},
             carrier=caller_carrier,
         )
 
         assert extender.captured is not None
         assert extender.captured.carrier == caller_carrier
         assert extender.captured.carrier is not caller_carrier
+        assert extender.captured.carrier is not _CARRIER
 
-        # Mutating the ComputeFramework-owned copy must not leak back into the caller's dict.
+        # The ComputeFramework-owned copy is read-only, and the caller's dict stays untouched.
         assert extender.captured.carrier is not None
-        extender.captured.carrier["mutated"] = "yes"
+        with pytest.raises(TypeError):
+            extender.captured.carrier["mutated"] = "yes"
         assert "mutated" not in caller_carrier
         assert caller_carrier == _CARRIER
 
@@ -255,11 +261,14 @@ class TestTwoFeatureGroupsShareSameRunId:
             compute_frameworks=["PythonDictFramework"],
             plugin_collector=_ENABLED,
             parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
         )
 
-        session.run(parallelization_modes={ParallelizationMode.SYNC}, function_extender={extender})
+        session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert len(extender.captured) == 2
         run_ids = {context.run_id for context in extender.captured}
-        assert run_ids == {session.run_id}
-        assert_valid_uuid7(session.run_id)
+        (run_id,) = run_ids
+        assert run_id is not None
+        assert_valid_uuid7(run_id)
+        assert {context.plan_id for context in extender.captured} == {session.plan_id}

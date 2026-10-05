@@ -16,6 +16,6 @@ def test_installed_packages_feature_group() -> None:
 
 def test_installed_packages_feature_group_mlodaAPI() -> None:
     features: list[Feature | str] = [InstalledPackagesFeatureGroup.get_class_name()]
-    result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
+    result = mloda.run_all(features, compute_frameworks=[PandasDataFrame])
     assert len(result) == 1
     assert InstalledPackagesFeatureGroup.get_class_name() in result[0]

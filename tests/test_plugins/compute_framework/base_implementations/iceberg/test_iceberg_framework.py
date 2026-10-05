@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -32,6 +33,7 @@ try:
     from pyiceberg.catalog import Catalog
     from pyiceberg.schema import Schema
     from pyiceberg.types import (
+        DecimalType,
         DoubleType,
         FloatType,
         IntegerType,
@@ -139,12 +141,65 @@ class TestIcebergFrameworkComputeFramework:
         with pytest.raises(ValueError, match="Expected an Iceberg catalog or table"):
             self.iceberg_framework.set_framework_connection_object("invalid")
 
-    def test_select_data_by_column_names_non_iceberg(self) -> None:
-        """Test that non-Iceberg data passes through unchanged."""
-        data = "not_iceberg_table"
-        feature_names = [FeatureName("column1")]
-        result = self.iceberg_framework.select_data_by_column_names(data, feature_names)
-        assert result is data
+    def test_select_data_by_column_names_pyarrow_table(self) -> None:
+        """A pa.Table is column-selected like PyArrowTable does it."""
+        data = pa.table({"a": [1], "b": [2], "c": [3]})
+        result = self.iceberg_framework.select_data_by_column_names(data, [FeatureName("a")])
+        assert result.column_names == ["a"]
+
+    def test_select_data_by_column_names_iceberg_table(self) -> None:
+        """An Iceberg Table is scanned with selected_fields and materialized in request order."""
+        mock_table = Mock(spec=IcebergTable)
+        mock_schema = Mock()
+        mock_schema.column_names = ["a", "b", "c"]
+        mock_table.schema.return_value = mock_schema
+        mock_scan = Mock()
+        mock_scan.to_arrow.return_value = pa.table({"a": [1], "c": [3]})
+        mock_table.scan.return_value = mock_scan
+
+        result = self.iceberg_framework.select_data_by_column_names(
+            mock_table,
+            [FeatureName("c"), FeatureName("a")],
+            column_ordering="request_order",
+            request_feature_order=["c", "a"],
+        )
+
+        mock_table.scan.assert_called_once()
+        _, kwargs = mock_table.scan.call_args
+        assert set(kwargs["selected_fields"]) == {"a", "c"}
+        assert isinstance(result, pa.Table)
+        assert result.column_names == ["c", "a"]
+
+    def test_select_data_by_column_names_iceberg_table_nested_field(self) -> None:
+        """A nested field path comes back as its own top-level column, named "b.c", in requested order."""
+        mock_table = Mock(spec=IcebergTable)
+        mock_schema = Mock()
+        mock_schema.column_names = ["id", "b.c", "b"]
+        mock_table.schema.return_value = mock_schema
+        mock_scan = Mock()
+        struct_type = pa.struct([("c", pa.int64())])
+        scanned = pa.table(
+            {
+                "id": pa.array([1], type=pa.int64()),
+                "b": pa.array([{"c": 2}], type=struct_type),
+            }
+        )
+        mock_scan.to_arrow.return_value = scanned
+        mock_table.scan.return_value = mock_scan
+
+        result = self.iceberg_framework.select_data_by_column_names(
+            mock_table,
+            [FeatureName("id"), FeatureName("b.c")],
+            column_ordering="request_order",
+        )
+
+        mock_table.scan.assert_called_once()
+        _, kwargs = mock_table.scan.call_args
+        assert set(kwargs["selected_fields"]) == {"id", "b.c"}
+        assert result.column_names == ["id", "b.c"]
+        assert "b" not in result.column_names
+        assert result["b.c"].to_pylist() == [2]
+        assert result["b.c"].type == pa.int64()
 
     def test_set_column_names_iceberg_table(self) -> None:
         """Test setting column names from Iceberg table."""
@@ -288,6 +343,10 @@ class TestIcebergDtypeExtraction(DtypeExtractionTestMixin):
         )
         return TestIcebergDataTypeValidator._wrap_schema(schema)
 
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return TestIcebergDataTypeValidator._wrap_schema(Schema(NestedField(1, "d", DecimalType(10, 2))))
+
 
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
@@ -302,6 +361,11 @@ class TestIcebergDtypeExtractionPyArrow(DtypeExtractionTestMixin, DuplicateColum
     @pytest.fixture
     def dtype_sample_data(self) -> Any:
         return pa.table({"int_col": [1, 2, 3], "str_col": ["a", "b", "c"], "float_col": [1.0, 2.0, 3.0]})
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        values = [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]
+        return pa.table({"d": pa.array(values, type=pa.decimal128(10, 2))})
 
     @pytest.fixture
     def dtype_duplicate_column_data(self) -> Any:
@@ -358,7 +422,7 @@ def test_extract_column_data_type_pyarrow_table_returns_int64() -> None:
 class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
     """Test IcebergFramework schema detection via shared mixin, covering both branches.
 
-    ``IcebergFramework._extract_column_names`` has two branches and the fixtures exercise
+    ``IcebergFramework.extract_column_names`` has two branches and the fixtures exercise
     one each:
 
     - ``empty_data`` is a real zero-row PyArrow table. ``IcebergFramework.transform`` emits

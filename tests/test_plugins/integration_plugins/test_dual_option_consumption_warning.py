@@ -52,7 +52,7 @@ class DualWarn579SourceGroup(FeatureGroup):
     """Upstream root group that declares the mode key and records resolved options."""
 
     PROPERTY_MAPPING = {
-        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 source group", context=False),
+        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 source group", context=False, default=None),
     }
 
     seen_options: ClassVar[list[dict[str, dict[str, Any]]]] = []
@@ -223,7 +223,9 @@ class DualWarn579SharedConsumerBGroup(_DualWarn579ConsumerBase):
 
     FEATURE_NAME = "dualwarn579_shared_consumer_b"
     PROPERTY_MAPPING = {
-        MODE_KEY: PropertySpec("Execution mode consumed by the dualwarn579 shared consumer B group", context=False),
+        MODE_KEY: PropertySpec(
+            "Execution mode consumed by the dualwarn579 shared consumer B group", context=False, default=None
+        ),
     }
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
@@ -249,7 +251,7 @@ def _frame_with_column(results: list[Any], column: str) -> Any:
 def _run(features: list[Feature | str], groups: set[type[FeatureGroup]]) -> list[Any]:
     return mloda.run_all(
         features,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=PluginCollector.enabled_feature_groups(groups),
     )
 

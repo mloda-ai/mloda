@@ -10,10 +10,14 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 
+from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.missing_value_zero_row_test_mixin import (
+    MissingValueZeroRowTestMixin,
+)
 from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.test_missing_value_utils import (
     PandasMissingValueTestDataCreator,
     validate_missing_value_features,
 )
+from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PandasZeroRowAdapter
 
 
 @pytest.fixture
@@ -276,6 +280,10 @@ class TestPandasMissingValueFeatureGroup:
             PandasMissingValueFeatureGroup.calculate_feature(sample_dataframe_with_missing, feature_set)
 
 
+class TestPandasMissingValueZeroRow(PandasZeroRowAdapter, MissingValueZeroRowTestMixin):
+    feature_group_class = PandasMissingValueFeatureGroup
+
+
 class TestMissingValuePandasIntegration:
     """Integration tests for the missing value feature group using DataCreator."""
 
@@ -309,7 +317,7 @@ class TestMissingValuePandasIntegration:
         # Run the mloda with multiple imputation features
         result = mloda.run_all(
             feature_list,
-            compute_frameworks={PandasDataFrame},
+            compute_frameworks=[PandasDataFrame],
             plugin_collector=plugin_collector,
         )
 

@@ -23,8 +23,8 @@ A fourth pass reads the other pairing on one ``try``: a ``finally`` that discard
 through a return, break or continue or by raising a replacement, undoes every escalation it encloses: the
 re-raises of its own clauses, and the marked raises in the arms those clauses never catch.
 
-Not covered: plugin code under ``mloda_plugins``, except ReadFile's match helpers, checked by the test
-below; dynamic dispatch, which is why SEEDS is hand-written;
+Not covered: plugin code under ``mloda_plugins``, except the match helpers of ReadFile, ReadDB and
+ReadDocument, checked by the parametrized test below; dynamic dispatch, which is why SEEDS is hand-written;
 decorators; ``except*`` groups, which neither pass over a ``try`` reads, as their clauses split an exception
 group between them instead of racing for it, so the third pass's first-match reasoning does not hold there
 and the fourth drops them with it; a raise in the body of a nested try that has handlers, assumed caught there, and
@@ -88,8 +88,11 @@ _DECIDED_ABOVE_BY_READER_SELECTION = (
     "ever reaches an absent key"
 )
 _MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
-_UPDATE_COLLISION = "name collision: dict.update, not the link resolver's"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
+_FORK_COLLISION = (
+    "real edge, collided verdict: Options._fork is a raise-free, swallow-free copy; its dict.update name collides with a "
+    "raising, swallowing update() elsewhere"
+)
 _MERGED_DECLARATION_RAISES = (
     "real edge: own_declaration's ValueError for a malformed declaration; __init_subclass__ already "
     "validates every class in the MRO at definition time, so this walk cannot raise for a class that "
@@ -105,6 +108,7 @@ _MERGED_DECLARATION_SWALLOWS_DIRECT = "name collision: dict.update inside merged
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/options.py", "add_to_group"): _DECIDED_ABOVE_BY_READER_SELECTION,
+    ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "__init__"): _READER_AUTO_LOAD,
@@ -114,11 +118,17 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
         "real edge, collided verdict: it raises nothing itself; the set.add / set.update names do"
     ),
+    ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
+        "real edge, collided verdict: it raises nothing itself; the str.join name collides with the runner's join"
+    ),
     ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
         "real edge, collided verdict: it raises nothing itself; warn_once_for's own try/except degrades any "
         "failure to 'not seen', and the WeakSet/set add() name collides with an unrelated raising add() elsewhere"
     ),
-    ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
+    ("mloda/core/abstract_plugins/components/declared_attributes.py", "unmet_reason"): (
+        "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
+        "a rejection with a reason"
+    ),
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (
         _MERGED_DECLARATION_RAISES
@@ -131,6 +141,7 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
         "it degrades one field in a rendering path, so swallowing a marked exception is its contract"
     ),
@@ -147,13 +158,19 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
         "real edge, collided verdict: it swallows nothing itself; the set.add / set.update names do"
     ),
+    ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
+        "real edge, collided verdict: it swallows nothing itself; the str.join name collides with the runner's join"
+    ),
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "__init__"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "load_group"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _READER_AUTO_LOAD,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
-    ("mloda/core/prepare/resolve_links.py", "update"): _UPDATE_COLLISION,
+    ("mloda/core/abstract_plugins/components/declared_attributes.py", "unmet_reason"): (
+        "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
+        "a rejection with a reason"
+    ),
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (
         _MERGED_DECLARATION_SWALLOWS_DIRECT
@@ -1162,6 +1179,7 @@ def test_known_escalating_handlers_are_enumerated() -> None:
     guards = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py"
     expected = {
         (match_hook, "call_match_hook"),
+        (feature_group, "_passes_option_declarations"),
         (feature_group, "is_root"),
         (mixin, "match_parser_criteria"),
         (guards, "check_required_when"),
@@ -2555,9 +2573,16 @@ def test_the_sweep_flags_a_returning_finally_spliced_into_the_real_seam() -> Non
     )
 
 
-def test_read_file_match_handlers_escalate_or_declare_a_swallow() -> None:
-    """ReadFile's match helpers are plugin code, outside the walked graph, so they get their own direct check."""
-    module = "mloda_plugins/feature_group/input_data/read_file.py"
+_READER_MATCH_MODULES = [
+    pytest.param("mloda_plugins/feature_group/input_data/read_file.py", id="read_file"),
+    pytest.param("mloda_plugins/feature_group/input_data/read_db.py", id="read_db"),
+    pytest.param("mloda_plugins/feature_group/input_data/read_document.py", id="read_document"),
+]
+
+
+@pytest.mark.parametrize("module", _READER_MATCH_MODULES)
+def test_reader_match_handlers_escalate_or_declare_a_swallow(module: str) -> None:
+    """Each reader family's match helpers are plugin code, outside the walked graph, so they get a direct check."""
     source = (_REPO_ROOT / module).read_text(encoding="utf-8")
 
     handlers = classify_handlers(source, module, functions=None)
@@ -2565,6 +2590,6 @@ def test_read_file_match_handlers_escalate_or_declare_a_swallow() -> None:
     misannotated = [site for site in handlers if site.kind == "misannotated"]
     escalating = [site for site in handlers if site.kind == "escalating"]
 
-    assert unannotated == [], f"unannotated ReadFile match handlers: {[s.location() for s in unannotated]}"
-    assert misannotated == [], f"misannotated ReadFile match handlers: {[s.location() for s in misannotated]}"
-    assert escalating != [], "expected at least one escalating handler among ReadFile's match helpers"
+    assert unannotated == [], f"unannotated match handlers in {module}: {[s.location() for s in unannotated]}"
+    assert misannotated == [], f"misannotated match handlers in {module}: {[s.location() for s in misannotated]}"
+    assert escalating != [], f"expected at least one escalating handler among {module}'s match helpers"

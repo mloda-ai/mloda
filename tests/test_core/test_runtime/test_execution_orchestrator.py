@@ -7,15 +7,27 @@ This test file defines the requirements for the ExecutionOrchestrator class.
 from __future__ import annotations
 
 import inspect
+import logging
 import threading
 import uuid as uuid_mod
 from collections.abc import Callable
+from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
 
 import pytest
 
-from mloda.provider import ComputeFramework, FeatureGroup  # noqa: F401
+from mloda.provider import (  # noqa: F401
+    BaseInputData,
+    ComputeFramework,
+    DataCreator,
+    FeatureGroup,
+    FeatureSet,
+)
+from mloda.user import Feature, PluginCollector, mloda
+from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
+from tests.helpers.uuid7_assertions import assert_valid_uuid7
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator
@@ -588,9 +600,9 @@ class TestDropTfsSourceIfPossibleResolvesViaSourceFrameworkUuid:
 
 
 class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
-    """The planner thread must not stall on a worker's drop ack; the flyway fallback still tracks."""
+    """The planner never reads a worker's result queue; the flyway fallback still tracks."""
 
-    def test_worker_owned_branch_never_calls_wait_for_drop_completion(self) -> None:
+    def test_worker_owned_branch_never_touches_result_queue(self) -> None:
         cfw_uuid = uuid_mod.uuid4()
         child_uuid = uuid_mod.uuid4()
         tracked_uuid = uuid_mod.uuid4()
@@ -600,7 +612,6 @@ class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
 
         process, command_queue, result_queue = Mock(), Mock(), Mock()
         orchestrator.worker_manager.process_register[cfw_uuid] = (process, command_queue, result_queue)
-        orchestrator.worker_manager.wait_for_drop_completion = Mock(return_value=None)  # type: ignore[method-assign]
 
         orchestrator.cfw_register = Mock()
         orchestrator.cfw_register.get_uuid_flyway_datasets.return_value = None
@@ -614,14 +625,14 @@ class TestMarkChildrenAndTrackNeverBlocksOnWorkerOwnedCfw:
         orchestrator._mark_children_and_track(cfw, children)
 
         command_queue.put.assert_called_once_with(children)
-        orchestrator.worker_manager.wait_for_drop_completion.assert_not_called()
+        assert result_queue.mock_calls == []
         assert orchestrator.data_lifecycle_manager.track_data_to_drop[cfw.uuid] == set(cfw.children_if_root)
 
 
 class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
-    """_drop_cfw_data_routed's return value is never read; the wait only ever blocked the caller."""
+    """_drop_cfw_data_routed must only queue the drop command; it never reads the worker's result queue."""
 
-    def test_never_calls_wait_for_drop_completion_when_worker_alive(self) -> None:
+    def test_never_touches_result_queue_when_worker_alive(self) -> None:
         cfw_uuid = uuid_mod.uuid4()
         child_uuid = uuid_mod.uuid4()
 
@@ -632,7 +643,6 @@ class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
         process.is_alive.return_value = True
         command_queue, result_queue = Mock(), Mock()
         orchestrator.worker_manager.process_register[cfw_uuid] = (process, command_queue, result_queue)
-        orchestrator.worker_manager.wait_for_drop_completion = Mock(return_value=None)  # type: ignore[method-assign]
 
         cfw = Mock()
         cfw.children_if_root = frozenset({child_uuid})
@@ -640,7 +650,7 @@ class TestDropCfwDataRoutedNeverBlocksWhenWorkerAlive:
         orchestrator._drop_cfw_data_routed(cfw_uuid, cfw)
 
         command_queue.put.assert_called_once_with(set(cfw.children_if_root))
-        orchestrator.worker_manager.wait_for_drop_completion.assert_not_called()
+        assert result_queue.mock_calls == []
 
 
 class TestDropCfwDataRoutedFallsBackToDirectDropWhenWorkerDead:
@@ -665,3 +675,274 @@ class TestDropCfwDataRoutedFallsBackToDirectDropWhenWorkerDead:
 
         cfw.drop_last_data.assert_called_once_with(orchestrator.location)
         command_queue.put.assert_not_called()
+
+
+_RUN_COMPLETE_BOOM = "run-complete-boom"
+
+_RunLog = list[tuple[str, str | None]]
+
+
+class _UnprintableError(Exception):
+    def __str__(self) -> str:
+        raise ValueError("str() of this exception is broken")
+
+
+class _RunCompleteRecorder(Extender):
+    def __init__(
+        self,
+        label: str,
+        log: _RunLog,
+        priority: int = 100,
+        raises: bool = False,
+        error: type[BaseException] | BaseException = RuntimeError,
+        raise_on_run_complete: bool = False,
+    ) -> None:
+        self.raise_on_run_complete = raise_on_run_complete
+        self.label = label
+        self.log = log
+        self.priority = priority
+        self.raises = raises
+        self.error = error
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_complete(self, run: Any, outcome: Any) -> None:
+        self.log.append((self.label, run.run_id))
+        if self.raises:
+            if isinstance(self.error, BaseException):
+                raise self.error
+            raise self.error(_RUN_COMPLETE_BOOM)
+
+
+_RUN_COLUMN = "orchestrator_run_complete_request_col"
+
+
+class _RunCompleteFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_RUN_COLUMN})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_RUN_COLUMN: [1, 2, 3]}
+
+
+class _FailingRunFG(_RunCompleteFG):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise RuntimeError("compute failed")
+
+
+def _session(extenders: set[Extender], failing: bool = False) -> Any:
+    return mloda.prepare(
+        [Feature(name=_RUN_COLUMN)],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=PluginCollector.enabled_feature_groups({_FailingRunFG if failing else _RunCompleteFG}),
+        parallelization_modes={ParallelizationMode.SYNC},
+        function_extender=extenders,
+    )
+
+
+def _run(session: Any) -> Any:
+    return session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+
+class TestDropAllUploadedFlightTablesScrubsCredentials:
+    """A FlightServer.drop_tables failure logged as a best-effort WARNING must not leak a credential."""
+
+    def test_drop_tables_failure_warning_scrubs_credential(self, caplog: pytest.LogCaptureFixture) -> None:
+        leak_marker = "hunter2z9"
+        mock_planner = Mock(spec=ExecutionPlan)
+        orchestrator = ExecutionOrchestrator(mock_planner)
+        orchestrator.location = "flight-location"
+
+        cfw = Mock()
+        cfw.get_object_ids.return_value = []
+        orchestrator.executor = Mock()
+        orchestrator.executor.cfw_collection = {uuid_mod.uuid4(): cfw}
+
+        with patch(
+            "mloda.core.runtime.run.FlightServer.drop_tables",
+            side_effect=Exception(f"drop failed for postgres://u:{leak_marker}@h/db"),
+        ):
+            with caplog.at_level(logging.WARNING):
+                orchestrator._drop_all_uploaded_flight_tables()
+
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warning_records, "expected a WARNING record for the failed flight table drop"
+        assert not any(leak_marker in r.getMessage() for r in warning_records), (
+            f"credential leaked into a WARNING record: {[r.getMessage() for r in warning_records]}"
+        )
+
+
+class TestExitOfANeverEnteredOrchestrator:
+    def test_exit_on_a_never_entered_orchestrator_does_not_raise(self) -> None:
+        ExecutionOrchestrator(Mock(spec=ExecutionPlan)).__exit__(None, None, None)
+
+
+class TestRequestNotifiesExtendersOfRunCompletion:
+    """Ported from the orchestrator-level exit notification: run completion now fires per request."""
+
+    def test_notifies_with_the_run_id_after_join_and_the_flight_table_sweep(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        log: _RunLog = []
+        monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self: log.append(("join", None)))
+        monkeypatch.setattr(
+            ExecutionOrchestrator, "_drop_all_uploaded_flight_tables", lambda self: log.append(("sweep", None))
+        )
+
+        _run(_session({_RunCompleteRecorder("extender", log)}))
+
+        assert [label for label, _ in log] == ["join", "sweep", "extender"]
+        run_id = log[-1][1]
+        assert run_id is not None
+        assert_valid_uuid7(run_id)
+
+    def test_notifies_after_the_runner_exit_and_a_base_exception_from_the_extender_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Replaces the orchestrator-level manager shutdown case: the runner exit must precede the notification."""
+        log: _RunLog = []
+        real_exit = ExecutionOrchestrator.__exit__
+        manager_spy = Mock()
+
+        def logged_exit(self: ExecutionOrchestrator, *args: Any) -> None:
+            if self.manager is None:
+                self.manager = manager_spy
+            real_exit(self, *args)
+            log.append(("exit", None))
+
+        monkeypatch.setattr(ExecutionOrchestrator, "__exit__", logged_exit)
+        extender = _RunCompleteRecorder("extender", log, raises=True, error=KeyboardInterrupt)
+
+        with pytest.raises(KeyboardInterrupt):
+            _run(_session({extender}))
+
+        assert [label for label, _ in log] == ["exit", "extender"]
+        manager_spy.shutdown.assert_called_once_with()
+
+    def test_notifies_when_compute_raises_and_the_run_exception_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        log: _RunLog = []
+        monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self: log.append(("join", None)))
+
+        with pytest.raises(Exception, match="compute failed"):
+            _run(_session({_RunCompleteRecorder("extender", log)}, failing=True))
+
+        assert [label for label, _ in log] == ["join", "extender"]
+
+    @pytest.mark.parametrize("failing_call", ["join", "set_artifacts"])
+    def test_notifies_exactly_once_as_failed_when_finalizing_raised(
+        self, failing_call: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Flipped: a failed worker join used to suppress the notification, now it reports failed."""
+        outcomes: list[Any] = []
+
+        class _OutcomeRecorder(_RunCompleteRecorder):
+            def on_run_complete(self, run: Any, outcome: Any) -> None:
+                outcomes.append(outcome)
+
+        owner = DataLifecycleManager if failing_call == "set_artifacts" else ExecutionOrchestrator
+        monkeypatch.setattr(owner, failing_call, Mock(side_effect=Exception("teardown failed")))
+
+        with pytest.raises(Exception, match="teardown failed"):
+            _run(_session({_OutcomeRecorder("extender", [])}))
+
+        assert [o.status for o in outcomes] == ["failed"]
+        assert outcomes[0].error_type == "Exception"
+
+    def test_extender_whose_exception_str_raises_does_not_escape_the_run(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        log: _RunLog = []
+        raiser = _RunCompleteRecorder("raiser", log, priority=10, raises=True, error=_UnprintableError)
+        survivor = _RunCompleteRecorder("survivor", log, priority=20)
+
+        with caplog.at_level(logging.ERROR):
+            _run(_session({raiser, survivor}))
+
+        assert [label for label, _ in log] == ["raiser", "survivor"]
+        assert [r for r in caplog.records if r.levelno == logging.ERROR]
+
+    @pytest.mark.parametrize("opt_in", [False, True])
+    def test_raising_extender_does_not_replace_the_run_exception(self, opt_in: bool) -> None:
+        log: _RunLog = []
+        failure = RuntimeError("compute failed")
+
+        class _IdentityFG(_FailingRunFG):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                raise failure
+
+        session = mloda.prepare(
+            [Feature(name=_RUN_COLUMN)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({_IdentityFG}),
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={_RunCompleteRecorder("raiser", log, raises=True, raise_on_run_complete=opt_in)},
+        )
+
+        with pytest.raises(Exception) as raised:
+            _run(session)
+
+        assert raised.value is failure
+        assert [label for label, _ in log] == ["raiser"]
+
+    def test_opt_in_failure_on_a_successful_run_propagates_after_later_extenders_are_notified(self) -> None:
+        log: _RunLog = []
+        failure = RuntimeError("opt-in boom")
+        raiser = _RunCompleteRecorder(
+            "raiser", log, priority=10, raises=True, error=failure, raise_on_run_complete=True
+        )
+        survivor = _RunCompleteRecorder("survivor", log, priority=20)
+
+        with pytest.raises(RuntimeError) as raised:
+            _run(_session({raiser, survivor}))
+
+        assert raised.value is failure
+        assert [label for label, _ in log] == ["raiser", "survivor"]
+
+    @pytest.mark.parametrize(
+        "first_error, first_opt_in, second_error, second_opt_in",
+        [
+            (ValueError, False, RuntimeError, True),
+            (RuntimeError, True, ValueError, True),
+        ],
+        ids=["default_then_opt_in", "opt_in_then_opt_in"],
+    )
+    def test_only_the_propagating_failure_escapes_and_the_other_is_logged(
+        self,
+        first_error: type[BaseException],
+        first_opt_in: bool,
+        second_error: type[BaseException],
+        second_opt_in: bool,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        log: _RunLog = []
+        first = _RunCompleteRecorder(
+            "first", log, priority=10, raises=True, error=first_error, raise_on_run_complete=first_opt_in
+        )
+        second = _RunCompleteRecorder(
+            "second", log, priority=20, raises=True, error=second_error, raise_on_run_complete=second_opt_in
+        )
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(RuntimeError, match=_RUN_COMPLETE_BOOM):
+                _run(_session({first, second}))
+
+        assert [label for label, _ in log] == ["first", "second"]
+        errors = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.ERROR and "on_run_complete" in r.getMessage()
+        ]
+        assert len(errors) == 1
+        assert "ValueError" in errors[0]

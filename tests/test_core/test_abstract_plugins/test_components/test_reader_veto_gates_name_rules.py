@@ -5,11 +5,9 @@ input-data-free candidates and valid values keep resolving. Leaked vg954 fixture
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-import pytest
 
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
@@ -305,15 +303,6 @@ def _vg954_required_setup(tag: str) -> tuple[type[BaseInputData], type[FeatureGr
     return Vg954LocalRequiredReader, Vg954LocalRequiredFG
 
 
-@pytest.fixture()
-def rejection_window() -> Iterator[dict[str, MatchRejection]]:
-    """Open a recording window around one call, mirroring the engine's per-candidate window."""
-    window: dict[str, MatchRejection] = {}
-    token = MATCH_REJECTION_REASONS.set(window)
-    yield window
-    MATCH_REJECTION_REASONS.reset(token)
-
-
 class TestHasMatchRejection:
     """The helper reports whether the ACTIVE window holds a rejection with the exact stage."""
 
@@ -405,7 +394,7 @@ class TestUngatedShapesKeepResolving:
 
         assert Vg954SiblingFG in result.identified
         assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Vg954CleanSiblingReader, VG954_CLEAN_ACCESS)
+        assert feature.input_data_match == (Vg954CleanSiblingReader, VG954_CLEAN_ACCESS)
 
     def test_an_unowned_global_content_decline_does_not_gate_the_name_rule(self, tmp_path: Path) -> None:
         """A content decline on the global probe, without the user addressing the reader, must not gate."""
@@ -473,7 +462,7 @@ class TestUngatedShapesKeepResolving:
 
         assert Vg954GatedFG in result.identified
         assert result.eliminations == {}
-        assert feature.options.get("BaseInputData") == (Vg954GateReader, VG954_GATE_ACCESS)
+        assert feature.input_data_match == (Vg954GateReader, VG954_GATE_ACCESS)
 
 
 class TestModuleLeakPolicy:

@@ -1,100 +1,145 @@
+from collections.abc import Sequence
+from datetime import date, datetime
+from functools import reduce
 from typing import Any
-from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
-from mloda.provider import BaseFilterEngine
+from mloda.core.abstract_plugins.components.mask.null_or_nan import is_null_or_nan, split_null_or_nan
 from mloda.user import SingleFilter
-from mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics import column_semantics_from_arrow
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 
 try:
     from pyiceberg.table import Table as IcebergTable
     from pyiceberg.expressions import (
-        LessThan,
+        AlwaysTrue,
         GreaterThanOrEqual,
         LessThanOrEqual,
         EqualTo,
         And,
+        Or,
+        In,
+        IsNull,
+        IsNaN,
         Reference,
     )
+    import pyarrow.compute as pc
 except ImportError:
     IcebergTable: type[Any] | None = None  # type: ignore[no-redef]
-    LessThan: type[Any] | None = None  # type: ignore[no-redef]
+    AlwaysTrue: type[Any] | None = None  # type: ignore[no-redef]
     GreaterThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
     LessThanOrEqual: type[Any] | None = None  # type: ignore[no-redef]
     EqualTo: type[Any] | None = None  # type: ignore[no-redef]
     And: type[Any] | None = None  # type: ignore[no-redef]
+    Or: type[Any] | None = None  # type: ignore[no-redef]
+    In: type[Any] | None = None  # type: ignore[no-redef]
+    IsNull: type[Any] | None = None  # type: ignore[no-redef]
+    IsNaN: type[Any] | None = None  # type: ignore[no-redef]
     Reference: type[Any] | None = None  # type: ignore[no-redef]
+    pc = None
+
+_PUSHDOWN_FILTER_TYPES = frozenset({"range", "min", "max", "equal", "categorical_inclusion"})
 
 
-class IcebergFilterEngine(BaseFilterEngine):
-    """
-    Filter engine for Iceberg tables using predicate pushdown.
+def scan_columns(table: Any, names: Sequence[str], row_filter: Any = None) -> Any:
+    """Scan an Iceberg table to exactly `names`, a nested path (e.g. "b.c") as its own top-level column."""
+    kwargs: dict[str, Any] = {"selected_fields": tuple(names)}
+    if row_filter is not None:
+        kwargs["row_filter"] = row_filter
+    scanned = table.scan(**kwargs).to_arrow()
 
-    This engine translates mloda filter operations to Iceberg expressions
-    for optimal performance through predicate pushdown.
-    """
+    for name in names:
+        if "." in name and name not in scanned.column_names:
+            root, *rest = name.split(".")
+            scanned = scanned.append_column(name, pc.struct_field(scanned[root], rest))
 
-    provides_column_semantics = True
+    return scanned.select(list(names))
 
-    @classmethod
-    def final_filters(cls) -> bool:
-        """Iceberg filters are applied during scan, not after feature calculation."""
-        return False
 
-    @classmethod
-    def _column_semantics(cls, data: Any, column: str) -> ColumnSemantics:
-        """Derive column semantics from the arrow schema of the iceberg data.
+# Iceberg primitive type name -> Python value types pyiceberg converts to that type exactly.
+# float and decimal are absent: float32 rounding can make a pushed bound stricter than PyArrow's,
+# and a decimal scale mismatch fails to bind rather than filtering correctly.
+_EXACT_TYPE_MATCH: dict[str, tuple[type, ...]] = {
+    "int": (int,),
+    "long": (int,),
+    "double": (int, float),
+    "string": (str,),
+    "boolean": (bool,),
+    "date": (date,),
+    "timestamp": (datetime,),
+    "timestamptz": (datetime,),
+}
 
-        Iceberg filters run via predicate pushdown in ``apply_filters`` rather than the
-        ``do_filter`` dispatch, so this hook is only used for completeness. An iceberg
-        ``Table`` exposes its schema as arrow; an already-materialized pyarrow table is
-        introspected directly.
-        """
-        if IcebergTable is not None and isinstance(data, IcebergTable):
-            arrow_schema = data.schema().as_arrow()
-            return column_semantics_from_arrow(arrow_schema.field(column).type)
 
-        from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
-
-        return pyarrow_type_semantics.column_semantics(data, column)
+class IcebergFilterEngine(PyArrowFilterEngine):
+    """Filters Iceberg tables by scan pushdown plus the PyArrow filters; other data via the PyArrow filters."""
 
     @classmethod
     def apply_filters(cls, data: Any, features: Any) -> Any:
-        """
-        Apply filters to Iceberg table using predicate pushdown.
-
-        Args:
-            data: Iceberg table
-            features: Feature set with filter specifications
-
-        Returns:
-            Filtered Iceberg table scan result
-        """
+        """Push type-exact filters into the scan, then apply every filter to the result."""
         if not isinstance(data, IcebergTable):
-            # If it's not an Iceberg table, fall back to default filtering
             return super().apply_filters(data, features)
 
-        # Build Iceberg filter expressions
-        filter_expressions = []
-        for single_filter in cls.applicable_filters(features):
-            iceberg_expr = cls._build_iceberg_expression(single_filter)
-            if iceberg_expr is not None:
-                filter_expressions.append(iceberg_expr)
-
-        if not filter_expressions:
+        applicable = cls.applicable_filters(features)
+        if not applicable:
             return data
 
-        # Combine multiple filters with AND
-        combined_filter = filter_expressions[0]
-        for expr in filter_expressions[1:]:
-            if And is not None:
-                combined_filter = And(combined_filter, expr)
+        schema = data.schema()
+        # Build pushable expressions before scanning: a malformed filter raises before the scan
+        # only when it is pushable.
+        expressions: list[Any] = [cls._build_iceberg_expression(f) for f in applicable if cls._is_pushable(schema, f)]
+        row_filter = reduce(And, expressions, AlwaysTrue())
 
-        # Apply filter to Iceberg table scan
-        return data.scan(row_filter=combined_filter)
+        feature_names = features.get_all_names()
+        needed = (
+            set(feature_names) | {str(f.filter_feature.name) for f in applicable} | set(features.link_index_columns)
+        )
+        selected = [
+            name
+            for name in schema.column_names
+            if name in needed or any(name.startswith(f"{feature_name}~") for feature_name in feature_names)
+        ]
+
+        scanned = scan_columns(data, selected, row_filter=row_filter)
+
+        # The PyArrow pass applies the filters Iceberg cannot push and re-checks the pushed ones.
+        return super().apply_filters(scanned, features)
+
+    @classmethod
+    def _is_pushable(cls, schema: Any, filter_feature: SingleFilter) -> bool:
+        """A filter is pushable when every bound's Python type converts exactly to the column's Iceberg type."""
+        if filter_feature.filter_type not in _PUSHDOWN_FILTER_TYPES:
+            return False
+
+        field = schema.find_field(str(filter_feature.filter_feature.name))
+        accepted = _EXACT_TYPE_MATCH.get(str(field.field_type))
+        if accepted is None:
+            return False
+
+        if filter_feature.filter_type == "categorical_inclusion":
+            values = filter_feature.parameter.values
+            if values is None:
+                # _build_iceberg_expression raises for this before the scan.
+                return True
+            present, _ = split_null_or_nan(values)
+            bounds = present
+        else:
+            bounds = [
+                v
+                for v in (
+                    filter_feature.parameter.value,
+                    filter_feature.parameter.min_value,
+                    filter_feature.parameter.max_value,
+                )
+                if v is not None
+            ]
+
+        return all(type(v) in accepted and not is_null_or_nan(v) for v in bounds)
 
     @classmethod
     def _build_iceberg_expression(cls, filter_feature: SingleFilter) -> Any:
         """Build an Iceberg filter expression from a SingleFilter."""
-        if any(expr is None for expr in [EqualTo, And, LessThan, GreaterThanOrEqual, LessThanOrEqual, Reference]):
+        if any(
+            expr is None
+            for expr in [EqualTo, And, Or, In, IsNull, IsNaN, GreaterThanOrEqual, LessThanOrEqual, Reference]
+        ):
             return None
 
         column_name = str(filter_feature.filter_feature.name)
@@ -117,14 +162,15 @@ class IcebergFilterEngine(BaseFilterEngine):
             has_value = cls._extract_parameter_value(filter_feature, "value") is not None
 
             if has_max:
-                min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
+                min_param, max_param, _ = cls.get_min_max_operator(filter_feature)
                 if min_param is not None:
                     raise ValueError(
                         f"Filter parameter {filter_feature.parameter} not supported as max filter: "
                         f"{filter_feature.name}"
                     )
-                if is_max_exclusive is True:
-                    return LessThan(Reference(column_name), max_param)
+                # Always push the max as inclusive: pyiceberg rebinds a double bound to float32 per data
+                # file after a float-to-double promotion, so a strict bound could drop rows the PyArrow
+                # pass keeps. The PyArrow pass enforces exclusivity afterward.
                 return LessThanOrEqual(Reference(column_name), max_param)
             elif has_value:
                 value = cls._extract_parameter_value(filter_feature, "value")
@@ -133,17 +179,26 @@ class IcebergFilterEngine(BaseFilterEngine):
                 raise ValueError(f"No valid filter parameter found in {filter_feature.parameter}")
 
         elif filter_type == "range":
-            min_param, max_param, is_max_exclusive = cls.get_min_max_operator(filter_feature)
+            min_param, max_param, _ = cls.get_min_max_operator(filter_feature)
             if min_param is None or max_param is None:
                 raise ValueError(f"Filter parameter {filter_feature.parameter} not supported")
 
             expr_min = GreaterThanOrEqual(Reference(column_name), min_param)
-            expr_max: Any
-            if is_max_exclusive is True:
-                expr_max = LessThan(Reference(column_name), max_param)
-            else:
-                expr_max = LessThanOrEqual(Reference(column_name), max_param)
+            # Always push the max as inclusive; see the comment in the "max" branch above.
+            expr_max = LessThanOrEqual(Reference(column_name), max_param)
             return And(expr_min, expr_max)
+
+        elif filter_type == "categorical_inclusion":
+            values = cls._extract_parameter_value(filter_feature, "values")
+            if values is None:
+                raise ValueError(f"Filter parameter 'values' not found in {filter_feature.parameter}")
+            present, has_null_or_nan = split_null_or_nan(values)
+            ref = Reference(column_name)
+            expression: Any = In(ref, set(present))
+            if has_null_or_nan:
+                # Mirrors PyArrow's is_null(nan_is_null=True); IsNaN binds to AlwaysFalse on non-float columns.
+                expression = Or(expression, IsNull(ref), IsNaN(ref))
+            return expression
 
         else:
             raise NotImplementedError(f"Unsupported Iceberg filter type: {filter_type!r}")
@@ -170,31 +225,6 @@ class IcebergFilterEngine(BaseFilterEngine):
         if param_name == "max_exclusive":
             return True
         return value is not None
-
-    # Standard filter methods - not used for Iceberg but required by interface
-    @classmethod
-    def do_range_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_min_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_max_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_equal_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Use apply_filters method for Iceberg filtering")
-
-    @classmethod
-    def do_regex_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Regex filtering is not supported for Iceberg tables")
-
-    @classmethod
-    def do_categorical_inclusion_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:
-        raise NotImplementedError("Categorical inclusion filtering is not yet implemented for Iceberg tables")
 
     @classmethod
     def do_custom_filter(cls, data: Any, filter_feature: SingleFilter) -> Any:

@@ -6,6 +6,9 @@ from decimal import Decimal
 import pytest
 from typing import Any
 from mloda.core.filter.filter_parameter import FilterParameter, FilterParameterImpl
+from tests.test_plugins.compute_framework.base_implementations.mask_engine_test_mixin import (
+    NON_COLLECTION_VALUES,
+)
 
 
 class AlwaysRaisesOnHash:
@@ -345,20 +348,6 @@ def test_values_property_returns_list_for_tuple_input() -> None:
     assert filter_param.values == ["EU", "NA"]
 
 
-def test_values_property_does_not_explode_string_value() -> None:
-    """Test a plain string value is not treated as a sequence of characters.
-
-    Normalizing collection values must not reach into scalars: a string is iterable, so a naive
-    conversion would turn "EU" into ["E", "U"]. `values` is typed as a list, so the scalar is read
-    back through `Any`.
-    """
-    filter_param = FilterParameterImpl.from_dict({"values": "EU"})
-    values: Any = filter_param.values
-
-    assert values == "EU"
-    assert values != ["E", "U"]
-
-
 def test_value_property_does_not_explode_string_value() -> None:
     """Test the scalar `value` accessor keeps a string intact."""
     filter_param = FilterParameterImpl.from_dict({"value": "EU"})
@@ -540,15 +529,21 @@ def test_from_dict_rejects_non_string_key_before_unhashable_value_check() -> Non
         {"value": 25},
         {"value": None},
         {"value": "EU"},
-        {"values": "EU"},
         {"values": ["A", "B"]},
         {"values": {"A", "B"}},
         {"values": ("A", "B")},
+        {"values": frozenset({"A", "B"})},
         {"values": [(1, 2), (3, 4)]},
         {"min": 0, "max": 100, "max_exclusive": True},
     ],
-    ids=["int", "none", "str", "str-values", "list", "set", "tuple", "list-of-tuples", "range"],
+    ids=["int", "none", "str", "list", "set", "tuple", "frozenset", "list-of-tuples", "range"],
 )
 def test_from_dict_accepts_every_hashable_value_shape(params: dict[str, Any]) -> None:
     """Test the rejection leaves the supported value shapes untouched."""
     hash(FilterParameterImpl.from_dict(params))
+
+
+@pytest.mark.parametrize("make_values", NON_COLLECTION_VALUES)
+def test_from_dict_rejects_non_collection_values(make_values: Any) -> None:
+    with pytest.raises(TypeError, match="list, tuple, set or frozenset"):
+        FilterParameterImpl.from_dict({"values": make_values()})

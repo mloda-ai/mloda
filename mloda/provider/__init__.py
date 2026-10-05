@@ -10,7 +10,7 @@
 #     from mloda.provider import FeatureChainParserMixin, FeatureGroup, DefaultOptionKeys
 #
 #     class MyPlugin(FeatureChainParserMixin, FeatureGroup):
-#         PREFIX_PATTERN = r".*__([\w]+)_my_op$"
+#         PREFIX_PATTERN = r".*__(?P<operation_type>[\w]+)_my_op$"
 #         PROPERTY_MAPPING = { ... }
 #         def calculate_feature(cls, data, features): ...
 #
@@ -22,15 +22,20 @@
 from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
 
 # Versioning
-from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.abstract_plugins.components.base_feature_group_version import (
+    BaseFeatureGroupVersion,
+    ThirdPartyVersionMode,
+)
 from mloda.core.version import get_mloda_version
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework as ComputeFramework
 from mloda.core.abstract_plugins.hook_context import OutputSchema as OutputSchema
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement as ConnectionRequirement
 from mloda.core.abstract_plugins.compute_framework import EmptyResultError as EmptyResultError
 
 # Utilities
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 
 # Feature set (internal computation container)
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -79,7 +84,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     missing_columnwise_hooks,
     declared_columnwise_hooks,
 )
-from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import ParsedFeatureName
+from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
 
 # Property specs
 from mloda.core.abstract_plugins.components.property_spec import (
@@ -89,10 +94,15 @@ from mloda.core.abstract_plugins.components.property_spec import (
     is_positive_int,
     property_spec,
 )
+from mloda.core.abstract_plugins.components.property_values_validation import (
+    PropertyValidationError,
+    validate_property_values,
+)
 
 # Match rejection recording
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
+    NAME_STAGE,
     record_match_rejection,
 )
 
@@ -134,12 +144,15 @@ __all__ = [
     "FeatureGroup",
     # Versioning
     "BaseFeatureGroupVersion",
+    "ThirdPartyVersionMode",
     "ComputeFramework",
     "OutputSchema",
+    "ConnectionRequirement",
     "EmptyResultError",
     # Utilities
     "HashableDict",
     "get_all_subclasses",
+    "scrub_credentials",
     # Feature set
     "FeatureSet",
     # Input data
@@ -176,14 +189,18 @@ __all__ = [
     "missing_columnwise_hooks",
     "declared_columnwise_hooks",
     "ParsedFeatureName",
+    "NameResolution",
     # Property specs
     "PropertySpec",
     "is_no_default",
     "is_positive_int",
     "property_spec",
     "NO_DEFAULT",
+    "PropertyValidationError",
+    "validate_property_values",
     # Match rejection recording
     "INPUT_DATA_STAGE",
+    "NAME_STAGE",
     "record_match_rejection",
     # Subtype declaration
     "SubtypeDeclaration",

@@ -3,10 +3,13 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine
 from mloda.provider import OutputSchema
-from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import IcebergFilterEngine
+from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter_engine import (
+    IcebergFilterEngine,
+    scan_columns,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import (
     arrow_schema_field_type,
     arrow_schema_output_schema,
@@ -81,6 +84,10 @@ class IcebergFramework(ComputeFramework):
                     raise ValueError(f"Expected an Iceberg catalog or table, got {type(framework_connection_object)}")
 
     @classmethod
+    def connection_requirement(cls) -> ConnectionRequirement:
+        return ConnectionRequirement.SELF_MANAGED
+
+    @classmethod
     def _connection_matches(cls, conn: Any) -> bool:
         if Catalog is None:
             return False
@@ -125,29 +132,22 @@ class IcebergFramework(ComputeFramework):
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
     ) -> Any:
-        """
-        Select specific columns from Iceberg table.
-
-        Args:
-            data: Iceberg table
-            selected_feature_names: Sequence of feature names to select
-            column_ordering: Optional column ordering strategy
-
-        Returns:
-            Iceberg table scan with selected columns
-        """
-        if not isinstance(data, IcebergTable):
-            return data
-
-        column_names = set(data.schema().column_names)
-        _selected_feature_names = self.identify_naming_convention(
-            selected_feature_names, column_names, ordering=column_ordering, request_feature_order=request_feature_order
+        """Select the requested columns; an Iceberg table is scanned into a pa.Table."""
+        column_names = self._extract_column_names(data)
+        selected = list(
+            self.identify_naming_convention(
+                selected_feature_names,
+                column_names,
+                ordering=column_ordering,
+                request_feature_order=request_feature_order,
+            )
         )
+        if IcebergTable is not None and isinstance(data, IcebergTable):
+            data = scan_columns(data, selected)
+        return data.select(selected)
 
-        # Use Iceberg's scan with column selection
-        return data.scan(selected_fields=tuple(_selected_feature_names))
-
-    def _extract_column_names(self, data: Any) -> set[str]:
+    @classmethod
+    def extract_column_names(cls, data: Any) -> set[str]:
         if IcebergTable is not None and isinstance(data, IcebergTable):
             return set(data.schema().column_names)
         # After transform, data may be a PyArrow table

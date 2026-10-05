@@ -1,5 +1,6 @@
 """Unit tests for the PythonDictFilterEngine class."""
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -24,10 +25,7 @@ from tests.test_plugins.compute_framework.base_implementations.time_range_filter
 class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTestMixin):
     """Unit tests for the PythonDictFilterEngine class using shared mixins."""
 
-    @pytest.fixture
-    def filter_engine(self) -> Any:
-        """Return the PythonDictFilterEngine class."""
-        return PythonDictFilterEngine
+    filter_engine_class = PythonDictFilterEngine
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -42,7 +40,19 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
     @pytest.fixture
     def nullable_category_sample_data(self) -> Any:
         """Create a sample columnar dict with null categories for testing."""
-        return {"id": [1, 2, 3, 4, 5], "category": ["A", None, "B", None, "C"]}
+        return {
+            "id": [1, 2, 3, 4, 5],
+            "category": ["A", None, "B", None, "C"],
+            "score": [1, None, 2, None, 3],
+            "ratio": [1.0, float("nan"), 2.0, None, 3.0],
+        }
+
+    @pytest.fixture
+    def decimal_sample_data(self) -> Any:
+        return {"d": [Decimal("12.34"), Decimal("5.50"), Decimal("99.99"), None]}
+
+    def get_decimal_column_dtype(self, data: Any) -> Any:
+        return type(next((value for value in data["d"] if value is not None), Decimal("0")))
 
     def result_row_count(self, result: Any) -> int:
         """A columnar dict's row count is the length of any of its columns."""
@@ -62,59 +72,6 @@ class TestPythonDictFilterEngine(FilterEngineTestMixin, TimeRangeFilterEngineTes
         return list(result["id"])
 
     # Framework-specific tests below
-
-    def test_do_min_filter_missing_value(self, sample_data: Any) -> None:
-        """Test min filter with missing value parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.MIN
-        parameter = {"invalid": 30}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_min_filter(sample_data, single_filter)
-
-    def test_do_min_filter_rejects_min_key_fallback(self) -> None:
-        """``do_min_filter`` must accept ONLY the canonical ``{"value": ...}`` parameter key.
-
-        The pandas/pyarrow/polars filter engines raise when a min filter carries its
-        threshold under ``{"min": ...}``; PythonDict must behave identically instead of
-        silently falling back to ``parameter.min_value``.
-        """
-        data = {"x": [1, 2, 3]}
-        single_filter = SingleFilter(Feature("x"), FilterType.MIN, {"min": 2})
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_min_filter(data, single_filter)
-
-    def test_do_equal_filter_missing_value(self, sample_data: Any) -> None:
-        """Test equal filter with missing value parameter."""
-        feature = Feature("age")
-        filter_type = FilterType.EQUAL
-        parameter = {"invalid": 30}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_equal_filter(sample_data, single_filter)
-
-    def test_do_regex_filter_missing_value(self, sample_data: Any) -> None:
-        """Test regex filter with missing value parameter."""
-        feature = Feature("name")
-        filter_type = FilterType.REGEX
-        parameter = {"invalid": "^A"}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'value' not found"):
-            PythonDictFilterEngine.do_regex_filter(sample_data, single_filter)
-
-    def test_do_categorical_inclusion_filter_missing_values(self, sample_data: Any) -> None:
-        """Test categorical inclusion filter with missing values parameter."""
-        feature = Feature("category")
-        filter_type = FilterType.CATEGORICAL_INCLUSION
-        parameter = {"invalid": ["A", "B"]}  # Wrong parameter name
-        single_filter = SingleFilter(feature, filter_type, parameter)
-
-        with pytest.raises(ValueError, match="Filter parameter 'values' not found"):
-            PythonDictFilterEngine.do_categorical_inclusion_filter(sample_data, single_filter)
 
     def test_filter_with_none_values(self, sample_data: Any) -> None:
         """Test filtering with None values in data."""

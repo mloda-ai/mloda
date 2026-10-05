@@ -371,9 +371,7 @@ class ExecutionPlan:
 
         for pex in pre_execution_plan:
             if isinstance(pex, tuple):
-                js = self.run_link(pex, link_trekker, graph, pre_execution_plan)
-                if js is not None:
-                    fw_execution_plan.append(js)
+                fw_execution_plan.extend(self.run_link(pex, link_trekker, graph, pre_execution_plan))
             else:
                 fw_execution_plan.append(pex)
 
@@ -782,7 +780,7 @@ Available join types:
             required_uuids=deepcopy(ep.required_uuids),
             from_feature_group=from_feature_group,
             to_feature_group=to_feature_group,
-            link_id=ep.link.uuid,
+            link_id=ep.uuid,
             source_framework_uuids=ep.source_framework_uuids,
         )
 
@@ -823,15 +821,11 @@ Available join types:
                 if ep.destination_framework != ep.source_framework:
                     new_tfs = self.fill_tfs_by_joinstep(ep)
 
-                    # Safe to reuse the canonical hop here: link_id is part of its identity, so both joins
-                    # of this link re-find the hopped framework by link.uuid.
-                    canonical_tfs = self.tfs_collection.get(new_tfs)
-                    if canonical_tfs is None:
-                        self.tfs_collection[new_tfs] = new_tfs
-                        new_execution_plan.append(new_tfs)
-                        canonical_tfs = new_tfs
-                    ep.required_uuids.add(canonical_tfs.uuid)
-                    hop_serves[canonical_tfs.uuid].add(ep.uuid)
+                    # link_id is the join token, so each join owns its hop and re-finds its hopped cfw by it.
+                    self.tfs_collection[new_tfs] = new_tfs
+                    new_execution_plan.append(new_tfs)
+                    ep.required_uuids.add(new_tfs.uuid)
+                    hop_serves[new_tfs.uuid].add(ep.uuid)
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -849,7 +843,7 @@ Available join types:
                             for uuid in inner_ep.get_uuids():
                                 if uuid in ep.source_framework_uuids:
                                     # add the link uuid to the children_if_root of the source feature group
-                                    inner_ep.add_value_to_children_if_root(ep.link.uuid)
+                                    inner_ep.add_value_to_children_if_root(ep.uuid)
 
                                     # add to upload as this source feature group gets accessed in mp by other process
                                     need_to_upload_collector.update(ep.source_framework_uuids)
@@ -1448,7 +1442,7 @@ Available join types:
         link_trekker: LinkTrekker,
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
-    ) -> JoinStep | None:
+    ) -> list[JoinStep]:
         link = link_fw[0]
         destination_framework = link_fw[1]
         source_framework = link_fw[2]
@@ -1479,6 +1473,55 @@ Available join types:
                 raise ValueError(f"Link {link} has no matching uuids.")
 
         children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
+
+        join_steps: list[JoinStep] = []
+        for component in self._independent_link_children(link, children_uuids, graph):
+            js = self._plan_link_join(
+                link_fw,
+                link_trekker,
+                graph,
+                pre_execution_plan,
+                component,
+                destination_framework,
+                source_framework,
+                swap_merge_sides,
+                attempted_key,
+            )
+            if js is not None:
+                join_steps.append(js)
+        return join_steps
+
+    def _independent_link_children(self, link: Link, children_uuids: set[UUID], graph: Graph) -> list[set[UUID]]:
+        """Children reading disjoint steps on the link's declared sides (e.g. option variants) each get a join."""
+        step_of = {uuid: index for index, uuids in enumerate(self.feature_set_collections) for uuid in uuids}
+        components: list[tuple[set[UUID], set[int]]] = []
+        for child in sorted(children_uuids):
+            split = split_by_declared_side(link, set(graph.parent_to_children_mapping[child]), graph)
+            sides = split.left_uuids_any_distance | split.right_uuids_any_distance
+            steps = {step_of[uuid] for uuid in sides if uuid in step_of}
+            if not steps:
+                return [children_uuids]
+            linked = [component for component in components if component[1] & steps]
+            merged = (
+                {child}.union(*(component[0] for component in linked)),
+                steps.union(*(component[1] for component in linked)),
+            )
+            components = [component for component in components if component not in linked] + [merged]
+        return [component[0] for component in components]
+
+    def _plan_link_join(
+        self,
+        link_fw: LinkFrameworkTrekker,
+        link_trekker: LinkTrekker,
+        graph: Graph,
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+        children_uuids: set[UUID],
+        destination_framework: type[ComputeFramework],
+        source_framework: type[ComputeFramework],
+        swap_merge_sides: bool,
+        attempted_key: LinkFrameworkTrekker,
+    ) -> JoinStep | None:
+        link = link_fw[0]
 
         # This gets the parent ids of the joinstep, which needs to be calculated before the link.
         required_uuids: set[UUID] = set()
@@ -1540,7 +1583,8 @@ Available join types:
             # result = True
             result = self.is_valid_join_step(link_fw, children_fw, children_uuid, graph)
             if result is False:
-                self.declined_orientations.append(attempted_key)
+                if attempted_key not in self.declined_orientations:
+                    self.declined_orientations.append(attempted_key)
                 return None
             elif result is True:
                 pass

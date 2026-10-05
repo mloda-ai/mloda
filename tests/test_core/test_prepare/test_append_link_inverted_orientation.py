@@ -110,7 +110,9 @@ def _plan_link(
 
 
 def _run(planned: Planned) -> JoinStep | None:
-    return planned.plan.run_link(planned.link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
+    join_steps = planned.plan.run_link(planned.link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
+    assert len(join_steps) <= 1
+    return join_steps[0] if join_steps else None
 
 
 def _assert_is_orientation_configuration_error(message: str, link: Link) -> None:

@@ -162,7 +162,7 @@ class TestTheJoinHopSurvivesASameShapedFeatureGroupHop:
         assert len(transform_steps) == 2, f"expected two transform hops (join + plain FG), got: {described}"
 
         join_step = _join_step(session)
-        join_hops = [step for step in transform_steps if step.link_id == join_step.link.uuid]
+        join_hops = [step for step in transform_steps if step.link_id == join_step.uuid]
         assert len(join_hops) == 1, f"expected exactly one hop tied to the join, got: {described}"
 
         assert join_hops[0].uuid in join_step.required_uuids, (
@@ -187,7 +187,7 @@ class TestTheJoinHopAndTheFeatureGroupHopShareAShapeButNotAnIdentity:
         described = [_describe(step) for step in transform_steps]
         assert len(transform_steps) == 2, f"expected two transform hops (join + plain FG), got: {described}"
 
-        join_link_uuid = _join_step(session).link.uuid
+        join_link_uuid = _join_step(session).uuid
         join_hop = next(step for step in transform_steps if step.link_id == join_link_uuid)
         plain_hop = next(step for step in transform_steps if step.link_id is None)
 

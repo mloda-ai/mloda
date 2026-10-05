@@ -3,11 +3,13 @@ frameworks and no child on that framework is rejected, the distinct-framework sh
 
 from typing import Any
 
+import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
@@ -539,3 +541,216 @@ def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_cor
     c_name = SidePathC.get_class_name()
     values = [sorted(result[c_name].to_pylist()) for result in results if c_name in result.column_names]
     assert values == [[211, 422, 633]]
+
+
+TIE_SCALE = {"a": 1, "b": 10}
+TIE_INDEX = Index(("tie_jid",))
+
+
+def _tie_root_data(features: FeatureSet, name: str, base: list[int]) -> dict[str, list[int]]:
+    scale = TIE_SCALE[features.get_options_key("tie_tag")]
+    return {"tie_jid": [1, 2, 3], name: [value * scale for value in base]}
+
+
+class TieLeftPd(FeatureGroup):
+    """Pandas root whose values depend on the tie_tag option."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"tie_left_val"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame(_tie_root_data(features, "tie_left_val", [1, 2, 3]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [TIE_INDEX]
+
+
+class TieLeftPa(FeatureGroup):
+    """PyArrow root whose values depend on the tie_tag option."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"tie_left_val"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(_tie_root_data(features, "tie_left_val", [1, 2, 3]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [TIE_INDEX]
+
+
+class TieRightPd(FeatureGroup):
+    """Pandas root whose values depend on the tie_tag option."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"tie_right_val"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame(_tie_root_data(features, "tie_right_val", [100, 200, 300]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [TIE_INDEX]
+
+
+class TieRightPa(FeatureGroup):
+    """PyArrow root whose values depend on the tie_tag option."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"tie_right_val"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table(_tie_root_data(features, "tie_right_val", [100, 200, 300]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def index_columns(cls) -> list[Index] | None:
+        return [TIE_INDEX]
+
+
+def _tie_parents(options: Options) -> set[Feature]:
+    tag = options.get("tie_tag")
+    return {Feature("tie_left_val", options={"tie_tag": tag}), Feature("tie_right_val", options={"tie_tag": tag})}
+
+
+class TieConsumerPd(FeatureGroup):
+    """Pandas consumer pulling both roots with its own tie_tag."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return _tie_parents(options)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["tie_left_val"] + data["tie_right_val"]
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class TieConsumerPa(FeatureGroup):
+    """PyArrow consumer pulling both roots with its own tie_tag."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return _tie_parents(options)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data["tie_left_val"], data["tie_right_val"]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+_TIE_LEFT: dict[str, type[FeatureGroup]] = {"pd": TieLeftPd, "pa": TieLeftPa}
+_TIE_RIGHT: dict[str, type[FeatureGroup]] = {"pd": TieRightPd, "pa": TieRightPa}
+_TIE_CONSUMER: dict[str, type[FeatureGroup]] = {"pd": TieConsumerPd, "pa": TieConsumerPa}
+
+_TIE_FRAMEWORK_MIXES = [
+    pytest.param("pd", "pd", "pd", id="pd_pd_pd"),
+    pytest.param("pd", "pa", "pd", id="pd_pa_pd"),
+    pytest.param("pa", "pd", "pd", id="pa_pd_pd"),
+    pytest.param("pd", "pa", "pa", id="pd_pa_pa"),
+    pytest.param("pa", "pa", "pa", id="pa_pa_pa"),
+]
+
+
+def _tie_args(left: str, right: str, consumer: str) -> dict[str, Any]:
+    left_group, right_group = _TIE_LEFT[left], _TIE_RIGHT[right]
+    return {
+        "links": {Link.inner(JoinSpec(left_group, "tie_jid"), JoinSpec(right_group, "tie_jid"))},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "plugin_collector": PluginCollector.enabled_feature_groups({left_group, right_group, _TIE_CONSUMER[consumer]}),
+    }
+
+
+def _tie_features(consumer: str, tags: list[str]) -> list[Feature | str]:
+    name = _TIE_CONSUMER[consumer].get_class_name()
+    return [Feature(name, options={"tie_tag": tag}) for tag in tags]
+
+
+def _tie_values(results: list[Any], consumer: str) -> list[list[int]]:
+    name = _TIE_CONSUMER[consumer].get_class_name()
+    return sorted(
+        sorted(int(v) for v in (r[name].tolist() if hasattr(r, "iloc") else r[name].to_pylist())) for r in results
+    )
+
+
+def _tie_expected(tags: list[str]) -> list[list[int]]:
+    return sorted([101 * TIE_SCALE[tag], 202 * TIE_SCALE[tag], 303 * TIE_SCALE[tag]] for tag in tags)
+
+
+@pytest.mark.parametrize("left, right, consumer", _TIE_FRAMEWORK_MIXES)
+def test_one_consumer_requested_with_two_option_variants_over_one_link_joins_each_variant(
+    left: str, right: str, consumer: str
+) -> None:
+    kwargs = _tie_args(left, right, consumer)
+    kwargs["parallelization_modes"] = {ParallelizationMode.SYNC}
+
+    results = mloda.run_all(_tie_features(consumer, ["a", "b"]), **kwargs)
+
+    assert _tie_values(results, consumer) == _tie_expected(["a", "b"])
+
+
+@pytest.mark.parametrize("left, right, consumer", _TIE_FRAMEWORK_MIXES)
+def test_one_consumer_requested_with_two_option_variants_over_one_link_plans_one_join_per_variant(
+    left: str, right: str, consumer: str
+) -> None:
+    kwargs = _tie_args(left, right, consumer)
+    kwargs["parallelization_modes"] = {ParallelizationMode.SYNC}
+
+    session = mloda.prepare(_tie_features(consumer, ["a", "b"]), **kwargs)
+
+    assert session.engine is not None
+    join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
+    assert len(join_steps) == 2
+
+
+@pytest.mark.parametrize("left, right, consumer", _TIE_FRAMEWORK_MIXES)
+def test_one_consumer_requested_with_one_option_variant_over_one_link_joins_it(
+    left: str, right: str, consumer: str
+) -> None:
+    kwargs = _tie_args(left, right, consumer)
+    kwargs["parallelization_modes"] = {ParallelizationMode.SYNC}
+
+    results = mloda.run_all(_tie_features(consumer, ["a"]), **kwargs)
+
+    assert _tie_values(results, consumer) == _tie_expected(["a"])
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+def test_two_option_variants_over_one_link_join_each_variant_with_multiprocessing(flight_server: Any) -> None:
+    kwargs = _tie_args("pd", "pd", "pd")
+    kwargs["parallelization_modes"] = {ParallelizationMode.MULTIPROCESSING}
+    kwargs["flight_server"] = flight_server
+
+    results = mloda.run_all(_tie_features("pd", ["a", "b"]), **kwargs)
+
+    assert _tie_values(results, "pd") == _tie_expected(["a", "b"])

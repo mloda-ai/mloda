@@ -799,7 +799,13 @@ def _join_steps(plan: ExecutionPlan) -> list[JoinStep]:
 
 
 def _transform_steps(plan: ExecutionPlan, link: Link) -> list[TransformFrameworkStep]:
-    return [step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id == link.uuid]
+    return [
+        step for step in plan if isinstance(step, TransformFrameworkStep) and step.link_id in _join_tokens(plan, link)
+    ]
+
+
+def _join_tokens(plan: ExecutionPlan, link: Link) -> set[UUID]:
+    return {step.uuid for step in _join_steps(plan) if step.link.uuid == link.uuid}
 
 
 def _records(plan: ExecutionPlan, link: Link) -> tuple[ResolvedJoin, ...]:

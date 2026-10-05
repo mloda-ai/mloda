@@ -832,6 +832,7 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
+        step.uuid = uuid4()
         link_uuid = uuid4()
         step.link = Mock()
         step.link.uuid = link_uuid
@@ -849,7 +850,7 @@ class TestPrepareTfsAndJoinStep:
 
         assert result is from_cfw
         # Should first try link.uuid
-        assert cfw_register.get_cfw_uuid.call_args_list[0] == call("DestinationCFW", link_uuid)
+        assert cfw_register.get_cfw_uuid.call_args_list[0] == call("DestinationCFW", step.uuid)
 
     def test_falls_back_to_source_framework_uuids_for_join_step(self) -> None:
         """Should fallback to source_framework_uuids if link UUID not found."""
@@ -858,6 +859,7 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
+        step.uuid = uuid4()
         link_uuid = uuid4()
         source_uuid = uuid4()
         step.link = Mock()
@@ -885,6 +887,7 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
+        step.uuid = uuid4()
         step.link = Mock()
         step.link.uuid = uuid4()
         step.destination_framework = Mock()
@@ -915,6 +918,7 @@ class TestPrepareTfsAndJoinStep:
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
+        step.uuid = uuid4()
         link_uuid = uuid4()
         step.link = Mock()
         step.link.uuid = link_uuid

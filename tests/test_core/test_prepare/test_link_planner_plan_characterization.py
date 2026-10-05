@@ -288,7 +288,9 @@ def _trek(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[Co
 
 def _run(planned: Planned, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework]) -> JoinStep | None:
     link_fw: LinkFrameworkTrekker = (planned.link, left_cfw, right_cfw)
-    return planned.plan.run_link(link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
+    join_steps = planned.plan.run_link(link_fw, planned.link_trekker, planned.graph, planned.pre_execution_plan)
+    assert len(join_steps) <= 1
+    return join_steps[0] if join_steps else None
 
 
 def _pair_scenario(

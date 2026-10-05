@@ -418,16 +418,16 @@ class ExecutionOrchestrator:
         self._mark_children_and_track(cfw, feature_uuids_to_possible_drop)
 
     def _drop_join_source_if_possible(self, step: JoinStep) -> None:
-        """Marks the join's destination-registered cfw with the link's own uuid; applies to both
+        """Marks the join's destination-registered cfw with the join's own token; applies to both
         same- and cross-framework joins, since only the join's own completion can supply it."""
         link_cfw_uuid = self.cfw_register.get_cfw_uuid_as_registered(
-            step.destination_framework.get_class_name(), step.link.uuid
+            step.destination_framework.get_class_name(), step.uuid
         )
         if link_cfw_uuid is None:
             return
 
         link_cfw = self.executor.cfw_collection[link_cfw_uuid]
-        self._mark_children_and_track(link_cfw, {step.link.uuid})
+        self._mark_children_and_track(link_cfw, {step.uuid})
 
     def _drop_tfs_source_if_possible(self, step: TransformFrameworkStep) -> None:
         """Marks a hop's SOURCE-side cfw with its owed tokens once the hop itself finishes, for both

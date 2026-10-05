@@ -1,6 +1,6 @@
-"""Regression coverage for add_tfs: a deduped TransformFrameworkStep must still wire its uuid
-into every consuming step, not just the one that first created it (Scenario A), and that two
-same-shaped hops from genuinely different parents must not dedup into one (Scenario B).
+"""Regression coverage for add_tfs: each JoinStep of one link owns its own hop, keyed by the join
+token (Scenario A), and two same-shaped hops from genuinely different parents must not dedup
+into one (Scenario B).
 """
 
 from typing import Any, NamedTuple
@@ -101,21 +101,18 @@ def _join_step_dedup_scenario() -> JoinStepDedupScenario:
     return JoinStepDedupScenario(js1, js2, Graph())
 
 
-def test_both_joinsteps_of_a_deduped_hop_depend_on_the_surviving_transform_step() -> None:
+def test_each_joinstep_of_one_link_owns_its_own_transform_hop() -> None:
     scenario = _join_step_dedup_scenario()
 
     new_plan = ExecutionPlan().add_tfs([scenario.js1, scenario.js2], scenario.graph)
 
     tfs_steps = [step for step in new_plan if isinstance(step, TransformFrameworkStep)]
-    assert len(tfs_steps) == 1, f"expected the two equal hops to dedup into one, got: {tfs_steps}"
-    tfs_uuid = tfs_steps[0].uuid
+    assert len(tfs_steps) == 2, f"expected one hop per join, got: {tfs_steps}"
 
-    assert tfs_uuid in scenario.js1.required_uuids
-    assert tfs_uuid in scenario.js2.required_uuids
-
-    # Pins current dedup behavior: the survivor is js1's hop verbatim (first-inserted wins),
-    # not a blend of both JoinSteps' source_framework_uuids.
-    assert tfs_steps[0].source_framework_uuid == next(iter(scenario.js1.source_framework_uuids))
+    for join_step in (scenario.js1, scenario.js2):
+        hop = next(step for step in tfs_steps if step.link_id == join_step.uuid)
+        assert join_step.required_uuids == {hop.uuid}
+        assert hop.source_framework_uuid == next(iter(join_step.source_framework_uuids))
 
 
 # ---------------------------------------------------------------------------

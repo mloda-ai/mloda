@@ -24,7 +24,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import DataCreator, FeatureGroup
+from mloda.provider import DataCreator, FeatureGroup, FileSource, InputDataDescriptor
 from mloda.steward import GateBypassError
 from mloda.user import (
     DataAccessCollection,
@@ -72,12 +72,14 @@ class _InputDataLoadCapturingExtender(Extender):
         self.priority = priority
         self.captured: HookContext | None = None
         self.all_captured: list[HookContext] = []
+        self.results: list[Any] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.INPUT_DATA_LOAD}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         result = func(*args, **kwargs)
+        self.results.append(result)
         self.captured = HookContext.current()
         if self.captured is not None:
             self.all_captured.append(self.captured)
@@ -168,6 +170,12 @@ class TestInputDataLoadHookFiresAlongsideCalculateExtender:
         assert fetch_context.principal == calc_context.principal
         assert fetch_context.compute_framework_name == calc_context.compute_framework_name
         assert fetch_context.feature_group_class == calc_context.feature_group_class
+
+        assert fetch_extender.results
+        assert all(isinstance(r, InputDataDescriptor) for r in fetch_extender.results)
+        assert any(isinstance(r, FileSource) for r in fetch_extender.results)
+        assert fetch_context.status == "success"
+        assert fetch_context.rows_out is None
 
 
 class TestInputDataLoadHookFiresWithOnlyFetchExtenderRegistered:

@@ -279,7 +279,7 @@ mloda picks one compute framework per step group (the features of one FeatureGro
 
 - **Allowed set**: the framework must fit the FeatureGroup (`compute_framework_rule`, `supports_compute_framework`), any pin via `Feature(compute_framework=...)`, and the run's enabled frameworks.
 - **Connection skip**: a `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with `compute_frameworks=[DuckDBFramework]`.
-- **Joins**: a link's child runs on one of its two sides. RIGHT joins run on the right side's framework, unless the consumers cannot run there, then on the left side's. APPEND and UNION on the left. Children of one link agree on the side.
+- **Joins**: a link's child runs on one of its two sides. RIGHT joins run on the right side's framework, unless the consumers cannot run there, then on the left side's (only for links joining two different FeatureGroups). APPEND and UNION on the left. Children of one link agree on the side.
 - **Filters**: a filter pinned to a framework moves its host feature onto that framework.
 - **Conversions**: a transformer chain must exist between every parent and child on different frameworks.
 - **Choice among valid plans**: lowest cost first (one point per conversion), then the order of the run's `compute_frameworks` list, then the default order. The default order puts Pandas, Polars, PyArrow before `SELF_MANAGED` frameworks (Spark, Iceberg), before `REQUIRED` ones (DuckDB, SQLite), then class name.

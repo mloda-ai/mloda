@@ -14,6 +14,7 @@ from mloda.core.runtime.flight.flight_server import FlightServer
 
 class JoinStep(Step):
     destination_hop_uuid: UUID | None = None
+    split_consumers: frozenset[UUID] | None = None  # set only for parts of a carrier-frame split
 
     def __init__(
         self,

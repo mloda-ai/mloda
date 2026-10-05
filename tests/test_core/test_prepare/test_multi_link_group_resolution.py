@@ -1067,21 +1067,33 @@ def test_one_sided_option_variant_requested_alone_over_one_link_joins_it(tag: st
     assert _tie_one_sided_run([tag]) == [expected]
 
 
+def _nullable_column_values(results: list[Any], name: str) -> list[list[int | None]]:
+    found = [r[name] for r in results if name in (r.columns if hasattr(r, "iloc") else r.column_names)]
+    columns = [
+        [None if pd.isna(v) else int(v) for v in (c.tolist() if hasattr(c, "iloc") else c.to_pylist())] for c in found
+    ]
+    return sorted((sorted(c, key=lambda v: (v is None, v or 0)) for c in columns), key=lambda c: [v or 0 for v in c])
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
 @pytest.mark.parametrize("right", ["pa_extra", "pd_extra"])
-def test_a_right_join_keeps_the_right_row_the_left_lacks_for_each_variant(right: str) -> None:
+def test_a_right_join_keeps_the_right_row_the_left_lacks_for_each_variant(
+    flight_server: Any, mode: ParallelizationMode, right: str
+) -> None:
     kwargs = _tie_one_sided_kwargs(TieOneSidedConsumer, "pa", right, "right")
-    name = TieOneSidedConsumer.get_class_name()
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
 
     results = mloda.run_all(
         _tie_one_sided_features(TieOneSidedConsumer, ["a", "b"]),
-        parallelization_modes={ParallelizationMode.SYNC},
+        parallelization_modes={mode},
+        flight_server=server,
         **kwargs,
     )
 
-    found = [r for r in results if name in (r.columns if hasattr(r, "iloc") else r.column_names)]
-    assert len(found) == 2
-    for result in found:
-        assert len(result) == 4
+    values = _nullable_column_values(results, TieOneSidedConsumer.get_class_name())
+    assert values == [[101, 202, 303, None], [1001, 2002, 3003, None]]
 
 
 def test_two_consumers_of_one_right_link_on_the_left_and_the_right_framework_raise_a_clear_error() -> None:

@@ -105,7 +105,7 @@ def _refine(
         classes = refined
 
 
-def _join_allows(jointype: JoinType, values: Values, right_off_child: bool = False) -> bool:
+def _join_allows(jointype: JoinType, values: Values, right_off_child: bool) -> bool:
     left, right, child = values
     if jointype is JoinType.RIGHT:
         return child is right or (right_off_child and child is left)

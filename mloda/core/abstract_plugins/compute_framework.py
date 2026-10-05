@@ -2,6 +2,7 @@ import contextlib
 import pickle  # nosec B403
 from abc import ABC
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, final
 from uuid import UUID, uuid4
@@ -12,6 +13,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 )
 from mloda.core.abstract_plugins.components.merge.base_merge_engine import BaseMergeEngine
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
+from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.function_extender import (
     Extender,
@@ -133,7 +135,7 @@ class ComputeFramework(ABC):
         self.children_if_root = children_if_root
         self.already_calculated_children_tracker: set[UUID] = set()
         self.column_names: set[str] = set()
-        self.function_extender = function_extender if function_extender is not None else set()
+        self.function_extender: AbstractSet[Extender] = function_extender if function_extender is not None else set()
         # Raw pickled payload attached by the worker dispatch path; materialized into
         # function_extender only by __setstate__, i.e. only on the actual unpickle in the worker.
         self._pending_extender_payload: bytes | None = None
@@ -168,6 +170,8 @@ class ComputeFramework(ABC):
     def __setstate__(self, state: dict[str, Any]) -> None:
         """Materialize a deferred worker extender payload on the actual unpickle, so an
         extender's own __setstate__ (e.g. building a live handle) fires in the worker's pid."""
+        if self.__dict__.get(_SEAL_FLAG):
+            raise AttributeError("__setstate__ cannot be called on a framework attached to a run")
         self.__dict__.update(state)
         restored = self.__dict__.get("run_context")
         if restored is not None and restored.run_id:
@@ -177,6 +181,17 @@ class ComputeFramework(ABC):
             object.__setattr__(self, "function_extender", extender)
             object.__setattr__(self, "_hook_extenders", hooks)
             self._pending_extender_payload = None
+        if self.__dict__.get(_SEAL_FLAG):
+            self._seal_extenders()
+
+    @final
+    def _seal_extenders(self) -> None:
+        """Seal on read-only copies, so neither the session's set nor the shared hook table is aliased."""
+        object.__setattr__(self, "function_extender", frozenset(self.__dict__.get("function_extender") or ()))
+        hooks = self.__dict__.get("_hook_extenders")
+        if hooks is not None:
+            object.__setattr__(self, "_hook_extenders", _frozen_dict(hooks))
+        object.__setattr__(self, _SEAL_FLAG, True)
 
     @classmethod
     def expected_data_framework(cls) -> Any:
@@ -873,6 +888,8 @@ class ComputeFramework(ABC):
         hooks = self._hook_extenders
         if hooks is None:
             hooks = build_hook_extenders(self.function_extender)
+            if self.__dict__.get(_SEAL_FLAG):
+                hooks = _frozen_dict(hooks)
             object.__setattr__(self, "_hook_extenders", hooks)
         return hooks.get(wrapper_function_enum)
 

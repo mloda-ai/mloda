@@ -1480,10 +1480,19 @@ class TestMultiExecuteStep:
 
 
 class TestExecutorSealsTheAttachedFramework:
-    def _attached(self) -> ComputeFramework:
+    def _attached(
+        self,
+        function_extender: set[Extender] | None = None,
+        hook_extenders: dict[ExtenderHook, Extender] | None = None,
+    ) -> ComputeFramework:
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_run_context.return_value = RunContext(run_id="run-1", carrier={"k": "v"})
-        executor = ComputeFrameworkExecutor(cfw_register, Mock(spec=WorkerManager))
+        executor = ComputeFrameworkExecutor(
+            cfw_register,
+            Mock(spec=WorkerManager),
+            function_extender=function_extender,
+            hook_extenders=hook_extenders,
+        )
         cfw_uuid = executor.init_compute_framework(PythonDictFramework, ParallelizationMode.SYNC, set())
         return executor.cfw_collection[cfw_uuid]
 
@@ -1550,6 +1559,68 @@ class TestExecutorSealsTheAttachedFramework:
         assert restored.run_context.run_id == "run-1"
         with pytest.raises(AttributeError):
             setattr(restored, name, value)
+
+    @pytest.mark.parametrize("name,error", [("function_extender", AttributeError), ("_hook_extenders", TypeError)])
+    def test_sealed_framework_rejects_in_place_clear_after_pickle_round_trip(
+        self, name: str, error: type[Exception]
+    ) -> None:
+        restored = pickle.loads(pickle.dumps(self._attached({_StateHoldingExtender("a")})))  # nosec B301
+        restored.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        target: Any = getattr(restored, name)
+
+        with pytest.raises(error):
+            target.clear()
+
+        assert len(restored.function_extender) == 1
+        assert ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE in restored._hook_extenders
+
+    @pytest.mark.parametrize(
+        "name,method,error",
+        [
+            ("function_extender", "clear", AttributeError),
+            ("function_extender", "add", AttributeError),
+            ("_hook_extenders", "clear", TypeError),
+            ("_hook_extenders", "pop", TypeError),
+            ("_hook_extenders", "__setitem__", TypeError),
+        ],
+    )
+    def test_attached_framework_rejects_in_place_mutation(self, name: str, method: str, error: type[Exception]) -> None:
+        hook = ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE
+        caller_set: set[Extender] = {_StateHoldingExtender("a")}
+        caller_table = build_hook_extenders(caller_set)
+        table_before = dict(caller_table)
+        cfw = self._attached(caller_set, caller_table)
+        target: Any = getattr(cfw, name)
+        args: tuple[Any, ...] = {
+            "clear": (),
+            "add": (_StateHoldingExtender("b"),),
+            "pop": (hook,),
+            "__setitem__": (hook, _StateHoldingExtender("b")),
+        }[method]
+
+        with pytest.raises(error):
+            getattr(target, method)(*args)
+
+        assert len(caller_set) == 1
+        assert caller_table == table_before
+        assert cfw.function_extender is not caller_set
+        assert cfw._hook_extenders is not caller_table
+
+    def test_direct_setstate_on_attached_framework_is_rejected(self) -> None:
+        cfw = self._attached({_StateHoldingExtender("a")})
+        cfw.get_function_extender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        run_context = cfw.run_context
+        function_extender = cfw.function_extender
+        hook_extenders = cfw._hook_extenders
+        state = dict(cfw.__dict__)
+        state.update(run_context=RunContext(run_id="forged"), function_extender=set(), _hook_extenders={})
+
+        with pytest.raises(AttributeError):
+            cfw.__setstate__(state)
+
+        assert cfw.run_context is run_context
+        assert cfw.function_extender is function_extender
+        assert cfw._hook_extenders is hook_extenders
 
     def test_unattached_framework_pickle_round_trip_stays_assignable(self) -> None:
         cfw = PythonDictFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())

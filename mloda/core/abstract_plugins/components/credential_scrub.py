@@ -54,8 +54,8 @@ _QUOTED_KEY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# token68 that looks like a token, not prose: a digit, uppercase or one of -_~+/, or a `.` followed by a token char, or 20+ token chars.
-# Scheme words are matched with a scoped (?i:...) so this uppercase check stays case-sensitive.
+# Token-shaped (not prose): has a digit, uppercase or one of -_~+/, a `.` before a token char, or is 20+ chars long.
+# Scheme words use a scoped (?i:...) so the uppercase check here stays case-sensitive.
 _TOKEN68 = r"[A-Za-z0-9\-._~+/]"
 _TOKEN_SHAPE = rf"(?={_TOKEN68}{{20}}|{_TOKEN68}*(?:[0-9A-Z\-_~+/]|\.{_TOKEN68}))"
 _BEARER_PATTERN = re.compile(rf"(?<![\w-])(?P<scheme>(?i:bearer))[ \t]+{_TOKEN_SHAPE}{_TOKEN68}+=*")

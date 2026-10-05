@@ -744,7 +744,10 @@ class Engine:
         if not input_features:
             return None
 
-        features = Features(list(input_features), child_options=options, child_uuid=uuid, parent_domain=parent_domain)
+        ordered: list[Feature | str] = list(input_features)
+        if isinstance(input_features, (set, frozenset)):  # set order is hash-seed dependent
+            ordered.sort(key=lambda f: str(f.name) if isinstance(f, Feature) else str(f))
+        features = Features(ordered, child_options=options, child_uuid=uuid, parent_domain=parent_domain)
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)
         for input_feature in features.collection:

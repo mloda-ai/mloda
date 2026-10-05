@@ -173,6 +173,13 @@ class FormatFeatureGroup(FeatureGroup):
         return None
 
     @classmethod
+    def _loader_for_match(
+        cls, framework: type[ComputeFramework], match: SourceMatch
+    ) -> Callable[[SourceMatch, Any], Any] | None:
+        """The loader for this match; a subclass returns None to force the neutral path."""
+        return cls._loader_for(framework)
+
+    @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> Any:
         """Load the matched source with the current framework's loader, else its neutral form, via the hook."""
         match = features.input_data_match
@@ -180,7 +187,7 @@ class FormatFeatureGroup(FeatureGroup):
             raise ValueError(f"{cls.__name__}.calculate_feature found no input_data_match on the feature set.")
         source = match[1]
         framework = features.get_sorted_features()[0].get_compute_framework()
-        loader = cls._loader_for(framework)
+        loader = cls._loader_for_match(framework, source)
         load = loader if loader is not None else cls.load_neutral
         loader_name = framework.__name__ if loader is not None else "neutral"
         return dispatch_input_data_load(

@@ -7,6 +7,7 @@ collected on its own. Every test-local subclass of the group is gated by an expl
 from __future__ import annotations
 
 import copy
+import hashlib
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
 HANDLE_OPTION = "data_access_handle"
 SECRET = "toyfmt-secret-value"  # nosec B105
 OWN_TABLE = "own_table"
+QUERY_OPTION = "query_text"
 
 
 class _Spy:
@@ -59,6 +61,10 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         """Create a readable database holding one table per entry with exactly these columns."""
+        raise NotImplementedError
+
+    def query_for(self, table: str, columns: list[str]) -> str:
+        """A query text the group's produce_query_rows runs, selecting these columns of the table."""
         raise NotImplementedError
 
     def write_corrupt_database(self, path: Path) -> None:
@@ -566,5 +572,108 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         identity = capture.contexts[0].data_access_identity
         assert identity == self._source_of(path, "identity_table")
         assert SECRET not in str(identity)
+
+    # query route (groups that list ReadDBFG.QUERY_ROUTE in their CLAIM_ROUTES)
+
+    def _require_query_route(self) -> None:
+        from mloda.provider import ReadDBFG as Base
+
+        if Base.QUERY_ROUTE not in self.feature_group_class.CLAIM_ROUTES:
+            pytest.skip(f"{self._group_name()} has no query route")
+
+    def _query_source(self, path: Path, query: str) -> str:
+        return f"{self.identity_of(path)}::query:{hashlib.sha256(query.encode()).hexdigest()[:16]}"
+
+    def _query_feature(self, name: str, query: str, pointer: Any = None) -> Feature:
+        group: dict[str, Any] = {QUERY_OPTION: query}
+        if pointer is not None:
+            group[self._group_name()] = pointer
+        return Feature(name, Options(group))
+
+    def test_db_query_pointer_claims_a_query_source_and_loads_the_requested_columns_without_secrets(self) -> None:
+        self._require_query_route()
+        from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery
+
+        columns = ["toyfmt_qa", "toyfmt_qb", "toyfmt_qc"]
+        path = self._make("query_db", {"query_table": {name: [i, i + 10] for i, name in enumerate(columns)}})
+        query = self.query_for("query_table", columns)
+        credential = self.make_credential(path, password=SECRET)
+
+        feature = self._query_feature("toyfmt_qa", query, credential)
+        assert self._claims(feature, None)
+        match = self._claimed_match(feature)
+        assert match.source == self._query_source(path, query)
+        assert isinstance(match.access, DBQuery)
+        assert SECRET not in match.source
+        assert SECRET not in repr(match)
+
+        with pytest.raises(NotImplementedError):
+            self.feature_group_class.describe_columns(match)
+
+        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+            PythonDictFramework,
+        )
+
+        expected = {"toyfmt_qa": [0, 10], "toyfmt_qc": [2, 12]}
+        for framework in (PyArrowTable, PythonDictFramework):
+            capture = _LoadCapture()
+            result = mloda.run_all(
+                [self._query_feature(name, query, credential) for name in ("toyfmt_qa", "toyfmt_qc")],
+                compute_frameworks=[framework],
+                plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class}),
+                function_extender={capture},
+            )
+            assert len(result) == 1
+            loaded = result[0].to_pydict() if framework is PyArrowTable else result[0]
+            assert loaded == expected, framework.__name__
+            assert len(capture.contexts) == 1
+            identity = capture.contexts[0].data_access_identity
+            assert identity == self._query_source(path, query)
+            assert SECRET not in str(identity)
+
+    def test_db_query_with_two_credentials_aborts_naming_both_query_sources_and_a_fix_without_any_secret(self) -> None:
+        self._require_query_route()
+        other = self._make("query_second_db", {OWN_TABLE: {self.present_column: [9]}})
+        query = self.query_for(OWN_TABLE, [self.present_column])
+        dac = DataAccessCollection(
+            credentials={
+                "db_a": self.make_credential(self.own_path, password=SECRET),
+                "db_b": self.make_credential(other, password=SECRET),
+            }
+        )
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(self._query_feature(self.present_column, query), dac)
+        message = str(exc_info.value)
+        assert self._query_source(self.own_path, query) in message
+        assert self._query_source(other, query) in message
+        assert "data_access_handle" in message
+        assert SECRET not in message
+
+    def test_db_query_text_suppresses_the_table_route_and_opens_no_connection_at_match_time(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._require_query_route()
+        query = self.query_for(OWN_TABLE, [self.present_column])
+        spy = self._spy(monkeypatch)
+        feature = self._query_feature(self.present_column, query)
+        assert self._claims(feature, self.own_dac())
+        assert self._claimed_match(feature).source == self._query_source(self.own_path, query)
+        assert spy.opened == []
+        assert spy.list_tables == 0
+        assert spy.table_columns == []
+
+    @pytest.mark.parametrize("same", [True, False], ids=["same_query", "different_queries"])
+    def test_db_query_source_is_a_stable_function_of_the_query_text(self, same: bool) -> None:
+        self._require_query_route()
+        first = self.query_for(OWN_TABLE, [self.present_column])
+        second = first if same else f"{first} WHERE 1 = 1"
+        feature_a = self._query_feature(self.present_column, first)
+        feature_b = self._query_feature("toyfmt_other_name", second)
+        dac = self.own_dac()
+        assert self._claims(feature_a, dac)
+        assert self._claims(feature_b, dac)
+        sources = (self._claimed_match(feature_a).source, self._claimed_match(feature_b).source)
+        assert (sources[0] == sources[1]) is same
+        assert sources[0] == self._query_source(self.own_path, first)
 
     # subclass takeover

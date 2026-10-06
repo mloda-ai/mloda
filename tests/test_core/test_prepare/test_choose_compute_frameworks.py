@@ -863,6 +863,20 @@ def _reason_fan_in_no_signal(net: _Net) -> list[Feature]:
     return [child]
 
 
+def _reason_mixed_depth_block(net: _Net) -> list[Feature]:
+    x_shallow = net.add(ChooserRootFG, "reason_mixed_shallow", {D})
+    layers = [net.add(ChooserLayerFG, "reason_mixed_layer", {D}, {"layer": index}) for index in range(3)]
+    net.edge(layers[0], layers[1])
+    net.edge(layers[1], layers[2])
+    x_deep = net.add(ChooserRootFG, "reason_mixed_deep", {D})
+    net.edge(layers[2], x_deep)
+    mid = net.add(ChooserLeafFG, "reason_mixed_mid", {P, D})
+    sink = net.add(ChooserSinkFG, "reason_mixed_sink", {P})
+    net.edge(x_shallow, mid)
+    net.edge(mid, sink)
+    return [mid]
+
+
 @pytest.mark.parametrize(
     ("build", "positions", "output", "expected", "frameworks"),
     [
@@ -877,6 +891,7 @@ def _reason_fan_in_no_signal(net: _Net) -> list[Feature]:
         (_reason_two_free_blocks, None, P, [SAVES_TWO, CONVERTS_LATER], [D, D]),
         (_reason_non_db_converts_at_the_end, {A: 0}, A, [CONVERTS_LATER], [P]),
         (_reason_fan_in_no_signal, {A: 0}, None, [LIST_ORDER], [A]),
+        (_reason_mixed_depth_block, None, None, [CONVERTS_LATER], [D]),
     ],
     ids=[
         "pinned",
@@ -890,6 +905,7 @@ def _reason_fan_in_no_signal(net: _Net) -> list[Feature]:
         "two_free_blocks",
         "non_db_converts_at_the_end",
         "fan_in_no_signal",
+        "mixed_depth_block",
     ],
 )
 def test_the_reason_names_why_the_framework_was_chosen(

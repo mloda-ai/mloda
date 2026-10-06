@@ -171,7 +171,8 @@ class ChooseComputeFrameworks:
         self.rank = framework_rank_key(positions)
         self.transformer = ComputeFrameworkTransformer()
         self.paths: dict[tuple[Framework, Framework], bool] = {}
-        self._depth: list[int] = []
+        self._step_depth: dict[tuple[int, type[FeatureGroup]], int] = {}
+        self._final_depth: list[int] = []
         self._horizon = 1
 
     def choose(self) -> None:
@@ -181,8 +182,13 @@ class ChooseComputeFrameworks:
         blocks, borrowed = self._regain_dropped(blocks, owner)
         rules = self._rules(blocks, owner) + borrowed
         groups = self._cost_groups(blocks, owner)
-        self._depth = self._block_depths(blocks)
-        self._horizon = max(self._depth, default=0) + 1
+        depth = self._feature_depths()
+        self._horizon = max(depth.values(), default=0) + 1
+        self._step_depth = self._step_depths(blocks, owner, depth)
+        self._final_depth = [
+            max((depth.get(f.uuid, 0) for f in block.features if f.initial_requested_data), default=0)
+            for block in blocks
+        ]
         domains = self._prune(blocks, rules)
         for order in self._search_orders(len(blocks), rules, groups):
             members = set(order)
@@ -335,9 +341,9 @@ class ChooseComputeFrameworks:
     def _requested(block: _Block) -> bool:
         return any(feature.initial_requested_data for feature in block.features)
 
-    def _transform_cost(self, parent: int, costs: list[int]) -> Cost:
+    def _transform_cost(self, depth: int, costs: list[int]) -> Cost:
         """Conversions of one transform step, then how early they happen."""
-        return (sum(costs), sum(costs) * (self._horizon - self._depth[parent]))
+        return (sum(costs), sum(costs) * (self._horizon - depth))
 
     def _final_cost(self, block: _Block, framework: Framework, index: int) -> Cost:
         output = self.output_framework
@@ -346,10 +352,21 @@ class ChooseComputeFrameworks:
         if framework.expected_data_framework() is output.expected_data_framework():
             return (0, 0)
         cost = conversion_cost(framework, output)
-        return (cost, cost * (self._horizon - self._depth[index] - 1))
+        return (cost, cost * (self._horizon - self._final_depth[index] - 1))
 
-    def _block_depths(self, blocks: list[_Block]) -> list[int]:
-        """Longest path from a root per block."""
+    def _step_depths(
+        self, blocks: list[_Block], owner: dict[UUID, int], depth: dict[UUID, int]
+    ) -> dict[tuple[int, type[FeatureGroup]], int]:
+        """Deepest parent feature with an edge into each transform step."""
+        result: dict[tuple[int, type[FeatureGroup]], int] = {}
+        for parent, child in self.graph.edges:
+            if parent in owner and child in owner and owner[parent] != owner[child]:
+                key = (owner[parent], blocks[owner[child]].fg)
+                result[key] = max(result.get(key, 0), depth.get(parent, 0))
+        return result
+
+    def _feature_depths(self) -> dict[UUID, int]:
+        """Longest path from a root per feature."""
         children: dict[UUID, list[UUID]] = {}
         waiting: Counter[UUID] = Counter()
         for parent, child in self.graph.edges:
@@ -364,7 +381,7 @@ class ChooseComputeFrameworks:
                 waiting[child] -= 1
                 if not waiting[child]:
                     ready.append(child)
-        return [max((depth.get(f.uuid, 0) for f in block.features), default=0) for block in blocks]
+        return depth
 
     def _rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
         rules: list[_Rule] = []
@@ -585,7 +602,9 @@ class ChooseComputeFrameworks:
         if len(block.domain) == 1:
             return ONLY_ALLOWED
         touching = [r for r in rules if index in r.blocks]
-        steps = [(parent, kids) for (parent, _), kids in groups.items() if index == parent or index in kids]
+        steps = [
+            (key[0], kids, self._step_depth[key]) for key, kids in groups.items() if index == key[0] or index in kids
+        ]
 
         def feasible(framework: Framework) -> bool:
             switched = {**assignment, index: framework}
@@ -594,9 +613,10 @@ class ChooseComputeFrameworks:
         def step_cost(values: Mapping[int, Framework]) -> Cost:
             costs = [
                 self._transform_cost(
-                    parent, [conversion_cost(values[parent], t) for t in {values[c] for c in kids} - {values[parent]}]
+                    depth,
+                    [conversion_cost(values[parent], t) for t in {values[c] for c in kids} - {values[parent]}],
                 )
-                for parent, kids in steps
+                for parent, kids, depth in steps
             ]
             final = self._final_cost(block, values[index], index)
             return (sum(c[0] for c in costs) + final[0], sum(c[1] for c in costs) + final[1])
@@ -630,22 +650,22 @@ class ChooseComputeFrameworks:
         for rule in rules:
             for b in self._rule_blocks(rule):
                 touching[b].append(rule)
-        local = [(parent, children) for (parent, _), children in groups.items() if parent in touching]
-        steps: dict[int, list[tuple[int, set[int]]]] = {b: [] for b in order}
-        for parent, children in local:
+        local = [(key[0], children, self._step_depth[key]) for key, children in groups.items() if key[0] in touching]
+        steps: dict[int, list[tuple[int, set[int], int]]] = {b: [] for b in order}
+        for parent, children, depth in local:
             for b in (parent, *children):
-                steps[b].append((parent, children))
+                steps[b].append((parent, children, depth))
         assigned: dict[int, Framework] = {}
         best: dict[int, Framework] = {}
         best_cost: list[Cost | None] = [None]
 
-        def step_cost(parent: int, children: set[int]) -> Cost:
+        def step_cost(parent: int, children: set[int], depth: int) -> Cost:
             if parent not in assigned:
                 return (0, 0)
             moved = {assigned[c] for c in children if c in assigned and assigned[c] is not assigned[parent]}
-            return self._transform_cost(parent, [conversion_cost(assigned[parent], target) for target in moved])
+            return self._transform_cost(depth, [conversion_cost(assigned[parent], target) for target in moved])
 
-        def total(indices: Sequence[tuple[int, set[int]]]) -> Cost:
+        def total(indices: Sequence[tuple[int, set[int], int]]) -> Cost:
             costs = [step_cost(*step) for step in indices]
             return (sum(c[0] for c in costs), sum(c[1] for c in costs))
 

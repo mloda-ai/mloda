@@ -290,6 +290,33 @@ class TestToxConfig:
         ]
         assert not overridden, f"[testenv:lint] must inherit the full [testenv] install, overrides: {overridden}"
 
+    def test_slow_marker_runs_only_in_its_own_env(self) -> None:
+        """The full probe sweeps carry `slow`; the default envs deselect it and `tox -e slow` selects it."""
+        ini = configparser.ConfigParser(interpolation=None)
+        assert ini.read(PROJECT_ROOT / "pytest.ini", encoding="utf-8"), "pytest.ini not found"
+        markers = ini.get("pytest", "markers", fallback="")
+        assert any(line.split(":")[0].strip() == "slow" for line in markers.splitlines()), (
+            "pytest.ini must register a `slow` marker"
+        )
+
+        parser = self._tox_parser()
+        for section in ("testenv", "testenv: core", "testenv: installed"):
+            commands = parser.get(section, "commands", fallback="")
+            assert "not slow" in commands, f"[{section}] commands must deselect slow tests"
+
+        assert parser.has_section("testenv:slow"), "tox.ini needs a [testenv:slow] section"
+        slow_commands = parser.get("testenv:slow", "commands", fallback="")
+        assert "pytest" in slow_commands and re.search(r"-m\s+[\"']?slow\b", slow_commands), (
+            "[testenv:slow] commands must run pytest with -m slow"
+        )
+        assert "slow" in re.findall(r"[\w-]+", parser.get("tox", "envlist")), "slow must be in the tox envlist"
+
+        jobs = self._workflow_jobs("ci.yaml")
+        tox_slow = re.compile(r"tox\s+-e\s+slow\b")
+        assert any(tox_slow.search(str(s.get("run", ""))) for job in jobs.values() for s in job.get("steps", [])), (
+            "ci.yaml needs a job with a step running `tox -e slow`"
+        )
+
     def test_ci_runs_lint_env(self) -> None:
         jobs = self._workflow_jobs("ci.yaml")
         assert "lint" in jobs, "ci.yaml needs a lint job"

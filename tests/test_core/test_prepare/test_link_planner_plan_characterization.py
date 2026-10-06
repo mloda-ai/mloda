@@ -29,7 +29,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.helpers.probe_runner import run_probes
+from tests.helpers.probe_runner import probe_sweep, run_probes
 from tests.test_core.test_prepare.join_plan_helpers import single_join_step
 
 
@@ -60,8 +60,8 @@ STACK_INVERSION_REASON = (
 MODES = pytest.mark.parametrize("modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])
 
 _PROBE = Path(__file__).with_name("link_planner_probe.py")
-# The reduction is deterministic within a process, so a second cold interpreter is the whole cross-process signal.
-_PROBE_PROCESSES = 2
+# One fresh interpreter in the gate, the full count under slow.
+_PROBE_PROCESSES = probe_sweep(1, 2)
 _PROBE_EXPECTED = {
     "child": "PyArrowTable",
     "orientation_count": "1",
@@ -697,9 +697,10 @@ def test_a_left_join_inverted_after_queueing_swaps_the_merge_sides() -> None:
 
 # Fresh interpreters are slow to start, so this one needs more than the suite-wide per-test budget.
 @pytest.mark.timeout(60)
-def test_fresh_interpreters_plan_the_same_link_orientation() -> None:
-    outputs = run_probes(_PROBE, _PROBE_PROCESSES)
+@pytest.mark.parametrize("processes", _PROBE_PROCESSES)
+def test_fresh_interpreters_plan_the_same_link_orientation(processes: int) -> None:
+    outputs = run_probes(_PROBE, processes)
 
-    assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
+    assert len(outputs) == processes, f"expected {processes} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):
         assert output == _PROBE_EXPECTED, f"probe {position} planned {output}, expected {_PROBE_EXPECTED}"

@@ -87,7 +87,7 @@ from mloda.steward import (
     plan_structure_hash,
     write_plan_lock,
 )
-from tests.helpers.probe_runner import run_probes
+from tests.helpers.probe_runner import probe_sweep, run_probes
 from mloda.user import (
     Credential,
     DataAccessCollection,
@@ -439,6 +439,8 @@ _INVERTED_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
 _NESTED_OPTIONS_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNestedOptionsSource})
 _ANY_FRAMEWORK_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoAnyFrameworkSource})
 _PLAN_LOCK_PROBE = Path(__file__).with_name("plan_lock_probe.py")
+# No seed ever reproduced a bug; two seeds suffice for the cross-seed equality check.
+_PLAN_LOCK_SEEDS = probe_sweep([0, 1], [0, 1, 2])
 _SPECIALIZED_PLUGINS = PluginCollector.enabled_feature_groups(
     {PlanInfoParentSource, PlanInfoChildSource, PlanInfoScopedSpecializedConsumer, PlanInfoPlainSpecializedConsumer}
 )
@@ -1540,11 +1542,12 @@ class TestPlanLock:
 
     # Fresh interpreters are slow, so this needs more than the suite-wide timeout.
     @pytest.mark.timeout(60)
-    def test_plan_lock_text_is_stable_across_hash_seeds(self) -> None:
-        outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=[0, 1, 2])
+    @pytest.mark.parametrize("seeds", _PLAN_LOCK_SEEDS)
+    def test_plan_lock_text_is_stable_across_hash_seeds(self, seeds: list[int]) -> None:
+        outputs = run_probes(_PLAN_LOCK_PROBE, 0, seeds=seeds)
 
-        assert len(outputs) == 3
-        assert outputs[0] == outputs[1] == outputs[2]
+        assert len(outputs) == len(seeds)
+        assert all(output == outputs[0] for output in outputs)
 
         order = json.loads(outputs[0]["order"])
         assert [row[3] for row in order if row[0] == "compute" and row[2] in ("PandasDataFrame", "PyArrowTable")]

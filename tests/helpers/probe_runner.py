@@ -5,6 +5,11 @@ import os
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
+from typing import Any, TypeVar
+
+import pytest
+
+T = TypeVar("T")
 
 _PROBE_TIMEOUT = 30.0
 
@@ -50,3 +55,8 @@ def run_probes(probe: Path, count: int, seeds: list[int] | None = None) -> list[
             if process.poll() is None:
                 process.kill()
     return outputs
+
+
+def probe_sweep(gate: T, full: T) -> list[Any]:
+    """``gate`` runs in the default envs; ``full`` only under the ``slow`` marker (``tox -e slow``)."""
+    return [pytest.param(gate, id="gate"), pytest.param(full, id="full", marks=pytest.mark.slow)]

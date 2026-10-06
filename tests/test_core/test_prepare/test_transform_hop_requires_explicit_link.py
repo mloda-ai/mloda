@@ -13,7 +13,7 @@ from mloda.provider import BaseInputData, ComputeFramework, DataCreator, Feature
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.helpers.probe_runner import run_probes
+from tests.helpers.probe_runner import probe_sweep, run_probes
 from tests.test_core.test_prepare import link_side_paths_probe as hd_probe
 
 
@@ -90,20 +90,22 @@ def test_two_unlinked_source_framework_instances_raise_missing_links_error_at_pr
 # a join's own source side) plus that join's own destination side is fully covered by the single
 # declared Link, so it must plan and run under every PYTHONHASHSEED, not just some of them.
 _SUBCLASS_LINKED_HOP_AND_JOIN_PROBE = Path(__file__).with_name("subclass_linked_hop_and_join_probe.py")
-_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS = [0, 1, 3, 4, 6]
+# Gate keeps seeds 0 and 3: before the fix seed 3 failed on 3.11+ hashing and seed 0 failed in the original report.
+_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS = probe_sweep([0, 3], [0, 1, 3, 4, 6])
 _SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED = {"outcome": "accepted", "subclass_linked_x": "[111, 222, 333]"}
 
 
 @pytest.mark.timeout(60)
-def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_seed() -> None:
+@pytest.mark.parametrize("seeds", _SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS)
+def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_seed(seeds: list[int]) -> None:
     outputs = run_probes(
         _SUBCLASS_LINKED_HOP_AND_JOIN_PROBE,
-        len(_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS),
-        seeds=_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS,
+        len(seeds),
+        seeds=seeds,
     )
 
-    assert len(outputs) == len(_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS)
-    for seed, output in zip(_SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS, outputs):
+    assert len(outputs) == len(seeds)
+    for seed, output in zip(seeds, outputs):
         assert output == _SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED, (
             f"PYTHONHASHSEED={seed} produced {output}, expected {_SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED}"
         )
@@ -116,20 +118,22 @@ def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_s
 # the two gates together, so `_entries_linked`'s bare `issubclass` check wrongly merges the two
 # hops into one binding and drops one column's data instead of keeping both.
 _SUBCLASS_SIBLING_PLAIN_HOPS_PROBE = Path(__file__).with_name("subclass_sibling_plain_hops_probe.py")
-_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS = [0, 1, 3, 4, 6]
+# Gate keeps seeds 0 and 1: before the fix every seed failed; 0 dropped p3_b and 1 dropped p3_a.
+_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS = probe_sweep([0, 1], [0, 1, 3, 4, 6])
 _SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED = {"outcome": "accepted", "p3_x": "[6, 8, 10]"}
 
 
 @pytest.mark.timeout(60)
-def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed() -> None:
+@pytest.mark.parametrize("seeds", _SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS)
+def test_subclass_sibling_plain_hops_both_survive_under_every_hash_seed(seeds: list[int]) -> None:
     outputs = run_probes(
         _SUBCLASS_SIBLING_PLAIN_HOPS_PROBE,
-        len(_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS),
-        seeds=_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS,
+        len(seeds),
+        seeds=seeds,
     )
 
-    assert len(outputs) == len(_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS)
-    for seed, output in zip(_SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS, outputs):
+    assert len(outputs) == len(seeds)
+    for seed, output in zip(seeds, outputs):
         assert output == _SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED, (
             f"PYTHONHASHSEED={seed} produced {output}, expected {_SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED}"
         )
@@ -147,26 +151,28 @@ _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE = Path(__file__).with_name(
 _SUBCLASS_UNRELATED_ROOTS_SAME_FRAMEWORK_PROBE = Path(__file__).with_name(
     "subclass_unrelated_roots_same_framework_probe.py"
 )
-_SUBCLASS_UNRELATED_ROOTS_SEEDS = [0, 1, 3, 4, 6]
+# Gate keeps seeds 0 and 1: before the fix every seed failed, so any two reproduce it.
+_SUBCLASS_UNRELATED_ROOTS_SEEDS = probe_sweep([0, 1], [0, 1, 3, 4, 6])
 
 
 @pytest.mark.timeout(60)
-def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -> None:
+@pytest.mark.parametrize("seeds", _SUBCLASS_UNRELATED_ROOTS_SEEDS)
+def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed(seeds: list[int]) -> None:
     cross_outputs = run_probes(
         _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE,
-        len(_SUBCLASS_UNRELATED_ROOTS_SEEDS),
-        seeds=_SUBCLASS_UNRELATED_ROOTS_SEEDS,
+        len(seeds),
+        seeds=seeds,
     )
     same_outputs = run_probes(
         _SUBCLASS_UNRELATED_ROOTS_SAME_FRAMEWORK_PROBE,
-        len(_SUBCLASS_UNRELATED_ROOTS_SEEDS),
-        seeds=_SUBCLASS_UNRELATED_ROOTS_SEEDS,
+        len(seeds),
+        seeds=seeds,
     )
 
-    assert len(cross_outputs) == len(_SUBCLASS_UNRELATED_ROOTS_SEEDS)
-    assert len(same_outputs) == len(_SUBCLASS_UNRELATED_ROOTS_SEEDS)
+    assert len(cross_outputs) == len(seeds)
+    assert len(same_outputs) == len(seeds)
 
-    for seed, output in zip(_SUBCLASS_UNRELATED_ROOTS_SEEDS, cross_outputs):
+    for seed, output in zip(seeds, cross_outputs):
         assert output["outcome"] == "rejected", (
             f"cross-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
@@ -181,7 +187,7 @@ def test_subclass_unrelated_roots_reject_missing_links_under_every_hash_seed() -
         assert "ScRootA" in output["error"], f"cross-framework PYTHONHASHSEED={seed}: {output}"
         assert "ScRootB" in output["error"], f"cross-framework PYTHONHASHSEED={seed}: {output}"
 
-    for seed, output in zip(_SUBCLASS_UNRELATED_ROOTS_SEEDS, same_outputs):
+    for seed, output in zip(seeds, same_outputs):
         assert output["outcome"] == "rejected", (
             f"same-framework PYTHONHASHSEED={seed} should be rejected with a missing-Links error: {output}"
         )
@@ -483,22 +489,22 @@ def test_same_class_fan_in_in_one_framework_plans_and_runs() -> None:
 # A parent that reaches a join side only through a compute-framework hop is not join-bridged, so the
 # consumer must hit the plan-time missing-Links error under every hash seed, never a runtime crash.
 _LINK_SIDE_PATHS_PROBE = Path(__file__).with_name("link_side_paths_probe.py")
-_LINK_SIDE_PATHS_SEEDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+# Gate keeps seeds 0 and 1: before the fix hop_diamond failed on seed 1 (of 1, 2, 6, 9) and hop_parent on seed 0; the other shapes failed on every seed.
+_LINK_SIDE_PATHS_SEEDS = probe_sweep([0, 1], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 
-@pytest.fixture(scope="module")
-def link_side_paths_outputs() -> list[dict[str, str]]:
-    return run_probes(_LINK_SIDE_PATHS_PROBE, len(_LINK_SIDE_PATHS_SEEDS), seeds=_LINK_SIDE_PATHS_SEEDS)
+@pytest.fixture(scope="module", params=_LINK_SIDE_PATHS_SEEDS)
+def link_side_paths_outputs(request: pytest.FixtureRequest) -> dict[int, dict[str, str]]:
+    seeds: list[int] = request.param
+    return dict(zip(seeds, run_probes(_LINK_SIDE_PATHS_PROBE, len(seeds), seeds=seeds)))
 
 
 @pytest.mark.timeout(60)
 def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed(
-    link_side_paths_outputs: list[dict[str, str]],
+    link_side_paths_outputs: dict[int, dict[str, str]],
 ) -> None:
-    outputs = link_side_paths_outputs
-
-    assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
-    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):
+    assert link_side_paths_outputs
+    for seed, output in link_side_paths_outputs.items():
         assert output["hop_parent_outcome"] == "rejected", f"PYTHONHASHSEED={seed}: {output}"
         assert "depends on parents from 2 unlinked sources" in output["hop_parent_error"], (
             f"PYTHONHASHSEED={seed} should hit the plan-time rejection: {output}"
@@ -508,12 +514,10 @@ def test_hop_parent_of_a_join_side_rejects_missing_links_under_every_hash_seed(
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize("shape", ["twin_sibling", "twin_chain"])
 def test_consumers_of_a_join_side_plan_and_run_correctly_under_every_hash_seed(
-    shape: str, link_side_paths_outputs: list[dict[str, str]]
+    shape: str, link_side_paths_outputs: dict[int, dict[str, str]]
 ) -> None:
-    outputs = link_side_paths_outputs
-
-    assert len(outputs) == len(_LINK_SIDE_PATHS_SEEDS)
-    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, outputs):
+    assert link_side_paths_outputs
+    for seed, output in link_side_paths_outputs.items():
         assert output[f"{shape}_outcome"] == "accepted", f"PYTHONHASHSEED={seed}: {output}"
         assert output.get(f"{shape}_values") == "[[21, 42, 63]]", f"PYTHONHASHSEED={seed}: {output}"
 
@@ -534,10 +538,10 @@ _HOP_DIAMOND_EXPECTED_VALUES = {
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize("shape", list(_HOP_DIAMOND_EXPECTED_VALUES))
 def test_same_root_diamond_with_a_hop_runs_correctly_under_every_hash_seed(
-    shape: str, link_side_paths_outputs: list[dict[str, str]]
+    shape: str, link_side_paths_outputs: dict[int, dict[str, str]]
 ) -> None:
-    assert len(link_side_paths_outputs) == len(_LINK_SIDE_PATHS_SEEDS)
-    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, link_side_paths_outputs):
+    assert link_side_paths_outputs
+    for seed, output in link_side_paths_outputs.items():
         assert output[f"{shape}_outcome"] == "accepted", f"PYTHONHASHSEED={seed}: {output}"
         assert output.get(f"{shape}_values") == _HOP_DIAMOND_EXPECTED_VALUES[shape], f"PYTHONHASHSEED={seed}: {output}"
 
@@ -545,10 +549,10 @@ def test_same_root_diamond_with_a_hop_runs_correctly_under_every_hash_seed(
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize("shape", ["hop_diamond_two_pandas"])
 def test_same_root_diamond_with_an_ambiguous_redirect_is_rejected_with_its_real_cause_under_every_hash_seed(
-    shape: str, link_side_paths_outputs: list[dict[str, str]]
+    shape: str, link_side_paths_outputs: dict[int, dict[str, str]]
 ) -> None:
-    first = link_side_paths_outputs[0].get(f"{shape}_error")
-    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, link_side_paths_outputs):
+    first = next(iter(link_side_paths_outputs.values())).get(f"{shape}_error")
+    for seed, output in link_side_paths_outputs.items():
         assert output[f"{shape}_outcome"] == "rejected", f"PYTHONHASHSEED={seed}: {output}"
         assert output[f"{shape}_error"] == first, f"PYTHONHASHSEED={seed}"
     assert "nothing merges" in str(first)
@@ -557,11 +561,11 @@ def test_same_root_diamond_with_an_ambiguous_redirect_is_rejected_with_its_real_
 
 @pytest.mark.timeout(60)
 def test_same_root_diamond_with_a_cycle_has_one_outcome_under_every_hash_seed(
-    link_side_paths_outputs: list[dict[str, str]],
+    link_side_paths_outputs: dict[int, dict[str, str]],
 ) -> None:
     keys = ("outcome", "error", "values")
-    first = {key: link_side_paths_outputs[0].get(f"hop_diamond_cycle_{key}") for key in keys}
-    for seed, output in zip(_LINK_SIDE_PATHS_SEEDS, link_side_paths_outputs):
+    first = {key: next(iter(link_side_paths_outputs.values())).get(f"hop_diamond_cycle_{key}") for key in keys}
+    for seed, output in link_side_paths_outputs.items():
         found = {key: output.get(f"hop_diamond_cycle_{key}") for key in keys}
         assert found == first, f"PYTHONHASHSEED={seed}: {found} differs from {first}"
     assert first["outcome"] == "rejected", first

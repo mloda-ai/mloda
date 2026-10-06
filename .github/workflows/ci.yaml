@@ -121,6 +121,27 @@ jobs:
       run: tox -e notebooks
       timeout-minutes: 10
 
+  # Full hash-seed and fresh-interpreter probe sweeps; the build matrix runs a reduced set.
+  slow:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install tox
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install uv
+        # Same tox pin as release.yaml; see the note there before bumping.
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+    - name: Run slow probe sweeps
+      env:
+        PYTEST_WORKERS: 2
+      run: tox -e slow
+      timeout-minutes: 10
+
   spark:
     # PYTEST_WORKERS stays at the env's default of 1: each xdist worker would start its own JVM.
     runs-on: ubuntu-latest

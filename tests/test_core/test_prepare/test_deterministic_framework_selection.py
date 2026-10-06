@@ -30,11 +30,11 @@ from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.helpers.probe_runner import run_probes
+from tests.helpers.probe_runner import probe_sweep, run_probes
 
 _PROBE = Path(__file__).with_name("determinism_probe.py")
-# Each probe is a fresh interpreter importing PyArrowTable, so the count is what the gate budget allows.
-_PROBE_PROCESSES = 5
+# One fresh interpreter in the gate, the full count under slow.
+_PROBE_PROCESSES = probe_sweep(1, 5)
 _PROBE_EXPECTED = {"feature": "PyArrowTable", "trekker_left": "PyArrowTable", "trekker_right": "PyArrowTable"}
 
 
@@ -234,10 +234,11 @@ def test_feature_compute_framework_rejects_an_empty_set() -> None:
 
 # Fresh interpreters cost roughly a second each, so this one needs more than the suite-wide per-test budget.
 @pytest.mark.timeout(60)
-def test_fresh_interpreters_reduce_to_the_same_frameworks() -> None:
-    outputs = run_probes(_PROBE, _PROBE_PROCESSES)
+@pytest.mark.parametrize("processes", _PROBE_PROCESSES)
+def test_fresh_interpreters_reduce_to_the_same_frameworks(processes: int) -> None:
+    outputs = run_probes(_PROBE, processes)
 
-    assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
+    assert len(outputs) == processes, f"expected {processes} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):
         assert output == _PROBE_EXPECTED, f"probe {position} reduced to {output}, expected {_PROBE_EXPECTED}"
 

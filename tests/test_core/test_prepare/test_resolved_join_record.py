@@ -33,7 +33,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.helpers.probe_runner import run_probes
+from tests.helpers.probe_runner import probe_sweep, run_probes
 from tests.test_core.test_prepare.join_plan_helpers import feature, join_tokens, trek
 
 
@@ -56,8 +56,8 @@ END_RIGHT_KEY = "resolved_join_end_right_key"
 END_RIGHT_PAYLOAD = "resolved_join_end_right_payload"
 
 _PROBE = Path(__file__).with_name("resolved_join_probe.py")
-# Each side reduces from a framework set, so a second cold interpreter is the cross-process signal.
-_PROBE_PROCESSES = 2
+# One fresh interpreter in the gate, the full count under slow.
+_PROBE_PROCESSES = probe_sweep(1, 2)
 _PROBE_EXPECTED = {
     "declined_count": "0",
     "depends_on_count": "0",
@@ -1457,10 +1457,11 @@ def test_the_resolver_snapshots_the_frameworks_a_feature_declared_and_never_narr
 
 # Fresh interpreters are slow to start, so this needs more than the suite-wide timeout.
 @pytest.mark.timeout(60)
-def test_fresh_interpreters_build_the_same_record_signature() -> None:
-    outputs = run_probes(_PROBE, _PROBE_PROCESSES)
+@pytest.mark.parametrize("processes", _PROBE_PROCESSES)
+def test_fresh_interpreters_build_the_same_record_signature(processes: int) -> None:
+    outputs = run_probes(_PROBE, processes)
 
-    assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
+    assert len(outputs) == processes, f"expected {processes} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):
         assert output == _PROBE_EXPECTED, f"probe {position} signed {output}, expected {_PROBE_EXPECTED}"
 

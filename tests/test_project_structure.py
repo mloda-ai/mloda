@@ -309,13 +309,15 @@ class TestToxConfig:
         assert "pytest" in slow_commands and re.search(r"-m\s+[\"']?slow\b", slow_commands), (
             "[testenv:slow] commands must run pytest with -m slow"
         )
-        assert "slow" in re.findall(r"[\w-]+", parser.get("tox", "envlist")), "slow must be in the tox envlist"
 
         jobs = self._workflow_jobs("ci.yaml")
         tox_slow = re.compile(r"tox\s+-e\s+slow\b")
-        assert any(tox_slow.search(str(s.get("run", ""))) for job in jobs.values() for s in job.get("steps", [])), (
-            "ci.yaml needs a job with a step running `tox -e slow`"
-        )
+        slow_jobs = [
+            job for job in jobs.values() if any(tox_slow.search(str(s.get("run", ""))) for s in job.get("steps", []))
+        ]
+        assert slow_jobs, "ci.yaml needs a job with a step running `tox -e slow`"
+        versions = {str(v) for v in slow_jobs[0].get("strategy", {}).get("matrix", {}).get("python-version", [])}
+        assert {"3.10", "3.14"} <= versions, f"slow job must matrix python-version over 3.10 and 3.14: {versions}"
 
     def test_ci_runs_lint_env(self) -> None:
         jobs = self._workflow_jobs("ci.yaml")

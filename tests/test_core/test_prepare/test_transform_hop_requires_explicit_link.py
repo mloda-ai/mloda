@@ -496,7 +496,7 @@ _LINK_SIDE_PATHS_SEEDS = probe_sweep([0, 1], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 @pytest.fixture(scope="module", params=_LINK_SIDE_PATHS_SEEDS)
 def link_side_paths_outputs(request: pytest.FixtureRequest) -> dict[int, dict[str, str]]:
     seeds: list[int] = request.param
-    return dict(zip(seeds, run_probes(_LINK_SIDE_PATHS_PROBE, len(seeds), seeds=seeds)))
+    return dict(zip(seeds, run_probes(_LINK_SIDE_PATHS_PROBE, len(seeds), seeds=seeds), strict=True))
 
 
 @pytest.mark.timeout(60)

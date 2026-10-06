@@ -72,7 +72,7 @@ QUERY_KEY = "toyfmt_sqlite_query"
 
 
 class SqliteQueryToyfmtFG(SqliteFG):
-    """Test-local SqliteFG that opts into the query route; its own credential key keeps it inert elsewhere."""
+    """Test-local SqliteFG that opts into the query route; its own credential key keeps it inert elsewhere and makes the database contract cover loaders a subclass inherits."""
 
     CREDENTIAL_KEY = QUERY_KEY
     CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)

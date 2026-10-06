@@ -76,11 +76,13 @@ class _InputDataLoadCapturingExtender(Extender):
         self.captured: HookContext | None = None
         self.all_captured: list[HookContext] = []
         self.results: list[Any] = []
+        self.func_owner: str | None = None
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.INPUT_DATA_LOAD}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        self.func_owner = Extender.feature_group_name(func)
         result = func(*args, **kwargs)
         self.results.append(result)
         self.captured = HookContext.current()
@@ -1709,8 +1711,10 @@ class TestThreadHopInASpawnedWorkerReachesTheGate:
 class TestInputDataLoadAuditForFormatGroups:
     """A format group fires INPUT_DATA_LOAD naming itself, its source and the loader that ran."""
 
-    def _fire(self, group: type, framework: Any) -> HookContext:
-        extender = _InputDataLoadCapturingExtender()
+    def _fire(
+        self, group: type, framework: Any, extender: _InputDataLoadCapturingExtender | None = None
+    ) -> HookContext:
+        extender = extender or _InputDataLoadCapturingExtender()
         mloda.run_all(
             ["toyfmt_audit"],
             compute_frameworks=[framework],
@@ -1733,13 +1737,15 @@ class TestInputDataLoadAuditForFormatGroups:
 
     def test_loader_load_names_the_framework_class(self, tmp_path: Path) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        group.register_loader(PythonDictFramework, lambda match, features: [{"toyfmt_audit": 1}])
+        group.register_loader(PythonDictFramework, lambda group, match, features: [{"toyfmt_audit": 1}])
 
-        context = self._fire(group, PythonDictFramework)
+        extender = _InputDataLoadCapturingExtender()
+        context = self._fire(group, PythonDictFramework, extender)
 
         assert context.reader_class is group
         assert context.data_access_identity == "h1:toy"
         assert context.data_access_loader == "PythonDictFramework"
+        assert extender.func_owner == group.__name__
 
     def test_readers_leave_the_loader_field_none(self) -> None:
         assert _direct_load_context(_DirectLoadReader).data_access_loader is None

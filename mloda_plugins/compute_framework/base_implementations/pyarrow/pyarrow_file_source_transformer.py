@@ -20,10 +20,10 @@ def unsupported_format_error(transformer: str, file_format: str) -> ValueError:
     )
 
 
-def pyarrow_file_loader(file_format: str) -> Callable[[Any, Any], Any]:
-    """Build a ``(match, features)`` loader reading one fixed file format into a pa.Table."""
+def pyarrow_file_loader(file_format: str) -> Callable[[Any, Any, Any], Any]:
+    """Build a ``(group, match, features)`` loader reading one fixed file format into a pa.Table."""
 
-    def load(match: Any, features: Any) -> Any:
+    def load(group: Any, match: Any, features: Any) -> Any:
         from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 
         source = FileSource(path=match.access, format=file_format, columns=tuple(sorted(features.get_all_names())))

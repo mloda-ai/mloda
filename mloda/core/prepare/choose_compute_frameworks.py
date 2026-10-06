@@ -336,7 +336,7 @@ class ChooseComputeFrameworks:
         return any(feature.initial_requested_data for feature in block.features)
 
     def _transform_cost(self, parent: int, costs: list[int]) -> Cost:
-        """Conversions of one transform step, then how early they happen (later is cheaper)."""
+        """Conversions of one transform step, then how early they happen."""
         return (sum(costs), sum(costs) * (self._horizon - self._depth[parent]))
 
     def _final_cost(self, block: _Block, framework: Framework, index: int) -> Cost:
@@ -349,7 +349,7 @@ class ChooseComputeFrameworks:
         return (cost, cost * (self._horizon - self._depth[index] - 1))
 
     def _block_depths(self, blocks: list[_Block]) -> list[int]:
-        """Longest path from a root per block (max over its features), iteratively over the feature DAG."""
+        """Longest path from a root per block."""
         children: dict[UUID, list[UUID]] = {}
         waiting: Counter[UUID] = Counter()
         for parent, child in self.graph.edges:

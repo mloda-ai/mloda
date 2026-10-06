@@ -1462,8 +1462,7 @@ def test_a_consumer_of_a_duckdb_native_parent_plans_on_duckdb_and_receives_the_r
 
     steps = _plan(["bd_out"], {BdDuckRoot, BdDuckConsumer}, frameworks, output_framework=output)
     assert _compute_names(steps, BdDuckConsumer) == {"DuckDBFramework"}
-    assert all(t.compute_framework_name == "PyArrowTable" for t in _transforms(steps))
-    assert all(t.source_compute_framework_name == "DuckDBFramework" for t in _transforms(steps))
+    assert _transforms(steps) == []
     if output is not None and order[0] == "PyArrowTable":
         (consumer_step,) = _compute_steps(steps, BdDuckConsumer)
         assert consumer_step.compute_framework_reason == "converts later"

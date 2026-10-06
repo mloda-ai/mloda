@@ -317,8 +317,8 @@ def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     def hashed(**group: object) -> str:
         return plan_content_hash([_compute_step(feature_set_options=Options(group=group))])
 
-    assert hashed(password="a1") == hashed(password="b2")
-    assert hashed(conn={"password": "a1", "host": "h"}) == hashed(conn={"password": "b2", "host": "h"})
+    assert hashed(password="a1") == hashed(password="b2")  # nosec B106
+    assert hashed(conn={"password": "a1", "host": "h"}) == hashed(conn={"password": "b2", "host": "h"})  # nosec B105
     assert hashed(conn={"api_key": "a1"}) == hashed(conn={"api_key": "b2"})
     assert hashed(window=3) != hashed(window=4)
 

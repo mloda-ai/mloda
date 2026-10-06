@@ -238,9 +238,13 @@ class TestToxConfig:
         return parser
 
     @staticmethod
-    def _workflow_jobs(name: str) -> dict[str, Any]:
-        config = yaml.safe_load(_read_text(PROJECT_ROOT / ".github" / "workflows" / name))
-        jobs: dict[str, Any] = config["jobs"]
+    def _workflow(name: str) -> dict[str, Any]:
+        config: dict[str, Any] = yaml.safe_load(_read_text(PROJECT_ROOT / ".github" / "workflows" / name))
+        return config
+
+    @classmethod
+    def _workflow_jobs(cls, name: str) -> dict[str, Any]:
+        jobs: dict[str, Any] = cls._workflow(name)["jobs"]
         return jobs
 
     def test_tox_opts_out_of_venv_redirect(self) -> None:
@@ -278,20 +282,33 @@ class TestToxConfig:
         assert "pytest" in base, "[testenv] commands must run pytest"
         for tool in ("ruff", "mypy", "bandit", "pip-licenses"):
             assert not re.search(rf"(?<![\w-]){tool}(?![\w-])", base), f"[testenv] commands must not run {tool}"
+        assert "pytest" not in lint, "[testenv:lint] commands must not run pytest"
+        overridden = [
+            key
+            for key in ("extras", "deps", "skip_install", "runner", "package", "basepython")
+            if parser.has_option("testenv:lint", key)
+        ]
+        assert not overridden, f"[testenv:lint] must inherit the full [testenv] install, overrides: {overridden}"
 
     def test_ci_runs_lint_env(self) -> None:
         jobs = self._workflow_jobs("ci.yaml")
-        runs = [str(step.get("run", "")) for job in jobs.values() for step in job.get("steps", [])]
-        assert any(re.search(r"tox\s+-e\s+lint\b", run) for run in runs), "ci.yaml needs a step running `tox -e lint`"
+        assert "lint" in jobs, "ci.yaml needs a lint job"
+        tox_lint = re.compile(r"tox\s+-e\s+lint\b")
+        assert any(tox_lint.search(str(s.get("run", ""))) for s in jobs["lint"].get("steps", [])), (
+            "lint job needs a step running `tox -e lint`"
+        )
+        versions = {str(v) for v in jobs["lint"].get("strategy", {}).get("matrix", {}).get("python-version", [])}
+        assert {"3.10", "3.14"} <= versions, f"lint job must matrix python-version over 3.10 and 3.14: {versions}"
+        assert not any(tox_lint.search(str(s.get("run", ""))) for s in jobs["build"].get("steps", [])), (
+            "build job must not run `tox -e lint`"
+        )
 
     def test_ci_build_job_derives_workers_from_nproc(self) -> None:
         steps = self._workflow_jobs("ci.yaml")["build"]["steps"]
-        assert any(
-            "nproc" in str(s.get("run", ""))
-            and "PYTEST_WORKERS" in str(s.get("run", ""))
-            and "GITHUB_ENV" in str(s.get("run", ""))
-            for s in steps
-        ), "build job must write nproc into PYTEST_WORKERS via $GITHUB_ENV"
+        write = re.compile(r"PYTEST_WORKERS=\$\(nproc\)")
+        assert any(write.search(str(s.get("run", ""))) and "GITHUB_ENV" in str(s.get("run", "")) for s in steps), (
+            "build job must write nproc into PYTEST_WORKERS via $GITHUB_ENV"
+        )
         hardcoded = [s for s in steps if "PYTEST_WORKERS" in (s.get("env") or {})]
         assert not hardcoded, "no build step may hardcode PYTEST_WORKERS in env"
 
@@ -300,7 +317,14 @@ class TestToxConfig:
         writers = [s for s in steps if "TOX_WRITE_THIRD_PARTY_LICENSES" in (s.get("env") or {})]
         assert writers, "release.yaml needs a step setting TOX_WRITE_THIRD_PARTY_LICENSES"
         for step in writers:
-            match = re.search(r"tox\b.*?-e\s+(\S+)", str(step.get("run", "")))
-            assert match and "lint" in match.group(1).split(","), (
-                f"license step must run tox -e with lint: {step.get('run')}"
-            )
+            run = str(step.get("run", ""))
+            envs = {env for arg in re.findall(r"-e\s+(\S+)", run) for env in arg.split(",")}
+            assert "lint" in envs, f"license step must run tox -e with lint: {run}"
+
+    def test_ci_cancels_only_superseded_pr_runs(self) -> None:
+        concurrency = self._workflow("ci.yaml").get("concurrency", {})
+        assert concurrency.get("cancel-in-progress") is True, "ci.yaml must cancel in-progress runs"
+        group = str(concurrency.get("group", ""))
+        assert "pull_request" in group and "run_id" in group, (
+            f"concurrency group must be unique per push run (run_id) and shared per PR: {group}"
+        )

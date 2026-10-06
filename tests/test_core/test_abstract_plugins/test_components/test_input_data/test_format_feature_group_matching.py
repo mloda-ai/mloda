@@ -398,6 +398,20 @@ class TestPointingIsExplicitOnly:
 _DERIVED = "toyfmt_col__sum_aggr"
 
 
+class _PlainClaimsDerived(FeatureGroup):
+    """Non-format survivor claiming the derived name."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return str(feature_name) == _DERIVED
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
 class TestPointedGroupDefersToAComputingCandidate:
     DERIVED = _DERIVED
 
@@ -415,7 +429,7 @@ class TestPointedGroupDefersToAComputingCandidate:
         ("name", "groups", "dac"),
         [
             ("toyfmt_unclaimed", (ToyFormatFG, PyArrowAggregatedFeatureGroup), None),
-            (_DERIVED, (ToyFormatFG, ToyRequiredOptionFG, PyArrowAggregatedFeatureGroup), toy_dac(h1={_DERIVED: [1]})),
+            (_DERIVED, (ToyFormatFG, _PlainClaimsDerived, PyArrowAggregatedFeatureGroup), None),
         ],
         ids=["no_other_claimant", "another_reader_survives"],
     )
@@ -780,6 +794,21 @@ class TestForeignPointerMakesSearchedRoutesDecline:
 
         assert column_values(result, "fpg_x") == [1, 2]
 
+    def test_a_foreign_pointer_also_declines_a_required_option_route(self) -> None:
+        from mloda.provider import ReadDBFG
+        from tests.test_plugins.feature_group.input_data.test_read_dbs.test_read_db_fg import KEY, ToyBaseDB
+
+        routes = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)
+        group_a = type("_QueryDBA", (ToyBaseDB,), {"CLAIM_ROUTES": routes})
+        group_b = type("_QueryDBB", (ToyBaseDB,), {"CLAIM_ROUTES": routes})
+        feature = Feature("anything", Options({"query_text": "SELECT 1", "_QueryDBA": {KEY: "a"}}))
+        result = _identify(feature, DataAccessCollection(credentials={"toy_handle": {KEY: "a"}}), group_a, group_b)
+
+        assert set(result.identified) == {group_a}
+        assert "options point at _QueryDBA" in result.eliminations[group_b].reason
+        del group_a, group_b, result, feature
+        gc.collect()
+
 
 class TestUnreachablePointerRaises:
     def _run(self, options: Options | None, feature_group: Any, collector: PluginCollector, folder: Path) -> None:
@@ -830,6 +859,7 @@ class TestUnreachablePointerRaises:
             ("CsvReader", None, ['"CsvReader" was retired', "point at CsvFG instead"]),
             ("ReadFile", None, ['"ReadFile" was retired', "concrete group for the format", "CsvFG"]),
             (None, "ReadFileFeature", ['"ReadFileFeature" was retired', "feature_group=ReadFileFG"]),
+            ("YamlDocumentReader", None, ['"YamlDocumentReader" was retired', "point at YamlFG instead"]),
         ],
     )
     def test_a_retired_reader_name_raises_naming_the_replacement(
@@ -841,6 +871,48 @@ class TestUnreachablePointerRaises:
 
         for fragment in fragments:
             assert fragment in str(exc_info.value)
+
+    @pytest.mark.parametrize("as_scope", [False, True], ids=["pointer", "scope"])
+    def test_an_unloaded_stock_group_raises_naming_the_loader(
+        self, as_scope: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mloda.core.prepare import identify_feature_group as module
+
+        csv_fg = _stock("csv_fg", "CsvFG")
+        _stock("json_fg", "JsonFG")
+        real = module.concrete_format_groups()
+        monkeypatch.setattr(module, "concrete_format_groups", lambda: {k: v for k, v in real.items() if k != "JsonFG"})
+        feature = (
+            Feature("fpg_x", feature_group="JsonFG") if as_scope else Feature("fpg_x", Options({"JsonFG": "x.json"}))
+        )
+        with pytest.raises(FormatPointerError) as exc_info:
+            IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg), None, None)
+
+        assert "JsonFG is not loaded" in str(exc_info.value)
+        assert "PluginLoader.all()" in str(exc_info.value)
+
+    def test_an_abstract_replacement_key_without_loaded_subclasses_prints_no_empty_examples(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from mloda.core.prepare import identify_feature_group as module
+
+        monkeypatch.setattr(module, "concrete_format_groups", lambda: {})
+        feature = Feature("fpg_x", Options({"ReadFile": "x"}))
+        with pytest.raises(FormatPointerError) as exc_info:
+            IdentifyFeatureGroupClass.evaluate(feature, _plugins(_stock("csv_fg", "CsvFG")), None, None)
+
+        assert '"ReadFile" was retired' in str(exc_info.value)
+        assert "e.g. ." not in str(exc_info.value)
+
+    def test_a_scope_with_a_pointer_at_a_different_group_raises_naming_both(self, tmp_path: Path) -> None:
+        csv_fg = _stock("csv_fg", "CsvFG")
+        json_fg = _stock("json_fg", "JsonFG")
+        feature = Feature("fpg_x", Options({"JsonFG": str(tmp_path / "b.json")}), feature_group="CsvFG")
+        with pytest.raises(FormatPointerError) as exc_info:
+            IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg, json_fg), None, None)
+
+        assert "CsvFG" in str(exc_info.value)
+        assert "JsonFG" in str(exc_info.value)
 
     def test_a_loaded_shim_named_like_a_retired_reader_is_not_rejected(self, tmp_path: Path) -> None:
         csv_fg = _stock("csv_fg", "CsvFG")
@@ -862,7 +934,7 @@ class TestRetiredReaderNames:
         for module in ("csv_fg", "parquet_fg", "feather_fg", "orc_fg", "json_fg"):
             importlib.import_module(f"mloda_plugins.feature_group.input_data.file_formats.{module}")
         importlib.import_module("mloda_plugins.feature_group.input_data.db_formats.sqlite_fg")
-        for module in ("json_document_fg", "markdown_fg", "text_fg"):
+        for module in ("json_document_fg", "markdown_fg", "text_fg", "yaml_fg"):
             importlib.import_module(f"mloda_plugins.feature_group.input_data.document_formats.{module}")
 
         known: set[str] = set()

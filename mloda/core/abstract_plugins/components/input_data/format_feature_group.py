@@ -37,6 +37,7 @@ RETIRED_READER_NAMES: dict[str, str] = {
     "JsonReader": "JsonFG",
     "SQLITEReader": "SqliteFG",
     "JsonDocumentReader": "JsonDocumentFG",
+    "YamlDocumentReader": "YamlFG",
     "MarkdownDocumentReader": "MarkdownFG",
     "TextFileReader": "TextFG",
     "PyFileReader": "PyFG",
@@ -47,6 +48,9 @@ RETIRED_READER_NAMES: dict[str, str] = {
     "ReadDocument": "ReadDocumentFG",
     "ReadDocumentFeature": "ReadDocumentFG",
 }
+
+_ABSTRACT_REPLACEMENTS = frozenset({"ReadFileFG", "ReadDBFG", "ReadDocumentFG"})
+STOCK_FORMAT_GROUP_NAMES = frozenset(RETIRED_READER_NAMES.values()) - _ABSTRACT_REPLACEMENTS
 
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(
@@ -322,7 +326,7 @@ class FormatFeatureGroup(FeatureGroup):
             unlocked = pointed or bool(route.required_options)
             if not (route.searched or unlocked):
                 continue
-            if foreign is not None and not unlocked:
+            if foreign is not None:
                 skipped = True
                 continue
             for match in cls.find_sources(route, name, options, data_access_collection):

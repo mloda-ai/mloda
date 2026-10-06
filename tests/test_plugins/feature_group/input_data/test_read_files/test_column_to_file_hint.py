@@ -86,11 +86,34 @@ class TestPointerAgainstColumnToFilePin:
         assert os.path.abspath(pinned) in str(excinfo.value)
         assert os.path.abspath(other) in str(excinfo.value)
 
-    def test_a_pointer_at_the_pinned_file_or_its_directory_is_fine(self, tmp_path: Path) -> None:
+    def test_a_pointer_at_the_pinned_file_is_fine(self, tmp_path: Path) -> None:
         pinned, _, dac = self._pinned(tmp_path)
 
         assert self._run(pinned, dac)
-        assert self._run(str(tmp_path / "pinned_dir"), dac)
+
+    def test_a_folder_pointer_conflicts_even_when_it_holds_the_pinned_file(self, tmp_path: Path) -> None:
+        _, _, dac = self._pinned(tmp_path)
+        with pytest.raises(FormatPointerError):
+            self._run(str(tmp_path / "pinned_dir"), dac)
+
+    def test_a_database_pointer_conflicts_without_leaking_the_credential(self, tmp_path: Path) -> None:
+        from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+
+        pinned, _, dac = self._pinned(tmp_path)
+        secret = str(tmp_path / "toyfmt-secret.db")
+        feature = Feature("cfh_pin_id", Options({"SqliteFG": {SqliteFG.CREDENTIAL_KEY: secret}}))
+        with pytest.raises(FormatPointerError) as excinfo:
+            resolve_or_raise(feature, {SqliteFG: {PyArrowTable}}, None, dac)
+
+        assert "SqliteFG" in str(excinfo.value)
+        assert os.path.abspath(pinned) in str(excinfo.value)
+        assert secret not in str(excinfo.value)
+
+    def test_a_non_str_option_key_with_a_pin_does_not_crash(self, tmp_path: Path) -> None:
+        _, _, dac = self._pinned(tmp_path)
+        feature = Feature("cfh_pin_id", Options({"a": 1, 7: "v"}))  # type: ignore[dict-item]
+
+        resolve_or_raise(feature, {_csv_group(): {PyArrowTable}}, None, dac)
 
     def test_a_csv_pointer_conflicts_with_a_pin_to_another_format(self, tmp_path: Path) -> None:
         pinned = tmp_path / "pin_c.parquet"

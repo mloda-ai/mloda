@@ -500,11 +500,12 @@ def _side_path_prepare(
     root_b: type[FeatureGroup] = MultiLinkRootBSame,
     compute_frameworks: list[type[ComputeFramework]] | None = None,
     extra_options: dict[str, Any] | None = None,
+    features: list[Feature | str] | None = None,
 ) -> Any:
     options = {"sp_p": p_group.get_class_name(), "sp_direct": direct, **(extra_options or {})}
     left, right = (root_b, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, root_b)
     return mloda.prepare(
-        [Feature(consumer.get_class_name(), options=options)],
+        features or [Feature(consumer.get_class_name(), options=options)],
         links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
         compute_frameworks=compute_frameworks or [PandasDataFrame, PyArrowTable],
         parallelization_modes={mode},
@@ -1216,9 +1217,7 @@ _CARRIER_CONSUMERS = {
     "carried_framework": (SidePathCarrierArrow, SidePathDirectArrow),
     "other_side_framework": (SidePathCarrierSecond, SidePathDirectSecond),
 }
-_CARRIER_CONSUMER_PARAMS = pytest.mark.parametrize(
-    "carrier, direct", list(_CARRIER_CONSUMERS.values()), ids=list(_CARRIER_CONSUMERS)
-)
+_CARRIER_KIND_PARAMS = pytest.mark.parametrize("consumer_kind", list(_CARRIER_CONSUMERS))
 
 
 def _carrier_alone(
@@ -1236,28 +1235,27 @@ def _carrier_alone(
     )
 
 
-@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-@_CARRIER_CONSUMER_PARAMS
-def test_a_carrier_consumer_over_a_link_across_distinct_frameworks_is_correct(
-    carrier: type[FeatureGroup], direct: type[FeatureGroup], swap_link_sides: bool
-) -> None:
-    results = _carrier_alone(carrier, swap_link_sides).run()
-
-    assert _side_path_values(results, carrier) == [[110, 220, 330]]
-
-
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
 @pytest.mark.timeout(30)
-@pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
 @pytest.mark.parametrize(
-    "swap_link_sides, consumer_kind",
+    "mode, swap_link_sides, consumer_kind",
     [
-        pytest.param(False, "carried_framework", id="a_b_carried_framework"),
-        pytest.param(True, "carried_framework", id="b_a_carried_framework"),
-        pytest.param(False, "other_side_framework", id="a_b_other_side_framework"),
+        pytest.param(ParallelizationMode.SYNC, False, "carried_framework", id="sync_a_b_carried_framework"),
+        pytest.param(ParallelizationMode.SYNC, True, "carried_framework", id="sync_b_a_carried_framework"),
+        pytest.param(ParallelizationMode.SYNC, False, "other_side_framework", id="sync_a_b_other_side_framework"),
+        pytest.param(ParallelizationMode.SYNC, True, "other_side_framework", id="sync_b_a_other_side_framework"),
+        *(
+            pytest.param(mode, swap, kind, id=f"{mode.value}_{name}")
+            for mode in (ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING)
+            for name, swap, kind in (
+                ("a_b_carried_framework", False, "carried_framework"),
+                ("b_a_carried_framework", True, "carried_framework"),
+                ("a_b_other_side_framework", False, "other_side_framework"),
+            )
+        ),
     ],
 )
-def test_a_carrier_consumer_over_a_link_across_distinct_frameworks_is_correct_in_parallel_modes(
+def test_a_carrier_consumer_over_a_link_across_distinct_frameworks_is_correct(
     flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool, consumer_kind: str
 ) -> None:
     carrier = _CARRIER_CONSUMERS[consumer_kind][0]
@@ -1271,17 +1269,20 @@ def test_a_carrier_consumer_over_a_link_across_distinct_frameworks_is_correct_in
 def _carrier_with_direct(
     carrier: type[FeatureGroup], direct: type[FeatureGroup], swap_link_sides: bool, mode: ParallelizationMode
 ) -> Any:
-    groups: set[type[FeatureGroup]] = {MultiLinkRootA, MultiLinkRootBDistinct, SidePathPandasP, carrier, direct}
-    left, right = (
-        (MultiLinkRootBDistinct, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBDistinct)
-    )
     options = {"sp_b": "mlg_bd"}
-    return mloda.prepare(
-        [Feature(carrier.get_class_name(), options=options), Feature(direct.get_class_name(), options=options)],
-        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+    return _side_path_prepare(
+        SidePathPandasP,
+        False,
+        swap_link_sides,
+        mode,
+        extra_groups={direct},
+        consumer=carrier,
+        root_b=MultiLinkRootBDistinct,
         compute_frameworks=_CARRIER_FRAMEWORKS,
-        parallelization_modes={mode},
-        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        features=[
+            Feature(carrier.get_class_name(), options=options),
+            Feature(direct.get_class_name(), options=options),
+        ],
     )
 
 
@@ -1318,10 +1319,9 @@ def test_a_carrier_consumer_next_to_a_direct_consumer_of_one_link_waits_only_on_
 
 
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-@_CARRIER_CONSUMER_PARAMS
-def test_the_carrier_join_is_planned_on_the_consumers_framework(
-    carrier: type[FeatureGroup], direct: type[FeatureGroup], swap_link_sides: bool
-) -> None:
+@_CARRIER_KIND_PARAMS
+def test_the_carrier_join_is_planned_on_the_consumers_framework(consumer_kind: str, swap_link_sides: bool) -> None:
+    carrier = _CARRIER_CONSUMERS[consumer_kind][0]
     session = _carrier_alone(carrier, swap_link_sides)
 
     assert session.engine is not None

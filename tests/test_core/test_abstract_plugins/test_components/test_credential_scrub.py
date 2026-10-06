@@ -372,6 +372,9 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["hunter2z9"],
         ["'host': 'h'"],
     ),
+    ("over_depth_nesting", "{'password': (a, (b, (c, (d, (e, (f, 'hunter2z9')))))), 'user': 'bob'}", ["hunter2z9"], []),
+    ("truncated_text", "{'password': ('a', ('b', 'hunter2z9'", ["hunter2z9"], []),
+    ("stray_foreign_closer", "{'password': [a)b, 'hunter2z9']}", ["hunter2z9"], []),
 ]
 
 
@@ -420,17 +423,6 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
         "{'password': '***', 'user': 'bob'}",
     ),
 ]
-
-NESTED_REGRESSION_CASES: list[tuple[str, str]] = [
-    ("over_depth_nesting", "{'password': (a, (b, (c, (d, (e, (f, 'hunter2z9')))))), 'user': 'bob'}"),
-    ("truncated_text", "{'password': ('a', ('b', 'hunter2z9'"),
-    ("stray_foreign_closer", "{'password': [a)b, 'hunter2z9']}"),
-]
-
-
-@pytest.mark.parametrize("case_id,text", NESTED_REGRESSION_CASES, ids=[case[0] for case in NESTED_REGRESSION_CASES])
-def test_scrub_credentials_nested_container_edge_cases_do_not_leak(case_id: str, text: str) -> None:
-    assert "hunter2z9" not in scrub_credentials(text)
 
 
 def test_scrub_credentials_masks_ordered_dict_value_under_secret_key() -> None:
@@ -716,28 +708,20 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated unterminated token brace"
 
 
-def test_repeated_unterminated_password_brace_scrubs_fast() -> None:
-    text = "password={ " * 4400
+@pytest.mark.parametrize(
+    "text, what",
+    [
+        ("password={ " * 4400, "a repeated unterminated password brace"),
+        ("{'password': ((" + ",'password': ((x" * 5000, "repeated unterminated nested containers"),
+        ("{'password': " + "((a)," * 5000 + ")}", "many balanced nested containers"),
+    ],
+    ids=["unterminated_password_brace", "unterminated_nested_container", "balanced_nested_containers"],
+)
+def test_repeated_unterminated_password_brace_scrubs_fast(text: str, what: str) -> None:
     start = time.perf_counter()
     scrub_credentials(text)
     elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated unterminated password brace"
-
-
-def test_repeated_unterminated_nested_password_container_scrubs_fast() -> None:
-    text = "{'password': ((" + ",'password': ((x" * 5000
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on repeated unterminated nested containers"
-
-
-def test_many_balanced_nested_password_containers_scrubs_fast() -> None:
-    text = "{'password': " + "((a)," * 5000 + ")}"
-    start = time.perf_counter()
-    scrub_credentials(text)
-    elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on many balanced nested containers"
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on {what}"
 
 
 def test_unterminated_password_brace_masks_to_end_of_line() -> None:

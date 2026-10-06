@@ -16,6 +16,8 @@ from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
+from mloda.user import FeatureName, Options
+from mloda_plugins.feature_group.experimental.key_features import with_key_features
 
 
 class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -144,7 +146,7 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
     ## Requirements
     - Input data must contain the source feature to be imputed
-    - For group-based imputation, grouping features must also be present
+    - For group-based imputation, grouping features are requested as inputs
     - For constant imputation, a constant_value must be provided
     """
 
@@ -209,6 +211,11 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             )
 
         return imputation_method
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        """Source features plus the group_by_features columns."""
+        sources = super().input_features(options, feature_name) or set()
+        return with_key_features(sources, options.get("group_by_features") or [])
 
     @classmethod
     def _extract_imputation_method(cls, feature: Feature) -> str | None:

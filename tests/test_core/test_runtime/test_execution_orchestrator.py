@@ -541,7 +541,7 @@ class TestSyncModeSkipsSleep:
         register.get_parallelization_modes.assert_called_once()
 
     def test_execute_step_uses_cached_register_modes(self) -> None:
-        orchestrator = ExecutionOrchestrator(MagicMock())  # type: ignore[arg-type]
+        orchestrator = ExecutionOrchestrator(MagicMock())
         register = Mock(wraps=CfwManager({ParallelizationMode.SYNC}))
         orchestrator.cfw_register = register
         cached_modes = {ParallelizationMode.THREADING}

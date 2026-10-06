@@ -58,6 +58,7 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     ("steward", "PlanStep", "plan_info"),
     ("steward", "write_plan_lock", "plan_lock"),
     ("steward", "plan_structure_hash", "plan_lock"),
+    ("steward", "plan_content_hash", "plan_lock"),
     ("steward", "check_plan_lock", "plan_lock"),
     ("steward", "PlanLockMismatchError", "plan_lock"),
     # Verified context seam: steward-only, platform-integrator surface.

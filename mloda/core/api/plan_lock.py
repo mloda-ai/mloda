@@ -8,7 +8,9 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.api.plan_info import PlanStep
+from mloda.core.prepare.choose_compute_frameworks import stable_text
 
 PLAN_LOCK_FORMAT = 3
 
@@ -25,54 +27,70 @@ def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: json.dumps(record, sort_keys=True))
 
 
-def _lock_content(plan: Sequence[PlanStep]) -> dict[str, Any]:
+def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return the lock content and the wider content-hash content, built in one pass."""
     requested: set[str] = set()
-    compute: list[dict[str, Any]] = []
-    joins: list[dict[str, Any]] = []
-    transforms: list[dict[str, Any]] = []
+    lock: dict[str, list[dict[str, Any]]] = {"compute": [], "joins": [], "transforms": []}
+    wide: dict[str, list[dict[str, Any]]] = {"compute": [], "joins": [], "transforms": []}
     for step in plan:
         if step.step_kind == "compute":
             requested.update(step.requested_feature_names)
             access = step.reader_data_access
-            compute.append(
-                {
-                    "feature_names": sorted(step.feature_names),
-                    "feature_group": _class_path(step.feature_group),
-                    "compute_framework": _class_path(step.compute_framework),
-                    "compute_framework_reason": step.compute_framework_reason,
-                    "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
-                    "reader": None if access is None else _class_path(access[0]),
-                    "result_framework": _class_path(step.result_framework),
-                }
-            )
+            record = {
+                "feature_names": sorted(step.feature_names),
+                "feature_group": _class_path(step.feature_group),
+                "compute_framework": _class_path(step.compute_framework),
+                "compute_framework_reason": step.compute_framework_reason,
+                "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
+                "reader": None if access is None else _class_path(access[0]),
+                "result_framework": _class_path(step.result_framework),
+            }
+            lock["compute"].append(record)
+            wide_record: dict[str, Any] = {
+                key: value for key, value in record.items() if key not in ("compute_framework_reason", "reader")
+            }
+            wide_record["input_feature_edges"] = {
+                name: sorted(inputs) for name, inputs in step.input_feature_edges.items()
+            }
+            wide_record["options"] = scrub_credentials(stable_text(step.feature_set_options))
+            wide["compute"].append(wide_record)
         elif step.step_kind == "join":
-            joins.append(
-                {
-                    "left_feature_group": _class_path(step.feature_group),
-                    "right_feature_group": _class_path(step.source_feature_group),
-                    "join_type": step.join_type,
-                    "compute_framework": _class_path(step.compute_framework),
-                    "source_compute_framework": _class_path(step.source_compute_framework),
-                    "destination_side": step.join_destination_side,
-                }
-            )
+            record = {
+                "left_feature_group": _class_path(step.feature_group),
+                "right_feature_group": _class_path(step.source_feature_group),
+                "join_type": step.join_type,
+                "compute_framework": _class_path(step.compute_framework),
+                "source_compute_framework": _class_path(step.source_compute_framework),
+                "destination_side": step.join_destination_side,
+            }
+            lock["joins"].append(record)
+            wide["joins"].append({**record, "join_keys": None if step.join_keys is None else list(step.join_keys)})
         elif step.step_kind == "transform":
-            transforms.append(
-                {
-                    "feature_group": _class_path(step.feature_group),
-                    "from_compute_framework": _class_path(step.source_compute_framework),
-                    "to_compute_framework": _class_path(step.compute_framework),
-                }
-            )
+            record = {
+                "feature_group": _class_path(step.feature_group),
+                "from_compute_framework": _class_path(step.source_compute_framework),
+                "to_compute_framework": _class_path(step.compute_framework),
+            }
+            lock["transforms"].append(record)
+            wide["transforms"].append(record)
         else:
             raise ValueError(f"Unknown plan step kind {step.step_kind!r}.")
-    return {
-        "format": PLAN_LOCK_FORMAT,
-        "requested_features": sorted(requested),
-        "compute": _sorted_records(compute),
-        "joins": _sorted_records(joins),
-        "transforms": _sorted_records(transforms),
-    }
+    sorted_requested = sorted(requested)
+    return (
+        {
+            "format": PLAN_LOCK_FORMAT,
+            "requested_features": sorted_requested,
+            **{key: _sorted_records(records) for key, records in lock.items()},
+        },
+        {
+            "requested_features": sorted_requested,
+            **{key: _sorted_records(records) for key, records in wide.items()},
+        },
+    )
+
+
+def _lock_content(plan: Sequence[PlanStep]) -> dict[str, Any]:
+    return _build(plan)[0]
 
 
 def _dump(content: dict[str, Any]) -> str:
@@ -86,6 +104,12 @@ def _lock_text(plan: Sequence[PlanStep]) -> str:
 def plan_structure_hash(plan: Sequence[PlanStep]) -> str:
     """Return the sha256 of the plan-lock text: an equal hash means an equal lock file."""
     return hashlib.sha256(_lock_text(plan).encode("utf-8")).hexdigest()
+
+
+def plan_content_hash(plan: Sequence[PlanStep]) -> str:
+    """Return the sha256 of the plan's audit content: structure plus scrubbed options, wiring and join keys."""
+    text = json.dumps(_build(plan)[1], sort_keys=True)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 _PATH_FIELDS = {

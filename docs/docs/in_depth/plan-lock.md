@@ -40,6 +40,8 @@ It never holds option values, `data_access_identity`, versions, per-run ids or t
 
 `plan_structure_hash(plan)` (from `mloda.steward`) is the sha256 hex of the lock text, so an equal hash means an equal lock file. A session with extenders carries it as `PlanContext.structure_hash`. Like the lock it excludes option values, data access, the input wiring between steps and join keys (the lock records classes and frameworks, not which inputs a feature reads or which columns a link joins on), so it is a plan-shape fingerprint, not a reproducibility or audit fingerprint. It includes the reason text and the lock format number, so it can change between mloda releases. The churn sources below apply.
 
+`plan_content_hash(plan)` (from `mloda.steward`) / `PlanContext.content_hash` is the wider audit/lineage fingerprint: it adds each compute step's group option values (credential-shaped values scrubbed first, so a rotated secret does not change it) and input wiring, and each join's keys, and drops the reason text and lock format number. It excludes context options, data access, a link's asof config and discriminators, ids and per-run tokens, and `FeatureGroup.version()` (that embeds the mloda version, so an unchanged plan would change on every upgrade; combine it with `HookContext.feature_group_version` if needed). Option values render through their repr, so an option object without a stable repr makes it unstable.
+
 ## Churn sources
 
 - A reason can change without a framework change, for example `saves 1 conversion` to `saves 2 conversions`.

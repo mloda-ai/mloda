@@ -69,7 +69,7 @@ class JoinStep(Step):
             input_features=None,
             compute_framework_name=cfw.get_class_name(),
             join_type=self.link.jointype.value,
-            join_keys=self._join_keys(),
+            join_keys=self.join_keys(),
             asof_config=self.link.asof_config,
             join_left_feature_group=f"{self.link.left_feature_group.__module__}.{self.link.left_feature_group.__qualname__}",
             join_right_feature_group=f"{self.link.right_feature_group.__module__}.{self.link.right_feature_group.__qualname__}",
@@ -84,7 +84,7 @@ class JoinStep(Step):
         with context.activate():
             _invoke_extender(extender, instrument(context, self._do_merge_data), cfw, from_cfw_data)
 
-    def _join_keys(self) -> tuple[str, ...] | None:
+    def join_keys(self) -> tuple[str, ...] | None:
         """Pairs each left column with its corresponding right column; None for APPEND/UNION, which merge without keys."""
         if self.link.jointype in (JoinType.APPEND, JoinType.UNION):
             return None

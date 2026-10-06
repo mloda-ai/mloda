@@ -11,7 +11,14 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.api.plan_lock import PLAN_LOCK_FORMAT, _lock_text
-from mloda.steward import PlanLockMismatchError, PlanStep, check_plan_lock, plan_structure_hash, write_plan_lock
+from mloda.steward import (
+    PlanLockMismatchError,
+    PlanStep,
+    check_plan_lock,
+    plan_content_hash,
+    plan_structure_hash,
+    write_plan_lock,
+)
 from mloda.provider import ComputeFramework, FeatureGroup
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -245,3 +252,75 @@ def test_plan_structure_hash_changes_with_a_lock_field() -> None:
     assert plan_structure_hash([_compute_step()]) != plan_structure_hash(
         [_compute_step(compute_framework=PyArrowTable)]
     )
+
+
+def _content_plan() -> list[PlanStep]:
+    return [
+        _compute_step(
+            feature_set_options=Options(group={"window": 3}),
+            input_feature_edges={"lock_io_value": ("a",)},
+        ),
+        _join_step(join_keys=("l=r",)),
+    ]
+
+
+def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash() -> None:
+    plan = _content_plan()
+    digest = plan_content_hash(plan)
+
+    assert len(digest) == 64
+    assert all(char in "0123456789abcdef" for char in digest)
+    assert digest != plan_structure_hash(plan)
+    assert digest == plan_content_hash(_content_plan())
+
+
+def test_plan_content_hash_ignores_run_ids_reader_access_and_reason_text() -> None:
+    base = _content_plan()
+    varied = [
+        dataclasses.replace(
+            base[0],
+            step_uuid=uuid.uuid4(),
+            reader_data_access=(cast(Any, object), "somewhere"),
+            compute_framework_reason="other reason",
+        ),
+        dataclasses.replace(base[1], join_token=uuid.uuid4()),
+    ]
+
+    assert plan_content_hash(varied) == plan_content_hash(base)
+
+
+def _with(index: int, **overrides: object) -> list[PlanStep]:
+    plan = _content_plan()
+    plan[index] = dataclasses.replace(plan[index], **overrides)  # type: ignore[arg-type]
+    return plan
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        pytest.param(lambda: _with(0, feature_names=("other",)), id="feature_name"),
+        pytest.param(lambda: _with(0, feature_group=PyArrowTable), id="feature_group"),
+        pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
+        pytest.param(lambda: _with(0, feature_set_options=Options(group={"window": 4})), id="group_option"),
+        pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_edges"),
+        pytest.param(lambda: _with(1, join_type="left"), id="join_type"),
+        pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
+    ],
+)
+def test_plan_content_hash_changes_with_a_content_field(changed: Callable[[], list[PlanStep]]) -> None:
+    assert plan_content_hash(changed()) != plan_content_hash(_content_plan())
+
+
+def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
+    def hashed(**group: object) -> str:
+        return plan_content_hash([_compute_step(feature_set_options=Options(group=group))])
+
+    assert hashed(password="a1") == hashed(password="b2")
+    assert hashed(window=3) != hashed(window=4)
+
+
+def test_plan_content_hash_is_independent_of_set_and_dict_order() -> None:
+    first = _compute_step(feature_set_options=Options(group={"s": {"a", "b", "c"}, "d": {"x": 1, "y": 2}}))
+    second = _compute_step(feature_set_options=Options(group={"d": {"y": 2, "x": 1}, "s": {"c", "b", "a"}}))
+
+    assert plan_content_hash([first]) == plan_content_hash([second])

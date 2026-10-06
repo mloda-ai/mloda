@@ -101,6 +101,8 @@ class PlanStep:
     reader_data_access: tuple[type["BaseInputData"], Any] | None = field(default=None, compare=False)
     compute_framework_reason: str | None = None
     result_framework: type["ComputeFramework"] | None = None
+    join_keys: tuple[str, ...] | None = None
+    """join steps: the link's `left=right` index column pairs, as `HookContext.join_keys`; None for APPEND/UNION and non-join steps"""
 
     @property
     def result_framework_name(self) -> str | None:
@@ -247,6 +249,7 @@ def build_plan_steps(
                     source_feature_group=step.link.right_feature_group,
                     source_compute_framework=step.source_framework,
                     join_type=step.link.jointype.value,
+                    join_keys=step.join_keys(),
                     join_destination_side=None if record is None else record.destination_side.value,
                     join_token=None if record is None else record.token,
                     declared_left_frameworks=()
@@ -286,6 +289,7 @@ def _content_key(record: PlanStep) -> tuple[str, ...]:
         ",".join(_class_path(fg) for fg in record.specialized_from),
         record.compute_framework_reason or "",
         _class_path(record.result_framework),
+        ",".join(record.join_keys or ()),
     )
 
 

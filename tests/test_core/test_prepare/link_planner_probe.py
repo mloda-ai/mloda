@@ -7,7 +7,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
@@ -36,7 +36,7 @@ def collect() -> dict[str, str]:
 
     link = Link.inner(JoinSpec(LinkPlannerProbeLeft, "idx"), JoinSpec(LinkPlannerProbeRight, "idx"))
     key = ResolveLinks(Graph()).create_link_trekker_key(
-        link, ComputeFramework.select_deterministic(left_side), ComputeFramework.select_deterministic(right_side)
+        link, min(left_side, key=framework_rank_key({})), min(right_side, key=framework_rank_key({}))
     )
 
     child = Feature("link_planner_probe_child")

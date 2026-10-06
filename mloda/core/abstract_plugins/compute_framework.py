@@ -1,7 +1,7 @@
 import contextlib
 import pickle  # nosec B403
 from abc import ABC
-from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
 from typing import Any, final
@@ -817,18 +817,6 @@ class ComputeFramework(ABC):
     @final
     def get_class_name(cls) -> str:
         return cls.__name__
-
-    @staticmethod
-    @final
-    def select_deterministic(
-        frameworks: Iterable[type["ComputeFramework"]],
-        positions: Mapping[type["ComputeFramework"], int] | None = None,
-    ) -> type["ComputeFramework"]:
-        """Pick by the run's preference, connection requirement, then a total name key (set iteration is id-based)."""
-        candidates = list(frameworks)
-        if not candidates:
-            raise ValueError("Cannot select a compute framework from an empty collection.")
-        return min(candidates, key=framework_rank_key({} if positions is None else positions))
 
     @final
     def __eq__(self, other: object) -> bool:

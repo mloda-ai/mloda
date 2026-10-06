@@ -8,7 +8,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
@@ -51,8 +51,8 @@ def collect() -> dict[str, str]:
     left = _feature("resolved_join_probe_left_payload", left_side, PROBE_LEFT_INDEX)
     right = _feature("resolved_join_probe_right_payload", right_side, PROBE_RIGHT_INDEX)
     child = _feature("resolved_join_probe_child_payload", {PandasDataFrame})
-    left.chosen_compute_framework = ComputeFramework.select_deterministic(left_side)
-    right.chosen_compute_framework = ComputeFramework.select_deterministic(right_side)
+    left.chosen_compute_framework = min(left_side, key=framework_rank_key({}))
+    right.chosen_compute_framework = min(right_side, key=framework_rank_key({}))
     child.chosen_compute_framework = PandasDataFrame
     key = ResolveLinks(Graph()).create_link_trekker_key(
         link, left.get_compute_framework(), right.get_compute_framework()

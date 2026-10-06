@@ -90,7 +90,7 @@ def test_two_unlinked_source_framework_instances_raise_missing_links_error_at_pr
 # a join's own source side) plus that join's own destination side is fully covered by the single
 # declared Link, so it must plan and run under every PYTHONHASHSEED, not just some of them.
 _SUBCLASS_LINKED_HOP_AND_JOIN_PROBE = Path(__file__).with_name("subclass_linked_hop_and_join_probe.py")
-# Gate keeps seeds 0 and 3: before the fix seed 3 failed on 3.11+ hashing and seed 0 failed in the original report.
+# Gate seeds 0, 3: pre-fix 3 failed under 3.11+ hashing, 0 in the original report.
 _SUBCLASS_LINKED_HOP_AND_JOIN_SEEDS = probe_sweep([0, 3], [0, 1, 3, 4, 6])
 _SUBCLASS_LINKED_HOP_AND_JOIN_EXPECTED = {"outcome": "accepted", "subclass_linked_x": "[111, 222, 333]"}
 
@@ -118,7 +118,7 @@ def test_subclass_linked_plain_hop_and_join_plan_the_same_way_under_every_hash_s
 # the two gates together, so `_entries_linked`'s bare `issubclass` check wrongly merges the two
 # hops into one binding and drops one column's data instead of keeping both.
 _SUBCLASS_SIBLING_PLAIN_HOPS_PROBE = Path(__file__).with_name("subclass_sibling_plain_hops_probe.py")
-# Gate keeps seeds 0 and 1: before the fix every seed failed; 0 dropped p3_b and 1 dropped p3_a.
+# Gate seeds 0, 1: pre-fix 0 dropped p3_b and 1 dropped p3_a.
 _SUBCLASS_SIBLING_PLAIN_HOPS_SEEDS = probe_sweep([0, 1], [0, 1, 3, 4, 6])
 _SUBCLASS_SIBLING_PLAIN_HOPS_EXPECTED = {"outcome": "accepted", "p3_x": "[6, 8, 10]"}
 
@@ -151,7 +151,7 @@ _SUBCLASS_UNRELATED_ROOTS_CROSS_FRAMEWORK_PROBE = Path(__file__).with_name(
 _SUBCLASS_UNRELATED_ROOTS_SAME_FRAMEWORK_PROBE = Path(__file__).with_name(
     "subclass_unrelated_roots_same_framework_probe.py"
 )
-# Gate keeps seeds 0 and 1: before the fix every seed failed, so any two reproduce it.
+# Gate seeds 0, 1: pre-fix every seed failed.
 _SUBCLASS_UNRELATED_ROOTS_SEEDS = probe_sweep([0, 1], [0, 1, 3, 4, 6])
 
 
@@ -489,7 +489,7 @@ def test_same_class_fan_in_in_one_framework_plans_and_runs() -> None:
 # A parent that reaches a join side only through a compute-framework hop is not join-bridged, so the
 # consumer must hit the plan-time missing-Links error under every hash seed, never a runtime crash.
 _LINK_SIDE_PATHS_PROBE = Path(__file__).with_name("link_side_paths_probe.py")
-# Gate keeps seeds 0 and 1: before the fix hop_diamond failed on seed 1 (of 1, 2, 6, 9) and hop_parent on seed 0; the other shapes failed on every seed.
+# Gate seeds 0, 1: pre-fix hop_diamond failed on 1, hop_parent on 0, other shapes on all.
 _LINK_SIDE_PATHS_SEEDS = probe_sweep([0, 1], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 

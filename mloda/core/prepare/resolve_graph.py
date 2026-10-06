@@ -1,5 +1,6 @@
 from collections import defaultdict
 from collections.abc import Mapping
+from typing import Any
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
@@ -25,11 +26,11 @@ class ResolveGraph:
         positions: Mapping[type[ComputeFramework], int] | None = None,
         output_framework: type[ComputeFramework] | None = None,
         connection_dropped: Mapping[UUID, frozenset[type[ComputeFramework]]] | None = None,
-        connected: frozenset[type[ComputeFramework]] = frozenset(),
+        connected: Mapping[type[ComputeFramework], Any] | None = None,
     ):
         self.output_framework = output_framework
         self.connection_dropped = connection_dropped or {}
-        self.connected = connected
+        self.connected: Mapping[type[ComputeFramework], Any] = connected or {}
         self.graph = graph
         self.filter_ties = filter_ties or []
         self.positions: Mapping[type[ComputeFramework], int] = positions or {}

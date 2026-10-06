@@ -562,7 +562,10 @@ class Engine:
     ) -> Feature:
         """A pinned filter moves its host onto the pin; on a collision the host merges into the equal feature."""
         pin = filter_feature.compute_frameworks
-        if not pin or host.compute_frameworks == pin:
+        if not pin:
+            return host
+        if host.compute_frameworks == pin:
+            host.framework_pinned = True
             return host
         collection = self.feature_group_collection[feature_group_class]
         if not any(f is host for f in collection):
@@ -795,16 +798,17 @@ class Engine:
                 self.connection_dropped[feature.uuid] = dropped
         return feature
 
-    def _connected_frameworks(self) -> frozenset[type[ComputeFramework]]:
-        """Dropped frameworks for which the DataAccessCollection holds exactly one matching connection."""
+    def _connected_frameworks(self) -> dict[type[ComputeFramework], Any]:
+        """Dropped frameworks mapped to the one matching connection the DataAccessCollection holds."""
         dac = self.data_access_collection
         if dac is None:
-            return frozenset()
-        return frozenset(
-            cfw
-            for cfw in set().union(*self.connection_dropped.values())
-            if sum(cfw._connection_matches(conn) for conn in dac.connections.values()) == 1
-        )
+            return {}
+        connected: dict[type[ComputeFramework], Any] = {}
+        for cfw in set().union(*self.connection_dropped.values()):
+            matching = [conn for conn in dac.connections.values() if cfw._connection_matches(conn)]
+            if len(matching) == 1:
+                connected[cfw] = matching[0]
+        return connected
 
     @staticmethod
     def _drop_unconnected_required(

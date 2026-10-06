@@ -631,6 +631,7 @@ class _PlanConsumer(FeatureGroup):
     INPUTS: ClassVar[tuple[str, ...]] = ()
     OUTPUT: ClassVar[str] = ""
     FW_NAME: ClassVar[str | None] = None
+    RULE: ClassVar[tuple[str, ...]] = ()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name) for name in self.INPUTS}
@@ -641,6 +642,8 @@ class _PlanConsumer(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        if cls.RULE:
+            return {_load_framework(_MODULE_OF[name], name) for name in cls.RULE}
         return None if cls.FW_NAME is None else {_load_framework(_MODULE_OF[cls.FW_NAME], cls.FW_NAME)}
 
     @classmethod
@@ -1326,30 +1329,28 @@ def test_pinned_and_unpinned_request_with_differing_options_stay_two_steps() -> 
 
 # --- a step whose parents already run in a connection-required framework keeps it -------------------
 
-_BD_SEEN: list[str] = []
-_BD_SHARED: dict[str, Any] = {}
 _BD_DUCK_PYARROW = ("DuckDBFramework", "PyArrowTable")
 
 
-def _bd_rule(*names: str) -> set[type[ComputeFramework]]:
-    return {_load_framework(_MODULE_OF[name], name) for name in names}
+class _BdDuckRoot(_PlanRoot):
+    """DuckDB root serving DATA as a relation; CONN (when set) is the shared connection."""
 
-
-def _bd_connection() -> Any:
-    import duckdb
-
-    return _BD_SHARED.get("conn") or duckdb.connect()
-
-
-class BdDuckRoot(_PlanRoot):
-    NAMES = ("bd_root",)
     FW_NAME = "DuckDBFramework"
+    DATA: ClassVar[dict[str, list[int]]] = {}
+    CONN: ClassVar[Any] = None
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        import duckdb
+
         from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
-        return DuckdbRelation.from_dict(_bd_connection(), {"bd_root": [1, 2, 3]})
+        return DuckdbRelation.from_dict(cls.CONN or duckdb.connect(), cls.DATA)
+
+
+class BdDuckRoot(_BdDuckRoot):
+    NAMES = ("bd_root",)
+    DATA = {"bd_root": [1, 2, 3]}
 
 
 class BdArrowRoot(_PlanRoot):
@@ -1360,24 +1361,19 @@ class BdArrowRoot(_PlanRoot):
 class BdDuckConsumer(_PlanConsumer):
     INPUTS = ("bd_root",)
     OUTPUT = "bd_out"
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return _bd_rule(*_BD_DUCK_PYARROW)
+    RULE = _BD_DUCK_PYARROW
+    SEEN: ClassVar[list[str]] = []
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        _BD_SEEN.append(type(data).__name__)
+        cls.SEEN.append(type(data).__name__)
         return data.project('"bd_root" AS "bd_out"')
 
 
 class BdArrowOutConsumer(_PlanConsumer):
     INPUTS = ("bd_root",)
     OUTPUT = "bd_out_np"
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return _bd_rule(*_BD_DUCK_PYARROW)
+    RULE = _BD_DUCK_PYARROW
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1387,43 +1383,25 @@ class BdArrowOutConsumer(_PlanConsumer):
 class BdArrowRootConsumer(_PlanConsumer):
     INPUTS = ("bd_arrow_root",)
     OUTPUT = "bd_pa_out"
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return _bd_rule(*_BD_DUCK_PYARROW)
+    RULE = _BD_DUCK_PYARROW
 
 
-class BdLeftRoot(_PlanRoot):
+class BdLeftRoot(_BdDuckRoot):
     NAMES = ("bd_l_val", "bd_lidx")
     INDEXES = ("bd_lidx",)
-    FW_NAME = "DuckDBFramework"
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
-
-        return DuckdbRelation.from_dict(_bd_connection(), {"bd_l_val": [10, 20, 30], "bd_lidx": [1, 2, 3]})
+    DATA = {"bd_l_val": [10, 20, 30], "bd_lidx": [1, 2, 3]}
 
 
-class BdRightRoot(_PlanRoot):
+class BdRightRoot(_BdDuckRoot):
     NAMES = ("bd_r_val", "bd_ridx")
     INDEXES = ("bd_ridx",)
-    FW_NAME = "DuckDBFramework"
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
-
-        return DuckdbRelation.from_dict(_bd_connection(), {"bd_r_val": [4, 5, 6], "bd_ridx": [1, 2, 3]})
+    DATA = {"bd_r_val": [4, 5, 6], "bd_ridx": [1, 2, 3]}
 
 
 class BdJoinConsumer(_PlanConsumer):
     INPUTS = ("bd_l_val", "bd_r_val")
     OUTPUT = "bd_join_out"
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return _bd_rule(*_BD_DUCK_PYARROW)
+    RULE = _BD_DUCK_PYARROW
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1445,19 +1423,13 @@ class BdMixedDuckRoot(_PlanRoot):
 class BdMixedConsumer(_PlanConsumer):
     INPUTS = ("bd_mx_duck", "bd_mx_arrow")
     OUTPUT = "bd_mx_out"
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return _bd_rule(*_BD_DUCK_PYARROW)
+    RULE = _BD_DUCK_PYARROW
 
 
 class BdDacConsumer(_PlanConsumer):
     INPUTS = ("bd_arrow_root",)
     OUTPUT = "bd_dac_out"
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
-        return _bd_rule("DuckDBFramework", "PandasDataFrame")
+    RULE = ("DuckDBFramework", "PandasDataFrame")
 
 
 _BD_ORDERS = [
@@ -1477,24 +1449,20 @@ def _bd_values(frame: Any) -> dict[str, list[Any]]:
 
 
 @pytest.mark.parametrize("order", _BD_ORDERS)
-def test_a_consumer_of_a_duckdb_native_parent_plans_on_duckdb_without_a_transform(order: list[str]) -> None:
-    steps = _plan(["bd_out"], {BdDuckRoot, BdDuckConsumer}, _bd_frameworks(order))
+def test_a_consumer_of_a_duckdb_native_parent_plans_on_duckdb_and_receives_the_relation(
+    order: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(BdDuckConsumer, "SEEN", seen)
+    frameworks = _bd_frameworks(order)
+    collector = PluginCollector.enabled_feature_groups({BdDuckRoot, BdDuckConsumer})
 
+    steps = _plan(["bd_out"], {BdDuckRoot, BdDuckConsumer}, frameworks)
     assert _compute_names(steps, BdDuckConsumer) == {"DuckDBFramework"}
     assert _transforms(steps) == []
 
-
-@pytest.mark.parametrize("order", _BD_ORDERS)
-def test_a_consumer_of_a_duckdb_native_parent_receives_the_relation(order: list[str]) -> None:
-    _BD_SEEN.clear()
-
-    result = mloda.run_all(
-        ["bd_out"],
-        compute_frameworks=_bd_frameworks(order),
-        plugin_collector=PluginCollector.enabled_feature_groups({BdDuckRoot, BdDuckConsumer}),
-    )
-
-    assert _BD_SEEN == ["DuckdbRelation"]
+    result = mloda.run_all(["bd_out"], compute_frameworks=frameworks, plugin_collector=collector)
+    assert seen == ["DuckdbRelation"]
     assert _bd_values(result[0]) == {"bd_out": [1, 2, 3]}
 
 
@@ -1508,42 +1476,50 @@ def test_a_borrowed_duckdb_step_returning_arrow_converts_on_the_adopted_connecti
     assert _bd_values(result[0]) == {"bd_out_np": [1, 2, 3]}
 
 
-def test_a_join_of_duckdb_native_parents_on_one_connection_runs_on_the_adopted_connection() -> None:
-    import duckdb
+def test_a_join_of_duckdb_native_parents_on_one_connection_runs_on_the_adopted_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    monkeypatch.setattr(_BdDuckRoot, "CONN", duckdb.connect())
+    links = {Link.inner(JoinSpec(BdLeftRoot, "bd_lidx"), JoinSpec(BdRightRoot, "bd_ridx"))}
 
-    _BD_SHARED["conn"] = duckdb.connect()
-    try:
-        links = {Link.inner(JoinSpec(BdLeftRoot, "bd_lidx"), JoinSpec(BdRightRoot, "bd_ridx"))}
-        result = mloda.run_all(
-            ["bd_join_out"],
-            compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
-            links=links,
-            plugin_collector=PluginCollector.enabled_feature_groups({BdLeftRoot, BdRightRoot, BdJoinConsumer}),
-        )
-    finally:
-        _BD_SHARED.clear()
+    result = mloda.run_all(
+        ["bd_join_out"],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        links=links,
+        plugin_collector=PluginCollector.enabled_feature_groups({BdLeftRoot, BdRightRoot, BdJoinConsumer}),
+    )
 
     assert sorted(_bd_values(result[0])["bd_join_out"]) == [10, 20, 30]
 
 
+_BD_MIXED_LINKS = {Link.inner(JoinSpec(BdMixedDuckRoot, "bd_mx_lidx"), JoinSpec(BdMixedArrowRoot, "bd_mx_ridx"))}
+
+
 @pytest.mark.parametrize("order", _BD_ORDERS)
-def test_a_consumer_of_a_pyarrow_only_parent_without_a_connection_plans_on_pyarrow(order: list[str]) -> None:
-    steps = _plan(["bd_pa_out"], {BdArrowRoot, BdArrowRootConsumer}, _bd_frameworks(order))
+@pytest.mark.parametrize(
+    ("feature", "groups", "consumer", "links"),
+    [
+        pytest.param("bd_pa_out", {BdArrowRoot, BdArrowRootConsumer}, BdArrowRootConsumer, None, id="pyarrow_only"),
+        pytest.param(
+            "bd_mx_out",
+            {BdMixedDuckRoot, BdMixedArrowRoot, BdMixedConsumer},
+            BdMixedConsumer,
+            _BD_MIXED_LINKS,
+            id="duckdb_and_pyarrow",
+        ),
+    ],
+)
+def test_a_consumer_with_a_pyarrow_parent_and_no_connection_plans_on_pyarrow(
+    order: list[str],
+    feature: str,
+    groups: set[type[FeatureGroup]],
+    consumer: type[FeatureGroup],
+    links: set[Link] | None,
+) -> None:
+    steps = _plan([feature], groups, _bd_frameworks(order), links=links)
 
-    assert _compute_names(steps, BdArrowRootConsumer) == {"PyArrowTable"}
-
-
-def test_a_consumer_with_one_duckdb_and_one_pyarrow_parent_plans_on_pyarrow() -> None:
-    links = {Link.inner(JoinSpec(BdMixedDuckRoot, "bd_mx_lidx"), JoinSpec(BdMixedArrowRoot, "bd_mx_ridx"))}
-
-    steps = _plan(
-        ["bd_mx_out"],
-        {BdMixedDuckRoot, BdMixedArrowRoot, BdMixedConsumer},
-        _bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
-        links=links,
-    )
-
-    assert _compute_names(steps, BdMixedConsumer) == {"PyArrowTable"}
+    assert _compute_names(steps, consumer) == {"PyArrowTable"}
 
 
 def _bd_dac_names(connections: int | None) -> set[str | None]:

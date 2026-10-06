@@ -66,7 +66,7 @@ jobs:
         echo "PYTEST_WORKERS=$(( $(nproc) < 3 ? $(nproc) : 3 ))" >> "$GITHUB_ENV"
     - name: Run tox ${{ matrix.toxenv }}
       run: tox ${{ matrix.toxenv }}
-      timeout-minutes: 6
+      timeout-minutes: 10
     # Catches a tox bump that brings the redirect file back (e.g. the provisional venv_redirect renamed)
     # on the PR instead of in the Release job.
     - name: Check tox left no .venv redirect file

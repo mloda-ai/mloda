@@ -24,8 +24,12 @@ class ResolveGraph:
         filter_ties: list[tuple[UUID, UUID]] | None = None,
         positions: Mapping[type[ComputeFramework], int] | None = None,
         output_framework: type[ComputeFramework] | None = None,
+        connection_dropped: Mapping[UUID, frozenset[type[ComputeFramework]]] | None = None,
+        connected: frozenset[type[ComputeFramework]] = frozenset(),
     ):
         self.output_framework = output_framework
+        self.connection_dropped = connection_dropped or {}
+        self.connected = connected
         self.graph = graph
         self.filter_ties = filter_ties or []
         self.positions: Mapping[type[ComputeFramework], int] = positions or {}
@@ -49,6 +53,8 @@ class ResolveGraph:
             self.filter_ties,
             self.positions,
             output_framework=self.output_framework,
+            dropped=self.connection_dropped,
+            connected=self.connected,
         ).choose()
         self.resolver_links.resolve_links()
         # we put link into queue depending on feature link relation

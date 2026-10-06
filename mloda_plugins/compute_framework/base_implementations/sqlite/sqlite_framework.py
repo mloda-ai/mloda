@@ -47,6 +47,10 @@ class SqliteFramework(ComputeFramework):
     def _connection_matches(cls, conn: Any) -> bool:
         return isinstance(conn, sqlite3.Connection)
 
+    @classmethod
+    def connection_of(cls, data: Any) -> Any | None:
+        return data.connection if isinstance(data, SqliteRelation) else None
+
     @staticmethod
     def is_available() -> bool:
         """sqlite3 is stdlib, but the relation and merge engine speak Arrow, so pyarrow decides."""

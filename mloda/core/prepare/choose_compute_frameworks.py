@@ -131,6 +131,11 @@ def _swapped_pairs_differ(values: Values) -> bool:
     return child_a is not child_b
 
 
+def _runs_after_parent(framework: Framework, values: Values) -> bool:
+    parent, child = values
+    return child is not framework or parent is framework
+
+
 def _same_side(values: Values) -> bool:
     left_a, right_a, child_a, left_b, right_b, child_b = values
     if (left_a, right_a) != (left_b, right_b) or left_a is right_a:
@@ -149,8 +154,12 @@ class ChooseComputeFrameworks:
         filter_ties: list[tuple[UUID, UUID]],
         positions: Mapping[Framework, int],
         output_framework: Framework | None = None,
+        dropped: Mapping[UUID, frozenset[Framework]] | None = None,
+        connected: frozenset[Framework] = frozenset(),
     ) -> None:
         self.output_framework = output_framework
+        self.dropped = dropped or {}
+        self.connected = connected
         self.graph = graph
         self.nodes = nodes_per_feature_group
         self.occurrences = link_occurrences
@@ -164,7 +173,8 @@ class ChooseComputeFrameworks:
         """Solve each connected component exactly and write the result onto the features."""
         blocks = self._blocks()
         owner = {f.uuid: i for i, block in enumerate(blocks) for f in block.features}
-        rules = self._rules(blocks, owner)
+        blocks, borrowed = self._regain_dropped(blocks, owner)
+        rules = self._rules(blocks, owner) + borrowed
         groups = self._cost_groups(blocks, owner)
         domains = self._prune(blocks, rules)
         for order in self._search_orders(len(blocks), rules, groups):
@@ -199,6 +209,52 @@ class ChooseComputeFrameworks:
         classes = _refine(keys, self._block_neighbors(keyed))
         order = sorted(range(len(keyed)), key=lambda i: (keys[i], classes[i], _names(keyed[i][1].features)))
         return [keyed[i][1] for i in order]
+
+    def _regain_dropped(self, blocks: list[_Block], owner: dict[UUID, int]) -> tuple[list[_Block], list[_Rule]]:
+        """Frameworks dropped for lack of a connection return when every parent runs there or the DAC has one."""
+        if not self.dropped:
+            return blocks, []
+        parents: list[set[int]] = [set() for _ in blocks]
+        for parent, child in self.graph.edges:
+            if parent in owner and child in owner and owner[parent] != owner[child]:
+                parents[owner[child]].add(owner[parent])
+        lost = [frozenset().union(*(self.dropped.get(f.uuid, frozenset()) for f in b.features)) for b in blocks]
+        domains = [set(block.domain) for block in blocks]
+        gained: list[set[Framework]] = [set() for _ in blocks]
+        changed = True
+        while changed:
+            changed = False
+            for index in range(len(blocks)):
+                for framework in lost[index] - domains[index]:
+                    if parents[index] and (
+                        framework in self.connected or all(framework in domains[p] for p in parents[index])
+                    ):
+                        domains[index].add(framework)
+                        gained[index].add(framework)
+                        changed = True
+            for host, tied in self.ties:
+                if host in owner and tied in owner:
+                    new = gained[owner[host]] - domains[owner[tied]]
+                    if new:
+                        domains[owner[tied]] |= new
+                        gained[owner[tied]] |= new
+                        changed = True
+        widened = [
+            block._replace(domain=tuple(sorted(domains[i], key=self.rank))) if gained[i] else block
+            for i, block in enumerate(blocks)
+        ]
+        rules = [
+            _Rule(
+                (parent, child),
+                partial(_runs_after_parent, framework),
+                f"{blocks[child].fg.__name__} has no connection for {framework.get_class_name()}, "
+                "so it runs there only after its parents",
+            )
+            for child in range(len(blocks))
+            for framework in sorted(gained[child] - self.connected, key=self.rank)
+            for parent in sorted(parents[child])
+        ]
+        return widened, rules
 
     def _block_neighbors(self, keyed: list[tuple[tuple[object, ...], _Block]]) -> list[set[int]]:
         """Blocks adjacent through graph edges, links and filter ties, for telling equal-keyed blocks apart."""

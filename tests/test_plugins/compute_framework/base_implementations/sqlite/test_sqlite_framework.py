@@ -56,6 +56,14 @@ class TestSqliteFrameworkBasics:
         with pytest.raises(ValueError, match="Expected a sqlite3.Connection"):
             fw.set_framework_connection_object("not_a_connection")
 
+    def test_connection_of_returns_the_relations_connection(self, connection: sqlite3.Connection) -> None:
+        relation = SqliteRelation.from_dict(connection, {"a": [1, 2]})
+
+        assert SqliteFramework.connection_of(relation) is connection
+
+    def test_connection_of_is_none_for_other_data(self) -> None:
+        assert SqliteFramework.connection_of({"a": [1, 2]}) is None
+
     def test_transform_dict(self, connection: sqlite3.Connection) -> None:
         fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         fw.set_framework_connection_object(connection)

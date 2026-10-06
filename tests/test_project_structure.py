@@ -231,10 +231,21 @@ class TestToxConfig:
     TOX_INSTALL = re.compile(r"\binstall\b.*(?<![\w-])tox(?![\w-])")
     TOX_PIN = re.compile(r"uv tool install tox==\S+ --with tox-uv==\S+$")
 
-    def test_tox_opts_out_of_venv_redirect(self) -> None:
-        """tox >= 4.64 otherwise writes a .venv redirect file that makes the release job's `uv lock` fail."""
+    @staticmethod
+    def _tox_parser() -> configparser.ConfigParser:
         parser = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
         assert parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8"), "tox.ini not found"
+        return parser
+
+    @staticmethod
+    def _workflow_jobs(name: str) -> dict[str, Any]:
+        config = yaml.safe_load(_read_text(PROJECT_ROOT / ".github" / "workflows" / name))
+        jobs: dict[str, Any] = config["jobs"]
+        return jobs
+
+    def test_tox_opts_out_of_venv_redirect(self) -> None:
+        """tox >= 4.64 otherwise writes a .venv redirect file that makes the release job's `uv lock` fail."""
+        parser = self._tox_parser()
         assert not parser.getboolean("tox", "venv_redirect", fallback=True), (
             "tox.ini must set `venv_redirect = false` under [tox]"
         )
@@ -253,18 +264,6 @@ class TestToxConfig:
                 pins.setdefault(workflow.name, set()).add(match.group(0))
         assert {"ci.yaml", "release.yaml"} <= pins.keys(), f"ci.yaml and release.yaml must install tox: {pins}"
         assert len(set().union(*pins.values())) == 1, f"workflows must install the same tox and tox-uv: {pins}"
-
-    @staticmethod
-    def _tox_parser() -> configparser.ConfigParser:
-        parser = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
-        assert parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8"), "tox.ini not found"
-        return parser
-
-    @staticmethod
-    def _workflow_jobs(name: str) -> dict[str, Any]:
-        config = yaml.safe_load(_read_text(PROJECT_ROOT / ".github" / "workflows" / name))
-        jobs: dict[str, Any] = config["jobs"]
-        return jobs
 
     def test_tox_splits_tests_from_lint(self) -> None:
         """Plain `tox` runs python310 and lint; lint tools run only in the lint env."""

@@ -59,10 +59,11 @@ jobs:
         python -m pip install uv
         # Same tox pin as release.yaml; see the note there before bumping.
         uv tool install tox==4.64.1 --with tox-uv==1.36.0
-    - name: Use one pytest worker per runner core
+    - name: Use up to three pytest workers
       run: |
         nproc
-        echo "PYTEST_WORKERS=$(nproc)" >> "$GITHUB_ENV"
+        # 4 workers on the 4-vCPU runner pushed subprocess-heavy tests past the per-test timeout.
+        echo "PYTEST_WORKERS=$(( $(nproc) < 3 ? $(nproc) : 3 ))" >> "$GITHUB_ENV"
     - name: Run tox ${{ matrix.toxenv }}
       run: tox ${{ matrix.toxenv }}
       timeout-minutes: 6

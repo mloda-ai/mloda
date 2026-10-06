@@ -305,9 +305,9 @@ class TestToxConfig:
 
     def test_ci_build_job_derives_workers_from_nproc(self) -> None:
         steps = self._workflow_jobs("ci.yaml")["build"]["steps"]
-        write = re.compile(r"PYTEST_WORKERS=\$\(nproc\)")
-        assert any(write.search(str(s.get("run", ""))) and "GITHUB_ENV" in str(s.get("run", "")) for s in steps), (
-            "build job must write nproc into PYTEST_WORKERS via $GITHUB_ENV"
+        write = re.compile(r"PYTEST_WORKERS=\$\(\(.*nproc.*\b3\b.*\)\).*GITHUB_ENV")
+        assert any(write.search(line) for s in steps for line in str(s.get("run", "")).splitlines()), (
+            "build job must write nproc, capped at 3, into PYTEST_WORKERS via $GITHUB_ENV"
         )
         hardcoded = [s for s in steps if "PYTEST_WORKERS" in (s.get("env") or {})]
         assert not hardcoded, "no build step may hardcode PYTEST_WORKERS in env"

@@ -1558,6 +1558,14 @@ class TestPlanLock:
         assert len(content["compute"]) > 1
         assert len(content["joins"]) >= 1
         assert len(content["transforms"]) >= 1
+        consumer_edges = [
+            record["input_feature_edges"]
+            for record in content["compute"]
+            if "LockProbeConsumer" in record["input_feature_edges"]
+        ]
+        assert consumer_edges
+        assert consumer_edges[0]["LockProbeConsumer"] == ["lock_probe_left_val", "lock_probe_right_val"]
+        assert all(record["join_keys"] == ["lock_probe_jid=lock_probe_jid"] for record in content["joins"])
 
         assert outputs[0]["structure_hash"] != "None"
         assert outputs[0]["structure_hash"] == outputs[0]["expected_structure_hash"]

@@ -2,7 +2,7 @@
 
 ## What it records and why
 
-Strict mode and `PluginPolicy` decide which classes may take part in a request. The plan lock records which class wins per step (feature group, compute framework, reader, specialization, joins, framework transforms) and fails when that changes. See [Plugin Registry](plugin_registry.md) for the policy side.
+Strict mode and `PluginPolicy` decide which classes may take part in a request. The plan lock records which class wins per step (feature group, compute framework, reader, specialization, joins, framework transforms) plus input wiring and join keys, and fails when that changes. See [Plugin Registry](plugin_registry.md) for the policy side.
 
 ## Usage
 
@@ -26,7 +26,7 @@ write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMo
 
 ## What the file holds
 
-Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Duplicate steps keep one record each.
+Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Compute records also hold each output feature's input names (`input_feature_edges`), join records the link's `join_keys` (`left=right` column pairs, null for append/union). Duplicate steps keep one record each. The format number is 4, so a lock file written by an older mloda fails `check_plan_lock` until rewritten with `write_plan_lock`.
 
 It never holds option values, `data_access_identity`, versions, per-run ids or the mloda version.
 
@@ -38,9 +38,9 @@ It never holds option values, `data_access_identity`, versions, per-run ids or t
 
 ## Structure hash
 
-`plan_structure_hash(plan)` (from `mloda.steward`) is the sha256 hex of the lock text, so an equal hash means an equal lock file. A session with extenders carries it as `PlanContext.structure_hash`. Like the lock it excludes option values, data access, the input wiring between steps and join keys (the lock records classes and frameworks, not which inputs a feature reads or which columns a link joins on), so it is a plan-shape fingerprint, not a reproducibility or audit fingerprint. It includes the reason text and the lock format number, so it can change between mloda releases. The churn sources below apply.
+`plan_structure_hash(plan)` (from `mloda.steward`) is the sha256 hex of the lock text, so an equal hash means an equal lock file. A session with extenders carries it as `PlanContext.structure_hash`. Like the lock it excludes option values and data access, so it is a plan-shape fingerprint, not a reproducibility or audit fingerprint. It includes the reason text and the lock format number, so it can change between mloda releases. The churn sources below apply.
 
-`plan_content_hash(plan)` (from `mloda.steward`) / `PlanContext.content_hash` is the wider audit fingerprint: it adds each compute step's group option values (values under credential-shaped option keys are masked at any depth through dicts, lists, tuples and other mappings, so a rotated secret does not change it, and a `RegisteredCredential` keeps hashing through its redacted repr; every other value is hashed in full, so a secret under another key name or inside a URL enters the hash input, which is a sha256 over the whole plan), the reader class, input wiring and each join's keys, and drops the reason text and lock format number. It excludes context options, the data access value, a link's asof config and discriminators, ids, per-run tokens and `FeatureGroup.version()` (it embeds the mloda version, so an unchanged plan would change on every upgrade; use `HookContext.feature_group_version` for that). Option values render through their repr, so an option object without a stable repr makes it unstable.
+`plan_content_hash(plan)` (from `mloda.steward`) / `PlanContext.content_hash` is the wider audit fingerprint: it adds each compute step's group option values (values under credential-shaped option keys are masked at any depth through dicts, lists, tuples and other mappings, so a rotated secret does not change it, and a `RegisteredCredential` keeps hashing through its redacted repr; every other value is hashed in full, so a secret under another key name or inside a URL enters the hash input, which is a sha256 over the whole plan), and drops the reason text and lock format number. It excludes context options, the data access value, a link's asof config and discriminators, ids, per-run tokens and `FeatureGroup.version()` (it embeds the mloda version, so an unchanged plan would change on every upgrade; use `HookContext.feature_group_version` for that). Option values render through their repr, so an option object without a stable repr makes it unstable.
 
 ## Churn sources
 

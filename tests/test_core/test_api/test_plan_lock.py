@@ -102,7 +102,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 3
+    assert content["format"] == PLAN_LOCK_FORMAT == 4
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
@@ -113,6 +113,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "specialized_from",
         "reader",
         "result_framework",
+        "input_feature_edges",
     }
     assert set(content["joins"][0]) == {
         "left_feature_group",
@@ -121,6 +122,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "compute_framework",
         "source_compute_framework",
         "destination_side",
+        "join_keys",
     }
     assert set(content["transforms"][0]) == {"feature_group", "from_compute_framework", "to_compute_framework"}
     assert text == _lock_text(plan)
@@ -250,12 +252,6 @@ def test_plan_structure_hash_ignores_non_lock_fields() -> None:
     assert plan_structure_hash(varied) == plan_structure_hash(base)
 
 
-def test_plan_structure_hash_changes_with_a_lock_field() -> None:
-    assert plan_structure_hash([_compute_step()]) != plan_structure_hash(
-        [_compute_step(compute_framework=PyArrowTable)]
-    )
-
-
 def _content_plan() -> list[PlanStep]:
     return [
         _compute_step(
@@ -267,6 +263,23 @@ def _content_plan() -> list[PlanStep]:
     ]
 
 
+@pytest.mark.parametrize(
+    "changed",
+    [
+        pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
+        pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_feature_edges"),
+        pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
+    ],
+)
+def test_plan_structure_hash_changes_with_a_lock_field(tmp_path: Path, changed: Callable[[], list[PlanStep]]) -> None:
+    assert plan_structure_hash(changed()) != plan_structure_hash(_content_plan())
+
+    lock = tmp_path / "plan.lock"
+    write_plan_lock(_content_plan(), lock)
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock(changed(), lock)
+
+
 def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash() -> None:
     plan = _content_plan()
     digest = plan_content_hash(plan)
@@ -275,6 +288,8 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     assert all(char in "0123456789abcdef" for char in digest)
     assert digest != plan_structure_hash(plan)
     assert digest == plan_content_hash(_content_plan())
+    # Pinned: moving wiring and join keys into the lock must not shift the content hash.
+    assert digest == "3795217432afaff05f341f680b5eac2047cb3145faed9cd78d114e79ccf7bd2f"
 
 
 def test_plan_content_hash_ignores_run_ids_reader_access_and_reason_text() -> None:

@@ -42,6 +42,9 @@ ONLY_ALLOWED = "only allowed framework"
 RULES = "rules exclude preferred frameworks"
 LIST_ORDER = "your list order"
 DEFAULT_ORDER = "default order"
+CONVERTS_LATER = "converts later"
+
+Cost = tuple[int, int]
 
 
 def saves_conversions(count: int) -> str:
@@ -168,6 +171,8 @@ class ChooseComputeFrameworks:
         self.rank = framework_rank_key(positions)
         self.transformer = ComputeFrameworkTransformer()
         self.paths: dict[tuple[Framework, Framework], bool] = {}
+        self._depth: list[int] = []
+        self._horizon = 1
 
     def choose(self) -> None:
         """Solve each connected component exactly and write the result onto the features."""
@@ -176,6 +181,8 @@ class ChooseComputeFrameworks:
         blocks, borrowed = self._regain_dropped(blocks, owner)
         rules = self._rules(blocks, owner) + borrowed
         groups = self._cost_groups(blocks, owner)
+        self._depth = self._block_depths(blocks)
+        self._horizon = max(self._depth, default=0) + 1
         domains = self._prune(blocks, rules)
         for order in self._search_orders(len(blocks), rules, groups):
             members = set(order)
@@ -328,13 +335,36 @@ class ChooseComputeFrameworks:
     def _requested(block: _Block) -> bool:
         return any(feature.initial_requested_data for feature in block.features)
 
-    def _final_cost(self, block: _Block, framework: Framework) -> int:
+    def _transform_cost(self, parent: int, costs: list[int]) -> Cost:
+        """Conversions of one transform step, then how early they happen (later is cheaper)."""
+        return (sum(costs), sum(costs) * (self._horizon - self._depth[parent]))
+
+    def _final_cost(self, block: _Block, framework: Framework, index: int) -> Cost:
         output = self.output_framework
         if output is None or not self._requested(block) or framework is output:
-            return 0
+            return (0, 0)
         if framework.expected_data_framework() is output.expected_data_framework():
-            return 0
-        return conversion_cost(framework, output)
+            return (0, 0)
+        cost = conversion_cost(framework, output)
+        return (cost, cost * (self._horizon - self._depth[index] - 1))
+
+    def _block_depths(self, blocks: list[_Block]) -> list[int]:
+        """Longest path from a root per block (max over its features), iteratively over the feature DAG."""
+        children: dict[UUID, list[UUID]] = {}
+        waiting: Counter[UUID] = Counter()
+        for parent, child in self.graph.edges:
+            children.setdefault(parent, []).append(child)
+            waiting[child] += 1
+        depth: dict[UUID, int] = {}
+        ready = [node for node in self.graph.nodes if not waiting[node]]
+        while ready:
+            node = ready.pop()
+            for child in children.get(node, ()):
+                depth[child] = max(depth.get(child, 0), depth.get(node, 0) + 1)
+                waiting[child] -= 1
+                if not waiting[child]:
+                    ready.append(child)
+        return [max((depth.get(f.uuid, 0) for f in block.features), default=0) for block in blocks]
 
     def _rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
         rules: list[_Rule] = []
@@ -561,12 +591,15 @@ class ChooseComputeFrameworks:
             switched = {**assignment, index: framework}
             return all(self._allows(rule, switched) for rule in touching)
 
-        def step_cost(values: Mapping[int, Framework]) -> int:
-            return sum(
-                conversion_cost(values[parent], target)
+        def step_cost(values: Mapping[int, Framework]) -> Cost:
+            costs = [
+                self._transform_cost(
+                    parent, [conversion_cost(values[parent], t) for t in {values[c] for c in kids} - {values[parent]}]
+                )
                 for parent, kids in steps
-                for target in {values[c] for c in kids if values[c] is not values[parent]}
-            ) + self._final_cost(block, values[index])
+            ]
+            final = self._final_cost(block, values[index], index)
+            return (sum(c[0] for c in costs) + final[0], sum(c[1] for c in costs) + final[1])
 
         alternatives = [fw for fw in block.domain if fw is not chosen and feasible(fw)]
         if not alternatives:
@@ -576,9 +609,12 @@ class ChooseComputeFrameworks:
         if not earlier:
             return self._order_reason(chosen, alternatives[0])
         base = step_cost(assignment)
-        delta = min(step_cost({**assignment, index: fw}) for fw in earlier) - base
+        costs = {fw: step_cost({**assignment, index: fw}) for fw in earlier}
+        delta = min(c[0] for c in costs.values()) - base[0]
         if delta > 0:
             return saves_conversions(delta)
+        if all(c[1] > base[1] for c in costs.values() if c[0] == base[0]):
+            return CONVERTS_LATER
         return self._order_reason(chosen, earlier[0])
 
     def _solve(
@@ -588,7 +624,7 @@ class ChooseComputeFrameworks:
         rules: list[_Rule],
         groups: dict[tuple[int, type[FeatureGroup]], set[int]],
         domains: list[list[Framework]],
-    ) -> tuple[dict[int, Framework], int]:
+    ) -> tuple[dict[int, Framework], Cost]:
         """Branch and bound; returns the best assignment and its cost, raising when no assignment is feasible."""
         touching: dict[int, list[_Rule]] = {b: [] for b in order}
         for rule in rules:
@@ -601,13 +637,17 @@ class ChooseComputeFrameworks:
                 steps[b].append((parent, children))
         assigned: dict[int, Framework] = {}
         best: dict[int, Framework] = {}
-        best_cost = [-1]
+        best_cost: list[Cost | None] = [None]
 
-        def step_cost(parent: int, children: set[int]) -> int:
+        def step_cost(parent: int, children: set[int]) -> Cost:
             if parent not in assigned:
-                return 0
+                return (0, 0)
             moved = {assigned[c] for c in children if c in assigned and assigned[c] is not assigned[parent]}
-            return sum(conversion_cost(assigned[parent], target) for target in moved)
+            return self._transform_cost(parent, [conversion_cost(assigned[parent], target) for target in moved])
+
+        def total(indices: Sequence[tuple[int, set[int]]]) -> Cost:
+            costs = [step_cost(*step) for step in indices]
+            return (sum(c[0] for c in costs), sum(c[1] for c in costs))
 
         def narrow(index: int, current: dict[int, list[Framework]]) -> dict[int, list[Framework]] | None:
             """Forward check: values of the one block still open in a rule must be supported by the assignment."""
@@ -626,18 +666,18 @@ class ChooseComputeFrameworks:
             return narrowed
 
         def open_frame(
-            depth: int, current: dict[int, list[Framework]], cost: int
-        ) -> tuple[int, int, Iterator[Framework], dict[int, list[Framework]], int] | None:
+            depth: int, current: dict[int, list[Framework]], cost: Cost
+        ) -> tuple[int, Cost, Iterator[Framework], dict[int, list[Framework]], Cost] | None:
             if depth == len(order):
                 best.update(assigned)
                 best_cost[0] = cost
                 return None
             index = order[depth]
-            before = sum(step_cost(*step) for step in steps[index])
+            before = total(steps[index])
             return index, before, iter(current[index]), current, cost
 
         frames = []
-        root = open_frame(0, {b: domains[b] for b in order}, 0)
+        root = open_frame(0, {b: domains[b] for b in order}, (0, 0))
         if root is not None:
             frames.append(root)
         while frames:
@@ -649,15 +689,18 @@ class ChooseComputeFrameworks:
                 continue
             assigned[index] = value
             narrowed = narrow(index, current)
-            new_cost = cost + sum(step_cost(*step) for step in steps[index]) - before
-            new_cost += self._final_cost(blocks[index], value)
-            if narrowed is not None and (best_cost[0] < 0 or new_cost < best_cost[0]):
+            after = total(steps[index])
+            final = self._final_cost(blocks[index], value, index)
+            new_cost = (cost[0] + after[0] - before[0] + final[0], cost[1] + after[1] - before[1] + final[1])
+            incumbent = best_cost[0]
+            if narrowed is not None and (incumbent is None or new_cost < incumbent):
                 frame = open_frame(len(frames), narrowed, new_cost)
                 if frame is not None:
                     frames.append(frame)
-        if best_cost[0] < 0:
+        found = best_cost[0]
+        if found is None:
             raise ValueError(self._infeasible(blocks, order, rules))
-        return best, best_cost[0]
+        return best, found
 
     @staticmethod
     def _infeasible(blocks: list[_Block], order: list[int], rules: list[_Rule]) -> str:

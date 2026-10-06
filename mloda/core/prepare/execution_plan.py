@@ -2030,6 +2030,9 @@ Available join types:
         declared_left_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.left_uuids}
         declared_right_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.right_uuids}
 
+        declared_carried_uuids: frozenset[UUID] | None = None
+        declared_other_uuids: frozenset[UUID] = frozenset()
+        declared_carried_left = False
         if link.jointype not in (JoinType.APPEND, JoinType.UNION) and destination_framework != source_framework:
             scanned, scanned_sides, _ = self._carrier_scan(
                 children_uuids, split, graph, {destination_framework, source_framework}
@@ -2047,10 +2050,21 @@ Available join types:
                     consumer_framework = next(iter(consumer_frameworks))
                     if consumer_framework in other_fws and consumer_framework not in carried_fws:
                         destination_framework = source_framework = consumer_framework
+                        declared_carried_left = carried_left
+                        declared_carried_uuids, declared_other_uuids = (
+                            (split.left_uuids, split.right_uuids)
+                            if carried_left
+                            else (split.right_uuids, split.left_uuids)
+                        )
                     elif consumer_framework in carried_fws:
                         if consumer_framework == source_framework:
                             source_framework = destination_framework
                         destination_framework = consumer_framework
+                    else:
+                        raise ValueError(
+                            f"The consumers of {link} read a link side through a feature on a third compute "
+                            "framework. Compute the consumer on one of the link sides' compute frameworks."
+                        )
                 else:
                     raise ValueError(
                         f"The consumers of {link} read a link side through a feature on a third compute framework. "
@@ -2069,6 +2083,8 @@ Available join types:
 
             if node_framework == source_framework:
                 source_framework_uuids.add(uuid)
+        if declared_carried_uuids is not None:
+            destination_framework_uuids, source_framework_uuids = set(declared_carried_uuids), set(declared_other_uuids)
         widened_right_frameworks = {
             graph.get_nodes()[u].feature.get_compute_framework()
             for u in split.right_uuids_any_distance - split.left_uuids
@@ -2097,6 +2113,8 @@ Available join types:
             fallback=swap_merge_sides,
             jointype=link.jointype,
         )
+        if declared_carried_uuids is not None:
+            swap_sides = not declared_carried_left
 
         # This part is for handling specific join cases. Currently, we only deal with equal feature groups.
         for children_uuid in children_uuids:
@@ -2111,7 +2129,7 @@ Available join types:
                 return None
             elif result is True:
                 pass
-            else:
+            elif declared_carried_uuids is None:
                 # case_link_fw_is_equal_to_children_fw and case_link_equal_feature_groups both
                 # guarantee, by construction, that result[0] runs on link_fw[1] and result[1] runs
                 # on link_fw[2]; unlike the nearest-split-derived swap_sides, that framework

@@ -501,12 +501,13 @@ def _side_path_prepare(
     compute_frameworks: list[type[ComputeFramework]] | None = None,
     extra_options: dict[str, Any] | None = None,
     features: list[Feature | str] | None = None,
+    link_factory: Any = Link.inner,
 ) -> Any:
     options = {"sp_p": p_group.get_class_name(), "sp_direct": direct, **(extra_options or {})}
     left, right = (root_b, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, root_b)
     return mloda.prepare(
         features or [Feature(consumer.get_class_name(), options=options)],
-        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+        links={link_factory(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
         compute_frameworks=compute_frameworks or [PandasDataFrame, PyArrowTable],
         parallelization_modes={mode},
         plugin_collector=PluginCollector.enabled_feature_groups(
@@ -1221,7 +1222,10 @@ _CARRIER_KIND_PARAMS = pytest.mark.parametrize("consumer_kind", list(_CARRIER_CO
 
 
 def _carrier_alone(
-    carrier: type[FeatureGroup], swap_link_sides: bool, mode: ParallelizationMode = ParallelizationMode.SYNC
+    carrier: type[FeatureGroup],
+    swap_link_sides: bool,
+    mode: ParallelizationMode = ParallelizationMode.SYNC,
+    link_factory: Any = Link.inner,
 ) -> Any:
     return _side_path_prepare(
         SidePathPandasP,
@@ -1232,6 +1236,7 @@ def _carrier_alone(
         root_b=MultiLinkRootBDistinct,
         compute_frameworks=_CARRIER_FRAMEWORKS,
         extra_options={"sp_b": "mlg_bd"},
+        link_factory=link_factory,
     )
 
 
@@ -1334,3 +1339,67 @@ def test_the_carrier_join_is_planned_on_the_consumers_framework(consumer_kind: s
     assert carried[0].destination_framework is consumer_framework
     records = [record for record in planner.resolved_join_plan.records if record.token == carried[0].uuid]
     assert [record.destination_framework for record in records] == [consumer_framework]
+    sides = [(record.left, record.right) for record in records]
+    for left, right in sides:
+        for side in (left, right):
+            expected = PyArrowTable if side.feature_group is MultiLinkRootA else SecondCfw
+            assert side.declared_frameworks == {expected}
+    assert all(record.destination_uuids.isdisjoint(record.source_uuids) for record in records)
+    assert all(record.destination_uuids and record.source_uuids for record in records)
+
+
+@pytest.mark.parametrize("link_factory", [Link.left, Link.right], ids=["left", "right"])
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@_CARRIER_KIND_PARAMS
+def test_a_carrier_consumer_over_a_left_or_right_link_matches_the_inner_values(
+    consumer_kind: str, swap_link_sides: bool, link_factory: Any
+) -> None:
+    carrier = _CARRIER_CONSUMERS[consumer_kind][0]
+
+    results = _carrier_alone(carrier, swap_link_sides, link_factory=link_factory).run()
+
+    assert _side_path_values(results, carrier) == [[110, 220, 330]]
+
+
+class SidePathPandasBP(_SidePathP):
+    """Pandas mid reading root B (mlg_bd)."""
+
+    FRAMEWORKS: ClassVar[set[type[ComputeFramework]]] = {PandasDataFrame}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_bd")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["mlg_bd"] * 100
+        return data
+
+
+class SidePathCarrierFromB(FeatureGroup):
+    """PyArrow consumer of the B-side Pandas mid and root A."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathPandasBP"), Feature("mlg_a")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.add(data.column("SidePathPandasBP"), data.column("mlg_a"))
+        return data.append_column(cls.get_class_name(), total)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_carrier_descending_from_the_b_side_is_correct(swap_link_sides: bool) -> None:
+    results = _side_path_prepare(
+        SidePathPandasBP,
+        False,
+        swap_link_sides,
+        consumer=SidePathCarrierFromB,
+        root_b=MultiLinkRootBDistinct,
+        compute_frameworks=_CARRIER_FRAMEWORKS,
+    ).run()
+
+    assert _side_path_values(results, SidePathCarrierFromB) == [[1001, 2002, 3003]]

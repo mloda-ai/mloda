@@ -151,12 +151,19 @@ class TestJoinHookFiresWithCorrectContext:
         assert context.asof_config is None
         assert context.feature_group_class is None
         assert context.feature_group_version is None
+        assert context.join_left_feature_group == _fg_path(_JoinHookLeftFeatureGroup)
+        assert context.join_right_feature_group == _fg_path(_JoinHookRightFeatureGroup)
 
 
-def _build_direct_join_step(link: Link | None = None) -> JoinStep:
+def _fg_path(cls: type) -> str:
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _build_direct_join_step(link: Link | None = None, swap_merge_sides: bool = False) -> JoinStep:
     """A JoinStep usable for direct _merge_data calls, bypassing DAG execution entirely."""
     return JoinStep(
         link=link if link is not None else _join_hook_link(),
+        swap_merge_sides=swap_merge_sides,
         destination_framework=PythonDictFramework,
         source_framework=PythonDictFramework,
         required_uuids=set(),
@@ -213,6 +220,25 @@ class TestJoinHookCarrierIsNotAliasedAcrossTwoMergesOnSameComputeFramework:
         assert "mutated" not in second_context.carrier
         assert cfw.run_context.carrier is not None
         assert "mutated" not in cfw.run_context.carrier
+
+
+class TestJoinHookFeatureGroupOrientationFollowsLink:
+    @pytest.mark.parametrize("swap_merge_sides", [False, True])
+    def test_declared_orientation_holds_regardless_of_swap(self, swap_merge_sides: bool) -> None:
+        extender = _JoinListCapturingExtender()
+        step = _build_direct_join_step(swap_merge_sides=swap_merge_sides)
+        cfw = PythonDictFramework(function_extender={extender})
+        cfw.run_context = RunContext()
+        left = {f"{_MARKER}_left_id": [1, 2, 3], f"{_MARKER}_left_value": ["a", "b", "c"]}
+        right = {f"{_MARKER}_right_id": [1, 2, 3], f"{_MARKER}_right_value": [10, 20, 30]}
+        cfw.data, from_cfw_data = (right, left) if swap_merge_sides else (left, right)
+
+        step._merge_data(cfw, from_cfw_data)
+
+        assert len(extender.captured) == 1
+        context = extender.captured[0]
+        assert context.join_left_feature_group == _fg_path(_JoinHookLeftFeatureGroup)
+        assert context.join_right_feature_group == _fg_path(_JoinHookRightFeatureGroup)
 
 
 class TestJoinHookCarriesAsofConfig:

@@ -105,19 +105,19 @@ def _refine(
         classes = refined
 
 
-def _join_allows(jointype: JoinType, values: Values) -> bool:
+def _join_allows(jointype: JoinType, values: Values, right_off_child: bool) -> bool:
     left, right, child = values
     if jointype is JoinType.RIGHT:
-        return child is right
+        return child is right or (right_off_child and child is left)
     if jointype in (JoinType.APPEND, JoinType.UNION):
         return child is left
     return child is left or child is right
 
 
-def _any_join_allows(occurrences: list[tuple[JoinType, bool]], values: Values) -> bool:
+def _any_join_allows(occurrences: list[tuple[JoinType, bool, bool]], values: Values) -> bool:
     """One link must be satisfied; a same-framework cross-group link may not be skipped (it would self-merge)."""
-    satisfied = [_join_allows(jt, values[3 * i : 3 * i + 3]) for i, (jt, _) in enumerate(occurrences)]
-    for i, (_, strict) in enumerate(occurrences):
+    satisfied = [_join_allows(jt, values[3 * i : 3 * i + 3], off) for i, (jt, _, off) in enumerate(occurrences)]
+    for i, (_, strict, _) in enumerate(occurrences):
         if strict and values[3 * i] is values[3 * i + 1] and not satisfied[i]:
             return False
     return any(satisfied)
@@ -275,8 +275,10 @@ class ChooseComputeFrameworks:
                     link.jointype,
                     link.left_feature_group != link.right_feature_group
                     and link.jointype not in (JoinType.APPEND, JoinType.UNION),
+                    link.left_feature_group != link.right_feature_group
+                    and set(blocks[joined[2]].domain).isdisjoint(blocks[joined[1]].domain),
                 )
-                for link, _ in occurrences
+                for link, joined in occurrences
             ]
             rules.append(
                 _Rule(

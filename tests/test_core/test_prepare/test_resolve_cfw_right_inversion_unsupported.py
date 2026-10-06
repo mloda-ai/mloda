@@ -10,6 +10,7 @@ from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import EdgeProperties, NodeProperties
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
 class RightInversionLeftFG(FeatureGroup):
@@ -24,14 +25,14 @@ class RightInversionChildFG(FeatureGroup):
     pass
 
 
-def test_right_join_onto_an_undeclared_framework_is_infeasible() -> None:
-    """The child declares only PandasDataFrame, but a RIGHT join lands on its right side, PyArrowTable."""
+def test_right_join_onto_an_unreachable_framework_is_infeasible() -> None:
+    """The child declares only PythonDictFramework, which neither side of the RIGHT join can reach."""
     left = Feature("right_inversion_left")
     right = Feature("right_inversion_right")
     child = Feature("right_inversion_feature")
     left.compute_frameworks = {PandasDataFrame}
     right.compute_frameworks = {PyArrowTable}
-    child.compute_frameworks = {PandasDataFrame}
+    child.compute_frameworks = {PythonDictFramework}
 
     graph = Graph()
     graph.add_node(left.uuid, NodeProperties(left, RightInversionLeftFG))
@@ -53,5 +54,5 @@ def test_right_join_onto_an_undeclared_framework_is_infeasible() -> None:
 
     message = str(excinfo.value)
     assert str(child.name) in message, message
-    assert PandasDataFrame.get_class_name() in message, message
+    assert PythonDictFramework.get_class_name() in message, message
     assert "join right" in message, message

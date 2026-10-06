@@ -81,6 +81,8 @@ class HookContext:
     join_type: str | None = None
     join_keys: tuple[str, ...] | None = None
     asof_config: "AsOfJoinConfig | None" = None
+    join_left_feature_group: str | None = None
+    join_right_feature_group: str | None = None
     plan_feature_count: int | None = None
     plan_node_count: int | None = None
     plan_depth: int | None = None

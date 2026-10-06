@@ -78,8 +78,8 @@ class CfwManager:
         self.run_context: RunContext = RunContext()
 
     def add_uuid_flyway_datasets(self, cf_uuid: UUID, object_ids: set[UUID]) -> None:
-        """Associates a set of Flyway dataset UUIDs with a Compute Framework UUID."""
-        self.uuid_flyway_datasets[cf_uuid] = object_ids
+        """Unions a set of Flyway dataset UUIDs into those already associated with a Compute Framework UUID."""
+        self.uuid_flyway_datasets[cf_uuid] = self.uuid_flyway_datasets.get(cf_uuid, set()) | set(object_ids)
 
     def get_uuid_flyway_datasets(self, cf_uuid: UUID) -> set[UUID] | None:
         """Retrieves the set of Flyway dataset UUIDs associated with a Compute Framework UUID."""

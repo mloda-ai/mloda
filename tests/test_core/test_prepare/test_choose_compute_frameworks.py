@@ -482,21 +482,38 @@ def test_a_deep_chain_with_a_link_is_chosen_without_recursion_errors() -> None:
 
 
 @pytest.mark.parametrize(
-    ("factory", "child_allowed"),
-    [(Link.right, {P}), (Link.append, {A}), (Link.union, {A})],
-    ids=["right_needs_right_side", "append_needs_left_side", "union_needs_left_side"],
+    ("factory", "child_allowed", "self_join"),
+    [
+        (Link.right, {P}, True),
+        (Link.append, {A}, False),
+        (Link.union, {A}, False),
+    ],
+    ids=["right_self_join_needs_right_side", "append_needs_left_side", "union_needs_left_side"],
 )
 def test_a_non_flippable_join_rejects_the_other_side(
-    factory: Callable[[JoinSpec, JoinSpec], Link], child_allowed: set[type[ComputeFramework]]
+    factory: Callable[[JoinSpec, JoinSpec], Link], child_allowed: set[type[ComputeFramework]], self_join: bool
 ) -> None:
     net = _Net()
-    left = net.add(ChooserLeftFG, "rigid_left", {P})
-    right = net.add(ChooserRightFG, "rigid_right", {A})
+    right_fg = ChooserLeftFG if self_join else ChooserRightFG
+    left = net.add(ChooserLeftFG, "rigid_left", {P}, {"side": 1})
+    right = net.add(right_fg, "rigid_right", {A}, {"side": 2})
     child = net.add(ChooserChildFG, "rigid_child", child_allowed)
-    net.join(_link(factory, ChooserLeftFG, ChooserRightFG), left, right, child)
+    net.join(_link(factory, ChooserLeftFG, right_fg), left, right, child)
 
     with pytest.raises(ValueError, match="rigid_child"):
         net.choose()
+
+
+def test_a_right_join_of_distinct_groups_runs_on_the_left_when_the_consumer_cannot_reach_the_right() -> None:
+    net = _Net()
+    left = net.add(ChooserLeftFG, "rigid_left", {P})
+    right = net.add(ChooserRightFG, "rigid_right", {A})
+    child = net.add(ChooserChildFG, "rigid_child", {P})
+    net.join(_link(Link.right, ChooserLeftFG, ChooserRightFG), left, right, child)
+
+    net.choose()
+
+    assert child.chosen_compute_framework is P
 
 
 @pytest.mark.parametrize(

@@ -1260,7 +1260,7 @@ def test_a_right_join_plans_when_the_consumer_shares_link_fw1_and_the_groups_are
     record = _one_record(built.plan, built.link)
 
     assert record.jointype is JoinType.RIGHT
-    assert record.destination_side is JoinSide.RIGHT
+    assert record.destination_side is JoinSide.LEFT
     assert record.left.uuids == {built.sides.left_uuid}
     assert record.right.uuids == {built.sides.right_uuid}
 

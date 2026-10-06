@@ -659,7 +659,15 @@ class SidePathTwoConsumerArrow(FeatureGroup):
         return {PyArrowTable}
 
 
-def test_two_consumers_of_one_link_reading_a_side_through_different_mids_raise_at_plan_time() -> None:
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize(
+    "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
+)
+def test_two_consumers_of_one_link_reading_a_side_through_different_mids_join_each_side_frame(
+    flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool
+) -> None:
     groups: set[type[FeatureGroup]] = {
         MultiLinkRootA,
         MultiLinkRootBSame,
@@ -668,22 +676,42 @@ def test_two_consumers_of_one_link_reading_a_side_through_different_mids_raise_a
         SidePathTwoConsumerPandas,
         SidePathTwoConsumerArrow,
     }
+    left, right = (MultiLinkRootBSame, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBSame)
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
 
-    with pytest.raises(ValueError) as error:
-        mloda.prepare(
-            ["SidePathTwoConsumerPandas", "SidePathTwoConsumerArrow"],
-            links={Link.inner(JoinSpec(MultiLinkRootA, MLG_INDEX), JoinSpec(MultiLinkRootBSame, MLG_INDEX))},
-            compute_frameworks=[PandasDataFrame, PyArrowTable],
-            parallelization_modes={ParallelizationMode.SYNC},
-            plugin_collector=PluginCollector.enabled_feature_groups(groups),
-        )
+    session = mloda.prepare(
+        ["SidePathTwoConsumerPandas", "SidePathTwoConsumerArrow"],
+        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={mode},
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
 
-    message = str(error.value)
-    assert "SidePathTwoConsumerPandas" in message
-    assert "SidePathTwoConsumerArrow" in message
-    assert "different frames" in message
-    assert "missing Links" not in message
-    assert "unlinked sources" not in message
+    assert session.engine is not None
+    steps = list(session.engine.execution_planner)
+    join_steps = [step for step in steps if isinstance(step, JoinStep)]
+    assert len(join_steps) == 2
+    pandas_mid_uuids = {
+        uuid
+        for step in steps
+        if isinstance(step, FeatureGroupStep) and issubclass(step.feature_group, SidePathPandasP)
+        for uuid in step.get_uuids()
+    }
+    carried = [step for step in join_steps if step.carriers]
+    direct = [step for step in join_steps if not step.carriers]
+    assert len(carried) == 1
+    assert len(direct) == 1
+    assert carried[0].carriers & pandas_mid_uuids
+    # The direct join must not merge into the frame the carried join shares.
+    assert direct[0].shared_destination
+    assert direct[0].destination_hop_uuid is not None
+    _assert_consumers_wait_only_on_their_joins(session, (SidePathTwoConsumerPandas, SidePathTwoConsumerArrow))
+
+    results = session.run(parallelization_modes={mode}, flight_server=server)
+
+    for consumer in (SidePathTwoConsumerPandas, SidePathTwoConsumerArrow):
+        name = consumer.get_class_name()
+        assert [sorted(r[name].to_pylist()) for r in results if name in r.column_names] == [[110, 220, 330]]
 
 
 class DownstreamHopQ(FeatureGroup):
@@ -743,7 +771,7 @@ TIE_INDEX = Index(("tie_jid",))
 
 def _tie_root_data(features: FeatureSet, name: str, base: list[int]) -> dict[str, list[int]]:
     scale = TIE_SCALE[features.get_options_key("tie_tag")]
-    return {"tie_jid": [1, 2, 3], name: [value * scale for value in base]}
+    return {"tie_jid": list(range(1, len(base) + 1)), name: [value * scale for value in base]}
 
 
 class _TieRoot(FeatureGroup):
@@ -779,6 +807,8 @@ TieLeftPd = _tie_root("TieLeftPd", "tie_left_val", [1, 2, 3], PandasDataFrame)
 TieLeftPa = _tie_root("TieLeftPa", "tie_left_val", [1, 2, 3], PyArrowTable)
 TieRightPd = _tie_root("TieRightPd", "tie_right_val", [100, 200, 300], PandasDataFrame)
 TieRightPa = _tie_root("TieRightPa", "tie_right_val", [100, 200, 300], PyArrowTable)
+TieRightExtraPd = _tie_root("TieRightExtraPd", "tie_right_val", [100, 200, 300, 400], PandasDataFrame)
+TieRightExtraPa = _tie_root("TieRightExtraPa", "tie_right_val", [100, 200, 300, 400], PyArrowTable)
 
 
 def _tie_parents(options: Options) -> set[Feature]:
@@ -815,7 +845,12 @@ TieConsumerPa = _tie_consumer("TieConsumerPa", PyArrowTable)
 
 
 _TIE_LEFT: dict[str, type[FeatureGroup]] = {"pd": TieLeftPd, "pa": TieLeftPa}
-_TIE_RIGHT: dict[str, type[FeatureGroup]] = {"pd": TieRightPd, "pa": TieRightPa}
+_TIE_RIGHT: dict[str, type[FeatureGroup]] = {
+    "pd": TieRightPd,
+    "pa": TieRightPa,
+    "pd_extra": TieRightExtraPd,
+    "pa_extra": TieRightExtraPa,
+}
 _TIE_CONSUMER: dict[str, type[FeatureGroup]] = {"pd": TieConsumerPd, "pa": TieConsumerPa}
 
 _TIE_FRAMEWORK_MIXES = [
@@ -1032,6 +1067,50 @@ def test_one_sided_option_variant_requested_alone_over_one_link_joins_it(tag: st
     assert _tie_one_sided_run([tag]) == [expected]
 
 
+def _nullable_column_values(results: list[Any], name: str) -> list[list[int | None]]:
+    found = [r[name] for r in results if name in (r.columns if hasattr(r, "iloc") else r.column_names)]
+    columns = [
+        [None if pd.isna(v) else int(v) for v in (c.tolist() if hasattr(c, "iloc") else c.to_pylist())] for c in found
+    ]
+    return sorted((sorted(c, key=lambda v: (v is None, v or 0)) for c in columns), key=lambda c: [v or 0 for v in c])
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
+@pytest.mark.parametrize("right", ["pa_extra", "pd_extra"])
+def test_a_right_join_keeps_the_right_row_the_left_lacks_for_each_variant(
+    flight_server: Any, mode: ParallelizationMode, right: str
+) -> None:
+    kwargs = _tie_one_sided_kwargs(TieOneSidedConsumer, "pa", right, "right")
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+
+    results = mloda.run_all(
+        _tie_one_sided_features(TieOneSidedConsumer, ["a", "b"]),
+        parallelization_modes={mode},
+        flight_server=server,
+        **kwargs,
+    )
+
+    values = _nullable_column_values(results, TieOneSidedConsumer.get_class_name())
+    assert values == [[101, 202, 303, None], [1001, 2002, 3003, None]]
+
+
+def test_two_consumers_of_one_right_link_on_the_left_and_the_right_framework_raise_a_clear_error() -> None:
+    link = Link.right(JoinSpec(TieLeftPa, "tie_jid"), JoinSpec(TieRightPd, "tie_jid"))
+
+    with pytest.raises(ValueError, match="Request them separately or restrict their compute frameworks"):
+        mloda.run_all(
+            [*_tie_features("pa", ["a"]), *_tie_features("pd", ["a"])],
+            links={link},
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {TieLeftPa, TieRightPd, TieConsumerPa, TieConsumerPd}
+            ),
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+
 def _tie_child_features(consumer: type[FeatureGroup], tags: list[str]) -> list[Feature | str]:
     options = {"tie_consumer": consumer.get_class_name()}
     return [Feature("TieOneSidedChild", options={**options, "tie_tag": tag}) for tag in tags]
@@ -1051,17 +1130,13 @@ def test_option_variants_reading_one_join_side_alike_and_the_other_differently_j
     if requested != "consumer":
         features += _tie_child_features(consumer, ["a", "b"])
 
-    if join_type == "right" and right == "pd" and left == "pa":
-        with pytest.raises(ValueError, match="No compute framework assignment.*join right"):
-            mloda.prepare(features, **kwargs)
-        return
-
     session = mloda.prepare(features, **kwargs)
 
     assert session.engine is not None
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
     if requested == "consumer":
         assert len(join_steps) == 2
+        assert {step.destination_framework for step in join_steps} == {PyArrowTable}
         _assert_consumers_wait_only_on_their_joins(session, (TieOneSidedConsumer,))
     results = session.run()
     expected = sorted(_tie_one_sided_expected(consumer, tag) for tag in ("a", "b"))
@@ -1106,10 +1181,11 @@ def test_one_sided_variants_requested_next_to_their_shared_side_feature_return_b
     "consumer, left, right",
     [_TIE_ONE_SIDED_SHAPES[0], _TIE_ONE_SIDED_SHAPES[1], _TIE_ONE_SIDED_SHAPES[3]],
 )
+@pytest.mark.parametrize("join_type", ["inner", "right"])
 def test_one_sided_option_variants_over_one_link_join_each_variant_in_parallel_modes(
-    flight_server: Any, mode: ParallelizationMode, consumer: type[FeatureGroup], left: str, right: str
+    flight_server: Any, mode: ParallelizationMode, consumer: type[FeatureGroup], left: str, right: str, join_type: str
 ) -> None:
-    kwargs = _tie_one_sided_kwargs(consumer, left, right, "inner")
+    kwargs = _tie_one_sided_kwargs(consumer, left, right, join_type)
     server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
 
     results = mloda.run_all(

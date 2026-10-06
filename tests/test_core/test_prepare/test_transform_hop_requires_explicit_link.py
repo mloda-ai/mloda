@@ -7,6 +7,8 @@ from typing import Any, ClassVar
 
 import pytest
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -519,6 +521,9 @@ def test_consumers_of_a_join_side_plan_and_run_correctly_under_every_hash_seed(
 _HOP_DIAMOND_EXPECTED_VALUES = {
     "hop_diamond": "[[20, 40, 60]]",
     "hop_diamond_threading": "[[20, 40, 60]]",
+    "hop_diamond_mirror": "[[20, 40, 60]]",
+    "hop_diamond_mirror_threading": "[[20, 40, 60]]",
+    "hop_diamond_mirror_unrelated_link": "[[20, 40, 60]]",
     "hop_diamond_link": "[[21, 42, 63]]",
     "hop_diamond_link_threading": "[[21, 42, 63]]",
     "read_through_hop": "[[2, 4, 6]]",
@@ -538,8 +543,8 @@ def test_same_root_diamond_with_a_hop_runs_correctly_under_every_hash_seed(
 
 
 @pytest.mark.timeout(60)
-@pytest.mark.parametrize("shape", ["hop_diamond_mirror", "hop_diamond_mirror_unrelated_link"])
-def test_same_root_diamond_mirror_is_rejected_with_its_real_cause_under_every_hash_seed(
+@pytest.mark.parametrize("shape", ["hop_diamond_two_pandas"])
+def test_same_root_diamond_with_an_ambiguous_redirect_is_rejected_with_its_real_cause_under_every_hash_seed(
     shape: str, link_side_paths_outputs: list[dict[str, str]]
 ) -> None:
     first = link_side_paths_outputs[0].get(f"{shape}_error")
@@ -566,13 +571,34 @@ def test_same_root_diamond_with_a_cycle_has_one_outcome_under_every_hash_seed(
 
 
 @pytest.mark.timeout(30)
-def test_same_root_diamond_with_a_hop_runs_with_multiprocessing(flight_server: Any) -> None:
+@pytest.mark.parametrize("groups", [hd_probe.HD_DIAMOND_GROUPS, hd_probe.HD_MIRROR_GROUPS], ids=["plain", "mirror"])
+def test_same_root_diamond_with_a_hop_runs_with_multiprocessing(
+    groups: set[type[FeatureGroup]], flight_server: Any
+) -> None:
     results = mloda.run_all(
         [Feature("hd_c")],
         compute_frameworks=[PandasDataFrame, PyArrowTable],
-        plugin_collector=PluginCollector.enabled_feature_groups(hd_probe.HD_DIAMOND_GROUPS),
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
         parallelization_modes={ParallelizationMode.MULTIPROCESSING},
         flight_server=flight_server,
     )
 
     assert [v for v in (hd_probe._column_list(r, "hd_c") for r in results) if v is not None] == [[20, 40, 60]]
+
+
+def test_mirror_diamond_consumer_reads_the_hop_that_waits_for_the_pyarrow_sibling() -> None:
+    session = mloda.prepare(
+        [Feature("hd_c")],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups(hd_probe.HD_MIRROR_GROUPS),
+        parallelization_modes={ParallelizationMode.SYNC},
+    )
+
+    assert session.engine is not None
+    steps = list(session.engine.execution_planner)
+    hops = [s for s in steps if isinstance(s, TransformFrameworkStep)]
+    assert len(hops) == 1
+    consumer = next(s for s in steps if isinstance(s, FeatureGroupStep) and s.feature_group is hd_probe.HdCPandas)
+    sibling = next(s for s in steps if isinstance(s, FeatureGroupStep) and s.feature_group is hd_probe.HdQ)
+    assert consumer.tfs_ids == {hops[0].uuid}
+    assert hops[0].order_after_uuids >= sibling.get_uuids()

@@ -162,7 +162,9 @@ HdP = _sum_group("HdP", ("hd_a",), "hd_p", PandasDataFrame)
 HdQ = _sum_group("HdQ", ("hd_a",), "hd_q", PyArrowTable)
 HdQJoin = _sum_group("HdQJoin", ("hd_a", "hd_b"), "hd_q", PyArrowTable)
 HdQCycle = _sum_group("HdQCycle", ("hd_a", "hd_p"), "hd_q", PyArrowTable)
+HdP2 = _sum_group("HdP2", ("hd_a",), "hd_p2", PandasDataFrame)
 HdC = _sum_group("HdC", ("hd_q", "hd_p"), "hd_c", PyArrowTable)
+HdCTwoPandas = _sum_group("HdCTwoPandas", ("hd_q", "hd_p", "hd_p2"), "hd_c", PandasDataFrame)
 HdCPandas = _sum_group("HdCPandas", ("hd_q", "hd_p"), "hd_c", PandasDataFrame)
 
 
@@ -191,6 +193,7 @@ HD_DIAMOND_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQ, HdC}
 HD_DIAMOND_LINK_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdRootB, HdP, HdQJoin, HdC}
 HD_MIRROR_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQ, HdCPandas}
 HD_CYCLE_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdQCycle, HdC}
+HD_TWO_PANDAS_GROUPS: set[type[FeatureGroup]] = {HdRootA, HdP, HdP2, HdQ, HdCTwoPandas}
 HD_LINK: Link = Link.inner(JoinSpec(HdRootA, "hd_rid"), JoinSpec(HdRootB, "hd_rid"))
 
 
@@ -266,9 +269,18 @@ def hop_diamond_link_threading_shape() -> dict[str, str]:
     return hop_diamond_link_shape(ParallelizationMode.THREADING)
 
 
-def hop_diamond_mirror_shape() -> dict[str, str]:
+def hop_diamond_mirror_shape(mode: ParallelizationMode = ParallelizationMode.SYNC) -> dict[str, str]:
     """As hop_diamond, but C is pandas, so P is same-framework and Q arrives through a hop."""
-    return _run(["hd_c"], HD_MIRROR_GROUPS, set(), "hd_c")
+    return _run(["hd_c"], HD_MIRROR_GROUPS, set(), "hd_c", mode)
+
+
+def hop_diamond_mirror_threading_shape() -> dict[str, str]:
+    return hop_diamond_mirror_shape(ParallelizationMode.THREADING)
+
+
+def hop_diamond_two_pandas_shape() -> dict[str, str]:
+    """As the mirror, but C reads two same-framework parents P and P2, so the hop redirect is ambiguous."""
+    return _run(["hd_c"], HD_TWO_PANDAS_GROUPS, set(), "hd_c")
 
 
 def hop_diamond_cycle_shape() -> dict[str, str]:
@@ -301,6 +313,8 @@ SHAPES: dict[str, Callable[[], dict[str, str]]] = {
     "hop_diamond_link": hop_diamond_link_shape,
     "hop_diamond_link_threading": hop_diamond_link_threading_shape,
     "hop_diamond_mirror": hop_diamond_mirror_shape,
+    "hop_diamond_mirror_threading": hop_diamond_mirror_threading_shape,
+    "hop_diamond_two_pandas": hop_diamond_two_pandas_shape,
     "hop_diamond_cycle": hop_diamond_cycle_shape,
     "read_through_hop": read_through_hop_shape,
     "read_through_root": read_through_root_shape,

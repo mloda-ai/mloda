@@ -339,6 +339,8 @@ class TestHookContextDataAccessAndJoinAndPlanFields:
         assert context.data_access_dataset_version is None
         assert context.join_type is None
         assert context.join_keys is None
+        assert context.join_left_feature_group is None
+        assert context.join_right_feature_group is None
         assert context.plan_feature_count is None
         assert context.plan_node_count is None
         assert context.plan_depth is None
@@ -349,6 +351,8 @@ class TestHookContextDataAccessAndJoinAndPlanFields:
             data_access_dataset_version="2024-01-01",
             join_type="inner",
             join_keys=("id", "date"),
+            join_left_feature_group="pkg.mod.Left",
+            join_right_feature_group="pkg.mod.Right",
             plan_feature_count=5,
             plan_node_count=12,
             plan_depth=3,
@@ -358,6 +362,8 @@ class TestHookContextDataAccessAndJoinAndPlanFields:
         assert context.data_access_dataset_version == "2024-01-01"
         assert context.join_type == "inner"
         assert context.join_keys == ("id", "date")
+        assert context.join_left_feature_group == "pkg.mod.Left"
+        assert context.join_right_feature_group == "pkg.mod.Right"
         assert context.plan_feature_count == 5
         assert context.plan_node_count == 12
         assert context.plan_depth == 3

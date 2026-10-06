@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.steward import PlanStep
+from mloda.steward import FeatureResolutionError, PlanStep, plan_structure_hash
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -158,6 +158,49 @@ class TestHookArguments:
         assert completes[0][2] == plan
         assert completes[0][3].status == "succeeded"
         assert completes[0][3].error_type is None
+
+    def test_structure_hash_is_none_at_plan_start_and_set_from_plan_complete_on(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare({_Recorder("r", log)})
+        session.run(parallelization_modes=_SYNC)
+
+        (start,) = [e for e in log if e[1] == "plan_start"]
+        (complete,) = [e for e in log if e[1] == "plan_complete"]
+        (run_start,) = [e for e in log if e[1] == "run_start"]
+        expected = plan_structure_hash(session.resolved_plan())
+        assert start[2].structure_hash is None
+        assert complete[2].structure_hash is not None
+        assert complete[2].structure_hash == expected
+        assert run_start[3].structure_hash == expected
+        assert session.plan_context.structure_hash == expected
+        assert start[2] == complete[2]
+        assert start[2].plan_id == complete[2].plan_id
+
+    def test_a_failed_plan_keeps_structure_hash_none(self) -> None:
+        log: list[tuple[Any, ...]] = []
+
+        with pytest.raises(FeatureResolutionError):
+            mloda.prepare(
+                [Feature(name="lifecycle_hooks_missing_col")],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=_ENABLED,
+                parallelization_modes=_SYNC,
+                function_extender={_Recorder("r", log)},
+            )
+
+        (complete,) = [e for e in log if e[1] == "plan_complete"]
+        assert complete[3].status == "failed"
+        assert complete[2].structure_hash is None
+
+    def test_a_session_without_extenders_has_no_structure_hash(self) -> None:
+        session = mloda.prepare(
+            [Feature(name=_COLUMN)],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED,
+            parallelization_modes=_SYNC,
+        )
+
+        assert session.plan_context.structure_hash is None
 
     def test_plan_start_fires_before_the_match_hook_and_plan_complete_after_it(self) -> None:
         log: list[tuple[Any, ...]] = []

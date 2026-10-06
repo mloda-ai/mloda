@@ -83,6 +83,7 @@ from mloda.steward import (
     HookContext,
     PlanLockMismatchError,
     check_plan_lock,
+    plan_structure_hash,
     write_plan_lock,
 )
 from tests.helpers.probe_runner import run_probes
@@ -413,6 +414,9 @@ class PlanInfoCalculateHookRecorder(Extender):
             (context.feature_group_class, context.feature_names): context.input_features or frozenset()
             for context in self.captured
         }
+
+    def step_uuid_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], UUID | None]:
+        return {(context.feature_group_class, context.feature_names): context.step_uuid for context in self.captured}
 
     def input_feature_edges_by_step(self) -> dict[tuple[str | None, tuple[str, ...]], dict[str, tuple[str, ...]]]:
         return {
@@ -1503,6 +1507,8 @@ class TestPlanLock:
 
         check_plan_lock(second, lock)
 
+        assert plan_structure_hash(first) == plan_structure_hash(second)
+
     @pytest.mark.parametrize(
         ("explain_plan", "differing_key"),
         [
@@ -1544,6 +1550,9 @@ class TestPlanLock:
         assert len(content["compute"]) > 1
         assert len(content["joins"]) >= 1
         assert len(content["transforms"]) >= 1
+
+        assert outputs[0]["structure_hash"] != "None"
+        assert outputs[0]["structure_hash"] == outputs[0]["expected_structure_hash"]
 
 
 # ---------------------------------------------------------------------------
@@ -2171,6 +2180,7 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
 
         hook_inputs = recorder.input_features_by_step()
         hook_edges = recorder.input_feature_edges_by_step()
+        hook_uuids = recorder.step_uuid_by_step()
         assert len(hook_inputs) == len(compute_steps), "every compute step must be hooked exactly once"
 
         for step in compute_steps:
@@ -2179,6 +2189,33 @@ class TestInputFeatureNamesMatchTheRuntimeHookContext:
             assert key in hook_inputs, f"no calculate hook captured for {key}"
             assert frozenset(step.input_feature_names) == hook_inputs[key]
             assert dict(step.input_feature_edges) == hook_edges[key]
+            assert step.step_uuid is not None
+            assert hook_uuids[key] is not None
+            assert hook_uuids[key] == step.step_uuid
+
+    def test_nested_options_steps_get_distinct_uuids_mapping_one_to_one_onto_the_plan(self) -> None:
+        recorder = PlanInfoCalculateHookRecorder()
+        session = mloda.prepare(
+            [
+                Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}}),
+                Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "mutated"}}),
+            ],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_NESTED_OPTIONS_PLUGINS,
+            function_extender={recorder},
+        )
+
+        session.run()
+
+        compute_steps = [step for step in session.resolved_plan() if step.step_kind == "compute"]
+        assert len(compute_steps) == 2
+        plan_uuids = [step.step_uuid for step in compute_steps]
+        hook_uuids = [context.step_uuid for context in recorder.captured]
+        assert len(hook_uuids) == 2
+        assert all(u is not None for u in plan_uuids)
+        assert all(u is not None for u in hook_uuids)
+        assert len(set(hook_uuids)) == 2
+        assert set(hook_uuids) == set(plan_uuids)
 
 
 class TestInputFeatureEdgesExcludeInjectedFeatures:

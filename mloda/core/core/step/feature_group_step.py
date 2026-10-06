@@ -30,6 +30,7 @@ class FeatureGroupStep(Step):
         self.api_input_data = api_input_data
 
         self.uuid = uuid4()
+        features.step_uuid = self.uuid
 
         self.step_is_done = False
 

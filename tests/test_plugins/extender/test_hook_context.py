@@ -9,6 +9,7 @@ import dataclasses
 import json
 import pickle  # nosec B403
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
@@ -201,10 +202,13 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             ("feature_names", ("forged",)),
             ("feature_group_class", "pkg.Forged"),
             ("specialized_from", ("pkg.Forged",)),
+            ("step_uuid", uuid4()),
         ],
     )
     def test_assigning_a_frozen_field_raises(self, field: str, value: Any) -> None:
-        context = _make_context(run_id="real", plan_id="real-plan", tenant_id="t", principal="p", carrier={"a": "b"})
+        context = _make_context(
+            run_id="real", plan_id="real-plan", tenant_id="t", principal="p", carrier={"a": "b"}, step_uuid=uuid4()
+        )
         before = getattr(context, field)
 
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -223,6 +227,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             "data_access_identity",
             "feature_names",
             "feature_group_class",
+            "step_uuid",
         ],
     )
     def test_deleting_a_frozen_field_raises_and_keeps_the_value(self, field: str) -> None:
@@ -233,6 +238,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             principal="p",
             carrier={"a": "b"},
             data_access_identity="d",
+            step_uuid=uuid4(),
         )
         before = getattr(context, field)
 
@@ -313,6 +319,18 @@ class TestHookContextInputFeatureEdgesField:
             with pytest.raises(TypeError):
                 mutate(edges)
             assert edges == {"a": ("src_a",)}, name
+
+
+class TestHookContextStepUuidField:
+    """HookContext carries the uuid of the compute step it ran in, None when not in one."""
+
+    def test_step_uuid_can_be_set_via_constructor(self) -> None:
+        step_uuid = uuid4()
+
+        context = _make_context(step_uuid=step_uuid)
+
+        assert context.step_uuid is not None
+        assert context.step_uuid == step_uuid
 
 
 class TestHookContextWorkerIndexField:

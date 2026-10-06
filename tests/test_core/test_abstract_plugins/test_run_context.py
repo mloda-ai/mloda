@@ -87,15 +87,29 @@ class TestPlanContext:
             created,
         )
 
-    @pytest.mark.parametrize("field", ["plan_id", "tenant_id", "project_id", "principal", "created_at"])
+    @pytest.mark.parametrize(
+        "field", ["plan_id", "tenant_id", "project_id", "principal", "created_at", "structure_hash"]
+    )
     def test_is_frozen(self, field: str) -> None:
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(_plan_context(), field, "forged")
 
     def test_pickle_round_trip(self) -> None:
-        ctx = _plan_context()
+        ctx = dataclasses.replace(_plan_context(), structure_hash="abc")
 
-        assert pickle.loads(pickle.dumps(ctx)) == ctx  # nosec B301
+        restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
+        assert restored == ctx
+        assert restored.structure_hash == "abc"
+
+    def test_structure_hash_is_excluded_from_equality_and_hash(self) -> None:
+        created = datetime.now(timezone.utc)
+        plain = _plan_context(created_at=created)
+        hashed = dataclasses.replace(plain, structure_hash="abc")
+
+        assert plain.structure_hash is None
+        assert hashed.structure_hash == "abc"
+        assert hashed == plain
+        assert hash(hashed) == hash(plain)
 
 
 class TestRunContextFrozen:

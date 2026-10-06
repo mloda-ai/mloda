@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -11,3 +11,4 @@ class PlanContext:
     project_id: str | None
     principal: str | None
     created_at: datetime
+    structure_hash: str | None = field(default=None, compare=False)

@@ -1,6 +1,7 @@
 """Lock file recording which classes a resolved plan picks, so a change fails loudly."""
 
 import difflib
+import hashlib
 import json
 import os
 from collections.abc import Sequence
@@ -80,6 +81,11 @@ def _dump(content: dict[str, Any]) -> str:
 
 def _lock_text(plan: Sequence[PlanStep]) -> str:
     return _dump(_lock_content(plan))
+
+
+def plan_structure_hash(plan: Sequence[PlanStep]) -> str:
+    """Return the sha256 of the plan-lock text: an equal hash means an equal lock file."""
+    return hashlib.sha256(_lock_text(plan).encode("utf-8")).hexdigest()
 
 
 _PATH_FIELDS = {

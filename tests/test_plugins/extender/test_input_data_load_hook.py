@@ -170,6 +170,9 @@ class TestInputDataLoadHookFiresAlongsideCalculateExtender:
         assert fetch_context.principal == calc_context.principal
         assert fetch_context.compute_framework_name == calc_context.compute_framework_name
         assert fetch_context.feature_group_class == calc_context.feature_group_class
+        assert calc_context.step_uuid is not None
+        assert fetch_context.step_uuid is not None
+        assert fetch_context.step_uuid == calc_context.step_uuid
 
         assert fetch_extender.results
         assert all(isinstance(r, InputDataDescriptor) for r in fetch_extender.results)

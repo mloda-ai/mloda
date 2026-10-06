@@ -82,6 +82,7 @@ class _WorkerIndexRecordingExtender(Extender):
                         "worker_index": context.worker_index,
                         "run_id": context.run_id,
                         "plan_id": context.plan_id,
+                        "step_uuid": str(context.step_uuid),
                         "carrier": context.carrier,
                         "specialized_from": list(context.specialized_from),
                     }
@@ -134,6 +135,18 @@ class TestWorkerIndexReachesHookContextUnderMultiprocessing:
         assert recorded_one["run_id"] != session.plan_id
         assert recorded_one["carrier"] == _CARRIER
         assert recorded_two["carrier"] == _CARRIER
+
+        # step_uuid must match the plan's compute step for that feature group, across the worker boundary.
+        plan = session.resolved_plan()
+        for feature_group, recorded in (
+            (_WorkerIndexFeatureGroupOne, recorded_one),
+            (_WorkerIndexFeatureGroupTwo, recorded_two),
+        ):
+            step = next(s for s in plan if s.step_kind == "compute" and s.feature_group is feature_group)
+            assert step.step_uuid is not None
+            assert recorded["step_uuid"] != "None"
+            assert recorded["step_uuid"] == str(step.step_uuid)
+        assert recorded_one["step_uuid"] != recorded_two["step_uuid"]
 
         # specialized_from must also survive the boundary: the subclass names its replaced parent.
         parent = _WorkerIndexFeatureGroupTwoParent

@@ -1,7 +1,9 @@
 """Lock-file I/O for write_plan_lock and check_plan_lock, driven by hand-built PlanSteps."""
 
 import dataclasses
+import hashlib
 import json
+import uuid
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any, cast
@@ -9,8 +11,9 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.api.plan_lock import PLAN_LOCK_FORMAT, _lock_text
-from mloda.steward import PlanLockMismatchError, PlanStep, check_plan_lock, write_plan_lock
+from mloda.steward import PlanLockMismatchError, PlanStep, check_plan_lock, plan_structure_hash, write_plan_lock
 from mloda.provider import ComputeFramework, FeatureGroup
+from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
@@ -216,3 +219,29 @@ def test_a_rewritten_lock_still_passes_check(tmp_path: Path, rewrite: Callable[[
     lock.write_bytes(rewrite(lock.read_bytes()))
 
     check_plan_lock(plan, lock)
+
+
+def test_plan_structure_hash_is_the_sha256_of_the_lock_text() -> None:
+    plan = _plan()
+    digest = plan_structure_hash(plan)
+
+    assert digest == hashlib.sha256(_lock_text(plan).encode("utf-8")).hexdigest()
+    assert len(digest) == 64
+    assert all(char in "0123456789abcdef" for char in digest)
+
+
+def test_plan_structure_hash_ignores_non_lock_fields() -> None:
+    base = [_compute_step(), _join_step()]
+    varied = [
+        dataclasses.replace(base[0], feature_set_options=Options({"k": "v"}), step_uuid=uuid.uuid4()),
+        dataclasses.replace(base[1], join_token=uuid.uuid4()),
+    ]
+    assert varied[0].feature_set_options is not None
+
+    assert plan_structure_hash(varied) == plan_structure_hash(base)
+
+
+def test_plan_structure_hash_changes_with_a_lock_field() -> None:
+    assert plan_structure_hash([_compute_step()]) != plan_structure_hash(
+        [_compute_step(compute_framework=PyArrowTable)]
+    )

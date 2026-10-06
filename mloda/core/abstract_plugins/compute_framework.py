@@ -908,7 +908,9 @@ class ComputeFramework(ABC):
         input_features: frozenset[str] | None = None
         input_feature_edges: dict[str, tuple[str, ...]] | None = None
         specialized_from: tuple[str, ...] = ()
+        step_uuid: UUID | None = None
         if isinstance(features, FeatureSet):
+            step_uuid = features.step_uuid
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)
             input_feature_edges = getattr(features, "declared_input_feature_edges", None)
@@ -938,6 +940,7 @@ class ComputeFramework(ABC):
             rows_in=safe_field(lambda: self._row_count(self.data), None),
             run_id=self.run_context.run_id,
             plan_id=self.run_context.plan_id,
+            step_uuid=step_uuid,
             carrier=self.run_context.carrier,
             tenant_id=self.run_context.tenant_id,
             project_id=self.run_context.project_id,

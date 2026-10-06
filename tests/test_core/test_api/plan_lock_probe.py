@@ -9,6 +9,7 @@ import pyarrow as pa
 
 from mloda.core.api.plan_lock import _lock_text
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.steward import Extender, ExtenderHook, plan_structure_hash
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -83,12 +84,13 @@ def collect() -> dict[str, str]:
     plugins = PluginCollector.enabled_feature_groups(
         {LockProbeLeftPandas, LockProbeRightArrow, LockProbeConsumer, LockProbeAnyFramework}
     )
+    features: list[Feature | str] = [
+        "LockProbeConsumer",
+        Feature("lock_probe_any_value", compute_framework="PandasDataFrame"),
+        Feature("lock_probe_any_value", compute_framework="PyArrowTable"),
+    ]
     plan = mloda.explain(
-        [
-            "LockProbeConsumer",
-            Feature("lock_probe_any_value", compute_framework="PandasDataFrame"),
-            Feature("lock_probe_any_value", compute_framework="PyArrowTable"),
-        ],
+        features,
         compute_frameworks=[PandasDataFrame, PyArrowTable],
         links={link},
         plugin_collector=plugins,
@@ -97,7 +99,27 @@ def collect() -> dict[str, str]:
         [step.step_kind, step.feature_group_name, step.compute_framework_name, step.compute_framework_reason]
         for step in plan
     ]
-    return {"lock": _lock_text(plan), "order": json.dumps(order)}
+
+    class NoOp(Extender):
+        def wraps(self) -> set[ExtenderHook]:
+            return set()
+
+        def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+            return func(*args, **kwargs)
+
+    session = mloda.prepare(
+        features,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        links={link},
+        plugin_collector=plugins,
+        function_extender={NoOp()},
+    )
+    return {
+        "lock": _lock_text(plan),
+        "order": json.dumps(order),
+        "structure_hash": str(session.plan_context.structure_hash),
+        "expected_structure_hash": plan_structure_hash(session.resolved_plan()),
+    }
 
 
 if __name__ == "__main__":

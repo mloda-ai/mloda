@@ -844,6 +844,8 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         assert calculate.run_id != _FORGED_ID
         assert validate.run_id == calculate.run_id
         assert validate.worker_index == calculate.worker_index != 99
+        assert calculate.step_uuid is not None
+        assert validate.step_uuid == calculate.step_uuid
 
     def test_prepared_session_keeps_its_extenders_across_runs(self) -> None:
         extender = _MultiHookCapturingExtender()
@@ -855,9 +857,13 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
             function_extender={extender},
         )
         session.run()
+        first_uuid = extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE].step_uuid
         extender.captured.clear()
         _forge_outcomes.clear()
 
         session.run()
 
         assert ExtenderHook.VALIDATE_OUTPUT_FEATURE in extender.captured
+        second_uuid = extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE].step_uuid
+        assert first_uuid is not None
+        assert second_uuid == first_uuid

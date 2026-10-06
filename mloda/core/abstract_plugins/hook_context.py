@@ -12,6 +12,7 @@ from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import safe_field
@@ -69,6 +70,7 @@ class HookContext:
     status: str | None = None
     run_id: str | None = None
     plan_id: str | None = None
+    step_uuid: UUID | None = None
     data_access_identity: str | None = None
     data_access_identity_is_fallback: bool | None = None
     tenant_id: str | None = None

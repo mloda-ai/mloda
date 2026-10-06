@@ -252,6 +252,126 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["hunter2z9"],
         ['"a": 1'],
     ),
+    (
+        "bearer_dotted_token_in_prose",
+        "401 with Bearer abc.def.ghi rejected",
+        ["abc.def.ghi"],
+        ["401 with Bearer *** rejected"],
+    ),
+    (
+        "bearer_lowercase_scheme_digit_token",
+        "sent bearer hunter2z9 to host",
+        ["hunter2z9"],
+        ["bearer ***"],
+    ),
+    (
+        "bearer_uppercase_scheme_jwt_like",
+        "BEARER eyJhbGciOi.hunter2z9.sig",
+        ["hunter2z9", "eyJhbGciOi"],
+        ["BEARER ***"],
+    ),
+    (
+        "bearer_base64_padding",
+        "Bearer YWJjZGVm+hunter2z9==",
+        ["hunter2z9"],
+        ["Bearer ***"],
+    ),
+    (
+        "authorization_basic_header",
+        "Authorization: Basic dXNlcjpwYXNz",
+        ["dXNlcjpwYXNz"],
+        ["Authorization: Basic ***"],
+    ),
+    (
+        "authorization_bearer_header",
+        "Authorization: Bearer abc.def.ghi",
+        ["abc.def.ghi"],
+        ["Authorization: Bearer ***"],
+    ),
+    (
+        "authorization_quoted_dict_bearer_plain_word",
+        "{'Authorization': 'Bearer abc'}",
+        ["'Bearer abc'"],
+        ["{'Authorization': 'Bearer ***"],
+    ),
+    (
+        "authorization_double_quoted_lowercase_key",
+        '{"authorization": "Bearer hunter2z9", "host": "h"}',
+        ["hunter2z9"],
+        ['"authorization": "Bearer ***', '"host": "h"'],
+    ),
+    (
+        "proxy_authorization_basic",
+        "Proxy-Authorization: Basic hunter2z9",
+        ["hunter2z9"],
+        ["Proxy-Authorization: Basic ***"],
+    ),
+    (
+        "authorization_token_scheme_plain_word",
+        "Authorization: Token abcdefgh",
+        ["abcdefgh"],
+        ["Authorization: Token ***"],
+    ),
+    (
+        "authorization_digest_scheme_lowercase",
+        "authorization: digest hunterz",
+        ["hunterz"],
+        ["authorization: digest ***"],
+    ),
+    (
+        "authorization_equals_no_scheme_token_shaped",
+        "authorization=eyJhbGciOi.x.y",
+        ["eyJhbGciOi"],
+        ["authorization="],
+    ),
+    (
+        "access_token_with_bearer_value",
+        "access_token=Bearer abc123",
+        ["abc123"],
+        ["access_token="],
+    ),
+    (
+        "access_token_with_bearer_plain_word",
+        "access_token=Bearer hunter",
+        ["hunter"],
+        ["access_token="],
+    ),
+    (
+        "api_key_with_basic_value",
+        "api_key=Basic dXNlcg",
+        ["dXNlcg"],
+        ["api_key="],
+    ),
+    (
+        "authorization_unknown_scheme_ntlm",
+        "Authorization: NTLM TlRMTVNTUAAB",
+        ["TlRMTVNTUAAB"],
+        ["Authorization: NTLM"],
+    ),
+    (
+        "authorization_unknown_scheme_dpop",
+        "Authorization: DPoP eyJhbGciOiJ.x.y",
+        ["eyJhbGciOiJ"],
+        ["Authorization: DPoP"],
+    ),
+    (
+        "authorization_aws4_signature",
+        "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/x, SignedHeaders=host, Signature=abc123def",
+        ["AKIDEXAMPLE", "abc123def"],
+        ["Authorization: AWS4-HMAC-SHA256"],
+    ),
+    (
+        "authorization_quoted_bearer_value_with_space",
+        "{'Authorization': 'Bearer abc def'}",
+        ["def"],
+        ["{'Authorization': 'Bearer"],
+    ),
+    (
+        "authorization_quoted_digest_params_keep_sibling",
+        "{'Authorization': 'Digest username=\"u\", response=\"hunter2z9\"', 'host': 'h'}",
+        ["hunter2z9"],
+        ["'host': 'h'"],
+    ),
 ]
 
 
@@ -269,7 +389,23 @@ def test_scrub_credentials_drops_secrets_and_keeps_context(
 DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
     ("dict_repr_password", "{'password': 'hunter2z9'}", "{'password': '***'}"),
     ("dict_repr_numeric_password", "{'db_password': 123456789}", "{'db_password': '***'}"),
+    ("dict_repr_password_tuple", "{'password': ('a', 'hunter2z9')}", "{'password': '***'}"),
+    ("dict_repr_password_set", "{'password': {'a', 'hunter2z9'}}", "{'password': '***'}"),
+    ("dict_repr_token_frozenset", "{'token': frozenset({'a', 'hunter2z9'})}", "{'token': '***'}"),
+    (
+        "dict_repr_password_tuple_keeps_siblings",
+        "{'password': ('a', 'hunter2z9'), 'host': 'h'}",
+        "{'password': '***', 'host': 'h'}",
+    ),
+    ("dict_repr_password_tuple_quoted_paren", "{'password': ('a)b', 'hunter2z9')}", "{'password': '***'}"),
+    ("dict_repr_password_list_quoted_bracket", "{'password': ['a]b', 'hunter2z9']}", "{'password': '***'}"),
+    ("dict_repr_password_set_quoted_brace", "{'password': {'a}b', 'hunter2z9'}}", "{'password': '***'}"),
+    ("dict_repr_token_repr_call_value", "{'token': Secret(value='hunter2z9')}", "{'token': '***'}"),
 ]
+
+
+def test_scrub_credentials_masks_ordered_dict_value_under_secret_key() -> None:
+    assert "hunter2z9" not in scrub_credentials("{'password': OrderedDict([('a', 'hunter2z9')])}")
 
 
 @pytest.mark.parametrize(
@@ -330,6 +466,15 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "http://localhost:8080/models@v:2",
     "Invalid option 'api_key': expected str, got int",
     "option 'token': must be a str",
+    "Missing bearer token",
+    "invalid bearer token.",
+    "the bearer of bad news",
+    "Bearer token required",
+    "authorization: denied for role x",
+    "authorization failed",
+    "Missing Bearer Token",
+    "Bearer Token Usage",
+    "Authorization: Required",
 ]
 
 
@@ -388,6 +533,16 @@ def test_text_without_url_is_unchanged() -> None:
         "DefaultEndpointsProtocol=https;AccountName=acct;AccountKey=abc+/hunter2z9==;EndpointSuffix=core.windows.net",
         "{'password': 'hunter2z9'}",
         "scott/hunter2z9@host:1521/service",
+        "Authorization: Bearer abc.def.ghi",
+        "{'Authorization': 'Bearer abc'}",
+        "Authorization: Basic dXNlcjpwYXNz",
+        "authorization=eyJhbGciOi.x.y",
+        "Bearer abc.def.ghi",
+        "{'password': ('a', 'hunter2z9')}",
+        "Authorization: NTLM TlRMTVNTUAAB",
+        "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/x, SignedHeaders=host, Signature=abc123def",
+        "{'Authorization': 'Digest username=\"u\", response=\"hunter2z9\"', 'host': 'h'}",
+        "access_token=Bearer hunter",
     ],
 )
 def test_scrub_credentials_is_idempotent(text: str) -> None:
@@ -403,6 +558,23 @@ def test_long_alphanumeric_run_scrubs_fast() -> None:
     elapsed = time.perf_counter() - start
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a long alphanumeric run"
     assert result == text
+
+
+@pytest.mark.parametrize(
+    ("text", "leaked"),
+    [
+        pytest.param("Bearer " + "a" * 50_000, "a" * 100, id="long_run_after_bearer"),
+        pytest.param("Authorization: " + "a" * 50_000, None, id="long_run_after_authorization"),
+        pytest.param("Bearer " * 20_000, None, id="repeated_bearer_prefix"),
+    ],
+)
+def test_bearer_and_authorization_inputs_scrub_fast(text: str, leaked: str | None) -> None:
+    start = time.perf_counter()
+    result = scrub_credentials(text)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s"
+    if leaked is not None:
+        assert leaked not in result
 
 
 def test_long_alphanumeric_run_followed_by_url_scrubs_fast() -> None:

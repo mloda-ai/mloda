@@ -259,7 +259,7 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
         Raises:
             ValueError: If parameters cannot be extracted
         """
-        source_features = cls._extract_source_features(feature)
+        source_features = cls._extract_validated_source_features(feature)
         algorithm, dimension, algo_options = cls._extract_dim_reduction_params(feature)
         if algorithm is None or dimension is None:
             raise ValueError(f"Could not extract algorithm and dimension from: {feature.name}")

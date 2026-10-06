@@ -19,6 +19,11 @@ permissions:
   pull-requests: write
   checks: write
 
+# Cancel a superseded PR run; push runs get a unique group so every pushed commit is still tested.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build:
 
@@ -26,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.14"]
         toxenv: ["-e core", "-e installed"]
         include:
           - python-version: "3.10"
@@ -54,9 +59,12 @@ jobs:
         python -m pip install uv
         # Same tox pin as release.yaml; see the note there before bumping.
         uv tool install tox==4.64.1 --with tox-uv==1.36.0
+    - name: Use up to three pytest workers
+      run: |
+        nproc
+        # 4 workers on the 4-vCPU runner pushed subprocess-heavy tests past the per-test timeout.
+        echo "PYTEST_WORKERS=$(( $(nproc) < 3 ? $(nproc) : 3 ))" >> "$GITHUB_ENV"
     - name: Run tox ${{ matrix.toxenv }}
-      env:
-        PYTEST_WORKERS: 2
       run: tox ${{ matrix.toxenv }}
       timeout-minutes: 6
     # Catches a tox bump that brings the redirect file back (e.g. the provisional venv_redirect renamed)
@@ -68,6 +76,29 @@ jobs:
           cat .venv
           exit 1
         fi
+
+  lint:
+    # ruff, licenses, mypy and bandit outside the test jobs; 3.10 and 3.14 cover both sides of uv.lock's dependency fork.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install tox
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install uv
+        # Same tox pin as release.yaml; see the note there before bumping.
+        uv tool install tox==4.64.1 --with tox-uv==1.36.0
+    - name: Run lint
+      run: tox -e lint
+      timeout-minutes: 6
 
   notebooks:
     # Runs the marimo example notebooks; slower than the unit-test matrix.

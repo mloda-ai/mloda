@@ -9,6 +9,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+import yaml
 from packaging.requirements import Requirement
 
 
@@ -230,10 +231,25 @@ class TestToxConfig:
     TOX_INSTALL = re.compile(r"\binstall\b.*(?<![\w-])tox(?![\w-])")
     TOX_PIN = re.compile(r"uv tool install tox==\S+ --with tox-uv==\S+$")
 
-    def test_tox_opts_out_of_venv_redirect(self) -> None:
-        """tox >= 4.64 otherwise writes a .venv redirect file that makes the release job's `uv lock` fail."""
+    @staticmethod
+    def _tox_parser() -> configparser.ConfigParser:
         parser = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
         assert parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8"), "tox.ini not found"
+        return parser
+
+    @staticmethod
+    def _workflow(name: str) -> dict[str, Any]:
+        config: dict[str, Any] = yaml.safe_load(_read_text(PROJECT_ROOT / ".github" / "workflows" / name))
+        return config
+
+    @classmethod
+    def _workflow_jobs(cls, name: str) -> dict[str, Any]:
+        jobs: dict[str, Any] = cls._workflow(name)["jobs"]
+        return jobs
+
+    def test_tox_opts_out_of_venv_redirect(self) -> None:
+        """tox >= 4.64 otherwise writes a .venv redirect file that makes the release job's `uv lock` fail."""
+        parser = self._tox_parser()
         assert not parser.getboolean("tox", "venv_redirect", fallback=True), (
             "tox.ini must set `venv_redirect = false` under [tox]"
         )
@@ -252,3 +268,63 @@ class TestToxConfig:
                 pins.setdefault(workflow.name, set()).add(match.group(0))
         assert {"ci.yaml", "release.yaml"} <= pins.keys(), f"ci.yaml and release.yaml must install tox: {pins}"
         assert len(set().union(*pins.values())) == 1, f"workflows must install the same tox and tox-uv: {pins}"
+
+    def test_tox_splits_tests_from_lint(self) -> None:
+        """Plain `tox` runs python310 and lint; lint tools run only in the lint env."""
+        parser = self._tox_parser()
+        envlist = parser.get("tox", "envlist")
+        assert {"python310", "lint"} <= set(re.findall(r"[\w-]+", envlist)), f"envlist lacks python310/lint: {envlist}"
+        assert parser.has_section("testenv:lint"), "tox.ini needs a [testenv:lint] section"
+        lint = parser.get("testenv:lint", "commands", fallback="")
+        for tool in ("ruff format", "ruff check", "pip-licenses", "mypy", "bandit"):
+            assert tool in lint, f"[testenv:lint] commands must run {tool}"
+        base = parser.get("testenv", "commands")
+        assert "pytest" in base, "[testenv] commands must run pytest"
+        for tool in ("ruff", "mypy", "bandit", "pip-licenses"):
+            assert not re.search(rf"(?<![\w-]){tool}(?![\w-])", base), f"[testenv] commands must not run {tool}"
+        assert "pytest" not in lint, "[testenv:lint] commands must not run pytest"
+        overridden = [
+            key
+            for key in ("extras", "deps", "skip_install", "runner", "package", "basepython")
+            if parser.has_option("testenv:lint", key)
+        ]
+        assert not overridden, f"[testenv:lint] must inherit the full [testenv] install, overrides: {overridden}"
+
+    def test_ci_runs_lint_env(self) -> None:
+        jobs = self._workflow_jobs("ci.yaml")
+        assert "lint" in jobs, "ci.yaml needs a lint job"
+        tox_lint = re.compile(r"tox\s+-e\s+lint\b")
+        assert any(tox_lint.search(str(s.get("run", ""))) for s in jobs["lint"].get("steps", [])), (
+            "lint job needs a step running `tox -e lint`"
+        )
+        versions = {str(v) for v in jobs["lint"].get("strategy", {}).get("matrix", {}).get("python-version", [])}
+        assert {"3.10", "3.14"} <= versions, f"lint job must matrix python-version over 3.10 and 3.14: {versions}"
+        assert not any(tox_lint.search(str(s.get("run", ""))) for s in jobs["build"].get("steps", [])), (
+            "build job must not run `tox -e lint`"
+        )
+
+    def test_ci_build_job_derives_workers_from_nproc(self) -> None:
+        steps = self._workflow_jobs("ci.yaml")["build"]["steps"]
+        write = re.compile(r"PYTEST_WORKERS=\$\(\(.*nproc.*\b3\b.*\)\).*GITHUB_ENV")
+        assert any(write.search(line) for s in steps for line in str(s.get("run", "")).splitlines()), (
+            "build job must write nproc, capped at 3, into PYTEST_WORKERS via $GITHUB_ENV"
+        )
+        hardcoded = [s for s in steps if "PYTEST_WORKERS" in (s.get("env") or {})]
+        assert not hardcoded, "no build step may hardcode PYTEST_WORKERS in env"
+
+    def test_release_license_write_runs_lint_env(self) -> None:
+        steps = [s for job in self._workflow_jobs("release.yaml").values() for s in job.get("steps", [])]
+        writers = [s for s in steps if "TOX_WRITE_THIRD_PARTY_LICENSES" in (s.get("env") or {})]
+        assert writers, "release.yaml needs a step setting TOX_WRITE_THIRD_PARTY_LICENSES"
+        for step in writers:
+            run = str(step.get("run", ""))
+            envs = {env for arg in re.findall(r"-e\s+(\S+)", run) for env in arg.split(",")}
+            assert "lint" in envs, f"license step must run tox -e with lint: {run}"
+
+    def test_ci_cancels_only_superseded_pr_runs(self) -> None:
+        concurrency = self._workflow("ci.yaml").get("concurrency", {})
+        assert concurrency.get("cancel-in-progress") is True, "ci.yaml must cancel in-progress runs"
+        group = str(concurrency.get("group", ""))
+        assert "pull_request" in group and "run_id" in group, (
+            f"concurrency group must be unique per push run (run_id) and shared per PR: {group}"
+        )

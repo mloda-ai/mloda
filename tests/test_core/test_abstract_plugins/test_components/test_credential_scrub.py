@@ -373,6 +373,19 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["'host': 'h'"],
     ),
     ("over_depth_nesting", "{'password': (a, (b, (c, (d, (e, (f, 'hunter2z9')))))), 'user': 'bob'}", ["hunter2z9"], []),
+    (
+        "over_depth_tuple_then_secret",
+        "{'password': ('a', ((((('b',),),),),), 'hunter2z9')}",
+        ["hunter2z9"],
+        [],
+    ),
+    ("over_depth_list_then_secret", "{'password': ['a', [[[['b']]]], 'hunter2z9']}", ["hunter2z9"], []),
+    (
+        "over_depth_mixed_tuple_then_secret",
+        "{'password': ('a', ('b', ('c', ('d', ('e',), 'x'), 'y'), 'z'), 'hunter2z9')}",
+        ["hunter2z9"],
+        [],
+    ),
     ("truncated_text", "{'password': ('a', ('b', 'hunter2z9'", ["hunter2z9"], []),
     ("stray_foreign_closer", "{'password': [a)b, 'hunter2z9']}", ["hunter2z9"], []),
 ]
@@ -714,8 +727,14 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
         ("password={ " * 4400, "a repeated unterminated password brace"),
         ("{'password': ((" + ",'password': ((x" * 5000, "repeated unterminated nested containers"),
         ("{'password': " + "((a)," * 5000 + ")}", "many balanced nested containers"),
+        ("{'password': " + "((((((a," * 5000, "repeated over-depth unterminated containers"),
     ],
-    ids=["unterminated_password_brace", "unterminated_nested_container", "balanced_nested_containers"],
+    ids=[
+        "unterminated_password_brace",
+        "unterminated_nested_container",
+        "balanced_nested_containers",
+        "over_depth_unterminated_containers",
+    ],
 )
 def test_repeated_unterminated_password_brace_scrubs_fast(text: str, what: str) -> None:
     start = time.perf_counter()

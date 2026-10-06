@@ -55,7 +55,7 @@ def _container_body(closer: str, depth: int = 0) -> str:
     """Quote-aware container body: a closer inside a quoted string does not end it."""
     quoted = r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\""
     if depth == 0:
-        return rf"(?:{quoted}|[^\{closer}'\"\n])*"
+        return rf"(?:{quoted}|[^\{closer}\[{{(\"'\n])*(?:[\[{{(][^\n]*)?"
     inner = depth - 1
     nested = (
         rf"\[{_container_body(']', inner)}\]?|\{{{_container_body('}', inner)}\}}?|\({_container_body(')', inner)}\)?"
@@ -64,6 +64,7 @@ def _container_body(closer: str, depth: int = 0) -> str:
 
 
 # Nesting levels inside the outer container; pattern size grows ~3^depth, keep <= 4.
+# Values nested deeper mask to end of line (fail closed).
 _NEST_DEPTH = 3
 
 

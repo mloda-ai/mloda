@@ -25,7 +25,7 @@ class TestCreateWorkerProcessWorkerIndex:
         manager = WorkerManager()
         mock_ctx = _mock_spawn_context()
 
-        with patch("mloda.core.runtime.worker_manager.mp_spawn_context", return_value=mock_ctx):
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=mock_ctx):
             manager.create_worker_process(uuid4(), _noop_target, ())
 
         _, kwargs = mock_ctx.Process.call_args
@@ -35,7 +35,7 @@ class TestCreateWorkerProcessWorkerIndex:
         manager = WorkerManager()
         mock_ctx = _mock_spawn_context()
 
-        with patch("mloda.core.runtime.worker_manager.mp_spawn_context", return_value=mock_ctx):
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=mock_ctx):
             manager.create_worker_process(uuid4(), _noop_target, ())
             manager.create_worker_process(uuid4(), _noop_target, ())
 

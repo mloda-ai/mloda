@@ -40,7 +40,7 @@ class TestFlightServerProcessLocation:
             Queue: Any = staticmethod(multiprocessing.Queue)
 
         monkeypatch.setattr(
-            "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",
+            "mloda.core.runtime.flight.runner_flight_server.mp_start_context",
             lambda: FakeCtx(),
         )
 
@@ -81,7 +81,7 @@ class TestFlightServerProcessLocation:
             Queue: Any = staticmethod(multiprocessing.Queue)
 
         monkeypatch.setattr(
-            "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",
+            "mloda.core.runtime.flight.runner_flight_server.mp_start_context",
             lambda: FakeCtx(),
         )
 
@@ -132,7 +132,7 @@ class TestFlightServerProcessDaemon:
             Queue: Any = staticmethod(multiprocessing.Queue)
 
         monkeypatch.setattr(
-            "mloda.core.runtime.flight.runner_flight_server.mp_spawn_context",
+            "mloda.core.runtime.flight.runner_flight_server.mp_start_context",
             lambda: FakeCtx(),
         )
 

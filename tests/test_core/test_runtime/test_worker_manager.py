@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from mloda.core.runtime.mp_context import mp_spawn_context
+from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker_manager import WorkerManager
 
 
@@ -143,7 +143,7 @@ class TestWorkerManagerProcessCreation:
         mock_ctx.Queue.return_value = Mock()
 
         with patch(
-            "mloda.core.runtime.worker_manager.mp_spawn_context",
+            "mloda.core.runtime.worker_manager.mp_start_context",
             return_value=mock_ctx,
         ):
             manager.create_worker_process(cfw_uuid, target_func, args)
@@ -163,7 +163,7 @@ class TestWorkerManagerProcessCreation:
         mock_ctx.Queue.return_value = Mock()
 
         with patch(
-            "mloda.core.runtime.worker_manager.mp_spawn_context",
+            "mloda.core.runtime.worker_manager.mp_start_context",
             return_value=mock_ctx,
         ):
             manager.create_worker_process(cfw_uuid, target_func, args)
@@ -328,7 +328,7 @@ class TestWorkerManagerResultPolling:
     def test_poll_result_queues_drains_real_multiprocessing_queue_without_blocking(self) -> None:
         """Drain-to-empty must hold for a real (non-mocked) multiprocessing.Queue too, and return promptly."""
         manager = WorkerManager()
-        mp_queue: Any = mp_spawn_context().Queue()
+        mp_queue: Any = mp_start_context().Queue()
 
         uuid1 = str(uuid4())
         uuid2 = str(uuid4())

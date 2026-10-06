@@ -11,7 +11,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
-from mloda.core.runtime.mp_context import mp_spawn_context, spawn_daemon_process
+from mloda.core.runtime.mp_context import mp_start_context, spawn_daemon_process
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class WorkerManager:
 
         Appends a zero-based worker_index as a trailing positional arg to the target.
         """
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
 

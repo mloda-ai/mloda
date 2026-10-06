@@ -14,7 +14,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.core.runtime.mp_context import mp_spawn_context
+from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker.multiprocessing_worker import worker
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -135,7 +135,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
     @pytest.mark.timeout(30)
     def test_real_worker_process_exits_after_its_real_parent_process_is_sigkilled(self, tmp_path: Path) -> None:
         pid_file = tmp_path / "worker.pid"
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         fake_parent = ctx.Process(target=_fake_parent_main, args=(str(pid_file),))
         fake_parent.start()
 

@@ -4,7 +4,6 @@ from multiprocessing.managers import BaseManager
 from typing import Any
 from uuid import UUID
 
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
@@ -299,23 +298,6 @@ class CfwManager:
         if self.compute_frameworks.get(uuid):
             raise ValueError(f"UUID {uuid} already exists in compute_frameworks")
         self.compute_frameworks[uuid] = (cls_name, children_if_root)
-
-    def get_initialized_compute_framework_uuid(self, cf_class: type[ComputeFramework], feature_uuid: UUID) -> UUID:
-        """
-        Retrieves the UUID of an initialized Compute Framework.
-
-        Args:
-            cf_class: The class of the Compute Framework.
-            feature_uuid: The UUID of the feature.
-
-        Returns:
-            The UUID of the Compute Framework.
-        """
-        cfw_uuid = self.get_cfw_uuid(cf_class.get_class_name(), feature_uuid)
-
-        if cfw_uuid is None:
-            raise ValueError("No compute framework registered.")
-        return cfw_uuid
 
     def set_location(self, location: str) -> None:
         """Sets the location for multiprocessing."""

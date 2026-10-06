@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
-from mloda.core.runtime.mp_context import mp_spawn_context
+from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, worker
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -114,7 +114,7 @@ _WORKER_LOGGER_NAME = "mloda.core.runtime.worker.multiprocessing_worker"
 
 class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:
     def test_worker_index_is_set_on_the_cfw_instance(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -139,7 +139,7 @@ class TestWorkerHasNoConnectionBindPrologue:
 
 class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
     def test_bootstrap_callable_is_invoked_exactly_once(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -154,7 +154,7 @@ class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
         bootstrap.assert_called_once()
 
     def test_none_child_bootstrap_does_not_raise(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -170,7 +170,7 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
     def test_bootstrap_exception_is_reported_via_set_error_and_stop_without_propagating(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -199,7 +199,7 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         assert not [r for r in caplog.records if "Traceback" in r.getMessage()]
 
     def test_bootstrap_exception_whose_str_raises_is_still_reported_and_stops(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -218,7 +218,7 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         assert command_queue.get(timeout=2) == "STOP"
 
     def test_bootstrap_exception_with_secret_is_scrubbed(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -243,7 +243,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
     def test_command_exception_is_reported_via_set_error_and_stop_without_logging_a_traceback(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -270,7 +270,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         assert recorded is not None and recorded.reason == "error"
 
     def test_command_exception_whose_str_raises_is_still_reported_and_stops(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -288,7 +288,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         assert command_queue.get(timeout=2) == "STOP"
 
     def test_command_exception_with_secret_is_scrubbed(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -307,7 +307,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         assert command_queue.get(timeout=2) == "STOP"
 
     def test_command_exception_with_secret_in_chained_cause_is_scrubbed(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -328,7 +328,7 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
 
 class TestWorkerLogsCriticalLocationErrorOnItsOwnLogger:
     def test_missing_location_error_is_not_logged_on_the_root_logger(self, caplog: pytest.LogCaptureFixture) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -352,7 +352,7 @@ class TestWorkerExitsWhenTheParentProcessIsNoLongerAlive:
 
         monkeypatch.setattr(multiprocessing, "parent_process", lambda: _FakeDeadParent())
 
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -376,7 +376,7 @@ class TestWorkerClosesExtendersOnStop:
     command loop-break path."""
 
     def test_close_called_exactly_once_on_stop(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -401,7 +401,7 @@ class TestWorkerSwallowsExtenderCloseExceptions:
     extenders' close() from running."""
 
     def test_worker_does_not_raise_and_other_extender_still_closes(self, caplog: pytest.LogCaptureFixture) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -450,7 +450,7 @@ class TestWorkerClosesExtendersEvenWhenChildBootstrapRaises:
     command loop is never entered."""
 
     def test_close_called_when_bootstrap_raises(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
@@ -477,7 +477,7 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
     has actually exited."""
 
     def test_queued_drop_command_effect_precedes_close(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue = Mock()
         cfw_register = Mock(spec=CfwManager)
@@ -509,7 +509,7 @@ class TestWorkerProcessesQueuedCommandsBeforeClosingExtendersOnStop:
 
     def test_resolved_drop_command_stops_worker_without_posting_a_result(self) -> None:
         """The resolved-drop path (all children_if_root satisfied) queues its own STOP."""
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue = Mock()
         cfw_register = Mock(spec=CfwManager)
@@ -585,7 +585,7 @@ class TestCloseContextRemainingTracksTheSharedDeadline:
         assert remainings[1] == 0.0
 
     def test_worker_run_context_graceful_shutdown_timeout_reaches_close_extenders(self) -> None:
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)

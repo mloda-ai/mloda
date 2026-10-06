@@ -15,6 +15,27 @@ from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightS
 
 from tests.registry_isolation import reclaim_leaked_feature_groups, reclaim_leaked_transformers
 
+MP_PRELOAD_MODULES = [
+    "mloda.user",
+    "mloda.provider",
+    "mloda.core.runtime.worker.multiprocessing_worker",
+    "mloda.core.core.cfw_manager",
+    "mloda.core.runtime.flight.flight_server",
+    "mloda_plugins.compute_framework.base_implementations.pandas.dataframe",
+    "mloda_plugins.compute_framework.base_implementations.pyarrow.table",
+    "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework",
+    "pandas",
+    "pyarrow",
+    "pyarrow.flight",
+    "polars",
+    "duckdb",
+    "pyiceberg.table",
+    "pyspark.sql",
+]
+# Must run before anything starts a worker process.
+os.environ.setdefault("MLODA_MP_START_METHOD", "forkserver")
+os.environ.setdefault("MLODA_MP_PRELOAD", ",".join(MP_PRELOAD_MODULES))
+
 
 # Defined first on purpose: autouse fixtures tear down in reverse, so this runs after the registry reset.
 @pytest.fixture(autouse=True)

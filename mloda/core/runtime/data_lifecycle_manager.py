@@ -166,8 +166,11 @@ class DataLifecycleManager:
         """Converts a selected result to the output framework's data type, once at the end of the run."""
         if self.output_framework is None:
             return data
-        source = type(cfw).expected_data_framework()
         target = self.output_framework.expected_data_framework()
+        if isinstance(target, type) and isinstance(data, target):
+            return data
+        expected = type(cfw).expected_data_framework()
+        source = expected if isinstance(expected, type) and isinstance(data, expected) else type(data)
         if source is target:
             return data
         chain = self.transformer.get_transformation_chain(source, target)

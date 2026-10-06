@@ -399,6 +399,57 @@ class TestDataLifecycleManagerOutputFramework:
 
         assert manager.get_result_data(self._arrow_cfw(empty), [FeatureName("feature1")]) is empty
 
+    @pytest.mark.parametrize(
+        "framework_name, output_name",
+        [
+            ("duckdb", "PyArrowTable"),
+            ("duckdb", "PandasDataFrame"),
+            ("duckdb", "DuckDBFramework"),
+            ("polars", "PandasDataFrame"),
+            ("polars", "PyArrowTable"),
+            ("polars", "PolarsLazyDataFrame"),
+            ("iceberg", "PandasDataFrame"),
+        ],
+    )
+    def test_result_arrives_as_the_output_framework_whatever_the_run_framework(
+        self, framework_name: str, output_name: str
+    ) -> None:
+        arrow = pa.table({"feature1": [1, 2], "feature2": [3, 4]})
+        connection: Any = None
+        if framework_name == "duckdb":
+            duckdb = pytest.importorskip("duckdb")
+            from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+            from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
+            connection = duckdb.connect()
+            cfw: Any = DuckDBFramework()
+            cfw.set_framework_connection_object(connection)
+            cfw.data = DuckdbRelation.from_arrow(connection, arrow)
+        elif framework_name == "polars":
+            pl = pytest.importorskip("polars")
+            from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+
+            cfw = PolarsLazyDataFrame()
+            cfw.data = pl.from_arrow(arrow).lazy()
+        else:
+            pytest.importorskip("pyiceberg")
+            from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+
+            cfw = IcebergFramework()
+            cfw.data = arrow
+
+        outputs: dict[str, Any] = {"PyArrowTable": PyArrowTable, "PandasDataFrame": PandasDataFrame}
+        if output_name == "DuckDBFramework":
+            outputs[output_name] = type(cfw)
+        elif output_name == "PolarsLazyDataFrame":
+            outputs[output_name] = type(cfw)
+        output = outputs[output_name]
+        manager = DataLifecycleManager(output_framework=output, output_connection=connection)
+
+        result = manager.get_result_data(cfw, [FeatureName("feature1")])
+
+        assert isinstance(result, output.expected_data_framework())
+
 
 class TestDataLifecycleManagerGetResults:
     """Test getting all collected results."""

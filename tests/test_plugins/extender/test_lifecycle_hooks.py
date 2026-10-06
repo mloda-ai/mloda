@@ -172,6 +172,7 @@ class TestHookArguments:
         assert complete[2].structure_hash is not None
         assert complete[2].structure_hash == expected
         assert run_start[3].structure_hash == expected
+        assert run_start[2].structure_hash == expected
         assert session.plan_context.structure_hash == expected
         expected_content = plan_content_hash(session.resolved_plan())
         assert start[2].content_hash is None
@@ -208,6 +209,7 @@ class TestHookArguments:
 
         assert session.plan_context.structure_hash is None
         assert session.plan_context.content_hash is None
+        assert session._build_run_context(None, None).structure_hash is None
 
     def test_plan_start_fires_before_the_match_hook_and_plan_complete_after_it(self) -> None:
         log: list[tuple[Any, ...]] = []

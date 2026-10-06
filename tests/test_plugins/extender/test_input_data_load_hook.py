@@ -163,6 +163,8 @@ class TestInputDataLoadHookFiresAlongsideCalculateExtender:
         assert fetch_context.data_access_dataset_version is None
 
         assert fetch_context.run_id == calc_context.run_id
+        assert fetch_context.structure_hash is not None
+        assert fetch_context.structure_hash == calc_context.structure_hash
         assert fetch_context.carrier == calc_context.carrier
         assert fetch_context.worker_index == calc_context.worker_index
         assert fetch_context.tenant_id == calc_context.tenant_id

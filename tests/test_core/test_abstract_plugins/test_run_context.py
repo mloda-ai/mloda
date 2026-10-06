@@ -47,14 +47,23 @@ class TestRunContextPlanIdAndStartedAt:
 
         assert ctx.plan_id is None
         assert ctx.started_at is None
+        assert ctx.structure_hash is None
 
     def test_plan_id_and_started_at_round_trip_through_constructor_and_pickle(self) -> None:
         started = datetime.now(timezone.utc)
-        ctx = RunContext(run_id="r", plan_id="p", started_at=started)
+        ctx = RunContext(run_id="r", plan_id="p", started_at=started, structure_hash="abc")
 
         restored = pickle.loads(pickle.dumps(ctx))  # nosec B301
 
-        assert (restored.plan_id, restored.started_at) == ("p", started)
+        assert (restored.plan_id, restored.started_at, restored.structure_hash) == ("p", started, "abc")
+
+    def test_structure_hash_is_excluded_from_equality_and_hash_and_is_the_last_field(self) -> None:
+        plain = RunContext(run_id="r")
+        hashed = RunContext(run_id="r", structure_hash="abc")
+
+        assert hashed == plain
+        assert hash(hashed) == hash(plain)
+        assert dataclasses.fields(RunContext)[-1].name == "structure_hash"
 
     def test_plan_id_is_frozen(self) -> None:
         with pytest.raises(dataclasses.FrozenInstanceError):

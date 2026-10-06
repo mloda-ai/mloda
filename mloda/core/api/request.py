@@ -576,6 +576,7 @@ class mlodaAPI:
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             principal=identity.principal,
+            structure_hash=self.plan_context.structure_hash,
         )
 
     def run(

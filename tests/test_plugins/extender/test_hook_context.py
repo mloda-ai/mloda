@@ -195,6 +195,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
         [
             ("run_id", "forged"),
             ("plan_id", "forged"),
+            ("structure_hash", "forged"),
             ("tenant_id", "forged"),
             ("principal", "forged"),
             ("carrier", {"forged": "yes"}),
@@ -207,7 +208,13 @@ class TestHookContextIsFrozenExceptOutcomeFields:
     )
     def test_assigning_a_frozen_field_raises(self, field: str, value: Any) -> None:
         context = _make_context(
-            run_id="real", plan_id="real-plan", tenant_id="t", principal="p", carrier={"a": "b"}, step_uuid=uuid4()
+            run_id="real",
+            plan_id="real-plan",
+            structure_hash="real-hash",
+            tenant_id="t",
+            principal="p",
+            carrier={"a": "b"},
+            step_uuid=uuid4(),
         )
         before = getattr(context, field)
 
@@ -221,6 +228,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
         [
             "run_id",
             "plan_id",
+            "structure_hash",
             "tenant_id",
             "principal",
             "carrier",
@@ -234,6 +242,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
         context = _make_context(
             run_id="real",
             plan_id="real-plan",
+            structure_hash="real-hash",
             tenant_id="t",
             principal="p",
             carrier={"a": "b"},
@@ -362,6 +371,7 @@ class TestHookContextDataAccessAndJoinAndPlanFields:
         assert context.plan_feature_count is None
         assert context.plan_node_count is None
         assert context.plan_depth is None
+        assert context.structure_hash is None
 
     def test_new_fields_can_be_set_via_constructor(self) -> None:
         context = _make_context(
@@ -374,6 +384,7 @@ class TestHookContextDataAccessAndJoinAndPlanFields:
             plan_feature_count=5,
             plan_node_count=12,
             plan_depth=3,
+            structure_hash="abc",
         )
 
         assert context.data_access_format == "parquet"
@@ -385,6 +396,7 @@ class TestHookContextDataAccessAndJoinAndPlanFields:
         assert context.plan_feature_count == 5
         assert context.plan_node_count == 12
         assert context.plan_depth == 3
+        assert context.structure_hash == "abc"
 
 
 class TestHookContextCurrentScope:

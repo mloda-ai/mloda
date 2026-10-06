@@ -82,6 +82,7 @@ class _WorkerIndexRecordingExtender(Extender):
                         "worker_index": context.worker_index,
                         "run_id": context.run_id,
                         "plan_id": context.plan_id,
+                        "structure_hash": context.structure_hash,
                         "step_uuid": str(context.step_uuid),
                         "carrier": context.carrier,
                         "specialized_from": list(context.specialized_from),
@@ -130,6 +131,9 @@ class TestWorkerIndexReachesHookContextUnderMultiprocessing:
         # run_id/carrier must survive the real pickle boundary into the spawned child unchanged.
         assert recorded_one["plan_id"] == session.plan_id
         assert recorded_two["plan_id"] == session.plan_id
+        assert session.plan_context.structure_hash is not None
+        assert recorded_one["structure_hash"] == session.plan_context.structure_hash
+        assert recorded_two["structure_hash"] == session.plan_context.structure_hash
         assert recorded_one["run_id"] is not None
         assert recorded_one["run_id"] == recorded_two["run_id"]
         assert recorded_one["run_id"] != session.plan_id

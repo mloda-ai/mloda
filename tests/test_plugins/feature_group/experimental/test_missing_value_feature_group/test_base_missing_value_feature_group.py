@@ -149,7 +149,7 @@ class TestMissingValueFeatureGroup:
         assert {str(f.name) for f in result} == expected
         assert len(result) == len(expected)
 
-    def test_group_by_features_share_group_options_of_scoped_source(self) -> None:
+    def test_group_by_features_carry_no_group_options_of_scoped_source(self) -> None:
         source = Feature("income", Options(group={"scope": "a"}))
         options = Options(
             group={"imputation_method": "mean"},
@@ -159,4 +159,5 @@ class TestMissingValueFeatureGroup:
         assert result is not None
         by_name = {str(f.name): f for f in result}
         assert set(by_name) == {"income", "region"}
-        assert by_name["region"].options.group == {"scope": "a"}
+        assert by_name["region"] == Feature("region")
+        assert not by_name["region"].options.group

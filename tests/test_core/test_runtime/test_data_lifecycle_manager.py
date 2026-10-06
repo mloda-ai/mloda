@@ -2,6 +2,7 @@
 """Tests for DataLifecycleManager class that manages data dropping, result collection, and artifacts."""
 
 from typing import Any
+from collections.abc import Iterator
 from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
@@ -351,12 +352,23 @@ class TestDataLifecycleManagerGetResultData:
             manager.get_result_data(mock_cfw, selected_feature_names, location=None)
 
 
+_OPEN_CONNECTIONS: list[Any] = []
+
+
+@pytest.fixture(autouse=True)
+def _close_opened_connections() -> Iterator[None]:
+    yield
+    while _OPEN_CONNECTIONS:
+        _OPEN_CONNECTIONS.pop().close()
+
+
 def _duckdb_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
     duckdb = pytest.importorskip("duckdb")
     from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
     from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 
     connection = duckdb.connect()
+    _OPEN_CONNECTIONS.append(connection)
     cfw = DuckDBFramework()
     cfw.set_framework_connection_object(connection)
     cfw.data = DuckdbRelation.from_arrow(connection, arrow)

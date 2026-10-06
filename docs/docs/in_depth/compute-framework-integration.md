@@ -306,7 +306,7 @@ For more details on how data transformation works between compute frameworks, se
 
 ## Framework Notes
 
-- **DuckDB**: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
+- **DuckDB**: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
 - **Spark**: requires PySpark and a Java 17+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
 - **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 

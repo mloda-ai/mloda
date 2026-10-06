@@ -994,6 +994,17 @@ def test_diagnose_reports_a_transform_into_a_required_connection_framework_witho
     assert "DataAccessCollection" in diagnosis.message
 
 
+def test_a_same_type_hop_into_a_required_connection_framework_needs_no_connection() -> None:
+    sqlite_cls = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+    to_cls = sqlite_cls
+    tfs = type("_Tfs", (), {"from_framework": sqlite_cls, "to_framework": to_cls})()
+    engine = Engine.__new__(Engine)
+    engine.execution_planner = type("_Planner", (), {"tfs_collection": {"k": tfs}})()  # type: ignore[assignment]
+    engine.data_access_collection = None
+
+    assert engine._resolve_tfs_connection_map() == {}
+
+
 def test_an_output_framework_outside_the_run_list_still_converts() -> None:
     expected = PythonDictFramework.expected_data_framework()
 

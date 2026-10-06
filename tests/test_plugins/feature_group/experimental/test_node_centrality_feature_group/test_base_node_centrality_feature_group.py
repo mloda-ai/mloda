@@ -147,7 +147,7 @@ class TestNodeCentralityFeatureGroup:
         assert {str(f.name) for f in result} == expected
         assert len(result) == len(expected)
 
-    def test_edge_columns_share_group_options_of_scoped_source(self) -> None:
+    def test_edge_columns_carry_no_group_options_of_scoped_source(self) -> None:
         source = Feature("user", Options(group={"scope": "a"}))
         options = Options(context={DefaultOptionKeys.in_features: frozenset([source]), "weight_column": "w"})
         result = PandasNodeCentralityFeatureGroup().input_features(options, FeatureName("user__degree_centrality"))
@@ -155,4 +155,5 @@ class TestNodeCentralityFeatureGroup:
         by_name = {str(f.name): f for f in result}
         assert set(by_name) == {"user", "source", "target", "w"}
         for name in ("source", "target", "w"):
-            assert by_name[name].options.group == {"scope": "a"}
+            assert by_name[name] == Feature(name)
+            assert not by_name[name].options.group

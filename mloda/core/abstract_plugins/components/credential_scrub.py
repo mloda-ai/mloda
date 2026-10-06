@@ -85,7 +85,7 @@ _BEARER_PATTERN = re.compile(rf"(?<![\w-])(?P<scheme>(?i:bearer))[ \t]+{_TOKEN_S
 # A scheme word is known or scheme-shaped (not all lowercase letters, so prose like `denied for` is skipped);
 # the rest of the value is masked up to the closing quote when the head opened one, else to end of line.
 _AUTHORIZATION_PATTERN = re.compile(
-    r"(?P<head>(?<![\w-])(?i:(?:proxy-)?authorization)['\"]?[ \t]*[:=][ \t]*(?P<q>['\"])?)"
+    r"(?P<head>(?<![\w-])(?i:(?:[\w-]*[-_])?authorization(?:[-_]header)?)['\"]?[ \t]*[:=][ \t]*(?P<q>['\"])?)"
     rf"(?:(?P<scheme>{_KNOWN_SCHEMES}|(?![a-z]+(?![\w-]))[A-Za-z][\w-]*)[ \t]+"
     r"(?(q)(?:(?!(?P=q))[^\n])*|[^\n]*)"
     rf"|{_TOKEN_SHAPE}{_TOKEN68}+=*)"

@@ -999,7 +999,7 @@ def test_a_same_type_hop_into_a_required_connection_framework_needs_no_connectio
     to_cls = sqlite_cls
     tfs = type("_Tfs", (), {"from_framework": sqlite_cls, "to_framework": to_cls})()
     engine = Engine.__new__(Engine)
-    engine.execution_planner = type("_Planner", (), {"tfs_collection": {"k": tfs}})()  # type: ignore[assignment]
+    engine.execution_planner = type("_Planner", (), {"tfs_collection": {"k": tfs}})()
     engine.data_access_collection = None
 
     assert engine._resolve_tfs_connection_map() == {}

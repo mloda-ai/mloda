@@ -3,6 +3,7 @@
 import dataclasses
 import hashlib
 import json
+import types
 import uuid
 from pathlib import Path
 from collections.abc import Callable
@@ -19,6 +20,7 @@ from mloda.steward import (
     plan_structure_hash,
     write_plan_lock,
 )
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.provider import ComputeFramework, FeatureGroup
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -321,6 +323,16 @@ def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     assert hashed(conn={"password": "a1", "host": "h"}) == hashed(conn={"password": "b2", "host": "h"})  # nosec B105
     assert hashed(conn={"api_key": "a1"}) == hashed(conn={"api_key": "b2"})
     assert hashed(window=3) != hashed(window=4)
+    assert hashed(conns=[{"password": "a1"}]) == hashed(conns=[{"password": "b2"}])  # nosec B105
+    assert hashed(conns=({"password": "a1"},)) == hashed(conns=({"password": "b2"},))  # nosec B105
+    assert hashed(c={"l": [{"api_key": "a1"}]}) == hashed(c={"l": [{"api_key": "b2"}]})
+    assert hashed(c=types.MappingProxyType({"password": "a1"})) == hashed(  # nosec B106
+        c=types.MappingProxyType({"password": "b2"})  # nosec B106
+    )
+    assert hashed(conn=RegisteredCredential(host="h1", password="p")) == hashed(  # nosec B106
+        conn=RegisteredCredential(host="h2", password="p")  # nosec B106
+    )
+    assert hashed(conns=[{"host": "a"}]) != hashed(conns=[{"host": "b"}])
 
 
 @pytest.mark.parametrize(
@@ -342,3 +354,9 @@ def test_plan_content_hash_is_independent_of_set_and_dict_order() -> None:
     second = _compute_step(feature_set_options=Options(group={"d": {"y": 2, "x": 1}, "s": {"c", "b", "a"}}))
 
     assert plan_content_hash([first]) == plan_content_hash([second])
+
+    proxy_a = types.MappingProxyType({"x": 1, "y": 2})
+    proxy_b = types.MappingProxyType({"y": 2, "x": 1})
+    third = _compute_step(feature_set_options=Options(group={"m": proxy_a}))
+    fourth = _compute_step(feature_set_options=Options(group={"m": proxy_b}))
+    assert plan_content_hash([third]) == plan_content_hash([fourth])

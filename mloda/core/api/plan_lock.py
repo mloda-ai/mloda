@@ -5,10 +5,11 @@ import hashlib
 import json
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_NAME
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.choose_compute_frameworks import stable_text
@@ -31,12 +32,16 @@ def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _mask_secret_keys(value: Any) -> Any:
-    if type(value) is not dict:
+    if isinstance(value, RegisteredCredential):
         return value
-    return {
-        key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
-        for key, item in value.items()
-    }
+    if isinstance(value, Mapping):
+        return {
+            key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
+            for key, item in value.items()
+        }
+    if type(value) is list or type(value) is tuple:
+        return type(value)(_mask_secret_keys(item) for item in value)
+    return value
 
 
 def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:

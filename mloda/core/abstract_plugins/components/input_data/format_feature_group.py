@@ -1,7 +1,7 @@
 """Shared base of one-FeatureGroup-per-format: claim routes decide matching, hooks discover and load sources."""
 
-import functools
 import inspect
+import types
 from abc import abstractmethod
 from collections.abc import Callable, Collection
 from typing import Any, ClassVar
@@ -190,7 +190,7 @@ class FormatFeatureGroup(FeatureGroup):
         framework = features.get_sorted_features()[0].get_compute_framework()
         loader = cls._loader_for_match(framework, source)
         load: Callable[[SourceMatch, Any], Any] = (
-            functools.partial(loader, cls) if loader is not None else cls.load_neutral
+            types.MethodType(loader, cls) if loader is not None else cls.load_neutral
         )
         loader_name = framework.__name__ if loader is not None else "neutral"
         return dispatch_input_data_load(

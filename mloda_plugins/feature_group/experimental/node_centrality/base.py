@@ -17,6 +17,8 @@ from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
+from mloda.user import FeatureName, Options
+from mloda_plugins.feature_group.experimental.key_features import with_key_features
 
 
 class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
@@ -24,6 +26,7 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     CENTRALITY_TYPE = "centrality_type"
     GRAPH_TYPE = "graph_type"
     WEIGHT_COLUMN = "weight_column"
+    EDGE_COLUMNS = ("source", "target")
     """
     Base class for all node centrality feature groups.
 
@@ -170,6 +173,13 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
             strict_validation=False,
         ),
     }
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        """Source features plus the edge and weight columns the implementation reads."""
+        sources = super().input_features(options, feature_name) or set()
+        weight_column = options.get(self.WEIGHT_COLUMN)
+        extra = [*self.EDGE_COLUMNS, *([weight_column] if weight_column else [])]
+        return with_key_features(sources, extra)
 
     @classmethod
     def parse_centrality_prefix(cls, feature_name: str) -> str:

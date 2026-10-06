@@ -131,3 +131,33 @@ class TestMissingValueFeatureGroup:
 
         input_features = feature_group.input_features(options, FeatureName("humidity__bfill_imputed"))
         assert input_features == {Feature("humidity")}
+
+    @pytest.mark.parametrize(
+        ("group_by", "expected"),
+        [
+            (["region"], {"income", "region"}),
+            (["region", "store"], {"income", "region", "store"}),
+            (None, {"income"}),
+            ([], {"income"}),
+            (["income"], {"income"}),
+        ],
+    )
+    def test_input_features_declare_group_by_columns(self, group_by: Any, expected: set[str]) -> None:
+        options = Options(context={"group_by_features": group_by})
+        result = ConcreteMissingValueFeatureGroup().input_features(options, FeatureName("income__mean_imputed"))
+        assert result is not None
+        assert {str(f.name) for f in result} == expected
+        assert len(result) == len(expected)
+
+    def test_group_by_features_carry_no_group_options_of_scoped_source(self) -> None:
+        source = Feature("income", Options(group={"scope": "a"}))
+        options = Options(
+            group={"imputation_method": "mean"},
+            context={DefaultOptionKeys.in_features: frozenset([source]), "group_by_features": ["region"]},
+        )
+        result = ConcreteMissingValueFeatureGroup().input_features(options, FeatureName("x"))
+        assert result is not None
+        by_name = {str(f.name): f for f in result}
+        assert set(by_name) == {"income", "region"}
+        assert by_name["region"] == Feature("region")
+        assert not by_name["region"].options.group

@@ -2,6 +2,7 @@
 """Tests for DataLifecycleManager class that manages data dropping, result collection, and artifacts."""
 
 from typing import Any
+from collections.abc import Iterator
 from unittest.mock import Mock, patch
 from uuid import UUID, uuid4
 
@@ -351,6 +352,47 @@ class TestDataLifecycleManagerGetResultData:
             manager.get_result_data(mock_cfw, selected_feature_names, location=None)
 
 
+_OPEN_CONNECTIONS: list[Any] = []
+
+
+@pytest.fixture(autouse=True)
+def _close_opened_connections() -> Iterator[None]:
+    yield
+    while _OPEN_CONNECTIONS:
+        _OPEN_CONNECTIONS.pop().close()
+
+
+def _duckdb_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
+    duckdb = pytest.importorskip("duckdb")
+    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
+    connection = duckdb.connect()
+    _OPEN_CONNECTIONS.append(connection)
+    cfw = DuckDBFramework()
+    cfw.set_framework_connection_object(connection)
+    cfw.data = DuckdbRelation.from_arrow(connection, arrow)
+    return cfw, connection
+
+
+def _polars_lazy_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
+    pl = pytest.importorskip("polars")
+    from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+
+    cfw = PolarsLazyDataFrame()
+    cfw.data = pl.from_arrow(arrow).lazy()
+    return cfw, None
+
+
+def _iceberg_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
+    pytest.importorskip("pyiceberg")
+    from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+
+    cfw = IcebergFramework()
+    cfw.data = arrow
+    return cfw, None
+
+
 class TestDataLifecycleManagerOutputFramework:
     """Results convert to the output framework once, after column selection."""
 
@@ -398,6 +440,29 @@ class TestDataLifecycleManagerOutputFramework:
         empty = pa.table({})
 
         assert manager.get_result_data(self._arrow_cfw(empty), [FeatureName("feature1")]) is empty
+
+    @pytest.mark.parametrize(
+        "make_run_framework, output",
+        [
+            (_duckdb_run_framework, PyArrowTable),
+            (_duckdb_run_framework, PandasDataFrame),
+            (_duckdb_run_framework, None),
+            (_polars_lazy_run_framework, PandasDataFrame),
+            (_polars_lazy_run_framework, PyArrowTable),
+            (_polars_lazy_run_framework, None),
+            (_iceberg_run_framework, PandasDataFrame),
+        ],
+    )
+    def test_result_arrives_as_the_output_framework_whatever_the_run_framework(
+        self, make_run_framework: Any, output: Any
+    ) -> None:
+        cfw, connection = make_run_framework(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
+        output = type(cfw) if output is None else output
+        manager = DataLifecycleManager(output_framework=output, output_connection=connection)
+
+        result = manager.get_result_data(cfw, [FeatureName("feature1")])
+
+        assert isinstance(result, output.expected_data_framework())
 
 
 class TestDataLifecycleManagerGetResults:

@@ -2,6 +2,8 @@
 Tests for the base NodeCentralityFeatureGroup class.
 """
 
+from typing import Any
+
 import pytest
 
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
@@ -85,12 +87,12 @@ class TestNodeCentralityFeatureGroup:
         # Test with different centrality types
         input_features = feature_group.input_features(Options(), FeatureName("user__degree_centrality"))
         assert input_features is not None
-        assert len(input_features) == 1
+        assert {str(f.name) for f in input_features} == {"user", "source", "target"}
         assert Feature("user") in input_features
 
         input_features = feature_group.input_features(Options(), FeatureName("product__betweenness_centrality"))
         assert input_features is not None
-        assert len(input_features) == 1
+        assert {str(f.name) for f in input_features} == {"product", "source", "target"}
         assert Feature("product") in input_features
 
     @pytest.mark.parametrize(
@@ -127,3 +129,31 @@ class TestNodeCentralityFeatureGroup:
         assert CentrPatternGroup.parse_centrality_prefix(name) == expected
         with pytest.raises(ValueError):
             CentrPatternGroup.parse_centrality_prefix("x__degree_centrality")
+
+    @pytest.mark.parametrize(
+        ("context", "expected"),
+        [
+            ({}, {"user", "source", "target"}),
+            ({"weight_column": "w"}, {"user", "source", "target", "w"}),
+            ({"weight_column": None}, {"user", "source", "target"}),
+            ({"weight_column": "source"}, {"user", "source", "target"}),
+        ],
+    )
+    def test_input_features_declare_edge_columns(self, context: dict[str, Any], expected: set[str]) -> None:
+        result = PandasNodeCentralityFeatureGroup().input_features(
+            Options(context=context), FeatureName("user__degree_centrality")
+        )
+        assert result is not None
+        assert {str(f.name) for f in result} == expected
+        assert len(result) == len(expected)
+
+    def test_edge_columns_carry_no_group_options_of_scoped_source(self) -> None:
+        source = Feature("user", Options(group={"scope": "a"}))
+        options = Options(context={DefaultOptionKeys.in_features: frozenset([source]), "weight_column": "w"})
+        result = PandasNodeCentralityFeatureGroup().input_features(options, FeatureName("user__degree_centrality"))
+        assert result is not None
+        by_name = {str(f.name): f for f in result}
+        assert set(by_name) == {"user", "source", "target", "w"}
+        for name in ("source", "target", "w"):
+            assert by_name[name] == Feature(name)
+            assert not by_name[name].options.group

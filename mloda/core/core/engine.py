@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 )
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.filter.global_filter import GlobalFilter
-from mloda.core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
@@ -142,13 +142,9 @@ class Engine:
     def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
         """Resolve a connection per TFS destination framework at setup time.
 
-        Walks the planned TFS steps once and asks each destination framework class to pick
-        a matching connection from the DataAccessCollection. The resulting dict is consumed
-        on the run path by ComputeFrameworkExecutor without any further DAC scanning.
+        Raises EnvironmentPreconditionError when a converting hop into a REQUIRED-connection framework has none.
         """
         connection_map: dict[type[ComputeFramework], Any] = {}
-        if self.data_access_collection is None:
-            return connection_map
         for tfs in self.execution_planner.tfs_collection.values():
             cfw_class = tfs.to_framework
             if cfw_class in connection_map:
@@ -156,6 +152,16 @@ class Engine:
             conn = cfw_class.pick_connection_from_dac(self.data_access_collection)
             if conn is not None:
                 connection_map[cfw_class] = conn
+            elif (
+                cfw_class.connection_requirement() is ConnectionRequirement.REQUIRED
+                and tfs.from_framework.expected_data_framework() is not cfw_class.expected_data_framework()
+            ):
+                raise EnvironmentPreconditionError(
+                    f"The transform from {tfs.from_feature_group.get_class_name()} on "
+                    f"{tfs.from_framework.get_class_name()} to {tfs.to_feature_group.get_class_name()} on "
+                    f"{cfw_class.get_class_name()} needs a connection, so add a matching connection "
+                    "to the DataAccessCollection."
+                )
         return connection_map
 
     def get_function_extender(self, hook: ExtenderHook) -> Extender | None:

@@ -2,6 +2,7 @@ from mloda.provider import MatchData
 from mloda.provider import ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 import pytest
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 from typing import Any
 
@@ -369,3 +370,19 @@ class TestDuckDBIntegrationWithMlodaAPI:
 
         assert len(result) == 1
         assert "pyarrow_avg_value_by_category" in result[0].column_names
+
+    @pytest.mark.parametrize("output", [PyArrowTable, PandasDataFrame])
+    def test_output_framework_with_a_duckdb_run(self, flight_server: Any, duckdb_conn: Any, output: Any) -> None:
+        result = mloda.run_all(
+            [Feature(name="doubled_value", options={"DuckDBTestDataCreator": duckdb_conn})],
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {DuckDBTestDataCreator, DuckDBSimpleTransformFeatureGroup}
+            ),
+            data_access_collection=DataAccessCollection(connections={duckdb_conn}),
+            compute_frameworks=[DuckDBFramework],
+            output_framework=output,
+        )
+
+        assert isinstance(result[0], output.expected_data_framework())

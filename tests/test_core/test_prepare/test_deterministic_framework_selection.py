@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.core.engine import Engine
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from mloda.core.prepare.accessible_plugins import PreFilterPlugins
+from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, PreFilterPlugins
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -929,6 +929,80 @@ def test_a_required_connection_output_framework_with_a_connection_prepares(sqlit
 
     assert session.engine is not None
     assert session.engine.output_connection is sqlite_conn
+
+
+class TfsDbRoot(_PlanRoot):
+    NAMES = ("tfsdb_root",)
+    FW_NAME = "PyArrowTable"
+
+
+class TfsSqliteConsumer(_PlanConsumer):
+    INPUTS = ("tfsdb_root",)
+    OUTPUT = "tfsdb_sqlite_out"
+    FW_NAME = "SqliteFramework"
+
+
+class TfsDuckDBConsumer(_PlanConsumer):
+    INPUTS = ("tfsdb_root",)
+    OUTPUT = "tfsdb_duckdb_out"
+    FW_NAME = "DuckDBFramework"
+
+
+_TFS_DB_CASES = [
+    pytest.param("SqliteFramework", TfsSqliteConsumer, "tfsdb_sqlite_out", id="sqlite"),
+    pytest.param("DuckDBFramework", TfsDuckDBConsumer, "tfsdb_duckdb_out", id="duckdb"),
+]
+_TFS_DAC = pytest.mark.parametrize("with_dac", [False, True], ids=["no_dac", "dac_without_connection"])
+
+
+def _tfs_request(fw_name: str, consumer: type[FeatureGroup], with_dac: bool, tmp_path: Path) -> dict[str, Any]:
+    if fw_name == "DuckDBFramework":
+        pytest.importorskip("duckdb")
+    return {
+        "compute_frameworks": [PyArrowTable, _load_framework(_MODULE_OF[fw_name], fw_name)],
+        "plugin_collector": PluginCollector.enabled_feature_groups({TfsDbRoot, consumer}),
+        "data_access_collection": DataAccessCollection(folders={str(tmp_path)}) if with_dac else None,
+    }
+
+
+@_TFS_DAC
+@pytest.mark.parametrize(("fw_name", "consumer", "feature"), _TFS_DB_CASES)
+@pytest.mark.parametrize("entry", ["prepare", "run_all"])
+def test_a_transform_into_a_required_connection_framework_without_a_connection_raises_at_planning(
+    entry: str, fw_name: str, consumer: type[FeatureGroup], feature: str, with_dac: bool, tmp_path: Path
+) -> None:
+    kwargs = _tfs_request(fw_name, consumer, with_dac, tmp_path)
+
+    with pytest.raises(EnvironmentPreconditionError, match=fw_name) as raised:
+        getattr(mloda, entry)([feature], **kwargs)
+
+    assert "DataAccessCollection" in str(raised.value)
+
+
+@_TFS_DAC
+@pytest.mark.parametrize(("fw_name", "consumer", "feature"), _TFS_DB_CASES)
+def test_diagnose_reports_a_transform_into_a_required_connection_framework_without_a_connection(
+    fw_name: str, consumer: type[FeatureGroup], feature: str, with_dac: bool, tmp_path: Path
+) -> None:
+    kwargs = _tfs_request(fw_name, consumer, with_dac, tmp_path)
+
+    diagnosis = mloda.diagnose([feature], **kwargs)
+
+    assert diagnosis.complete is False
+    assert diagnosis.message is not None
+    assert fw_name in diagnosis.message
+    assert "DataAccessCollection" in diagnosis.message
+
+
+def test_a_same_type_hop_into_a_required_connection_framework_needs_no_connection() -> None:
+    sqlite_cls = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+    to_cls = sqlite_cls
+    tfs = type("_Tfs", (), {"from_framework": sqlite_cls, "to_framework": to_cls})()
+    engine = Engine.__new__(Engine)
+    engine.execution_planner = type("_Planner", (), {"tfs_collection": {"k": tfs}})()
+    engine.data_access_collection = None
+
+    assert engine._resolve_tfs_connection_map() == {}
 
 
 def test_an_output_framework_outside_the_run_list_still_converts() -> None:

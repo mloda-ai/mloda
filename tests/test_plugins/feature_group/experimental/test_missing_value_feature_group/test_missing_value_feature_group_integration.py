@@ -12,6 +12,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import FeatureSet
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -134,3 +135,39 @@ class TestMissingValueFeatureGroupIntegration:
 
         assert len(results2) == 1
         assert results[0].sort_index(axis=1).equals(results2[0].sort_index(axis=1))
+
+
+class GroupedMissingValueDataCreator(MissingValueParserTestDataCreator):
+    """Root that returns only the requested columns."""
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {
+            "income": [10.0, None, 30.0, 100.0, None],
+            "region": ["N", "N", "N", "S", "S"],
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raw = cls.get_raw_data()
+        return cls.transform_format_for_testing({n: raw[n] for n in features.get_all_names()})
+
+
+class TestMissingValueGroupByColumnSelectiveRoot:
+    def test_grouped_mean_imputation_behind_column_selective_root(self) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup}
+        )
+        f = Feature(
+            "income__mean_imputed",
+            Options(
+                context={
+                    MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
+                    DefaultOptionKeys.in_features: "income",
+                    "group_by_features": ["region"],
+                }
+            ),
+        )
+        results = mloda.run_all([f], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+        assert len(results) == 1
+        assert results[0]["income__mean_imputed"].tolist() == [10.0, 20.0, 30.0, 100.0, 100.0]

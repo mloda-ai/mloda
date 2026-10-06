@@ -47,7 +47,7 @@ jobs:
           TOX_WRITE_THIRD_PARTY_LICENSES: true
           PYTEST_WORKERS: 2
         run: |
-            tox -e python310
+            tox -e python310,lint
             # Ship the committed ATTRIBUTION.md, not a copy regenerated from this
             # runner's environment; tox also rewrites it, so restore the tracked one.
             git checkout -- attribution/ATTRIBUTION.md

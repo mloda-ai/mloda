@@ -9,6 +9,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+import yaml
 from packaging.requirements import Requirement
 
 
@@ -252,3 +253,55 @@ class TestToxConfig:
                 pins.setdefault(workflow.name, set()).add(match.group(0))
         assert {"ci.yaml", "release.yaml"} <= pins.keys(), f"ci.yaml and release.yaml must install tox: {pins}"
         assert len(set().union(*pins.values())) == 1, f"workflows must install the same tox and tox-uv: {pins}"
+
+    @staticmethod
+    def _tox_parser() -> configparser.ConfigParser:
+        parser = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=("#",))
+        assert parser.read(PROJECT_ROOT / "tox.ini", encoding="utf-8"), "tox.ini not found"
+        return parser
+
+    @staticmethod
+    def _workflow_jobs(name: str) -> dict[str, Any]:
+        config = yaml.safe_load(_read_text(PROJECT_ROOT / ".github" / "workflows" / name))
+        jobs: dict[str, Any] = config["jobs"]
+        return jobs
+
+    def test_tox_splits_tests_from_lint(self) -> None:
+        """Plain `tox` runs python310 and lint; lint tools run only in the lint env."""
+        parser = self._tox_parser()
+        envlist = parser.get("tox", "envlist")
+        assert {"python310", "lint"} <= set(re.findall(r"[\w-]+", envlist)), f"envlist lacks python310/lint: {envlist}"
+        assert parser.has_section("testenv:lint"), "tox.ini needs a [testenv:lint] section"
+        lint = parser.get("testenv:lint", "commands", fallback="")
+        for tool in ("ruff format", "ruff check", "pip-licenses", "mypy", "bandit"):
+            assert tool in lint, f"[testenv:lint] commands must run {tool}"
+        base = parser.get("testenv", "commands")
+        assert "pytest" in base, "[testenv] commands must run pytest"
+        for tool in ("ruff", "mypy", "bandit", "pip-licenses"):
+            assert not re.search(rf"(?<![\w-]){tool}(?![\w-])", base), f"[testenv] commands must not run {tool}"
+
+    def test_ci_runs_lint_env(self) -> None:
+        jobs = self._workflow_jobs("ci.yaml")
+        runs = [str(step.get("run", "")) for job in jobs.values() for step in job.get("steps", [])]
+        assert any(re.search(r"tox\s+-e\s+lint\b", run) for run in runs), "ci.yaml needs a step running `tox -e lint`"
+
+    def test_ci_build_job_derives_workers_from_nproc(self) -> None:
+        steps = self._workflow_jobs("ci.yaml")["build"]["steps"]
+        assert any(
+            "nproc" in str(s.get("run", ""))
+            and "PYTEST_WORKERS" in str(s.get("run", ""))
+            and "GITHUB_ENV" in str(s.get("run", ""))
+            for s in steps
+        ), "build job must write nproc into PYTEST_WORKERS via $GITHUB_ENV"
+        hardcoded = [s for s in steps if "PYTEST_WORKERS" in (s.get("env") or {})]
+        assert not hardcoded, "no build step may hardcode PYTEST_WORKERS in env"
+
+    def test_release_license_write_runs_lint_env(self) -> None:
+        steps = [s for job in self._workflow_jobs("release.yaml").values() for s in job.get("steps", [])]
+        writers = [s for s in steps if "TOX_WRITE_THIRD_PARTY_LICENSES" in (s.get("env") or {})]
+        assert writers, "release.yaml needs a step setting TOX_WRITE_THIRD_PARTY_LICENSES"
+        for step in writers:
+            match = re.search(r"tox\b.*?-e\s+(\S+)", str(step.get("run", "")))
+            assert match and "lint" in match.group(1).split(","), (
+                f"license step must run tox -e with lint: {step.get('run')}"
+            )

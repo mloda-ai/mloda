@@ -9,7 +9,7 @@ import pyarrow as pa
 
 from mloda.core.api.plan_lock import _lock_text
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.steward import Extender, ExtenderHook, plan_structure_hash
+from mloda.steward import Extender, ExtenderHook, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, FeatureName, Index, JoinSpec, Link, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -85,7 +85,13 @@ def collect() -> dict[str, str]:
         {LockProbeLeftPandas, LockProbeRightArrow, LockProbeConsumer, LockProbeAnyFramework}
     )
     features: list[Feature | str] = [
-        "LockProbeConsumer",
+        Feature(
+            "LockProbeConsumer",
+            options={
+                "probe_set": {"alpha", "beta", "gamma", "delta", "epsilon"},
+                "probe_dict": {"x": {"q", "r", "s"}, "y": 2, "z": 3},
+            },
+        ),
         Feature("lock_probe_any_value", compute_framework="PandasDataFrame"),
         Feature("lock_probe_any_value", compute_framework="PyArrowTable"),
     ]
@@ -119,6 +125,9 @@ def collect() -> dict[str, str]:
         "order": json.dumps(order),
         "structure_hash": str(session.plan_context.structure_hash),
         "expected_structure_hash": plan_structure_hash(session.resolved_plan()),
+        "plan_content_hash": plan_content_hash(plan),
+        "content_hash": str(session.plan_context.content_hash),
+        "expected_content_hash": plan_content_hash(session.resolved_plan()),
     }
 
 

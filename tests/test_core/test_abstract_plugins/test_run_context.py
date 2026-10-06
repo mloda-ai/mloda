@@ -88,7 +88,7 @@ class TestPlanContext:
         )
 
     @pytest.mark.parametrize(
-        "field", ["plan_id", "tenant_id", "project_id", "principal", "created_at", "structure_hash"]
+        "field", ["plan_id", "tenant_id", "project_id", "principal", "created_at", "structure_hash", "content_hash"]
     )
     def test_is_frozen(self, field: str) -> None:
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -110,6 +110,16 @@ class TestPlanContext:
         assert hashed.structure_hash == "abc"
         assert hashed == plain
         assert hash(hashed) == hash(plain)
+
+    def test_content_hash_defaults_to_none_and_is_excluded_from_equality_and_hash(self) -> None:
+        plain = _plan_context()
+        hashed = dataclasses.replace(plain, content_hash="def")
+
+        assert plain.content_hash is None
+        assert hashed.content_hash == "def"
+        assert hashed == plain
+        assert hash(hashed) == hash(plain)
+        assert pickle.loads(pickle.dumps(hashed)).content_hash == "def"  # nosec B301
 
 
 class TestRunContextFrozen:

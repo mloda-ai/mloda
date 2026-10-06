@@ -83,6 +83,7 @@ from mloda.steward import (
     HookContext,
     PlanLockMismatchError,
     check_plan_lock,
+    plan_content_hash,
     plan_structure_hash,
     write_plan_lock,
 )
@@ -572,7 +573,13 @@ class TestPlanStepDataclass:
             "reader_data_access",
             "compute_framework_reason",
             "result_framework",
+            "join_keys",
         ]
+
+    def test_join_keys_defaults_to_none(self) -> None:
+        field = {f.name: f for f in dataclasses.fields(PlanStep)}["join_keys"]
+
+        assert field.default is None
 
     def test_join_type_defaults_to_none(self) -> None:
         """Compute and transform steps must not need to pass join_type."""
@@ -1508,6 +1515,7 @@ class TestPlanLock:
         check_plan_lock(second, lock)
 
         assert plan_structure_hash(first) == plan_structure_hash(second)
+        assert plan_content_hash(first) == plan_content_hash(second)
 
     @pytest.mark.parametrize(
         ("explain_plan", "differing_key"),
@@ -1553,6 +1561,12 @@ class TestPlanLock:
 
         assert outputs[0]["structure_hash"] != "None"
         assert outputs[0]["structure_hash"] == outputs[0]["expected_structure_hash"]
+
+        assert outputs[0]["content_hash"] != "None"
+        assert outputs[0]["content_hash"] == outputs[0]["expected_content_hash"]
+        assert outputs[0]["content_hash"] != outputs[0]["structure_hash"]
+        assert len({output["content_hash"] for output in outputs}) == 1
+        assert len({output["plan_content_hash"] for output in outputs}) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1616,6 +1630,8 @@ class TestJoinStepMapping:
         assert join.feature_group is PlanInfoLeftSource
         assert join.source_feature_group is PlanInfoRightSource
         assert join.join_type == "inner"
+        assert join.join_keys == ("plan_info_jid=plan_info_jid",)
+        assert all(step.join_keys is None for step in plan if step.step_kind != "join")
 
         assert join.feature_group_name == "PlanInfoLeftSource"
         assert join.source_feature_group_name == "PlanInfoRightSource"
@@ -1663,6 +1679,7 @@ class TestCrossFrameworkJoinStepMapping:
         assert join.feature_group is PlanInfoCrossLeftPandas
         assert join.source_feature_group is PlanInfoCrossRightArrow
         assert join.join_type == "inner"
+        assert join.join_keys == ("plan_info_xjid=plan_info_xjid",)
 
     def test_cross_framework_join_plan_has_a_transform_into_the_join_destination(self) -> None:
         plan = _prepare_cross_framework_join_session().resolved_plan()

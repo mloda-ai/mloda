@@ -497,22 +497,27 @@ def _side_path_prepare(
     mode: ParallelizationMode = ParallelizationMode.SYNC,
     extra_groups: set[type[FeatureGroup]] | None = None,
     consumer: type[FeatureGroup] = SidePathC,
+    root_b: type[FeatureGroup] = MultiLinkRootBSame,
+    compute_frameworks: list[type[ComputeFramework]] | None = None,
+    extra_options: dict[str, Any] | None = None,
+    features: list[Feature | str] | None = None,
+    link_factory: Any = Link.inner,
 ) -> Any:
-    options = {"sp_p": p_group.get_class_name(), "sp_direct": direct}
-    left, right = (MultiLinkRootBSame, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBSame)
+    options = {"sp_p": p_group.get_class_name(), "sp_direct": direct, **(extra_options or {})}
+    left, right = (root_b, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, root_b)
     return mloda.prepare(
-        [Feature(consumer.get_class_name(), options=options)],
-        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
-        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        features or [Feature(consumer.get_class_name(), options=options)],
+        links={link_factory(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+        compute_frameworks=compute_frameworks or [PandasDataFrame, PyArrowTable],
         parallelization_modes={mode},
         plugin_collector=PluginCollector.enabled_feature_groups(
-            {MultiLinkRootA, MultiLinkRootBSame, p_group, SidePathQ, consumer, *(extra_groups or set())}
+            {MultiLinkRootA, root_b, p_group, SidePathQ, consumer, *(extra_groups or set())}
         ),
     )
 
 
-def _side_path_values(results: Any) -> list[list[int]]:
-    c_name = SidePathC.get_class_name()
+def _side_path_values(results: Any, consumer: type[FeatureGroup] = SidePathC) -> list[list[int]]:
+    c_name = consumer.get_class_name()
     return [sorted(result[c_name].to_pylist()) for result in results if c_name in result.column_names]
 
 
@@ -627,36 +632,47 @@ def test_a_side_path_through_two_frameworks_into_one_consumer_raises_at_plan_tim
     assert "unlinked sources" not in message
 
 
-class SidePathTwoConsumerPandas(FeatureGroup):
-    """PyArrow consumer of the Pandas mid and root B."""
+def _side_path_b_column(data: Any) -> str:
+    return next(name for name in ("mlg_bd", "mlg_b") if name in data.column_names)
+
+
+class _SidePathBConsumer(FeatureGroup):
+    """Consumer of the mid named by READS and root B's column (option sp_b, default mlg_b)."""
+
+    READS: ClassVar[str] = ""
+    FRAMEWORKS: ClassVar[set[type[ComputeFramework]]] = {PyArrowTable}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("SidePathPandasP"), Feature("mlg_b")}
+        return {Feature(self.READS), Feature(options.get("sp_b") or "mlg_b")}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        total = pc.add(data.column("SidePathPandasP"), data.column("mlg_b"))
+        total = pc.add(data.column(cls.READS), data.column(_side_path_b_column(data)))
         return data.append_column(cls.get_class_name(), total)
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+        return cls.FRAMEWORKS
 
 
-class SidePathTwoConsumerArrow(FeatureGroup):
-    """PyArrow consumer of the PyArrow mid and root B."""
+class _SidePathDirectConsumer(_SidePathBConsumer):
+    """Consumer of root A and root B's column directly."""
 
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("SidePathR"), Feature("mlg_b")}
+    READS: ClassVar[str] = "mlg_a"
 
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        total = pc.add(data.column("SidePathR"), data.column("mlg_b"))
-        return data.append_column(cls.get_class_name(), total)
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+def _side_path_consumer(
+    name: str, reads: str, frameworks: set[type[ComputeFramework]], base: type[FeatureGroup] = _SidePathBConsumer
+) -> type[FeatureGroup]:
+    return type(name, (base,), {"READS": reads, "FRAMEWORKS": frameworks, "__module__": __name__})
+
+
+SidePathTwoConsumerPandas = _side_path_consumer("SidePathTwoConsumerPandas", "SidePathPandasP", {PyArrowTable})
+SidePathTwoConsumerArrow = _side_path_consumer("SidePathTwoConsumerArrow", "SidePathR", {PyArrowTable})
+SidePathCarrierArrow = _side_path_consumer("SidePathCarrierArrow", "SidePathPandasP", {PyArrowTable})
+SidePathCarrierSecond = _side_path_consumer("SidePathCarrierSecond", "SidePathPandasP", {SecondCfw})
+SidePathDirectArrow = _side_path_consumer("SidePathDirectArrow", "mlg_a", {PyArrowTable}, base=_SidePathDirectConsumer)
+SidePathDirectSecond = _side_path_consumer("SidePathDirectSecond", "mlg_a", {SecondCfw}, base=_SidePathDirectConsumer)
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
@@ -1195,3 +1211,197 @@ def test_one_sided_option_variants_over_one_link_join_each_variant_in_parallel_m
     assert _column_values(results, consumer.get_class_name()) == sorted(
         _tie_one_sided_expected(consumer, tag) for tag in ("a", "b")
     )
+
+
+_CARRIER_FRAMEWORKS = [PandasDataFrame, PyArrowTable, SecondCfw]
+_CARRIER_CONSUMERS = {
+    "carried_framework": (SidePathCarrierArrow, SidePathDirectArrow),
+    "other_side_framework": (SidePathCarrierSecond, SidePathDirectSecond),
+}
+_CARRIER_KIND_PARAMS = pytest.mark.parametrize("consumer_kind", list(_CARRIER_CONSUMERS))
+
+
+def _carrier_alone(
+    carrier: type[FeatureGroup],
+    swap_link_sides: bool,
+    mode: ParallelizationMode = ParallelizationMode.SYNC,
+    link_factory: Any = Link.inner,
+) -> Any:
+    return _side_path_prepare(
+        SidePathPandasP,
+        False,
+        swap_link_sides,
+        mode,
+        consumer=carrier,
+        root_b=MultiLinkRootBDistinct,
+        compute_frameworks=_CARRIER_FRAMEWORKS,
+        extra_options={"sp_b": "mlg_bd"},
+        link_factory=link_factory,
+    )
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize(
+    "mode, swap_link_sides, consumer_kind",
+    [
+        pytest.param(ParallelizationMode.SYNC, False, "carried_framework", id="sync_a_b_carried_framework"),
+        pytest.param(ParallelizationMode.SYNC, True, "carried_framework", id="sync_b_a_carried_framework"),
+        pytest.param(ParallelizationMode.SYNC, False, "other_side_framework", id="sync_a_b_other_side_framework"),
+        pytest.param(ParallelizationMode.SYNC, True, "other_side_framework", id="sync_b_a_other_side_framework"),
+        pytest.param(ParallelizationMode.THREADING, False, "carried_framework", id="threading_a_b_carried_framework"),
+        pytest.param(ParallelizationMode.THREADING, True, "carried_framework", id="threading_b_a_carried_framework"),
+        pytest.param(
+            ParallelizationMode.THREADING, False, "other_side_framework", id="threading_a_b_other_side_framework"
+        ),
+        pytest.param(
+            ParallelizationMode.MULTIPROCESSING, False, "carried_framework", id="multiprocessing_a_b_carried_framework"
+        ),
+    ],
+)
+def test_a_carrier_consumer_over_a_link_across_distinct_frameworks_is_correct(
+    flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool, consumer_kind: str
+) -> None:
+    carrier = _CARRIER_CONSUMERS[consumer_kind][0]
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+
+    results = _carrier_alone(carrier, swap_link_sides, mode).run(parallelization_modes={mode}, flight_server=server)
+
+    assert _side_path_values(results, carrier) == [[110, 220, 330]]
+
+
+def _carrier_with_direct(
+    carrier: type[FeatureGroup], direct: type[FeatureGroup], swap_link_sides: bool, mode: ParallelizationMode
+) -> Any:
+    options = {"sp_b": "mlg_bd"}
+    return _side_path_prepare(
+        SidePathPandasP,
+        False,
+        swap_link_sides,
+        mode,
+        extra_groups={direct},
+        consumer=carrier,
+        root_b=MultiLinkRootBDistinct,
+        compute_frameworks=_CARRIER_FRAMEWORKS,
+        features=[
+            Feature(carrier.get_class_name(), options=options),
+            Feature(direct.get_class_name(), options=options),
+        ],
+    )
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize(
+    "mode, swap_link_sides, consumer_kind",
+    [
+        pytest.param(mode, swap, kind, id=f"{name}-{swap_id}")
+        for name, mode, kind in (
+            ("sync_carried_framework", ParallelizationMode.SYNC, "carried_framework"),
+            ("sync_other_side_framework", ParallelizationMode.SYNC, "other_side_framework"),
+            ("threading", ParallelizationMode.THREADING, "carried_framework"),
+        )
+        for swap, swap_id in ((False, "a_b"), (True, "b_a"))
+    ]
+    + [pytest.param(ParallelizationMode.MULTIPROCESSING, False, "carried_framework", id="multiprocessing-a_b")],
+)
+def test_a_carrier_consumer_next_to_a_direct_consumer_of_one_link_waits_only_on_its_join(
+    flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool, consumer_kind: str
+) -> None:
+    carrier, direct = _CARRIER_CONSUMERS[consumer_kind]
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+
+    session = _carrier_with_direct(carrier, direct, swap_link_sides, mode)
+
+    assert session.engine is not None
+    join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
+    assert len(join_steps) == 2
+    assert len([step for step in join_steps if step.carriers]) == 1
+    _assert_consumers_wait_only_on_their_joins(session, (carrier, direct))
+
+    results = session.run(parallelization_modes={mode}, flight_server=server)
+
+    assert _side_path_values(results, carrier) == [[110, 220, 330]]
+    assert _side_path_values(results, direct) == [[11, 22, 33]]
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@_CARRIER_KIND_PARAMS
+def test_the_carrier_join_is_planned_on_the_consumers_framework(consumer_kind: str, swap_link_sides: bool) -> None:
+    carrier = _CARRIER_CONSUMERS[consumer_kind][0]
+    session = _carrier_alone(carrier, swap_link_sides)
+
+    assert session.engine is not None
+    planner = session.engine.execution_planner
+    carried = [step for step in planner if isinstance(step, JoinStep) and step.carriers]
+    assert len(carried) == 1
+    frameworks = carrier.compute_framework_rule()
+    assert frameworks is not None
+    consumer_framework = next(iter(frameworks))
+    assert carried[0].destination_framework is consumer_framework
+    records = [record for record in planner.resolved_join_plan.records if record.token == carried[0].uuid]
+    assert [record.destination_framework for record in records] == [consumer_framework]
+    sides = [(record.left, record.right) for record in records]
+    for left, right in sides:
+        for side in (left, right):
+            expected = PyArrowTable if side.feature_group is MultiLinkRootA else SecondCfw
+            assert side.declared_frameworks == {expected}
+    assert all(record.destination_uuids.isdisjoint(record.source_uuids) for record in records)
+    assert all(record.destination_uuids and record.source_uuids for record in records)
+
+
+@pytest.mark.parametrize("link_factory", [Link.left, Link.right], ids=["left", "right"])
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@_CARRIER_KIND_PARAMS
+def test_a_carrier_consumer_over_a_left_or_right_link_matches_the_inner_values(
+    consumer_kind: str, swap_link_sides: bool, link_factory: Any
+) -> None:
+    carrier = _CARRIER_CONSUMERS[consumer_kind][0]
+
+    results = _carrier_alone(carrier, swap_link_sides, link_factory=link_factory).run()
+
+    assert _side_path_values(results, carrier) == [[110, 220, 330]]
+
+
+class SidePathPandasBP(_SidePathP):
+    """Pandas mid reading root B (mlg_bd)."""
+
+    FRAMEWORKS: ClassVar[set[type[ComputeFramework]]] = {PandasDataFrame}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_bd")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["mlg_bd"] * 100
+        return data
+
+
+class SidePathCarrierFromB(FeatureGroup):
+    """PyArrow consumer of the B-side Pandas mid and root A."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathPandasBP"), Feature("mlg_a")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.add(data.column("SidePathPandasBP"), data.column("mlg_a"))
+        return data.append_column(cls.get_class_name(), total)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_carrier_descending_from_the_b_side_is_correct(swap_link_sides: bool) -> None:
+    results = _side_path_prepare(
+        SidePathPandasBP,
+        False,
+        swap_link_sides,
+        consumer=SidePathCarrierFromB,
+        root_b=MultiLinkRootBDistinct,
+        compute_frameworks=_CARRIER_FRAMEWORKS,
+    ).run()
+
+    assert _side_path_values(results, SidePathCarrierFromB) == [[1001, 2002, 3003]]

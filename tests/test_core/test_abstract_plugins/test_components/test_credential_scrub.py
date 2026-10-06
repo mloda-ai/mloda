@@ -372,6 +372,22 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["hunter2z9"],
         ["'host': 'h'"],
     ),
+    ("over_depth_nesting", "{'password': (a, (b, (c, (d, (e, (f, 'hunter2z9')))))), 'user': 'bob'}", ["hunter2z9"], []),
+    (
+        "over_depth_tuple_then_secret",
+        "{'password': ('a', ((((('b',),),),),), 'hunter2z9')}",
+        ["hunter2z9"],
+        [],
+    ),
+    ("over_depth_list_then_secret", "{'password': ['a', [[[['b']]]], 'hunter2z9']}", ["hunter2z9"], []),
+    (
+        "over_depth_mixed_tuple_then_secret",
+        "{'password': ('a', ('b', ('c', ('d', ('e',), 'x'), 'y'), 'z'), 'hunter2z9')}",
+        ["hunter2z9"],
+        [],
+    ),
+    ("truncated_text", "{'password': ('a', ('b', 'hunter2z9'", ["hunter2z9"], []),
+    ("stray_foreign_closer", "{'password': [a)b, 'hunter2z9']}", ["hunter2z9"], []),
 ]
 
 
@@ -401,6 +417,24 @@ DICT_KEY_SCRUB_EXACT_CASES: list[tuple[str, str, str]] = [
     ("dict_repr_password_list_quoted_bracket", "{'password': ['a]b', 'hunter2z9']}", "{'password': '***'}"),
     ("dict_repr_password_set_quoted_brace", "{'password': {'a}b', 'hunter2z9'}}", "{'password': '***'}"),
     ("dict_repr_token_repr_call_value", "{'token': Secret(value='hunter2z9')}", "{'token': '***'}"),
+    ("dict_repr_password_tuple_in_tuple", "{'password': ('a', ('b', 'c'), 'hunter2z9')}", "{'password': '***'}"),
+    ("dict_repr_password_list_in_dict", "{'password': {'k': ['a', 'b'], 'z': 'hunter2z9'}}", "{'password': '***'}"),
+    ("dict_repr_password_dict_in_list", "{'password': [{'k': 'a'}, 'hunter2z9']}", "{'password': '***'}"),
+    (
+        "dict_repr_password_nested_tuple_keeps_sibling",
+        "{'password': ('a', ('b',), 'x9'), 'user': 'bob'}",
+        "{'password': '***', 'user': 'bob'}",
+    ),
+    (
+        "dict_repr_password_nested_quoted_closer",
+        "{'password': ('a', (')', 'z'), 's3cr3t')}",
+        "{'password': '***'}",
+    ),
+    (
+        "dict_repr_password_three_level_nesting",
+        "{'password': ('a', ('b', ['c', 'd']), 'hunter2z9'), 'user': 'bob'}",
+        "{'password': '***', 'user': 'bob'}",
+    ),
 ]
 
 
@@ -539,6 +573,7 @@ def test_text_without_url_is_unchanged() -> None:
         "authorization=eyJhbGciOi.x.y",
         "Bearer abc.def.ghi",
         "{'password': ('a', 'hunter2z9')}",
+        "{'password': ('a', ('b', 'c'), 'hunter2z9'), 'user': 'bob'}",
         "Authorization: NTLM TlRMTVNTUAAB",
         "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/x, SignedHeaders=host, Signature=abc123def",
         "{'Authorization': 'Digest username=\"u\", response=\"hunter2z9\"', 'host': 'h'}",
@@ -686,12 +721,26 @@ def test_repeated_unterminated_token_brace_scrubs_fast() -> None:
     assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated unterminated token brace"
 
 
-def test_repeated_unterminated_password_brace_scrubs_fast() -> None:
-    text = "password={ " * 4400
+@pytest.mark.parametrize(
+    "text, what",
+    [
+        ("password={ " * 4400, "a repeated unterminated password brace"),
+        ("{'password': ((" + ",'password': ((x" * 5000, "repeated unterminated nested containers"),
+        ("{'password': " + "((a)," * 5000 + ")}", "many balanced nested containers"),
+        ("{'password': " + "((((((a," * 5000, "repeated over-depth unterminated containers"),
+    ],
+    ids=[
+        "unterminated_password_brace",
+        "unterminated_nested_container",
+        "balanced_nested_containers",
+        "over_depth_unterminated_containers",
+    ],
+)
+def test_repeated_unterminated_password_brace_scrubs_fast(text: str, what: str) -> None:
     start = time.perf_counter()
     scrub_credentials(text)
     elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on a repeated unterminated password brace"
+    assert elapsed < 1.0, f"scrub_credentials took {elapsed:.3f}s on {what}"
 
 
 def test_unterminated_password_brace_masks_to_end_of_line() -> None:

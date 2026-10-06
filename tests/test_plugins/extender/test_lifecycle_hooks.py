@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.steward import FeatureResolutionError, PlanStep, plan_structure_hash
+from mloda.steward import FeatureResolutionError, PlanStep, plan_content_hash, plan_structure_hash
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -173,6 +173,11 @@ class TestHookArguments:
         assert complete[2].structure_hash == expected
         assert run_start[3].structure_hash == expected
         assert session.plan_context.structure_hash == expected
+        expected_content = plan_content_hash(session.resolved_plan())
+        assert start[2].content_hash is None
+        assert complete[2].content_hash == expected_content
+        assert run_start[3].content_hash == expected_content
+        assert session.plan_context.content_hash == expected_content
         assert start[2] == complete[2]
         assert start[2].plan_id == complete[2].plan_id
 
@@ -191,6 +196,7 @@ class TestHookArguments:
         (complete,) = [e for e in log if e[1] == "plan_complete"]
         assert complete[3].status == "failed"
         assert complete[2].structure_hash is None
+        assert complete[2].content_hash is None
 
     def test_a_session_without_extenders_has_no_structure_hash(self) -> None:
         session = mloda.prepare(
@@ -201,6 +207,7 @@ class TestHookArguments:
         )
 
         assert session.plan_context.structure_hash is None
+        assert session.plan_context.content_hash is None
 
     def test_plan_start_fires_before_the_match_hook_and_plan_complete_after_it(self) -> None:
         log: list[tuple[Any, ...]] = []

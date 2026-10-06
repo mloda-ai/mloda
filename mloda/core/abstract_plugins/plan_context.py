@@ -12,3 +12,4 @@ class PlanContext:
     principal: str | None
     created_at: datetime
     structure_hash: str | None = field(default=None, compare=False)
+    content_hash: str | None = field(default=None, compare=False)

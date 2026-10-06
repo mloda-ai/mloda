@@ -955,9 +955,7 @@ _TFS_DB_CASES = [
 _TFS_DAC = pytest.mark.parametrize("with_dac", [False, True], ids=["no_dac", "dac_without_connection"])
 
 
-def _tfs_request(
-    fw_name: str, consumer: type[FeatureGroup], with_dac: bool, tmp_path: Path
-) -> dict[str, Any]:
+def _tfs_request(fw_name: str, consumer: type[FeatureGroup], with_dac: bool, tmp_path: Path) -> dict[str, Any]:
     if fw_name == "DuckDBFramework":
         pytest.importorskip("duckdb")
     return {

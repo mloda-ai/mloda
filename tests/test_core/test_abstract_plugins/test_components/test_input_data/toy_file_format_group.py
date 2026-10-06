@@ -79,11 +79,11 @@ class ToyFileFormatFG(ReadFileFG):
         return [n for n in names if n]
 
 
-def _load_pyarrow(match: SourceMatch, features: Any) -> pa.Table:
+def _load_pyarrow(group: Any, match: SourceMatch, features: Any) -> pa.Table:
     return pa.table(read_toy_file(match.access, tuple(sorted(features.get_all_names()))))
 
 
-def _load_dict(match: SourceMatch, features: Any) -> dict[str, list[Any]]:
+def _load_dict(group: Any, match: SourceMatch, features: Any) -> dict[str, list[Any]]:
     return read_toy_file(match.access, tuple(sorted(features.get_all_names())))
 
 

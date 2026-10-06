@@ -134,7 +134,7 @@ class TestFormatGroupsReadLikePyArrow:
         loader = group._loader_for(PyArrowTable)
 
         assert loader is not None
-        result = loader(SourceMatch(source=str(path), access=str(path)), _Features(_WANTED))
+        result = loader(group, SourceMatch(source=str(path), access=str(path)), _Features(_WANTED))
         whole_file = class_name in ("CsvFG", "JsonFG")
         assert result.to_pydict() == self._expected(reader, path, whole_file)
 
@@ -163,4 +163,4 @@ class TestFormatGroupsReadLikePyArrow:
         assert loader is not None
         expected = self._expected(reader, path, class_name == "JsonFG")
         assert Renamed.load_neutral(match, _Features(_WANTED)).to_pydict() == expected
-        assert loader(match, _Features(_WANTED)).to_pydict() == expected
+        assert loader(Renamed, match, _Features(_WANTED)).to_pydict() == expected

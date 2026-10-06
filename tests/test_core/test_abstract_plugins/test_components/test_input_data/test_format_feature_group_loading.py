@@ -30,7 +30,7 @@ def _run(group: type, frameworks: Any = None, column: str = "toyfmt_ld") -> list
     )
 
 
-def _loader(match: SourceMatch, features: Any) -> Any:
+def _loader(group: Any, match: SourceMatch, features: Any) -> Any:
     return SENTINEL
 
 
@@ -62,7 +62,7 @@ class TestRegisterLoader:
 
     def test_same_framework_on_a_subclass_is_allowed_and_wins(self, tmp_path: Path) -> None:
         parent = neutral_csv_group(tmp_path / "n.csv")
-        parent.register_loader(PythonDictFramework, lambda m, f: [{"toyfmt_ld": 1}])
+        parent.register_loader(PythonDictFramework, lambda g, m, f: [{"toyfmt_ld": 1}])
 
         class _Child(parent):  # type: ignore[valid-type, misc]
             pass
@@ -73,12 +73,19 @@ class TestRegisterLoader:
 
     def test_inherited_loader_is_found_through_the_mro(self, tmp_path: Path) -> None:
         parent = neutral_csv_group(tmp_path / "n.csv")
-        parent.register_loader(PythonDictFramework, _loader)
+        groups: list[Any] = []
+
+        def recording(group: Any, match: SourceMatch, features: Any) -> Any:
+            groups.append(group)
+            return SENTINEL
+
+        parent.register_loader(PythonDictFramework, recording)
 
         class _Child(parent):  # type: ignore[valid-type, misc]
             pass
 
         assert column_values(_run(_Child), "toyfmt_ld") == [111, 222]
+        assert groups == [_Child]
 
     def test_loader_of_an_unavailable_framework_is_not_counted(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

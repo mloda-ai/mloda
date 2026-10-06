@@ -472,7 +472,9 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
         )
         if loader_value is not None:
-            getattr(sub, "register_loader")(PyArrowTable, lambda match, features: pa.table({column: [loader_value]}))
+            getattr(sub, "register_loader")(
+                PyArrowTable, lambda group, match, features: pa.table({column: [loader_value]})
+            )
         result = mloda.run_all(
             [Feature(column, Options({sub_name: str(self.own_path)}))],
             compute_frameworks=[PyArrowTable],

@@ -631,6 +631,7 @@ class _PlanConsumer(FeatureGroup):
     INPUTS: ClassVar[tuple[str, ...]] = ()
     OUTPUT: ClassVar[str] = ""
     FW_NAME: ClassVar[str | None] = None
+    RULE: ClassVar[tuple[str, ...]] = ()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name) for name in self.INPUTS}
@@ -641,6 +642,8 @@ class _PlanConsumer(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        if cls.RULE:
+            return {_load_framework(_MODULE_OF[name], name) for name in cls.RULE}
         return None if cls.FW_NAME is None else {_load_framework(_MODULE_OF[cls.FW_NAME], cls.FW_NAME)}
 
     @classmethod
@@ -1322,3 +1325,387 @@ def test_pinned_and_unpinned_request_with_differing_options_stay_two_steps() -> 
     _, steps = _shared_root_steps([pinned, PinnedUnpinnedSharedRootFG.NAME])
 
     assert len(steps) == 2
+
+
+# --- a step whose parents already run in a connection-required framework keeps it -------------------
+
+_BD_DUCK_PYARROW = ("DuckDBFramework", "PyArrowTable")
+
+
+class _BdDuckRoot(_PlanRoot):
+    """DuckDB root serving DATA as a relation; CONN (when set) is the shared connection."""
+
+    FW_NAME = "DuckDBFramework"
+    DATA: ClassVar[dict[str, list[int]]] = {}
+    CONN: ClassVar[Any] = None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        import duckdb
+
+        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
+        return DuckdbRelation.from_dict(cls.CONN or duckdb.connect(), cls.DATA)
+
+
+class BdDuckRoot(_BdDuckRoot):
+    NAMES = ("bd_root",)
+    DATA = {"bd_root": [1, 2, 3]}
+
+
+class BdArrowRoot(_PlanRoot):
+    NAMES = ("bd_arrow_root",)
+    FW_NAME = "PyArrowTable"
+
+
+class BdDuckConsumer(_PlanConsumer):
+    INPUTS = ("bd_root",)
+    OUTPUT = "bd_out"
+    RULE = _BD_DUCK_PYARROW
+    SEEN: ClassVar[list[str]] = []
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.SEEN.append(type(data).__name__)
+        return data.project('"bd_root" AS "bd_out"')
+
+
+class BdArrowOutConsumer(_PlanConsumer):
+    INPUTS = ("bd_root",)
+    OUTPUT = "bd_out_np"
+    RULE = _BD_DUCK_PYARROW
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"bd_out_np": data.to_arrow_table()["bd_root"]})
+
+
+class BdArrowRootConsumer(_PlanConsumer):
+    INPUTS = ("bd_arrow_root",)
+    OUTPUT = "bd_pa_out"
+    RULE = _BD_DUCK_PYARROW
+
+
+class BdLeftRoot(_BdDuckRoot):
+    NAMES = ("bd_l_val", "bd_lidx")
+    INDEXES = ("bd_lidx",)
+    DATA = {"bd_l_val": [10, 20, 30], "bd_lidx": [1, 2, 3]}
+
+
+class BdRightRoot(_BdDuckRoot):
+    NAMES = ("bd_r_val", "bd_ridx")
+    INDEXES = ("bd_ridx",)
+    DATA = {"bd_r_val": [4, 5, 6], "bd_ridx": [1, 2, 3]}
+
+
+class BdJoinConsumer(_PlanConsumer):
+    INPUTS = ("bd_l_val", "bd_r_val")
+    OUTPUT = "bd_join_out"
+    RULE = _BD_DUCK_PYARROW
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.project('"bd_l_val" AS "bd_join_out"')
+
+
+class BdMixedArrowRoot(_PlanRoot):
+    NAMES = ("bd_mx_arrow", "bd_mx_ridx")
+    INDEXES = ("bd_mx_ridx",)
+    FW_NAME = "PyArrowTable"
+
+
+class BdMixedDuckRoot(_PlanRoot):
+    NAMES = ("bd_mx_duck", "bd_mx_lidx")
+    INDEXES = ("bd_mx_lidx",)
+    FW_NAME = "DuckDBFramework"
+
+
+class BdMixedConsumer(_PlanConsumer):
+    INPUTS = ("bd_mx_duck", "bd_mx_arrow")
+    OUTPUT = "bd_mx_out"
+    RULE = _BD_DUCK_PYARROW
+
+
+class BdDacConsumer(_PlanConsumer):
+    INPUTS = ("bd_arrow_root",)
+    OUTPUT = "bd_dac_out"
+    RULE = ("DuckDBFramework", "PandasDataFrame")
+
+
+_BD_ORDERS = [
+    pytest.param(["PyArrowTable", "DuckDBFramework"], id="pyarrow_first"),
+    pytest.param(["DuckDBFramework", "PyArrowTable"], id="duckdb_first"),
+]
+
+
+def _bd_frameworks(order: list[str]) -> list[type[ComputeFramework]]:
+    pytest.importorskip("duckdb")
+    return [_load_framework(_MODULE_OF[name], name) for name in order]
+
+
+def _bd_values(frame: Any) -> dict[str, list[Any]]:
+    table = frame.to_arrow_table() if hasattr(frame, "to_arrow_table") else frame
+    return {name: table[name].to_pylist() for name in table.column_names}
+
+
+@pytest.mark.parametrize("order", _BD_ORDERS)
+def test_a_consumer_of_a_duckdb_native_parent_plans_on_duckdb_and_receives_the_relation(
+    order: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+    monkeypatch.setattr(BdDuckConsumer, "SEEN", seen)
+    frameworks = _bd_frameworks(order)
+    collector = PluginCollector.enabled_feature_groups({BdDuckRoot, BdDuckConsumer})
+
+    steps = _plan(["bd_out"], {BdDuckRoot, BdDuckConsumer}, frameworks)
+    assert _compute_names(steps, BdDuckConsumer) == {"DuckDBFramework"}
+    assert _transforms(steps) == []
+
+    result = mloda.run_all(["bd_out"], compute_frameworks=frameworks, plugin_collector=collector)
+    assert seen == ["DuckdbRelation"]
+    assert _bd_values(result[0]) == {"bd_out": [1, 2, 3]}
+
+
+def test_a_borrowed_duckdb_step_returning_arrow_converts_on_the_adopted_connection() -> None:
+    result = mloda.run_all(
+        ["bd_out_np"],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        plugin_collector=PluginCollector.enabled_feature_groups({BdDuckRoot, BdArrowOutConsumer}),
+    )
+
+    assert _bd_values(result[0]) == {"bd_out_np": [1, 2, 3]}
+
+
+def test_a_join_of_duckdb_native_parents_on_one_connection_runs_on_the_adopted_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    monkeypatch.setattr(_BdDuckRoot, "CONN", duckdb.connect())
+    links = {Link.inner(JoinSpec(BdLeftRoot, "bd_lidx"), JoinSpec(BdRightRoot, "bd_ridx"))}
+
+    result = mloda.run_all(
+        ["bd_join_out"],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        links=links,
+        plugin_collector=PluginCollector.enabled_feature_groups({BdLeftRoot, BdRightRoot, BdJoinConsumer}),
+    )
+
+    assert sorted(_bd_values(result[0])["bd_join_out"]) == [10, 20, 30]
+
+
+_BD_MIXED_LINKS = {Link.inner(JoinSpec(BdMixedDuckRoot, "bd_mx_lidx"), JoinSpec(BdMixedArrowRoot, "bd_mx_ridx"))}
+
+
+@pytest.mark.parametrize("order", _BD_ORDERS)
+@pytest.mark.parametrize(
+    ("feature", "groups", "consumer", "links"),
+    [
+        pytest.param("bd_pa_out", {BdArrowRoot, BdArrowRootConsumer}, BdArrowRootConsumer, None, id="pyarrow_only"),
+        pytest.param(
+            "bd_mx_out",
+            {BdMixedDuckRoot, BdMixedArrowRoot, BdMixedConsumer},
+            BdMixedConsumer,
+            _BD_MIXED_LINKS,
+            id="duckdb_and_pyarrow",
+        ),
+    ],
+)
+def test_a_consumer_with_a_pyarrow_parent_and_no_connection_plans_on_pyarrow(
+    order: list[str],
+    feature: str,
+    groups: set[type[FeatureGroup]],
+    consumer: type[FeatureGroup],
+    links: set[Link] | None,
+) -> None:
+    steps = _plan([feature], groups, _bd_frameworks(order), links=links)
+
+    assert _compute_names(steps, consumer) == {"PyArrowTable"}
+
+
+def _bd_dac_names(connections: int | None) -> set[str | None]:
+    frameworks = _bd_frameworks(["DuckDBFramework", "PandasDataFrame", "PyArrowTable"])
+    access = None
+    if connections is not None:
+        import duckdb
+
+        access = DataAccessCollection(connections={duckdb.connect() for _ in range(connections)})
+    steps = mloda.explain(
+        ["bd_dac_out"],
+        compute_frameworks=frameworks,
+        data_access_collection=access,
+        plugin_collector=PluginCollector.enabled_feature_groups({BdArrowRoot, BdDacConsumer}),
+    )
+    return _compute_names(steps, BdDacConsumer)
+
+
+@pytest.mark.parametrize(
+    ("connections", "expected"),
+    [(1, "DuckDBFramework"), (None, "PandasDataFrame"), (2, "PandasDataFrame")],
+    ids=["one_connection", "no_dac", "two_connections"],
+)
+def test_the_dac_connection_lets_a_consumer_with_parents_run_on_duckdb(connections: int | None, expected: str) -> None:
+    assert _bd_dac_names(connections) == {expected}
+
+
+def test_a_consumer_narrowed_to_a_pinned_filter_does_not_borrow_duckdb() -> None:
+    global_filter = GlobalFilter()
+    global_filter.add_filter(Feature("bd_out", compute_framework="PyArrowTable"), "min", {"value": 2})
+
+    steps = mloda.explain(
+        ["bd_out"],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        global_filter=global_filter,
+        plugin_collector=PluginCollector.enabled_feature_groups({BdDuckRoot, BdDuckConsumer}),
+    )
+
+    assert _compute_names(steps, BdDuckConsumer) == {"PyArrowTable"}
+
+
+class BdOptLeftRoot(_PlanRoot):
+    NAMES = ("bd_o_l_val", "bd_o_lidx")
+    INDEXES = ("bd_o_lidx",)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"bd_o_l_val": [10, 20, 30], "bd_o_lidx": [1, 2, 3]})
+
+
+class BdOptRightRoot(_PlanRoot):
+    NAMES = ("bd_o_r_val", "bd_o_ridx")
+    INDEXES = ("bd_o_ridx",)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"bd_o_r_val": [4, 5, 6], "bd_o_ridx": [1, 2, 3]})
+
+
+class BdOptConsumer(_PlanConsumer):
+    OUTPUT = "bd_o_out"
+    RULE = _BD_DUCK_PYARROW
+    CONNS: ClassVar[tuple[Any, Any]] = (None, None)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        left, right = self.CONNS
+        return {
+            Feature("bd_o_l_val", options=Options(context={"BdOptLeftRoot": left})),
+            Feature("bd_o_r_val", options=Options(context={"BdOptRightRoot": right})),
+        }
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if hasattr(data, "project"):
+            return data.project('"bd_o_l_val" AS "bd_o_out"')
+        return pa.table({"bd_o_out": data["bd_o_l_val"]})
+
+
+@pytest.mark.parametrize("shared", [False, True], ids=["different_connections", "one_connection"])
+def test_a_consumer_of_parents_with_option_connections_borrows_duckdb_only_on_one_connection(
+    shared: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    duckdb = pytest.importorskip("duckdb")
+    left = duckdb.connect()
+    monkeypatch.setattr(BdOptConsumer, "CONNS", (left, left if shared else duckdb.connect()))
+    links = {Link.inner(JoinSpec(BdOptLeftRoot, "bd_o_lidx"), JoinSpec(BdOptRightRoot, "bd_o_ridx"))}
+    groups = {BdOptLeftRoot, BdOptRightRoot, BdOptConsumer}
+    frameworks = _bd_frameworks(["DuckDBFramework", "PyArrowTable"])
+
+    steps = _plan(["bd_o_out"], groups, frameworks, links=links)
+    if not shared:
+        assert "DuckDBFramework" not in _compute_names(steps, BdOptConsumer)
+
+    result = mloda.run_all(
+        ["bd_o_out"],
+        compute_frameworks=frameworks,
+        links=links,
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
+    assert sorted(_bd_values(result[0])["bd_o_out"]) == [10, 20, 30]
+
+
+class BdDacMixConsumer(_PlanConsumer):
+    INPUTS = ("bd_l_val", "bd_mx_arrow")
+    OUTPUT = "bd_dm_out"
+    RULE = _BD_DUCK_PYARROW
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if hasattr(data, "project"):
+            return data.project('"bd_l_val" AS "bd_dm_out"')
+        return pa.table({"bd_dm_out": data["bd_l_val"]})
+
+
+def test_a_dac_connection_differing_from_a_parents_own_connection_keeps_the_consumer_on_pyarrow() -> None:
+    duckdb = pytest.importorskip("duckdb")
+    links = {Link.inner(JoinSpec(BdLeftRoot, "bd_lidx"), JoinSpec(BdMixedArrowRoot, "bd_mx_ridx"))}
+    groups = {BdLeftRoot, BdMixedArrowRoot, BdDacMixConsumer}
+    frameworks = _bd_frameworks(["DuckDBFramework", "PyArrowTable"])
+
+    def access() -> DataAccessCollection:
+        return DataAccessCollection(connections={duckdb.connect()})
+
+    steps = mloda.explain(
+        ["bd_dm_out"],
+        compute_frameworks=frameworks,
+        links=links,
+        data_access_collection=access(),
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
+    assert _compute_names(steps, BdDacMixConsumer) == {"PyArrowTable"}
+
+    result = mloda.run_all(
+        ["bd_dm_out"],
+        compute_frameworks=frameworks,
+        links=links,
+        data_access_collection=access(),
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
+    assert sorted(_bd_values(result[0])["bd_dm_out"]) == [10, 20, 30]
+
+
+class BdDacRunConsumer(_PlanConsumer):
+    INPUTS = ("bd_arrow_root",)
+    OUTPUT = "bd_dac_run_out"
+    RULE = ("DuckDBFramework", "PandasDataFrame")
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"bd_dac_run_out": data.to_arrow_table()["bd_arrow_root"]})
+
+
+def test_a_consumer_on_the_one_dac_connection_receives_a_duckdb_relation_and_runs() -> None:
+    duckdb = pytest.importorskip("duckdb")
+
+    result = mloda.run_all(
+        ["bd_dac_run_out"],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PandasDataFrame", "PyArrowTable"]),
+        data_access_collection=DataAccessCollection(connections={duckdb.connect()}),
+        plugin_collector=PluginCollector.enabled_feature_groups({BdArrowRoot, BdDacRunConsumer}),
+    )
+
+    assert _bd_values(result[0]) == {"bd_dac_run_out": [1, 2, 3]}
+
+
+class BdSqliteRoot(_PlanRoot):
+    NAMES = ("bd_sq_root",)
+    FW_NAME = "SqliteFramework"
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+
+        return SqliteRelation.from_dict(sqlite3.connect(":memory:"), {"bd_sq_root": [1, 2, 3]})
+
+
+class BdSqliteConsumer(_PlanConsumer):
+    INPUTS = ("bd_sq_root",)
+    OUTPUT = "bd_sq_out"
+    RULE = ("SqliteFramework", "PyArrowTable")
+
+
+def test_a_consumer_of_a_sqlite_native_parent_plans_on_sqlite_without_a_transform() -> None:
+    frameworks = [_load_framework(_MODULE_OF[name], name) for name in ("PyArrowTable", "SqliteFramework")]
+
+    steps = _plan(["bd_sq_out"], {BdSqliteRoot, BdSqliteConsumer}, frameworks)
+
+    assert _compute_names(steps, BdSqliteConsumer) == {"SqliteFramework"}
+    assert _transforms(steps) == []

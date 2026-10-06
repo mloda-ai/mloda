@@ -337,6 +337,11 @@ class ComputeFramework(ABC):
         return False
 
     @classmethod
+    def connection_of(cls, data: Any) -> Any | None:
+        """The connection carried by native `data`, or None."""
+        return None
+
+    @classmethod
     def pick_connection_from_dac(cls, data_access_collection: Any, options: Any | None = None) -> Any | None:
         """Pick the matching connection for this framework from the DataAccessCollection.
 
@@ -393,15 +398,19 @@ class ComputeFramework(ABC):
         # every one does this
         features = self.set_filter_engine(features)
         features = self.set_mask_engine(features)
+        self._adopt_connection(self.data)
         data = self.run_calculate_feature(feature_group, features)
 
         names = features.get_all_names()
 
         if not isinstance(data, self.expected_data_framework()):
             # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
-            self.set_framework_connection_object(features.get_options_key(feature_group.get_class_name()))
+            connection = features.get_options_key(feature_group.get_class_name())
+            if connection is not None or self.framework_connection_object is None:
+                self.set_framework_connection_object(connection)
             data = self.transform(data, names)
         else:
+            self._adopt_connection(data)
             # already the native type: transform is skipped, so enforce the framework's
             # native-representation contract here before it is stored / filtered.
             self.validate_native_data(data)
@@ -425,6 +434,11 @@ class ComputeFramework(ABC):
         # upload finished dataset to flight server
         self.data = self.upload_finished_data(location)
         return self.data
+
+    def _adopt_connection(self, data: Any) -> None:
+        carried = self.connection_of(data)
+        if carried is not None and self.framework_connection_object is None:
+            self.set_framework_connection_object(carried)
 
     @final
     def run_final_filter(self, data: Any, features: Any, feature_group: Any = None) -> Any:

@@ -85,6 +85,10 @@ class DuckDBFramework(ComputeFramework):
     def _connection_matches(cls, conn: Any) -> bool:
         return duckdb is not None and isinstance(conn, duckdb.DuckDBPyConnection)
 
+    @classmethod
+    def connection_of(cls, data: Any) -> Any | None:
+        return data.connection if isinstance(data, DuckdbRelation) else None
+
     @staticmethod
     def is_available() -> bool:
         """duckdb alone is not enough: data only enters the framework through Arrow (transform() from a

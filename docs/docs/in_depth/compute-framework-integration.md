@@ -278,7 +278,7 @@ class PandasMyFeatureGroup(MyFeatureGroup):
 mloda picks one compute framework per step group (the features of one FeatureGroup that run as one step) in one planning step, before link joins are resolved.
 
 - **Allowed set**: the framework must fit the FeatureGroup (`compute_framework_rule`, `supports_compute_framework`), any pin via `Feature(compute_framework=...)`, and the run's enabled frameworks.
-- **Connection skip**: a `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with `compute_frameworks=[DuckDBFramework]`.
+- **Connection skip**: a `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. It is kept when every parent can run on that framework, because the step then uses the connection its input data carries. Parents carrying different connections keep the step off that framework. It is also kept when the feature has parents and the DataAccessCollection holds exactly one matching connection. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with `compute_frameworks=[DuckDBFramework]`.
 - **Joins**: a link's child runs on one of its two sides. RIGHT joins run on the right side's framework, unless the consumers cannot run there, then on the left side's (only for links joining two different FeatureGroups). APPEND and UNION on the left. Children of one link agree on the side.
 - **Filters**: a filter pinned to a framework moves its host feature onto that framework.
 - **Conversions**: a transformer chain must exist between every parent and child on different frameworks.
@@ -292,7 +292,7 @@ List order is a tie-break after cost, not "first listed wins". To force a framew
 
 `Feature.get_compute_framework()` returns the chosen framework. On a feature that allows several frameworks and was never planned, it raises.
 
-Framework authors declare the connection rule by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`).
+Framework authors declare the connection rule by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`). A `REQUIRED` framework also overrides `connection_of(data)` to return the connection its native data carries, so a step after a parent on the same framework needs no connection of its own.
 
 ## Data Transformation
 
@@ -306,7 +306,7 @@ For more details on how data transformation works between compute frameworks, se
 
 ## Framework Notes
 
-- **DuckDB**: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
+- **DuckDB**: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name, or from the relation its parents hand in (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
 - **Spark**: requires PySpark and a Java 17+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
 - **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 

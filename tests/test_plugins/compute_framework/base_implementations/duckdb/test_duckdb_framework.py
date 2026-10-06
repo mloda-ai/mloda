@@ -87,6 +87,12 @@ class TestDuckDBFrameworkComputeFramework:
     def test_expected_data_framework(self, duckdb_framework: DuckDBFramework) -> None:
         assert duckdb_framework.expected_data_framework() == DuckdbRelation
 
+    def test_connection_of_returns_the_relations_connection(self, connection: Any, expected_data: Any) -> None:
+        assert DuckDBFramework.connection_of(expected_data) is connection
+
+    def test_connection_of_is_none_for_other_data(self, dict_data: dict[str, list[int]]) -> None:
+        assert DuckDBFramework.connection_of(dict_data) is None
+
     def test_transform_dict_to_relation(
         self, duckdb_framework: DuckDBFramework, connection: Any, dict_data: dict[str, list[int]], expected_data: Any
     ) -> None:

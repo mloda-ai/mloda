@@ -73,6 +73,7 @@ class Engine:
         self.output_framework = output_framework
         self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
         self.filter_ties: list[tuple[UUID, UUID]] = []
+        self.connection_dropped: dict[UUID, frozenset[type[ComputeFramework]]] = {}
         # setup variables which track the primary sources and the compute platforms
         self.function_extender = function_extender if function_extender is not None else set()
         self._hook_extenders = build_hook_extenders(self.function_extender)
@@ -200,7 +201,13 @@ class Engine:
 
         # resolve graph into a queue
         resolver = ResolveGraph(
-            graph, self.links, self.filter_ties, self.framework_positions, output_framework=self.output_framework
+            graph,
+            self.links,
+            self.filter_ties,
+            self.framework_positions,
+            output_framework=self.output_framework,
+            connection_dropped=self.connection_dropped,
+            connected=self._connected_frameworks(),
         )
         resolver.create_initial_queue()
 
@@ -507,6 +514,8 @@ class Engine:
         """Creates and adds a new index feature to the collection."""
         new_index_feature = create_index_feature(index, feature_group, feature)
         self.add_feature_to_collection(feature_group_class, new_index_feature, features.child_uuid, True)
+        if feature.uuid in self.connection_dropped:
+            self.connection_dropped[new_index_feature.uuid] = self.connection_dropped[feature.uuid]
 
     def _add_filter_feature(
         self,
@@ -553,7 +562,10 @@ class Engine:
     ) -> Feature:
         """A pinned filter moves its host onto the pin; on a collision the host merges into the equal feature."""
         pin = filter_feature.compute_frameworks
-        if not pin or host.compute_frameworks == pin:
+        if not pin:
+            return host
+        if host.compute_frameworks == pin:
+            host.framework_pinned = True
             return host
         collection = self.feature_group_collection[feature_group_class]
         if not any(f is host for f in collection):
@@ -781,7 +793,22 @@ class Engine:
             feature.compute_frameworks = self._drop_unconnected_required(
                 feature, compute_frameworks, feature_group_class
             )
+            dropped = frozenset(compute_frameworks - feature.compute_frameworks)
+            if dropped:
+                self.connection_dropped[feature.uuid] = dropped
         return feature
+
+    def _connected_frameworks(self) -> dict[type[ComputeFramework], Any]:
+        """Dropped frameworks mapped to the one matching connection the DataAccessCollection holds."""
+        dac = self.data_access_collection
+        if dac is None:
+            return {}
+        connected: dict[type[ComputeFramework], Any] = {}
+        for cfw in set().union(*self.connection_dropped.values()):
+            matching = [conn for conn in dac.connections.values() if cfw._connection_matches(conn)]
+            if len(matching) == 1:
+                connected[cfw] = matching[0]
+        return connected
 
     @staticmethod
     def _drop_unconnected_required(

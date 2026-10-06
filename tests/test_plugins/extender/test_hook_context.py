@@ -199,6 +199,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             ("tenant_id", "forged"),
             ("principal", "forged"),
             ("carrier", {"forged": "yes"}),
+            ("result_attributes", {"forged": "yes"}),
             ("data_access_identity", "forged"),
             ("feature_names", ("forged",)),
             ("feature_group_class", "pkg.Forged"),
@@ -214,6 +215,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             tenant_id="t",
             principal="p",
             carrier={"a": "b"},
+            result_attributes={"a": "b"},
             step_uuid=uuid4(),
         )
         before = getattr(context, field)
@@ -232,6 +234,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             "tenant_id",
             "principal",
             "carrier",
+            "result_attributes",
             "data_access_identity",
             "feature_names",
             "feature_group_class",
@@ -246,6 +249,7 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             tenant_id="t",
             principal="p",
             carrier={"a": "b"},
+            result_attributes={"a": "b"},
             data_access_identity="d",
             step_uuid=uuid4(),
         )
@@ -470,6 +474,89 @@ class TestOutputSchemaPublicExport:
         import mloda.provider as provider
 
         assert "OutputSchema" in provider.__all__
+
+
+class TestHookContextProviderExport:
+    """HookContext is re-exported from mloda.provider as the same object."""
+
+    def test_provider_hook_context_is_the_same_object(self) -> None:
+        from mloda.provider import HookContext as ProviderHookContext
+
+        assert ProviderHookContext is HookContext
+
+    def test_hook_context_listed_in_provider_all(self) -> None:
+        import mloda.provider as provider
+
+        assert "HookContext" in provider.__all__
+
+
+class TestHookContextResultAttributes:
+    """result_attributes are published during calculate_feature and read after the call."""
+
+    def test_defaults_to_none(self) -> None:
+        assert _make_context().result_attributes is None
+
+    def test_publish_sets_and_merges_later_key_wins(self) -> None:
+        context = _make_context()
+
+        with context.activate():
+            HookContext.publish_result_attributes({"a": 1, "b": "x"})
+            HookContext.publish_result_attributes({"b": "y", "c": True})
+
+        assert context.result_attributes == {"a": 1, "b": "y", "c": True}
+
+    def test_result_is_read_only_dict(self) -> None:
+        context = _make_context()
+        with context.activate():
+            HookContext.publish_result_attributes({"a": 1})
+
+        attrs = context.result_attributes
+        assert isinstance(attrs, dict)
+        with pytest.raises(TypeError):
+            attrs["x"] = 1
+        assert attrs == {"a": 1}
+
+    def test_publish_without_active_context_is_noop(self) -> None:
+        assert HookContext.current() is None
+
+        HookContext.publish_result_attributes({"a": 1})
+
+    def test_non_str_key_raises_type_error_even_without_context(self) -> None:
+        with pytest.raises(TypeError, match="result_attributes keys must be str"):
+            HookContext.publish_result_attributes({1: "x"})
+
+    def test_non_mapping_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="result_attributes"):
+            HookContext.publish_result_attributes([("a", 1)])  # type: ignore[arg-type]
+
+    def test_non_scalar_values_are_dropped(self) -> None:
+        context = _make_context()
+
+        with context.activate():
+            HookContext.publish_result_attributes(
+                {"s": "x", "i": 1, "f": 0.5, "b": False, "l": [1], "d": {"k": 1}, "n": None, "by": b"x"}
+            )
+
+        assert context.result_attributes == {"s": "x", "i": 1, "f": 0.5, "b": False}
+
+    def test_instrument_resets_result_attributes_per_call(self) -> None:
+        context = _make_context()
+        seen: list[Any] = []
+
+        def raw() -> str:
+            seen.append(context.result_attributes)
+            if len(seen) == 1:
+                HookContext.publish_result_attributes({"a": 1})
+            return "ok"
+
+        wrapped = instrument(context, raw)
+        with context.activate():
+            wrapped()
+            assert context.result_attributes == {"a": 1}
+            wrapped()
+
+        assert seen == [None, None]
+        assert context.result_attributes is None
 
 
 class TestHookContextRowCount:

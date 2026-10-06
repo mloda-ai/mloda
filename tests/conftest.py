@@ -27,14 +27,14 @@ MP_PRELOAD_MODULES = [
     "pandas",
     "pyarrow",
     "pyarrow.flight",
-    "polars",
-    "duckdb",
     "pyiceberg.table",
     "pyspark.sql",
 ]
 # Must run before anything starts a worker process.
 os.environ.setdefault("MLODA_MP_START_METHOD", "forkserver")
 os.environ.setdefault("MLODA_MP_PRELOAD", ",".join(MP_PRELOAD_MODULES))
+# Keeps numpy's OpenBLAS from starting threads in the forkserver.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 
 # Defined first on purpose: autouse fixtures tear down in reverse, so this runs after the registry reset.

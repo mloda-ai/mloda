@@ -3,7 +3,6 @@
 import importlib.util
 import logging
 import multiprocessing
-from multiprocessing.context import ForkServerContext
 from unittest.mock import Mock
 
 import pytest
@@ -12,9 +11,10 @@ from mloda.core.runtime.mp_context import mp_start_context
 from tests.conftest import MP_PRELOAD_MODULES
 
 FORKSERVER_AVAILABLE = "forkserver" in multiprocessing.get_all_start_methods()
+ONCE_FLAG = "mloda.core.runtime.mp_context._warned_forkserver_unavailable"
 
 
-@pytest.mark.parametrize("value", [None, "", "spawn"])
+@pytest.mark.parametrize("value", [None, "", "spawn", " spawn ", "SPAWN"])
 def test_spawn_is_default(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
     if value is None:
         monkeypatch.delenv("MLODA_MP_START_METHOD", raising=False)
@@ -25,8 +25,9 @@ def test_spawn_is_default(monkeypatch: pytest.MonkeyPatch, value: str | None) ->
 
 
 @pytest.mark.skipif(not FORKSERVER_AVAILABLE, reason="forkserver unavailable")
-def test_forkserver_selected(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MLODA_MP_START_METHOD", "forkserver")
+@pytest.mark.parametrize("value", ["forkserver", " ForkServer "])
+def test_forkserver_selected(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("MLODA_MP_START_METHOD", value)
     monkeypatch.delenv("MLODA_MP_PRELOAD", raising=False)
 
     assert mp_start_context().get_start_method() == "forkserver"
@@ -35,6 +36,7 @@ def test_forkserver_selected(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_forkserver_unavailable_falls_back_to_spawn_with_warning(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
+    monkeypatch.setattr(ONCE_FLAG, False, raising=False)
     monkeypatch.setenv("MLODA_MP_START_METHOD", "forkserver")
     monkeypatch.setattr(multiprocessing, "get_all_start_methods", lambda: ["spawn"])
 
@@ -42,6 +44,20 @@ def test_forkserver_unavailable_falls_back_to_spawn_with_warning(
         ctx = mp_start_context()
 
     assert ctx.get_start_method() == "spawn"
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
+
+
+def test_forkserver_unavailable_warns_once_per_process(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(ONCE_FLAG, False, raising=False)
+    monkeypatch.setenv("MLODA_MP_START_METHOD", "forkserver")
+    monkeypatch.setattr(multiprocessing, "get_all_start_methods", lambda: ["spawn"])
+
+    with caplog.at_level(logging.WARNING):
+        mp_start_context()
+        mp_start_context()
+
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
 
 
@@ -60,7 +76,7 @@ def test_preload_forwarded_to_forkserver(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("MLODA_MP_START_METHOD", "forkserver")
     monkeypatch.setenv("MLODA_MP_PRELOAD", " a, b ,,")
     preload = Mock()
-    monkeypatch.setattr(ForkServerContext, "set_forkserver_preload", preload)
+    monkeypatch.setattr("multiprocessing.forkserver.set_forkserver_preload", preload)
 
     mp_start_context()
 
@@ -72,7 +88,7 @@ def test_empty_preload_not_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MLODA_MP_START_METHOD", "forkserver")
     monkeypatch.setenv("MLODA_MP_PRELOAD", " , ")
     preload = Mock()
-    monkeypatch.setattr(ForkServerContext, "set_forkserver_preload", preload)
+    monkeypatch.setattr("multiprocessing.forkserver.set_forkserver_preload", preload)
 
     mp_start_context()
 
@@ -83,7 +99,7 @@ def test_preload_ignored_under_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MLODA_MP_START_METHOD", "spawn")
     monkeypatch.setenv("MLODA_MP_PRELOAD", "a,b")
     preload = Mock()
-    monkeypatch.setattr(ForkServerContext, "set_forkserver_preload", preload)
+    monkeypatch.setattr("multiprocessing.forkserver.set_forkserver_preload", preload)
 
     mp_start_context()
 

@@ -516,36 +516,29 @@ def test_a_right_join_of_distinct_groups_runs_on_the_left_when_the_consumer_cann
     assert child.chosen_compute_framework is P
 
 
-def test_a_flexible_sibling_of_a_rigid_consumer_of_one_right_link_follows_it_to_the_left() -> None:
+@pytest.mark.parametrize(
+    "first_allowed, second_allowed, expected",
+    [({P}, {P, A}, P), ({P, A}, {P, A}, A)],
+    ids=["flexible_sibling_follows_rigid_consumer_left", "flexible_consumers_stay_right"],
+)
+def test_consumers_of_one_right_link_share_a_framework(
+    first_allowed: set[type[ComputeFramework]],
+    second_allowed: set[type[ComputeFramework]],
+    expected: type[ComputeFramework],
+) -> None:
     link = _link(Link.right, ChooserLeftFG, ChooserRightFG)
     net = _Net()
     left = net.add(ChooserLeftFG, "sib_left", {P})
     right = net.add(ChooserRightFG, "sib_right", {A})
-    rigid = net.add(ChooserChildFG, "sib_rigid", {P}, {"n": 1})
-    flexible = net.add(ChooserChildFG, "sib_flexible", {P, A}, {"n": 2})
-    net.join(link, left, right, rigid)
-    net.join(link, left, right, flexible)
-
-    net.choose()
-
-    assert rigid.chosen_compute_framework is P
-    assert flexible.chosen_compute_framework is P
-
-
-def test_flexible_consumers_of_one_right_link_stay_on_the_right() -> None:
-    link = _link(Link.right, ChooserLeftFG, ChooserRightFG)
-    net = _Net()
-    left = net.add(ChooserLeftFG, "flex_left", {P})
-    right = net.add(ChooserRightFG, "flex_right", {A})
-    first = net.add(ChooserChildFG, "flex_child", {P, A}, {"n": 1})
-    second = net.add(ChooserChildFG, "flex_child", {P, A}, {"n": 2})
+    first = net.add(ChooserChildFG, "sib_first", first_allowed, {"n": 1})
+    second = net.add(ChooserChildFG, "sib_second", second_allowed, {"n": 2})
     net.join(link, left, right, first)
     net.join(link, left, right, second)
 
     net.choose()
 
-    assert first.chosen_compute_framework is A
-    assert second.chosen_compute_framework is A
+    assert first.chosen_compute_framework is expected
+    assert second.chosen_compute_framework is expected
 
 
 def test_a_right_link_with_swapped_side_domains_keeps_its_flexible_consumer_on_its_own_right() -> None:

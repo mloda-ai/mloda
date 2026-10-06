@@ -78,6 +78,9 @@ class PlanStep:
     ``reader_data_access`` is the (reader class, data access) pair of ``FeatureSet.input_data_match``, excluded from equality.
     ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for that
     pair, computed on access.
+
+    ``join_keys`` is a join step's ``left=right`` index column pairs, as ``HookContext.join_keys``; None for
+    APPEND/UNION and non-join steps.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -102,7 +105,6 @@ class PlanStep:
     compute_framework_reason: str | None = None
     result_framework: type["ComputeFramework"] | None = None
     join_keys: tuple[str, ...] | None = None
-    """join steps: the link's `left=right` index column pairs, as `HookContext.join_keys`; None for APPEND/UNION and non-join steps"""
 
     @property
     def result_framework_name(self) -> str | None:

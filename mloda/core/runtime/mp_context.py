@@ -11,11 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 def mp_start_context() -> SpawnContext | ForkServerContext:
-    """Return a multiprocessing context chosen by MLODA_MP_START_METHOD (spawn default, or forkserver).
+    """Return the spawn (default) or forkserver context chosen by MLODA_MP_START_METHOD.
 
-    Never fork: it deadlocks children when the parent has live threads (xdist, asyncio).
-    MLODA_MP_PRELOAD only applies when the forkserver starts (first use in the process).
-    """
+    Never fork: a forked child inherits locks held by the parent's live threads (xdist, asyncio) and deadlocks."""
     method = os.environ.get("MLODA_MP_START_METHOD", "")
     if method in ("", "spawn"):
         return multiprocessing.get_context("spawn")

@@ -259,6 +259,7 @@ def _content_plan() -> list[PlanStep]:
         _compute_step(
             feature_set_options=Options(group={"window": 3}),
             input_feature_edges={"lock_io_value": ("a",)},
+            reader_data_access=(cast(Any, int), "orig"),
         ),
         _join_step(join_keys=("l=r",)),
     ]
@@ -280,7 +281,7 @@ def test_plan_content_hash_ignores_run_ids_reader_access_and_reason_text() -> No
         dataclasses.replace(
             base[0],
             step_uuid=uuid.uuid4(),
-            reader_data_access=(cast(Any, object), "somewhere"),
+            reader_data_access=(cast(Any, int), "somewhere"),
             compute_framework_reason="other reason",
         ),
         dataclasses.replace(base[1], join_token=uuid.uuid4()),
@@ -303,6 +304,7 @@ def _with(index: int, **overrides: object) -> list[PlanStep]:
         pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
         pytest.param(lambda: _with(0, feature_set_options=Options(group={"window": 4})), id="group_option"),
         pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_edges"),
+        pytest.param(lambda: _with(0, reader_data_access=(cast(Any, str), "orig")), id="reader_class"),
         pytest.param(lambda: _with(1, join_type="left"), id="join_type"),
         pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
     ],
@@ -316,7 +318,23 @@ def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
         return plan_content_hash([_compute_step(feature_set_options=Options(group=group))])
 
     assert hashed(password="a1") == hashed(password="b2")
+    assert hashed(conn={"password": "a1", "host": "h"}) == hashed(conn={"password": "b2", "host": "h"})
+    assert hashed(conn={"api_key": "a1"}) == hashed(conn={"api_key": "b2"})
     assert hashed(window=3) != hashed(window=4)
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("https://h/x.csv?rev=1", "https://h/x.csv?rev=2"),
+        ("s3://b/dir/a%20b/one.csv", "s3://b/dir/a%20b/two.csv"),
+    ],
+)
+def test_plan_content_hash_keeps_non_credential_url_values_in_full(left: str, right: str) -> None:
+    def hashed(path: str) -> str:
+        return plan_content_hash([_compute_step(feature_set_options=Options(group={"path": path}))])
+
+    assert hashed(left) != hashed(right)
 
 
 def test_plan_content_hash_is_independent_of_set_and_dict_order() -> None:

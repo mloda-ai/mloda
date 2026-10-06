@@ -4,13 +4,16 @@ import difflib
 import hashlib
 import json
 import os
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_NAME
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.choose_compute_frameworks import stable_text
+
+_SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
 
 PLAN_LOCK_FORMAT = 3
 
@@ -25,6 +28,15 @@ def _class_path(cls: type | None) -> str | None:
 
 def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: json.dumps(record, sort_keys=True))
+
+
+def _mask_secret_keys(value: Any) -> Any:
+    if type(value) is not dict:
+        return value
+    return {
+        key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
+        for key, item in value.items()
+    }
 
 
 def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -47,12 +59,13 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
             }
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
-                key: value for key, value in record.items() if key not in ("compute_framework_reason", "reader")
+                key: value for key, value in record.items() if key != "compute_framework_reason"
             }
             wide_record["input_feature_edges"] = {
                 name: sorted(inputs) for name, inputs in step.input_feature_edges.items()
             }
-            wide_record["options"] = scrub_credentials(stable_text(step.feature_set_options))
+            options = step.feature_set_options
+            wide_record["options"] = None if options is None else stable_text(_mask_secret_keys(options.group))
             wide["compute"].append(wide_record)
         elif step.step_kind == "join":
             record = {

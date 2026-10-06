@@ -51,17 +51,28 @@ _KEYWORD_PATTERN = re.compile(
 )
 
 
-def _container_body(closer: str) -> str:
+def _container_body(closer: str, depth: int = 0) -> str:
     """Quote-aware container body: a closer inside a quoted string does not end it."""
-    return rf"(?:'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"|[^\{closer}'\"\n])*"
+    quoted = r"'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\""
+    if depth == 0:
+        return rf"(?:{quoted}|[^\{closer}'\"\n])*"
+    inner = depth - 1
+    nested = (
+        rf"\[{_container_body(']', inner)}\]?|\{{{_container_body('}', inner)}\}}?|\({_container_body(')', inner)}\)?"
+    )
+    return rf"(?:{quoted}|{nested}|[^\{closer}\[{{(\"'\n])*"
+
+
+# Nesting levels inside the outer container; pattern size grows ~3^depth, keep <= 4.
+_NEST_DEPTH = 3
 
 
 # Anchored on a `{`/`,` lead so prose like `invalid password: too short` or unquoted `password: X` is left alone.
 _QUOTED_KEY_PATTERN = re.compile(
     r"(?P<lead>[{,][ \t]*)(?P<quote>['\"])(?P<keyword>[\w-]*" + _SECRET_NAME + r")(?P=quote)[ \t]*:[ \t]*"
     r"(?:b?'(?:[^'\\\n]|\\.)*'|b?\"(?:[^\"\\\n]|\\.)*\""
-    rf"|\[{_container_body(']')}\]?|\{{{_container_body('}')}\}}?"
-    rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')')}\)?|[^,}}\s]*)",
+    rf"|\[{_container_body(']', _NEST_DEPTH)}\]?|\{{{_container_body('}', _NEST_DEPTH)}\}}?"
+    rf"|(?:[A-Za-z_][\w.]*)?\({_container_body(')', _NEST_DEPTH)}\)?|[^,}}\s]*)",
     re.IGNORECASE,
 )
 

@@ -284,7 +284,7 @@ class FormatFeatureGroup(FeatureGroup):
                     fitting[match.source] = match
                 else:
                     undeclared = True
-        if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls._passes_option_declarations(options):
+        if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls.passes_option_declarations(options):
             return False
         if len(fitting) > 1:
             return cls._abort(

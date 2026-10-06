@@ -4,11 +4,12 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatPointerError
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
-from mloda.user import DataAccessCollection, Feature, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.mixins.reader_feature_groups.format_file_writers import write_csv
+from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_parquet
 from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group, load_group
 
 
@@ -60,6 +61,44 @@ class TestColumnToFileHint:
         by_columns = {frozenset(table.column_names): table for table in result}
         assert set(by_columns) == {frozenset({"cfh_int_id", "cfh_int_target"}), frozenset({"cfh_int_amount"})}
         assert by_columns[frozenset({"cfh_int_amount"})].to_pydict() == {"cfh_int_amount": [500, 300]}
+
+
+class TestPointerAgainstColumnToFilePin:
+    def _run(self, pointer: str, dac: DataAccessCollection) -> list[Any]:
+        return mloda.run_all(
+            [Feature("cfh_pin_id", Options({"CsvFG": pointer}))],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({_csv_group()}),
+            data_access_collection=dac,
+        )
+
+    def _pinned(self, tmp_path: Path) -> tuple[str, str, DataAccessCollection]:
+        (tmp_path / "pinned_dir").mkdir()
+        pinned = _csv(tmp_path / "pinned_dir", "pin_a", {"cfh_pin_id": [1]})
+        other = _csv(tmp_path, "pin_b", {"cfh_pin_id": [2]})
+        return pinned, other, DataAccessCollection(files={pinned}, column_to_file={"cfh_pin_id": pinned})
+
+    def test_a_file_pointer_that_differs_from_the_pin_raises_naming_both(self, tmp_path: Path) -> None:
+        pinned, other, dac = self._pinned(tmp_path)
+        with pytest.raises(FormatPointerError) as excinfo:
+            self._run(other, dac)
+
+        assert os.path.abspath(pinned) in str(excinfo.value)
+        assert os.path.abspath(other) in str(excinfo.value)
+
+    def test_a_pointer_at_the_pinned_file_or_its_directory_is_fine(self, tmp_path: Path) -> None:
+        pinned, _, dac = self._pinned(tmp_path)
+
+        assert self._run(pinned, dac)
+        assert self._run(str(tmp_path / "pinned_dir"), dac)
+
+    def test_a_csv_pointer_conflicts_with_a_pin_to_another_format(self, tmp_path: Path) -> None:
+        pinned = tmp_path / "pin_c.parquet"
+        write_parquet(pinned, {"cfh_pin_id": [1]})
+        csv_path = _csv(tmp_path, "pin_d", {"cfh_pin_id": [2]})
+        dac = DataAccessCollection(files={str(pinned)}, column_to_file={"cfh_pin_id": str(pinned)})
+        with pytest.raises(FormatPointerError):
+            self._run(csv_path, dac)
 
 
 class TestColumnToFileHintTextFG:

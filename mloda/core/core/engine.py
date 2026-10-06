@@ -89,7 +89,9 @@ class Engine:
         self.feature_link_parents: dict[UUID, set[UUID]] = defaultdict(set)
 
         # get accessible feature groups and their compute platforms
-        self.accessible_plugins = PreFilterPlugins(compute_frameworks, plugin_collector).get_accessible_plugins()
+        pre_filter = PreFilterPlugins(compute_frameworks, plugin_collector)
+        self.accessible_plugins = pre_filter.get_accessible_plugins()
+        self.excluded_feature_groups = pre_filter.excluded_feature_groups
         # get links
         LinkValidator.validate_links(links)
         self.links = set(links) if links is not None else None
@@ -349,6 +351,7 @@ class Engine:
                 self.links,
                 self.data_access_collection,
                 partial_records=self.resolution_records,
+                excluded=self.excluded_feature_groups,
             )
         else:
             result = self._resolve_with_match_hook(extender, feature, depth)
@@ -402,6 +405,7 @@ class Engine:
                     self.links,
                     self.data_access_collection,
                     partial_records=self.resolution_records,
+                    excluded=self.excluded_feature_groups,
                 ),
             )
 

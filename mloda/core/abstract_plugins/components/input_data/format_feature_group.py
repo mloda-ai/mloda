@@ -29,6 +29,25 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 
 _MAX_LISTED_COLUMNS = 20
 
+RETIRED_READER_NAMES: dict[str, str] = {
+    "CsvReader": "CsvFG",
+    "ParquetReader": "ParquetFG",
+    "FeatherReader": "FeatherFG",
+    "OrcReader": "OrcFG",
+    "JsonReader": "JsonFG",
+    "SQLITEReader": "SqliteFG",
+    "JsonDocumentReader": "JsonDocumentFG",
+    "MarkdownDocumentReader": "MarkdownFG",
+    "TextFileReader": "TextFG",
+    "PyFileReader": "PyFG",
+    "ReadFile": "ReadFileFG",
+    "ReadFileFeature": "ReadFileFG",
+    "ReadDB": "ReadDBFG",
+    "ReadDBFeature": "ReadDBFG",
+    "ReadDocument": "ReadDocumentFG",
+    "ReadDocumentFeature": "ReadDocumentFG",
+}
+
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(
     "Name of the DataAccessCollection handle to read from.",
@@ -49,6 +68,22 @@ def _listed(columns: Collection[str] | None) -> str:
     if len(names) > _MAX_LISTED_COLUMNS:
         text += f", ... and {len(names) - _MAX_LISTED_COLUMNS} more"
     return f"[{text}]"
+
+
+class FormatPointerError(ValueError):
+    """A class-name pointer or feature_group= scope that cannot be served; validated before matching."""
+
+
+def concrete_format_groups() -> dict[str, type["FormatFeatureGroup"]]:
+    """Loaded concrete format groups by class name, including ones a run's filters dropped."""
+    found: dict[str, type[FormatFeatureGroup]] = {}
+    stack: list[Any] = list(FormatFeatureGroup.__subclasses__())
+    while stack:
+        current = stack.pop()
+        stack.extend(current.__subclasses__())
+        if not inspect.isabstract(current):
+            found[current.__name__] = current
+    return found
 
 
 class FormatFeatureGroup(FeatureGroup):
@@ -132,6 +167,16 @@ class FormatFeatureGroup(FeatureGroup):
             and klass is not FormatFeatureGroup
             and (klass is cls or not inspect.isabstract(klass))
         )
+
+    @classmethod
+    def foreign_pointer(cls, options: Options) -> str | None:
+        """First option key naming a concrete format group that is not one of this group's pointer keys."""
+        keys = sorted(key for key in options.keys() if isinstance(key, str))
+        if not keys:
+            return None
+        groups = concrete_format_groups()
+        own = cls.pointer_keys()
+        return next((key for key in keys if key in groups and key not in own), None)
 
     @classmethod
     def _scope_points_here(cls, scope: Any) -> bool:
@@ -266,6 +311,8 @@ class FormatFeatureGroup(FeatureGroup):
             return False
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
+        foreign = None if pointed else cls.foreign_pointer(options)
+        skipped = False
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, SourceMatch] = {}
         undeclared = False
@@ -274,6 +321,9 @@ class FormatFeatureGroup(FeatureGroup):
                 continue
             unlocked = pointed or bool(route.required_options)
             if not (route.searched or unlocked):
+                continue
+            if foreign is not None and not unlocked:
+                skipped = True
                 continue
             for match in cls.find_sources(route, name, options, data_access_collection):
                 if route.names is NamePolicy.CHECKED:
@@ -307,6 +357,9 @@ class FormatFeatureGroup(FeatureGroup):
                     ValueError(f"{reason}; request a column a source has or point at another source."),
                     deferrable=True,
                 )
+            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+        elif skipped:
+            reason = f"options point at {foreign}, so {cls.get_class_name()} does not search the collection"
             record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
         elif pointed and undeclared:
             reason = f"'{base_name}' is not a name {cls.get_class_name()} declares"

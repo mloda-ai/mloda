@@ -181,6 +181,8 @@ def _exploding_evaluate_and_render(
     accessible_plugins: FeatureGroupEnvironmentMapping,
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
+    *,
+    excluded: dict[type[FeatureGroup], str] | None = None,
 ) -> tuple[EvaluationResult, str | None]:
     """Stand-in for the helper pair that always raises, standing for a renderer that blows up."""
     raise RuntimeError(RENDER_EXPLOSION_016)

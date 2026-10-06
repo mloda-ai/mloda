@@ -1,5 +1,6 @@
 import inspect
-from collections.abc import Sequence
+import os
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
@@ -33,6 +34,12 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
 )
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader, feature_group_scope
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+    RETIRED_READER_NAMES,
+    FormatFeatureGroup,
+    FormatPointerError,
+    concrete_format_groups,
+)
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
@@ -45,6 +52,7 @@ from mloda.core.abstract_plugins.components.utils import (
     is_deferred_match_abort,
     is_match_abort,
     contained_raise_reason,
+    get_all_subclasses,
     safe_exc_str,
     safe_field,
 )
@@ -119,6 +127,85 @@ def validate_single_framework_pin(feature: Feature) -> None:
         )
 
 
+_NOT_ACCESSIBLE = "it is not among this run's accessible feature groups"
+
+
+def _retired_message(old: str, new: str, as_scope: bool, loaded: dict[str, type[FormatFeatureGroup]]) -> str:
+    base = next((k for k in get_all_subclasses(FormatFeatureGroup) if k.__name__ == new), None)
+    if base is None or not inspect.isabstract(base):
+        return f'"{old}" was retired; point at {new} instead.'
+    if as_scope:
+        return f'"{old}" was retired; use feature_group={new} or a concrete group.'
+    examples = ", ".join(sorted(name for name, group in loaded.items() if issubclass(group, base))[:3])
+    return f'"{old}" was retired; point at the concrete group for the format, e.g. {examples}.'
+
+
+def _pinned_path(feature: Feature, collection: DataAccessCollection | None) -> str | None:
+    if collection is None or collection.column_to_file is None:
+        return None
+    handle = collection.column_to_file.get(str(feature.name))
+    return None if handle is None else collection.files.get(handle)
+
+
+def _pin_conflict(
+    feature: Feature, collection: DataAccessCollection | None, loaded: dict[str, type[FormatFeatureGroup]]
+) -> str | None:
+    pinned = _pinned_path(feature, collection)
+    if pinned is None:
+        return None
+    pinned_abs = os.path.abspath(pinned)
+    for key, value in sorted(feature.options.items()):
+        group = loaded.get(key)
+        if group is None or not isinstance(value, (str, os.PathLike)):
+            continue
+        if not any(klass.__name__ == "ReadFileFG" for klass in group.__mro__):
+            continue
+        pointer = os.path.abspath(value)
+        agrees = os.path.dirname(pinned_abs) == pointer if os.path.isdir(pointer) else pointer == pinned_abs
+        if not agrees:
+            return (
+                f"options point {key} at {pointer}, but column_to_file pins '{feature.name}' to {pinned_abs}; "
+                "drop the pointer or the pin."
+            )
+    return None
+
+
+def validate_format_pointers(
+    feature: Feature,
+    accessible_plugins: FeatureGroupEnvironmentMapping,
+    excluded: Mapping[type[FeatureGroup], str],
+    data_access_collection: DataAccessCollection | None,
+) -> None:
+    """Raise FormatPointerError for a retired name, an unreachable pointer or scope, or a pointer against a pin."""
+    loaded = concrete_format_groups()
+    scope = feature.feature_group_scope
+    loaded_names = {fg.__name__ for fg in get_all_subclasses(FeatureGroup)}
+    keys = [key for key in feature.options.keys() if isinstance(key, str)]
+    named = [(key, False) for key in sorted(keys)]
+    if isinstance(scope, str):
+        named.append((scope, True))
+    for name, as_scope in named:
+        if name in RETIRED_READER_NAMES and name not in loaded_names:
+            raise FormatPointerError(_retired_message(name, RETIRED_READER_NAMES[name], as_scope, loaded))
+    accessible_formats = [fg for fg in accessible_plugins if issubclass(fg, FormatFeatureGroup)]
+    for key in sorted(keys):
+        group = loaded.get(key)
+        if group is not None and not any(key in fg.pointer_keys() for fg in accessible_formats):
+            reason = excluded.get(group, _NOT_ACCESSIBLE)
+            raise FormatPointerError(f"options point at {key}, but {key} is not accessible in this run: {reason}.")
+    if scope is not None:
+        scope_name = scope if isinstance(scope, str) else scope.__name__
+        group = loaded.get(scope_name)
+        if group is not None and not any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
+            reason = excluded.get(group, _NOT_ACCESSIBLE)
+            raise FormatPointerError(
+                f"feature_group={scope_name}, but {scope_name} is not accessible in this run: {reason}."
+            )
+    conflict = _pin_conflict(feature, data_access_collection, loaded)
+    if conflict is not None:
+        raise FormatPointerError(conflict)
+
+
 class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
@@ -168,11 +255,14 @@ class IdentifyFeatureGroupClass:
         accessible_plugins: FeatureGroupEnvironmentMapping,
         links: set[Link] | None,
         data_access_collection: DataAccessCollection | None = None,
+        *,
+        excluded: Mapping[type[FeatureGroup], str] = {},
     ) -> EvaluationResult:
         """Run the matching/filter logic without raising, returning a structured result."""
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
+        validate_format_pointers(feature, accessible_plugins, excluded, data_access_collection)
         self = cls(data_access_collection)
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
@@ -871,10 +961,14 @@ def evaluate_and_render(
     accessible_plugins: FeatureGroupEnvironmentMapping,
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
+    *,
+    excluded: Mapping[type[FeatureGroup], str] = {},
 ) -> tuple[EvaluationResult, str | None]:
     """One resolution pass plus its failure message; the message is None iff the feature resolved."""
     # Unguarded: ComputeFrameworkPinError is a misuse validated before matching, so it escapes unconverted.
-    result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links, data_access_collection)
+    result = IdentifyFeatureGroupClass.evaluate(
+        feature, accessible_plugins, links, data_access_collection, excluded=excluded
+    )
     return result, render_resolution_failure(result, feature)
 
 
@@ -884,9 +978,11 @@ def resolve_or_raise(
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
     partial_records: Sequence[ResolutionRecord] = (),
+    *,
+    excluded: Mapping[type[FeatureGroup], str] = {},
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
-    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection)
+    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection, excluded=excluded)
     if message is not None:
         # The constructor does the cap-then-deepcopy snapshot, so the records are forwarded as they are.
         raise FeatureResolutionError(message, str(feature.name), result, partial_records=partial_records)

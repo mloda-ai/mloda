@@ -516,6 +516,56 @@ def test_a_right_join_of_distinct_groups_runs_on_the_left_when_the_consumer_cann
     assert child.chosen_compute_framework is P
 
 
+def test_a_flexible_sibling_of_a_rigid_consumer_of_one_right_link_follows_it_to_the_left() -> None:
+    link = _link(Link.right, ChooserLeftFG, ChooserRightFG)
+    net = _Net()
+    left = net.add(ChooserLeftFG, "sib_left", {P})
+    right = net.add(ChooserRightFG, "sib_right", {A})
+    rigid = net.add(ChooserChildFG, "sib_rigid", {P}, {"n": 1})
+    flexible = net.add(ChooserChildFG, "sib_flexible", {P, A}, {"n": 2})
+    net.join(link, left, right, rigid)
+    net.join(link, left, right, flexible)
+
+    net.choose()
+
+    assert rigid.chosen_compute_framework is P
+    assert flexible.chosen_compute_framework is P
+
+
+def test_flexible_consumers_of_one_right_link_stay_on_the_right() -> None:
+    link = _link(Link.right, ChooserLeftFG, ChooserRightFG)
+    net = _Net()
+    left = net.add(ChooserLeftFG, "flex_left", {P})
+    right = net.add(ChooserRightFG, "flex_right", {A})
+    first = net.add(ChooserChildFG, "flex_child", {P, A}, {"n": 1})
+    second = net.add(ChooserChildFG, "flex_child", {P, A}, {"n": 2})
+    net.join(link, left, right, first)
+    net.join(link, left, right, second)
+
+    net.choose()
+
+    assert first.chosen_compute_framework is A
+    assert second.chosen_compute_framework is A
+
+
+def test_a_right_link_with_swapped_side_domains_keeps_its_flexible_consumer_on_its_own_right() -> None:
+    link = _link(Link.right, ChooserLeftFG, ChooserRightFG)
+    net = _Net()
+    left_one = net.add(ChooserLeftFG, "var_left", {P}, {"n": 1})
+    right_one = net.add(ChooserRightFG, "var_right", {A}, {"n": 1})
+    left_two = net.add(ChooserLeftFG, "var_left", {A}, {"n": 2})
+    right_two = net.add(ChooserRightFG, "var_right", {P}, {"n": 2})
+    rigid = net.add(ChooserChildFG, "var_rigid", {P}, {"n": 1})
+    flexible = net.add(ChooserChildFG, "var_flexible", {P, A}, {"n": 2})
+    net.join(link, left_one, right_one, rigid)
+    net.join(link, left_two, right_two, flexible)
+
+    net.choose({A: 0})
+
+    assert rigid.chosen_compute_framework is P
+    assert flexible.chosen_compute_framework is P
+
+
 @pytest.mark.parametrize(
     ("factory", "expected"),
     [(Link.inner, P), (Link.right, A), (Link.append, P)],

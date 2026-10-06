@@ -36,6 +36,10 @@ class _Rule(NamedTuple):
 
 
 _UNFLIPPABLE = (JoinType.RIGHT, JoinType.APPEND, JoinType.UNION)
+_RIGHT_ONE_SIDE = (
+    "consumers of one RIGHT link join on one side. "
+    "Request them separately or restrict their compute frameworks to one side of the link"
+)
 
 PINNED = "pinned"
 ONLY_ALLOWED = "only allowed framework"
@@ -261,6 +265,8 @@ class ChooseComputeFrameworks:
                 rules.append(_Rule((owner[host], owner[tied]), lambda v: v[0] is v[1], "filter tied to its host"))
         rules += self._side_path_rules(blocks, owner)
         by_link: dict[UUID, list[tuple[int, int, int]]] = {}
+        right_by_link: dict[UUID, list[tuple[int, int, int]]] = {}
+        right_off: dict[tuple[UUID, Values, Values], bool] = {}
         by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]] = {}
         for link, left_uuid, right_uuid, child_uuid in self.occurrences:
             joined = (owner[left_uuid], owner[right_uuid], owner[child_uuid])
@@ -268,6 +274,12 @@ class ChooseComputeFrameworks:
             by_child.setdefault(child_uuid, []).append((link, joined))
             if jointype not in _UNFLIPPABLE:
                 by_link.setdefault(link.uuid, []).append(joined)
+            elif jointype is JoinType.RIGHT:
+                right_by_link.setdefault(link.uuid, []).append(joined)
+                if link.left_feature_group != link.right_feature_group:
+                    key = (link.uuid, blocks[joined[0]].domain, blocks[joined[1]].domain)
+                    off = set(blocks[joined[2]].domain).isdisjoint(blocks[joined[1]].domain)
+                    right_off[key] = right_off.get(key, False) or off
         for occurrences in by_child.values():
             jointypes = [link.jointype for link, _ in occurrences]
             kinds = [
@@ -275,8 +287,7 @@ class ChooseComputeFrameworks:
                     link.jointype,
                     link.left_feature_group != link.right_feature_group
                     and link.jointype not in (JoinType.APPEND, JoinType.UNION),
-                    link.left_feature_group != link.right_feature_group
-                    and set(blocks[joined[2]].domain).isdisjoint(blocks[joined[1]].domain),
+                    right_off.get((link.uuid, blocks[joined[0]].domain, blocks[joined[1]].domain), False),
                 )
                 for link, joined in occurrences
             ]
@@ -293,6 +304,11 @@ class ChooseComputeFrameworks:
                     if first[2] != second[2]:
                         rules.append(_Rule(first + second, _same_side, "one side per link"))
                         rules.append(_Rule(first + second, _swapped_pairs_differ, "swapped pairs join apart"))
+        for joins in right_by_link.values():
+            for i, first in enumerate(joins):
+                for second in joins[i + 1 :]:
+                    if first[2] != second[2]:
+                        rules.append(_Rule(first + second, _same_side, _RIGHT_ONE_SIDE))
         return rules
 
     def _reach(self, start: UUID, neighbours: Mapping[UUID, set[UUID]]) -> set[UUID]:

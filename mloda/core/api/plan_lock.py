@@ -124,7 +124,7 @@ def plan_structure_hash(plan: Sequence[PlanStep]) -> str:
 
 
 def plan_content_hash(plan: Sequence[PlanStep]) -> str:
-    """Return the sha256 of the plan's audit content: lock content minus reason text and format, plus scrubbed options."""
+    """Return the sha256 of the plan's audit content (lock content plus scrubbed options)."""
     text = json.dumps(_build(plan)[1], sort_keys=True)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 

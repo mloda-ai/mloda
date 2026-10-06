@@ -7,7 +7,7 @@ import copy
 import importlib
 import inspect
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -102,15 +102,21 @@ def _same_name_and_qualname_frameworks() -> tuple[type[ComputeFramework], type[C
     return make("zz_module_b"), make("zz_module_a")
 
 
-def test_select_deterministic_ignores_input_order() -> None:
-    forward = ComputeFramework.select_deterministic([PandasDataFrame, PyArrowTable])
-    backward = ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame])
+def _pick(
+    candidates: Iterable[type[ComputeFramework]], positions: dict[type[ComputeFramework], int] | None = None
+) -> type[ComputeFramework]:
+    return min(candidates, key=framework_rank_key(positions or {}))
+
+
+def test_rank_key_ignores_input_order() -> None:
+    forward = _pick([PandasDataFrame, PyArrowTable])
+    backward = _pick([PyArrowTable, PandasDataFrame])
 
     assert forward is backward
     assert forward is PandasDataFrame
 
 
-def test_select_deterministic_returns_the_expected_name() -> None:
+def test_rank_key_returns_the_expected_name() -> None:
     zulu, alfa, tango, bravo = _throwaway_frameworks()
     expectations: list[tuple[tuple[type[ComputeFramework], ...], str]] = [
         ((zulu, alfa), "ZzAlfaThrowawayFramework"),
@@ -121,32 +127,27 @@ def test_select_deterministic_returns_the_expected_name() -> None:
     ]
 
     for group, expected in expectations:
-        assert ComputeFramework.select_deterministic(set(group)).get_class_name() == expected
+        assert _pick(set(group)).get_class_name() == expected
 
 
-def test_select_deterministic_breaks_a_shared_class_name_by_qualname() -> None:
+def test_rank_key_breaks_a_shared_class_name_by_qualname() -> None:
     """A shared class name would otherwise fall back to input order, which for a set is id-based."""
     alfa, bravo = _same_name_frameworks()
 
-    forward = ComputeFramework.select_deterministic([alfa, bravo])
-    backward = ComputeFramework.select_deterministic([bravo, alfa])
+    forward = _pick([alfa, bravo])
+    backward = _pick([bravo, alfa])
 
     assert forward is backward
     assert forward is alfa
     assert ".alfa." in forward.__qualname__, forward.__qualname__
 
 
-def test_select_deterministic_breaks_a_shared_name_and_qualname_by_module() -> None:
+def test_rank_key_breaks_a_shared_name_and_qualname_by_module() -> None:
     module_b, module_a = _same_name_and_qualname_frameworks()
     assert module_a.__qualname__ == module_b.__qualname__
 
     for order in ([module_b, module_a], [module_a, module_b]):
-        assert ComputeFramework.select_deterministic(order) is module_a
-
-
-def test_select_deterministic_rejects_empty_input() -> None:
-    with pytest.raises(ValueError):
-        ComputeFramework.select_deterministic([])
+        assert _pick(order) is module_a
 
 
 def test_the_throwaway_frameworks_stay_out_of_plugin_discovery() -> None:
@@ -177,8 +178,8 @@ def test_throwaway_framework_pairs_reduce_to_the_expected_framework() -> None:
     ]
 
     for (left, right), expected in expectations:
-        assert ComputeFramework.select_deterministic({left, right}).get_class_name() == expected
-        assert ComputeFramework.select_deterministic([right, left], {}).get_class_name() == expected
+        assert _pick({left, right}).get_class_name() == expected
+        assert _pick([right, left], {}).get_class_name() == expected
 
 
 def test_a_link_between_unrestricted_roots_follows_a_non_default_preference() -> None:
@@ -296,10 +297,10 @@ _RANK_CASES: list[tuple[list[str], str]] = [
     _RANK_CASES,
     ids=[f"{'+'.join(i)}->{e}" for i, e in _RANK_CASES],
 )
-def test_select_deterministic_orders_by_connection_rank_then_name(inputs: list[str], expected: str) -> None:
+def test_rank_key_orders_by_connection_rank_then_name(inputs: list[str], expected: str) -> None:
     frameworks = [_load_framework(_MODULE_OF[name], name) for name in inputs]
 
-    assert ComputeFramework.select_deterministic(frameworks).get_class_name() == expected
+    assert _pick(frameworks).get_class_name() == expected
 
 
 # --- planning and run ---------------------------------------------------------------------------
@@ -414,37 +415,33 @@ class PreferenceUnavailableRootFG(_ConnAwareRoot):
 
 
 def test_preference_first_listed_among_candidates_wins() -> None:
-    assert ComputeFramework.select_deterministic(
-        [PandasDataFrame, PyArrowTable], {PyArrowTable: 0, PandasDataFrame: 1}
-    ) is (PyArrowTable)
-    assert ComputeFramework.select_deterministic(
-        [PyArrowTable, PandasDataFrame], {PandasDataFrame: 0, PyArrowTable: 1}
-    ) is (PandasDataFrame)
+    assert _pick([PandasDataFrame, PyArrowTable], {PyArrowTable: 0, PandasDataFrame: 1}) is PyArrowTable
+    assert _pick([PyArrowTable, PandasDataFrame], {PandasDataFrame: 0, PyArrowTable: 1}) is PandasDataFrame
 
 
 def test_preference_ranks_unlisted_candidates_after_listed_in_default_order() -> None:
     zulu, alfa, _, bravo = _throwaway_frameworks()
 
-    assert ComputeFramework.select_deterministic({alfa, zulu, bravo}, {zulu: 0}) is zulu
-    assert ComputeFramework.select_deterministic({alfa, bravo, PandasDataFrame}, {zulu: 0}) is PandasDataFrame
+    assert _pick({alfa, zulu, bravo}, {zulu: 0}) is zulu
+    assert _pick({alfa, bravo, PandasDataFrame}, {zulu: 0}) is PandasDataFrame
 
 
 def test_unlisted_candidates_rank_after_every_listed_one_when_positions_repeat() -> None:
     zulu, alfa, _, bravo = _throwaway_frameworks()
 
-    assert ComputeFramework.select_deterministic({alfa, zulu, bravo}, {zulu: 1, bravo: 1}) is bravo
-    assert ComputeFramework.select_deterministic({alfa, zulu, PandasDataFrame}, {zulu: 1, bravo: 1}) is zulu
+    assert _pick({alfa, zulu, bravo}, {zulu: 1, bravo: 1}) is bravo
+    assert _pick({alfa, zulu, PandasDataFrame}, {zulu: 1, bravo: 1}) is zulu
 
 
 def test_a_shared_position_is_broken_by_the_module() -> None:
     module_b, module_a = _same_name_and_qualname_frameworks()
     positions: dict[type[ComputeFramework], int] = {module_b: 0, module_a: 0, PandasDataFrame: 1}
 
-    assert ComputeFramework.select_deterministic({module_b, module_a, PandasDataFrame}, positions) is module_a
+    assert _pick({module_b, module_a, PandasDataFrame}, positions) is module_a
 
 
 def test_no_preference_leaves_the_default_unchanged() -> None:
-    assert ComputeFramework.select_deterministic([PyArrowTable, PandasDataFrame], {}) is PandasDataFrame
+    assert _pick([PyArrowTable, PandasDataFrame], {}) is PandasDataFrame
 
 
 @pytest.mark.parametrize(
@@ -550,26 +547,24 @@ def test_copy_keeps_the_chosen_compute_framework() -> None:
     ],
     ids=["pa_first", "pd_first", "empty", "none", "unlisted_after_listed"],
 )
-def test_select_deterministic_follows_explicit_positions(
+def test_rank_key_follows_explicit_positions(
     positions: dict[type[ComputeFramework], int] | None,
     candidates: list[type[ComputeFramework]],
     expected: type[ComputeFramework],
 ) -> None:
-    assert ComputeFramework.select_deterministic(candidates, positions) is expected
+    assert _pick(candidates, positions) is expected
 
 
-def test_select_deterministic_positions_tie_breaks_by_module_after_name() -> None:
+def test_rank_key_positions_tie_breaks_by_module_after_name() -> None:
     module_b, module_a = _same_name_and_qualname_frameworks()
 
-    assert ComputeFramework.select_deterministic({module_b, module_a}, {module_b: 0, module_a: 0}) is module_a
+    assert _pick({module_b, module_a}, {module_b: 0, module_a: 0}) is module_a
 
 
-def test_select_deterministic_positions_rank_connection_before_name() -> None:
+def test_rank_key_positions_rank_connection_before_name() -> None:
     sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
 
-    assert ComputeFramework.select_deterministic([sqlite_fw, PyArrowTable], {sqlite_fw: 0, PyArrowTable: 0}) is (
-        PyArrowTable
-    )
+    assert _pick([sqlite_fw, PyArrowTable], {sqlite_fw: 0, PyArrowTable: 0}) is PyArrowTable
 
 
 def test_framework_rank_key_orders_by_position_then_default() -> None:

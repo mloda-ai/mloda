@@ -6,7 +6,7 @@ import json
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_links import ResolveLinks
@@ -28,12 +28,12 @@ def collect() -> dict[str, str]:
     both: set[type[ComputeFramework]] = {PythonDictFramework, PyArrowTable}
 
     link = Link.inner(JoinSpec(ProbeLeftFeatureGroup, "idx"), JoinSpec(ProbeRightFeatureGroup, "idx"))
-    picked = ComputeFramework.select_deterministic(both)
+    picked = min(both, key=framework_rank_key({}))
     _, trekker_left, trekker_right = ResolveLinks(Graph()).create_link_trekker_key(link, picked, picked)
 
     feature = Feature("determinism_probe_feature")
     feature.compute_frameworks = set(both)
-    feature.chosen_compute_framework = ComputeFramework.select_deterministic(feature.compute_frameworks)
+    feature.chosen_compute_framework = min(feature.compute_frameworks, key=framework_rank_key({}))
 
     return {
         "feature": feature.get_compute_framework().get_class_name(),

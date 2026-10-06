@@ -1,10 +1,10 @@
 """Reading a CSV does not require pyarrow.
 
-``CsvReader`` resolves a CSV into a lightweight ``FileSource`` descriptor, and a
+``CsvFG`` resolves a CSV into a lightweight ``FileSource`` descriptor, and a
 per-compute-framework transformer materializes it into that framework's native type.
 ``PythonDictFramework`` therefore reads a CSV using only the stdlib, so
 ``mloda.run_all([...], compute_frameworks=[PythonDictFramework], ...)`` succeeds even
-when pyarrow is unavailable. ``CsvReader.get_column_names`` discovers the header with
+when pyarrow is unavailable. ``CsvFG.column_names`` discovers the header with
 the stdlib ``csv`` module, so it works with pyarrow absent too.
 
 Both bodies run in a subprocess with pyarrow blocked via ``sys.meta_path`` (see
@@ -83,9 +83,9 @@ finally:
 
 
 # ---------------------------------------------------------------------------
-# Stdlib header discovery: CsvReader.get_column_names must work without pyarrow.
+# Stdlib header discovery: CsvFG.column_names must work without pyarrow.
 # ---------------------------------------------------------------------------
-_BODY_GET_COLUMN_NAMES: str = """
+_BODY_COLUMN_NAMES: str = """
 import csv
 import os
 import sys
@@ -103,13 +103,14 @@ try:
     from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
         PythonDictFramework,
     )
-    from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+    from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
-    cols = list(CsvReader.get_column_names(path))
+    cols = list(CsvFG.column_names(path))
     print("COLS:" + ",".join(cols))
     if cols == ["A", "B"]:
         print("OK")
-    print("COUNT:" + str(CsvReader.count_rows(path, PythonDictFramework)))
+    print("COUNT:" + str(CsvFG.count_rows(SourceMatch(source=path, access=path), PythonDictFramework)))
     sys.exit(0)
 except Exception as e:
     print("FAILED:" + type(e).__name__ + ":" + str(e))
@@ -136,14 +137,12 @@ def test_csv_reads_into_python_dict_without_pyarrow() -> None:
 
 
 @pytest.mark.timeout(30)
-def test_get_column_names_uses_stdlib_without_pyarrow() -> None:
-    """CsvReader.get_column_names returns ["A", "B"] via stdlib with pyarrow blocked."""
-    result = run_blocked(_BODY_GET_COLUMN_NAMES)
+def test_column_names_uses_stdlib_without_pyarrow() -> None:
+    """CsvFG.column_names returns ["A", "B"] via stdlib with pyarrow blocked."""
+    result = run_blocked(_BODY_COLUMN_NAMES)
 
     assert result.returncode == 0, (
-        "get_column_names crashed under blocked pyarrow.\n"
-        f"--- stdout ---\n{result.stdout}\n"
-        f"--- stderr ---\n{result.stderr}"
+        f"column_names crashed under blocked pyarrow.\n--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
     )
     assert "COLS:A,B" in result.stdout, (
         f"Expected COLS:A,B header sentinel. Got stdout:\n{result.stdout}\nstderr:\n{result.stderr}"

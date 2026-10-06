@@ -630,7 +630,7 @@ class FeatureGroup(ABC):
         Matching logic that reads option values can therefore see different values on the two paths.
         See ``docs/in_depth/property-mapping.md`` ("Applying declared defaults").
 
-        A veto recorded while the user explicitly addressed the reader family gates the name-based
+        A veto recorded while the user explicitly addressed the reader gates the name-based
         rules below; the MatchData rule still decides on its own.
 
         Writes to ``options`` reach the feature only if this candidate wins.
@@ -659,7 +659,7 @@ class FeatureGroup(ABC):
         if cls._matches_data(base_feature_name, options, data_access_collection):
             return True
 
-        # An owned veto: the user explicitly addressed this candidate's reader family and its declaration
+        # An owned veto: the user explicitly addressed this candidate and its declaration
         # rejected the request; recovering by name would only defer the failure to load time in init_reader.
         if has_match_rejection(INPUT_DATA_OWNED_STAGE):
             return False

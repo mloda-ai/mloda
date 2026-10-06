@@ -106,7 +106,6 @@ def _():
     # Step 2: We specify the data sources to load
     import os
     from mloda.user import DataAccessCollection
-    from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
     # Initialize a DataAccessCollection object
     data_access_collection = DataAccessCollection()
@@ -121,7 +120,7 @@ def _():
     data_access_collection.add_folder(base_data_path)
 
     # As a db cannot work with a folder, we need to add a connection for the db.
-    data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")})
+    data_access_collection.add_credentials({"sqlite": os.path.join(base_data_path, "example.sqlite")})
     return (data_access_collection,)
 
 
@@ -183,16 +182,16 @@ def _(Feature, data_access_collection, mloda):
     from typing import Any
     from mloda.provider import FeatureGroup, FeatureSet
     from mloda.user import FeatureName, Options, Index, Link, JoinSpec
-    from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
     index = Index(("order_id",))
 
-    class ReadFileFeatureJoin(ReadFileFeature):
+    class CsvFGJoin(CsvFG):
         @classmethod
         def index_columns(cls) -> list[Index] | None:
             return [index]
 
-    link = Link.inner(JoinSpec(ReadFileFeatureJoin, index), JoinSpec(ReadFileFeatureJoin, index))
+    link = Link.inner(JoinSpec(CsvFGJoin, index), JoinSpec(CsvFGJoin, index))
 
     class ExampleMlLifeCycleJoin(FeatureGroup):
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:

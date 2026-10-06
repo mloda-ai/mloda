@@ -3588,3 +3588,38 @@ class TestSkippedPluginsRenderBlock:
         bullet_lines = [line for line in message.split("\n") if line.startswith("  - pkg.skiptest_module_")]
         assert len(bullet_lines) == MAX_SKIPPED_PLUGINS
         assert "  ... and 2 more, see PluginLoader.skipped_plugins()." in message
+
+
+class TestMultipleSourceFixLine:
+    def _result(self, sources: dict[type[FeatureGroup], str]) -> EvaluationResult:
+        identified: dict[type[FeatureGroup], set[type[ComputeFramework]]] = {
+            RendererSuccessFG791: set(),
+            RendererBareOnlyFG791: set(),
+        }
+        return EvaluationResult(identified=identified, facts=RenderFacts(sources=sources))
+
+    def test_captured_sources_append_one_fix_line_before_the_url(self) -> None:
+        result = self._result({RendererSuccessFG791: "A: one", RendererBareOnlyFG791: "B: two"})
+
+        message = render_resolution_failure(result, Feature(MULTIPLE_FEATURE_791))
+
+        assert message is not None
+        fix_lines = [line for line in message.split("\n") if "column_to_file" in line]
+        assert len(fix_lines) == 1
+        assert "feature_group=" in fix_lines[0]
+        assert "data_access_handle" in fix_lines[0]
+        assert message.index("column_to_file") < message.index(TROUBLESHOOTING_LINE)
+
+    def test_a_single_captured_source_appends_no_fix_line(self) -> None:
+        message = render_resolution_failure(
+            self._result({RendererSuccessFG791: "A: one"}), Feature(MULTIPLE_FEATURE_791)
+        )
+
+        assert message is not None
+        assert "column_to_file" not in message
+
+    def test_no_captured_source_appends_no_fix_line(self) -> None:
+        message = render_resolution_failure(self._result({}), Feature(MULTIPLE_FEATURE_791))
+
+        assert message is not None
+        assert "column_to_file" not in message

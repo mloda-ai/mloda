@@ -1,4 +1,5 @@
 import csv
+import importlib
 import os
 import tempfile
 from pathlib import Path
@@ -6,12 +7,11 @@ from typing import Any
 
 import pytest
 
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.provider import FeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     FileSourcePyArrowTransformer,
@@ -26,46 +26,47 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature  # noqa: F401
 
+DOUBLING_MARKER = "overwritten_csv_doubling_marker"
 
-class OverwrittenReadCsvInputDataTestFeatureGroup(ReadFileFeature):
-    @classmethod
-    def match_feature_group_criteria(
-        cls,
-        feature_name: FeatureName | str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-    ) -> bool:
-        if isinstance(feature_name, FeatureName):
-            feature_name = str(feature_name)
 
-        feature_names = "id,V1,V2,V3,V4,V5,V6,V7,V8,V9,V10,V11,V12,V13,V14,V15,V16,V17,V18,V19,V20,V21,V22,V23,V24,V25,V26,V27,V28,Amount,Class"
-        feature_list = feature_names.split(",")
+@pytest.fixture(autouse=True)
+def _stock_formats_loaded() -> None:
+    importlib.import_module("mloda_plugins.feature_group.input_data.file_formats.stock_formats")
 
-        # We added this, because else this feature name rule would supersede the other examples.
-        if options.get("OverwrittenReadCsvInputDataTestFeatureGroup") is None:
-            return False
 
-        if feature_name in feature_list:
-            return True
+def _overwritten_group() -> Any:
+    """A fresh CsvFG subclass per test (so it is collected afterwards) that doubles every value when marked."""
+    csv_group = load_group("csv_fg", "CsvFG")
 
-        return False
+    class OverwrittenReadCsvInputDataTestFeatureGroup(csv_group):  # type: ignore[misc,valid-type]
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            # Gated: without the marker this subclass never claims, so it cannot take over other tests' features.
+            if options.get(DOUBLING_MARKER) is None:
+                return False
+            return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
 
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        reader = cls.input_data()
-        if reader is not None:
-            source = reader.load(features)
-            # ``load`` now yields a FileSource descriptor; materialize it into a pa.Table.
-            result = FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
-
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            result = super().calculate_feature(data, features)
+            # The stock PyArrowTable loader yields a table; a FileSource descriptor is materialized the same way.
+            if isinstance(result, FileSource):
+                result = FileSourcePyArrowTransformer.transform_fw_to_other_fw(result)
             new_columns = {
                 col_name: pa.array([value * 2 for value in result[col_name].to_pylist()])
                 for col_name in result.schema.names
             }
             return pa.table(new_columns)
-        raise ValueError(f"Reading file failed for feature {features.get_name_of_one_feature()}.")
+
+    return OverwrittenReadCsvInputDataTestFeatureGroup
 
 
 class TestInputData:
@@ -84,7 +85,7 @@ class TestInputData:
             for k, v in additional_options.items():
                 _f.options.add_to_group(k, v)
             if path is not None:
-                _f.options.add_to_group(CsvReader.__name__, path)
+                _f.options.add_to_group("CsvFG", path)
             _feature_list.append(_f)
         return _feature_list
 
@@ -132,11 +133,12 @@ class TestInputData:
 
     def test_overwriting_match_feature_group_criteria_using_data_access_collection(self) -> Any:
         """
-        This test checks if the overwritten match feature group criteria is applied if overriden.
+        A gated CsvFG subclass takes over from CsvFG when its marker option is set and it calls the parent.
 
         Further, this checks if sub_classes are filtered out correctly. (Functionality in IdentifyFeatureGroupClass).
         """
-        features = self.get_features(self.feature_list, None, {"OverwrittenReadCsvInputDataTestFeatureGroup": "dummy"})
+        _group = _overwritten_group()
+        features = self.get_features(self.feature_list, None, {DOUBLING_MARKER: "dummy"})
 
         result = mloda.run_all(
             features,
@@ -150,13 +152,12 @@ class TestInputData:
 
     def test_overwriting_match_feature_group_criteria_using_local_scope(self) -> Any:
         """
-        This test checks if the overwritten match feature group criteria is applied if overriden.
+        A gated CsvFG subclass takes over from CsvFG when its marker option is set and it calls the parent.
 
         Further, this checks if sub_classes are filtered out correctly. (Functionality in IdentifyFeatureGroupClass).
         """
-        features = self.get_features(
-            self.feature_list, self.file_path, {"OverwrittenReadCsvInputDataTestFeatureGroup": "dummy"}
-        )
+        _group = _overwritten_group()
+        features = self.get_features(self.feature_list, self.file_path, {DOUBLING_MARKER: "dummy"})
 
         result = mloda.run_all(
             features,
@@ -186,7 +187,7 @@ class TestInputData:
     def test_aggregated_load_csv_with_path_given_to_feature(self) -> Any:
         f = Feature(
             name="sum_of_",
-            options={"sum": ("V1", "V2"), CsvReader.__name__: self.file_path},
+            options={"sum": ("V1", "V2"), "CsvFG": self.file_path},
         )
         result = mloda.run_all(
             [f],
@@ -198,12 +199,13 @@ class TestInputData:
                 assert v[0] == -2.378746582538124
 
     def test_aggregated_load_csv_with_overwriting_match_feature_group_criteria(self) -> Any:
+        _group = _overwritten_group()
         f = Feature(
             name="sum_of_",
             options={
                 "sum": ("V1", "V2"),
-                CsvReader.__name__: self.file_path,
-                "OverwrittenReadCsvInputDataTestFeatureGroup": "dummy",
+                "CsvFG": self.file_path,
+                DOUBLING_MARKER: "dummy",
             },
         )
         result = mloda.run_all(
@@ -216,141 +218,47 @@ class TestInputData:
                 assert v[0] == -4.757493165076248
 
 
-class TestReadFileValidationErrors:
-    def test_load_without_match_message_names_class_and_attribute(self) -> None:
-        """An unmatched FeatureSet raises a ValueError naming the reader class and input_data_match."""
-
-        class MyCustomReader(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return []
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
+class TestCsvFGOutsideTheRun:
+    def test_calculate_feature_without_match_names_class_and_attribute(self) -> None:
+        """An unmatched FeatureSet raises a ValueError naming the group class and input_data_match."""
+        csv_group = load_group("csv_fg", "CsvFG")
         features = FeatureSet()
         features.add(Feature("unmatched_read_file_col"))
-        with pytest.raises(ValueError, match=r"MyCustomReader") as excinfo:
-            MyCustomReader().load(features)
+
+        with pytest.raises(ValueError, match=r"CsvFG") as excinfo:
+            csv_group.calculate_feature(None, features)
         assert "input_data_match" in str(excinfo.value)
 
+    def test_describe_columns_lists_the_header_without_types(self, tmp_path: Path) -> None:
+        csv_group = load_group("csv_fg", "CsvFG")
+        path = tmp_path / "described.csv"
+        path.write_text("describe_id,describe_v1\n1,2\n")
+        match = SourceMatch(source=os.path.abspath(path), access=str(path))
 
-class TestReadFile:
-    def test_validate_columns(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "V1", "V2"]
+        assert csv_group.describe_columns(match) == {"describe_id": None, "describe_v1": None}
 
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        assert TestReadFile.validate_columns("dummy.csv", ["id", "V1"])
-        assert not TestReadFile.validate_columns("dummy.csv", ["id", "V3"])
-
-    def test_match_read_file_data_access(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "V1", "V2"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        data_accesses = ["dummy.csv", "dummy2.csv"]
-        feature_names = ["id", "V1"]
-        assert TestReadFile.match_read_file_data_access(data_accesses, feature_names) == "dummy.csv"
-
-    def test_match_subclass_data_access(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "V1", "V2"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        data_access = DataAccessCollection(files={"dummy.csv"})
-        feature_names = ["id", "V1"]
-        assert TestReadFile.match_subclass_data_access(data_access, feature_names, options=Options({})) == "dummy.csv"
-
-    def test_init_reader(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "V1", "V2"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        reader, data_access = TestReadFile().init_reader((TestReadFile, "dummy.csv"))
-        assert isinstance(reader, TestReadFile)
-        assert data_access == "dummy.csv"
-
-    def test_load(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "V1", "V2"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-            @classmethod
-            def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-                return pa.table({"id": [1, 2], "V1": [3, 4], "V2": [5, 6]})
-
-        features = FeatureSet()
-        for name in ("id", "V1", "V2"):
-            feature = Feature(name)
-            feature.input_data_match = (TestReadFile, "dummy.csv")
-            features.add(feature)
-        data = TestReadFile().load(features)
-        assert data.column_names == ["id", "V1", "V2"]
-
-    def test_describe_columns_wraps_get_column_names(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def get_column_names(cls, file_name: str) -> list[str]:
-                return ["id", "V1", "V2"]
-
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-        expected = {"id": None, "V1": None, "V2": None}
-        assert TestReadFile.describe_columns("dummy.csv") == expected
-        assert TestReadFile.describe_columns(Path("dummy.csv")) == expected
-        with pytest.raises(ValueError):
-            TestReadFile.describe_columns(DataAccessCollection(files={"dummy.csv"}))
-
-    def test_describe_columns_not_implemented_by_default(self) -> None:
-        class TestReadFile(ReadFile):
-            @classmethod
-            def suffix(cls) -> tuple[str, ...]:
-                return (".csv",)
+    def test_describe_columns_raises_not_implemented_when_the_file_cannot_enumerate(self, tmp_path: Path) -> None:
+        csv_group = load_group("csv_fg", "CsvFG")
+        path = tmp_path / "undescribable.csv"
+        path.write_bytes(b"\xff\xfe\x00\x81" * 64)
+        match = SourceMatch(source=os.path.abspath(path), access=str(path))
 
         with pytest.raises(NotImplementedError):
-            TestReadFile.describe_columns("dummy.csv")
+            csv_group.describe_columns(match)
 
 
 class TestSameClassFGLinkWithDifferentDataSources:
     """Integration test: same FeatureGroup class linked with different data sources.
 
     This test verifies that left_discriminator/right_discriminator on Link correctly
-    resolves two nodes of the same ReadFileFeature subclass that load different CSV files.
+    resolves two nodes of the same CsvFG subclass that load different CSV files.
     """
 
     file_path_a = f"{os.getcwd()}/tests/test_plugins/feature_group/src/dataset/creditcard_2023_short.csv"
 
     def test_left_discriminator_right_discriminator_resolves_same_class_fg_nodes(self) -> None:
         path_a = self.file_path_a
+        csv_group = load_group("csv_fg", "CsvFG")
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
             path_b = f.name
@@ -361,7 +269,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
 
         try:
 
-            class ReadFileWithIndex(ReadFileFeature):
+            class ReadFileWithIndex(csv_group):  # type: ignore[misc,valid-type]
                 @classmethod
                 def index_columns(cls) -> list[Index] | None:
                     return [Index(("id",))]
@@ -377,10 +285,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                         return False
                     if isinstance(feature_name, FeatureName):
                         feature_name = str(feature_name)
-                    if cls().is_root(options, feature_name):
-                        input_data_class = cls.input_data()
-                        return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
-                    return False
+                    return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
 
             class JoinedCsvFeature(FeatureGroup):
                 _path_a: str = path_a
@@ -392,28 +297,28 @@ class TestSameClassFGLinkWithDifferentDataSources:
                     link = Link.inner(
                         JoinSpec(ReadFileWithIndex, Index(("id",))),
                         JoinSpec(ReadFileWithIndex, Index(("id",))),
-                        left_discriminator={"CsvReader": _path_a},
-                        right_discriminator={"CsvReader": _path_b},
+                        left_discriminator={"CsvFG": _path_a},
+                        right_discriminator={"CsvFG": _path_b},
                     )
                     return {
                         Feature(
                             "id",
-                            options={CsvReader.__name__: _path_a, "discriminator_test": True},
+                            options={"CsvFG": _path_a, "discriminator_test": True},
                         ),
                         Feature(
                             "V1",
                             link=link,
                             index=Index(("id",)),
-                            options={CsvReader.__name__: _path_a, "discriminator_test": True},
+                            options={"CsvFG": _path_a, "discriminator_test": True},
                         ),
                         Feature(
                             "id",
-                            options={CsvReader.__name__: _path_b, "discriminator_test": True},
+                            options={"CsvFG": _path_b, "discriminator_test": True},
                         ),
                         Feature(
                             "score",
                             index=Index(("id",)),
-                            options={CsvReader.__name__: _path_b, "discriminator_test": True},
+                            options={"CsvFG": _path_b, "discriminator_test": True},
                         ),
                     }
 
@@ -441,6 +346,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
     def test_missing_discriminator_raises_helpful_error(self) -> None:
         """Same-class FG link without discriminators raises a clear error message."""
         path_a = self.file_path_a
+        csv_group = load_group("csv_fg", "CsvFG")
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
             path_b = f.name
@@ -451,7 +357,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
 
         try:
 
-            class ReadFileWithIndexNoDisc(ReadFileFeature):
+            class ReadFileWithIndexNoDisc(csv_group):  # type: ignore[misc,valid-type]
                 @classmethod
                 def index_columns(cls) -> list[Index] | None:
                     return [Index(("id",))]
@@ -467,10 +373,7 @@ class TestSameClassFGLinkWithDifferentDataSources:
                         return False
                     if isinstance(feature_name, FeatureName):
                         feature_name = str(feature_name)
-                    if cls().is_root(options, feature_name):
-                        input_data_class = cls.input_data()
-                        return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
-                    return False
+                    return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
 
             class JoinedCsvNoDisc(FeatureGroup):
                 _path_a: str = path_a
@@ -486,22 +389,22 @@ class TestSameClassFGLinkWithDifferentDataSources:
                     return {
                         Feature(
                             "id",
-                            options={CsvReader.__name__: _path_a, "no_disc_test": True},
+                            options={"CsvFG": _path_a, "no_disc_test": True},
                         ),
                         Feature(
                             "V1",
                             link=link,
                             index=Index(("id",)),
-                            options={CsvReader.__name__: _path_a, "no_disc_test": True},
+                            options={"CsvFG": _path_a, "no_disc_test": True},
                         ),
                         Feature(
                             "id",
-                            options={CsvReader.__name__: _path_b, "no_disc_test": True},
+                            options={"CsvFG": _path_b, "no_disc_test": True},
                         ),
                         Feature(
                             "score",
                             index=Index(("id",)),
-                            options={CsvReader.__name__: _path_b, "no_disc_test": True},
+                            options={"CsvFG": _path_b, "no_disc_test": True},
                         ),
                     }
 

@@ -1,11 +1,12 @@
+import gc
 import os
-from typing import Any
+from typing import Any, cast
 
 import tempfile
 import sqlite3
 from mloda.user import FeatureName
 from mloda.user import Options
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 import pytest
 import pyarrow as pa
 
@@ -16,11 +17,7 @@ from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import PluginCollector
 from mloda.user import mloda
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import (
-    DBInputDataTestFeatureGroup,
-)
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
 
@@ -53,46 +50,58 @@ class TestTwoReader:
             # add sqlite reader feature
             f = Feature(
                 name=feature,
-                options={SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}},
+                options={SqliteFG.__name__: {"sqlite": self.db_path, "table_name": "test_table"}},
             )
             feature_list.append(f)
             # add csv reader feature
-            f = Feature(name=feature, options={CsvReader.__name__: self.file_path})
+            f = Feature(name=feature, options={CsvFG.get_class_name(): self.file_path})
             feature_list.append(f)
 
         result = mloda.run_all(
             feature_list,  # type: ignore
             compute_frameworks=["PyArrowTable"],
-            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup, ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG, CsvFG}),
         )
         assert result[0].to_pydict()["id"] != result[1].to_pydict()["id"]
 
     def test_load_multiple_local_data_for_one_feature_fail(self) -> None:
-        feature_list: list[Feature] = []
-        for feature in self.feature_list:
-            f = Feature(
+        def gated(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
+            if options.get("test_two_siblings") is None:
+                return False
+            return bool(
+                getattr(super(cls, cls), "match_feature_group_criteria")(feature_name, options, data_access_collection)
+            )
+
+        sibling_a = type("SqliteFGSiblingA", (SqliteFG,), {"match_feature_group_criteria": classmethod(gated)})
+        sibling_b = type("SqliteFGSiblingB", (SqliteFG,), {"match_feature_group_criteria": classmethod(gated)})
+        feature_list = [
+            Feature(
                 name=feature,
                 options={
-                    SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
-                    CsvReader.__name__: self.file_path,
+                    SqliteFG.__name__: {"sqlite": self.db_path, "table_name": "test_table"},
+                    "test_two_siblings": True,
                 },
             )
-            feature_list.append(f)
+            for feature in self.feature_list
+        ]
 
         with pytest.raises(ValueError) as excinfo:
             mloda.run_all(
                 feature_list,  # type: ignore
                 compute_frameworks=["PyArrowTable"],
+                plugin_collector=PluginCollector.enabled_feature_groups(cast(Any, {sibling_a, sibling_b})),
             )
         assert "Multiple feature groups found" in str(excinfo.value)
         assert "BaseInputData already set" not in str(excinfo.value)
+        del sibling_a, sibling_b, excinfo
+        gc.collect()
 
     def test_load_data_access_collection_feature_scope_data_double_reader_fail(self) -> None:
         feature_list: list[Feature] = []
         for feature in self.feature_list:
             f = Feature(
                 name=feature,
-                options={SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"}},
+                options={SqliteFG.__name__: {"sqlite": self.db_path, "table_name": "test_table"}},
             )
             feature_list.append(f)
 
@@ -101,14 +110,15 @@ class TestTwoReader:
                 feature_list,  # type: ignore
                 compute_frameworks=["PyArrowTable"],
                 data_access_collection=DataAccessCollection(files={self.file_path}),
+                plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG, CsvFG}),
             )
         assert "Multiple feature groups found" in str(excinfo.value)
         assert "BaseInputData already set" not in str(excinfo.value)
 
-    def test_agg_feature(self) -> None:
+    def _agg_groups(self) -> tuple[type[CsvFG], type[SqliteFG], Link]:
         index = Index(("id",))
 
-        class ReadFileFeatureWithIndex(ReadFileFeature):
+        class CsvFGWithIndex(CsvFG):
             @classmethod
             def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
@@ -124,50 +134,59 @@ class TestTwoReader:
                 if options.get("test_agg_feature") is None:
                     return False
 
-                if isinstance(feature_name, FeatureName):
-                    feature_name = str(feature_name)
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
-                if cls().is_root(options, feature_name):
-                    input_data_class = cls.input_data()
-                    return input_data_class.matches(feature_name, options, data_access_collection)  # type: ignore
-                return False
-
-        class DBInputDataTestFeatureGroupWithIndex(DBInputDataTestFeatureGroup):
+        class SqliteFGWithIndex(SqliteFG):
             @classmethod
             def index_columns(cls) -> list[Index] | None:
                 return [Index(("id",))]
 
             @classmethod
+            def match_feature_group_criteria(
+                cls,
+                feature_name: FeatureName | str,
+                options: Options,
+                data_access_collection: DataAccessCollection | None = None,
+            ) -> bool:
+                # Feature is only valid for this test
+                if options.get("test_agg_feature") is None:
+                    return False
+
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+            @classmethod
             def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                reader = cls.input_data()
-                if reader is not None:
-                    result = reader.load(features)
+                result = super().calculate_feature(data, features)
 
-                    # As of date of writing this test, we did not handle the types automatically.
-                    # Thus, we need to convert the columns to int64...
-                    for column_name in features.get_all_names():
-                        index = result.schema.get_field_index(column_name)
-                        if column_name == "any_num":
-                            col = result[column_name].cast(pa.float64())
-                        else:
-                            col = result[column_name].cast(pa.int64())
-                        result = result.set_column(index, column_name, col)
+                # As of date of writing this test, we did not handle the types automatically.
+                # Thus, we need to convert the columns to int64...
+                for column_name in features.get_all_names():
+                    index = result.schema.get_field_index(column_name)
+                    if column_name == "any_num":
+                        col = result[column_name].cast(pa.float64())
+                    else:
+                        col = result[column_name].cast(pa.int64())
+                    result = result.set_column(index, column_name, col)
 
-                    return result
-
-                raise ValueError(f"Reading file failed for feature {features.get_name_of_one_feature()}.")
+                return result
 
         link = Link(
             jointype="inner",
-            left=JoinSpec(DBInputDataTestFeatureGroupWithIndex, index),
-            right=JoinSpec(ReadFileFeatureWithIndex, index),
+            left=JoinSpec(SqliteFGWithIndex, index),
+            right=JoinSpec(CsvFGWithIndex, index),
         )
+        return CsvFGWithIndex, SqliteFGWithIndex, link
+
+    def _dac(self) -> DataAccessCollection:
+        return DataAccessCollection(files={self.file_path}, credentials=[{"sqlite": self.db_path}])
+
+    def test_agg_feature(self) -> None:
+        CsvFGWithIndex, SqliteFGWithIndex, link = self._agg_groups()
+        # The credential lives in the collection: a consumer pointer would be forwarded to the csv input too.
         f = Feature(
             name="sum_of_",
             options={
                 "sum": ("any_num", "Amount"),
-                SQLITEReader.__name__: {SQLITEReader.db_path(): self.db_path, "table_name": "test_table"},
-                CsvReader.__name__: self.file_path,
                 "test_agg_feature": True,
             },
         )
@@ -176,9 +195,8 @@ class TestTwoReader:
             [f],
             compute_frameworks=["PyArrowTable"],
             links={link},
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {ReadFileFeatureWithIndex, DBInputDataTestFeatureGroupWithIndex, SumFeature}
-            ),
+            data_access_collection=self._dac(),
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFGWithIndex, SqliteFGWithIndex, SumFeature}),
         )
         assert result[0].to_pydict()["SumFeature_any_numAmount"] == [9051.91, 9051.91]
 
@@ -187,7 +205,26 @@ class TestTwoReader:
                 [f],
                 compute_frameworks=["PyArrowTable"],
                 links={link},
-                plugin_collector=PluginCollector.enabled_feature_groups(
-                    {ReadFileFeature, DBInputDataTestFeatureGroupWithIndex}
-                ),
+                data_access_collection=self._dac(),
+                plugin_collector=PluginCollector.enabled_feature_groups({CsvFG, SqliteFGWithIndex}),
+            )
+
+    def test_pointer_on_the_consumer_aborts_naming_the_input_the_csv_lacks(self) -> None:
+        csv_group, db_group, link = self._agg_groups()
+        f = Feature(
+            name="sum_of_",
+            options={
+                "sum": ("any_num", "Amount"),
+                SqliteFG.__name__: {"sqlite": self.db_path, "table_name": "test_table"},
+                "test_agg_feature": True,
+                csv_group.get_class_name(): self.file_path,
+            },
+        )
+
+        with pytest.raises(ValueError, match=r"column 'Amount' is in none of the sources"):
+            mloda.run_all(
+                [f],
+                compute_frameworks=["PyArrowTable"],
+                links={link},
+                plugin_collector=PluginCollector.enabled_feature_groups({csv_group, db_group, SumFeature}),
             )

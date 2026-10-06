@@ -23,7 +23,7 @@ class DynamicFeatureGroupCreator:
 
     - Create feature group classes at runtime without explicit class definitions
     - Override specific methods (calculate_feature, match_feature_group_criteria, etc.)
-    - Inherit from any FeatureGroup subclass (e.g., ReadFileFeature, SourceInputFeature)
+    - Inherit from any FeatureGroup subclass (e.g., CsvFG, SourceInputFeature)
     - Cache created classes to avoid duplicate definitions
     - Support full feature group lifecycle customization
 
@@ -79,25 +79,22 @@ class DynamicFeatureGroupCreator:
     # The class is now registered and can match "double_value" features
     ```
 
-    ### Dynamic File Reader Feature Group
+    ### Dynamic Feature Group Over a Document Format Group
 
     ```python
-    from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
-    from mloda_plugins.feature_group.input_data.read_files.text_file_reader import PyFileReader
+    from mloda.user import Feature
 
     properties = {
-        "input_data": lambda: PyFileReader(),
+        "input_features": lambda cls, options, feature_name: {Feature("PyFG")},
         "calculate_feature": lambda cls, data, features: process_file_content(data),
         "match_feature_group_criteria": lambda cls, fn, opts, dac: (
             fn == FeatureName("my_file_reader")
         ),
     }
 
-    # Inherit from ReadDocumentFeature for document reading capabilities
     MyFileReaderFG = DynamicFeatureGroupCreator.create(
         properties=properties,
         class_name="MyFileReaderFeatureGroup",
-        feature_group_cls=ReadDocumentFeature
     )
     ```
 

@@ -9,6 +9,7 @@ import concurrent.futures
 import contextvars
 import copy
 import logging
+import os
 import pickle  # nosec B403
 import sqlite3
 import threading
@@ -24,7 +25,9 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
-from mloda.provider import DataCreator, FeatureGroup, FileSource, InputDataDescriptor
+from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
+from mloda.provider import DataCreator, FeatureGroup, FileSource, InputDataDescriptor, SourceMatch
 from mloda.steward import GateBypassError
 from mloda.user import (
     DataAccessCollection,
@@ -37,16 +40,16 @@ from mloda.user import (
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-from mloda_plugins.feature_group.input_data.read_files.text_file_reader import TextFileReader
-from tests.test_plugins.feature_group.input_data.test_classes.test_input_classes import DBInputDataTestFeatureGroup
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    neutral_csv_group,
+    toy_dac,
+)
 
 _MARKER = "inputload051"
-_EXPECTED_FEATURE_GROUP_CLASS = f"{ReadFileFeature.__module__}.{ReadFileFeature.__qualname__}"
+_EXPECTED_FEATURE_GROUP_CLASS = f"{CsvFG.__module__}.{CsvFG.__qualname__}"
 
 
 class _CalcContextCapturingExtender(Extender):
@@ -73,11 +76,13 @@ class _InputDataLoadCapturingExtender(Extender):
         self.captured: HookContext | None = None
         self.all_captured: list[HookContext] = []
         self.results: list[Any] = []
+        self.func_owner: str | None = None
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.INPUT_DATA_LOAD}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        self.func_owner = Extender.feature_group_name(func)
         result = func(*args, **kwargs)
         self.results.append(result)
         self.captured = HookContext.current()
@@ -299,13 +304,13 @@ class TestComputeFrameworkCurrentShortCircuit:
         _write_csv(path, column, [1, 2])
 
         observed: list[Any] = []
-        original_load_data = CsvReader.__dict__["load_data"].__func__
+        original_load_neutral = CsvFG.load_neutral.__func__  # type: ignore[attr-defined]
 
-        def _probe_load_data(cls: type, data_access: Any, features: Any) -> Any:
+        def _probe_load_neutral(cls: type, match: Any, features: Any) -> Any:
             observed.append(ComputeFramework.current())
-            return original_load_data(cls, data_access, features)
+            return original_load_neutral(cls, match, features)
 
-        monkeypatch.setattr(CsvReader, "load_data", classmethod(_probe_load_data))
+        monkeypatch.setattr(CsvFG, "load_neutral", classmethod(_probe_load_neutral))
 
         mloda.run_all(
             [column],
@@ -374,9 +379,9 @@ class TestDataAccessIdentityHidesDictCredentialValues:
             ["name"],
             compute_frameworks=[PyArrowTable],
             data_access_collection=DataAccessCollection(
-                credentials=[{SQLITEReader.db_path(): str(db_path), "user": "alice", "password": "hunter2"}]  # nosec B105
+                credentials=[{"sqlite": str(db_path), "user": "alice", "password": "hunter2"}]  # nosec B105
             ),
-            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
             function_extender={fetch_extender},
         )
 
@@ -404,8 +409,8 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         mloda.run_all(
             ["col_a", "col_b"],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=DataAccessCollection(credentials=[{SQLITEReader.db_path(): str(db_path)}]),
-            plugin_collector=PluginCollector.enabled_feature_groups({DBInputDataTestFeatureGroup}),
+            data_access_collection=DataAccessCollection(credentials=[{"sqlite": str(db_path)}]),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
             function_extender={extender},
         )
 
@@ -413,48 +418,49 @@ class TestDataAccessIdentityHidesDictCredentialValues:
         assert identities == {f"{db_path}::table_a", f"{db_path}::table_b"}
 
 
-class TestSQLiteReaderDataAccessIdentity:
-    """SQLITEReader falls back to key names unless the sqlite value is a str naming an existing file."""
+class TestSqliteFGSources:
+    """SqliteFG sources carry the credential-free identity: the absolute path, plus ``::table`` per table."""
 
-    @pytest.mark.parametrize("kind", ["missing_file", "directory", "path_object", "missing_key"])
-    def test_falls_back_to_key_names(self, tmp_path: Path, kind: str) -> None:
-        existing = tmp_path / "x.db"
-        existing.write_bytes(b"")
-        cases: dict[str, dict[str, Any]] = {
-            "missing_file": {"sqlite": str(tmp_path / "missing.db")},
-            "directory": {"sqlite": str(tmp_path)},
-            "path_object": {"sqlite": existing},
-            "missing_key": {"user": "alice"},
-        }
-        access = cases[kind]
-        assert SQLITEReader.data_access_identity(access) == ("{user}" if kind == "missing_key" else "{sqlite}")
+    _ROUTE = ClaimRoute("credentials", NamePolicy.CHECKED, True)
+
+    def _sources(self, credential: dict[str, Any]) -> list[SourceMatch]:
+        dac = DataAccessCollection(credentials={"identity_handle": credential})
+        return SqliteFG.find_sources(self._ROUTE, "identity_col", Options(), dac)
+
+    @pytest.mark.parametrize("kind", ["missing_file", "directory"])
+    def test_an_unreadable_database_is_one_source_named_by_its_path_alone(self, tmp_path: Path, kind: str) -> None:
+        target = tmp_path / "missing.db" if kind == "missing_file" else tmp_path
+        sources = self._sources({"sqlite": str(target)})
+        assert [match.source for match in sources] == [os.path.abspath(target)]
+        assert isinstance(sources[0].access, DBTable)
+        assert sources[0].access.table is None
+        assert SqliteFG.data_access_identity(sources[0]) == os.path.abspath(target)
+
+    @pytest.mark.parametrize("kind", ["path_object", "missing_key"])
+    def test_an_invalid_credential_yields_no_source(self, tmp_path: Path, kind: str) -> None:
+        credential = {"sqlite": tmp_path / "x.db"} if kind == "path_object" else {"user": "alice"}
+        assert self._sources(credential) == []
 
     def test_path_and_table_name_join_with_double_colon(self, tmp_path: Path) -> None:
         db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        access = {"sqlite": str(db), "table_name": "orders"}
-        assert SQLITEReader.data_access_identity(access) == f"{db}::orders"
+        write_sqlite(db, {"orders": {"identity_col": [1]}})
+        assert [match.source for match in self._sources({"sqlite": str(db)})] == [f"{db}::orders"]
 
-    def test_path_without_table_name_stays_the_path(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("table_name", ["", None])
+    def test_an_empty_table_name_is_no_preset(self, tmp_path: Path, table_name: Any) -> None:
         db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        assert SQLITEReader.data_access_identity({"sqlite": str(db)}) == str(db)
+        write_sqlite(db, {"orders": {"identity_col": [1]}, "items": {"identity_col": [2]}})
+        sources = self._sources({"sqlite": str(db), "table_name": table_name})
+        assert sorted(match.source for match in sources) == [f"{db}::items", f"{db}::orders"]
 
-    @pytest.mark.parametrize("table_name", ["", 5, None, b"orders"])
-    def test_non_str_or_empty_table_name_stays_the_path(self, tmp_path: Path, table_name: Any) -> None:
+    def test_password_is_not_leaked_into_the_source_or_its_repr(self, tmp_path: Path) -> None:
         db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        access = {"sqlite": str(db), "table_name": table_name}
-        assert SQLITEReader.data_access_identity(access) == str(db)
-
-    def test_password_is_not_leaked_alongside_table_name(self, tmp_path: Path) -> None:
-        db = tmp_path / "x.db"
-        db.write_bytes(b"")
-        access = {"sqlite": str(db), "user": "alice", "password": "hunter2", "table_name": "orders"}  # nosec B105
-        identity = SQLITEReader.data_access_identity(access)
-        assert identity == f"{db}::orders"
-        assert "hunter2" not in identity
-        assert "alice" not in identity
+        write_sqlite(db, {"orders": {"identity_col": [1]}})
+        credential = {"sqlite": str(db), "user": "alice", "password": "hunter2", "table_name": "orders"}  # nosec B105
+        sources = self._sources(credential)
+        assert [match.source for match in sources] == [f"{db}::orders"]
+        assert "hunter2" not in repr(sources[0])
+        assert "alice" not in repr(sources[0])
 
 
 class TestDataAccessIdentityOfUriStrings:
@@ -948,9 +954,9 @@ class TestDataAccessIdentityOfExistingLocalPaths:
 
 
 class TestDataAccessIdentityRegressionGuardForReportedLeak:
-    """A credential-shaped value must never come back verbatim from any reader family's data_access_identity."""
+    """A credential-shaped value must never come back verbatim from any reader's data_access_identity."""
 
-    @pytest.mark.parametrize("reader", [CsvReader, TextFileReader, ReadFile, ReadDocument])
+    @pytest.mark.parametrize("reader", [BaseInputData, _DirectLoadReader])
     @pytest.mark.parametrize(
         ("value", "secret"),
         [
@@ -965,6 +971,18 @@ class TestDataAccessIdentityRegressionGuardForReportedLeak:
         identity = reader.data_access_identity(value)
         assert identity == type(value).__name__
         assert secret not in identity
+
+
+class TestFormatGroupIdentityNeverEchoesTheAccess:
+    """A format group publishes the match's source, never a credential-shaped access value."""
+
+    def test_identity_is_the_source_not_the_access(self) -> None:
+        match = SourceMatch(source="/data/key.csv", access=PurePosixPath("s3://alice:hunter2@bucket/key.csv"))
+
+        identity = CsvFG.data_access_identity(match)
+
+        assert identity == "/data/key.csv"
+        assert "hunter2" not in identity
 
 
 class TestDataAccessIdentityWiring:
@@ -1529,21 +1547,13 @@ class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
         assert context.reader_class is _RaisingDeclarationReader
         assert context.declared_attributes is None
 
-    def test_end_to_end_load_uses_reader_declarations_and_calculate_uses_group_declarations(
+    def test_end_to_end_format_group_declarations_reach_both_load_and_calculate(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         column = f"{_MARKER}_col_decl"
         path = tmp_path / "data.csv"
         _write_csv(path, column, [1, 2])
-        monkeypatch.setattr(
-            CsvReader, "declared_attributes", classmethod(lambda cls, features: {"origin": "reader"}), raising=False
-        )
-        monkeypatch.setattr(
-            ReadFileFeature,
-            "declared_attributes",
-            classmethod(lambda cls, features: {"origin": "group"}),
-            raising=False,
-        )
+        monkeypatch.setattr(CsvFG, "declared_attributes", classmethod(lambda cls, features: {"origin": "format"}))
         calc_extender = _CalcContextCapturingExtender()
         fetch_extender = _InputDataLoadCapturingExtender()
 
@@ -1555,11 +1565,11 @@ class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
         )
 
         assert fetch_extender.captured is not None
-        assert fetch_extender.captured.reader_class is CsvReader
-        assert fetch_extender.captured.declared_attributes == {"origin": "reader"}
+        assert fetch_extender.captured.reader_class is CsvFG
+        assert fetch_extender.captured.declared_attributes == {"origin": "format"}
         assert calc_extender.captured is not None
         assert calc_extender.captured.reader_class is None
-        assert calc_extender.captured.declared_attributes == {"origin": "group"}
+        assert calc_extender.captured.declared_attributes == {"origin": "format"}
 
 
 _ROW_COUNT_SENTINEL = 424242
@@ -1595,8 +1605,8 @@ class TestInputDataLoadHookUsesFrameworkRowCountNotDefaultLen:
 _REPLACED_COLUMN = f"{_MARKER}_replaced_col"
 
 
-class _ReplacedReadParentFeatureGroup(FeatureGroup):
-    """Reader feature group replaced by its subclass; matches only its own column so other tests are unaffected."""
+class _ReplacedReadParentFeatureGroup(CsvFG):
+    """CsvFG subclass replaced by its own subclass; gated to its own column so other tests are unaffected."""
 
     @classmethod
     def match_feature_group_criteria(
@@ -1605,17 +1615,9 @@ class _ReplacedReadParentFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        return str(feature_name) == _REPLACED_COLUMN and ReadFileFeature.match_feature_group_criteria(
+        return str(feature_name) == _REPLACED_COLUMN and super().match_feature_group_criteria(
             feature_name, options, data_access_collection
         )
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return ReadFile()
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return ReadFileFeature.calculate_feature.__func__(cls, data, features)  # type: ignore[attr-defined]
 
 
 class _ReplacingReadChildFeatureGroup(_ReplacedReadParentFeatureGroup):
@@ -1704,3 +1706,67 @@ class TestThreadHopInASpawnedWorkerReachesTheGate:
 
         assert result[0][_MP_HOP_COLUMN] == [1, 2, 3] or list(result[0][_MP_HOP_COLUMN]) == [[1, 2, 3]]
         assert output_path.read_text(encoding="utf-8").splitlines() == ["gate"]
+
+
+class TestInputDataLoadAuditForFormatGroups:
+    """A format group fires INPUT_DATA_LOAD naming itself, its source and the loader that ran."""
+
+    def _fire(
+        self, group: type, framework: Any, extender: _InputDataLoadCapturingExtender | None = None
+    ) -> HookContext:
+        extender = extender or _InputDataLoadCapturingExtender()
+        mloda.run_all(
+            ["toyfmt_audit"],
+            compute_frameworks=[framework],
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            data_access_collection=toy_dac(h1={"toyfmt_audit": [1, 2]}),
+            function_extender={extender},
+        )
+        assert extender.captured is not None
+        return extender.captured
+
+    def test_neutral_load_is_audited(self, tmp_path: Path) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+
+        context = self._fire(group, PythonDictFramework)
+
+        assert context.data_access_format == group.get_class_name()
+        assert context.reader_class is group
+        assert context.data_access_identity == "h1:toy"
+        assert context.data_access_loader == "neutral"
+
+    def test_loader_load_names_the_framework_class(self, tmp_path: Path) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        group.register_loader(PythonDictFramework, lambda group, match, features: [{"toyfmt_audit": 1}])
+
+        extender = _InputDataLoadCapturingExtender()
+        context = self._fire(group, PythonDictFramework, extender)
+
+        assert context.reader_class is group
+        assert context.data_access_identity == "h1:toy"
+        assert context.data_access_loader == "PythonDictFramework"
+        assert extender.func_owner == group.__name__
+
+    def test_readers_leave_the_loader_field_none(self) -> None:
+        assert _direct_load_context(_DirectLoadReader).data_access_loader is None
+
+    def test_stock_csv_group_audits_itself_with_the_neutral_loader(self, tmp_path: Path) -> None:
+        column = f"{_MARKER}_col_csv_audit"
+        path = tmp_path / "data.csv"
+        _write_csv(path, column, [1])
+        extender = _InputDataLoadCapturingExtender()
+
+        mloda.run_all(
+            [column],
+            compute_frameworks=[PythonDictFramework],
+            data_access_collection=DataAccessCollection(files={str(path)}),
+            function_extender={extender},
+        )
+
+        context = extender.captured
+        assert context is not None
+        assert context.reader_class is CsvFG
+        assert context.feature_group_class == _EXPECTED_FEATURE_GROUP_CLASS
+        assert context.data_access_format == "CsvFG"
+        assert context.data_access_identity == os.path.abspath(path)
+        assert context.data_access_loader == "neutral"

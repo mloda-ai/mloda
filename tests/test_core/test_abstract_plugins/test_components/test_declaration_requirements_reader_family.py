@@ -1,4 +1,4 @@
-"""Consumer declaration requirements with reader families: a sibling reader that declares the key wins.
+"""Consumer declaration requirements against a root reader that declares, or lacks, the required key.
 
 Readers match only their module-unique handle or access string and only the DEPTH name, so they stay inert
 for other suites. Load order is logged so plan-time refusal can be proven (nothing loaded).
@@ -42,7 +42,6 @@ OUT_SCOPED = "decl_out_scoped_1648"
 OUT_LONELY_REQUIRING = "decl_out_lonely_requiring_1648"
 OUT_LONELY_PLAIN = "decl_out_lonely_plain_1648"
 
-PLAIN_ACCESS = "decl_plain_access_1648"
 SCALED_ACCESS = "decl_scaled_access_1648"
 LONELY_ACCESS = "decl_lonely_access_1648"
 DEPTH_HANDLE = "decl_depth_handle_1648"
@@ -59,7 +58,7 @@ SHARED_LONELY_INPUT: list[Feature] = []
 
 
 class _DeclMarkedReader(BaseInputData):
-    """Family base: a child matches only its own access string or handle, and only its feature name."""
+    """Base: a child matches only its own access string or handle, and only its feature name."""
 
     ACCESS: ClassVar[str] = ""
     HANDLE: ClassVar[str] = ""
@@ -83,19 +82,7 @@ class _DeclMarkedReader(BaseInputData):
         return {cls.FEATURE: [1], JOIN_KEY: [1]}
 
 
-class DeclDepthFamily1648(_DeclMarkedReader):
-    """Family of the two depth readers."""
-
-
-class DeclPlainDepthReader1648(DeclDepthFamily1648):
-    """Declares nothing (feature-scoped probe runs pinned readers in name order; the collection route is set-ordered)."""
-
-    ACCESS = PLAIN_ACCESS
-    HANDLE = DEPTH_HANDLE
-    FEATURE = DEPTH
-
-
-class DeclScaledDepthReader1648(DeclDepthFamily1648):
+class DeclScaledDepthReader1648(_DeclMarkedReader):
     """Declares a scale."""
 
     ACCESS = SCALED_ACCESS
@@ -107,11 +94,7 @@ class DeclScaledDepthReader1648(DeclDepthFamily1648):
         return {"scale": 0.001}
 
 
-class DeclLonelyFamily1648(_DeclMarkedReader):
-    """Family with a single reader that declares nothing."""
-
-
-class DeclLonelyReader1648(DeclLonelyFamily1648):
+class DeclLonelyReader1648(_DeclMarkedReader):
     """The only provider of the lonely depth."""
 
     ACCESS = LONELY_ACCESS
@@ -119,11 +102,7 @@ class DeclLonelyReader1648(DeclLonelyFamily1648):
     FEATURE = LONELY_DEPTH
 
 
-class DeclNameRuleFamily1648(_DeclMarkedReader):
-    """Family whose only reader declares a scale that differs from its feature group's."""
-
-
-class DeclNameRuleReader1648(DeclNameRuleFamily1648):
+class DeclNameRuleReader1648(_DeclMarkedReader):
     """Matches the name-rule data but declares scale 1."""
 
     ACCESS = NAMERULE_ACCESS
@@ -144,7 +123,7 @@ class DeclNameRuleFG1648(FeatureGroup):
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DeclNameRuleFamily1648()
+        return DeclNameRuleReader1648()
 
     @classmethod
     def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
@@ -182,11 +161,11 @@ class DeclDerivedDepthFG1648(FeatureGroup):
 
 
 class DeclDepthFG1648(FeatureGroup):
-    """Root group resolved through the depth reader family."""
+    """Root group returning the depth reader that declares a scale."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DeclDepthFamily1648()
+        return DeclScaledDepthReader1648()
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -203,11 +182,11 @@ class DeclDepthFG1648(FeatureGroup):
 
 
 class DeclLonelyFG1648(DeclDepthFG1648):
-    """Root group resolved through the lonely reader family."""
+    """Root group returning the lonely reader."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DeclLonelyFamily1648()
+        return DeclLonelyReader1648()
 
 
 class DeclFrameFG1648(FeatureGroup):
@@ -264,7 +243,7 @@ class DeclDepthToMetresScoped1648(_DeclConsumer):
     OUT = OUT_SCOPED
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        addressed = {DeclPlainDepthReader1648.__name__: PLAIN_ACCESS, DeclScaledDepthReader1648.__name__: SCALED_ACCESS}
+        addressed = {DeclScaledDepthReader1648.__name__: SCALED_ACCESS}
         depth = Feature(DEPTH, options=addressed, required_declarations=self.depth_requirement())
         return {depth, Feature(FRAME)}
 
@@ -345,8 +324,7 @@ def _requiring(feature: Feature) -> Feature:
 
 
 def _scoped_depth() -> Feature:
-    addressed = {DeclPlainDepthReader1648.__name__: PLAIN_ACCESS, DeclScaledDepthReader1648.__name__: SCALED_ACCESS}
-    return Feature(DEPTH, options=addressed)
+    return Feature(DEPTH, options={DeclScaledDepthReader1648.__name__: SCALED_ACCESS})
 
 
 DEPTH_FRAME_LINK = Link.inner(JoinSpec(DeclDepthFG1648, JOIN_KEY), JoinSpec(DeclFrameFG1648, JOIN_KEY))
@@ -363,41 +341,24 @@ def _run(names: list[Feature | str], dac: DataAccessCollection | None, links: se
     )
 
 
-class TestReaderFamilyResolution:
-    """A reader that fails the requirement is skipped so a sibling reader in the family wins."""
+class TestReaderRequirementResolution:
+    """The root reader serves a requiring request only when it declares the key."""
 
-    def test_global_path_skips_the_reader_without_the_key(self) -> None:
+    def test_global_path_accepts_the_reader_declaring_the_key(self) -> None:
         feature = _requiring(Feature(DEPTH))
 
         evaluate_or_raise(feature, DEPTH_MAPPING, data_access_collection=DEPTH_DAC)
 
         assert feature.input_data_match == (DeclScaledDepthReader1648, SCALED_ACCESS)
 
-    def test_feature_scope_path_skips_the_reader_without_the_key(self) -> None:
+    def test_feature_scope_path_accepts_the_reader_declaring_the_key(self) -> None:
         feature = _requiring(_scoped_depth())
 
         evaluate_or_raise(feature, DEPTH_MAPPING)
 
         assert feature.input_data_match == (DeclScaledDepthReader1648, SCALED_ACCESS)
 
-    def test_requiring_request_is_steered_while_plain_request_is_ambiguous(self) -> None:
-        """The requiring request picks its reader; the plain one fails on several accepting readers."""
-        requiring = _requiring(Feature(DEPTH))
-        plain = Feature(DEPTH)
-
-        evaluate_or_raise(requiring, DEPTH_MAPPING, data_access_collection=DEPTH_DAC)
-
-        assert requiring.input_data_match == (DeclScaledDepthReader1648, SCALED_ACCESS)
-
-        result = IdentifyFeatureGroupClass.evaluate(plain, DEPTH_MAPPING, None, DEPTH_DAC)
-
-        assert result.identified == {}
-        reasons = " ".join(e.reason for e in result.eliminations.values())
-        assert DeclPlainDepthReader1648.__name__ in reasons
-        assert DeclScaledDepthReader1648.__name__ in reasons
-        assert "options=" in reasons, reasons
-
-    def test_family_without_a_satisfying_reader_is_refused_before_any_load(self) -> None:
+    def test_reader_without_the_declaration_is_refused_before_any_load(self) -> None:
         feature = _requiring(Feature(LONELY_DEPTH))
 
         result = IdentifyFeatureGroupClass.evaluate(feature, LONELY_MAPPING, None, LONELY_DAC)
@@ -448,7 +409,7 @@ class TestReaderFamilyResolution:
         assert all("requires declared" not in e.reason for e in result.eliminations.values())
 
     def test_scoped_reader_that_does_not_own_the_data_records_no_declaration_rejection(self) -> None:
-        feature = _requiring(Feature(DEPTH, options={DeclPlainDepthReader1648.__name__: "decl_not_my_access_1648"}))
+        feature = _requiring(Feature(DEPTH, options={DeclScaledDepthReader1648.__name__: "decl_not_my_access_1648"}))
 
         result = IdentifyFeatureGroupClass.evaluate(feature, DEPTH_MAPPING, None, None)
 
@@ -467,13 +428,13 @@ class TestReaderFamilyResolution:
 class TestDeclarationRequirementsEndToEnd:
     """A consumer's Feature carries the requirement per input and resolution honours it."""
 
-    def test_global_family_sibling_reader_supplies_the_depth(self) -> None:
+    def test_global_reader_supplies_the_depth(self) -> None:
         result = _run([OUT_GLOBAL], DEPTH_DAC, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_GLOBAL] == [1]
         assert LOAD_LOG == [DeclScaledDepthReader1648.__name__]
 
-    def test_scoped_family_sibling_reader_supplies_the_depth(self) -> None:
+    def test_scoped_reader_supplies_the_depth(self) -> None:
         result = _run([OUT_SCOPED], None, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_SCOPED] == [1]

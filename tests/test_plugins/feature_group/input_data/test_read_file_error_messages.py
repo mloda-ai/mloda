@@ -1,4 +1,6 @@
-"""Tests for error messages of ReadFile.load without a match."""
+"""Tests for error messages of BaseInputData.load without a match."""
+
+from typing import Any
 
 import pytest
 
@@ -7,11 +9,15 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import BaseInputData
 
 
-class ConcreteReadFile(ReadFile):
-    """Minimal concrete ReadFile for testing error messages."""
+class ConcreteReadFile(BaseInputData):
+    """Minimal concrete BaseInputData reader for testing error messages."""
+
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Options) -> Any:
+        return None
 
     @classmethod
     def match_feature_group_criteria(

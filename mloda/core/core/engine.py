@@ -46,6 +46,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_featu
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
+from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -114,7 +115,8 @@ class Engine:
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        self.execution_planner = self.create_setup_execution_plan(features)
+        with run_match_cache():
+            self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
         self.tfs_connection_map = self._resolve_tfs_connection_map()
@@ -742,7 +744,10 @@ class Engine:
         if not input_features:
             return None
 
-        features = Features(list(input_features), child_options=options, child_uuid=uuid, parent_domain=parent_domain)
+        ordered: list[Feature | str] = list(input_features)
+        if isinstance(input_features, (set, frozenset)):  # set order is hash-seed dependent
+            ordered.sort(key=lambda f: str(f.name) if isinstance(f, Feature) else str(f))
+        features = Features(ordered, child_options=options, child_uuid=uuid, parent_domain=parent_domain)
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)
         for input_feature in features.collection:

@@ -2,7 +2,7 @@
 
 ## What it records and why
 
-Strict mode and `PluginPolicy` decide which classes may take part in a request. The plan lock records which class wins per step (feature group, compute framework, reader, specialization, joins, framework transforms) and fails when that changes. See [Plugin Registry](plugin_registry.md) for the policy side.
+Strict mode and `PluginPolicy` decide which classes may take part in a request. The plan lock records which class wins per step (feature group, compute framework, specialization, joins, framework transforms) and fails when that changes. See [Plugin Registry](plugin_registry.md) for the policy side.
 
 ## Usage
 
@@ -26,7 +26,7 @@ write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMo
 
 ## What the file holds
 
-Sorted JSON with a `format` number, the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Duplicate steps keep one record each.
+Sorted JSON with a `format` number (currently 4; there is no reader entry), the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Duplicate steps keep one record each.
 
 It never holds option values, `data_access_identity`, versions, per-run ids or the mloda version.
 

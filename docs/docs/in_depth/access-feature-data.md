@@ -54,7 +54,7 @@ import os
 
 from mloda.user import mloda, PluginCollector
 from mloda.user import DataAccessCollection
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 file_path = os.getcwd()
@@ -67,7 +67,7 @@ result = mloda.run_all(
             compute_frameworks=["PandasDataFrame"],
             # Define data access on a global level
             data_access_collection=data_access_collection,
-            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
         )
 print(result)
 ```
@@ -80,23 +80,20 @@ Output
 1   Value2         3]
 ```
 
-#### ReadDocument: Unstructured File Access
+#### Document format groups
 
-For unstructured files (Markdown `.md`, YAML `.yaml`/`.yml`, text `.text`/`.txt`/`.TXT`), mloda provides `ReadDocumentFeature`.
-It skips structured file types (CSV, JSON, Parquet, etc.) by default to avoid conflicts
-with `ReadFile`.
-ReadDocument matches by file suffix only and ignores feature names, so when a folder or file set mixes document
-suffixes such as `.txt` with structured files (CSV, Parquet), exclude `ReadDocumentFeature` through the
-`PluginCollector` (`PluginCollector.disabled_feature_groups({ReadDocumentFeature})`) to avoid multiple feature group matches.
+For unstructured files, mloda ships one group per format: `TextFG` (`.text`/`.txt`/`.TXT`), `PyFG` (`.py`),
+`MarkdownFG` (`.md`), `YamlFG` (`.yaml`/`.yml`) and `JsonDocumentFG` (`.json`). Each answers three names:
+`TextFG` (the content), `TextFG~source` (the path) and `TextFG~file_type` (the file's actual suffix, lowercased, without the dot).
+A request reads one file; with several matching files, pick one with a `data_access_handle`, a
+`column_to_file` entry or `options={"TextFG": path}`.
 
-To read a structured file type as a document, use the `document_suffixes` option:
+To read a `.json` file as a document, list it in `document_suffixes`; `JsonFG` then steps aside and
+`JsonDocumentFG` claims it:
 
 ```py
-Feature("content", options={"document_suffixes": frozenset({".json"})})
+Feature("JsonDocumentFG", options={"document_suffixes": frozenset({".json"})})
 ```
-
-This tells ReadDocument to include .json files and ReadFile to auto-exclude them
-for that feature.
 
 #### Disambiguating columns shared across multiple files
 
@@ -132,7 +129,7 @@ Rules:
 The existing per-feature alternative still works for one-off pinning:
 
 ```py
-Feature("SK_ID_CURR", options=Options({CsvReader: "application_train.csv"}))
+Feature("SK_ID_CURR", options=Options({"CsvFG": "application_train.csv"}))
 ```
 
 #### Feature Scope Data Access
@@ -142,27 +139,18 @@ on a local level.
 
 If data needs to be added specifically for a single feature (or features from the same feature group), you can use the feature_scope_data_access_name functionality.
 
-We show the ReadFileFeature as example. It uses the input_data ReadFile. 
-In this case, we need to provide the specific reader class: CsvReader.
+We show `CsvFG` as example, a `ReadFileFG` subclass that claims CSV files.
+In this case, we point it at a path with its class name as option key: `CsvFG`.
 
 ```py
-
-# This feature is already implemented as plugin, so do not run it again. This will raise intentional errors.
-class ReadFileFeature(FeatureGroup):
+# CsvFG is already implemented as plugin, so do not define it again.
+class CsvFG(ReadFileFG):
     @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return ReadFile()
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        reader = cls.input_data()
-        if reader is not None:
-            data = reader.load(features)
-            return data
-        raise ValueError(f"Reading file failed for feature {features.get_name_of_one_feature()}.")
+    def suffixes(cls) -> tuple[str, ...]:
+        return (".csv", ".CSV")
 ```
 
-As a side note, the ReadFileFeature was also used for the global scope automatism.
+As a side note, `CsvFG` is also used for the global scope automatism.
 
 To use it, we can simply:
 
@@ -171,10 +159,8 @@ from typing import Any
 from pathlib import Path
 
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, BaseInputData, FeatureSet
 from mloda.user import Feature
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 file_path = os.getcwd()
@@ -185,7 +171,7 @@ feature_list.append(
     Feature(
         name="AExample",
         # Define data access on a feature level
-        options={CsvReader.get_class_name(): file_path}),
+        options={CsvFG.get_class_name(): file_path}),
 )
 
 

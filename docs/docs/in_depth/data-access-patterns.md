@@ -19,7 +19,7 @@ BaseInputData is an **abstract base class** that defines how feature groups **lo
 - **Universal Usage**: Used by all feature groups that need to load data
 
 ### Use Cases
-- Reading files (CSV, JSON, Parquet, etc.)
+- Reading files, documents and databases (through format FeatureGroups)
 - Connecting to databases
 - Creating synthetic/test data
 - Loading data from APIs
@@ -29,34 +29,36 @@ For detailed examples of these use cases, see the [data access documentation](ac
 
 ### Example Implementation
 ```py
-from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
+from typing import Any
 
-class ReadFileFeature(FeatureGroup):
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+
+class SyntheticFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return ReadFile()  # BaseInputData implementation
-    
+        return DataCreator({"synthetic"})
+
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        reader = cls.input_data()
-        if reader is not None:
-            data = reader.load(features)
-            return data
-        raise ValueError("Reading file failed.")
+        return {"synthetic": [1, 2, 3]}
 ```
 
-### Common BaseInputData Implementations
-- **ReadFile**: For structured file-based data loading (see [access-feature-data](access-feature-data.md#global-scope-data-access))
-- **ReadDocument**: For unstructured document loading (Markdown `.md`, YAML `.yaml`/`.yml`, text `.text`/`.txt`/`.TXT`). Skips file types owned by ReadFile by default.
+### Common Implementations
+- **Format FeatureGroups**: one FeatureGroup per source format, claiming features through `CLAIM_ROUTES` instead of `input_data()`:
+    - `ReadFileFG` with `CsvFG`, `ParquetFG`, `JsonFG`, `FeatherFG`, `OrcFG` (see [access-feature-data](access-feature-data.md#global-scope-data-access))
+    - `ReadDBFG` with `SqliteFG`
+    - `ReadDocumentFG` with `TextFG`, `PyFG`, `MarkdownFG`, `YamlFG`, `JsonDocumentFG`; documents skip suffixes owned by file format groups by default
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
-- **ReadDB**: For database-backed loading
 
-### Writing an input-data reader
+### Writing a format FeatureGroup
 
-Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
+Subclass the base that fits your source and write only what it asks for. The base owns the matching: claim routes, source discovery, pointers, `data_access_handle`, `column_to_file`, per-run caching, ambiguity and missing-column errors, and the extender hook around the load.
 
-- **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials`, `build_query`, and `claims_feature_name` (a name-only check that runs before any credential probe). To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
+- **FormatFeatureGroup** (any source): declare `CLAIM_ROUTES`, implement `find_sources` and `load_neutral`; optionally `columns`, `has_column`, `ambiguity_fix`, `describe_columns`, `count_rows`.
+- **ReadFileFG**: implement `suffixes()` and `column_names(path)`. It inherits file and folder discovery, the pinned-file rule, and a default `load_neutral` that hands a `FileSource` to the compute framework; the stock `FileSource` transformers read csv, parquet, json, feather and orc.
+- **ReadDocumentFG**: implement `suffixes()`; optionally `read_text` and `handover_suffixes`. It inherits the three names `<Group>`, `<Group>~source` and `<Group>~file_type`.
+- **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns` and `produce_rows`. `is_valid_credentials` must never raise. `database_identity` must not contain credential values. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
 
     ```python
     from typing import Any
@@ -78,111 +80,85 @@ Each reader family exposes a recommended hook seam. Overriding `load_data` whole
     assert not is_valid_credentials({"host": "db", "password": "secret"})
     ```
 
-- **ReadDocument**: implement `produce_document` and `suffix`; optionally `document_file_type`.
-- **ReadFile**: override `load_data` wholesale to return the table. `CsvReader` resolves to a `FileSource` descriptor that the target compute framework materializes into its native type.
+- **ReadDBFG query route**: opt in with `CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)` and implement `produce_query_rows(connection, query_text, features)`. A query-only group lists just `(ReadDBFG.QUERY_ROUTE,)` and stubs the table hooks. The source is a hash of the query text, so textually different queries are different sources. Without a pointer the route claims any name for each matching credential in the DataAccessCollection, and it switches off the table route for that feature.
 
-Override `data_access_identity` to publish a richer identity than the default.
+Override `data_access_identity` to publish a richer identity than the default. Run the contract mixins in mloda's `tests/mixins/reader_feature_groups/` against your group; they pin the behavior every format group shares.
+
 
 CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib reader behind PythonDict follows it. Types are inferred per column: null tokens (pyarrow's default set, e.g. `NA`, `NaN`, `null`) become `None` in an int/float/bool column but stay literal text in a string column, a column of only empty cells and/or null tokens is all-`None`, and an int column with a value outside signed int64 range degrades entirely to float.
 
 The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (`" 1 "`), `inf`/`infinity`, uppercase `NAN` (the float value, not the `NaN` null token), hex literals (`0x1f`), and a `true`/`1` mix (pyarrow reads `1`/`0` as bools too).
 
-Readers are classified structurally; no reader code is executed for classification. `is_final_reader()` is True when a class overrides `load_data` wholesale, or when it overrides all hooks named by its family's `_final_reader_requires()` (for example `("produce_rows", "connect")` for ReadDB). Family bases (ReadDB, ReadDocument, ReadFile) are never discovered as final readers themselves.
+### Column discovery and row counts
 
-**Warning**: classification is structural (declared is overridden), so an intermediate base that re-declares a hook or `load_data` with a bare `raise NotImplementedError` body is classified as a final reader and enters discovery. Intermediate bases must not re-declare bare hooks; re-anchor the family by declaring `_final_reader_requires` instead.
+`describe_columns(match)` maps column name to `DataType` (`None` where unknown) and raises `NotImplementedError` when the group cannot enumerate columns, `ImportError` when a backend it needs is missing, and `OSError` or `ValueError` for an unreadable source. `ReadFileFG` lists the names from `column_names`; `ParquetFG`, `FeatherFG` and `OrcFG` report the types stored in the file's schema, `JsonFG` the types pyarrow infers while parsing, and `SqliteFG` SQLite's declared (unenforced) column types. A document group reports its three names as strings.
 
-`_final_reader_requires` is underscore-named but is a stable, documented extension point for third-party reader families.
+`count_rows(match, compute_framework)` returns the row count of the source without loading it, or `None` when only a read can tell (the default). `ParquetFG`, `OrcFG` and `FeatherFG` count from file metadata for every compute framework; `CsvFG` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ; a document group counts one. The count is of the source itself, not of the step's output: filters, extenders and feature-group logic may change what the step reports. Both are called on the group with the `SourceMatch`; a resolved plan does not expose them.
 
-### Column discovery
+### Pointing a feature at a source
 
-`BaseInputData.describe_columns(data_access) -> dict[str, DataType | None]` maps column name to `DataType` (`None` where unknown). It raises `NotImplementedError` when a reader can't enumerate columns, and `ImportError` when a backend it needs is missing; a missing or unreadable source raises `OSError` or `ValueError`. `ReadFile` supplies a family default wrapping `get_column_names` with unknown types and accepting a `str` or `Path` data access (anything else raises `ValueError`); `ParquetReader`, `FeatherReader`, and `OrcReader` override it to report the types stored in the file's own schema, and `JsonReader` the types pyarrow infers while parsing. `SQLITEReader` overrides it too, from SQLite's declared (unenforced) column types; it needs `data_access["table_name"]` already set, e.g. `{"sqlite": path, "table_name": "customers"}`; matching sets it on a copy, not on the registered credential.
+- `options={"CsvFG": path}` points the group at one file (or folder). A subclass also answers to its parent's name, so `Feature("x", options={"CsvFG": path})` reaches a `CsvFG` subclass.
+- `options={"SqliteFG": Credential(sqlite="/x.db")}` points a database group at one database. Prefer `Credential` for secrets: a plain-dict pointer shows its values in `str(options)`.
+- `Feature(name, options={"query_text": ..., "<Group>": Credential(...)})` runs a query on a database group that opts into `ReadDBFG.QUERY_ROUTE`.
+- `Feature(..., feature_group=CsvFG)` scopes resolution to that group (and its subclasses) without choosing a source.
+- `data_access_handle` only narrows: it picks one of the sources the `DataAccessCollection` holds and never points a group at a source the collection lacks.
+- `column_to_file` pins columns to files in the `DataAccessCollection`; a pinned file that cannot serve the request aborts instead of falling back (see [access-feature-data](access-feature-data.md)).
 
-### Row counts
+The matched pair lives on `Feature.input_data_match`, never in the options, and is handed to the loader at load time. The source may hold credentials, so use `PlanStep.data_access_identity` (or `Group.data_access_identity(match)` outside a plan) for display and logs. If your own error text may carry a credential, scrub it with `mloda.provider.scrub_credentials` before logging.
 
-`BaseInputData.count_rows(data_access, compute_framework) -> int | None` returns the row count of `data_access` without loading it, or `None` when only a read can tell (the default); it raises `ImportError` when a backend it needs is missing, and `OSError`/`ValueError` for a non-path, missing, or unreadable source. `ParquetReader`, `OrcReader`, and `FeatherReader` count from file metadata for every compute framework; `CsvReader` only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ. A subclass overriding `load_data` gets `None` unless it also overrides `count_rows`. The count is of `data_access` itself, not of the step's output: filters, extenders, and feature-group logic may change what the step actually reports.
+### Non-file sources such as HTTP
 
-### Selecting among sibling readers
+Write a plain `FeatureGroup` that claims a feature only when it is pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`), under the pointed-only route of the format FeatureGroup matcher contract. `govdata` is the example. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 
-A feature selects a specific reader with an Option whose key equals the reader's `BaseInputData.data_access_name()`, which defaults to `cls.__name__` (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:
+### Resolution of a pointed group vs feature-group resolution
 
-```py
-Feature("value", options={UbaAirReader.__name__: url})
-```
-
-The reader class itself is also accepted as the key, e.g. `Feature("value", options={UbaAirReader: url})`; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.
-
-The matched `(ReaderClass, data_access)` pair lives on `Feature.input_data_match`, never in the options, and `load` hands it to `init_reader(reader_data_access)` at load time; `PlanStep.reader_data_access` exposes the same pair on a resolved plan. `data_access` may hold credentials, so use `PlanStep.data_access_identity` (or `reader.data_access_identity(data_access)` outside a plan) for display and logs. If a reader's own error text may carry a credential, scrub it with `mloda.provider.scrub_credentials` before logging.
-
-For non-file sources such as HTTP endpoints, subclassing `ReadFile` and overriding `match_subclass_data_access` plus `load_data` is a supported pattern; on that path `suffix()` is never consulted (it is inert). `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
-
-### Reader selection vs feature-group resolution
-
-Reader selection answers "which plugin handles this input" the way [feature-group resolution](feature-group-matching.md) answers "which feature group owns this name". It is not a second resolver: it runs nested inside the criteria gate of feature-group resolution, where `match_feature_group_criteria` calls the reader family's `matches()`. The two deliberately share no request, environment, or outcome abstractions; they share only the low-level rejection channel described below.
-
-| Aspect | Feature-group resolution | Reader selection |
-|--------|--------------------------|------------------|
-| **Candidate discovery** | Registered accessible plugins | Structural walk over the family's final readers (`is_final_reader()`); no reader code executed |
-| **Auto-loading** | Up-front plugin loading | Lazy per-family `_auto_load_group`, triggered only when no final readers are found |
-| **Accessibility policy** | Strict mode, collector policy, enabled compute frameworks | None: every final reader of the family is a candidate |
-| **Matching** | Criteria, domain, scope, capability, framework-pin, and links gates | Per-reader file, suffix, column-validation, and pinning rules |
-| **Ambiguity** | Multiple winners resolved by subclass preference, then reported | Two readers accepting the same access raise (a subclass replaces its parent for the same access); pin one by its option key to pick it |
-| **Outcome and diagnostics** | Structured evaluation result rendered into failure messages | A matched `(ReaderClass, data_access)` pair written into options; declines surface through the shared rejection channel |
+Source selection runs inside [feature-group resolution](feature-group-matching.md): the group's matcher is the criteria gate, so a group is accessible, scoped and framework-checked like any other feature group. Several sources found for one name in one group are an error naming them and the fix; two groups finding the same column is ordinary feature-group ambiguity (fix with `feature_group=`, a pointer or `data_access_handle`). See [Resolution errors](troubleshooting/feature-group-resolution-errors.md).
 
 ### Declining with an attributable reason
 
-A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom reader owns its own suffix and overrides `load_data` wholesale; its own decline points sit beyond the automatic column validation, for example a required schema marker in the header:
+A format group that owns a source but cannot serve the requested feature records why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom file format group owns its own suffix and lists its columns; a `ValueError` from `column_names` declines the file with a recorded reason, for example a required schema marker in the header:
 
 ```python
 from typing import Any
 
-from mloda.provider import INPUT_DATA_STAGE, FeatureSet, record_match_rejection
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import FeatureSet, ReadFileFG
 
-class SensorCsvReader(ReadFile):
+class SensorCsvFG(ReadFileFG):
     @classmethod
-    def suffix(cls) -> tuple[str, ...]:
+    def suffixes(cls) -> tuple[str, ...]:
         return (".sensorcsv",)
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any: ...
-
-    @classmethod
-    def validate_columns(cls, file_name: str, feature_names: list[str]) -> bool:
-        if super().validate_columns(file_name, feature_names) is False:
-            return False
-        with open(file_name, encoding="utf-8") as handle:
+    def column_names(cls, path: str) -> list[str]:
+        with open(path, encoding="utf-8") as handle:
             header = handle.readline()
         if "#sensor-schema" not in header:
-            record_match_rejection(
-                cls.get_class_name(),
-                f"{cls.get_class_name()} matched the suffix of {file_name} "
-                f"but its header lacks the #sensor-schema marker",
-                stage=INPUT_DATA_STAGE,
-            )
-            return False
-        return True
+            raise ValueError("its header lacks the #sensor-schema marker")
+        return header.replace("#sensor-schema", "").strip().split(",")
+
+    @classmethod
+    def load_neutral(cls, match: Any, features: FeatureSet) -> Any: ...
 ```
 
 The recorded decline renders as a near-miss line of the resolution failure:
 
 ```
-  - SensorFeatureGroup (input data): SensorCsvReader matched the suffix of /data/run1.sensorcsv but its header lacks the #sensor-schema marker
+  - SensorCsvFG (input data): SensorCsvFG matched /data/run1.sensorcsv but could not read its columns: its header lacks the #sensor-schema marker
 ```
 
-Rules for reader authors:
+Rules for format group authors:
 
-- Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature.
-- Plain non-matches (wrong suffix, invalid credentials) stay silent. An unmarked `NotImplementedError` from `is_valid_credentials` is a silent non-match; from `check_feature_in_data_access` it is an accept for a plain name (the reader matches on credentials alone). A raise marked with `escalate_match_abort` propagates instead of being read as a non-match.
-- Never raise to decline: anything but an unmarked `NotImplementedError` in the DB match hooks aborts matching for every reader sharing the `DataAccessCollection`. Record, then return a falsy value.
-- Recording outside an engine-opened window is a no-op, so readers stay usable standalone.
-- Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
-- Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden `data_access_name()` included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.
-- A `ReadFile` subclass that cannot enumerate columns (no `get_column_names` override, or one raising `NotImplementedError` or `ImportError`), and a `ReadDB` subclass that does not override `check_feature_in_data_access`, decline a chain- or column-separated feature name while matching. A `ReadDocument` subclass declines such a name on a `DataAccessCollection` (not on a `str` or `Path` access), since a document reader has no columns to confirm such a name. An explicit `column_to_file` pin is exempt; for `ReadDB`, overriding the hook opts out.
-- In `ReadFile` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file reader needs the file to be readable when features resolve. A pinned file that cannot be read raises instead of falling back to another file. Any other exception from `get_column_names` ends reader selection for that feature group candidate, so no sibling reader is tried (the engine contains it as a non-match for that candidate); a raise marked with `escalate_match_abort` propagates out of matching.
+- Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature. Plain non-matches (wrong suffix, invalid credentials) stay silent.
+- Never raise to decline: a hook that raises anything but `OSError`, `ValueError` or `ImportError` from `column_names` (or an unmarked `NotImplementedError` where a base documents it) ends matching for that candidate. A raise marked with `escalate_match_abort` propagates. Record, then return a falsy value.
+- Recording outside an engine-opened window is a no-op, so groups stay usable standalone.
+- Recorded reasons are discarded at the enclosing candidate level: when the group ultimately matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
+- Name the group and the concrete source in the reason, as the example does. The first recording per owner wins, so a later reason under a name already used in the same window is dropped.
+- A `ReadFileFG` subclass that cannot enumerate columns (a `column_names` raising `NotImplementedError` or `ImportError`) declines a chain- or column-separated feature name while matching. A `ReadDocumentFG` subclass declines any name other than its three declared names. An explicit `column_to_file` pin is exempt.
+- In `ReadFileFG` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file group needs the file to be readable when features resolve. A pinned or pointed file that cannot be read aborts with the missing-column error instead of falling back to another file.
 
-`ReadFile` column validation and the `ReadDB` feature check (`check_feature_in_data_access`) already record automatically; a custom reader only needs this for its own decline points.
+`ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically; a custom group only needs this for its own decline points.
 
-A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's `data_access_name()`) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in `init_reader`. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. A pinned reader is final: when it declines, neither a sibling reader nor the DataAccessCollection serves the feature. When several readers of the probed family are pinned on one feature, pinned readers are probed in name order, a subclass replaces its parent for an equal access, and two remaining acceptors raise, naming both pins. When exactly one pin accepts, the declining pins' vetoes are dropped. Since group options forward to input features, a pin on a derived feature binds its inputs too. A pinned reader that matches nothing without a recorded reason is reported under its own name. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.
+A veto recorded while the user explicitly addressed the group (an option key equal to its `data_access_name()`) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time. A content decline on that path gates the same way: if the addressed group records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. A pinned group is final: when it declines, neither another group nor the DataAccessCollection serves the feature. Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.
 
 ## MatchData Pattern
 
@@ -268,7 +244,7 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
         # BaseInputData for general data loading
-        return ReadFile()
+        return DataCreator({"analytics_input"})
 
     @classmethod
     def match_data_access(cls, feature_name: str, options: Options,
@@ -282,16 +258,13 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 
 ## Practical Examples
 
-### Scenario 1: Standard File Processing (BaseInputData Only)
+### Scenario 1: Standard File Processing (Format FeatureGroup Only)
 
 **Use Case**: Reading CSV files with Pandas
-**Pattern**: Only BaseInputData is needed
+**Pattern**: Neither is needed; `CsvFG` claims the feature when a file has the column
 
 ```py
-class CsvProcessingFeature(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return ReadFile()  # BaseInputData handles file reading
+Feature("id", options={"CsvFG": "data/people.csv"})
 ```
 
 ### Scenario 2: DuckDB Analytics (BaseInputData + MatchData)
@@ -303,7 +276,7 @@ class CsvProcessingFeature(FeatureGroup):
 class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return ReadFile()  # BaseInputData for data loading
+        return DataCreator({"analytics_input"})  # BaseInputData for data creation
 
     @classmethod
     def match_data_access(cls, ...):
@@ -345,7 +318,7 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ### When to Use BaseInputData Only
 - Working with stateless compute frameworks (Pandas, PyArrow, Polars)
-- File-based data loading
+- Runtime data injection and synthetic data (files and databases use format FeatureGroups)
 - mloda data injection
 - Synthetic data generation
 - Most standard data processing scenarios

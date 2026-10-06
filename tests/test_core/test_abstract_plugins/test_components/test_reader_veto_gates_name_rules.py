@@ -1,6 +1,6 @@
 """Pins issue #954, corrected: ONLY an OWNED reader veto (the user addressed the reader via its
 ``data_access_name()`` key and its READER_OPTIONS declined) gates the name-based OR rules of
-``match_feature_group_criteria``; unowned global-probe declines, the MatchData rule, sibling probing,
+``match_feature_group_criteria``; unowned global-probe declines, the MatchData rule, a sibling reader's options,
 input-data-free candidates and valid values keep resolving. Leaked vg954 fixtures stay foreign-inert."""
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from mloda.core.prepare.resolution_failure_renderer import render_resolution_fai
 from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from tests.helpers.suffix_file_reader import SuffixFileReader
 
 
 VG954_FEATURE_NAME = "vg954_column"
@@ -57,7 +57,7 @@ VG954_UNIT_REASON = "vg954 unit reason"
 
 
 class _Vg954MarkedReader(BaseInputData):
-    """Family base: a child matches ONLY its own module-unique access string or dac folder handle."""
+    """Base: a child matches ONLY its own module-unique access string or dac folder handle."""
 
     VG954_ACCESS: ClassVar[str] = ""
     VG954_HANDLE: ClassVar[str] = ""
@@ -75,12 +75,8 @@ class _Vg954MarkedReader(BaseInputData):
         return None
 
 
-class Vg954GateFamily(_Vg954MarkedReader):
-    """Scopes the probes of the gated-shape tests to exactly one final reader."""
-
-
-class Vg954GateReader(Vg954GateFamily):
-    """Final reader whose strict key vetoes the gated-shape bogus value; the default keeps it foreign-inert."""
+class Vg954GateReader(_Vg954MarkedReader):
+    """Reader whose strict key vetoes the gated-shape bogus value; the default keeps it foreign-inert."""
 
     VG954_ACCESS = VG954_GATE_ACCESS
 
@@ -103,7 +99,7 @@ class Vg954GatedFG(FeatureGroup):
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return Vg954GateFamily()
+        return Vg954GateReader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -113,12 +109,8 @@ class Vg954GatedFG(FeatureGroup):
         return {VG954_FEATURE_NAME}
 
 
-class Vg954SiblingFamily(_Vg954MarkedReader):
-    """Two-reader family: one spec-vetoed sibling plus one clean sibling, both addressed by name."""
-
-
-class Vg954VetoedSiblingReader(Vg954SiblingFamily):
-    """Final sibling whose strict key rejects the sibling test's supplied value."""
+class Vg954VetoedSiblingReader(_Vg954MarkedReader):
+    """Sibling whose strict key rejects the sibling test's supplied value."""
 
     VG954_ACCESS = VG954_VETOED_ACCESS
 
@@ -136,8 +128,8 @@ class Vg954VetoedSiblingReader(Vg954SiblingFamily):
         return {VG954_SIBLING_FEATURE_NAME: [1]}
 
 
-class Vg954CleanSiblingReader(Vg954SiblingFamily):
-    """Final clean sibling; it must keep matching while its sibling is vetoed."""
+class Vg954CleanSiblingReader(_Vg954MarkedReader):
+    """Clean reader; it must keep matching while the options of a vetoed sibling are present."""
 
     VG954_ACCESS = VG954_CLEAN_ACCESS
 
@@ -147,11 +139,11 @@ class Vg954CleanSiblingReader(Vg954SiblingFamily):
 
 
 class Vg954SiblingFG(FeatureGroup):
-    """Root FG matching ONLY via its sibling reader family; unique names keep it inert elsewhere."""
+    """Root FG returning the clean reader; unique names keep it inert elsewhere."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return Vg954SiblingFamily()
+        return Vg954CleanSiblingReader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -169,12 +161,8 @@ class Vg954PlainFG(FeatureGroup):
         return {VG954_PLAIN_FEATURE_NAME}
 
 
-class Vg954GlobalFamily(ReadFile):
-    """Family base of the unowned-content shape; it overrides nothing, so it never classifies as final."""
-
-
-class Vg954GlobalCsvReader(Vg954GlobalFamily):
-    """Final reader owning the unique .vg954gcsv suffix; introspects the comma-separated header line."""
+class Vg954GlobalCsvReader(SuffixFileReader):
+    """Reader owning the unique .vg954gcsv suffix; introspects the comma-separated header line."""
 
     @classmethod
     def suffix(cls) -> tuple[str, ...]:
@@ -191,11 +179,11 @@ class Vg954GlobalCsvReader(Vg954GlobalFamily):
 
 
 class Vg954GlobalDeclineFG(FeatureGroup):
-    """Root FG whose name rule claims vg954_global_column while its reader family declines only globally."""
+    """Root FG whose name rule claims vg954_global_column while its reader declines only globally."""
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return Vg954GlobalFamily()
+        return Vg954GlobalCsvReader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -205,12 +193,8 @@ class Vg954GlobalDeclineFG(FeatureGroup):
         return {VG954_GLOBAL_FEATURE_NAME}
 
 
-class Vg954UnownedFamily(_Vg954MarkedReader):
-    """Scopes the unowned-strict-shape global probe to exactly one final reader."""
-
-
-class Vg954UnownedReader(Vg954UnownedFamily):
-    """Final reader claiming the unique dac folder handle; here its strict key vetoes only on the global probe."""
+class Vg954UnownedReader(_Vg954MarkedReader):
+    """Reader claiming the unique dac folder handle; here its strict key vetoes only on the global probe."""
 
     VG954_ACCESS = VG954_UNOWNED_ACCESS
     VG954_HANDLE = VG954_UNOWNED_HANDLE
@@ -234,7 +218,7 @@ class Vg954UnownedFG(FeatureGroup):
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return Vg954UnownedFamily()
+        return Vg954UnownedReader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -249,7 +233,7 @@ class Vg954MatchDataFG(FeatureGroup, MatchData):
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return Vg954GateFamily()
+        return Vg954GateReader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -268,10 +252,7 @@ def _vg954_required_setup(tag: str) -> tuple[type[BaseInputData], type[FeatureGr
     """(reader, feature group) with an unconditionally required key, built test-locally per the leak policy;
     the per-test tag keys data_access_name() so a traceback-kept stale twin is never the addressed reader."""
 
-    class Vg954LocalRequiredFamily(_Vg954MarkedReader):
-        """Scopes the solo probe to the one required-key reader."""
-
-    class Vg954LocalRequiredReader(Vg954LocalRequiredFamily):
+    class Vg954LocalRequiredReader(_Vg954MarkedReader):
         VG954_ACCESS = VG954_REQUIRED_ACCESS
 
         READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
@@ -291,7 +272,7 @@ def _vg954_required_setup(tag: str) -> tuple[type[BaseInputData], type[FeatureGr
 
         @classmethod
         def input_data(cls) -> BaseInputData | None:
-            return Vg954LocalRequiredFamily()
+            return Vg954LocalRequiredReader()
 
         def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
             return None
@@ -378,8 +359,8 @@ class TestReaderVetoGatesNameRules:
 class TestUngatedShapesKeepResolving:
     """The shapes the gate must NOT touch: unowned vetoes, the MatchData rule, siblings, gate-free candidates."""
 
-    def test_a_vetoed_sibling_still_lets_the_clean_sibling_match(self) -> None:
-        """One vetoed sibling must not gate the family: the clean sibling wins and pins the pair."""
+    def test_the_options_of_a_vetoed_sibling_do_not_gate_the_clean_reader(self) -> None:
+        """A root returning the clean reader ignores the vetoed sibling's key and strict option."""
         feature = Feature(
             name=VG954_SIBLING_FEATURE_NAME,
             options={
@@ -466,19 +447,19 @@ class TestUngatedShapesKeepResolving:
 
 
 class TestModuleLeakPolicy:
-    """The module's leak policy, machine-checked over every module-level final reader."""
+    """The module's leak policy, machine-checked over every module-level reader."""
 
     def test_module_level_readers_cannot_fire_on_foreign_options(self) -> None:
-        """Every module-level final reader carries its marker and no absence-firing spec; Vg954Local* are exempt."""
+        """Every module-level reader carries its marker and no absence-firing spec; Vg954Local* are exempt."""
         module_level = [
             cls
             for cls in get_all_subclasses(BaseInputData)
-            if cls.__module__ == __name__ and cls.is_final_reader() and "Local" not in cls.__name__
+            if cls.__module__ == __name__ and "load_data" in vars(cls) and "Local" not in cls.__name__
         ]
 
-        assert module_level, "expected this module's final readers to be reachable through __subclasses__()"
+        assert module_level, "expected this module's readers to be reachable through __subclasses__()"
         for cls in module_level:
-            if issubclass(cls, ReadFile):
+            if issubclass(cls, SuffixFileReader):
                 assert all("vg954" in s for s in cls.suffix()), f"{cls.__name__} must own only vg954-marked suffixes"
             else:
                 assert getattr(cls, "VG954_ACCESS", ""), f"{cls.__name__} must declare its module-unique access marker"

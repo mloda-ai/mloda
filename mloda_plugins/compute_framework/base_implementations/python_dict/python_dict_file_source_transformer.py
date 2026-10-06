@@ -100,10 +100,7 @@ def _infer_column(cells: list[str | None]) -> list[Any]:
 
 
 class FileSourceDictTransformer(BaseTransformer):
-    """Materialize a ``FileSource`` descriptor into a columnar ``dict[str, list[Any]]``.
-
-    Uses only the stdlib ``csv`` module, so a CSV can be read into PythonDict without pyarrow.
-    """
+    """Materialize a ``FileSource`` into ``dict[str, list[Any]]``; csv needs no pyarrow, other formats use it."""
 
     @classmethod
     def framework(cls) -> Any:
@@ -126,7 +123,15 @@ class FileSourceDictTransformer(BaseTransformer):
     @classmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:
         if data.format != "csv":
-            raise ValueError(f"FileSourceDictTransformer only supports the 'csv' format, got {data.format!r}.")
+            from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
+                SUPPORTED_FORMATS,
+                FileSourcePyArrowTransformer,
+                unsupported_format_error,
+            )
+
+            if data.format not in SUPPORTED_FORMATS:
+                raise unsupported_format_error("FileSourceDictTransformer", data.format)
+            return FileSourcePyArrowTransformer.transform_fw_to_other_fw(data).to_pydict()
 
         with open(data.path, newline="", encoding="utf-8-sig") as f:
             reader = csv.reader(f)

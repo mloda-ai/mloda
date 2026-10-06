@@ -1,13 +1,7 @@
 """Tests for method renames introduced by issue #266."""
 
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.input_data.base_input_data import get_all_filtered_subclasses
 from mloda.core.filter.global_filter import GlobalFilter
-
-
-class TestRenamedGetAllFilteredSubclasses:
-    def test_importable(self) -> None:
-        assert callable(get_all_filtered_subclasses)
 
 
 class TestRenamedIdentifyMatchedFilters:

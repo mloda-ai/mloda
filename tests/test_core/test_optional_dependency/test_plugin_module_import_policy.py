@@ -109,12 +109,14 @@ MODULE_EXTRA: dict[str, str] = {
     f"{_EXPERIMENTAL}.text_cleaning.python_dict": "text_cleaning",
     f"{_EXPERIMENTAL}.time_window.pandas": "pandas",
     f"{_EXPERIMENTAL}.time_window.pyarrow": "pyarrow",
-    f"{_INPUT_DATA}.read_dbs.sqlite": "sqlite",
-    f"{_INPUT_DATA}.read_files.feather": "pyarrow",
-    f"{_INPUT_DATA}.read_files.json": "pyarrow",
-    f"{_INPUT_DATA}.read_files.orc": "pyarrow",
-    f"{_INPUT_DATA}.read_files.parquet": "pyarrow",
-    f"{_INPUT_DATA}.read_files.yaml_document_reader": "yaml",
+    f"{_INPUT_DATA}.file_formats.csv_fg": "pyarrow",
+    f"{_INPUT_DATA}.file_formats.feather_fg": "pyarrow",
+    f"{_INPUT_DATA}.file_formats.json_fg": "pyarrow",
+    f"{_INPUT_DATA}.file_formats.orc_fg": "pyarrow",
+    f"{_INPUT_DATA}.file_formats.parquet_fg": "pyarrow",
+    f"{_INPUT_DATA}.file_formats.stock_formats": "pyarrow",
+    f"{_INPUT_DATA}.db_formats.sqlite_fg": "sqlite",
+    f"{_INPUT_DATA}.document_formats.yaml_fg": "yaml",
 }
 
 # Extras a module reaches only lazily, guarded or through an import edge, on top of its home extra.
@@ -132,6 +134,7 @@ ALSO_NEEDS: dict[str, tuple[str, ...]] = {
     f"{_EXPERIMENTAL}.sklearn.scaling.pandas": ("pandas",),
     f"{_EXPERIMENTAL}.text_cleaning.pandas": ("text_cleaning",),
     f"{_EXPERIMENTAL}.time_window.pyarrow": ("pandas",),
+    f"{_INPUT_DATA}.file_formats.stock_formats": ("yaml",),
 }
 
 # The only modules allowed to import their home extra's roots unconditionally.
@@ -142,7 +145,6 @@ EAGER_MODULES: frozenset[str] = frozenset(
         "mloda_plugins.feature_group.experimental.time_window.pyarrow",
         "mloda_plugins.feature_group.experimental.geo_distance.pandas",
         "mloda_plugins.feature_group.experimental.time_window.pandas",
-        "mloda_plugins.feature_group.input_data.read_dbs.sqlite",
     }
 )
 

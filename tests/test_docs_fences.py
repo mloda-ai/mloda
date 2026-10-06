@@ -28,7 +28,7 @@ ILLUSTRATIVE_BLOCK_ALLOWLIST: dict[str, int] = {
     "docs/docs/in_depth/access-feature-data.md": 5,
     "docs/docs/in_depth/artifacts.md": 1,
     "docs/docs/in_depth/compute-framework-integration.md": 8,
-    "docs/docs/in_depth/data-access-patterns.md": 7,
+    "docs/docs/in_depth/data-access-patterns.md": 6,
     "docs/docs/in_depth/discover-plugins.md": 1,
     "docs/docs/in_depth/feature-chain-parser.md": 16,
     "docs/docs/in_depth/feature-group-matching.md": 3,
@@ -42,7 +42,7 @@ ILLUSTRATIVE_BLOCK_ALLOWLIST: dict[str, int] = {
     "docs/docs/in_depth/plugin-loader.md": 2,
     "docs/docs/in_depth/plugin_registry.md": 1,
     "docs/docs/in_depth/property-mapping.md": 4,
-    "docs/docs/in_depth/troubleshooting/feature-group-resolution-errors.md": 3,
+    "docs/docs/in_depth/troubleshooting/feature-group-resolution-errors.md": 4,
 }
 
 MAX_REPORTED_VIOLATIONS = 60

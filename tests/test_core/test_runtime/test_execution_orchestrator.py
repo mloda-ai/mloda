@@ -540,6 +540,10 @@ class TestSyncModeSkipsSleep:
 
         register.get_parallelization_modes.assert_called_once()
 
+
+class TestRegisterModesCache:
+    """_execute_step reads the parallelization modes cached on the orchestrator."""
+
     def test_execute_step_uses_cached_register_modes(self) -> None:
         orchestrator = ExecutionOrchestrator(MagicMock())
         register = Mock(wraps=CfwManager({ParallelizationMode.SYNC}))

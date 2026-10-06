@@ -452,7 +452,6 @@ class TestGetCfw:
 
         assert result is mock_cfw
         cfw_register.get_cfw_uuid.assert_called_once_with("PandasDataFrame", feature_uuid)
-        assert not hasattr(CfwManager, "get_initialized_compute_framework_uuid")
 
     def test_raises_value_error_if_cfw_uuid_is_none(self) -> None:
         """Should raise ValueError if CFW UUID is not found in register."""

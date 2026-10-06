@@ -1,5 +1,6 @@
 """Lock-file I/O for write_plan_lock and check_plan_lock, driven by hand-built PlanSteps."""
 
+import collections
 import dataclasses
 import hashlib
 import json
@@ -330,6 +331,14 @@ def test_plan_content_hash_changes_with_a_content_field(changed: Callable[[], li
     assert plan_content_hash(changed()) != plan_content_hash(_content_plan())
 
 
+_Conns = collections.namedtuple("_Conns", ["items"])
+_OtherConns = collections.namedtuple("_OtherConns", ["items"])
+
+
+class _ConnList(list[Any]):
+    pass
+
+
 def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     def hashed(**group: object) -> str:
         return plan_content_hash([_compute_step(feature_set_options=Options(group=group))])
@@ -341,9 +350,16 @@ def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     assert hashed(conns=[{"password": "a1"}]) == hashed(conns=[{"password": "b2"}])  # nosec B105
     assert hashed(conns=({"password": "a1"},)) == hashed(conns=({"password": "b2"},))  # nosec B105
     assert hashed(c={"l": [{"api_key": "a1"}]}) == hashed(c={"l": [{"api_key": "b2"}]})
-    assert hashed(c=types.MappingProxyType({"password": "a1"})) == hashed(  # nosec B106
-        c=types.MappingProxyType({"password": "b2"})  # nosec B106
+    assert hashed(c=types.MappingProxyType({"password": "a1"})) == hashed(  # nosec B105
+        c=types.MappingProxyType({"password": "b2"})  # nosec B105
     )
+    assert hashed(c=_Conns(items=[{"password": "a1"}])) == hashed(  # nosec B105
+        c=_Conns(items=[{"password": "b2"}])  # nosec B105
+    )
+    assert hashed(c=_ConnList([{"password": "a1"}])) == hashed(  # nosec B105
+        c=_ConnList([{"password": "b2"}])  # nosec B105
+    )
+    assert hashed(c=_Conns(items=[1])) != hashed(c=_OtherConns(items=[1]))
     assert hashed(conn=RegisteredCredential(host="h1", password="p")) == hashed(  # nosec B106
         conn=RegisteredCredential(host="h2", password="p")  # nosec B106
     )

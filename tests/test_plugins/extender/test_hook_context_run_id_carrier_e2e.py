@@ -217,6 +217,23 @@ class TestRunIdAndCarrierSurfaceOnHookContext:
         assert extender.captured.run_id != session.plan_id
         assert extender.captured.carrier == _CARRIER
 
+    def test_stream_run_captures_the_session_structure_hash(self) -> None:
+        extender = _ContextCapturingExtender()
+        session = mloda.prepare(
+            [Feature(name="run_id_carrier_e2e_col_one")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED,
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+
+        list(session.stream_run(parallelization_modes={ParallelizationMode.SYNC}))
+
+        assert extender.captured is not None
+        assert extender.captured.plan_id == session.plan_id
+        assert extender.captured.structure_hash is not None
+        assert extender.captured.structure_hash == session.plan_context.structure_hash
+
 
 class TestCarrierIsCopiedOnIngestNotAliased:
     """HookContext.carrier must be a copy, so a hook mutating it can't leak into the caller's dict."""

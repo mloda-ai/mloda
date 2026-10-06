@@ -1,4 +1,4 @@
-"""Lock file recording which classes a resolved plan picks, so a change fails loudly."""
+"""Lock file recording a resolved plan's classes, input wiring and join keys, so a change fails loudly."""
 
 import difflib
 import hashlib
@@ -39,8 +39,11 @@ def _mask_secret_keys(value: Any) -> Any:
             key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
             for key, item in value.items()
         }
-    if type(value) is list or type(value) is tuple:
-        return type(value)(_mask_secret_keys(item) for item in value)
+    if isinstance(value, (list, tuple)):
+        items = [_mask_secret_keys(item) for item in value]
+        if hasattr(value, "_make"):
+            return value._make(items)
+        return tuple(items) if isinstance(value, tuple) else items
     return value
 
 
@@ -124,7 +127,7 @@ def plan_structure_hash(plan: Sequence[PlanStep]) -> str:
 
 
 def plan_content_hash(plan: Sequence[PlanStep]) -> str:
-    """Return the sha256 of the plan's audit content (lock content plus scrubbed options)."""
+    """Return the sha256 of the lock content minus reason text and format, plus scrubbed options."""
     text = json.dumps(_build(plan)[1], sort_keys=True)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 

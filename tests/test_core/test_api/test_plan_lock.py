@@ -1,8 +1,10 @@
 """Lock-file I/O for write_plan_lock and check_plan_lock, driven by hand-built PlanSteps."""
 
+import collections
 import dataclasses
 import hashlib
 import json
+import types
 import uuid
 from pathlib import Path
 from collections.abc import Callable
@@ -19,6 +21,7 @@ from mloda.steward import (
     plan_structure_hash,
     write_plan_lock,
 )
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.provider import ComputeFramework, FeatureGroup
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -100,7 +103,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 3
+    assert content["format"] == PLAN_LOCK_FORMAT == 4
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
@@ -111,6 +114,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "specialized_from",
         "reader",
         "result_framework",
+        "input_feature_edges",
     }
     assert set(content["joins"][0]) == {
         "left_feature_group",
@@ -119,6 +123,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "compute_framework",
         "source_compute_framework",
         "destination_side",
+        "join_keys",
     }
     assert set(content["transforms"][0]) == {"feature_group", "from_compute_framework", "to_compute_framework"}
     assert text == _lock_text(plan)
@@ -248,12 +253,6 @@ def test_plan_structure_hash_ignores_non_lock_fields() -> None:
     assert plan_structure_hash(varied) == plan_structure_hash(base)
 
 
-def test_plan_structure_hash_changes_with_a_lock_field() -> None:
-    assert plan_structure_hash([_compute_step()]) != plan_structure_hash(
-        [_compute_step(compute_framework=PyArrowTable)]
-    )
-
-
 def _content_plan() -> list[PlanStep]:
     return [
         _compute_step(
@@ -265,6 +264,23 @@ def _content_plan() -> list[PlanStep]:
     ]
 
 
+@pytest.mark.parametrize(
+    "changed",
+    [
+        pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
+        pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_feature_edges"),
+        pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
+    ],
+)
+def test_plan_structure_hash_changes_with_a_lock_field(tmp_path: Path, changed: Callable[[], list[PlanStep]]) -> None:
+    assert plan_structure_hash(changed()) != plan_structure_hash(_content_plan())
+
+    lock = tmp_path / "plan.lock"
+    write_plan_lock(_content_plan(), lock)
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock(changed(), lock)
+
+
 def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash() -> None:
     plan = _content_plan()
     digest = plan_content_hash(plan)
@@ -273,6 +289,8 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     assert all(char in "0123456789abcdef" for char in digest)
     assert digest != plan_structure_hash(plan)
     assert digest == plan_content_hash(_content_plan())
+    # Pinned: moving wiring and join keys into the lock must not shift the content hash.
+    assert digest == "3795217432afaff05f341f680b5eac2047cb3145faed9cd78d114e79ccf7bd2f"
 
 
 def test_plan_content_hash_ignores_run_ids_reader_access_and_reason_text() -> None:
@@ -313,6 +331,14 @@ def test_plan_content_hash_changes_with_a_content_field(changed: Callable[[], li
     assert plan_content_hash(changed()) != plan_content_hash(_content_plan())
 
 
+_Conns = collections.namedtuple("_Conns", ["items"])
+_OtherConns = collections.namedtuple("_OtherConns", ["items"])
+
+
+class _ConnList(list[Any]):
+    pass
+
+
 def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     def hashed(**group: object) -> str:
         return plan_content_hash([_compute_step(feature_set_options=Options(group=group))])
@@ -321,6 +347,23 @@ def test_plan_content_hash_scrubs_credential_option_values_only() -> None:
     assert hashed(conn={"password": "a1", "host": "h"}) == hashed(conn={"password": "b2", "host": "h"})  # nosec B105
     assert hashed(conn={"api_key": "a1"}) == hashed(conn={"api_key": "b2"})
     assert hashed(window=3) != hashed(window=4)
+    assert hashed(conns=[{"password": "a1"}]) == hashed(conns=[{"password": "b2"}])  # nosec B105
+    assert hashed(conns=({"password": "a1"},)) == hashed(conns=({"password": "b2"},))  # nosec B105
+    assert hashed(c={"l": [{"api_key": "a1"}]}) == hashed(c={"l": [{"api_key": "b2"}]})
+    assert hashed(c=types.MappingProxyType({"password": "a1"})) == hashed(  # nosec B105
+        c=types.MappingProxyType({"password": "b2"})  # nosec B105
+    )
+    assert hashed(c=_Conns(items=[{"password": "a1"}])) == hashed(  # nosec B105
+        c=_Conns(items=[{"password": "b2"}])  # nosec B105
+    )
+    assert hashed(c=_ConnList([{"password": "a1"}])) == hashed(  # nosec B105
+        c=_ConnList([{"password": "b2"}])  # nosec B105
+    )
+    assert hashed(c=_Conns(items=[1])) != hashed(c=_OtherConns(items=[1]))
+    assert hashed(conn=RegisteredCredential(host="h1", password="p")) == hashed(  # nosec B106
+        conn=RegisteredCredential(host="h2", password="p")  # nosec B106
+    )
+    assert hashed(conns=[{"host": "a"}]) != hashed(conns=[{"host": "b"}])
 
 
 @pytest.mark.parametrize(
@@ -342,3 +385,9 @@ def test_plan_content_hash_is_independent_of_set_and_dict_order() -> None:
     second = _compute_step(feature_set_options=Options(group={"d": {"y": 2, "x": 1}, "s": {"c", "b", "a"}}))
 
     assert plan_content_hash([first]) == plan_content_hash([second])
+
+    proxy_a = types.MappingProxyType({"x": 1, "y": 2})
+    proxy_b = types.MappingProxyType({"y": 2, "x": 1})
+    third = _compute_step(feature_set_options=Options(group={"m": proxy_a}))
+    fourth = _compute_step(feature_set_options=Options(group={"m": proxy_b}))
+    assert plan_content_hash([third]) == plan_content_hash([fourth])

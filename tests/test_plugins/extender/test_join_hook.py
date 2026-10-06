@@ -142,6 +142,8 @@ class TestJoinHookFiresWithCorrectContext:
         assert context.compute_framework_name == "PythonDictFramework"
         assert context.run_id is not None
         assert context.plan_id == session.plan_id
+        assert context.structure_hash is not None
+        assert context.structure_hash == session.plan_context.structure_hash
         assert context.run_id != session.plan_id
         assert context.carrier == carrier
         assert context.worker_index is None

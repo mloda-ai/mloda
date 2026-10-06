@@ -288,6 +288,7 @@ class TestPlanIdConsistentAcrossMatches:
         assert isinstance(session.plan_id, str)
         assert session.plan_id
         assert {context.plan_id for context in extender.captured} == {session.plan_id}
+        assert {context.structure_hash for context in extender.captured} == {None}
         assert {context.run_id for context in extender.captured} == {None}
 
 

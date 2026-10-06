@@ -1,21 +1,22 @@
-"""Lock file recording which classes a resolved plan picks, so a change fails loudly."""
+"""Lock file recording a resolved plan's classes, input wiring and join keys, so a change fails loudly."""
 
 import difflib
 import hashlib
 import json
 import os
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_NAME
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.choose_compute_frameworks import stable_text
 
 _SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
 
-PLAN_LOCK_FORMAT = 3
+PLAN_LOCK_FORMAT = 4
 
 
 class PlanLockMismatchError(Exception):
@@ -31,12 +32,19 @@ def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _mask_secret_keys(value: Any) -> Any:
-    if type(value) is not dict:
+    if isinstance(value, RegisteredCredential):
         return value
-    return {
-        key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
-        for key, item in value.items()
-    }
+    if isinstance(value, Mapping):
+        return {
+            key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        items = [_mask_secret_keys(item) for item in value]
+        if hasattr(value, "_make"):
+            return value._make(items)
+        return tuple(items) if isinstance(value, tuple) else items
+    return value
 
 
 def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -56,13 +64,11 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
                 "reader": None if access is None else _class_path(access[0]),
                 "result_framework": _class_path(step.result_framework),
+                "input_feature_edges": {name: sorted(inputs) for name, inputs in step.input_feature_edges.items()},
             }
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
                 key: value for key, value in record.items() if key != "compute_framework_reason"
-            }
-            wide_record["input_feature_edges"] = {
-                name: sorted(inputs) for name, inputs in step.input_feature_edges.items()
             }
             options = step.feature_set_options
             wide_record["options"] = None if options is None else stable_text(_mask_secret_keys(options.group))
@@ -75,9 +81,10 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 "compute_framework": _class_path(step.compute_framework),
                 "source_compute_framework": _class_path(step.source_compute_framework),
                 "destination_side": step.join_destination_side,
+                "join_keys": None if step.join_keys is None else list(step.join_keys),
             }
             lock["joins"].append(record)
-            wide["joins"].append({**record, "join_keys": None if step.join_keys is None else list(step.join_keys)})
+            wide["joins"].append(record)
         elif step.step_kind == "transform":
             record = {
                 "feature_group": _class_path(step.feature_group),
@@ -120,7 +127,7 @@ def plan_structure_hash(plan: Sequence[PlanStep]) -> str:
 
 
 def plan_content_hash(plan: Sequence[PlanStep]) -> str:
-    """Return the sha256 of the plan's audit content: structure plus scrubbed options, wiring and join keys."""
+    """Return the sha256 of the lock content minus reason text and format, plus scrubbed options."""
     text = json.dumps(_build(plan)[1], sort_keys=True)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 

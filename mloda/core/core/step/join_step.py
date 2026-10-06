@@ -75,6 +75,7 @@ class JoinStep(Step):
             join_right_feature_group=f"{self.link.right_feature_group.__module__}.{self.link.right_feature_group.__qualname__}",
             run_id=cfw.run_context.run_id,
             plan_id=cfw.run_context.plan_id,
+            structure_hash=cfw.run_context.structure_hash,
             carrier=cfw.run_context.carrier,
             tenant_id=cfw.run_context.tenant_id,
             project_id=cfw.run_context.project_id,

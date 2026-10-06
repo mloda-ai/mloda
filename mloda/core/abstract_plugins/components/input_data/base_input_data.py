@@ -660,6 +660,7 @@ class BaseInputData(ABC):
             compute_framework_name=cfw.get_class_name(),
             run_id=calc_context.run_id,
             plan_id=calc_context.plan_id,
+            structure_hash=calc_context.structure_hash,
             step_uuid=calc_context.step_uuid,
             carrier=calc_context.carrier,
             tenant_id=calc_context.tenant_id,

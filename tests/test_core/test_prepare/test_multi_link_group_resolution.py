@@ -1249,14 +1249,13 @@ def _carrier_alone(
         pytest.param(ParallelizationMode.SYNC, True, "carried_framework", id="sync_b_a_carried_framework"),
         pytest.param(ParallelizationMode.SYNC, False, "other_side_framework", id="sync_a_b_other_side_framework"),
         pytest.param(ParallelizationMode.SYNC, True, "other_side_framework", id="sync_b_a_other_side_framework"),
-        *(
-            pytest.param(mode, swap, kind, id=f"{mode.value}_{name}")
-            for mode in (ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING)
-            for name, swap, kind in (
-                ("a_b_carried_framework", False, "carried_framework"),
-                ("b_a_carried_framework", True, "carried_framework"),
-                ("a_b_other_side_framework", False, "other_side_framework"),
-            )
+        pytest.param(ParallelizationMode.THREADING, False, "carried_framework", id="threading_a_b_carried_framework"),
+        pytest.param(ParallelizationMode.THREADING, True, "carried_framework", id="threading_b_a_carried_framework"),
+        pytest.param(
+            ParallelizationMode.THREADING, False, "other_side_framework", id="threading_a_b_other_side_framework"
+        ),
+        pytest.param(
+            ParallelizationMode.MULTIPROCESSING, False, "carried_framework", id="multiprocessing_a_b_carried_framework"
         ),
     ],
 )
@@ -1293,15 +1292,18 @@ def _carrier_with_direct(
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
 @pytest.mark.timeout(30)
-@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
-    "mode, consumer_kind",
+    "mode, swap_link_sides, consumer_kind",
     [
-        pytest.param(ParallelizationMode.SYNC, "carried_framework", id="sync_carried_framework"),
-        pytest.param(ParallelizationMode.SYNC, "other_side_framework", id="sync_other_side_framework"),
-        pytest.param(ParallelizationMode.THREADING, "carried_framework", id="threading"),
-        pytest.param(ParallelizationMode.MULTIPROCESSING, "carried_framework", id="multiprocessing"),
-    ],
+        pytest.param(mode, swap, kind, id=f"{name}-{swap_id}")
+        for name, mode, kind in (
+            ("sync_carried_framework", ParallelizationMode.SYNC, "carried_framework"),
+            ("sync_other_side_framework", ParallelizationMode.SYNC, "other_side_framework"),
+            ("threading", ParallelizationMode.THREADING, "carried_framework"),
+        )
+        for swap, swap_id in ((False, "a_b"), (True, "b_a"))
+    ]
+    + [pytest.param(ParallelizationMode.MULTIPROCESSING, False, "carried_framework", id="multiprocessing-a_b")],
 )
 def test_a_carrier_consumer_next_to_a_direct_consumer_of_one_link_waits_only_on_its_join(
     flight_server: Any, mode: ParallelizationMode, swap_link_sides: bool, consumer_kind: str

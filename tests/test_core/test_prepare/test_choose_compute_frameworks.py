@@ -559,6 +559,44 @@ def test_a_right_link_with_swapped_side_domains_keeps_its_flexible_consumer_on_i
     assert flexible.chosen_compute_framework is P
 
 
+def test_a_right_link_keeps_a_consumer_on_its_own_right_when_no_left_only_sibling_shares_its_sides() -> None:
+    link = _link(Link.right, ChooserLeftFG, ChooserRightFG)
+    net = _Net()
+    l1 = net.add(ChooserLeftFG, "pair_left", {P, A}, {"n": 1})
+    l2 = net.add(ChooserLeftFG, "pair_left", {P, A}, {"n": 2})
+    r1 = net.add(ChooserRightFG, "pair_right", {D}, {"n": 1})
+    r2 = net.add(ChooserRightFG, "pair_right", {D}, {"n": 2})
+    c1 = net.add(ChooserChildFG, "pair_child", {P}, {"n": 1})
+    c2 = net.add(ChooserChildFG, "pair_child", {A, D}, {"n": 2})
+    net.join(link, l1, r1, c1)
+    net.join(link, l2, r2, c2)
+
+    net.choose({A: 0, D: 1, P: 2})
+
+    assert c1.chosen_compute_framework is P
+    assert c2.chosen_compute_framework is D
+
+
+def test_a_right_link_consumer_that_also_consumes_an_inner_link_resolves_as_a_chained_hop() -> None:
+    right_link = _link(Link.right, ChooserLeftFG, ChooserRightFG)
+    inner_link = _link(Link.inner, ChooserLeafFG, ChooserOtherLeafFG)
+    net = _Net()
+    left = net.add(ChooserLeftFG, "hop_left", {P})
+    right = net.add(ChooserRightFG, "hop_right", {A})
+    leaf = net.add(ChooserLeafFG, "hop_leaf", {D})
+    other_leaf = net.add(ChooserOtherLeafFG, "hop_other_leaf", {D})
+    y = net.add(ChooserChildFG, "hop_y", {P}, {"n": 1})
+    x = net.add(ChooserChildFG, "hop_x", {A, D}, {"n": 2})
+    net.join(right_link, left, right, y)
+    net.join(right_link, left, right, x)
+    net.join(inner_link, leaf, other_leaf, x)
+
+    net.choose()
+
+    assert y.chosen_compute_framework is P
+    assert x.chosen_compute_framework is D
+
+
 @pytest.mark.parametrize(
     ("factory", "expected"),
     [(Link.inner, P), (Link.right, A), (Link.append, P)],

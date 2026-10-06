@@ -31,6 +31,7 @@ _WRITABLE_FIELDS = frozenset({"rows_out", "output_schema", "duration_seconds", "
 
 _gate_scopes = 0
 _gate_scopes_lock = threading.Lock()
+_result_attributes_lock = threading.Lock()
 
 
 @contextlib.contextmanager
@@ -147,8 +148,9 @@ class HookContext:
         current = cls.current()
         if current is None:
             return
-        merged = _frozen_dict({**(current.result_attributes or {}), **validated})
-        object.__setattr__(current, "result_attributes", merged)
+        with _result_attributes_lock:
+            merged = _frozen_dict({**(current.result_attributes or {}), **validated})
+            object.__setattr__(current, "result_attributes", merged)
 
     @contextlib.contextmanager
     def activate(self) -> Generator["HookContext", None, None]:

@@ -35,10 +35,9 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader, feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
-    STOCK_FORMAT_GROUP_NAMES,
     FormatFeatureGroup,
     FormatPointerError,
-    concrete_format_groups as concrete_format_groups,
+    concrete_format_groups,
 )
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
@@ -171,22 +170,13 @@ def validate_format_pointers(
     excluded: Mapping[type[FeatureGroup], str] | None,
     data_access_collection: DataAccessCollection | None,
 ) -> None:
-    """Raise FormatPointerError for an unloaded stock group, an unreachable pointer or scope, or a pointer against a pin."""
+    """Raise FormatPointerError for an unreachable pointer or scope, or a pointer against a pin."""
     scope = feature.feature_group_scope
     keys = sorted(key for key in feature.options.keys() if isinstance(key, str))
     if not keys and scope is None:
         return
     excluded = excluded or {}
     loaded = concrete_format_groups()
-    named = [(key, False) for key in keys]
-    if isinstance(scope, str):
-        named.append((scope, True))
-    for name, as_scope in named:
-        if name in STOCK_FORMAT_GROUP_NAMES and name not in loaded:
-            source = "feature_group=" if as_scope else "options point at "
-            raise FormatPointerError(
-                f"{source}{name}, but {name} is not loaded; import its module or call PluginLoader.all()."
-            )
     accessible_formats = [fg for fg in accessible_plugins if issubclass(fg, FormatFeatureGroup)]
     for key in keys:
         group = loaded.get(key)

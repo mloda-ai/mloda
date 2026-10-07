@@ -863,25 +863,6 @@ class TestUnreachablePointerRaises:
 
         assert "dropped by strict mode" in str(exc_info.value)
 
-    @pytest.mark.parametrize("as_scope", [False, True], ids=["pointer", "scope"])
-    def test_an_unloaded_stock_group_raises_naming_the_loader(
-        self, as_scope: bool, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from mloda.core.prepare import identify_feature_group as module
-
-        csv_fg = _stock("csv_fg", "CsvFG")
-        _stock("json_fg", "JsonFG")
-        real = module.concrete_format_groups()
-        monkeypatch.setattr(module, "concrete_format_groups", lambda: {k: v for k, v in real.items() if k != "JsonFG"})
-        feature = (
-            Feature("fpg_x", feature_group="JsonFG") if as_scope else Feature("fpg_x", Options({"JsonFG": "x.json"}))
-        )
-        with pytest.raises(FormatPointerError) as exc_info:
-            IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg), None, None)
-
-        assert "JsonFG is not loaded" in str(exc_info.value)
-        assert "PluginLoader.all()" in str(exc_info.value)
-
     def test_a_scope_with_a_pointer_at_a_different_group_raises_naming_both(self, tmp_path: Path) -> None:
         csv_fg = _stock("csv_fg", "CsvFG")
         json_fg = _stock("json_fg", "JsonFG")

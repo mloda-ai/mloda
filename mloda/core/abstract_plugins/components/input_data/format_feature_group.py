@@ -29,22 +29,6 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 
 _MAX_LISTED_COLUMNS = 20
 
-STOCK_FORMAT_GROUP_NAMES = frozenset(
-    {
-        "CsvFG",
-        "ParquetFG",
-        "FeatherFG",
-        "OrcFG",
-        "JsonFG",
-        "SqliteFG",
-        "JsonDocumentFG",
-        "YamlFG",
-        "MarkdownFG",
-        "TextFG",
-        "PyFG",
-    }
-)
-
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(
     "Name of the DataAccessCollection handle to read from.",

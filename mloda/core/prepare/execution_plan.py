@@ -1029,6 +1029,7 @@ Available join types:
         split: DeclaredSideSplit,
         graph: Graph,
         frameworks: set[type[ComputeFramework]],
+        side_frameworks: set[type[ComputeFramework]] | None = None,
     ) -> tuple[frozenset[UUID], set[bool], set[UUID]]:
         """Non-raising scan: carriers, the sides they descend from, and the children reading through them."""
         nodes = graph.get_nodes()
@@ -1044,6 +1045,15 @@ Available join types:
                 above = graph.parent_to_children_mapping.get(parent, set())
                 from_left = bool(above & split.left_uuids_any_distance)
                 from_right = bool(above & split.right_uuids_any_distance)
+                # Same-framework join: one-sided mids over other-framework members arrive via another join of the link.
+                if (
+                    side_frameworks is not None
+                    and not (from_left and from_right)
+                    and not any(
+                        nodes[a].feature.get_compute_framework() in side_frameworks for a in above & side_members
+                    )
+                ):
+                    continue
                 if from_left or from_right:
                     carriers.add(parent)
                     carried_children.add(child)
@@ -1058,9 +1068,10 @@ Available join types:
         split: DeclaredSideSplit,
         frameworks: set[type[ComputeFramework]],
         graph: Graph,
+        side_frameworks: set[type[ComputeFramework]] | None = None,
     ) -> tuple[frozenset[UUID], bool]:
         """Consumer parents on another framework that descend from a link side, and whether that side is the left."""
-        carriers, sides, _ = self._carrier_scan(children_uuids, split, graph, frameworks)
+        carriers, sides, _ = self._carrier_scan(children_uuids, split, graph, frameworks, side_frameworks)
         if len(sides) > 1:
             nodes = graph.get_nodes()
             names = sorted(format_feature_group_class(nodes[c].feature_group_class) for c in carriers)
@@ -2038,6 +2049,7 @@ Available join types:
         beside_carried: bool = False,
     ) -> JoinStep | None:
         link = link_fw[0]
+        entered_same_framework = destination_framework == source_framework
 
         # This gets the parent ids of the joinstep, which needs to be calculated before the link.
         required_uuids: set[UUID] = set()
@@ -2232,7 +2244,11 @@ Available join types:
             join_step_required_uuids = required_uuids
 
             carriers, carriers_on_left = self._join_carriers(
-                children_uuids, split, {destination_framework, source_framework}, graph
+                children_uuids,
+                split,
+                {destination_framework, source_framework},
+                graph,
+                {destination_framework} if entered_same_framework else None,
             )
             if carriers and (side is JoinSide.LEFT) != carriers_on_left:
                 side = JoinSide.LEFT if carriers_on_left else JoinSide.RIGHT

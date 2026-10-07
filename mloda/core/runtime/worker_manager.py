@@ -11,7 +11,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
-from mloda.core.runtime.mp_context import mp_start_context, spawn_daemon_process
+from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class WorkerManager:
         worker_index = len(self.process_register)
         # As a side effect of daemon=True, code running inside a worker cannot itself
         # spawn multiprocessing children (Python raises on that).
-        process = spawn_daemon_process(ctx, target, (command_queue, result_queue, *args, worker_index))
+        process = start_daemon_process(ctx, target, (command_queue, result_queue, *args, worker_index))
 
         self.process_register[cfw_uuid] = (process, command_queue, result_queue)
         self.result_queues_collection.add(result_queue)

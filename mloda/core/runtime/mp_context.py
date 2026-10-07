@@ -3,12 +3,16 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
-from multiprocessing.context import ForkServerContext, SpawnContext
+from importlib.util import find_spec
 from multiprocessing.process import BaseProcess
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from multiprocessing.context import ForkServerContext, SpawnContext
 
 logger = logging.getLogger(__name__)
 _warned_forkserver_unavailable = False
+_warned_missing_preload: set[str] = set()
 
 
 def mp_start_context() -> SpawnContext | ForkServerContext:
@@ -29,12 +33,16 @@ def mp_start_context() -> SpawnContext | ForkServerContext:
         return multiprocessing.get_context("spawn")
     ctx = multiprocessing.get_context("forkserver")
     preload = [m.strip() for m in os.environ.get("MLODA_MP_PRELOAD", "").split(",") if m.strip()]
+    for name in preload:
+        if name not in _warned_missing_preload and find_spec(name.split(".")[0]) is None:
+            _warned_missing_preload.add(name)
+            logger.warning("MLODA_MP_PRELOAD entry %r: no such top-level module", name)
     if preload:
         ctx.set_forkserver_preload(preload)
     return ctx
 
 
-def spawn_daemon_process(
+def start_daemon_process(
     ctx: SpawnContext | ForkServerContext, target: Callable[..., None], args: tuple[Any, ...] = ()
 ) -> BaseProcess:
     """Creates ctx.Process(target, args, daemon=True): reaped automatically if the parent exits

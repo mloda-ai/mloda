@@ -1,4 +1,5 @@
 import gc
+import importlib.util
 import os
 from collections.abc import Iterator
 from typing import Any
@@ -15,7 +16,7 @@ from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightS
 
 from tests.registry_isolation import reclaim_leaked_feature_groups, reclaim_leaked_transformers
 
-MP_PRELOAD_MODULES = [
+_ALL_MP_PRELOAD_MODULES = [
     "mloda.user",
     "mloda.provider",
     "mloda.core.runtime.worker.multiprocessing_worker",
@@ -30,10 +31,17 @@ MP_PRELOAD_MODULES = [
     "pyiceberg.table",
     "pyspark.sql",
 ]
+OPTIONAL_BACKEND_PACKAGES = {"pyarrow", "pandas", "polars", "duckdb", "pyiceberg", "pyspark"}
+MP_PRELOAD_MODULES = [
+    m
+    for m in _ALL_MP_PRELOAD_MODULES
+    if m.split(".")[0] not in OPTIONAL_BACKEND_PACKAGES or importlib.util.find_spec(m.split(".")[0]) is not None
+]
 # Must run before anything starts a worker process.
 os.environ.setdefault("MLODA_MP_START_METHOD", "forkserver")
 os.environ.setdefault("MLODA_MP_PRELOAD", ",".join(MP_PRELOAD_MODULES))
-# Keeps numpy's OpenBLAS from starting threads in the forkserver.
+# OPENBLAS_NUM_THREADS=1 stops numpy's thread pool; pyarrow's jemalloc thread is fork-safe (atfork handlers).
+# polars and duckdb are left out of the preload because they start thread pools at import.
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 

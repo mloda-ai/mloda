@@ -36,9 +36,11 @@ This means, depending on your needs, you can run them all at once (**batch run**
 -   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)
     Multiprocessing uses `spawn` by default. `MLODA_MP_START_METHOD=forkserver` opts into forkserver (falls back to
     spawn where unavailable; `fork` is rejected). `MLODA_MP_PRELOAD` lists modules the forkserver imports once.
-    Caveats: preload only modules that start no threads; children share preloaded module state (e.g. numpy's
-    global random seed, so seed per process); the environment is fixed when the forkserver starts; children skip
-    `atexit`; the preload is process-wide and ignored once the forkserver runs.
+    Caveats: preload only modules whose import-time threads are fork-safe (e.g. not polars or duckdb); children
+    share preloaded module state (e.g. numpy's global random seed, so seed per process); the environment is fixed
+    when the forkserver starts; children skip `atexit`; the preload is process-wide and ignored once the forkserver
+    runs; `MLODA_MP_PRELOAD` replaces any `multiprocessing.set_forkserver_preload` value, and entries whose
+    top-level package is not installed are logged as a warning.
 -   flight_server (optional): Specify a flight server for multiprocessing only.
 -   **column_ordering** (optional): Control the ordering of result columns.
     Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`

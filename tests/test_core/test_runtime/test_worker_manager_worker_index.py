@@ -12,7 +12,7 @@ def _noop_target(*args: Any, **kwargs: Any) -> None:
     return None
 
 
-def _mock_spawn_context() -> Any:
+def _mock_start_context() -> Any:
     mock_process = Mock()
     mock_ctx = Mock()
     mock_ctx.Process.return_value = mock_process
@@ -23,7 +23,7 @@ def _mock_spawn_context() -> Any:
 class TestCreateWorkerProcessWorkerIndex:
     def test_first_worker_created_in_a_run_gets_index_zero(self) -> None:
         manager = WorkerManager()
-        mock_ctx = _mock_spawn_context()
+        mock_ctx = _mock_start_context()
 
         with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=mock_ctx):
             manager.create_worker_process(uuid4(), _noop_target, ())
@@ -33,7 +33,7 @@ class TestCreateWorkerProcessWorkerIndex:
 
     def test_second_worker_created_in_a_run_gets_index_one_regardless_of_cfw_uuid(self) -> None:
         manager = WorkerManager()
-        mock_ctx = _mock_spawn_context()
+        mock_ctx = _mock_start_context()
 
         with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=mock_ctx):
             manager.create_worker_process(uuid4(), _noop_target, ())

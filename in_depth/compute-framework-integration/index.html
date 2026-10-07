@@ -119,6 +119,10 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#empty-results">Empty Results</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#column-name-case-sensitivity">Column name case sensitivity</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#row-count-for-observability">Row count for observability</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#timezone-and-unit-validation-merge-and-filter-engines">Timezone and unit validation (merge and filter engines)</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#framework-specific-implementations">Framework-Specific Implementations</a>
@@ -137,7 +141,7 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#data-transformation">Data Transformation</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#example">Example</a>
+    <li class="toctree-l3"><a class="reference internal" href="#framework-notes">Framework Notes</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#sql-relation-helpers-duckdb-sqlite">SQL Relation Helpers (DuckDB / SQLite)</a>
         <ul>
@@ -178,6 +182,8 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
     </ul>
                   </li>
@@ -303,7 +309,7 @@ instead of a hand-written <code>supports_compute_framework</code>.</p>
         parametric_families={&quot;ntile&quot;: &quot;N-tile bucketing&quot;},
         supported={&quot;PythonDictFramework&quot;: {&quot;dense&quot;, &quot;ordinal&quot;}},
     )
-    PREFIX_PATTERN = r&quot;.*__([\w]+)_rank$&quot;
+    PREFIX_PATTERN = r&quot;.*__(?P&lt;rank_type&gt;[\w]+)_rank$&quot;
     PROPERTY_MAPPING = {
         &quot;rank_type&quot;: property_spec(
             &quot;Rank subtype.&quot;,
@@ -357,12 +363,13 @@ API: <code>from mloda.provider import EmptyResultError</code>. Intermediate feat
 are never subject to this check.</p>
 <h4 id="the-schema-presence-gate">The schema-presence gate</h4>
 <p>The guard detects a missing schema via the framework's existing
-<code>ComputeFramework._extract_column_names(self, data) -&gt; set[str]</code>: an empty set
+<code>ComputeFramework.extract_column_names(data) -&gt; set[str]</code> (a classmethod): an empty set
 means no schema, which is the error condition. Every framework already implements
 this off schema metadata, so it works on a zero-row frame and costs nothing extra
 (no row scan, collect, or count). No per-framework opt-in is needed when you
-implement a new compute framework, as long as <code>_extract_column_names</code> returns the
-columns for a zero-row frame.</p>
+implement a new compute framework, as long as <code>extract_column_names</code> returns the
+columns for a zero-row frame. Feature groups can call
+<code>&lt;Framework&gt;.extract_column_names(data)</code> without an instance to resolve available columns.</p>
 <p>There is one representational caveat. The schema-bearing frameworks (PyArrow,
 Pandas, Polars, DuckDB, SQLite, Spark, Iceberg) carry their schema as metadata
 even at zero rows, so a zero-row result keeps its columns and passes. The
@@ -381,6 +388,22 @@ Filtering an empty result is a no-op, so neither the column check nor row
 elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.</p>
+<h3 id="column-name-case-sensitivity">Column name case sensitivity</h3>
+<p>mloda matches column and feature names exactly (case-sensitive) in every lookup, match and presence check; engines that resolve names differently add the rules below.</p>
+<ul>
+<li>DuckDB and SQLite compare identifiers ignoring ASCII case only (<code>val</code> and <code>VAL</code> are one column; <code>é</code> and <code>É</code> are two), and mloda's checks for new and helper column names fold case the same way. A join, as-of merge, union, append, <code>from_arrow</code> or <code>from_dict</code> whose output names differ only in case, or repeat a name exactly, raises <code>ValueError</code>; rename one side upstream.</li>
+<li>On those engines, mask primitives, the <code>partition_by</code> / <code>order_by</code> columns of <code>with_row_number</code> / <code>window</code>, merge keys, as-of <code>by</code> and time columns, <code>select</code> names and SQLite <code>order</code> names must be exact column names. SQLite also accepts its <code>rowid</code> / <code>oid</code> / <code>_rowid_</code> pseudo-columns in <code>select</code>, <code>order</code>, <code>with_row_number</code> and <code>window</code>. Raw SQL fragments (<code>filter</code> conditions, <code>project</code> expressions, the <code>window</code> function, DuckDB <code>order</code>) bind through the engine and stay case-insensitive; on SQLite an unresolvable quoted name there is read as a string literal, not an error.</li>
+<li>Spark column resolution follows <code>spark.sql.caseSensitive</code> (default <code>false</code>, folding like Python's <code>str.lower</code>, Unicode included). The Spark as-of merge and adding a feature column in <code>transform</code> raise <code>ValueError</code> on names that collide under that setting; Spark joins, union and append are not checked. Spark as-of time columns must match exactly; other Spark lookups (keys, masks, filters) bind through Spark's resolver.</li>
+</ul>
+<h3 id="row-count-for-observability">Row count for observability</h3>
+<p><code>ComputeFramework._row_count(self, data) -&gt; int | None</code> supplies the row counts extenders read
+off <code>HookContext</code> (<code>rows_in</code>/<code>rows_out</code>) on the <code>FEATURE_GROUP_CALCULATE_FEATURE</code> and
+<code>INPUT_DATA_LOAD</code> hooks (see <a href="../../chapter1/extender/">Extender</a>). The default,
+<code>HookContext.row_count(data)</code>, is a best-effort <code>len(data)</code> that already counts a columnar
+<code>dict[str, list]</code> by its first column, so <code>PythonDictFramework</code> needs no override. Override
+<code>_row_count</code> only when the native type's <code>__len__</code> is missing, wrong, or would materialize or
+query the data: <code>DuckDBFramework</code> and <code>SqliteFramework</code> both return <code>None</code> for their relation
+objects, since <code>len()</code> on either runs a real <code>COUNT(*)</code> query rather than reading metadata.</p>
 <h3 id="timezone-and-unit-validation-merge-and-filter-engines">Timezone and unit validation (merge and filter engines)</h3>
 <p>A custom compute framework's merge and filter engines can opt into the
 <a href="../comparison-contract/">comparison contract</a>, which rejects incompatible
@@ -398,7 +421,7 @@ since ordered time columns are intrinsic to the operation.</p>
 - Base class defines the interface and common functionality
 - Framework-specific classes implement the actual calculations</p>
 <pre><code>FeatureGroup
-  └── BaseFeatureGroup (e.g., ClusteringFeatureGroup)
+  └── BaseFeatureGroup (e.g., SegmentationFeatureGroup)
         ├── PandasImplementation
         ├── PyArrowImplementation
         └── PythonDictFrameworkImplementation
@@ -433,16 +456,22 @@ since ordered time columns are intrinsic to the operation.</p>
         # Pandas-specific implementation
 </code></pre>
 <h2 id="framework-selection-process">Framework Selection Process</h2>
-<p>When a feature is requested:</p>
-<ol>
-<li>The system identifies the appropriate feature group</li>
-<li>It checks which compute frameworks are supported by:</li>
-<li>The feature definition</li>
-<li>The feature group</li>
-<li>The mloda request</li>
-<li>It selects a compatible compute framework</li>
-<li>It uses the framework-specific implementation for calculations</li>
-</ol>
+<p>mloda picks one compute framework per step group (the features of one FeatureGroup that run as one step) in one planning step, before link joins are resolved.</p>
+<ul>
+<li><strong>Allowed set</strong>: the framework must fit the FeatureGroup (<code>compute_framework_rule</code>, <code>supports_compute_framework</code>), any pin via <code>Feature(compute_framework=...)</code>, and the run's enabled frameworks.</li>
+<li><strong>Connection skip</strong>: a <code>REQUIRED</code> framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. It is kept when every parent can run on that framework, because the step then uses the connection its input data carries. Parents carrying different connections keep the step off that framework. It is also kept when the feature has parents and the DataAccessCollection holds exactly one matching connection. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with <code>compute_frameworks=[DuckDBFramework]</code>.</li>
+<li><strong>Joins</strong>: a link's child runs on one of its two sides. RIGHT joins run on the right side's framework, unless the consumers cannot run there, then on the left side's (only for links joining two different FeatureGroups). APPEND and UNION on the left. Children of one link agree on the side.</li>
+<li><strong>Filters</strong>: a filter pinned to a framework moves its host feature onto that framework.</li>
+<li><strong>Conversions</strong>: a transformer chain must exist between every parent and child on different frameworks.</li>
+<li><strong>Choice among valid plans</strong>: lowest cost first (one point per conversion), then the order of the run's <code>compute_frameworks</code> list, then the default order. The default order puts Pandas, Polars, PyArrow before <code>SELF_MANAGED</code> frameworks (Spark, Iceberg), before <code>REQUIRED</code> ones (DuckDB, SQLite), then class name.</li>
+<li><strong>Reason</strong>: each step records why it got its framework: <code>pinned</code>, <code>only allowed framework</code>, <code>rules exclude preferred frameworks</code>, <code>saves N conversion(s)</code>, <code>your list order</code> or <code>default order</code>. "saves N conversions" counts the conversions added by moving only that step to a preferred framework.</li>
+<li><strong>Equal-cost plans</strong>: blocks are settled in a fixed order (by FeatureGroup and feature names), each taking the most preferred framework still possible.</li>
+<li><strong>Both ways</strong>: a Polars-only consumer pulls its unrestricted source onto Polars, and a Polars-only source pulls its unrestricted consumers, so no transform step is needed.</li>
+<li><strong>No valid plan</strong>: planning raises an error naming the features and their allowed sets.</li>
+</ul>
+<p>List order is a tie-break after cost, not "first listed wins". To force a framework, pin the feature or restrict the run's list.</p>
+<p><code>Feature.get_compute_framework()</code> returns the chosen framework. On a feature that allows several frameworks and was never planned, it raises.</p>
+<p>Framework authors declare the connection rule by overriding <code>connection_requirement()</code> (default <code>ConnectionRequirement.NONE</code>). A <code>REQUIRED</code> framework also overrides <code>connection_of(data)</code> to return the connection its native data carries, so a step after a parent on the same framework needs no connection of its own.</p>
 <h2 id="data-transformation">Data Transformation</h2>
 <p>When data needs to move between compute frameworks:</p>
 <ol>
@@ -451,107 +480,13 @@ since ordered time columns are intrinsic to the operation.</p>
 <li>The system automatically handles these transformations when needed</li>
 </ol>
 <p>For more details on how data transformation works between compute frameworks, see <a href="../framework-transformers/">Framework Transformers</a>.</p>
-<h2 id="example">Example</h2>
-<p>For a clustering feature group:</p>
-<pre><code class="language-py"># Base class (framework-agnostic)
-class ClusteringFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# Pandas implementation
-class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PandasDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # Pandas-specific clustering implementation
-
-# PyArrow implementation
-class PyArrowClusteringFeatureGroup(ClusteringFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PyArrowTable}
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # PyArrow-specific clustering implementation
-</code></pre>
-<p>For an aggregated feature group with Polars support:</p>
-<pre><code class="language-py"># Base class (framework-agnostic)
-class AggregatedFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# Polars Lazy implementation
-class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PolarsLazyDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # Polars lazy-specific aggregation implementation
-        # Uses lazy evaluation for query optimization
-</code></pre>
-<p>Note that Polars supports both eager (<code>PolarsDataFrame</code>) and lazy (<code>PolarsLazyDataFrame</code>) evaluation modes, allowing you to choose the appropriate strategy based on your performance requirements.</p>
-<p>For an analytical feature group with DuckDB support:</p>
-<pre><code class="language-py"># Base class (framework-agnostic)
-class AnalyticalFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# DuckDB implementation
-class DuckDBAnalyticalFeatureGroup(AnalyticalFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {DuckDBFramework}
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # DuckDB-specific analytical implementation
-        # Uses SQL-like operations for complex analytics
-        # Example: data.aggregate(&quot;column&quot;, &quot;sum&quot;).df()
-        return data.aggregate(&quot;value_column&quot;, &quot;sum&quot;)
-</code></pre>
-<p><strong>Important</strong>: DuckDB feature groups require a connection object to be available. The framework will automatically handle connection management, but ensure your data access collection includes the necessary connection information.</p>
-<p>For a distributed processing feature group with Spark support:</p>
-<pre><code class="language-py"># Base class (framework-agnostic)
-class DistributedFeatureGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        # Extract source features from feature name
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-
-# Spark implementation
-class SparkDistributedFeatureGroup(DistributedFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {SparkFramework}
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        # Spark-specific distributed processing implementation
-        # Uses Spark DataFrame operations for scalable processing
-        # Example: data.groupBy(&quot;category&quot;).agg({&quot;value&quot;: &quot;sum&quot;})
-        return data.groupBy(&quot;category_column&quot;).agg({&quot;value_column&quot;: &quot;sum&quot;})
-</code></pre>
-<p><strong>Important</strong>: Spark feature groups require PySpark installation and Java 8+ environment with JAVA_HOME configured. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession through the data access collection. Spark uses its own distributed processing capabilities instead of mloda's framework inherent multiprocessing.</p>
+<h2 id="framework-notes">Framework Notes</h2>
+<ul>
+<li><strong>DuckDB</strong>: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name, or from the relation its parents hand in (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.</li>
+<li><strong>Spark</strong>: requires PySpark and a Java 17+ runtime (<code>JAVA_HOME</code>). mloda can auto-create a local <code>SparkSession</code>; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.</li>
+<li><strong>Iceberg</strong>: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.</li>
+</ul>
+<p>A run requesting only <code>{ParallelizationMode.MULTIPROCESSING}</code> drops these frameworks at setup; a run left with no usable framework, or a feature pinned to a dropped one, raises. Request <code>{SYNC, MULTIPROCESSING}</code> or <code>{THREADING, MULTIPROCESSING}</code> to combine them with worker-dispatched frameworks.</p>
 <h2 id="sql-relation-helpers-duckdb-sqlite">SQL Relation Helpers (DuckDB / SQLite)</h2>
 <p>The DuckDB and SQLite frameworks expose a relation object (<code>DuckdbRelation</code>, <code>SqliteRelation</code>) inside <code>calculate_feature</code>. Both share the same helper surface so a feature group can be written once against either.</p>
 <h3 id="reading-column-types">Reading column types</h3>
@@ -564,7 +499,7 @@ class SparkDistributedFeatureGroup(DistributedFeatureGroup):
 relation.types     # backend-specific dtype objects, same order as columns
 </code></pre>
 <h3 id="window-functions">Window functions</h3>
-<p><code>with_row_number</code> appends a <code>ROW_NUMBER()</code> column; <code>window</code> appends an arbitrary window expression. Both quote every identifier and raise <code>ValueError</code> if the new <code>alias</code> collides with an existing column.</p>
+<p><code>with_row_number</code> appends a <code>ROW_NUMBER()</code> column; <code>window</code> appends an arbitrary window expression. Both quote every identifier and raise <code>ValueError</code> if the new <code>alias</code> collides with an existing column (the comparison ignores ASCII case) or if a <code>partition_by</code> / <code>order_by</code> column is not an exact column name.</p>
 <pre><code class="language-py">from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
     OrderBy,
     WindowFrame,

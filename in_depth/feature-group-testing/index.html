@@ -157,6 +157,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -270,7 +272,7 @@ from mloda.user.pandas import PandasDataFrame
 features = [&quot;sales__sum_aggr&quot;]
 result = mloda.run_all(
     features,
-    compute_frameworks={PandasDataFrame},
+    compute_frameworks=[PandasDataFrame],
     api_data={&quot;SalesData&quot;: {&quot;sales&quot;: [10.0, 20.0, 30.0]}},
 )
 assert &quot;sales__sum_aggr&quot; in result[0].columns

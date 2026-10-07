@@ -169,6 +169,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -236,25 +238,25 @@ Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.<
 <h4 id="feature-group-with-artifact-implementation">Feature Group with Artifact implementation</h4>
 <p>The following example demonstrates how to implement and test an artifact.</p>
 <p>Here, we create a <code>FeatureGroup</code> with a configured <code>BaseArtifact</code>.</p>
-<pre><code class="language-python">from typing import Type, Any, Optional
+<pre><code class="language-python">from typing import Any
 from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreator, BaseInputData
 
 
 class BaseExampleArtifactFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @staticmethod
-    def artifact() -&gt; Type[BaseArtifact] | None:
+    def artifact() -&gt; type[BaseArtifact] | None:
         return BaseArtifact
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        if features.artifact_to_save:
+        if features.artifact_to_save is not None:
             features.save_artifact = &quot;BasicArtifact&quot;
 
-        if features.artifact_to_load:
+        if features.artifact_to_load is not None:
             result = cls.load_artifact(features)
             print(f&quot;{result} is the loaded artifact.&quot;)
 
@@ -264,7 +266,7 @@ class BaseExampleArtifactFeature(FeatureGroup):
 <pre><code class="language-python">from mloda.user import mloda
 from mloda.user.pyarrow import PyArrowTable
 
-api = mloda([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
+api = mloda([&quot;BaseExampleArtifactFeature&quot;], [PyArrowTable])
 api.run()
 artifacts = api.get_artifacts()
 print(artifacts)
@@ -276,7 +278,7 @@ print(artifacts)
 <pre><code class="language-python">from mloda.user import Feature, mloda
 
 feat = Feature(name=&quot;BaseExampleArtifactFeature&quot;, options=artifacts)
-mloda.run_all([feat], {PyArrowTable})
+mloda.run_all([feat], [PyArrowTable])
 </code></pre>
 <p>Result:</p>
 <pre><code class="language-text">&quot;BasicArtifact is the loaded artifact.&quot;
@@ -292,7 +294,7 @@ single session alternates between training (save) and inference (load).</p>
 from mloda.user.pyarrow import PyArrowTable
 
 # 1. Prepare once
-session = mloda.prepare([&quot;BaseExampleArtifactFeature&quot;], {PyArrowTable})
+session = mloda.prepare([&quot;BaseExampleArtifactFeature&quot;], [PyArrowTable])
 
 # 2. First run: save mode (train)
 session.run()
@@ -304,7 +306,7 @@ result = session.run(artifacts=saved_artifacts)
 </code></pre>
 <h4 id="cross-validation-pattern">Cross-validation pattern</h4>
 <pre><code class="language-py"># pseudocode
-session = mloda.prepare([&quot;MyArtifactFeature&quot;], {PyArrowTable})
+session = mloda.prepare([&quot;MyArtifactFeature&quot;], [PyArrowTable])
 
 for fold_data in folds:
     # Train fold
@@ -315,7 +317,10 @@ for fold_data in folds:
     session.run(artifacts=trained)
 </code></pre>
 <p>When <code>artifacts</code> is not provided (the default), the artifact mode from
-<code>prepare()</code> is used.</p>
+<code>prepare()</code> is used. Baking an artifact into <code>Options</code> at prepare time and also
+supplying it via <code>run(artifacts=...)</code> for the same feature are mutually
+exclusive: resolving a runtime artifact when the key is already present in
+<code>Options.group</code> raises, rather than silently picking one over the other.</p>
 <h4 id="testing-artifacts">Testing Artifacts</h4>
 <p>Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the <code>BaseTestArtifactFeature</code> class.</p>
 <p><a href="https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py">View the test file on GitHub</a></p>
@@ -325,13 +330,13 @@ for fold_data in folds:
 
 class MySklearnFeatureGroup(FeatureGroup):
     @staticmethod
-    def artifact() -&gt; Type[BaseArtifact] | None:
+    def artifact() -&gt; type[BaseArtifact] | None:
         return SklearnArtifact
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
         # Save multiple artifacts with unique keys
-        if features.artifact_to_save:
+        if features.artifact_to_save is not None:
             SklearnArtifact.save_sklearn_artifact(
                 features, 
                 &quot;my_transformer&quot;, 
@@ -339,7 +344,7 @@ class MySklearnFeatureGroup(FeatureGroup):
             )
 
         # Load specific artifact by key
-        if features.artifact_to_load:
+        if features.artifact_to_load is not None:
             artifact_data = SklearnArtifact.load_sklearn_artifact(features, &quot;my_transformer&quot;)
             fitted_model = artifact_data[&quot;fitted_transformer&quot;]
 </code></pre>

@@ -107,7 +107,7 @@ def _(mo):
 
     ```python
     # This could be:
-    def input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {OrderAmount, Datetime, ID}
     ```
     """)
@@ -140,9 +140,9 @@ def _(mo):
     ```python
     @classmethod
     def match_feature_group_criteria(
-        feature_name: Union[FeatureName, str],
+        feature_name: FeatureName | str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None
+        data_access_collection: DataAccessCollection | None = None
         )
         ...
     ```
@@ -163,10 +163,9 @@ def _(mo):
 
         # check if the feature_name is in the tables
         for table in table_names:
-            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({table});")
+            result, _ = cls.read_db(data_access, query=f"PRAGMA table_info({quote_ident(table)});")
             column_names = [column[1] for column in result]
             if feature_name in column_names:
-                cls.set_table_name(data_access, table)
                 return True
         return False
     ```

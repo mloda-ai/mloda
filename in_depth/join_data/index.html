@@ -157,6 +157,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -270,8 +272,7 @@ join_type = JoinType.INNER
 join <code>Index</code>) drive the equi match; the time columns drive the inequality match. ASOF is a LEFT
 join: every left row survives, with null right columns when no match is found.</p>
 <p><strong>Backend support.</strong> Implemented for <code>pandas</code>, <code>polars</code> (eager and lazy), <code>duckdb</code>, <code>python_dict</code>,
-<code>pyarrow</code>, and <code>sqlite</code>. A <code>spark</code> implementation exists but is <strong>experimental and not exercised in
-CI</strong> (requires <code>JAVA_HOME</code>); validate it yourself before relying on it. <code>iceberg</code> has no merge
+<code>pyarrow</code>, <code>sqlite</code>, and <code>spark</code> (requires Java 17+ on <code>JAVA_HOME</code>). <code>iceberg</code> has no merge
 engine and does not support joins.</p>
 <p>Cross-backend caveats to be aware of:</p>
 <ul>
@@ -376,7 +377,7 @@ link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup)
 # Select specific index when feature group has multiple (0-based position):
 link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup, left_index=0, right_index=1)
 </code></pre>
-<p>Available <code>_on</code> methods: <code>inner_on</code>, <code>left_on</code>, <code>right_on</code>, <code>outer_on</code>, <code>append_on</code>, <code>union_on</code></p>
+<p>Available <code>_on</code> methods: <code>inner_on</code>, <code>left_on</code>, <code>right_on</code>, <code>outer_on</code>, <code>append_on</code>, <code>union_on</code>, <code>asof_on</code></p>
 <p><strong>Note:</strong> The <code>_on</code> methods raise <code>ValueError</code> if the feature group doesn't define <code>index_columns()</code> or returns an empty list, and <code>IndexError</code> if the specified index position is out of range.</p>
 <p><strong>Note:</strong> Explicit <code>JoinSpec</code> (Option 1 above) works regardless of whether the feature group defines <code>index_columns()</code>. The engine automatically injects the join columns specified in the <code>JoinSpec</code> into that feature group's feature set. The <code>_on</code> shorthand requires <code>index_columns()</code>.</p>
 <h4 id="star-joins-linkstar">Star Joins (Link.star)</h4>
@@ -446,6 +447,8 @@ features = {
 }
 </code></pre>
 <p>The execution planner validates that the discriminator key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
+<p>The two sides may use different key column names: each side's key column is injected only into the nodes matching that side's discriminator.</p>
+<p>Discriminators are part of a link's identity, so two links that differ only by their discriminators are distinct in <code>links=</code>, letting one node join to several same-class nodes.</p>
 <h4 id="polymorphic-link-matching">Polymorphic Link Matching</h4>
 <p>Links support inheritance-based matching, allowing a link defined with base classes to automatically apply to subclasses. This enables defining generic join relationships that work across feature group hierarchies.</p>
 <p><strong>Matching Rules:</strong></p>
@@ -486,6 +489,7 @@ link = Link.inner(
 # - (PremiumUserFeatureGroup, StandardUserFeatureGroup) ✗
 </code></pre>
 <p>The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.</p>
+<p>Key injection follows the same subclass rule: a link declared on a base class injects its key column into subclass nodes on that side just as it would the declared class, so a subclass must provide that column even when a more specific link also applies. Discriminators narrow the side only when a class matches both sides. A node whose requested feature is itself one of its links' key columns receives no other key, which keeps batches named after their key column distinguishable.</p>
 <p>When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using <code>right_index</code>: first by exact <code>feature.index</code> match, then by checking whether the feature name appears in the join key columns of <code>right_index</code>. Ensure each link's <code>right_index</code> contains the column name that uniquely identifies its right-side batch.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
 <pre><code class="language-py">from mloda.user import mloda
@@ -498,12 +502,15 @@ mloda.run_all(
     )
 </code></pre>
 <p>mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed.</p>
+<p>A feature between a join side and the feature consuming the join runs on that side's compute framework. The one exception is a direct input of the consumer that is pinned to another framework: the join then reads that side through the input's hop. Still rejected at plan time are an off-framework feature below another input of the consumer, one side reaching the consumer through two different frameworks, inputs off the sides' framework when the two sides differ in framework, and any such input for APPEND or UNION links. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join, also when the variants differ on one side only, and each consumer waits only on its own join.</p>
 <p>In the following section, we will see how this can look like.</p>
 <h4 id="merging-data-in-the-compute-framework">Merging Data in the Compute Framework</h4>
 <p>The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.</p>
+<p>On DuckDB and SQLite (and the Spark as-of merge under the default <code>spark.sql.caseSensitive=false</code>), a merge whose output column names differ only in case raises <code>ValueError</code>; see <a href="../compute-framework-integration/#column-name-case-sensitivity">Column name case sensitivity</a>.</p>
 <pre><code class="language-py">class PandasDataFrame(ComputeFramework):
-    def merge_engine(self) -&gt; Type[BaseMergeEngine]:
+    @classmethod
+    def merge_engine(cls) -&gt; type[BaseMergeEngine]:
         return PandasMergeEngine
 </code></pre>
 <p>The merge can implement:</p>
@@ -514,15 +521,24 @@ In this example, we show the PandasMergeEngine.</p>
 <li><strong>merge_full_outer</strong></li>
 <li><strong>merge_append</strong></li>
 <li><strong>merge_union</strong></li>
+<li><strong>merge_asof</strong></li>
 </ul>
-<p>These methods are invoked via the final implementation in the abstract class <strong>BaseMergeEngine</strong>:</p>
+<p>These methods are invoked via the final implementation in the abstract class <strong>BaseMergeEngine</strong>, which receives the <code>Link</code> and reads the join type and indexes from it:</p>
 <pre><code class="language-py">@final
-def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index: Index, right_index: Index) -&gt; Any:
+def merge(self, left_data: Any, right_data: Any, link: Link) -&gt; Any:
+    self.check_import()
+
+    jointype = link.jointype
+    left_index = link.left_index
+    right_index = link.right_index
+    ...
     if jointype == JoinType.INNER:
         return self.merge_inner(left_data, right_data, left_index, right_index)
-    if jointype == JoinType.LEFT:
+    elif jointype == JoinType.LEFT:
         return self.merge_left(left_data, right_data, left_index, right_index)
     ...
+    elif jointype == JoinType.ASOF:
+        return self.merge_asof(left_data, right_data, left_index, right_index, link.asof_config)
 </code></pre>
 <p>A simplified MergeEngine implementation looks like this:</p>
 <pre><code class="language-py">class PandasMergeEngine(BaseMergeEngine):
@@ -541,26 +557,23 @@ def merge(self, left_data: Any, right_data: Any, jointype: JoinType, left_index:
     def join_logic(
         self, join_type: str, left_data: Any, right_data: Any, left_index: Index, right_index: Index, jointype: JoinType
     ) -&gt; Any:
+        left_idx: str | list[str]
+        right_idx: str | list[str]
         if left_index.is_multi_index() or right_index.is_multi_index():
-            raise ValueError(f&quot;MultiIndex is not yet implemented {self.__class__.__name__}&quot;)
-
-        if left_index == right_index:
+            left_idx = list(left_index.index)
+            right_idx = list(right_index.index)
+        else:
             left_idx = left_index.index[0]
             right_idx = right_index.index[0]
-            left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
-            return left_data
 
-        else:
-            raise ValueError(
-                f&quot;JoinType {join_type} {left_index} {right_index} is not yet implemented in {self.__class__.__name__}&quot;
-            )
+        left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
+        return left_data
 </code></pre>
 <p>Key Components:</p>
 <ul>
 <li><strong>left_data</strong>: Left dataset for the join.</li>
 <li><strong>right_data</strong>: Right dataset for the join.</li>
-<li><strong>left_index</strong> and <strong>right_index</strong>: Indexes specifying join keys.</li>
-<li><strong>jointype</strong>: Instance of JoinType.</li>
+<li><strong>link</strong>: The Link carrying the join type (<code>link.jointype</code>), the join keys (<code>link.left_index</code>, <code>link.right_index</code>), and for as-of joins the <code>link.asof_config</code>.</li>
 </ul>
 <p>By implementing these merge functionality, the compute framework automatically handles data merging operations in the background, aligning with the relationships defined by <strong>Index</strong>, <strong>JoinType</strong>, and <strong>Link</strong>.</p>
               

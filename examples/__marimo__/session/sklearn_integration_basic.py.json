@@ -112,7 +112,7 @@
     },
     {
       "id": "SFPL",
-      "code_hash": "396dafdb51a01fd881250e5511ce6b95",
+      "code_hash": "dc0368b82dbb5aee04ad26a2dc4bb303",
       "outputs": [
         {
           "type": "data",
@@ -125,14 +125,14 @@
         {
           "type": "stream",
           "name": "stdout",
-          "text": "\u2705 Transformed dataset with split fit/transform:\n   age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled\n0                            0.339295                               1.243621\n1                            1.057320                              -0.677472\n   state__onehot_encoded~1  gender__onehot_encoded~1  state__onehot_encoded~3  \\\n0                      0.0                       0.0                      0.0   \n1                      0.0                       1.0                      0.0   \n\n   gender__onehot_encoded~0  state__onehot_encoded~2  state__onehot_encoded~0  \n0                       1.0                      1.0                      0.0  \n1                       0.0                      1.0                      0.0  \nResult: [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] \n ['state__onehot_encoded~1', 'gender__onehot_encoded~1', 'state__onehot_encoded~3', 'gender__onehot_encoded~0', 'state__onehot_encoded~2', 'state__onehot_encoded~0'] columns total\n",
+          "text": "\u2705 Transformed dataset with split fit/transform:\n   state__onehot_encoded~3  gender__onehot_encoded~0  \\\n0                      0.0                       1.0   \n1                      0.0                       0.0   \n\n   gender__onehot_encoded~1  state__onehot_encoded~2  state__onehot_encoded~1  \\\n0                       0.0                      1.0                      0.0   \n1                       1.0                      1.0                      0.0   \n\n   state__onehot_encoded~0  \n0                      0.0  \n1                      0.0  \n   age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled\n0                            0.339295                               1.243621\n1                            1.057320                              -0.677472\nResult: ['state__onehot_encoded~3', 'gender__onehot_encoded~0', 'gender__onehot_encoded~1', 'state__onehot_encoded~2', 'state__onehot_encoded~1', 'state__onehot_encoded~0'] \n [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] columns total\n",
           "mimetype": "text/plain"
         }
       ]
     },
     {
       "id": "BYtC",
-      "code_hash": "12f8582d6530065294eef5723099fe58",
+      "code_hash": "6474677d0f4445e798c858f9fc946118",
       "outputs": [
         {
           "type": "data",
@@ -145,14 +145,14 @@
         {
           "type": "stream",
           "name": "stdout",
-          "text": "   weight__mean_imputed__robust_scaled\n0                             0.938858\n1                            -0.535025    age__mean_imputed__standard_scaled__max_aggr\n0                                      1.609647\n1                                      1.609647    state__onehot_encoded~0\n0                      0.0\n1                      0.0\n",
+          "text": "   state__onehot_encoded~0\n0                      0.0\n1                      0.0    weight__mean_imputed__robust_scaled\n0                             0.938858\n1                            -0.535025    age__mean_imputed__standard_scaled__max_aggr\n0                                      1.609647\n1                                      1.609647\n",
           "mimetype": "text/plain"
         }
       ]
     },
     {
       "id": "RGSE",
-      "code_hash": "4612bb663483c4cc7f0b26d2b1f27a0d",
+      "code_hash": "49f8e60343240d274a0420cfa9e785d4",
       "outputs": [
         {
           "type": "data",
@@ -165,7 +165,7 @@
         {
           "type": "stream",
           "name": "stdout",
-          "text": "I, SecondSklearnDataCreator AM NOW USED.\n   weight__mean_imputed__robust_scaled\n0                             0.677809\n1                            -0.293511    age__mean_imputed__standard_scaled__max_aggr\n0                                      1.631997\n1                                      1.631997    state__onehot_encoded~0\n0                      1.0\n1                      1.0\n",
+          "text": "I, SecondSklearnDataCreator AM NOW USED.\n   state__onehot_encoded~0\n0                      1.0\n1                      1.0    weight__mean_imputed__robust_scaled\n0                             0.677809\n1                            -0.293511    age__mean_imputed__standard_scaled__max_aggr\n0                                      1.631997\n1                                      1.631997\n",
           "mimetype": "text/plain"
         }
       ]

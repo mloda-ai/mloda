@@ -139,6 +139,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -199,7 +201,7 @@ for result in mloda.stream_all(
 ):
     print(result)
 </code></pre>
-<p><code>stream_all</code> returns a <code>ResultStream</code>: it iterates exactly like the old generator and additionally exposes a <code>.plan</code> property with the resolved execution plan. Planning happens eagerly, so an unresolvable request raises at the <code>stream_all</code> call, not at first iteration.</p>
+<p><code>stream_all</code> returns a <code>ResultStream</code>: it iterates exactly like the old generator and additionally exposes a <code>.plan</code> property with the resolved execution plan. Planning happens eagerly, so an unresolvable request raises at the <code>stream_all</code> call, not at first iteration. <code>ResultStream.frames()</code> yields <code>(PlanStep, frame)</code> pairs from the same stream instead, pairing each frame with the compute step that produced it.</p>
 <h2 id="comparison-with-run_all">Comparison with <code>run_all</code></h2>
 <p><code>run_all</code> returns all results at once after every feature group has finished:</p>
 <pre><code class="language-python">from mloda.user import mloda
@@ -224,7 +226,7 @@ for result in mloda.stream_all(
     # each result arrives as its feature group finishes
     process(result)
 </code></pre>
-<p>Both produce the same data: <code>list(mloda.stream_all(...))</code> is equivalent to <code>mloda.run_all(...)</code>.</p>
+<p>Both produce the same elements, but <code>stream_all</code> yields in completion order while <code>run_all</code>'s list follows plan order (positions can differ under THREADING/MULTIPROCESSING).</p>
 <h2 id="what-streaming-means-here">What "streaming" means here</h2>
 <p>Streaming operates at <strong>feature-group granularity</strong>.  Each yielded value is a <strong>complete</strong> result table for one feature group (e.g. a <code>pa.Table</code>).  There is no partial or incremental data within a single group; you always receive the full result.</p>
 <h2 id="what-is-not-supported">What is not supported</h2>

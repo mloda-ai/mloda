@@ -179,6 +179,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -241,7 +243,7 @@
 </ul>
 <p>Example: Input Feature Validation Using Custom Validators</p>
 <h6 id="simple-validator">Simple validator</h6>
-<pre><code class="language-python">from typing import Any, Optional, Set
+<pre><code class="language-python">from typing import Any
 from mloda.user import mloda
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
@@ -250,7 +252,7 @@ from mloda.user.pyarrow import PyArrowTable
 
 class DocBaseValidateInputFeaturesBase(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -264,7 +266,7 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
         return {cls.get_class_name(): [1, 2, 3]}
 
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
         return {Feature(name=&quot;DocBaseValidateInputFeaturesBase&quot;, options=options)}
 
     @classmethod
@@ -276,7 +278,7 @@ class DocSimpleValidateInputFeatures(FeatureGroup):
 </code></pre>
 <p>As we run it, it will return an error.</p>
 <pre><code class="language-text">results = mloda.run_all(
-            [&quot;DocSimpleValidateInputFeatures&quot;], {PyArrowTable}
+            [&quot;DocSimpleValidateInputFeatures&quot;], [PyArrowTable]
         )
 ValueError: Data should have 3 elements
 </code></pre>
@@ -337,7 +339,7 @@ class DocExamplePanderaValidator(BaseValidator):
 </code></pre>
 <p>The validator should raise an error again.</p>
 <pre><code class="language-text">results = mloda.run_all(
-            [&quot;DocCustomValidateInputFeatures&quot;], {PyArrowTable}
+            [&quot;DocCustomValidateInputFeatures&quot;], [PyArrowTable]
         )
 SchemaError: Column 'DocBaseValidateInputFeaturesBase' failed element-wise validator: in_range(1, 2)
 </code></pre>
@@ -353,7 +355,7 @@ import time
 
 
 class DokuValidateInputFeatureExtender(Extender):
-    def wraps(self) -&gt; Set[ExtenderHook]:
+    def wraps(self) -&gt; set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -&gt; Any:
@@ -365,7 +367,7 @@ class DokuValidateInputFeatureExtender(Extender):
 example_feature = Feature(&quot;DocCustomValidateInputFeatures&quot;, {&quot;ValidationLevel&quot;: &quot;warning&quot;})
 
 results = mloda.run_all(
-            [example_feature], {PyArrowTable}, function_extender={DokuValidateInputFeatureExtender()}
+            [example_feature], [PyArrowTable], function_extender={DokuValidateInputFeatureExtender()}
         )
 </code></pre>
 <p>This time it does not raise an error, we should see the following output:</p>
@@ -387,7 +389,7 @@ from mloda.user import Options
 
 class DocBaseValidateOutputFeaturesBase(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator({cls.get_class_name()})
 
     @classmethod
@@ -402,7 +404,7 @@ class DocBaseValidateOutputFeaturesBase(FeatureGroup):
             raise ValueError(&quot;Data should have 3 elements&quot;)
 
 results = mloda.run_all(
-            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyArrowTable}
+            [&quot;DocBaseValidateOutputFeaturesBase&quot;], [PyArrowTable]
         )
 results
 </code></pre>
@@ -424,14 +426,14 @@ results
 </code></pre>
 <p>This one should fail:</p>
 <pre><code class="language-text">results = mloda.run_all(
-            [&quot;DocBaseValidateOutputFeaturesBaseNegativePandera&quot;], {PyArrowTable}
+            [&quot;DocBaseValidateOutputFeaturesBaseNegativePandera&quot;], [PyArrowTable]
         )
 SchemaError: Column 'DocBaseValidateOutputFeaturesBaseNegativePandera' failed element-wise validator: in_range(1, 2)
 </code></pre>
 <h6 id="log-only-validator-and-extender-use_1">Log only validator and Extender use</h6>
 <p>We can of course also use an extender.</p>
 <pre><code class="language-python">class ValidateOutputFeatureExtender(Extender):
-    def wraps(self) -&gt; Set[ExtenderHook]:
+    def wraps(self) -&gt; set[ExtenderHook]:
         return {ExtenderHook.VALIDATE_OUTPUT_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -&gt; Any:
@@ -442,7 +444,7 @@ SchemaError: Column 'DocBaseValidateOutputFeaturesBaseNegativePandera' failed el
         return result
 
 results = mloda.run_all(
-            [&quot;DocBaseValidateOutputFeaturesBase&quot;], {PyArrowTable},
+            [&quot;DocBaseValidateOutputFeaturesBase&quot;], [PyArrowTable],
             function_extender={ValidateOutputFeatureExtender()}
         )
 </code></pre>

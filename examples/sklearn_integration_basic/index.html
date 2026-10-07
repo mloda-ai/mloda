@@ -147,6 +147,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -1274,7 +1276,7 @@ Result: 8 columns total
         <span class="k">return</span> <span class="n">data</span>  <span class="c1"># With this, we have access to the before and after state of a feature.</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseInputData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">DataCreator</span><span class="p">(</span>
             <span class="p">{</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">}</span>
         <span class="p">)</span>  <span class="c1"># If this feature would not load data, we would use the data given from the parameter "data".</span>
@@ -1286,7 +1288,7 @@ Result: 8 columns total
     <span class="s2">"gender__onehot_encoded"</span><span class="p">,</span>
 <span class="p">]</span>
 <span class="n">PluginLoader</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>
+<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="n">PandasDataFrame</span><span class="p">])</span>
 <span class="n">_result</span><span class="p">,</span> <span class="n">_result2</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">_result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
     <span class="n">_result</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
@@ -1326,7 +1328,7 @@ class SklearnDataCreator(FeatureGroup):
         return data  # With this, we have access to the before and after state of a feature.
 
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator(
             {"age", "weight", "state", "gender"}
         )  # If this feature would not load data, we would use the data given from the parameter "data".
@@ -1338,7 +1340,7 @@ features = [
     "gender__onehot_encoded",
 ]
 PluginLoader().all()
-_result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
+_result = mloda.run_all(features, compute_frameworks=[PandasDataFrame])
 _result, _result2 = (
     _result[0],
     _result[1],
@@ -1367,18 +1369,22 @@ print(
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>✅ Transformed dataset with split fit/transform:
+   state__onehot_encoded~3  gender__onehot_encoded~0  \
+0                      0.0                       1.0   
+1                      0.0                       0.0   
+
+   gender__onehot_encoded~1  state__onehot_encoded~2  state__onehot_encoded~1  \
+0                       0.0                      1.0                      0.0   
+1                       1.0                      1.0                      0.0   
+
+   state__onehot_encoded~0  
+0                      0.0  
+1                      0.0  
    age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled
 0                            0.339295                               1.243621
 1                            1.057320                              -0.677472
-   state__onehot_encoded~1  gender__onehot_encoded~1  state__onehot_encoded~3  \
-0                      0.0                       0.0                      0.0   
-1                      0.0                       1.0                      0.0   
-
-   gender__onehot_encoded~0  state__onehot_encoded~2  state__onehot_encoded~0  
-0                       1.0                      1.0                      0.0  
-1                       0.0                      1.0                      0.0  
-Result: [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] 
- ['state__onehot_encoded~1', 'gender__onehot_encoded~1', 'state__onehot_encoded~3', 'gender__onehot_encoded~0', 'state__onehot_encoded~2', 'state__onehot_encoded~0'] columns total
+Result: ['state__onehot_encoded~3', 'gender__onehot_encoded~0', 'gender__onehot_encoded~1', 'state__onehot_encoded~2', 'state__onehot_encoded~1', 'state__onehot_encoded~0'] 
+ [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] columns total
 </pre>
 </div>
 </div>
@@ -1410,7 +1416,7 @@ Result: [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight_
     <span class="s2">"weight__mean_imputed__robust_scaled"</span><span class="p">,</span>
     <span class="s2">"state__onehot_encoded~0"</span><span class="p">,</span>
 <span class="p">]</span>
-<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">_chained_features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">})</span>  <span class="c1"># Do feature pipelines</span>
+<span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span><span class="n">_chained_features</span><span class="p">,</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="n">PandasDataFrame</span><span class="p">])</span>  <span class="c1"># Do feature pipelines</span>
 <span class="nb">print</span><span class="p">(</span>
     <span class="n">_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">_result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">_result</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 <span class="p">)</span>  <span class="c1"># Different scaler for weight  # Access specific one-hot column</span>
@@ -1421,7 +1427,7 @@ _chained_features = [
     "weight__mean_imputed__robust_scaled",
     "state__onehot_encoded~0",
 ]
-_result = mloda.run_all(_chained_features, compute_frameworks={PandasDataFrame})  # Do feature pipelines
+_result = mloda.run_all(_chained_features, compute_frameworks=[PandasDataFrame])  # Do feature pipelines
 print(
     _result[0].head(2), _result[1].head(2), _result[2].head(2)
 )  # Different scaler for weight  # Access specific one-hot column</div>
@@ -1436,13 +1442,13 @@ print(
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>   weight__mean_imputed__robust_scaled
+<pre>   state__onehot_encoded~0
+0                      0.0
+1                      0.0    weight__mean_imputed__robust_scaled
 0                             0.938858
 1                            -0.535025    age__mean_imputed__standard_scaled__max_aggr
 0                                      1.609647
-1                                      1.609647    state__onehot_encoded~0
-0                      0.0
-1                      0.0
+1                                      1.609647
 </pre>
 </div>
 </div>
@@ -1473,7 +1479,7 @@ print(
 
 <span class="k">class</span><span class="w"> </span><span class="nc">SecondSklearnDataCreator</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">BaseInputData</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseInputData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">DataCreator</span><span class="p">({</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">})</span>
 
     <span class="nd">@classmethod</span>
@@ -1495,7 +1501,7 @@ print(
 <span class="p">]</span>
 <span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">_chained_features</span><span class="p">,</span>
-    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">{</span><span class="n">PandasDataFrame</span><span class="p">},</span>
+    <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="n">PandasDataFrame</span><span class="p">],</span>
     <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PluginCollector</span><span class="o">.</span><span class="n">disabled_feature_groups</span><span class="p">(</span><span class="n">SklearnDataCreator</span><span class="p">),</span>
 <span class="p">)</span>
 <span class="c1"># We deactivated now the other feature group, so that we use SecondSklearnDataCreator.</span>
@@ -1508,7 +1514,7 @@ from mloda.user import PluginCollector
 
 class SecondSklearnDataCreator(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator({"age", "weight", "state", "gender"})
 
     @classmethod
@@ -1530,7 +1536,7 @@ _chained_features = [
 ]
 _result = mloda.run_all(
     _chained_features,
-    compute_frameworks={PandasDataFrame},
+    compute_frameworks=[PandasDataFrame],
     plugin_collector=PluginCollector.disabled_feature_groups(SklearnDataCreator),
 )
 # We deactivated now the other feature group, so that we use SecondSklearnDataCreator.
@@ -1549,13 +1555,13 @@ print(
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>I, SecondSklearnDataCreator AM NOW USED.
-   weight__mean_imputed__robust_scaled
+   state__onehot_encoded~0
+0                      1.0
+1                      1.0    weight__mean_imputed__robust_scaled
 0                             0.677809
 1                            -0.293511    age__mean_imputed__standard_scaled__max_aggr
 0                                      1.631997
-1                                      1.631997    state__onehot_encoded~0
-0                      1.0
-1                      1.0
+1                                      1.631997
 </pre>
 </div>
 </div>

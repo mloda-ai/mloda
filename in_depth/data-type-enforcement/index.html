@@ -137,6 +137,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">Data Type Enforcement</a>
@@ -160,6 +162,8 @@
     <li class="toctree-l2"><a class="reference internal" href="#implementing-the-hook-in-a-custom-compute-framework">Implementing the Hook in a Custom Compute Framework</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#per-framework-precision-support">Per-Framework Precision Support</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#decimal-columns">Decimal Columns</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#execution-plan-grouping">Execution Plan Grouping</a>
     </li>
@@ -218,7 +222,7 @@
 <p>mloda supports optional data type declarations on Features, enabling runtime validation that computed data matches declared types.</p>
 <h2 id="declaring-feature-types">Declaring Feature Types</h2>
 <p>Use typed constructors to declare the expected data type:</p>
-<pre><code class="language-python">from typing import Any, Optional
+<pre><code class="language-python">from typing import Any
 from mloda.user import Feature
 
 # Typed features: Will be validated at runtime
@@ -303,7 +307,7 @@ fail to determine a type, return <code>None</code> for that case rather than let
 <p>In strict mode, only exact type matches or standard widening conversions are allowed.</p>
 <h2 id="implementing-the-hook-in-a-custom-compute-framework">Implementing the Hook in a Custom Compute Framework</h2>
 <p>Enforcement is driven by a single override point on <code>ComputeFramework</code>:</p>
-<pre><code class="language-python">def _extract_column_data_type(self, data: Any, column_name: str) -&gt; Optional[DataType]:
+<pre><code class="language-python">def _extract_column_data_type(self, data: Any, column_name: str) -&gt; DataType | None:
     ...
 </code></pre>
 <p>When a typed feature is produced, mloda calls this hook for the column and compares
@@ -327,7 +331,7 @@ from mloda.provider import ComputeFramework
 
 
 class MyFramework(ComputeFramework):
-    def _extract_column_data_type(self, data: Any, column_name: str) -&gt; Optional[DataType]:
+    def _extract_column_data_type(self, data: Any, column_name: str) -&gt; DataType | None:
         native = data.schema.field(column_name).type  # framework-specific access
         if native == ...:
             return DataType.INT64
@@ -400,6 +404,68 @@ validation still applies).</p>
 </tr>
 </tbody>
 </table>
+<h2 id="decimal-columns">Decimal Columns</h2>
+<p><code>DataType.DECIMAL</code> means a decimal of any precision and scale: a <code>Feature</code> cannot declare precision or scale, and validation checks only the family. <code>to_arrow_type</code> maps <code>DECIMAL</code> to <code>decimal128(38, 18)</code> only when mloda must build an Arrow schema without data (the SQLite reader). <code>DECIMAL</code> never coerces to or from the float or integer family, in strict and lenient mode alike: exactness is the reason to declare it.</p>
+<table>
+<thead>
+<tr>
+<th>Framework</th>
+<th>Extraction</th>
+<th>Filter, mask, merge</th>
+<th>PyArrow transformer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pandas</td>
+<td><code>DECIMAL</code> for an Arrow-backed decimal dtype; <code>object</code> columns are not validated (indistinguishable from object strings)</td>
+<td>exact</td>
+<td>Arrow-backed decimals are kept in both directions; an <code>object</code> column of <code>Decimal</code> has its precision inferred from the values on the way out, and comes back Arrow-backed after a round trip through Arrow</td>
+</tr>
+<tr>
+<td>Polars (eager / lazy)</td>
+<td><code>DECIMAL</code></td>
+<td>exact (including <code>is_in</code>; values the column cannot represent never match)</td>
+<td>exact</td>
+</tr>
+<tr>
+<td>PyArrow</td>
+<td><code>DECIMAL</code></td>
+<td>exact</td>
+<td>native</td>
+</tr>
+<tr>
+<td>DuckDB</td>
+<td><code>DECIMAL</code></td>
+<td>exact (a <code>Decimal</code> value renders as an exact decimal literal)</td>
+<td>exact</td>
+</tr>
+<tr>
+<td>SQLite</td>
+<td>no decimal storage type: inserting <code>Decimal</code> values fails</td>
+<td>a <code>Decimal</code> filter or mask value renders as a numeric literal, which SQLite compares as REAL against a TEXT column</td>
+<td>fails</td>
+</tr>
+<tr>
+<td>PythonDict</td>
+<td><code>DECIMAL</code></td>
+<td>exact</td>
+<td>precision inferred from the values (a dict carries no schema)</td>
+</tr>
+<tr>
+<td>Spark</td>
+<td><code>DECIMAL</code></td>
+<td>mask <code>is_in</code> exact; filter and merge not checked</td>
+<td>not checked (no schema is passed on the way in)</td>
+</tr>
+<tr>
+<td>Iceberg</td>
+<td><code>DECIMAL</code></td>
+<td>decimal filters are not pushed into the scan; they run exactly in the PyArrow pass, for both an Iceberg <code>Table</code> and a <code>pa.Table</code> result; no mask or merge</td>
+<td>pass-through</td>
+</tr>
+</tbody>
+</table>
 <h2 id="execution-plan-grouping">Execution Plan Grouping</h2>
 <p>Features with different explicit data types are separated into different execution groups at plan time. This allows type-specific processing paths.</p>
 <p>Untyped features (<code>data_type=None</code>) are "lenient" and can be grouped with any typed features, preserving compatibility with index columns and legacy code.</p>
@@ -438,7 +504,7 @@ except DataTypeMismatchError as e:
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../plugin_registry/" class="btn btn-neutral float-left" title="Plugin Registry"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../plan-lock/" class="btn btn-neutral float-left" title="Plan Lock"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../comparison-contract/" class="btn btn-neutral float-right" title="Comparison Contract">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -462,7 +528,7 @@ except DataTypeMismatchError as e:
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../plugin_registry/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../plan-lock/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../comparison-contract/" style="color: #fcfcfc">Next &raquo;</a></span>

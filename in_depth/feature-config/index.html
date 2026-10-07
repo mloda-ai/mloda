@@ -179,6 +179,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -450,6 +452,8 @@ result = mloda.run_all(
     }
 ]
 </code></pre>
+<p>On a feature whose name carries its source, a declared <code>in_features</code> must list the name's direct sources (the part before the last <code>__</code>; for <code>age__mean_imputed__standard_scaled</code> that is <code>age__mean_imputed</code>), otherwise the run raises. Omit <code>in_features</code> to let the name decide.</p>
+<p>The <code>in_features</code> order is kept, and duplicates are kept and count toward <code>MAX_IN_FEATURES</code>.</p>
 <h3 id="nested-in_features-feature-dict">Nested in_features feature dict</h3>
 <p>Inside <code>options</code>, <code>group_options</code> or <code>context_options</code>, an <code>in_features</code> key can hold a feature dict instead of a name, which defines the source feature inline:</p>
 <pre><code class="language-json">[

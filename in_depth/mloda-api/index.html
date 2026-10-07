@@ -167,6 +167,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -241,13 +243,14 @@
 <h4 id="configuration-for-mlodaapi">Configuration for mlodaAPI</h4>
 <ul>
 <li><strong>requested_features</strong>: Specify the features to process (as names, Feature objects, or a Features container).</li>
-<li><strong>compute_frameworks</strong> (optional): Limit the compute frameworks using framework types or names.</li>
+<li><strong>compute_frameworks</strong> (optional): Limit the compute frameworks using an ordered list of framework types or names. When several can run a feature, the cheapest plan wins first, then list order. A set or an unknown name raises.</li>
 <li><strong>links</strong> (optional): Define dataset merging links with Link objects.</li>
 <li><strong>data_access_collection</strong> (optional): Provide data sources for feature identification.</li>
+<li><strong>function_extender</strong> (optional): Add function extenders to customize computations. Session-level: accepted by every call that plans (the constructor, <code>prepare()</code>, <code>run_all()</code>, <code>stream_all()</code>, <code>explain()</code>, <code>diagnose()</code>) and snapshotted then; not accepted by <code>run()</code>/<code>stream_run()</code>, so changing the set afterwards has no effect.</li>
+<li><strong>output_framework</strong> (optional): Name or class of the compute framework results come back in. Session-level like <code>function_extender</code>: not accepted by <code>run()</code>/<code>stream_run()</code>. The final conversion counts as a cost, so a requested feature may run on the output framework directly (its inputs are converted instead); the rest are converted once at the end of the run. Without it, results stay in the chosen framework.</li>
 </ul>
 <h4 id="runner-execution-configuration">Runner &amp; Execution Configuration</h4>
 <ul>
-<li><strong>function_extender</strong> (optional): Add function extenders to customize computations.</li>
 <li>parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)</li>
 <li>flight_server (optional): Specify a flight server for multiprocessing only.</li>
 <li><strong>column_ordering</strong> (optional): Control the ordering of result columns.
@@ -305,7 +308,7 @@ save and load modes across calls. See <a href="../artifacts/#run-time-artifact-s
 )
 </code></pre>
 <h5 id="resolve_feature">resolve_feature</h5>
-<p>Resolve a single feature name (or a <code>Feature</code>) to its matching FeatureGroup without running the request, reporting failures in <code>result.error</code> instead of raising. It takes <code>feature</code> (<code>str | Feature</code>) positionally plus keyword-only <code>options</code>, <code>plugin_collector</code>, <code>feature_group</code>, <code>links</code>, <code>data_access_collection</code>, and <code>compute_frameworks</code>, and returns a <code>ResolvedFeature</code> (8 fields, including <code>candidates</code>, <code>error</code>, <code>supported_compute_frameworks</code>, <code>subtype</code>).</p>
+<p>Resolve a single feature name (or a <code>Feature</code>) to its matching FeatureGroup without running the request, reporting failures in <code>result.error</code> instead of raising. It takes <code>feature</code> (<code>str | Feature</code>) positionally plus keyword-only <code>options</code>, <code>plugin_collector</code>, <code>feature_group</code>, <code>links</code>, <code>data_access_collection</code>, and <code>compute_frameworks</code> (a set that only restricts candidates), and returns a <code>ResolvedFeature</code> (8 fields, including <code>candidates</code>, <code>error</code>, <code>supported_compute_frameworks</code>, <code>subtype</code>).</p>
 <pre><code class="language-python">from mloda.steward import resolve_feature
 
 result = resolve_feature(&quot;my_feature_name&quot;)
@@ -316,7 +319,7 @@ else:
 </code></pre>
 <p>See <a href="../discover-plugins/#resolving-feature-names">Discover Plugins</a> for the full signature, every <code>ResolvedFeature</code> field, and worked examples (options-gated groups, scoping, broken framework declarations). <code>resolve_feature</code> is exported from <code>mloda.provider</code>, <code>mloda.user</code>, and <code>mloda.steward</code>; the <code>ResolvedFeature</code> return type is exported from <code>mloda.steward</code>.</p>
 <h5 id="explain-and-resolved_plan">explain and resolved_plan</h5>
-<p>The runtime counterpart to <code>resolve_feature</code>: <code>mlodaAPI.explain(...)</code> builds the execution plan for a request without running it, and <code>session.resolved_plan()</code> returns the same records for a prepared session (before or after <code>run()</code>). Both return a <code>list[PlanStep]</code> in execution-plan order. Every <code>explain</code> parameter after <code>features</code> is keyword-only.</p>
+<p>The runtime counterpart to <code>resolve_feature</code>: <code>mlodaAPI.explain(...)</code> builds the execution plan for a request without running it, and <code>session.resolved_plan()</code> returns the same records for a prepared session (before or after <code>run()</code>). Both return a <code>list[PlanStep]</code> in dependency order (independent steps sorted by content, so every process reports the same order). Every <code>explain</code> parameter after <code>features</code> is keyword-only.</p>
 <p><code>explain</code> re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior <code>run_all</code> execution. For the plan of a run that actually happened, use the return value directly: <code>run_all</code> returns a <code>RunResult</code> (a <code>list</code> with a read-only <code>plan</code> property) and <code>stream_all</code> returns a <code>ResultStream</code> (generator-compatible, <code>plan</code> available before consuming). One planning pass serves both the results and the plan, unlike <code>explain</code>, which re-resolves.</p>
 <pre><code class="language-python">from mloda.user import mloda
 
@@ -326,6 +329,8 @@ results = mloda.run_all([&quot;sales__mean_aggr&quot;], compute_frameworks=[&quo
 for step in results.plan:
     print(step.step_kind, step.feature_names)
 </code></pre>
+<p><code>RunResult.frames()</code> pairs each result frame with the compute <code>PlanStep</code> that produced it, by <code>step_uuid</code>; the list itself is in plan order, one element per step that produced requested output.</p>
+<p>To pin a resolved plan, see <a href="../plan-lock/">Plan Lock</a>.</p>
 <p>To match a <code>run_all</code> resolution, pass the same <code>parallelization_modes</code>: <code>run_all</code> defaults to <code>{ParallelizationMode.SYNC}</code>, <code>prepare</code>/<code>explain</code> default to <code>None</code>, and compute frameworks are filtered by mode.</p>
 <pre><code class="language-python">from mloda.user import mloda
 
@@ -339,6 +344,9 @@ for step in mloda.explain([&quot;sales__mean_aggr&quot;], compute_frameworks=[&q
 <li><strong>feature_names</strong> (<code>tuple[str, ...]</code>): Features computed by a compute step, empty otherwise. This includes engine-injected features (link index features, global-filter features); use the requested/injected split below to tell them apart.</li>
 <li><strong>requested_feature_names</strong> (<code>tuple[str, ...]</code>): The user-requested subset of <code>feature_names</code> on a compute step, empty for join and transform steps.</li>
 <li><strong>injected_feature_names</strong> (<code>tuple[str, ...]</code>): The engine-injected/dependency remainder of <code>feature_names</code> on a compute step, empty for join and transform steps.</li>
+<li><strong>input_feature_names</strong> (<code>tuple[str, ...]</code>): The sorted, deduplicated names a compute step's FeatureGroup declares as input, empty for a root step and for join and transform steps. It is the prepare-time twin of the run-time <code>HookContext.input_features</code>, which reads the same FeatureSet attribute.</li>
+<li><strong>input_feature_edges</strong> (<code>Mapping[str, tuple[str, ...]]</code>): Each output feature name of a compute step mapped to its sorted declared input names (empty for root, join and transform steps; injected features and features declaring no inputs are absent; same-named features in one step merge into one entry). Prepare-time twin of <code>HookContext.input_feature_edges</code>.</li>
+<li><strong>specialized_from</strong> (<code>tuple[type[FeatureGroup], ...]</code>): the parent FeatureGroup classes a compute step's FeatureGroup replaced through subclass preference for at least one of its features, sorted by class name; empty when nothing was replaced and for join and transform steps.</li>
 <li><strong>feature_group</strong> (<code>type[FeatureGroup] | None</code>): Resolved FeatureGroup; the destination for a transform step; the link's declared left side for a join.</li>
 <li><strong>compute_framework</strong> (<code>type[ComputeFramework] | None</code>): Selected ComputeFramework; the destination for a transform step; the merge destination for a join.</li>
 <li><strong>source_feature_group</strong> / <strong>source_compute_framework</strong>: Origin of a transform step. For a join: the link's declared right side, and the framework merged in.</li>
@@ -347,10 +355,18 @@ for step in mloda.explain([&quot;sales__mean_aggr&quot;], compute_frameworks=[&q
 <li><strong>join_inverted</strong> (<code>bool | None</code>, property): <code>join_destination_side == "right"</code>, None without a side.</li>
 <li><strong>join_token</strong> (<code>UUID | None</code>): the join's completion token, the uuid the scheduler tracks, for a join step; None otherwise. Excluded from equality (fresh per planning run).</li>
 <li><strong>declared_left_frameworks</strong> / <strong>declared_right_frameworks</strong> (<code>tuple[type[ComputeFramework], ...]</code>): the compute frameworks each declared side's parent features declared as candidates, sorted by class name, for a join step; empty otherwise, and empty when the plan recorded no candidates for the side. APPEND/UNION sides carry only the index-bearing parent.</li>
-<li><strong>feature_group_name</strong> / <strong>compute_framework_name</strong> / <strong>source_feature_group_name</strong> / <strong>source_compute_framework_name</strong> (<code>str | None</code>): Class names of the above, None when unset.</li>
+<li><strong>feature_set_options</strong> (<code>Options | None</code>): a group-only, deep-copied snapshot of a compute step's <code>FeatureSet.options</code>, without the reader pair; None otherwise. Excluded from equality.</li>
+<li><strong>compute_framework_reason</strong> (<code>str | None</code>): why the central choice put a compute step on its framework (for example <code>pinned</code> or <code>saves 1 conversion</code>); None for join and transform steps.</li>
+<li><strong>result_framework</strong> (<code>type[ComputeFramework] | None</code>): the framework a compute step's requested features come back in, the <code>output_framework</code> if set, else the step's own framework; None without requested features and for join and transform steps.</li>
+<li><strong>reader_data_access</strong> (<code>tuple[type[BaseInputData], Any] | None</code>, field, excluded from equality): the <code>(ReaderClass, data_access)</code> pair a compute step resolved for reading its input data; None otherwise.</li>
+<li><strong>data_access_identity</strong> (<code>str | None</code>, property): the reader's <code>data_access_identity(data_access)</code> for a compute step's reader pair, None otherwise, the same value <code>HookContext.data_access_identity</code> carries. Core readers keep credentials out of it; a reader whose paths carry tokens must override <code>data_access_identity</code> (see <a href="../../chapter1/extender/">Extenders</a>).</li>
+<li><strong>data_access_identity_is_fallback</strong> (<code>bool | None</code>, property): True when that identity is a fallback (the type name or bare key names) that names no source, False otherwise, None without a reader pair.</li>
+<li><strong>step_uuid</strong> (<code>UUID | None</code>): the compute step's uuid, the key <code>RunResult.frames()</code> and <code>ResultStream.frames()</code> pair by; None otherwise. Excluded from equality (fresh per planning run).</li>
+<li><strong>feature_group_name</strong> / <strong>compute_framework_name</strong> / <strong>source_feature_group_name</strong> / <strong>source_compute_framework_name</strong> / <strong>result_framework_name</strong> (<code>str | None</code>): Class names of the above, None when unset.</li>
 <li><strong>declared_left_framework_names</strong> / <strong>declared_right_framework_names</strong> (<code>tuple[str, ...]</code>): class names of the two tuples above, same order.</li>
 </ul>
-<p>Join semantics: for a join step the <code>*_feature_group</code> fields are the link's declared left/right sides, while <code>compute_framework</code>/<code>source_compute_framework</code> are the merge destination and the framework merged in, which may belong to the declared right side. <code>join_destination_side</code> is resolved from the two declared sides' framework candidates for every join type except APPEND and UNION, which always report <code>"left"</code>; a right join queues its destination on the declared right side, so it reports <code>"right"</code> in the common case.</p>
+<p><code>reader_data_access</code> may hold credentials, so never log or serialize it raw; <code>dataclasses.asdict(step)</code> includes it, and <code>feature_set_options</code> no longer holds the pair. Use <code>data_access_identity</code> instead; the other fields hold names, classes and uuids.</p>
+<p>Join semantics: for a join step the <code>*_feature_group</code> fields are the link's declared left/right sides, while <code>compute_framework</code>/<code>source_compute_framework</code> are the merge destination and the framework merged in, which may belong to the declared right side. <code>join_destination_side</code> is resolved from the two declared sides' framework candidates for every join type except APPEND and UNION, which always report <code>"left"</code>; a right join queues its destination on the declared right side, so it reports <code>"right"</code> in the common case. It reports <code>"left"</code> when the join runs on the left side's framework because its consumers cannot run on the right side's. When declared-side membership doesn't decide (both sides silent, both claim the destination framework, or, for a RIGHT join, one side's nearest-only answer is contradicted by the other side's widened any-distance candidates, excluding that other side's own nearest uuids, also touching the destination framework), a RIGHT join always resolves to the declared right side. For any other join type, a differing destination/source framework instead breaks the tie by identity against the trekker key; matching frameworks fall back to the link's trekker-key flip flag.</p>
 <h5 id="how-the-engine-tracks-request-provenance">How the engine tracks request provenance</h5>
 <p>The requested/injected split above is derived from a per-feature flag, not from re-matching names against the request.</p>
 <ul>
@@ -366,7 +382,7 @@ for step in mloda.explain([&quot;sales__mean_aggr&quot;], compute_frameworks=[&q
 </code></pre>
 <h5 id="diagnose-and-resolution_report">diagnose and resolution_report</h5>
 <p><code>diagnose</code> and <code>resolution_report()</code> are the non-raising counterparts to <code>explain</code> and <code>resolved_plan()</code>: where the plan-based pair returns <code>PlanStep</code> records, these return the resolution facts a failing request would otherwise raise.</p>
-<p><code>mlodaAPI.diagnose(features, ...)</code> runs the whole-request preflight without raising and returns a single <code>ResolutionDiagnosis</code>. It takes the same arguments as <code>explain</code> (every parameter after <code>features</code> is keyword-only). On success its <code>records</code> equal <code>session.resolution_report()</code> and <code>complete</code> is <code>True</code>; on a resolution failure it carries the records resolved before the failing feature plus <code>feature_name</code>, <code>failed_result</code>, and <code>message</code>; on an environment or config failure (redefinition conflict, framework-declaration error, compute-framework pin) it returns <code>records=[]</code>, <code>complete=False</code>, and only <code>message</code>.</p>
+<p><code>mlodaAPI.diagnose(features, ...)</code> runs the whole-request preflight without raising and returns a single <code>ResolutionDiagnosis</code>. It takes the same arguments as <code>explain</code> (every parameter after <code>features</code> is keyword-only). On success its <code>records</code> equal <code>session.resolution_report()</code> and <code>complete</code> is <code>True</code>; on a resolution failure it carries the records resolved before the failing feature plus <code>feature_name</code>, <code>failed_result</code>, and <code>message</code>; on an environment or config failure (redefinition conflict, framework-declaration error, compute-framework pin) it returns <code>records=[]</code>, <code>complete=False</code>, and only <code>message</code>. Any other error, including an exception a breaking extender raises (unless it is one of the projected types), still propagates.</p>
 <p><code>session.resolution_report()</code> returns the <code>list[ResolutionRecord]</code> captured while <code>prepare()</code> planned the request, one per feature, available before or after <code>run()</code>.</p>
 <pre><code class="language-python">from mloda.user import mlodaAPI
 
@@ -387,7 +403,7 @@ else:
 <li><strong><code>ResolutionDiagnosis</code></strong> (frozen dataclass): the return value of <code>diagnose</code>, never raised. Fields: <code>records</code> (<code>list[ResolutionRecord]</code>), <code>complete</code> (<code>bool</code>), <code>feature_name</code> (<code>str | None</code>), <code>failed_result</code> (<code>EvaluationResult | None</code>), <code>message</code> (<code>str | None</code>).</li>
 <li><strong><code>ResolutionRecord</code></strong> (frozen dataclass): one per feature, returned inside <code>resolution_report()</code>, <code>ResolutionDiagnosis.records</code>, and <code>FeatureResolutionError.partial_records</code>; never raised. Fields: <code>feature_name</code> (<code>str</code>), <code>requested</code> (<code>bool</code>), <code>result</code> (<code>EvaluationResult</code>).</li>
 </ul>
-<p><code>EvaluationResult</code> is the captured matcher outcome carried by the fields above; it is defined in <code>mloda.core.prepare.resolution_types</code> and is not part of the public <code>__init__</code> exports.</p>
+<p><code>EvaluationResult</code> is the captured matcher outcome carried by the fields above; it is defined in <code>mloda.core.prepare.resolution_types</code> and is not part of the public <code>__init__</code> exports. <code>EvaluationResult.specialized_from</code> carries, per feature, the parent classes the single winner replaced through subclass preference.</p>
 <h5 id="get_feature_group_docs">get_feature_group_docs</h5>
 <p>Get documentation for feature groups with optional filtering.</p>
 <pre><code class="language-python">from mloda.steward import get_feature_group_docs
@@ -405,10 +421,12 @@ fgs = get_feature_group_docs(compute_framework=&quot;PandasDataFrame&quot;)
 <ul>
 <li><strong>name</strong> (<code>str</code>, optional): Filter by name (case-insensitive partial match).</li>
 <li><strong>search</strong> (<code>str</code>, optional): Search in description (case-insensitive partial match).</li>
-<li><strong>compute_framework</strong> (<code>str | Type[ComputeFramework]</code>, optional): Filter by compute framework.</li>
+<li><strong>compute_framework</strong> (<code>str | type[ComputeFramework]</code>, optional): Filter by compute framework.</li>
 <li><strong>version_contains</strong> (<code>str</code>, optional): Filter by version substring.</li>
+<li><strong>plugin_collector</strong> (<code>PluginCollector</code>, optional): Filter using the plugin collector's applicability check.</li>
+<li><strong>registered_only</strong> (<code>bool</code>, default <code>False</code>): If <code>True</code>, only document classes in the collector's injected registry, else the default registry.</li>
 </ul>
-<p><strong>Returns:</strong> <code>List[FeatureGroupInfo]</code> sorted by name.</p>
+<p><strong>Returns:</strong> <code>list[FeatureGroupInfo]</code> sorted by name.</p>
 <h5 id="get_compute_framework_docs">get_compute_framework_docs</h5>
 <p>Get documentation for compute frameworks with optional filtering.</p>
 <pre><code class="language-python">from mloda.steward import get_compute_framework_docs
@@ -424,8 +442,9 @@ available_frameworks = get_compute_framework_docs(available_only=True)
 <li><strong>name</strong> (<code>str</code>, optional): Filter by name (case-insensitive partial match).</li>
 <li><strong>search</strong> (<code>str</code>, optional): Search in description (case-insensitive partial match).</li>
 <li><strong>available_only</strong> (<code>bool</code>, default <code>False</code>): By default all frameworks are listed (with <code>is_available</code> as the flag); set <code>available_only=True</code> to filter to available frameworks only.</li>
+<li><strong>registered_only</strong> (<code>bool</code>, default <code>False</code>): If <code>True</code>, only document classes in the default registry.</li>
 </ul>
-<p><strong>Returns:</strong> <code>List[ComputeFrameworkInfo]</code> sorted by name.</p>
+<p><strong>Returns:</strong> <code>list[ComputeFrameworkInfo]</code> sorted by name.</p>
 <h5 id="get_extender_docs">get_extender_docs</h5>
 <p>Get documentation for extenders with optional filtering.</p>
 <pre><code class="language-python">from mloda.steward import get_extender_docs
@@ -441,8 +460,9 @@ extenders = get_extender_docs(wraps=&quot;formula&quot;)
 <li><strong>name</strong> (<code>str</code>, optional): Filter by name (case-insensitive partial match).</li>
 <li><strong>search</strong> (<code>str</code>, optional): Search in description (case-insensitive partial match).</li>
 <li><strong>wraps</strong> (<code>str</code>, optional): Filter by wrapped function type (case-insensitive exact match).</li>
+<li><strong>registered_only</strong> (<code>bool</code>, default <code>False</code>): If <code>True</code>, only document classes in the default registry.</li>
 </ul>
-<p><strong>Returns:</strong> <code>List[ExtenderInfo]</code> sorted by name.</p>
+<p><strong>Returns:</strong> <code>list[ExtenderInfo]</code> sorted by name.</p>
               
             </div>
           </div><footer>

@@ -157,6 +157,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -274,9 +276,12 @@ print(result)
 1   Value2         3]
 </code></pre>
 <h4 id="readdocument-unstructured-file-access">ReadDocument: Unstructured File Access</h4>
-<p>For unstructured files (Markdown, YAML, text), mloda provides <code>ReadDocumentFeature</code>.
+<p>For unstructured files (Markdown <code>.md</code>, YAML <code>.yaml</code>/<code>.yml</code>, text <code>.text</code>/<code>.txt</code>/<code>.TXT</code>), mloda provides <code>ReadDocumentFeature</code>.
 It skips structured file types (CSV, JSON, Parquet, etc.) by default to avoid conflicts
-with <code>ReadFile</code>.</p>
+with <code>ReadFile</code>.
+ReadDocument matches by file suffix only and ignores feature names, so when a folder or file set mixes document
+suffixes such as <code>.txt</code> with structured files (CSV, Parquet), exclude <code>ReadDocumentFeature</code> through the
+<code>PluginCollector</code> (<code>PluginCollector.disabled_feature_groups({ReadDocumentFeature})</code>) to avoid multiple feature group matches.</p>
 <p>To read a structured file type as a document, use the <code>document_suffixes</code> option:</p>
 <pre><code class="language-py">Feature(&quot;content&quot;, options={&quot;document_suffixes&quot;: frozenset({&quot;.json&quot;})})
 </code></pre>
@@ -303,7 +308,7 @@ result = mloda.run_all(
 )
 </code></pre>
 <p>Rules:
-- <code>column_to_file</code> only applies to global-scope resolution. Per-feature <code>options</code> always take precedence.
+- A <code>column_to_file</code> pin is authoritative once it applies to a requested feature: it short-circuits the resolver and takes precedence over <code>data_access_handle</code>, regardless of whether the <code>DataAccessCollection</code> is global- or per-feature-scoped.
 - Values may be either a file handle (a key of the <code>files</code> dict) or a file path (a value of the <code>files</code> dict); they are normalized to handles internally. Construction raises <code>ValueError</code> if a value matches neither.
 - If a batch of features has some columns pinned and others not, a <code>ValueError</code> is raised (use <code>column_to_file</code> for all columns or none in a batch).
 - For columns not listed in the map, the consumer falls back to the shared resolver: a single matching file binds, multiple matching files raise <code>ValueError</code> listing the candidates. Set <code>data_access_handle</code> on the feature's <code>Options</code> to disambiguate without <code>column_to_file</code>. See <a href="../named-data-access-handles/">Named Data Access Handles</a>.</p>
@@ -320,7 +325,7 @@ In this case, we need to provide the specific reader class: CsvReader.</p>
 # This feature is already implemented as plugin, so do not run it again. This will raise intentional errors.
 class ReadFileFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return ReadFile()
 
     @classmethod
@@ -333,7 +338,7 @@ class ReadFileFeature(FeatureGroup):
 </code></pre>
 <p>As a side note, the ReadFileFeature was also used for the global scope automatism.</p>
 <p>To use it, we can simply:</p>
-<pre><code class="language-python">from typing import Optional, Any, List
+<pre><code class="language-python">from typing import Any
 from pathlib import Path
 
 from mloda.user import mloda
@@ -346,7 +351,7 @@ from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 file_path = os.getcwd()
 file_path += &quot;/docs/docs/in_depth&quot;
 
-feature_list: List[Feature | str] = []
+feature_list: list[Feature | str] = []
 feature_list.append(
     Feature(
         name=&quot;AExample&quot;,
@@ -375,15 +380,13 @@ For this purpose, we have the ApiData.</p>
 <li>features as parameters</li>
 </ul>
 <p>The following example shows a simple ApiData setup.</p>
-<pre><code class="language-python">from typing import List
-
-from mloda.user import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.user.pandas import PandasDataFrame
 
 # Pass api_data directly as a dict - the framework handles registration internally
 result = mloda.run_all(
         [&quot;FeatureInputAPITest&quot;],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         api_data={&quot;ExampleApiData&quot;: {&quot;FeatureInputAPITest&quot;: [&quot;TestValue3&quot;, &quot;TestValue4&quot;]}},
 )
 for res in result:
@@ -414,7 +417,7 @@ class AFeatureInputCreator(FeatureGroup):
 
     # Define input_data with using DataCreator
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator({&quot;AFeatureInputCreator&quot;})
 
     # Define the data this feature creates
@@ -424,7 +427,7 @@ class AFeatureInputCreator(FeatureGroup):
 
 result = mloda.run_all(
         [&quot;AFeatureInputCreator&quot;],
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
 )
 for res in result:
      print(res)
@@ -439,9 +442,7 @@ for res in result:
 <p>The input_features method allows a feature to access data from other features. This enables data sharing and collaboration between different components of your system.</p>
 <p>This is one of the key aspects in how we achieve to split data from processes. </p>
 <p>In the following example, we will use data from another feature.</p>
-<pre><code class="language-python">from typing import Set
-
-from mloda.user import mloda
+<pre><code class="language-python">from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature, PluginCollector
 
@@ -452,7 +453,7 @@ _in_features = &quot;in_features&quot;
 # First, we create a class, which uses input features from another class
 class AInputFeatureGroup(FeatureGroup):
 
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
 
         # We use the source to make this feature flexible.
         # One could give here different feature names via the configuration.
@@ -481,7 +482,7 @@ feature_list.append(
 
 result = mloda.run_all(
     feature_list,
-    compute_frameworks={PandasDataFrame},
+    compute_frameworks=[PandasDataFrame],
     plugin_collector=PluginCollector.enabled_feature_groups({AInputFeatureGroup, AFeatureInputCreator})
 
 )
@@ -505,7 +506,7 @@ from mloda.provider import ApiInputDataFeature
 
 class JoinedFeature(FeatureGroup):
 
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
         # Create a LEFT join between mloda data and Creator data
         link = Link.left(
             (ApiInputDataFeature, Index((&quot;api_id&quot;,))),

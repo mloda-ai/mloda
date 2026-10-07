@@ -159,6 +159,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -246,7 +248,7 @@ temperature~std
 <h4 id="automatic-column-discovery-recommended">Automatic Column Discovery (Recommended)</h4>
 <p>Use the <code>resolve_multi_column_feature()</code> utility to automatically discover all columns matching the pattern:</p>
 <pre><code class="language-py">class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
         return {Feature.not_typed(&quot;MultiColumnFeature&quot;)}
 
     @classmethod
@@ -271,7 +273,7 @@ temperature~std
 <h4 id="manual-column-access-legacy">Manual Column Access (Legacy)</h4>
 <p>For backwards compatibility, you can still access columns manually:</p>
 <pre><code class="language-py">class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
         return {Feature.not_typed(&quot;MultiColumnFeature&quot;)}
 
     @classmethod
@@ -289,7 +291,7 @@ temperature~std
 <h4 id="specific-sub-column-dependency">Specific Sub-Column Dependency</h4>
 <p>You can declare a dependency on a specific sub-column directly, without needing all columns:</p>
 <pre><code class="language-py">class SpecificSubColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -&gt; Optional[Set[Feature]]:
+    def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
         # Depend on ONLY base_feature~1, not all columns
         return {Feature(&quot;base_feature~1&quot;)}
 
@@ -324,26 +326,15 @@ temperature~std
 <p>This is implemented in the <code>identify_naming_convention</code> method in the <code>ComputeFramework</code> class:</p>
 </li>
 </ol>
-<pre><code class="language-py">def identify_naming_convention(self, selected_feature_names: Set[FeatureName], column_names: Set[str]) -&gt; Set[str]:
-    feature_name_strings = {f.name for f in selected_feature_names}
-    _selected_feature_names: Set[str] = set()
-
-    for col in column_names:
-        for feature_name in feature_name_strings:
-            if col == feature_name:
-                _selected_feature_names.add(col)
-                continue
-
-            if col.startswith(f&quot;{feature_name}~&quot;):
-                _selected_feature_names.add(col)
-
-    if not _selected_feature_names:
-        raise ValueError(
-            f&quot;No columns found that match feature names {feature_name_strings} or follow the naming convention 'feature_name~column_name'&quot;
-        )
-
-    return _selected_feature_names
+<pre><code class="language-py">def identify_naming_convention(
+    self,
+    selected_feature_names: Sequence[FeatureName],
+    column_names: set[str],
+    ordering: str | None = None,
+    request_feature_order: list[str] | None = None,
+) -&gt; set[str] | list[str]: ...
 </code></pre>
+<p>It collects every column that equals a requested feature name or starts with <code>feature_name~</code>, and raises a <code>ValueError</code> if no column matches. By default it returns a set; with <code>ordering="alphabetical"</code> it returns a sorted list, and with <code>ordering="request_order"</code> it returns a list ordered by <code>request_feature_order</code> (falling back to <code>selected_feature_names</code>). Any other <code>ordering</code> value raises a <code>ValueError</code>.</p>
 <h2 id="best-practices">Best Practices</h2>
 <ol>
 <li><strong>Use Automatic Discovery</strong>: Prefer <code>resolve_multi_column_feature()</code> over manual column enumeration when you need all columns</li>
@@ -382,12 +373,12 @@ temperature~std
 </tr>
 <tr>
 <td><code>get_column_base_feature(column_name)</code></td>
-<td>Strip suffix from column</td>
-<td>Both: Extract base feature from <code>feature~N</code></td>
+<td>Strip trailing <code>~N</code> suffix from column</td>
+<td>Both: Extract base feature from <code>feature~N</code> (last <code>~</code> wins)</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Note</strong>: When declaring dependencies with <code>Feature("base_feature~N")</code>, the framework automatically resolves to the parent FeatureGroup that produces <code>base_feature</code> and extracts only the specified sub-column.</p>
+<p><strong>Note</strong>: When declaring dependencies with <code>Feature("base_feature~N")</code>, the framework automatically resolves to the parent FeatureGroup that produces <code>base_feature</code> and extracts only the specified sub-column. Only a numeric suffix is recognized this way: <code>get_column_base_feature</code> does not strip a non-digit suffix such as <code>~mean</code> or <code>~dim1</code> back to its base, so a feature name like <code>Feature("base_feature~mean")</code> will NOT resolve to the producing FeatureGroup as a formal sub-column dependency.</p>
               
             </div>
           </div><footer>

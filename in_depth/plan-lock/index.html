@@ -5,15 +5,15 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <link rel="shortcut icon" href="../../img/favicon.ico" />
-    <title>Comparison Contract - mloda docs</title>
+    <title>Plan Lock - mloda docs</title>
     <link rel="stylesheet" href="../../css/theme.css" />
     <link rel="stylesheet" href="../../css/theme_extra.css" />
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
     
       <script>
         // Current page data
-        var mkdocs_page_name = "Comparison Contract";
-        var mkdocs_page_input_path = "in_depth/comparison-contract.md";
+        var mkdocs_page_name = "Plan Lock";
+        var mkdocs_page_input_path = "in_depth/plan-lock.md";
         var mkdocs_page_url = null;
       </script>
     
@@ -129,31 +129,35 @@
                 </li>
     </ul>
                   </li>
-                  <li class="toctree-l1"><a class="reference internal" >Plugin System</a>
-    <ul>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Plugin System</a>
+    <ul class="current">
                 <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
-                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Plan Lock</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#what-it-records-and-why">What it records and why</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#usage">Usage</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#what-the-file-holds">What the file holds</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#what-it-does-not-cover">What it does not cover</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#structure-hash">Structure hash</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#churn-sources">Churn sources</a>
+    </li>
+    </ul>
                 </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
                   </li>
-                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Comparison Contract</a>
-    <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#the-pieces">The pieces</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#where-it-is-applied">Where it is applied</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#per-engine-capability">Per-engine capability</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#deferred">Deferred</a>
-    </li>
-    </ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
     <ul>
@@ -189,7 +193,8 @@
   <ul class="wy-breadcrumbs">
     <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
           <li class="breadcrumb-item">In Depth - Advanced</li>
-      <li class="breadcrumb-item active">Comparison Contract</li>
+          <li class="breadcrumb-item">Plugin System</li>
+      <li class="breadcrumb-item active">Plan Lock</li>
     <li class="wy-breadcrumbs-aside">
     </li>
   </ul>
@@ -198,132 +203,49 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="comparison-contract">Comparison Contract</h1>
-<p>Operations that assume ordered or temporal semantics (as-of joins, equi-joins, range/min/max
-filters, time-window and forecasting reference columns) validate the columns they touch at the
-backend boundary through a shared <strong>comparison contract</strong>. This turns a class of silent-wrongness
-bugs (for example joining or comparing a timezone-aware column against a timezone-naive one) into a
-clear error instead of a cryptic backend failure or a quietly incorrect result.</p>
-<h2 id="the-pieces">The pieces</h2>
+                <h1 id="plan-lock">Plan Lock</h1>
+<h2 id="what-it-records-and-why">What it records and why</h2>
+<p>Strict mode and <code>PluginPolicy</code> decide which classes may take part in a request. The plan lock records which class wins per step (feature group, compute framework, reader, specialization, joins, framework transforms) plus input wiring and join keys, and fails when that changes. See <a href="../plugin_registry/">Plugin Registry</a> for the policy side.</p>
+<h2 id="usage">Usage</h2>
+<pre><code class="language-py">from mloda.steward import check_plan_lock
+
+session = mloda.prepare(features, compute_frameworks={PandasDataFrame})
+check_plan_lock(session.resolved_plan(), &quot;plan.lock&quot;)
+session.run()
+</code></pre>
+<p>Call <code>write_plan_lock(plan, path)</code> to create or update the file, and review the change in the pull request. <code>check_plan_lock</code> never writes and raises <code>PlanLockMismatchError</code> with a unified diff, or with the expected content when the file is missing.</p>
+<p>CI can check <code>mloda.explain(...)</code> without running anything. Pass the same <code>parallelization_modes</code> as the real run, since <code>prepare</code> and <code>explain</code> default to <code>None</code> and <code>run_all</code> to <code>SYNC</code>.</p>
+<pre><code class="language-py">from mloda.steward import write_plan_lock
+
+write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMode.SYNC}), &quot;plan.lock&quot;)
+</code></pre>
+<h2 id="what-the-file-holds">What the file holds</h2>
+<p>Sorted JSON with a <code>format</code> number, the requested feature names, and one record per compute, join and transform step, as class paths (<code>module:QualName</code>). Compute records include the framework choice reason (for example <code>pinned</code>) and the <code>result_framework</code> the requested features come back in, which follows the <code>output_framework</code> option when set. Compute records also hold each output feature's input names (<code>input_feature_edges</code>), join records the link's <code>join_keys</code> (<code>left=right</code> column pairs, null for append/union). Duplicate steps keep one record each. A <code>format</code> bump makes a lock file written by an older mloda fail <code>check_plan_lock</code> until rewritten with <code>write_plan_lock</code>.</p>
+<p>It never holds option values, <code>data_access_identity</code>, versions, per-run ids or the mloda version.</p>
+<h2 id="what-it-does-not-cover">What it does not cover</h2>
 <ul>
-<li><code>ComparisonContract</code> declares the semantics an operation requires: a set of
-  <code>SemanticDimension</code> values (<code>ORDERED</code>, <code>TEMPORAL</code>, <code>NUMERIC</code>), an optional <code>unit</code>, and a
-  <code>tz_policy</code>.</li>
-<li><code>ColumnSemantics</code> is the framework-neutral view of one column: <code>is_ordered</code>, <code>is_temporal</code>,
-  <code>is_numeric</code>, <code>unit</code>, <code>is_tz_aware</code>. Each merge and filter engine (<code>BaseMergeEngine</code> /
-  <code>BaseFilterEngine</code> subclass) derives it from its framework's native schema via the
-  <code>_column_semantics(data, column)</code> hook.</li>
-<li><code>ComparisonContract.validate(semantics, column)</code> checks a single column against the required
-  dimensions. <code>require_compatible(left, right, ...)</code> checks two columns are comparable, using a
-  <strong>strict timezone model</strong>: mixing timezone-aware and timezone-naive temporal columns is an error,
-  and known time units must match.</li>
+<li>Code changes inside the same class. Use <code>FeatureGroup.version()</code> on <code>HookContext</code>, see <a href="../feature-group-version/">Feature Group Version</a>.</li>
+<li>Data.</li>
+<li>Extenders.</li>
 </ul>
-<h2 id="where-it-is-applied">Where it is applied</h2>
-<table>
-<thead>
-<tr>
-<th>Operation</th>
-<th>Check</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>As-of joins</td>
-<td>time columns must be ordered (opt-in coercion otherwise); the two time columns must be timezone-compatible</td>
-</tr>
-<tr>
-<td>Equi-joins (inner/left/right/outer)</td>
-<td>when <strong>both</strong> join keys are temporal, they must be timezone-compatible; string / numeric / id keys are never affected</td>
-</tr>
-<tr>
-<td>Range / min / max filters</td>
-<td>when a bound is a native <code>datetime</code>, its timezone-awareness must match the filtered column</td>
-</tr>
-<tr>
-<td>Time-window / forecasting</td>
-<td>the reference time column must be temporal and ordered</td>
-</tr>
-</tbody>
-</table>
-<p>The timezone check only fires when both sides are genuinely temporal, so ordinary non-temporal
-joins and filters are never rejected.</p>
-<h2 id="per-engine-capability">Per-engine capability</h2>
-<p>What each backend can determine from its native schema. <code>column_semantics</code> is an opt-in merge- and
-filter-engine hook: an engine enables the timezone/unit guard by setting <code>provides_column_semantics =
-True</code> and implementing the hook. Engines that leave the flag <code>False</code> (for example a time-agnostic
-custom ComputeFramework) skip the guard entirely and are never forced to implement it. An engine that
-opts in but forgets to implement the hook raises a clear error rather than silently skipping
-validation. All built-in backends below opt in.</p>
-<table>
-<thead>
-<tr>
-<th>Backend</th>
-<th style="text-align: center;">ordered / temporal / numeric</th>
-<th style="text-align: center;">timezone-awareness</th>
-<th style="text-align: center;">time unit</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>pandas</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">yes</td>
-</tr>
-<tr>
-<td>polars</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">yes</td>
-</tr>
-<tr>
-<td>pyarrow</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">yes</td>
-</tr>
-<tr>
-<td>duckdb</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">yes (<code>TIMESTAMP WITH TIME ZONE</code>)</td>
-<td style="text-align: center;">partial</td>
-</tr>
-<tr>
-<td>sqlite</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">only for native timestamp columns</td>
-<td style="text-align: center;">only for native timestamp columns</td>
-</tr>
-<tr>
-<td>spark</td>
-<td style="text-align: center;">yes</td>
-<td style="text-align: center;">no (deferred)</td>
-<td style="text-align: center;">no</td>
-</tr>
-<tr>
-<td>python_dict</td>
-<td style="text-align: center;">yes (value scan)</td>
-<td style="text-align: center;">yes (value scan)</td>
-<td style="text-align: center;">no</td>
-</tr>
-</tbody>
-</table>
-<h2 id="deferred">Deferred</h2>
+<h2 id="structure-hash">Structure hash</h2>
+<p><code>plan_structure_hash(plan)</code> (from <code>mloda.steward</code>) is the sha256 hex of the lock text, so an equal hash means an equal lock file. A session with extenders carries it as <code>PlanContext.structure_hash</code>. Like the lock it excludes option values and data access, so it is a plan-shape fingerprint, not a reproducibility or audit fingerprint. It includes the reason text and the lock format number, so it can change between mloda releases. The churn sources below apply.</p>
+<p><code>plan_content_hash(plan)</code> (from <code>mloda.steward</code>) / <code>PlanContext.content_hash</code> is the wider audit fingerprint: it adds each compute step's group option values (values under credential-shaped option keys are masked at any depth through dicts, lists, tuples (namedtuples included) and other mappings, and a <code>RegisteredCredential</code> hashes through its redacted repr, so a rotated secret does not change it; every other value is hashed in full, so a secret under another key name or inside a URL enters the hash input, which is a sha256 over the whole plan), and drops the reason text and lock format number. It excludes context options, the data access value, a link's asof config and discriminators, ids, per-run tokens and <code>FeatureGroup.version()</code> (it embeds the mloda version, so an unchanged plan would change on every upgrade; use <code>HookContext.feature_group_version</code> for that). Option values render through their repr, so an option object without a stable repr makes it unstable.</p>
+<h2 id="churn-sources">Churn sources</h2>
 <ul>
-<li><strong>Value inspection on dynamically typed storage.</strong> sqlite stores datetimes as ISO-8601 text, so
-  timezone and unit are not visible from its schema; these are read only when the column is a native
-  temporal type. A value-scanning fallback is intentionally not implemented yet.</li>
-<li><strong>Unit enforcement.</strong> The time unit is derived and carried on <code>ColumnSemantics</code>, but it is not
-  enforced across sides: differing resolutions (for example nanoseconds vs microseconds) are aligned
-  natively by the backends, so <code>require_compatible</code> does not reject them. A unit is only checked when
-  a <code>ComparisonContract.unit</code> is explicitly declared (the single-column <code>validate</code> path).</li>
+<li>A reason can change without a framework change, for example <code>saves 1 conversion</code> to <code>saves 2 conversions</code>.</li>
+<li>Moving a class to another module changes its path.</li>
+<li>Classes created at runtime (for example via <code>DynamicFeatureGroupCreator</code>) get a module path that does not say where they came from (<code>abc:&lt;ClassName&gt;</code>), so two with the same class name share one path.</li>
+<li>Classes defined in <code>__main__</code> are refused by <code>write_plan_lock</code>.</li>
+<li>A mapping option value other than a plain dict (for example <code>OrderedDict</code> or <code>MappingProxyType</code>) hashes as a plain dict in <code>plan_content_hash</code>, so its content hash changed once when masking started to walk it.</li>
 </ul>
+<p>A corrupt lock file raises <code>json.JSONDecodeError</code>.</p>
               
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../data-type-enforcement/" class="btn btn-neutral float-left" title="Data Type Enforcement"><span class="icon icon-circle-arrow-left"></span> Previous</a>
-        <a href="../troubleshooting/feature-group-resolution-errors/" class="btn btn-neutral float-right" title="Feature Group Resolution Errors">Next <span class="icon icon-circle-arrow-right"></span></a>
+        <a href="../plugin_registry/" class="btn btn-neutral float-left" title="Plugin Registry"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../data-type-enforcement/" class="btn btn-neutral float-right" title="Data Type Enforcement">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
   <hr/>
@@ -346,10 +268,10 @@ validation. All built-in backends below opt in.</p>
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../data-type-enforcement/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../plugin_registry/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
-      <span><a href="../troubleshooting/feature-group-resolution-errors/" style="color: #fcfcfc">Next &raquo;</a></span>
+      <span><a href="../data-type-enforcement/" style="color: #fcfcfc">Next &raquo;</a></span>
     
   </span>
 </div>

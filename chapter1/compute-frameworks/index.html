@@ -175,6 +175,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -289,6 +291,7 @@ result[0]
 id: int64
 id: [[0,1,2,3,...]]
 </code></pre>
+<p>If the same feature is requested once pinned and once unpinned, both requests share one read in the pinned framework when the unpinned one can run there. An unpinned request that could join two differing pins joins neither.</p>
 <h5 id="defining-the-compute-framework-in-a-feature-group">Defining the Compute Framework in a Feature Group</h5>
 <p>In this example, we define a compute framework rule inside the feature group. This ensures that the feature group can only run on a <strong>PyArrowTable</strong>. We also specify that the input feature should use <strong>PandasDataFrame</strong>, allowing automatic conversion from <strong>PandasDataFrame</strong> to <strong>PyArrowTable</strong> behind the scenes.</p>
 <pre><code class="language-python">import pyarrow.compute as pc
@@ -320,7 +323,7 @@ class ExampleB(FeatureGroup):
 
 result = mloda.run_all(
     example_feature_list,
-    compute_frameworks={PyArrowTable, PandasDataFrame},
+    compute_frameworks=[PandasDataFrame, PyArrowTable],
     data_access_collection=data_access_collection,
 )
 result[0]
@@ -392,7 +395,7 @@ result[0]
 <td>Apache Spark DataFrames</td>
 <td>Distributed processing, scalability, fault tolerance</td>
 <td>Big data, distributed computing, production clusters</td>
-<td>pyspark, Java 8+</td>
+<td>pyspark, Java 17+</td>
 </tr>
 <tr>
 <td><strong>PythonDictFramework</strong></td>
@@ -508,9 +511,9 @@ result = mloda.run_all(
     [feature],
     data_access_collection=data_access_collection
 )
-result[0]  # Returns pyiceberg.table.Table or pyarrow.Table
+result[0]  # Returns pyarrow.Table
 </code></pre>
-<p><strong>Note</strong>: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks.</p>
+<p><strong>Note</strong>: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks. A filtered Iceberg table is passed on to later feature groups and returned as a <code>pyarrow.Table</code>. Does not support mloda framework inherent multiprocessing (the catalog stays in the parent process). The filtered step passes on only those columns to later feature groups: its own features, its filter columns, and the columns a Link reads from it or from any step downstream of it, including ASOF time columns. In the result, a nested field requested as a feature (e.g. <code>"b.c"</code>) comes back as its own column.</p>
 <p>Example using Spark framework:</p>
 <pre><code class="language-py">from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection
@@ -535,7 +538,7 @@ result = mloda.run_all(
 )
 result[0]  # Returns pyspark.sql.DataFrame
 </code></pre>
-<p><strong>Note</strong>: Spark framework requires PySpark installation and Java 8+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).</p>
+<p><strong>Note</strong>: Spark framework requires PySpark installation and Java 17+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).</p>
 <h4 id="6-summary">6. Summary</h4>
 <p>mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.</p>
 <p>That said, <strong>you can configure mloda to use just one compute framework</strong> for a more familiar workflow, similar to traditional feature stores, data pipelines, or ETL systems. Whether you prefer flexibility or simplicity, mloda adapts to your needs while ensuring consistent feature processing.</p>

@@ -115,6 +115,10 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#writing-an-input-data-reader">Writing an input-data reader</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#column-discovery">Column discovery</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#row-counts">Row counts</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#selecting-among-sibling-readers">Selecting among sibling readers</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#reader-selection-vs-feature-group-resolution">Reader selection vs feature-group resolution</a>
@@ -134,6 +138,8 @@
     <li class="toctree-l3"><a class="reference internal" href="#use-cases_1">Use Cases</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#example-implementation_1">Example Implementation</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#connection-forwarding">Connection Forwarding</a>
     </li>
         </ul>
     </li>
@@ -221,6 +227,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -299,7 +307,7 @@
 
 class ReadFileFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return ReadFile()  # BaseInputData implementation
 
     @classmethod
@@ -313,7 +321,7 @@ class ReadFileFeature(FeatureGroup):
 <h3 id="common-baseinputdata-implementations">Common BaseInputData Implementations</h3>
 <ul>
 <li><strong>ReadFile</strong>: For structured file-based data loading (see <a href="../access-feature-data/#global-scope-data-access">access-feature-data</a>)</li>
-<li><strong>ReadDocument</strong>: For unstructured document loading (Markdown, YAML, text). Skips file types owned by ReadFile by default.</li>
+<li><strong>ReadDocument</strong>: For unstructured document loading (Markdown <code>.md</code>, YAML <code>.yaml</code>/<code>.yml</code>, text <code>.text</code>/<code>.txt</code>/<code>.TXT</code>). Skips file types owned by ReadFile by default.</li>
 <li><strong>DataCreator</strong>: For generating synthetic data (see <a href="../access-feature-data/#data-creator">access-feature-data</a>)</li>
 <li><strong>ApiInputData</strong>: For runtime data injection (see <a href="../access-feature-data/#apidata">access-feature-data</a>)</li>
 <li><strong>ReadDB</strong>: For database-backed loading</li>
@@ -321,21 +329,43 @@ class ReadFileFeature(FeatureGroup):
 <h3 id="writing-an-input-data-reader">Writing an input-data reader</h3>
 <p>Each reader family exposes a recommended hook seam. Overriding <code>load_data</code> wholesale remains supported in every family.</p>
 <ul>
-<li><strong>ReadDB</strong>: implement <code>produce_rows</code>, <code>connect</code>, and <code>is_valid_credentials</code>; optionally <code>prepare_credentials</code> and <code>build_query</code>.</li>
-<li><strong>ReadDocument</strong>: implement <code>produce_document</code> and <code>suffix</code>; optionally <code>document_file_type</code>.</li>
+<li>
+<p><strong>ReadDB</strong>: implement <code>produce_rows</code>, <code>connect</code>, and <code>is_valid_credentials</code>; optionally <code>prepare_credentials</code>, <code>build_query</code>, and <code>claims_feature_name</code> (a name-only check that runs before any credential probe). To check credentials against <code>PropertySpec</code>s, use <code>validate_property_values</code>, converting its error, since any raise other than a soft <code>NotImplementedError</code> aborts matching:</p>
+<p>```python
+from typing import Any</p>
+<p>from mloda.provider import PropertySpec, PropertyValidationError, validate_property_values</p>
+<p>CREDENTIAL_SPECS = {"host": PropertySpec("Database host")}</p>
+<p>def is_valid_credentials(credentials: dict[str, Any]) -&gt; bool:
+    try:
+        validate_property_values(credentials, CREDENTIAL_SPECS, closed_world=True)
+    except PropertyValidationError:
+        return False
+    return True</p>
+<p>assert is_valid_credentials({"host": "db"})
+assert not is_valid_credentials({"host": "db", "password": "secret"})
+```</p>
+</li>
+<li>
+<p><strong>ReadDocument</strong>: implement <code>produce_document</code> and <code>suffix</code>; optionally <code>document_file_type</code>.</p>
+</li>
 <li><strong>ReadFile</strong>: override <code>load_data</code> wholesale to return the table. <code>CsvReader</code> resolves to a <code>FileSource</code> descriptor that the target compute framework materializes into its native type.</li>
 </ul>
+<p>Override <code>data_access_identity</code> to publish a richer identity than the default.</p>
 <p>CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib reader behind PythonDict follows it. Types are inferred per column: null tokens (pyarrow's default set, e.g. <code>NA</code>, <code>NaN</code>, <code>null</code>) become <code>None</code> in an int/float/bool column but stay literal text in a string column, a column of only empty cells and/or null tokens is all-<code>None</code>, and an int column with a value outside signed int64 range degrades entirely to float.</p>
 <p>The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (<code>" 1 "</code>), <code>inf</code>/<code>infinity</code>, uppercase <code>NAN</code> (the float value, not the <code>NaN</code> null token), hex literals (<code>0x1f</code>), and a <code>true</code>/<code>1</code> mix (pyarrow reads <code>1</code>/<code>0</code> as bools too).</p>
 <p>Readers are classified structurally; no reader code is executed for classification. <code>is_final_reader()</code> is True when a class overrides <code>load_data</code> wholesale, or when it overrides all hooks named by its family's <code>_final_reader_requires()</code> (for example <code>("produce_rows", "connect")</code> for ReadDB). Family bases (ReadDB, ReadDocument, ReadFile) are never discovered as final readers themselves.</p>
 <p><strong>Warning</strong>: classification is structural (declared is overridden), so an intermediate base that re-declares a hook or <code>load_data</code> with a bare <code>raise NotImplementedError</code> body is classified as a final reader and enters discovery. Intermediate bases must not re-declare bare hooks; re-anchor the family by declaring <code>_final_reader_requires</code> instead.</p>
 <p><code>_final_reader_requires</code> is underscore-named but is a stable, documented extension point for third-party reader families.</p>
+<h3 id="column-discovery">Column discovery</h3>
+<p><code>BaseInputData.describe_columns(data_access) -&gt; dict[str, DataType | None]</code> maps column name to <code>DataType</code> (<code>None</code> where unknown). It raises <code>NotImplementedError</code> when a reader can't enumerate columns, and <code>ImportError</code> when a backend it needs is missing; a missing or unreadable source raises <code>OSError</code> or <code>ValueError</code>. <code>ReadFile</code> supplies a family default wrapping <code>get_column_names</code> with unknown types and accepting a <code>str</code> or <code>Path</code> data access (anything else raises <code>ValueError</code>); <code>ParquetReader</code>, <code>FeatherReader</code>, and <code>OrcReader</code> override it to report the types stored in the file's own schema, and <code>JsonReader</code> the types pyarrow infers while parsing. <code>SQLITEReader</code> overrides it too, from SQLite's declared (unenforced) column types; it needs <code>data_access["table_name"]</code> already set, e.g. <code>{"sqlite": path, "table_name": "customers"}</code>; matching sets it on a copy, not on the registered credential.</p>
+<h3 id="row-counts">Row counts</h3>
+<p><code>BaseInputData.count_rows(data_access, compute_framework) -&gt; int | None</code> returns the row count of <code>data_access</code> without loading it, or <code>None</code> when only a read can tell (the default); it raises <code>ImportError</code> when a backend it needs is missing, and <code>OSError</code>/<code>ValueError</code> for a non-path, missing, or unreadable source. <code>ParquetReader</code>, <code>OrcReader</code>, and <code>FeatherReader</code> count from file metadata for every compute framework; <code>CsvReader</code> only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ. A subclass overriding <code>load_data</code> gets <code>None</code> unless it also overrides <code>count_rows</code>. The count is of <code>data_access</code> itself, not of the step's output: filters, extenders, and feature-group logic may change what the step actually reports.</p>
 <h3 id="selecting-among-sibling-readers">Selecting among sibling readers</h3>
 <p>A feature selects a specific reader with an Option whose key equals the reader's <code>BaseInputData.data_access_name()</code>, which defaults to <code>cls.__name__</code> (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:</p>
 <pre><code class="language-py">Feature(&quot;value&quot;, options={UbaAirReader.__name__: url})
 </code></pre>
 <p>The reader class itself is also accepted as the key, e.g. <code>Feature("value", options={UbaAirReader: url})</code>; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.</p>
-<p>The matched <code>(ReaderClass, data_access)</code> pair is stored under the reserved <code>"BaseInputData"</code> options key and consumed by <code>init_reader</code> at load time.</p>
+<p>The matched <code>(ReaderClass, data_access)</code> pair lives on <code>Feature.input_data_match</code>, never in the options, and <code>load</code> hands it to <code>init_reader(reader_data_access)</code> at load time; <code>PlanStep.reader_data_access</code> exposes the same pair on a resolved plan. <code>data_access</code> may hold credentials, so use <code>PlanStep.data_access_identity</code> (or <code>reader.data_access_identity(data_access)</code> outside a plan) for display and logs. If a reader's own error text may carry a credential, scrub it with <code>mloda.provider.scrub_credentials</code> before logging.</p>
 <p>For non-file sources such as HTTP endpoints, subclassing <code>ReadFile</code> and overriding <code>match_subclass_data_access</code> plus <code>load_data</code> is a supported pattern; on that path <code>suffix()</code> is never consulted (it is inert). <code>ApiInputData</code> injects in-memory data passed through the API request and is not an HTTP client.</p>
 <h3 id="reader-selection-vs-feature-group-resolution">Reader selection vs feature-group resolution</h3>
 <p>Reader selection answers "which plugin handles this input" the way <a href="../feature-group-matching/">feature-group resolution</a> answers "which feature group owns this name". It is not a second resolver: it runs nested inside the criteria gate of feature-group resolution, where <code>match_feature_group_criteria</code> calls the reader family's <code>matches()</code>. The two deliberately share no request, environment, or outcome abstractions; they share only the low-level rejection channel described below.</p>
@@ -371,7 +401,7 @@ class ReadFileFeature(FeatureGroup):
 <tr>
 <td><strong>Ambiguity</strong></td>
 <td>Multiple winners resolved by subclass preference, then reported</td>
-<td>First match wins; a second conflicting reader for the same feature raises</td>
+<td>Two readers accepting the same access raise (a subclass replaces its parent for the same access); pin one by its option key to pick it</td>
 </tr>
 <tr>
 <td><strong>Outcome and diagnostics</strong></td>
@@ -417,14 +447,16 @@ class SensorCsvReader(ReadFile):
 <p>Rules for reader authors:</p>
 <ul>
 <li>Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature.</li>
-<li>Plain non-matches (wrong suffix, invalid credentials) stay silent. <code>NotImplementedError</code> from <code>is_valid_credentials</code> is a silent non-match; from <code>check_feature_in_data_access</code> it is an accept (the reader matches on credentials alone).</li>
-<li>Never raise to decline: anything but <code>NotImplementedError</code> in the DB match hooks aborts matching for every reader sharing the <code>DataAccessCollection</code>. Record, then return a falsy value.</li>
+<li>Plain non-matches (wrong suffix, invalid credentials) stay silent. An unmarked <code>NotImplementedError</code> from <code>is_valid_credentials</code> is a silent non-match; from <code>check_feature_in_data_access</code> it is an accept for a plain name (the reader matches on credentials alone). A raise marked with <code>escalate_match_abort</code> propagates instead of being read as a non-match.</li>
+<li>Never raise to decline: anything but an unmarked <code>NotImplementedError</code> in the DB match hooks aborts matching for every reader sharing the <code>DataAccessCollection</code>. Record, then return a falsy value.</li>
 <li>Recording outside an engine-opened window is a no-op, so readers stay usable standalone.</li>
 <li>Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.</li>
 <li>Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden <code>data_access_name()</code> included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.</li>
+<li>A <code>ReadFile</code> subclass that cannot enumerate columns (no <code>get_column_names</code> override, or one raising <code>NotImplementedError</code> or <code>ImportError</code>), and a <code>ReadDB</code> subclass that does not override <code>check_feature_in_data_access</code>, decline a chain- or column-separated feature name while matching. A <code>ReadDocument</code> subclass declines such a name on a <code>DataAccessCollection</code> (not on a <code>str</code> or <code>Path</code> access), since a document reader has no columns to confirm such a name. An explicit <code>column_to_file</code> pin is exempt; for <code>ReadDB</code>, overriding the hook opts out.</li>
+<li>In <code>ReadFile</code> matching, an unpinned file whose columns cannot be read (<code>OSError</code>, <code>ValueError</code>) is declined with a recorded reason, so a shipped file reader needs the file to be readable when features resolve. A pinned file that cannot be read raises instead of falling back to another file. Any other exception from <code>get_column_names</code> ends reader selection for that feature group candidate, so no sibling reader is tried (the engine contains it as a non-match for that candidate); a raise marked with <code>escalate_match_abort</code> propagates out of matching.</li>
 </ul>
 <p><code>ReadFile</code> column validation and the <code>ReadDB</code> feature check (<code>check_feature_in_data_access</code>) already record automatically; a custom reader only needs this for its own decline points.</p>
-<p>A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's <code>data_access_name()</code>) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in <code>init_reader</code>. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.</p>
+<p>A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's <code>data_access_name()</code>) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in <code>init_reader</code>. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. A pinned reader is final: when it declines, neither a sibling reader nor the DataAccessCollection serves the feature. When several readers of the probed family are pinned on one feature, pinned readers are probed in name order, a subclass replaces its parent for an equal access, and two remaining acceptors raise, naming both pins. When exactly one pin accepts, the declining pins' vetoes are dropped. Since group options forward to input features, a pin on a derived feature binds its inputs too. A pinned reader that matches nothing without a recorded reason is reported under its own name. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.</p>
 <h2 id="matchdata-pattern">MatchData Pattern</h2>
 <h3 id="purpose_1">Purpose</h3>
 <p>MatchData is a <strong>specialized matching mechanism</strong> specifically designed for feature groups that require <strong>framework connection objects</strong>. It determines which data access method should be used when stateful connections are needed.</p>
@@ -456,8 +488,8 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
         cls,
         feature_name: str,
         options: Options,
-        data_access_collection: Optional[DataAccessCollection] = None,
-        framework_connection_object: Optional[Any] = None,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
     ) -&gt; Any:
         # Logic to determine if this matcher handles DuckDB connections
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
@@ -470,6 +502,12 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
             )
         return None
 </code></pre>
+<h3 id="connection-forwarding">Connection Forwarding</h3>
+<ul>
+<li>The connection value forwards to input features like any other option, including across a same-class chain (an upstream feature resolved by the same MatchData class as its consumer).</li>
+<li>Both entry points (<code>global_scope_data_access</code> and <code>feature_scope_data_access</code>) mark the class-name key non-forwarded for pickling, without blocking normal option flow.</li>
+<li>Pickling an <code>Options</code> with a marked key (multiprocessing preflight or a worker handoff) drops that key from the snapshot, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs even though the connection itself can't be pickled. In-process reads are unaffected.</li>
+</ul>
 <h2 id="key-differences">Key Differences</h2>
 <table>
 <thead>
@@ -529,14 +567,14 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <h3 id="combined-usage-example">Combined Usage Example</h3>
 <pre><code class="language-py">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         # BaseInputData for general data loading
         return ReadFile()
 
     @classmethod
     def match_data_access(cls, feature_name: str, options: Options,
-                         data_access_collection: Optional[DataAccessCollection] = None,
-                         framework_connection_object: Optional[Any] = None) -&gt; Any:
+                         data_access_collection: DataAccessCollection | None = None,
+                         framework_connection_object: Any | None = None) -&gt; Any:
         # MatchData for connection object matching
         if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             return framework_connection_object
@@ -548,7 +586,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <strong>Pattern</strong>: Only BaseInputData is needed</p>
 <pre><code class="language-py">class CsvProcessingFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return ReadFile()  # BaseInputData handles file reading
 </code></pre>
 <h3 id="scenario-2-duckdb-analytics-baseinputdata-matchdata">Scenario 2: DuckDB Analytics (BaseInputData + MatchData)</h3>
@@ -556,7 +594,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <strong>Pattern</strong>: Both BaseInputData and MatchData are needed</p>
 <pre><code class="language-py">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return ReadFile()  # BaseInputData for data loading
 
     @classmethod
@@ -570,7 +608,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 <strong>Pattern</strong>: Only BaseInputData is needed</p>
 <pre><code class="language-py">class SyntheticDataFeature(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator({&quot;synthetic_data&quot;})  # BaseInputData for data creation
 </code></pre>
 <h2 id="integration-with-other-concepts">Integration with Other Concepts</h2>

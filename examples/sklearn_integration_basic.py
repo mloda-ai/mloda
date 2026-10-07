@@ -156,7 +156,7 @@ def _(data_dict, pd):
             return data  # With this, we have access to the before and after state of a feature.
 
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator(
                 {"age", "weight", "state", "gender"}
             )  # If this feature would not load data, we would use the data given from the parameter "data".
@@ -168,7 +168,7 @@ def _(data_dict, pd):
         "gender__onehot_encoded",
     ]
     PluginLoader().all()
-    _result = mloda.run_all(features, compute_frameworks={PandasDataFrame})
+    _result = mloda.run_all(features, compute_frameworks=[PandasDataFrame])
     _result, _result2 = (
         _result[0],
         _result[1],
@@ -206,7 +206,7 @@ def _(PandasDataFrame, mloda):
         "weight__mean_imputed__robust_scaled",
         "state__onehot_encoded~0",
     ]
-    _result = mloda.run_all(_chained_features, compute_frameworks={PandasDataFrame})  # Do feature pipelines
+    _result = mloda.run_all(_chained_features, compute_frameworks=[PandasDataFrame])  # Do feature pipelines
     print(
         _result[0].head(2), _result[1].head(2), _result[2].head(2)
     )  # Different scaler for weight  # Access specific one-hot column
@@ -232,7 +232,7 @@ def _(
 
     class SecondSklearnDataCreator(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return DataCreator({"age", "weight", "state", "gender"})
 
         @classmethod
@@ -254,7 +254,7 @@ def _(
     ]
     _result = mloda.run_all(
         _chained_features,
-        compute_frameworks={PandasDataFrame},
+        compute_frameworks=[PandasDataFrame],
         plugin_collector=PluginCollector.disabled_feature_groups(SklearnDataCreator),
     )
     # We deactivated now the other feature group, so that we use SecondSklearnDataCreator.

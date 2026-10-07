@@ -91,7 +91,7 @@ def _():
     mloda.run_all(
         all_features,
         data_access_collection=data_access_collection,
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         plugin_collector=PluginCollector.disabled_feature_groups({ReadDocumentFeature}),
     )
     return (
@@ -140,7 +140,7 @@ def _(mo):
     ```python
     class ReadFileFeature(FeatureGroup):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return ReadFile()
 
         @classmethod
@@ -185,7 +185,7 @@ def _():
     # In the following, we will just adjust a bit the CsvReader to handle a different delimiter.
     # CsvReader2 overrides load_data wholesale, returning a concrete table instead of a FileSource.
 
-    from typing import Any, Optional
+    from typing import Any
 
     from pyarrow import csv as pyarrow_csv
 
@@ -209,7 +209,7 @@ def _():
 
     class ReadFileFeature2(ReadFileFeature):
         @classmethod
-        def input_data(cls) -> Optional[BaseInputData]:
+        def input_data(cls) -> BaseInputData | None:
             return CsvReader2()
 
         @classmethod
@@ -237,7 +237,7 @@ def _(
     result = mloda.run_all(
         order_features,
         data_access_collection=data_access_collection,
-        compute_frameworks={PyArrowTable},
+        compute_frameworks=[PyArrowTable],
         plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature2}),
     )
     return
@@ -324,13 +324,13 @@ def _(mo):
     class mlodaAPI:
         def __init__(
             self,
-            requested_features: Union[Features, list[Union[Feature, str]]],
-            compute_frameworks: Union[Set[Type[ComputeFramework]], Optional[list[str]]] = None,
-            links: Optional[Set[Link]] = None,
-            data_access_collection: Optional[DataAccessCollection] = None,
-            global_filter: Optional[GlobalFilter] = None,
-            api_input_data_collection: Optional[ApiInputDataCollection] = None,
-            plugin_collector: Optional[PluginCollector] = None,
+            requested_features: Features | list[Feature | str],
+            compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
+            links: set[Link] | None = None,
+            data_access_collection: DataAccessCollection | None = None,
+            global_filter: GlobalFilter | None = None,
+            api_data: dict[str, dict[str, Any]] | None = None,
+            plugin_collector: PluginCollector | None = None,
         ) -> None:
 
     data = mlodamloda.run_all(requested_feature,...)
@@ -378,19 +378,13 @@ def _(mo):
     #### Using organization wide logging
 
     ```python
-    class OtelExtender(Extender):
-        def __init__(self) -> None:
-            if trace is None:
-                return
-
+    class OrgLoggingExtender(Extender):
+        def wraps(self) -> set[ExtenderHook]:
             # Function to be wrapped by the Extender
-            self.wrapped = {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
-
-        def wraps(self) -> Set[ExtenderHook]:
-            return self.wrapped
+            return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
         def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-            logger.warning("OtelExtender")
+            logger.warning("OrgLoggingExtender")
             result = func(*args, **kwargs)
             return result
     ```
@@ -400,7 +394,7 @@ def _(mo):
     ```python
     class LogSizeOfData(Extender):
 
-        def wraps(self) -> Set[ExtenderHook]:
+        def wraps(self) -> set[ExtenderHook]:
             # Function to be wrapped by the Extender
             return {ExtenderHook.VALIDATE_INPUT_FEATURE}
 

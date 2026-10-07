@@ -85,12 +85,12 @@
     },
     {
       "id": "Xref",
-      "code_hash": "18a961b5c54862926964f7f378b36ecc",
+      "code_hash": "df33ce025c51b788c83b7109b294e8dc",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/markdown": "### Why do we relate a Feature to a FeatureGroup\n\nWe need to match the Feature with a FeatureGroup, as the FeatureGroup \"knows\" how to use the access description of the data. Additionally, the FeatureGroup \"knows\" which other required input Features the Feature needs. mloda will add these required input Features to be resolved as well.\n\n```python\n# This could be:\ndef input_features(self, options: Options, feature_name: FeatureName) -> Optional[Set[Feature]]:\n    return {OrderAmount, Datetime, ID}\n```"
+            "text/markdown": "### Why do we relate a Feature to a FeatureGroup\n\nWe need to match the Feature with a FeatureGroup, as the FeatureGroup \"knows\" how to use the access description of the data. Additionally, the FeatureGroup \"knows\" which other required input Features the Feature needs. mloda will add these required input Features to be resolved as well.\n\n```python\n# This could be:\ndef input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:\n    return {OrderAmount, Datetime, ID}\n```"
           }
         }
       ],
@@ -111,12 +111,12 @@
     },
     {
       "id": "BYtC",
-      "code_hash": "41d02547557d8139675caf183023c367",
+      "code_hash": "ea3563f2e580f6738b7ab6ee958dab6e",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/markdown": "### Let us look a bit more into: _filter_feature_group_by_criteria\n\n```python\n@classmethod\ndef match_feature_group_criteria(\n    feature_name: Union[FeatureName, str],\n    options: Options,\n    data_access_collection: Optional[DataAccessCollection] = None\n    )\n    ...\n```\n\nEvery feature group must implement this function. However, most will inherit the default behaviour from the FeatureGroup base class.\n\nThe default behaviour covers mostly name based approaches to identify a feature (equal or prefix of a feature name).\nBut this can be also a call to a webservice, which knows which data supports or could be any other algorithmic solution.\n\nAs example could be this sqlite database, where we check the table for metainformation.\n\n```python\n@classmethod\ndef check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:\n    # get tables in the database\n    result, _ = cls.read_db(data_access, query=\"SELECT name FROM sqlite_master WHERE type='table';\")\n    table_names = [table[0] for table in result]\n\n    # check if the feature_name is in the tables\n    for table in table_names:\n        result, _ = cls.read_db(data_access, query=f\"PRAGMA table_info({table});\")\n        column_names = [column[1] for column in result]\n        if feature_name in column_names:\n            cls.set_table_name(data_access, table)\n            return True\n    return False\n```\n\nThis means, you are open to customize this logic to match a Feature to a FeatureGroup. But please, do not query the database for every single feature to feature group match lookup. :)"
+            "text/markdown": "### Let us look a bit more into: _filter_feature_group_by_criteria\n\n```python\n@classmethod\ndef match_feature_group_criteria(\n    feature_name: FeatureName | str,\n    options: Options,\n    data_access_collection: DataAccessCollection | None = None\n    )\n    ...\n```\n\nEvery feature group must implement this function. However, most will inherit the default behaviour from the FeatureGroup base class.\n\nThe default behaviour covers mostly name based approaches to identify a feature (equal or prefix of a feature name).\nBut this can be also a call to a webservice, which knows which data supports or could be any other algorithmic solution.\n\nAs example could be this sqlite database, where we check the table for metainformation.\n\n```python\n@classmethod\ndef check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:\n    # get tables in the database\n    result, _ = cls.read_db(data_access, query=\"SELECT name FROM sqlite_master WHERE type='table';\")\n    table_names = [table[0] for table in result]\n\n    # check if the feature_name is in the tables\n    for table in table_names:\n        result, _ = cls.read_db(data_access, query=f\"PRAGMA table_info({quote_ident(table)});\")\n        column_names = [column[1] for column in result]\n        if feature_name in column_names:\n            return True\n    return False\n```\n\nThis means, you are open to customize this logic to match a Feature to a FeatureGroup. But please, do not query the database for every single feature to feature group match lookup. :)"
           }
         }
       ],

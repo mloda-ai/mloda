@@ -157,6 +157,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -1071,7 +1073,7 @@ class DummyData(FeatureGroup):
 <span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 <span class="c1"># Load plugins into namespace so compute frameworks register.</span>
 <span class="n">_result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
-    <span class="p">[</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">],</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PyArrowTable"</span><span class="p">,</span> <span class="s2">"PandasDataFrame"</span><span class="p">]</span>
+    <span class="p">[</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">],</span> <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="s2">"PandasDataFrame"</span><span class="p">,</span> <span class="s2">"PyArrowTable"</span><span class="p">]</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">_result</span><span class="p">)</span>
 </pre></div>
@@ -1081,7 +1083,7 @@ from mloda.user import mloda, PluginLoader
 PluginLoader.all()
 # Load plugins into namespace so compute frameworks register.
 _result = mloda.run_all(
-    ["age", "weight", "state", "gender"], compute_frameworks=["PyArrowTable", "PandasDataFrame"]
+    ["age", "weight", "state", "gender"], compute_frameworks=["PandasDataFrame", "PyArrowTable"]
 )
 print(_result)</div>
 </div>
@@ -1095,18 +1097,18 @@ print(_result)</div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>[       weight  age state gender
-0   77.965069   33    TX      F
-1   55.146970   70    CA      M
-2   85.173198   62    CA      F
-3   65.185641   43    TX      F
-4   57.418842   63    FL      F
-..        ...  ...   ...    ...
-95  54.515487   19    NY      M
-96  70.420550   45    TX      M
-97  92.889109   64    TX      M
-98  67.705347   21    CA      F
-99  66.535843   50    FL      M
+<pre>[    age state gender     weight
+0    55    NY      F  92.048332
+1    36    TX      M  74.012635
+2    40    FL      M  71.355146
+3    77    CA      M  55.414713
+4    36    TX      M  60.180648
+..  ...   ...    ...        ...
+95   63    CA      M  47.563638
+96   42    TX      M  61.098454
+97   35    NY      F  82.741975
+98   35    FL      M  48.767208
+99   63    CA      M  92.380329
 
 [100 rows x 4 columns]]
 </pre>
@@ -1187,17 +1189,17 @@ print(_result)</div>
 │ ---           │
 │ i64           │
 ╞═══════════════╡
-│ 5010          │
-│ 5010          │
-│ 5010          │
-│ 5010          │
-│ 5010          │
+│ 4846          │
+│ 4846          │
+│ 4846          │
+│ 4846          │
+│ 4846          │
 │ …             │
-│ 5010          │
-│ 5010          │
-│ 5010          │
-│ 5010          │
-│ 5010          │
+│ 4846          │
+│ 4846          │
+│ 4846          │
+│ 4846          │
+│ 4846          │
 └───────────────┘]
 </pre>
 </div>
@@ -1270,11 +1272,11 @@ print(_result)</div>
 │ ---                 │
 │ i64                 │
 ╞═════════════════════╡
-│ 253                 │
-│ 253                 │
-│ 253                 │
-│ 253                 │
-│ 253                 │
+│ 246                 │
+│ 246                 │
+│ 246                 │
+│ 246                 │
+│ 246                 │
 └─────────────────────┘]
 </pre>
 </div>
@@ -1291,7 +1293,7 @@ print(_result)</div>
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="how-the-chaining-essentially-works">How the chaining essentially works<a class="anchor-link" href="#how-the-chaining-essentially-works">¶</a></h3><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">FeatureGroup</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="c1"># In principle, the resolver checks if the feature group depends on another input feature</span>
         <span class="c1"># -&gt; then adds it to the chain of features which need to be resolved</span>
@@ -1303,9 +1305,9 @@ print(_result)</div>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">match_feature_group_criteria</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span>
-        <span class="n">feature_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">FeatureName</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+        <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span>
-        <span class="n">data_access_collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataAccessCollection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">data_access_collection</span><span class="p">:</span> <span class="n">DataAccessCollection</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 </pre></div>
 <h3 id="now-we-have-chaining-and-matching-why-do-we-do-this">Now we have chaining and matching. Why do we do this?<a class="anchor-link" href="#now-we-have-chaining-and-matching-why-do-we-do-this">¶</a></h3>

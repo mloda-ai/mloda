@@ -153,6 +153,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -209,7 +211,8 @@
 <ul>
 <li>filter_feature: It can be a Feature or a feature name as string.</li>
 <li>parameter: A dictionary of parameters to filter. Example: {"min": 2, "max": 3}
-    Parameter values must be hashable (scalars, or lists, sets or tuples of hashables); anything else raises <code>ValueError</code>.</li>
+    Parameter values must be hashable (scalars, or lists, sets or tuples of hashables); anything else raises <code>ValueError</code>.
+    The <code>values</code> key must be a list, tuple, set or frozenset; anything else (a string, a range, a generator) raises <code>TypeError</code>.</li>
 <li>filter_type: It can be a str or a FilterType.</li>
 </ul>
 <h4 id="filtertype">FilterType</h4>
@@ -222,6 +225,8 @@
     REGEX = &quot;regex&quot;
     CATEGORICAL_INCLUSION = &quot;categorical_inclusion&quot;
 </code></pre>
+<p>A null or NaN row never passes a range, min, max or equal filter, and categorical inclusion keeps null and
+NaN rows only when its <code>values</code> contain <code>None</code> (a NaN value counts as <code>None</code>).</p>
 <h4 id="globalfilter">GlobalFilter</h4>
 <p>The GlobalFilter provides methods to add filters to the collection. The preferred way to use the GlobalFilter is by using the following functions.</p>
 <p><strong>add_filter</strong>: Adds a single filter to the GlobalFilter object.</p>
@@ -240,8 +245,8 @@
 <ul>
 <li>event_from (datetime): Start of the time range (with timezone).</li>
 <li>event_to (datetime): End of the time range (with timezone).</li>
-<li>valid_from (Optional[datetime]): Start of the validity period (optional, with timezone).</li>
-<li>valid_to (Optional[datetime]): End of the validity period (optional, with timezone).</li>
+<li>valid_from (datetime | None): Start of the validity period (optional, with timezone).</li>
+<li>valid_to (datetime | None): End of the validity period (optional, with timezone).</li>
 <li>max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.</li>
 <li>event_time_column: The column name containing event timestamps. Default is "reference_time".</li>
 <li>validity_time_column: The column name containing validity timestamps. Default is "time_travel".</li>
@@ -284,12 +289,12 @@ The implementation of the concrete filters is dependent on the feature group. Th
 <p>Further, the feature is a data creator, so we create the data here itself. </p>
 <pre><code class="language-python">from mloda.user import mloda
 from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
-from typing import Any, Union, Set, Type, Optional
+from typing import Any
 from mloda.user.pyarrow import PyArrowTable
 
 class ExampleOrderFilter(FeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; Optional[BaseInputData]:
+    def input_data(cls) -&gt; BaseInputData | None:
         return DataCreator({cls.get_class_name(), &quot;example_order_id&quot;})
 
     @classmethod
@@ -356,6 +361,11 @@ clears these gates, in the order they run:</p>
 </thead>
 <tbody>
 <tr>
+<td>scope</td>
+<td><code>matches_feature_group_scope</code>: the named class and its subclasses, class-object and string forms alike</td>
+<td>a FeatureGroup outside the filter feature's <code>feature_group=</code> is skipped before its matcher runs and records nothing in <code>dropped_filters</code>, as in feature resolution</td>
+</tr>
+<tr>
 <td>criteria</td>
 <td><a href="../feature-group-matching/#modern-unified-matching">one shared probe</a></td>
 <td>asked about the filter feature's name and its enriched options, plus the run's <code>DataAccessCollection</code></td>
@@ -364,11 +374,6 @@ clears these gates, in the order they run:</p>
 <td>domain</td>
 <td><code>Domain</code> equality only: resolution compares the FeatureGroup's domain to the feature's, and passes any candidate for a domainless feature</td>
 <td>the filter feature's domain must equal the resolved feature's, or the FeatureGroup's when the feature declares none; a domainless filter copy adopts that domain, though never a default group domain</td>
-</tr>
-<tr>
-<td>scope</td>
-<td><code>matches_feature_group_scope</code>: the named class and its subclasses, class-object and string forms alike</td>
-<td>none, beyond reading the filter feature's own <code>feature_group=</code></td>
 </tr>
 <tr>
 <td>capability (<code>compute framework</code>)</td>
@@ -458,10 +463,11 @@ recorded fact back to the filter that lost. The key previously carried no uuid, 
 as <code>for (feature_group, name), elimination in ...</code> must now unpack three parts.</p>
 <p>A filter that matches no FeatureGroup at all is reported once after setup, with its nearest miss
 appended when one was recorded: across FeatureGroups the deepest gate wins, and a matcher defect
-ranks last.</p>
-<pre><code class="language-text">Filter feature 'price' matched no feature group. Nearest miss: SalesTotal (scope): outside the requested feature group scope
+ranks last. A FeatureGroup outside the filter feature's <code>feature_group=</code> scope is skipped silently and
+is never named as the nearest miss.</p>
+<pre><code class="language-text">Filter feature 'price' matched no feature group. Nearest miss: SalesTotal (domain): the filter feature's domain 'finance' does not match 'sales'
 </code></pre>
-<p>The parenthesized label, <code>(scope)</code> here, names the gate in the vocabulary of the "No feature groups
+<p>The parenthesized label, <code>(domain)</code> here, names the gate in the vocabulary of the "No feature groups
 found" error's
 <a href="../troubleshooting/feature-group-resolution-errors/#the-eliminated-candidates-block">near-miss bullets</a>.</p>
 <p>Two filters declared on one column name each record their own fact and get their own nearest miss.</p>
@@ -516,7 +522,7 @@ def final_filters(cls) -&gt; bool | None:
 <tbody>
 <tr>
 <td style="text-align: center;"><code>None</code></td>
-<td>Defer to the FilterEngine tied to the ComputeFramework. Most engines (Pandas, PyArrow, Polars, Spark) default to <code>True</code> (eliminate rows). Iceberg defaults to <code>False</code> (predicate pushdown handles it).</td>
+<td>Defer to the FilterEngine tied to the ComputeFramework. Every built-in engine defaults to <code>True</code> (eliminate rows).</td>
 </tr>
 <tr>
 <td style="text-align: center;"><code>False</code></td>
@@ -557,9 +563,9 @@ filter is applied, not <em>where</em> the computation runs physically:</p>
 <td><code>.filter()</code> adds node to lazy plan; optimizer decides physical order</td>
 </tr>
 <tr>
-<td>Scan-time</td>
+<td>Scan-time, then eager</td>
 <td>Iceberg</td>
-<td>Predicates pushed into scan expressions (<code>final_filters()=False</code>)</td>
+<td>For a <code>Table</code> result, range, min, max, equal and categorical inclusion push into the scan when the value's type converts exactly to the column type; every filter then reruns on the scan result, returning a <code>pa.Table</code>; a <code>pa.Table</code> result is filtered as PyArrow</td>
 </tr>
 </tbody>
 </table>
@@ -579,13 +585,14 @@ removes non-matching rows after calculation. No override needed.</p>
 <p>For patterns that use <code>features.mask_engine</code> to build boolean masks inside
 <code>calculate_feature()</code>, see <a href="../mask_engine/">Mask Engine</a>.</p>
 <h4 id="pattern-4-force-elimination-on-a-non-eliminating-engine">Pattern 4: Force elimination on a non-eliminating engine</h4>
-<p>Some engines skip row elimination by default (e.g. Iceberg, which uses predicate pushdown
-at scan time). If your FeatureGroup computes derived columns that the scan could not
-filter, override <code>final_filters()</code> to force elimination:</p>
-<pre><code>class DerivedIcebergFeature(FeatureGroup):
+<p>A custom FilterEngine can skip row elimination by returning <code>False</code> from
+<code>final_filters()</code> (e.g. an engine that applies filters at scan time). If your
+FeatureGroup computes derived columns that the scan could not filter, override
+<code>final_filters()</code> to force elimination:</p>
+<pre><code>class DerivedFeature(FeatureGroup):
     @classmethod
     def final_filters(cls) -&gt; bool:
-        return True  # override Iceberg's default of False
+        return True  # override the engine's default of False
 </code></pre>
 <h3 id="the-overlap-contract">The overlap contract</h3>
 <p>When a FeatureGroup uses the mask engine inline <strong>and</strong> returns <code>final_filters() = True</code>,

@@ -173,6 +173,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -248,12 +250,8 @@
 </code></pre>
 <p>Key features:
 - Maintains a registry of available transformers
-- Auto-loads transformer files from the <code>compute_framework</code> group on first use if no <code>BaseTransformer</code> subclasses are registered yet
+- Auto-loads transformer files from the <code>compute_framework</code> group once per process on first use
 - Provides a lookup mechanism to find the appropriate transformer for any framework pair</p>
-<p>To suppress auto-loading:</p>
-<pre><code class="language-python">from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
-</code></pre>
 <h3 id="pandaspyarrowtransformer">PandasPyArrowTransformer</h3>
 <p>The <code>PandasPyArrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Pandas DataFrames and PyArrow Tables.</p>
 <pre><code class="language-py">class PandasPyArrowTransformer(BaseTransformer):
@@ -295,8 +293,7 @@ PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
 <h2 id="how-framework-transformers-work">How Framework Transformers Work</h2>
 <h3 id="registration-process">Registration Process</h3>
 <ol>
-<li>During initialization, <code>ComputeFrameworkTransformer</code> checks for existing <code>BaseTransformer</code> subclasses</li>
-<li>If none are found, it auto-loads only <code>*transformer*</code> files from the <code>compute_framework</code> group</li>
+<li>On first use in a process, <code>ComputeFrameworkTransformer</code> auto-loads only <code>*transformer*</code> files from the <code>compute_framework</code> group, then collects every <code>BaseTransformer</code> subclass</li>
 <li>Each transformer is registered in a mapping from framework pairs to transformer classes</li>
 <li>Each direction is registered only if the transformer implements that direction's hook: two-way transformers register both edges, one-way transformers register only the edge whose hook they implement</li>
 </ol>
@@ -345,7 +342,7 @@ PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
 <li><code>FileSourcePyArrowTransformer</code> and <code>FileSourceDictTransformer</code> are the reference one-way implementations; both omit <code>transform_other_fw_to_fw()</code>.</li>
 </ul>
 <p>Example of a two-way transformer:</p>
-<pre><code class="language-python">from typing import Any, Optional
+<pre><code class="language-python">from typing import Any
 
 class CustomTransformer(BaseTransformer):
     @classmethod
@@ -370,7 +367,7 @@ class CustomTransformer(BaseTransformer):
         return other_framework.from_custom(data)
 
     @classmethod
-    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Optional[Any] = None) -&gt; Any:
+    def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -&gt; Any:
         # Convert from OtherFramework to CustomFramework
         return custom_framework.from_other(data)
 </code></pre>
@@ -382,12 +379,24 @@ class CustomTransformer(BaseTransformer):
 <li>When data is retrieved from a flight server and needs to be converted back</li>
 </ol>
 <p>The transformation is handled automatically by the <code>apply_compute_framework_transformer</code> method:</p>
-<pre><code class="language-py">def apply_compute_framework_transformer(self, data: Any) -&gt; Any:
+<pre><code class="language-py">@final
+def apply_compute_framework_transformer(self, data: Any) -&gt; Any:
     _from_fw = type(data)
     _to_fw = self.expected_data_framework()
-    transformer_cls = self.transformer.transformer_map.get((_from_fw, _to_fw), None)
-    if transformer_cls is not None:
-        return transformer_cls.transform(_from_fw, _to_fw, data)
+
+    # Same native type: nothing to transform.
+    if _from_fw == _to_fw:
+        return None
+
+    # A direct transformer always applies.
+    direct = self.transformer.transformer_map.get((_from_fw, _to_fw))
+    if direct is not None:
+        return direct.transform(_from_fw, _to_fw, data, self.framework_connection_object)
+
+    # A multi-hop chain (through pa.Table) is only valid for a descriptor input.
+    if isinstance(data, InputDataDescriptor):
+        return self._materialize_descriptor(data, _from_fw, _to_fw)
+
     return None
 </code></pre>
 <h2 id="benefits-of-framework-transformers">Benefits of Framework Transformers</h2>

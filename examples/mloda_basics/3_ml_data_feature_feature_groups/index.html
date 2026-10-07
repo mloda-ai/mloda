@@ -163,6 +163,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -1094,7 +1096,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="why-do-we-relate-a-feature-to-a-featuregroup">Why do we relate a Feature to a FeatureGroup<a class="anchor-link" href="#why-do-we-relate-a-feature-to-a-featuregroup">¶</a></h3><p>We need to match the Feature with a FeatureGroup, as the FeatureGroup "knows" how to use the access description of the data. Additionally, the FeatureGroup "knows" which other required input Features the Feature needs. mloda will add these required input Features to be resolved as well.</p>
 <div class="highlight"><pre><span></span><span class="c1"># This could be:</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">return</span> <span class="p">{</span><span class="n">OrderAmount</span><span class="p">,</span> <span class="n">Datetime</span><span class="p">,</span> <span class="n">ID</span><span class="p">}</span>
 </pre></div>
 </div>
@@ -1128,9 +1130,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="let-us-look-a-bit-more-into-_filter_feature_group_by_criteria">Let us look a bit more into: _filter_feature_group_by_criteria<a class="anchor-link" href="#let-us-look-a-bit-more-into-_filter_feature_group_by_criteria">¶</a></h3><div class="highlight"><pre><span></span><span class="nd">@classmethod</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">match_feature_group_criteria</span><span class="p">(</span>
-    <span class="n">feature_name</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">FeatureName</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span>
+    <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span>
-    <span class="n">data_access_collection</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DataAccessCollection</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">data_access_collection</span><span class="p">:</span> <span class="n">DataAccessCollection</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span>
     <span class="o">...</span>
 </pre></div>
@@ -1146,10 +1148,9 @@ But this can be also a call to a webservice, which knows which data supports or 
 
     <span class="c1"># check if the feature_name is in the tables</span>
     <span class="k">for</span> <span class="n">table</span> <span class="ow">in</span> <span class="n">table_names</span><span class="p">:</span>
-        <span class="n">result</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">read_db</span><span class="p">(</span><span class="n">data_access</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="sa">f</span><span class="s2">"PRAGMA table_info(</span><span class="si">{</span><span class="n">table</span><span class="si">}</span><span class="s2">);"</span><span class="p">)</span>
+        <span class="n">result</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">read_db</span><span class="p">(</span><span class="n">data_access</span><span class="p">,</span> <span class="n">query</span><span class="o">=</span><span class="sa">f</span><span class="s2">"PRAGMA table_info(</span><span class="si">{</span><span class="n">quote_ident</span><span class="p">(</span><span class="n">table</span><span class="p">)</span><span class="si">}</span><span class="s2">);"</span><span class="p">)</span>
         <span class="n">column_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">column</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">result</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">feature_name</span> <span class="ow">in</span> <span class="n">column_names</span><span class="p">:</span>
-            <span class="bp">cls</span><span class="o">.</span><span class="n">set_table_name</span><span class="p">(</span><span class="n">data_access</span><span class="p">,</span> <span class="n">table</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">True</span>
     <span class="k">return</span> <span class="kc">False</span>
 </pre></div>

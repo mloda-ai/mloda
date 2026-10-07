@@ -149,11 +149,9 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#load_entry_pointsgroup-str-none-none">load_entry_points(group: str | None = None)</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#disable_auto_loadgroup-str">disable_auto_load(group: str)</a>
+    <li class="toctree-l4"><a class="reference internal" href="#list_loaded_modulesplugin_category-str-none">list_loaded_modules(plugin_category: str | None)</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#list_loaded_modulesplugin_category-optionalstr">list_loaded_modules(plugin_category: Optional[str])</a>
-    </li>
-    <li class="toctree-l4"><a class="reference internal" href="#display_plugin_graphplugin_category-optionalstr">display_plugin_graph(plugin_category: Optional[str])</a>
+    <li class="toctree-l4"><a class="reference internal" href="#display_plugin_graphplugin_category-str-none">display_plugin_graph(plugin_category: str | None)</a>
     </li>
         </ul>
     </li>
@@ -162,6 +160,8 @@
     <li class="toctree-l3"><a class="reference internal" href="#entry-points">Entry Points</a>
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#manifest-convention">Manifest Convention</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#declaring-optional-dependencies">Declaring Optional Dependencies</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#loading">Loading</a>
     </li>
@@ -172,6 +172,8 @@
     </ul>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
     </ul>
                   </li>
@@ -246,14 +248,9 @@ loader.load_group(&quot;feature_group&quot;)
 <p>Loads all plugin groups.</p>
 <h3 id="load_entry_pointsgroup-str-none-none"><code>load_entry_points(group: str | None = None)</code></h3>
 <p>Discovers plugins from installed packages that declare <a href="#entry-points">entry points</a>. Pass a group name to restrict discovery to one group; <code>None</code> loads all three. Returns the sorted, deduplicated list of registry keys it registered.</p>
-<h3 id="disable_auto_loadgroup-str"><code>disable_auto_load(group: str)</code></h3>
-<p>Prevents a group from being auto-loaded lazily. Call this before any plugin discovery if you want full control over what is loaded.</p>
-<pre><code class="language-python">PluginLoader.disable_auto_load(&quot;feature_group/input_data/read_files&quot;)
-PluginLoader.disable_auto_load(&quot;compute_framework&quot;)
-</code></pre>
-<h3 id="list_loaded_modulesplugin_category-optionalstr"><code>list_loaded_modules(plugin_category: Optional[str])</code></h3>
+<h3 id="list_loaded_modulesplugin_category-str-none"><code>list_loaded_modules(plugin_category: str | None)</code></h3>
 <p>Lists loaded plugin modules, optionally filtered by category.</p>
-<h3 id="display_plugin_graphplugin_category-optionalstr"><code>display_plugin_graph(plugin_category: Optional[str])</code></h3>
+<h3 id="display_plugin_graphplugin_category-str-none"><code>display_plugin_graph(plugin_category: str | None)</code></h3>
 <p>Shows plugin dependencies as a graph.</p>
 <h2 id="example">Example</h2>
 <pre><code class="language-python"># Create loader and load plugins
@@ -292,6 +289,19 @@ class CustomerChurnFeatureGroup(FeatureGroup):
 
 FEATURE_GROUPS = [CustomerChurnFeatureGroup]
 </code></pre>
+<h3 id="declaring-optional-dependencies">Declaring Optional Dependencies</h3>
+<p>A package can name its own optional import roots per entry point via a companion <code>mloda.optional_dependencies</code> entry, whose name matches the entry it protects:</p>
+<pre><code class="language-toml">[project.entry-points.&quot;mloda.feature_groups&quot;]
+my-pkg = &quot;my_pkg.manifest:FEATURE_GROUPS&quot;
+
+[project.entry-points.&quot;mloda.optional_dependencies&quot;]
+my-pkg = &quot;my_pkg.optional_deps:OPTIONAL_DEPENDENCIES&quot;
+</code></pre>
+<pre><code class="language-py"># my_pkg/optional_deps.py
+# Must always be safely importable on its own.
+OPTIONAL_DEPENDENCIES = (&quot;some_optional_lib&quot;,)
+</code></pre>
+<p>The declaration is scoped to the distribution that published it (matched by the installed package, not the entry-point name), so two unrelated packages reusing the same entry-point label never collide.</p>
 <h3 id="loading">Loading</h3>
 <p>Discovery is lazy: installing a package does nothing by itself. Manifests are imported and registered only when <code>load_entry_points()</code> runs, either directly or as the final step of <code>PluginLoader.all()</code>. Discovered classes register into the default registry with provenance <code>source="entry_point"</code> (see <a href="../plugin_registry/">Plugin Registry</a>).</p>
 <pre><code class="language-python">from mloda.user import PluginLoader
@@ -310,7 +320,10 @@ fg_keys = loader.load_entry_points(group=&quot;mloda.feature_groups&quot;)
 <li><strong>Validation is loud, by design.</strong> A malformed entry point fails discovery with an error instead of being skipped: a manifest that is not a list or tuple of plugin classes, or that contains classes of the wrong base type for its group, raises <code>TypeError</code> naming the entry point.</li>
 <li><strong>Abstract classes are skipped</strong> silently; manifests may list a shared abstract base alongside its concrete subclasses.</li>
 <li><strong>Collisions raise.</strong> If a different class already holds a manifest class's <code>module:qualname</code> key, loading raises <code>PluginRegistryCollisionError</code>. Loading the same manifests twice is idempotent.</li>
-<li><strong>Missing optional dependencies skip.</strong> If importing a manifest fails on a module listed in <code>OPTIONAL_PLUGIN_DEPENDENCIES</code> (pandas, polars, duckdb, ...), only that entry point is skipped; any other <code>ModuleNotFoundError</code> is re-raised.</li>
+<li><strong>Missing optional dependencies skip.</strong> <code>ImportError</code> (covers <code>ModuleNotFoundError</code> too) around an entry point's <code>.load()</code> is caught. It is attributed to a declared (or global <code>OPTIONAL_PLUGIN_DEPENDENCIES</code>) optional root either by the error's own module name, or by the innermost (deepest) traceback frame, i.e. where the failure actually happened, belonging to that root's code. A match skips only that entry point and logs at WARNING naming the entry point and the missing module; otherwise the error re-raises.</li>
+<li><strong>Skips are visible.</strong> A skipped in-tree <code>mloda_plugins</code> module or entry point logs one WARNING naming it and the missing dependency, and warns again only when that dependency changes, after a successful load in between, or after <code>reset_cache()</code>. <code>PluginLoader.skipped_plugins()</code> returns every skipped module and entry point with its missing dependency; <code>reset_cache()</code> clears it.</li>
+<li><strong>Reusable directly.</strong> The traceback-frame attribution above is importable directly: <code>traceback_blames_root(exc, root)</code> from <code>mloda.provider</code> or <code>mloda.steward</code>, for downstream packages building their own optional-dependency guards. Callers must exclude their own module's root from the roots they pass in, the same way <code>load_entry_points</code> excludes the entry point's own module, so a namespace collision can't misattribute the caller's own bug to that root.</li>
+<li><strong>Own-package failures always raise.</strong> If the missing root is the entry point's own module root, it re-raises even if declared optional. The entry point's own namespace (and anything under it) is also never eligible for the traceback-based attribution, so a genuine failure in the plugin's own code still always raises even if it happens to share a name with a declared optional root. When the missing module is the entry point's own module or a parent package (files gone, metadata left), the error names the entry point, distribution and module, and suggests <code>pip install --force-reinstall &lt;distribution&gt;</code>.</li>
 <li><strong>Policies apply, after import.</strong> A registration denied by an installed <a href="../plugin_registry/#governance">plugin policy</a> raises inside <code>register()</code>; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration only, not import: the manifest module is imported before the policy applies, so installing a package implies trusting its import side effects.</li>
 </ul>
               

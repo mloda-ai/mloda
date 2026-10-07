@@ -143,6 +143,8 @@
     </li>
         </ul>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#declared-attributes-and-input-requirements">Declared Attributes and Input Requirements</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#migration-path">Migration Path</a>
     </li>
     </ul>
@@ -164,6 +166,8 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
     </ul>
                   </li>
@@ -219,7 +223,7 @@
 <h2 id="overview">Overview</h2>
 <p>The mloda framework uses a sophisticated matching system to determine which feature group should handle a given feature. The modern approach supports both traditional string-based matching and configuration-based matching through the unified <code>FeatureChainParser</code>.</p>
 <h2 id="matching-process">Matching Process</h2>
-<p>When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the <code>match_feature_group_criteria</code> method in each feature group, which now typically uses the unified parser approach.</p>
+<p>When a feature is requested, the system checks all available feature groups to find the one that should handle the feature. This is done through the <code>match_feature_group_criteria</code> method in each feature group, which now typically uses the unified parser approach. Feature and column names match case-sensitively; see <a href="../compute-framework-integration/#column-name-case-sensitivity">Column name case sensitivity</a>.</p>
 <h2 id="modern-unified-matching">Modern Unified Matching</h2>
 <p>The recommended approach uses <code>FeatureChainParserMixin</code>, whose default <code>match_feature_group_criteria</code> already does this. Override it only to add your own checks, and reach the parser through <code>cls.match_parser_criteria</code>, which reads <code>PROPERTY_MAPPING</code> (configuration-based matching) and <code>PREFIX_PATTERN</code> / <code>SUFFIX_PATTERN</code> (string-based matching) off the class:</p>
 <h3 id="1-dual-approach-support">1. Dual Approach Support</h3>
@@ -231,11 +235,17 @@ def match_feature_group_criteria(cls, feature_name, options, data_access_collect
     return cls.match_parser_criteria(feature_name, options)
 </code></pre>
 <p>Do not call <code>FeatureChainParser.match_configuration_feature_chain_parser</code> directly from a match hook: it raises on an option value the <code>PROPERTY_MAPPING</code> rejects. An exception out of a match hook is contained as a <code>match hook</code> near-miss for that candidate instead of taking the whole resolution down, but a contained crash is a worse reason than a rejection. <code>match_parser_criteria</code> turns that rejection into a non-match, and the reason still reaches the user in the "No feature groups found" error.</p>
+<p><code>match_parser_criteria</code> does not run <code>match_guard</code>, the in_features count or name agreement; a widening override keeps the value and guard checks with <code>cls.passes_option_declarations(options)</code>.</p>
+<p>To report why a <code>match_guard</code> declined a value without overriding <code>match_feature_group_criteria</code>, declare <code>expected</code> on the spec instead; see <a href="../property-mapping/">PROPERTY_MAPPING Configuration</a>.</p>
 <p>Containment covers plugin raises only: a framework-owned raise (a two-readers conflict, a forwarded value contradicting the feature name, a rejected effective-options build) still aborts the whole resolution, because it reports a misconfiguration you have to fix.</p>
 <p>Filter matching contains the same way: a raise is a non-match for that probe, like a <code>False</code> return, and is recorded in <code>GlobalFilter.dropped_filters</code> as a <code>match hook</code> near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. <a href="../filter_data/#how-filters-reach-your-featuregroup">How filters reach your FeatureGroup</a> tables the gates the two paths share and where filter policy differs.</p>
+<p>A filter whose column is served by a different data source than its feature is dropped and recorded in <code>dropped_filters</code> as an <code>input data</code> near-miss naming both sources. A string <code>feature_group</code> scope that matches no accessible group adds a <code>Did you mean one of: ...?</code> line to the failure message.</p>
 <p>The probe runs per feature, but a matched filter attaches to the whole <code>FeatureSet</code>, so a non-match for one feature does not suppress a filter a sibling matched. See <a href="../filter_data/#filter-scope-is-the-featureset">Filter scope</a>.</p>
 <p>Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match. Filter matching additionally reports a falsy value that is not <code>False</code>, and each distinct report is a WARNING once per setup.</p>
+<p>A match hook that refuses the feature because of its name, for example an unknown output part, records the reason with <code>record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)</code> (both from <code>mloda.provider</code>) and returns <code>False</code>; the near-miss then reads <code>feature name</code> instead of <code>option value</code>. Record the reason only when the name is otherwise addressed to the group, for example its base or prefix matches but the output part is unknown; a plain name mismatch returns <code>False</code> without recording anything.</p>
 <p>The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See <a href="../property-mapping/#applying-declared-defaults">Applying declared defaults</a>.</p>
+<h4 id="option-writes-from-a-match-hook">Option writes from a match hook</h4>
+<p>A match hook may write into the options it is handed. Each candidate matches against its own shallow copy of the request's options, and only the winner's copy (values, non-forwarded marks, own-key provenance) is applied to the feature. A candidate that returns <code>False</code>, raises, or is dropped by a later gate leaves nothing behind, and a failed resolution leaves the options as requested. A readerless subclass inherits its nearest replaced ancestor's reader pair, and two unrelated survivors give "Multiple feature groups found", naming each candidate's source; the reader pair is never adopted into the options. Different MatchData writes under one class name raise. The hook keeps its <code>bool</code> return, so existing hooks need no change, but must not keep the options reference after returning. Rebind a value rather than mutating a nested container in place, since the copy is shallow.</p>
 <h3 id="2-property_mapping-configuration">2. PROPERTY_MAPPING Configuration</h3>
 <p>The <code>PROPERTY_MAPPING</code> defines how configuration-based features are validated:</p>
 <pre><code class="language-python">from mloda.provider import PropertySpec
@@ -258,7 +268,8 @@ PROPERTY_MAPPING = {
 </code></pre>
 <p>Every value in the mapping is a <code>PropertySpec</code>; accepted values go under <code>allowed_values</code>.
 A raw dict spec raises at class definition, and an unknown field is a constructor
-<code>TypeError</code>. See <a href="../property-mapping/">PROPERTY_MAPPING Configuration</a> for the full model.</p>
+<code>TypeError</code>. See <a href="../property-mapping/">PROPERTY_MAPPING Configuration</a> for the full model.
+On the configuration path, a class with the default <code>MIN_IN_FEATURES = 1</code> does not match options that omit <code>in_features</code>, because an absent or explicit <code>None</code> <code>in_features</code> counts as zero; a source-less chained group sets <code>MIN_IN_FEATURES = 0</code> to opt out.</p>
 <h3 id="3-validation-modes">3. Validation Modes</h3>
 <h4 id="strict-validation">Strict Validation</h4>
 <p>With <code>strict_validation=True</code>, parameter values must be in the value space:</p>
@@ -276,11 +287,13 @@ options = Options(context={&quot;in_features&quot;: &quot;custom_feature&quot;})
 </code></pre>
 <h4 id="custom-validation-functions">Custom Validation Functions</h4>
 <p>For complex validation beyond simple value lists:</p>
-<pre><code class="language-python">PROPERTY_MAPPING = {
+<pre><code class="language-python">from mloda.provider import is_positive_int
+
+PROPERTY_MAPPING = {
     &quot;window_size&quot;: PropertySpec(
         &quot;Size of the time window&quot;,
         strict_validation=True,
-        element_validator=lambda x: isinstance(x, int) and x &gt; 0,
+        element_validator=is_positive_int,
     ),
 }
 </code></pre>
@@ -304,6 +317,9 @@ options = Options(context={&quot;in_features&quot;: &quot;custom_feature&quot;})
 <p><strong>Explicitly Supported</strong>: The feature name is in the set of explicitly supported feature names.
    <code>py
    feature_name in FeatureGroup.feature_names_supported()</code></p>
+</li>
+<li>
+<p><strong>PROPERTY_MAPPING</strong>: A group matched by rules 1 to 4 must still pass its <code>PROPERTY_MAPPING</code>: required options present, present values valid, and every <code>match_guard</code> satisfied. See <a href="../property-mapping/#a-plain-feature-group">Property Mapping</a>.</p>
 </li>
 </ol>
 <p>An owned reader veto recorded during rule 1 (the user addressed the reader family by name and its declaration rejected the request, or its probe recorded a content decline and matched nothing) gates the name-based rules 2 to 4; see <a href="../data-access-patterns/">Data Access Patterns</a> for the recording contract.</p>
@@ -347,6 +363,9 @@ feature4 = Feature(&quot;placeholder&quot;, Options(
     context={&quot;aggregation_type&quot;: &quot;avg&quot;, &quot;in_features&quot;: &quot;revenue&quot;}  # Different context
 ))
 </code></pre>
+<h2 id="declared-attributes-and-input-requirements">Declared Attributes and Input Requirements</h2>
+<p>A feature group or reader can override the classmethod <code>declared_attributes(features)</code> to return what its output means, as a mapping of <code>str</code> keys to scalar (<code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>) values, for example <code>{"scale": 5000, "sensor": "Kinect"}</code>. The default is <code>{}</code>, and non-scalar values are dropped.</p>
+<p>A feature states what it must find declared through the <code>required_declarations</code> keyword, for example <code>Feature("depth_raw", required_declarations={"scale": None})</code>, returned from <code>input_features()</code> or passed in a request. The mapping is key to required value: <code>None</code> accepts any declared value, anything else must be equal and of the same type (<code>True</code> does not satisfy <code>1</code>). Resolution checks each input feature against the declarations of the candidate feature group merged with those of its selected reader (the reader wins on a shared key). It calls <code>declared_attributes(None)</code>, so a declaration that depends on the runtime <code>FeatureSet</code> cannot be checked. A reader in a family that misses the requirement is skipped so a sibling reader can match; if every matching reader in the family misses it, the family is refused at the input data stage. Any other candidate that misses it is eliminated at the <code>declarations</code> stage. A <code>declared_attributes</code> that raises counts as a miss. When no candidate is left, the run fails before any data is loaded, naming the consumer (or the request) and the key. The requirement belongs to the Feature object, so a shared instance carries it for every consumer that returns it. Features that differ only in <code>required_declarations</code> count as the same feature: they merge at intake, and a set keeps one of them. A chained group whose <code>input_features</code> builds bare Features from the parsed name must override <code>input_features</code> to attach one.</p>
 <h2 id="migration-path">Migration Path</h2>
 <p>When modernizing a feature group:</p>
 <ol>

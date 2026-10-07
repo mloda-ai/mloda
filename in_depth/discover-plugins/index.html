@@ -169,6 +169,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -379,7 +381,7 @@ degrades a field instead of sinking the catalog call.</p>
   <code>available_only=True</code>, exactly as a genuinely unavailable one would be.</li>
 <li><strong>Skip.</strong> An entry that is not meant to be documented is dropped silently:
   classes defined in <code>__main__</code>, and the abstract bases (<code>get_extender_docs</code>
-  skips <code>Extender</code> and <code>_CompositeExtender</code> explicitly; the FeatureGroup and
+  skips <code>Extender</code> and <code>CompositeExtender</code> explicitly; the FeatureGroup and
   ComputeFramework roots never appear because <code>get_all_subclasses</code> omits them).
   Redefinition duplicates are collapsed rather than listed twice (see below).</li>
 <li><strong>Propagate.</strong> Errors that are not a single plugin's introspection fault are
@@ -432,7 +434,7 @@ its declaration is read. Both apply identically to a run, so a scope that rescue
 <code>resolve_feature</code> rescues the run too.</p>
 <h3 id="shared-helper">Shared helper</h3>
 <p>The annotate tier is a single shared helper,
-<code>safe_field(read, fallback, catching=(Exception,), field="")</code> in
+<code>safe_field(read, fallback, catching=(Exception,), field="", warn_once_for=None)</code> in
 <code>mloda.core.abstract_plugins.components.utils</code>: it calls the <code>read</code> thunk and
 returns <code>fallback</code> if the read raises one of <code>catching</code>, so a catalog function or
 info field reaches for one helper instead of re-deriving a <code>try/except</code>.</p>
@@ -443,10 +445,13 @@ The reads that feed a filter (<code>get_class_name()</code>, <code>description()
 also reject a non-str return, so a wrong type degrades too instead of sinking the
 call at the filter.</p>
 <p>Logging is opt-in via <code>field</code>: the labelled <code>get_feature_group_docs</code> reads warn on
-swallow, where a raise does mean a broken plugin. The unlabelled guards stay silent
-because degrading there is by design (source introspection of <code>type()</code>-built
-classes, an availability probe without its optional backend, Iceberg's deliberate
-<code>NotImplementedError</code> from <code>merge_engine()</code>).</p>
+swallow, where a raise does mean a broken plugin (<code>_safe_version</code> included, via
+<code>warn_once_for</code> so a broken class warns once, not once per catalog walk). The
+unlabelled guards stay silent because degrading there is by design (the source-hash
+read in <code>accessible_plugins.py</code>, an availability probe without its optional backend,
+Iceberg's deliberate <code>NotImplementedError</code> from <code>merge_engine()</code>). A hot call site
+can also pass <code>warn_once_for</code> (a key, typically the plugin class) to dedup that
+WARNING to once per key instead of once per call.</p>
 <p><code>get_compute_framework_docs</code> uses the default broad <code>catching</code> (any failure
 degrades the field), while the narrower named guards <code>_safe_version</code> (in
 <code>plugin_docs.py</code>) and <code>_safe_class_source_hash</code> (one layer down in
@@ -459,6 +464,7 @@ entry), because the catalog's job is to list a degraded class, not hide it.</p>
 <li><a href="../plugin-loader/">Plugin Loader</a></li>
 <li><a href="../feature-group-matching/">Feature Group Matching</a></li>
 <li><a href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a></li>
+<li><a href="../data-access-patterns/#column-discovery">Column discovery on a reader</a></li>
 </ul>
               
             </div>

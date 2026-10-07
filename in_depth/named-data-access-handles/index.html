@@ -163,6 +163,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -311,18 +313,19 @@ DataAccessCollection(credentials=[Credential(sqlite=&quot;/a.db&quot;), {&quot;p
 DataAccessCollection(credentials={&quot;pg-prod&quot;: Credential(host=&quot;h&quot;)})     # named form
 dac.add_credentials(Credential(host=&quot;h&quot;))                               # mutators too
 </code></pre>
-<p><code>Credential</code> is unwrapped to a plain dict at registration time, so feature groups and <code>is_valid_credentials</code> implementations keep receiving plain dicts. Nothing changes downstream.</p>
+<p>Registered credentials are stored as <code>RegisteredCredential</code>, a <code>dict</code> subclass, so <code>isinstance(x, dict)</code>, item access and <code>**</code> unpacking see raw values.</p>
 <p>Two safety behaviors come with it:</p>
 <ul>
 <li><strong>Early mis-wrap error.</strong> Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises <code>ValueError</code> at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.</li>
-<li><strong>Redacted error output.</strong> <code>repr(Credential(password="hunter2"))</code> prints <code>Credential(password='***')</code>, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by <code>***</code>. Note that the registered credential itself is a plain dict, so code that prints <code>dac.credentials</code> directly still sees raw values.</li>
+<li><strong>Redacted error output.</strong> <code>repr(Credential(password="hunter2"))</code> prints <code>Credential(password='***')</code>, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by <code>***</code>. Mapping credentials registered through the constructor or <code>add_credentials</code> print (print, f-strings, logging, pprint) with values <code>***</code>. Copies (<code>dict(cred)</code>, <code>{**cred}</code>, <code>.copy()</code>), <code>.items()</code>/<code>.values()</code> and <code>json.dumps</code> see raw values; <code>yaml.safe_dump</code> rejects the subclass, so convert with <code>dict(cred)</code> first. Direct assignment into <code>dac.credentials</code> stores the value as-is and prints raw; registration copies the caller's dict. A plain dict under a DB reader key gets swapped for a redacting <code>RegisteredCredential</code> copy when mloda probes it; the caller's own dict stays untouched. Option conflict errors and filter divergence warnings mask mapping values and scrub credential-shaped strings (URI user info, query and fragment, <code>password=</code> values) inside nested lists, tuples and sets (mapping keys print as given). <code>str(Options)</code> renders the whole <code>(Reader, value)</code> <code>BaseInputData</code> tuple through the same masking (a mapping masked, a DSN string scrubbed); everything else prints as given, including the caller's own <code>Options</code> (mloda works on copies), so <code>Credential(...)</code> (e.g. <code>options={"SQLITEReader": Credential(sqlite="/x.db")}</code>) stays the recommended form.</li>
+<li><strong><code>dac.redact(text)</code>.</strong> Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from <code>credentials</code> (not connections, files, folders), then scrubs the result through <code>scrub_credentials</code>.</li>
 </ul>
 <h3 id="why-a-typed-class-four-kinds-of-users">Why a typed class: four kinds of users</h3>
 <p>The design serves four user groups that hit credentials differently:</p>
 <ol>
 <li><strong>Notebook users</strong> (one data source) write the obvious shape from an example. For them the bare dict either has to work or fail loudly at construction; <code>Credential(sqlite="/data/x.db")</code> gives them a form with no nesting decision to get wrong, and the early error catches the legacy shape.</li>
 <li><strong>Production users</strong> (multiple sources) live in the named-handle registry and disambiguate per feature via <code>data_access_handle</code>. For them <code>Credential</code> keeps the registry values homogeneous, so ambiguity errors and <code>handles()</code> introspection stay trustworthy.</li>
-<li><strong>Plugin authors</strong> implement <code>is_valid_credentials</code> and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: whatever the end user typed, the plugin receives a plain dict.</li>
+<li><strong>Plugin authors</strong> implement <code>is_valid_credentials</code> and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: the plugin receives a dict for every mapping credential.</li>
 <li><strong>Ops and data stewards</strong> care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values, so credential candidates are rendered with redacted values (keys only), keeping passwords out of those messages and the logs that capture them.</li>
 </ol>
 <h2 id="resolution-rule">Resolution rule</h2>
@@ -395,7 +398,7 @@ mloda.run_all(features, compute_frameworks=[&quot;PyArrowTable&quot;], data_acce
     },
 )
 </code></pre>
-<p>For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for <code>data_access_handle</code>).</p>
+<p>For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for <code>data_access_handle</code>). If the pinned file cannot serve the request (wrong reader, missing column), the feature is declined rather than falling back to another file. When no registered reader anywhere owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.</p>
 <p>See <a href="../access-feature-data/#disambiguating-columns-shared-across-multiple-files">Disambiguating columns shared across multiple files</a> for the full example.</p>
 <h2 id="why-this-exists">Why this exists</h2>
 <p>Before #443, every DAC field was an unkeyed set. When two resources of the same kind were registered, Python's set iteration (<code>PYTHONHASHSEED</code>-dependent) decided which one the engine picked. The same pipeline could read the wrong table, wrong file, or wrong credential across processes, with no error and no signal at planning time.</p>
@@ -407,7 +410,8 @@ mloda.run_all(features, compute_frameworks=[&quot;PyArrowTable&quot;], data_acce
 <li><strong>"Handle 'X' is registered under kind 'K1', but kind 'K2' was requested"</strong>: you set <code>data_access_handle='X'</code>, but the registry has <code>X</code> under a different kind. A connection consumer cannot bind to a file handle even if the names match.</li>
 <li><strong>"Ambiguous resolve for kind 'K': N candidates [...]; set 'data_access_handle' in Options to disambiguate"</strong>: more than one entry of the requested kind matched. Set <code>data_access_handle</code> on the feature's <code>Options</code> to pick one, or remove the extras from the DAC.</li>
 <li><strong>"credentials value for handle 'X' is not a mapping"</strong>: you passed a bare <code>{connector_id: slot}</code> dict as <code>credentials</code>, which the named form reads as <code>{handle: credential}</code>. Use <code>credentials=Credential(...)</code>, the list form <code>credentials=[{...}]</code>, or the named form <code>{handle: {connector_id: slot}}</code>. See <a href="#typed-credentials-credential">Typed credentials</a>.</li>
-<li><strong>"HashableDict is no longer accepted as a credential value"</strong>: pre-0.7 call sites wrapped credentials in <code>HashableDict</code>. The credentials path no longer accepts it; pass <code>Credential(...)</code> or a plain dict instead. <code>HashableDict</code> is not removed from the library: it still backs hashability-required internals (for example <code>Options</code> hashing and <code>ApiInputDataCollection</code>). It is simply no longer unwrapped anywhere on the database credential / data-access path, so the <code>Options(group={"BaseInputData": (Reader, ...)})</code> route also expects a plain dict now.</li>
+<li><strong>"credentials list entry N has type T, not a mapping"</strong>: each list entry must be a dict or <code>Credential</code>; wrap a bare value such as a DSN as <code>Credential(dsn=...)</code>.</li>
+<li><strong>"HashableDict is no longer accepted as a credential value"</strong>: pre-0.7 call sites wrapped credentials in <code>HashableDict</code>. The credentials path no longer accepts it; pass <code>Credential(...)</code> or a plain dict instead. <code>HashableDict</code> is not removed from the library: it still backs hashability-required internals (for example <code>Options</code> hashing and <code>ApiInputDataCollection</code>). It is simply no longer unwrapped anywhere on the database credential / data-access path.</li>
 </ul>
 <h2 id="related">Related</h2>
 <ul>

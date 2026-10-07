@@ -161,6 +161,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -238,8 +240,12 @@ def calculate_feature(cls, data, features: FeatureSet):
 </thead>
 <tbody>
 <tr>
+<td><code>supported_data_type()</code></td>
+<td>(not a mask) the data container type this engine handles, e.g. <code>pd.DataFrame</code></td>
+</tr>
+<tr>
 <td><code>equal(data, column, value)</code></td>
-<td><code>data[column] == value</code></td>
+<td><code>data[column] == value</code>; <code>None</code> matches null and NaN rows</td>
 </tr>
 <tr>
 <td><code>greater_equal(data, column, value)</code></td>
@@ -259,7 +265,7 @@ def calculate_feature(cls, data, features: FeatureSet):
 </tr>
 <tr>
 <td><code>is_in(data, column, values)</code></td>
-<td><code>data[column]</code> is in <code>values</code></td>
+<td><code>data[column]</code> is in <code>values</code> (list, tuple, set or frozenset); any other type (a string, a generator, a NumPy array or pandas Series) raises <code>TypeError</code>; an empty <code>values</code> matches nothing, and a <code>None</code> in <code>values</code> matches null and NaN rows</td>
 </tr>
 <tr>
 <td><code>combine(mask1, mask2)</code></td>
@@ -267,10 +273,16 @@ def calculate_feature(cls, data, features: FeatureSet):
 </tr>
 <tr>
 <td><code>all_true(data)</code></td>
-<td>all <code>True</code> (no filtering)</td>
+<td>all <code>True</code> (no filtering), boolean-typed even at zero rows</td>
 </tr>
 </tbody>
 </table>
+<p>A null or NaN row never matches (a mask holds <code>False</code> there) unless the call targets them, as
+<code>equal(..., None)</code> and <code>is_in</code> with <code>None</code> do; a NaN value counts as <code>None</code>; SQL conditions yield
+NULL, which is treated as no match. The engines do not tell NaN from null, so use the framework's
+native API directly when that distinction matters. <code>data</code> is the frame or relation being masked,
+never <code>None</code>; the Polars lazy and DuckDB engines raise <code>TypeError</code> on <code>None</code> in the calls that
+read its column types. When <code>data</code> is given, SQL mask engines raise <code>ValueError</code> if <code>column</code> is not an exact entry of <code>data.columns</code> (the check is skipped for <code>None</code>).</p>
 <h3 id="convenience-methods">Convenience methods</h3>
 <p>Built from the primitives above. No per-engine implementation needed.</p>
 <h4 id="betweendata-column-min_value-max_value-min_exclusivefalse-max_exclusivefalse"><code>between(data, column, min_value, max_value, *, min_exclusive=False, max_exclusive=False)</code></h4>

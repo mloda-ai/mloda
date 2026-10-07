@@ -139,6 +139,8 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -204,6 +206,7 @@ Feature(name=&quot;Revenue&quot;,
         options={&quot;domain&quot;: &quot;Fraud&quot;}
 )
 </code></pre>
+<p>A <code>Domain</code> instance can be passed directly in both places instead of a string, with the same effect.</p>
 <p>The domain can also be set in the feature group.</p>
 <p><strong>Feature group</strong></p>
 <pre><code class="language-python">from mloda.provider import FeatureGroup

@@ -216,6 +216,24 @@ class TestTimeWindowFeatureGroup:
             Feature(DefaultOptionKeys.reference_time),
         }
 
+        source = Feature(
+            "sales_max", Options(group={"aggregation_type": "max", DefaultOptionKeys.in_features: "sales"})
+        )
+        chained = Options(
+            context={
+                "window_function": "sum",
+                "window_size": 2,
+                "time_unit": "day",
+                DefaultOptionKeys.in_features: frozenset([source]),
+            }
+        )
+        result = feature_group.input_features(chained, FeatureName("tw"))
+        assert result is not None
+        by_name = {str(f.name): f for f in result}
+        time_feature = by_name[DefaultOptionKeys.reference_time.value]
+        assert dict(time_feature.options.group) == {"aggregation_type": "max"}
+        assert DefaultOptionKeys.in_features not in time_feature.options.group
+
     def test_get_reference_time_column_default(self) -> None:
         """Test get_reference_time_column method returns default column name when no options provided."""
         # Test with no options - should return default column name

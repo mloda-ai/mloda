@@ -4,7 +4,9 @@ Integration tests for the MissingValueFeatureGroup with mloda.
 
 from typing import Any
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.user import mloda
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import PluginCollector
@@ -171,3 +173,34 @@ class TestMissingValueGroupByColumnSelectiveRoot:
         results = mloda.run_all([f], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
         assert len(results) == 1
         assert results[0]["income__mean_imputed"].tolist() == [10.0, 20.0, 30.0, 100.0, 100.0]
+
+    def test_chained_aggregated_source_shares_one_root_step_with_group_by_column(self) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup, PandasAggregatedFeatureGroup}
+        )
+        source = Feature(
+            "income_sum", Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "income"})
+        )
+        f = Feature(
+            "mv",
+            Options(
+                context={
+                    MissingValueFeatureGroup.IMPUTATION_METHOD: "mean",
+                    DefaultOptionKeys.in_features: frozenset([source]),
+                    "group_by_features": ["region"],
+                }
+            ),
+        )
+        session = mloda.prepare([f], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+        assert session.engine is not None
+        root_steps = [
+            s
+            for s in session.engine.execution_planner
+            if isinstance(s, FeatureGroupStep) and s.feature_group is GroupedMissingValueDataCreator
+        ]
+        assert len(root_steps) == 1
+        assert {str(n) for n in root_steps[0].features.get_all_names()} == {"income", "region"}
+
+        results = session.run()
+        assert len(results) == 1
+        assert results[0]["mv"].tolist() == [140.0] * 5

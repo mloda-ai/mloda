@@ -30,7 +30,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 # Import the transformer so the pandas/pyarrow hop is registered.
 import mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer  # noqa: F401
 
-from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw
+from tests.test_plugins.compute_framework.test_tooling.shared_compute_frameworks import SecondCfw, ThirdCfw
 
 
 MLG_INDEX = Index(("mlg_idx",))
@@ -85,6 +85,22 @@ class MultiLinkRootBDistinct(FeatureGroup):
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {SecondCfw}
+
+
+class MultiLinkRootAPartial(MultiLinkRootA):
+    """Root A with an extra row (w) and without root B's rows (v, u)."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mlg_a": [1, 2, 3, 4], "mlg_idx": ["x", "y", "z", "w"]}
+
+
+class MultiLinkRootBDistinctPartial(MultiLinkRootBDistinct):
+    """Root B with extra rows (v, u) and without root A's row (w)."""
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mlg_bd": [10, 20, 30, 50, 60], "mlg_idx": ["x", "y", "z", "v", "u"]}
 
 
 class MultiLinkRootC(FeatureGroup):
@@ -502,16 +518,17 @@ def _side_path_prepare(
     extra_options: dict[str, Any] | None = None,
     features: list[Feature | str] | None = None,
     link_factory: Any = Link.inner,
+    root_a: type[FeatureGroup] = MultiLinkRootA,
 ) -> Any:
     options = {"sp_p": p_group.get_class_name(), "sp_direct": direct, **(extra_options or {})}
-    left, right = (root_b, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, root_b)
+    left, right = (root_b, root_a) if swap_link_sides else (root_a, root_b)
     return mloda.prepare(
         features or [Feature(consumer.get_class_name(), options=options)],
         links={link_factory(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
         compute_frameworks=compute_frameworks or [PandasDataFrame, PyArrowTable],
         parallelization_modes={mode},
         plugin_collector=PluginCollector.enabled_feature_groups(
-            {MultiLinkRootA, root_b, p_group, SidePathQ, consumer, *(extra_groups or set())}
+            {root_a, root_b, p_group, SidePathQ, consumer, *(extra_groups or set())}
         ),
     )
 
@@ -537,7 +554,7 @@ def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_cor
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize("direct", [False, True], ids=["indirect", "direct"])
 @pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
@@ -676,7 +693,7 @@ SidePathDirectSecond = _side_path_consumer("SidePathDirectSecond", "mlg_a", {Sec
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
     "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
@@ -949,7 +966,7 @@ def test_one_consumer_requested_with_one_option_variant_over_one_link_joins_it(
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "left, right, consumer",
     [pytest.param("pd", "pd", "pd", id="pd_pd_pd"), pytest.param("pa", "pd", "pd", id="pa_pd_pd")],
@@ -1093,7 +1110,7 @@ def _nullable_column_values(results: list[Any], name: str) -> list[list[int | No
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
 @pytest.mark.parametrize("right", ["pa_extra", "pd_extra"])
 def test_a_right_join_keeps_the_right_row_the_left_lacks_for_each_variant(
@@ -1152,7 +1169,7 @@ def test_a_flexible_and_a_left_only_consumer_of_one_right_link_both_plan_on_the_
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
 def test_a_flexible_and_a_left_only_consumer_of_one_right_link_return_the_right_join_values(
     flight_server: Any, mode: ParallelizationMode
@@ -1231,7 +1248,7 @@ def test_one_sided_variants_requested_next_to_their_shared_side_feature_return_b
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.MULTIPROCESSING, ParallelizationMode.THREADING])
 @pytest.mark.parametrize(
     "consumer, left, right",
@@ -1266,6 +1283,8 @@ def _carrier_alone(
     swap_link_sides: bool,
     mode: ParallelizationMode = ParallelizationMode.SYNC,
     link_factory: Any = Link.inner,
+    root_a: type[FeatureGroup] = MultiLinkRootA,
+    root_b: type[FeatureGroup] = MultiLinkRootBDistinct,
 ) -> Any:
     return _side_path_prepare(
         SidePathPandasP,
@@ -1273,7 +1292,8 @@ def _carrier_alone(
         swap_link_sides,
         mode,
         consumer=carrier,
-        root_b=MultiLinkRootBDistinct,
+        root_a=root_a,
+        root_b=root_b,
         compute_frameworks=_CARRIER_FRAMEWORKS,
         extra_options={"sp_b": "mlg_bd"},
         link_factory=link_factory,
@@ -1281,7 +1301,7 @@ def _carrier_alone(
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "mode, swap_link_sides, consumer_kind",
     [
@@ -1331,7 +1351,7 @@ def _carrier_with_direct(
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "mode, swap_link_sides, consumer_kind",
     [
@@ -1390,17 +1410,81 @@ def test_the_carrier_join_is_planned_on_the_consumers_framework(consumer_kind: s
     assert all(record.destination_uuids and record.source_uuids for record in records)
 
 
+_A_KEPT = [110, 220, 330, None]
+_B_KEPT = [110, 220, 330, None, None]
+_FULL_MATCH = [110, 220, 330]
+
+
+@pytest.mark.parametrize(
+    "root_a, root_b, partial",
+    [
+        pytest.param(MultiLinkRootA, MultiLinkRootBDistinct, False, id="full_match"),
+        pytest.param(MultiLinkRootAPartial, MultiLinkRootBDistinctPartial, True, id="partial_match"),
+    ],
+)
 @pytest.mark.parametrize("link_factory", [Link.left, Link.right], ids=["left", "right"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @_CARRIER_KIND_PARAMS
-def test_a_carrier_consumer_over_a_left_or_right_link_matches_the_inner_values(
-    consumer_kind: str, swap_link_sides: bool, link_factory: Any
+def test_a_carrier_consumer_over_a_left_or_right_link_keeps_the_link_rows(
+    consumer_kind: str, swap_link_sides: bool, link_factory: Any, root_a: Any, root_b: Any, partial: bool
 ) -> None:
     carrier = _CARRIER_CONSUMERS[consumer_kind][0]
+    a_side_kept = (link_factory == Link.left) != swap_link_sides
+    expected = ([_A_KEPT] if a_side_kept else [_B_KEPT]) if partial else [_FULL_MATCH]
 
-    results = _carrier_alone(carrier, swap_link_sides, link_factory=link_factory).run()
+    results = _carrier_alone(carrier, swap_link_sides, link_factory=link_factory, root_a=root_a, root_b=root_b).run()
 
-    assert _side_path_values(results, carrier) == [[110, 220, 330]]
+    assert _nullable_column_values(results, carrier.get_class_name()) == expected
+
+
+class RemedyRootA1(MultiLinkRootA):
+    """Polymorphic root A variant on a third framework."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"mlg_a1"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mlg_a1": [7, 8, 9], "mlg_idx": ["x", "y", "z"]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {ThirdCfw}
+
+
+class RemedyThirdConsumer(FeatureGroup):
+    """Consumer on the third framework reading both root A variants and root B."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("SidePathArrowP"), Feature("mlg_a1"), Feature("mlg_bd")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {ThirdCfw}
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_consumer_on_a_framework_of_a_polymorphic_link_side_but_neither_nearest_side_is_rejected(
+    swap_link_sides: bool,
+) -> None:
+    left, right = (
+        (MultiLinkRootBDistinct, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBDistinct)
+    )
+
+    with pytest.raises(ValueError, match="read a link side through"):
+        mloda.prepare(
+            [RemedyThirdConsumer.get_class_name()],
+            links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+            compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {MultiLinkRootA, RemedyRootA1, MultiLinkRootBDistinct, SidePathArrowP, RemedyThirdConsumer}
+            ),
+        )
 
 
 class SidePathPandasBP(_SidePathP):

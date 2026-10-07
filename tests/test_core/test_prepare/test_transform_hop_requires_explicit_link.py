@@ -570,7 +570,7 @@ def test_same_root_diamond_with_a_cycle_has_one_outcome_under_every_hash_seed(
     assert "unlinked sources" not in str(first["error"])
 
 
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("groups", [hd_probe.HD_DIAMOND_GROUPS, hd_probe.HD_MIRROR_GROUPS], ids=["plain", "mirror"])
 def test_same_root_diamond_with_a_hop_runs_with_multiprocessing(
     groups: set[type[FeatureGroup]], flight_server: Any

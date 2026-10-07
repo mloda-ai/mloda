@@ -150,7 +150,8 @@ class TestNodeCentralityFeatureGroup:
     @pytest.mark.parametrize(
         ("source", "expected_group"),
         [
-            pytest.param(Feature("user", Options(group={"scope": "a"})), {}, id="scoped_source"),
+            pytest.param(Feature("user", Options(group={"scope": "a"})), {"scope": "a"}, id="scoped_source"),
+            pytest.param(Feature("user"), {}, id="plain_source"),
             pytest.param(
                 Feature("user", Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "raw_user"})),
                 {"aggregation_type": "sum"},

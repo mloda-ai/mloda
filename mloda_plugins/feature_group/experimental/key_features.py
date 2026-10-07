@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from mloda.user import Feature, Options
-from mloda.provider import DefaultOptionKeys
 
 
 def _forwarded(source: Feature) -> Options:
@@ -15,17 +14,17 @@ def _forwarded(source: Feature) -> Options:
 
 
 def with_key_features(sources: set[Feature], key_names: Iterable[str]) -> set[Feature]:
-    """Key columns carry what the chained sources forward to their own inputs (default forwarding).
+    """Key columns carry the group options the sources carry (minus in_features).
 
-    They stay plain when there is no chained source or the sources disagree.
+    They stay plain when the sources disagree.
     """
-    chained = sorted((f for f in sources if DefaultOptionKeys.in_features in f.options), key=lambda f: str(f.name))
-    forwarded = [_forwarded(f) for f in chained]
-    shared = bool(chained) and all(o == forwarded[0] for o in forwarded)
+    ordered = sorted(sources, key=lambda f: str(f.name))
+    forwarded = [_forwarded(f) for f in ordered]
+    shared = bool(ordered) and all(o == forwarded[0] for o in forwarded) and bool(forwarded[0].group)
     taken = {str(f.name) for f in sources}
     result = set(sources)
     for name in key_names:
         if name not in taken:
             taken.add(name)
-            result.add(Feature(name, _forwarded(chained[0])) if shared else Feature(name))
+            result.add(Feature(name, _forwarded(ordered[0])) if shared else Feature(name))
     return result

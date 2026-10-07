@@ -152,7 +152,10 @@ class TestMissingValueFeatureGroup:
     @pytest.mark.parametrize(
         ("source", "source_name", "expected_group"),
         [
-            pytest.param(Feature("income", Options(group={"scope": "a"})), "income", {}, id="scoped_source"),
+            pytest.param(
+                Feature("income", Options(group={"scope": "a"})), "income", {"scope": "a"}, id="scoped_source"
+            ),
+            pytest.param(Feature("income"), "income", {}, id="plain_source"),
             pytest.param(
                 Feature(
                     "income_sum",

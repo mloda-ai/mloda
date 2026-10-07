@@ -6,7 +6,7 @@ splitting into independent parts once assigned blocks separate them.
 import re
 from itertools import combinations
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from functools import partial
 from typing import Any, NamedTuple
 from uuid import UUID
@@ -230,7 +230,7 @@ class ChooseComputeFrameworks:
         ]
         domains = self._prune(blocks, rules)
         linked = self._neighbor_map(len(blocks), rules, groups)
-        touching, steps = self._component_indexes(range(len(blocks)), rules, groups)
+        touching, steps = self._component_indexes(len(blocks), rules, groups)
         for order in self._search_orders(len(blocks), linked):
             assignment, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
             for index, framework in assignment.items():
@@ -241,14 +241,14 @@ class ChooseComputeFrameworks:
         self._require_all_chosen()
 
     def _component_indexes(
-        self, order: Iterable[int], rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
+        self, count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
     ) -> tuple[dict[int, list[_Rule]], dict[int, list[tuple[int, set[int], int]]]]:
-        """Per block of the given blocks: the rules touching it and the transform steps it takes part in."""
-        touching: dict[int, list[_Rule]] = {b: [] for b in order}
+        """Per block: the rules touching it and the transform steps it takes part in."""
+        touching: dict[int, list[_Rule]] = {b: [] for b in range(count)}
         for rule in rules:
             for b in self._rule_blocks(rule):
                 touching[b].append(rule)
-        steps: dict[int, list[tuple[int, set[int], int]]] = {b: [] for b in order}
+        steps: dict[int, list[tuple[int, set[int], int]]] = {b: [] for b in range(count)}
         for key, children in groups.items():
             for b in (key[0], *children):
                 steps[b].append((key[0], children, self._step_depth[key]))

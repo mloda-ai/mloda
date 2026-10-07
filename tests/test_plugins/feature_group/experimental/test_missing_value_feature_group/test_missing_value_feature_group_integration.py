@@ -4,6 +4,8 @@ Integration tests for the MissingValueFeatureGroup with mloda.
 
 from typing import Any
 
+import pytest
+
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.user import mloda
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
@@ -174,12 +176,26 @@ class TestMissingValueGroupByColumnSelectiveRoot:
         assert len(results) == 1
         assert results[0]["income__mean_imputed"].tolist() == [10.0, 20.0, 30.0, 100.0, 100.0]
 
-    def test_chained_aggregated_source_shares_one_root_step_with_group_by_column(self) -> None:
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            pytest.param(
+                Feature(
+                    "income_sum", Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "income"})
+                ),
+                [140.0] * 5,
+                id="chained_source",
+            ),
+            pytest.param(
+                Feature("income", Options(group={"scope": "a"})),
+                [10.0, 20.0, 30.0, 100.0, 100.0],
+                id="scoped_source",
+            ),
+        ],
+    )
+    def test_source_shares_one_root_step_with_group_by_column(self, source: Feature, expected: list[float]) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
             {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup, PandasAggregatedFeatureGroup}
-        )
-        source = Feature(
-            "income_sum", Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "income"})
         )
         f = Feature(
             "mv",
@@ -203,4 +219,4 @@ class TestMissingValueGroupByColumnSelectiveRoot:
 
         results = session.run()
         assert len(results) == 1
-        assert results[0]["mv"].tolist() == [140.0] * 5
+        assert results[0]["mv"].tolist() == expected

@@ -4,6 +4,7 @@ splitting into independent parts once assigned blocks separate them.
 """
 
 import re
+from itertools import combinations
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from functools import partial
@@ -141,6 +142,11 @@ def _any_join_allows(occurrences: list[tuple[JoinType, bool, bool]], values: Val
         if strict and values[3 * i] is values[3 * i + 1] and not satisfied[i]:
             return False
     return any(satisfied)
+
+
+def _side_member_allows(values: Values) -> bool:
+    """Members share a framework, or the other link side runs on one of theirs."""
+    return values[0] is values[1] or any(o is values[0] or o is values[1] for o in values[2:])
 
 
 def _swapped_pairs_differ(values: Values) -> bool:
@@ -514,7 +520,31 @@ class ChooseComputeFrameworks:
                 for _, second, _ in entries[i + 1 :]:
                     if first[2] != second[2]:
                         rules.append(_Rule(first + second, _no_side_mix, _RIGHT_ONE_SIDE))
+        rules += self._side_member_rules(blocks, by_child)
         return rules
+
+    def _side_member_rules(
+        self, blocks: list[_Block], by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]]
+    ) -> list[_Rule]:
+        """Members of one link side differ in framework only if the other side runs on one of theirs."""
+        rules: dict[tuple[int, ...], _Rule] = {}
+        for occurrences in by_child.values():
+            joinable = [(k, j) for k, j in occurrences if k.jointype not in (JoinType.APPEND, JoinType.UNION)]
+            for link_uuid in {k.uuid for k, _ in joinable}:
+                found = [j for k, j in joinable if k.uuid == link_uuid]
+                for pos in (0, 1):
+                    members = sorted({j[pos] for j in found}, key=lambda b: (blocks[b].fg.__name__, b))
+                    others = tuple(sorted({j[1 - pos] for j in found}))
+                    for a, b in combinations(members, 2):
+                        if blocks[a].fg is blocks[b].fg:
+                            continue
+                        why = (
+                            f"{blocks[found[0][2]].fg.__name__} joins {blocks[a].fg.__name__} and "
+                            f"{blocks[b].fg.__name__}, members of one link side, on different frameworks while "
+                            "the other link side runs on neither. Read one member of the link side per consumer"
+                        )
+                        rules.setdefault((a, b, *others), _Rule((a, b, *others), _side_member_allows, why))
+        return list(rules.values())
 
     def _reach(self, start: UUID, neighbours: Mapping[UUID, set[UUID]]) -> set[UUID]:
         """Nodes reachable from `start` over the given edge map, iteratively."""

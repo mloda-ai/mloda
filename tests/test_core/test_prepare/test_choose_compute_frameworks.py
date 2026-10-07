@@ -40,6 +40,8 @@ LIST_ORDER = "your list order"
 DEFAULT_ORDER = "default order"
 SAVES_ONE = "saves 1 conversion"
 SAVES_TWO = "saves 2 conversions"
+SAVES_THREE = "saves 3 conversions"
+SAVES_FIVE = "saves 5 conversions"
 CONVERTS_LATER = "converts later"
 
 _PROBE = Path(__file__).with_name("choose_probe.py")
@@ -1154,10 +1156,6 @@ def test_a_twenty_five_block_six_framework_component_with_a_forced_conversion_so
     assert net.conversions() == 4
 
 
-SAVES_THREE = "saves 3 conversions"
-SAVES_FIVE = "saves 5 conversions"
-
-
 def _fan_child(net: _Net, name: str, parents: list[Feature]) -> Feature:
     child = net.add(type(f"Fan{name}FG", (FeatureGroup,), {}), name, {P, A, D}, requested=True)
     for parent in parents:
@@ -1246,8 +1244,12 @@ def _separator_net(
     child = net.add(ChooserRootFG, "split_child", child_allowed(fws))
     other = net.add(ChooserOtherLeafFG, "split_other", {fws[0], fws[4]})
     net.join(_link(Link.inner, ChooserChildFG, ChooserRightFG), sep, right, child)
+    tail0 = net.add(ChooserLayerFG, "split_tail0", {fws[0], fws[4]}, {"layer": 0})
+    tail1 = net.add(ChooserLayerFG, "split_tail1", {fws[0], fws[4]}, {"layer": 1})
     net.edge(sep, other)
-    return net, fws, [sep, right, child, other]
+    net.edge(other, tail0)
+    net.edge(tail0, tail1)
+    return net, fws, [sep, right, child, other, tail0, tail1]
 
 
 def test_a_separator_value_that_leaves_one_part_infeasible_is_undone() -> None:
@@ -1255,8 +1257,15 @@ def test_a_separator_value_that_leaves_one_part_infeasible_is_undone() -> None:
 
     net.choose({fws[4]: 0, fws[0]: 1}, chooser_class=_AllConvertibleChooser)
 
-    assert [f.chosen_compute_framework for f in features] == [fws[0], fws[2], fws[0], fws[0]]
-    assert [f.chosen_compute_framework_reason for f in features] == [RULES, DEFAULT_ORDER, RULES, SAVES_ONE]
+    assert [f.chosen_compute_framework for f in features] == [fws[0], fws[2], fws[0], fws[0], fws[0], fws[0]]
+    assert [f.chosen_compute_framework_reason for f in features] == [
+        RULES,
+        DEFAULT_ORDER,
+        RULES,
+        SAVES_TWO,
+        SAVES_TWO,
+        SAVES_ONE,
+    ]
 
 
 def test_a_fully_infeasible_split_plan_names_its_features() -> None:
@@ -1265,7 +1274,7 @@ def test_a_fully_infeasible_split_plan_names_its_features() -> None:
     with pytest.raises(ValueError, match="^No compute framework assignment satisfies the hard rules") as raised:
         net.choose({fws[4]: 0, fws[0]: 1}, chooser_class=_AllConvertibleChooser)
 
-    for name in ("split_sep", "split_right", "split_child", "split_other"):
+    for name in ("split_sep", "split_right", "split_child", "split_other", "split_tail0", "split_tail1"):
         assert name in str(raised.value)
 
 

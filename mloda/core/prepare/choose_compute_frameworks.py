@@ -752,6 +752,8 @@ class ChooseComputeFrameworks:
                     narrowed[open_block] = kept
             return narrowed
 
+        cuts: dict[int, list[list[int]]] = {}
+
         def separated(index: int) -> list[list[int]]:
             """Open parts cut off by assigning index, except the largest, which continues in place."""
             starts = sorted(b for b in linked[index] if b != index and b not in assigned)
@@ -790,7 +792,9 @@ class ChooseComputeFrameworks:
                     best_cost[0] = cost
                     return None
                 index = part[at]
-                return _Frame(index, at, total(steps[index]), iter(current[index]), current, cost, separated(index), [])
+                if index not in cuts:  # the assigned set at a block's opening depends only on the decomposition
+                    cuts[index] = separated(index)
+                return _Frame(index, at, total(steps[index]), iter(current[index]), current, cost, cuts[index], [])
 
             frames: list[_Frame] = []
             root = open_frame(0, start, (0, 0))

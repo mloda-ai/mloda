@@ -5,6 +5,7 @@ import inspect
 from typing import Any
 from unittest.mock import patch
 
+from mloda.core.api.plan_info import PlanStep
 from mloda.core.api.request import mlodaAPI
 from mloda.user import Feature, PluginCollector, mloda
 from mloda.provider import ApiInputDataFeature, FeatureGroup, FeatureSet
@@ -137,7 +138,6 @@ class TestBaseClassBehaviorUnchanged:
         assert not isinstance(result, list)
 
     def test_explain_accepts_list_of_features(self) -> None:
-        from mloda.core.api.plan_info import PlanStep
 
         plan = mlodaAPI.explain(
             _features,

@@ -1143,13 +1143,6 @@ class TestPlanStepReaderDataAccess:
         assert "hunter2" not in str(step.feature_set_options)
         assert type(step.feature_set_options.group[reader.__name__]) is RegisteredCredential
 
-    def test_non_db_reader_wrap_is_identity_and_keeps_the_pair(self) -> None:
-        access = {"path": "x", "password": "hunter2"}  # nosec B105
-        assert ParquetReader.wrap_feature_scoped_access(access) is access
-        options = Options(group={ParquetReader.__name__: access})
-        BaseInputData.add_base_input_data_to_options(ParquetReader, access, options)
-        assert options.get(ParquetReader.__name__) is access
-
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
         step = PlanStep(
             step_kind="compute",

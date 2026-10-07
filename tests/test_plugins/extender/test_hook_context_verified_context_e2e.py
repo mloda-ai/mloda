@@ -322,7 +322,7 @@ class TestRunStartGateWithDifferingIdentity:
                 session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert capture.captured is None
-        assert events.events == [("run_complete:failed:PermissionError", "hash-run")]
+        assert events.events == [("run_complete:failed:builtins.PermissionError", "hash-run")]
 
     def test_a_refusing_gate_lets_a_run_with_the_same_identity_proceed(self) -> None:
         gate = _MatchedGateRefusingOnIdentityChange()
@@ -349,7 +349,9 @@ class TestFailClosedRunStartIdentityRefusal:
                 session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert capture.captured is None
-        assert events.events == [("run_complete:failed:GateBypassError", "hash-run")]
+        assert events.events == [
+            ("run_complete:failed:mloda.core.abstract_plugins.function_extender.GateBypassError", "hash-run")
+        ]
 
     def test_another_gate_overriding_on_run_start_does_not_satisfy_the_matched_gate(self) -> None:
         capture = _ContextCapturingExtender()

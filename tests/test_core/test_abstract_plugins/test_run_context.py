@@ -97,11 +97,15 @@ class TestPlanContext:
         )
 
     @pytest.mark.parametrize(
-        "field", ["plan_id", "tenant_id", "project_id", "principal", "created_at", "structure_hash", "content_hash"]
+        "field",
+        ["plan_id", "tenant_id", "project_id", "principal", "created_at", "structure_hash", "content_hash", "origin"],
     )
     def test_is_frozen(self, field: str) -> None:
         with pytest.raises(dataclasses.FrozenInstanceError):
             setattr(_plan_context(), field, "forged")
+
+    def test_origin_defaults_to_none(self) -> None:
+        assert _plan_context().origin is None
 
     def test_pickle_round_trip(self) -> None:
         ctx = dataclasses.replace(_plan_context(), structure_hash="abc")

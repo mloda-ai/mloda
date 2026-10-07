@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Literal
+
+PlanOrigin = Literal["run_all", "stream_all", "prepare", "explain", "diagnose"]
 
 
 @dataclass(frozen=True)
@@ -13,3 +16,4 @@ class PlanContext:
     created_at: datetime
     structure_hash: str | None = field(default=None, compare=False)
     content_hash: str | None = field(default=None, compare=False)
+    origin: PlanOrigin | None = None

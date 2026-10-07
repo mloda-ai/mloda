@@ -873,7 +873,7 @@ class TestRequestNotifiesExtendersOfRunCompletion:
             _run(_session({_OutcomeRecorder("extender", [])}))
 
         assert [o.status for o in outcomes] == ["failed"]
-        assert outcomes[0].error_type == "Exception"
+        assert outcomes[0].error_type == "builtins.Exception"
 
     def test_extender_whose_exception_str_raises_does_not_escape_the_run(
         self, caplog: pytest.LogCaptureFixture

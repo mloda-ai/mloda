@@ -2,7 +2,7 @@
 
 import dataclasses
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import pytest
@@ -246,6 +246,121 @@ class TestHookArguments:
         assert complete[3].error_type is None
 
 
+_MISSING = "lifecycle_hooks_missing_col"
+
+
+def _kwargs(ext: Extender) -> dict[str, Any]:
+    return {"compute_frameworks": ["PythonDictFramework"], "plugin_collector": _ENABLED, "function_extender": {ext}}
+
+
+def _origin_run_all(ext: Extender) -> None:
+    mloda.run_all([Feature(name=_COLUMN)], parallelization_modes=_SYNC, **_kwargs(ext))
+
+
+def _origin_stream_all(ext: Extender) -> None:
+    list(mloda.stream_all([Feature(name=_COLUMN)], parallelization_modes=_SYNC, **_kwargs(ext)))
+
+
+def _origin_prepare(ext: Extender) -> None:
+    mloda.prepare([Feature(name=_COLUMN)], parallelization_modes=_SYNC, **_kwargs(ext))
+
+
+def _origin_direct(ext: Extender) -> None:
+    mloda([Feature(name=_COLUMN)], parallelization_modes=_SYNC, **_kwargs(ext))
+
+
+def _origin_explain(ext: Extender) -> None:
+    mloda.explain([Feature(name=_COLUMN)], **_kwargs(ext))
+
+
+def _origin_diagnose(ext: Extender) -> None:
+    assert mloda.diagnose([Feature(name=_COLUMN)], **_kwargs(ext)).complete
+
+
+def _origin_diagnose_failing(ext: Extender) -> None:
+    assert not mloda.diagnose([Feature(name=_MISSING)], **_kwargs(ext)).complete
+
+
+class _OriginExplainer(_Recorder):
+    """On the first plan_start, plans a nested explain."""
+
+    def __init__(self, label: str, log: list[tuple[Any, ...]]) -> None:
+        super().__init__(label, log)
+        self.nested = False
+
+    def on_plan_start(self, plan: Any) -> None:
+        super().on_plan_start(plan)
+        if not self.nested:
+            self.nested = True
+            mloda.explain([Feature(name=_COLUMN)], **_kwargs(self))
+
+
+class TestPlanContextOrigin:
+    @pytest.mark.parametrize(
+        "entry, expected",
+        [
+            (_origin_run_all, "run_all"),
+            (_origin_stream_all, "stream_all"),
+            (_origin_prepare, "prepare"),
+            (_origin_direct, "prepare"),
+            (_origin_explain, "explain"),
+            (_origin_diagnose, "diagnose"),
+            (_origin_diagnose_failing, "diagnose"),
+        ],
+    )
+    def test_plan_hooks_see_the_entry_point_origin(self, entry: Callable[[Extender], None], expected: str) -> None:
+        log: list[tuple[Any, ...]] = []
+
+        entry(_Recorder("r", log))
+
+        (start,) = [e for e in log if e[1] == "plan_start"]
+        (complete,) = [e for e in log if e[1] == "plan_complete"]
+        assert start[2].origin == expected
+        assert complete[2].origin == expected
+
+    @pytest.mark.parametrize("entry, expected", [(_origin_run_all, "run_all"), (_origin_stream_all, "stream_all")])
+    def test_run_start_carries_the_origin(self, entry: Callable[[Extender], None], expected: str) -> None:
+        log: list[tuple[Any, ...]] = []
+
+        entry(_Recorder("r", log))
+
+        (run_start,) = [e for e in log if e[1] == "run_start"]
+        assert run_start[3].origin == expected
+
+    def test_session_plan_context_carries_the_origin(self) -> None:
+        session = mloda.prepare([Feature(name=_COLUMN)], parallelization_modes=_SYNC, **_kwargs(_Minimal()))
+
+        assert session.plan_context.origin == "prepare"
+
+    def test_nested_planning_gets_its_own_origin(self) -> None:
+        log: list[tuple[Any, ...]] = []
+
+        _origin_run_all(_OriginExplainer("r", log))
+
+        origins = [e[2].origin for e in log if e[1] == "plan_start"]
+        assert origins == ["run_all", "explain"]
+        completes = [e[2].origin for e in log if e[1] == "plan_complete"]
+        assert completes == ["explain", "run_all"]
+
+    @pytest.mark.parametrize("first", [_origin_diagnose, _origin_explain, _origin_diagnose_failing])
+    def test_origin_does_not_leak_into_a_following_prepare(self, first: Callable[[Extender], None]) -> None:
+        first(_Minimal())
+        log: list[tuple[Any, ...]] = []
+
+        _origin_prepare(_Recorder("r", log))
+
+        assert [e[2].origin for e in log if e[1] == "plan_start"] == ["prepare"]
+
+    def test_origin_does_not_leak_after_a_raising_entry_point(self) -> None:
+        with pytest.raises(FeatureResolutionError):
+            mloda.run_all([Feature(name=_MISSING)], parallelization_modes=_SYNC, **_kwargs(_Minimal()))
+        log: list[tuple[Any, ...]] = []
+
+        _origin_prepare(_Recorder("r", log))
+
+        assert [e[2].origin for e in log if e[1] == "plan_start"] == ["prepare"]
+
+
 class TestHooksRunInAscendingPriorityOrder:
     @pytest.mark.parametrize("hook", ["plan_start", "plan_complete", "run_start", "run_complete"])
     def test_every_hook_visits_extenders_by_priority(self, hook: str) -> None:
@@ -333,6 +448,16 @@ class _WarningOnlyRefuser(_BreakingRefuser):
         self.raise_on_error = False
 
 
+class _Outer:
+    class Inner(Exception):
+        pass
+
+
+class _InnerRefuser(_BreakingRefuser):
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        raise _Outer.Inner("nested-boom")
+
+
 class TestOnRunStartRefusalSemantics:
     @pytest.mark.parametrize("refuser_type", [_BreakingRefuser, _GateRefuser])
     def test_raise_on_error_or_never_fall_back_propagates_and_the_run_is_refused(
@@ -346,7 +471,7 @@ class TestOnRunStartRefusalSemantics:
 
         complete = [e for e in log if e[1] == "run_complete"]
         assert [e[3].status for e in complete] == ["failed"]
-        assert complete[0][3].error_type == "RuntimeError"
+        assert complete[0][3].error_type == "builtins.RuntimeError"
 
     def test_a_warning_only_extender_is_logged_and_the_run_proceeds(self, caplog: pytest.LogCaptureFixture) -> None:
         log: list[tuple[Any, ...]] = []
@@ -379,6 +504,16 @@ class TestOnRunStartRefusalSemantics:
             session.run(parallelization_modes=_SYNC)
 
         assert calculated == []
+
+    def test_nested_exception_class_reports_module_and_qualname(self) -> None:
+        log: list[tuple[Any, ...]] = []
+        session = _prepare({_InnerRefuser("refuser", log), _Recorder("later", log, priority=200)})
+
+        with pytest.raises(_Outer.Inner):
+            session.run(parallelization_modes=_SYNC)
+
+        complete = [e for e in log if e[0] == "later" and e[1] == "run_complete"]
+        assert complete[0][3].error_type == f"{__name__}._Outer.Inner"
 
 
 class _Calculated(Extender):

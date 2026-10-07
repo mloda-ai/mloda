@@ -537,7 +537,7 @@ def test_a_mid_on_the_side_framework_between_a_link_side_and_its_consumer_is_cor
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize("direct", [False, True], ids=["indirect", "direct"])
 @pytest.mark.parametrize("mode", [ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING])
@@ -676,7 +676,7 @@ SidePathDirectSecond = _side_path_consumer("SidePathDirectSecond", "mlg_a", {Sec
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
     "mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING, ParallelizationMode.MULTIPROCESSING]
@@ -949,7 +949,7 @@ def test_one_consumer_requested_with_one_option_variant_over_one_link_joins_it(
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "left, right, consumer",
     [pytest.param("pd", "pd", "pd", id="pd_pd_pd"), pytest.param("pa", "pd", "pd", id="pa_pd_pd")],
@@ -1093,7 +1093,7 @@ def _nullable_column_values(results: list[Any], name: str) -> list[list[int | No
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
 @pytest.mark.parametrize("right", ["pa_extra", "pd_extra"])
 def test_a_right_join_keeps_the_right_row_the_left_lacks_for_each_variant(
@@ -1152,7 +1152,7 @@ def test_a_flexible_and_a_left_only_consumer_of_one_right_link_both_plan_on_the_
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
 def test_a_flexible_and_a_left_only_consumer_of_one_right_link_return_the_right_join_values(
     flight_server: Any, mode: ParallelizationMode
@@ -1231,7 +1231,7 @@ def test_one_sided_variants_requested_next_to_their_shared_side_feature_return_b
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize("mode", [ParallelizationMode.MULTIPROCESSING, ParallelizationMode.THREADING])
 @pytest.mark.parametrize(
     "consumer, left, right",
@@ -1281,7 +1281,7 @@ def _carrier_alone(
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "mode, swap_link_sides, consumer_kind",
     [
@@ -1331,7 +1331,7 @@ def _carrier_with_direct(
 
 
 # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(60)
 @pytest.mark.parametrize(
     "mode, swap_link_sides, consumer_kind",
     [

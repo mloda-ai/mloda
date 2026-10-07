@@ -1933,7 +1933,7 @@ Available join types:
         unsplit = [(component, varying_side, False)]
         if link.jointype in (JoinType.APPEND, JoinType.UNION) or len(component) < 2:
             return unsplit
-        # Same scope _plan_link_join uses for same-framework joins.
+        # Same framework scope _plan_link_join uses for same-framework joins; the scan here stays per child.
         side_frameworks = frameworks if len(frameworks) == 1 else None
         by_carriers: dict[frozenset[UUID], set[UUID]] = {}
         for child in sorted(component):

@@ -150,12 +150,12 @@ class TestMissingValueFeatureGroup:
         assert len(result) == len(expected)
 
     @pytest.mark.parametrize(
-        ("source", "source_name", "expected_group"),
+        ("source", "source_name", "expected_group", "expected_context"),
         [
             pytest.param(
-                Feature("income", Options(group={"scope": "a"})), "income", {"scope": "a"}, id="scoped_source"
+                Feature("income", Options(group={"scope": "a"})), "income", {"scope": "a"}, {}, id="scoped_source"
             ),
-            pytest.param(Feature("income"), "income", {}, id="plain_source"),
+            pytest.param(Feature("income"), "income", {}, {}, id="plain_source"),
             pytest.param(
                 Feature(
                     "income_sum",
@@ -163,12 +163,30 @@ class TestMissingValueFeatureGroup:
                 ),
                 "income_sum",
                 {"aggregation_type": "sum"},
+                {},
                 id="chained_source",
+            ),
+            pytest.param(
+                Feature(
+                    "income_sum",
+                    Options(
+                        context={DefaultOptionKeys.in_features: "income", "tenant": "t1"},
+                        propagate_context_keys=frozenset({"tenant"}),
+                    ),
+                ),
+                "income_sum",
+                {},
+                {"tenant": "t1"},
+                id="context_chained_source_pushing_context_key",
             ),
         ],
     )
     def test_group_by_features_carry_only_forwarded_group_options_of_source(
-        self, source: Feature, source_name: str, expected_group: dict[str, Any]
+        self,
+        source: Feature,
+        source_name: str,
+        expected_group: dict[str, Any],
+        expected_context: dict[str, Any],
     ) -> None:
         options = Options(
             group={"imputation_method": "mean"},
@@ -180,5 +198,6 @@ class TestMissingValueFeatureGroup:
         assert set(by_name) == {source_name, "region"}
         assert dict(by_name["region"].options.group) == expected_group
         assert DefaultOptionKeys.in_features not in by_name["region"].options.group
-        if not expected_group:
+        assert dict(by_name["region"].options.context) == expected_context
+        if not expected_group and not expected_context:
             assert by_name["region"] == Feature("region")

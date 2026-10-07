@@ -20,7 +20,11 @@ def with_key_features(sources: set[Feature], key_names: Iterable[str]) -> set[Fe
     """
     ordered = sorted(sources, key=lambda f: str(f.name))
     forwarded = [_forwarded(f) for f in ordered]
-    shared = bool(ordered) and all(o == forwarded[0] for o in forwarded) and bool(forwarded[0].group)
+    shared = (
+        bool(ordered)
+        and all(o == forwarded[0] for o in forwarded)
+        and (bool(forwarded[0].group) or bool(forwarded[0].context))
+    )
     taken = {str(f.name) for f in sources}
     result = set(sources)
     for name in key_names:

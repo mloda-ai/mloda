@@ -2084,7 +2084,7 @@ Available join types:
                         member = self._polymorphic_member(split, graph, {consumer_framework})
                         name = (
                             format_feature_group_class(graph.get_nodes()[member].feature_group_class)
-                            if member
+                            if member is not None
                             else "A side member"
                         )
                         raise ValueError(
@@ -2098,12 +2098,16 @@ Available join types:
                     message = (
                         f"The consumers {self._named(graph, children_uuids)} of {link} read through the carriers "
                         f"{self._named(graph, scanned)}, but the join runs on "
-                        f"{destination_framework.get_class_name()} and {source_framework.get_class_name()}. "
-                        "Compute the consumer on one of the join's frameworks."
+                        f"{destination_framework.get_class_name()} and {source_framework.get_class_name()}."
                     )
                     if member is not None:
                         name = format_feature_group_class(graph.get_nodes()[member].feature_group_class)
-                        message += f" {name} is a polymorphic member of a link side and sets one of those frameworks."
+                        message += (
+                            f" {name} is a polymorphic member of a link side and sets one of those frameworks."
+                            " Read one member of the link side per consumer."
+                        )
+                    else:
+                        message += " Compute the consumer on one of the join's frameworks."
                     raise ValueError(message)
 
         # This filters the required_uuids to only the one with the final compute framework.

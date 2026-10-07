@@ -1568,23 +1568,66 @@ def test_the_planner_backstop_messages_for_members_of_one_link_side_on_different
     assert "SidePathArrowP" in outer
     assert "RemedyRootA1" in outer
     assert "third compute framework" not in outer
+    assert "Read one member of the link side per consumer" in outer
+    assert "Compute the consumer on one of the join's frameworks" not in outer
     assert inner != outer
 
 
+class RemedyRootBThird(MultiLinkRootBSame):
+    """Root B variant on the third framework."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {ThirdCfw}
+
+
+def _remedy_sum_consumer(name: str, framework: type[ComputeFramework], inputs: tuple[str, ...]) -> type[FeatureGroup]:
+    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        total = data[inputs[0]]
+        for column in inputs[1:]:
+            total = pc.add(total, data[column])
+        return {cls.get_class_name(): total.to_pylist()}
+
+    namespace = {
+        "FRAMEWORK": framework,
+        "INPUTS": inputs,
+        "__module__": __name__,
+        "calculate_feature": classmethod(calculate_feature),
+    }
+    return type(name, (_RemedyConsumer,), namespace)
+
+
+_REMEDY_DIRECT_INPUTS = ("mlg_a", "mlg_a1", "mlg_b")
+RemedyArrowSameBConsumer = _remedy_sum_consumer("RemedyArrowSameBConsumer", PyArrowTable, _REMEDY_DIRECT_INPUTS)
+RemedyArrowSameBMidConsumer = _remedy_sum_consumer(
+    "RemedyArrowSameBMidConsumer", PyArrowTable, ("SidePathArrowP", "mlg_a1", "mlg_b")
+)
+RemedyThirdBThirdConsumer = _remedy_sum_consumer("RemedyThirdBThirdConsumer", ThirdCfw, _REMEDY_DIRECT_INPUTS)
+
+
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-def test_a_consumer_reading_one_member_per_link_side_on_the_third_framework_is_correct(
-    swap_link_sides: bool,
+@pytest.mark.parametrize(
+    "consumer, root_b, expected",
+    [
+        pytest.param(RemedySumConsumer, MultiLinkRootBDistinct, [[17, 28, 39]], id="third_distinct_b"),
+        pytest.param(RemedyArrowSameBConsumer, MultiLinkRootBSame, [[18, 30, 42]], id="arrow_direct_b_on_arrow"),
+        pytest.param(RemedyArrowSameBMidConsumer, MultiLinkRootBSame, [[117, 228, 339]], id="arrow_mid_b_on_arrow"),
+        pytest.param(RemedyThirdBThirdConsumer, RemedyRootBThird, [[18, 30, 42]], id="third_direct_b_on_third"),
+    ],
+)
+def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_side_shares_a_framework(
+    consumer: type[FeatureGroup], root_b: type[FeatureGroup], expected: list[list[int]], swap_link_sides: bool
 ) -> None:
     results = _side_path_prepare(
         SidePathArrowP,
         False,
         swap_link_sides,
-        consumer=RemedySumConsumer,
-        features=[RemedySumConsumer.get_class_name()],
-        **_REMEDY_KWARGS,
+        consumer=consumer,
+        features=[consumer.get_class_name()],
+        **{**_REMEDY_KWARGS, "root_b": root_b},
     ).run()
 
-    assert _side_path_values(results, RemedySumConsumer) == [[17, 28, 39]]
+    assert _side_path_values(results, consumer) == expected
 
 
 class SidePathPandasBP(_SidePathP):

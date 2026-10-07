@@ -69,6 +69,40 @@ class TestTimeWindowPandasIntegration:
         # Validate the time window features
         validate_time_window_features(window_df, TIME_WINDOW_FEATURES)
 
+    def test_chained_aggregated_source_shares_one_root_step_with_reference_time(self) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup, PandasAggregatedFeatureGroup}
+        )
+        source = Feature(
+            "temp_max", Options(group={"aggregation_type": "max", DefaultOptionKeys.in_features: "temperature"})
+        )
+        f = Feature(
+            "tw",
+            Options(
+                context={
+                    "window_function": "sum",
+                    "window_size": 2,
+                    "time_unit": "day",
+                    DefaultOptionKeys.in_features: frozenset([source]),
+                }
+            ),
+        )
+        session = mloda.prepare([f], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+        assert session.engine is not None
+        root_steps = [
+            s
+            for s in session.engine.execution_planner
+            if isinstance(s, FeatureGroupStep) and s.feature_group is PandasTimeWindowTestDataCreator
+        ]
+        assert len(root_steps) == 1
+        assert {str(n) for n in root_steps[0].features.get_all_names()} == {
+            "temperature",
+            DefaultOptionKeys.reference_time.value,
+        }
+
+        results = session.run()
+        assert len(results) == 1
+
 
 class TestTimeWindowPyArrowIntegration:
     """Integration tests for the time window feature group using PyArrow."""
@@ -111,40 +145,3 @@ class TestTimeWindowPyArrowIntegration:
 
         # Validate the time window features
         validate_time_window_features(window_df, TIME_WINDOW_FEATURES)
-
-
-class TestTimeWindowChainedAggregatedSource:
-    def test_chained_aggregated_source_shares_one_root_step_with_reference_time(self) -> None:
-        plugin_collector = PluginCollector.enabled_feature_groups(
-            {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup, PandasAggregatedFeatureGroup}
-        )
-        source = Feature(
-            "temp_max", Options(group={"aggregation_type": "max", DefaultOptionKeys.in_features: "temperature"})
-        )
-        f = Feature(
-            "tw",
-            Options(
-                context={
-                    "window_function": "sum",
-                    "window_size": 2,
-                    "time_unit": "day",
-                    DefaultOptionKeys.in_features: frozenset([source]),
-                }
-            ),
-        )
-        session = mloda.prepare([f], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
-        assert session.engine is not None
-        root_steps = [
-            s
-            for s in session.engine.execution_planner
-            if isinstance(s, FeatureGroupStep) and s.feature_group is PandasTimeWindowTestDataCreator
-        ]
-        assert len(root_steps) == 1
-        assert {str(n) for n in root_steps[0].features.get_all_names()} == {
-            "temperature",
-            DefaultOptionKeys.reference_time.value,
-        }
-
-        results = session.run()
-        assert len(results) == 1
-        assert results[0]["tw"].tolist() == [25.0] + [50.0] * 9

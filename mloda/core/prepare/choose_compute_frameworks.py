@@ -226,13 +226,29 @@ class ChooseComputeFrameworks:
         for order in self._search_orders(len(blocks), rules, groups):
             members = set(order)
             local_rules = [r for r in rules if r.blocks[0] in members]
-            assignment, _ = self._solve(blocks, order, local_rules, groups, domains)
+            touching, steps = self._component_indexes(order, local_rules, groups)
+            assignment, _ = self._solve(blocks, order, local_rules, groups, domains, touching, steps)
             for index, framework in assignment.items():
-                reason = self._reason(blocks, local_rules, groups, assignment, index)
+                reason = self._reason(blocks, touching, steps, assignment, index)
                 for feature in blocks[index].features:
                     feature.chosen_compute_framework = framework
                     feature.chosen_compute_framework_reason = reason
         self._require_all_chosen()
+
+    def _component_indexes(
+        self, order: list[int], rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
+    ) -> tuple[dict[int, list[_Rule]], dict[int, list[tuple[int, set[int], int]]]]:
+        """Per block of one component: the rules touching it and the transform steps it takes part in."""
+        touching: dict[int, list[_Rule]] = {b: [] for b in order}
+        for rule in rules:
+            for b in self._rule_blocks(rule):
+                touching[b].append(rule)
+        steps: dict[int, list[tuple[int, set[int], int]]] = {b: [] for b in order}
+        for key, children in groups.items():
+            if key[0] in touching:
+                for b in (key[0], *children):
+                    steps[b].append((key[0], children, self._step_depth[key]))
+        return touching, steps
 
     def _require_all_chosen(self) -> None:
         for node in self.graph.nodes:
@@ -653,8 +669,8 @@ class ChooseComputeFrameworks:
     def _reason(
         self,
         blocks: list[_Block],
-        rules: list[_Rule],
-        groups: dict[tuple[int, type[FeatureGroup]], set[int]],
+        touching_by_block: dict[int, list[_Rule]],
+        steps_by_block: dict[int, list[tuple[int, set[int], int]]],
         assignment: dict[int, Framework],
         index: int,
     ) -> str:
@@ -665,24 +681,26 @@ class ChooseComputeFrameworks:
             return PINNED
         if len(block.domain) == 1:
             return ONLY_ALLOWED
-        touching = [r for r in rules if index in r.blocks]
-        steps = [
-            (key[0], kids, self._step_depth[key]) for key, kids in groups.items() if index == key[0] or index in kids
-        ]
+        touching = touching_by_block[index]
+        steps = steps_by_block[index]
 
         def feasible(framework: Framework) -> bool:
-            switched = {**assignment, index: framework}
-            return all(self._allows(rule, switched) for rule in touching)
+            return all(
+                rule.allows(tuple(framework if b == index else assignment[b] for b in rule.blocks)) for rule in touching
+            )
 
-        def step_cost(values: Mapping[int, Framework]) -> Cost:
+        def step_cost(swap: Framework | None) -> Cost:
+            def at(b: int) -> Framework:
+                return swap if swap is not None and b == index else assignment[b]
+
             costs = [
                 self._transform_cost(
                     depth,
-                    [conversion_cost(values[parent], t) for t in {values[c] for c in kids} - {values[parent]}],
+                    [conversion_cost(at(parent), t) for t in {at(c) for c in kids} - {at(parent)}],
                 )
                 for parent, kids, depth in steps
             ]
-            final = self._final_cost(block, values[index], index)
+            final = self._final_cost(block, at(index), index)
             return (sum(c[0] for c in costs) + final[0], sum(c[1] for c in costs) + final[1])
 
         alternatives = [fw for fw in block.domain if fw is not chosen and feasible(fw)]
@@ -692,8 +710,8 @@ class ChooseComputeFrameworks:
         earlier = [fw for fw in alternatives if self.rank(fw) < chosen_rank]
         if not earlier:
             return self._order_reason(chosen, alternatives[0])
-        base = step_cost(assignment)
-        costs = {fw: step_cost({**assignment, index: fw}) for fw in earlier}
+        base = step_cost(None)
+        costs = {fw: step_cost(fw) for fw in earlier}
         delta = min(c[0] for c in costs.values()) - base[0]
         if delta > 0:
             return saves_conversions(delta)
@@ -708,17 +726,10 @@ class ChooseComputeFrameworks:
         rules: list[_Rule],
         groups: dict[tuple[int, type[FeatureGroup]], set[int]],
         domains: list[list[Framework]],
+        touching: dict[int, list[_Rule]],
+        steps: dict[int, list[tuple[int, set[int], int]]],
     ) -> tuple[dict[int, Framework], Cost]:
         """Branch and bound; returns the best assignment and its cost, raising when no assignment is feasible."""
-        touching: dict[int, list[_Rule]] = {b: [] for b in order}
-        for rule in rules:
-            for b in self._rule_blocks(rule):
-                touching[b].append(rule)
-        local = [(key[0], children, self._step_depth[key]) for key, children in groups.items() if key[0] in touching]
-        steps: dict[int, list[tuple[int, set[int], int]]] = {b: [] for b in order}
-        for parent, children, depth in local:
-            for b in (parent, *children):
-                steps[b].append((parent, children, depth))
         linked = self._neighbor_map(
             len(blocks), rules, {key: kids for key, kids in groups.items() if key[0] in touching}
         )
@@ -738,7 +749,7 @@ class ChooseComputeFrameworks:
 
         def narrow(index: int, current: dict[int, list[Framework]]) -> dict[int, list[Framework]] | None:
             """Forward check: values of the one block still open in a rule must be supported by the assignment."""
-            narrowed = dict(current)
+            narrowed = current  # copy on write: frames hold current, never mutate it
             for rule in touching[index]:
                 pending = [b for b in self._rule_blocks(rule) if b not in assigned]
                 if not pending:
@@ -746,10 +757,17 @@ class ChooseComputeFrameworks:
                         return None
                 elif len(pending) == 1:
                     open_block = pending[0]
-                    kept = [v for v in narrowed[open_block] if self._allows(rule, {**assigned, open_block: v})]
+                    kept = [
+                        v
+                        for v in narrowed[open_block]
+                        if rule.allows(tuple(v if b == open_block else assigned[b] for b in rule.blocks))
+                    ]
                     if not kept:
                         return None
-                    narrowed[open_block] = kept
+                    if len(kept) != len(narrowed[open_block]):
+                        if narrowed is current:
+                            narrowed = dict(current)
+                        narrowed[open_block] = kept
             return narrowed
 
         cuts: dict[int, list[list[int]]] = {}
@@ -759,22 +777,46 @@ class ChooseComputeFrameworks:
             starts = sorted(b for b in linked[index] if b != index and b not in assigned)
             if len(starts) < 2:
                 return []
-            seen = {index}
-            parts: list[list[int]] = []
-            for start in starts:
-                if start in seen:
-                    continue
-                seen.add(start)
-                found, stack = [start], [start]
+            owner = {start: start for start in starts}  # start -> id (smallest start) of the part holding it
+            found = {start: [start] for start in starts}
+            stacks = {start: [start] for start in starts}
+            while sum(1 for stack in stacks.values() if stack) > 1:  # lockstep: the last growing part is not walked
+                for pid in [p for p in stacks if stacks[p]]:
+                    if pid not in stacks or not stacks[pid]:
+                        continue
+                    current = stacks[pid].pop()
+                    for other in linked[current]:
+                        if other == index or other in assigned:
+                            continue
+                        held = owner.get(other)
+                        if held is None:
+                            owner[other] = pid
+                            found[pid].append(other)
+                            stacks[pid].append(other)
+                        elif held != pid:
+                            keep, drop = min(pid, held), max(pid, held)
+                            for node in found[drop]:
+                                owner[node] = keep
+                            found[keep].extend(found.pop(drop))
+                            stacks[keep].extend(stacks.pop(drop))
+                            stacks[keep].append(current)
+                            break
+            if len(found) < 2:
+                return []
+            parts = [found[pid] for pid in sorted(found)]
+            growing = [pid for pid in sorted(found) if stacks[pid]]
+            if growing:
+                rest = max(len(found[pid]) for pid in found if pid != growing[0])
+                if len(found[growing[0]]) > rest:
+                    parts.remove(found[growing[0]])
+                    return [sorted(part, key=position.__getitem__) for part in parts]
+                stack = stacks[growing[0]]
                 while stack:
                     for other in linked[stack.pop()]:
-                        if other not in seen and other not in assigned:
-                            seen.add(other)
-                            found.append(other)
+                        if other not in owner and other != index and other not in assigned:
+                            owner[other] = growing[0]
+                            found[growing[0]].append(other)
                             stack.append(other)
-                parts.append(found)
-            if len(parts) < 2:
-                return []
             parts.remove(max(parts, key=len))
             return [sorted(part, key=position.__getitem__) for part in parts]
 

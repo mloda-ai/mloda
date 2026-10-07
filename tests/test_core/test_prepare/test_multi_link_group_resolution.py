@@ -12,6 +12,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
+from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import (
     Feature,
@@ -1453,11 +1454,20 @@ class RemedyRootA1(MultiLinkRootA):
         return {ThirdCfw}
 
 
-class RemedyThirdConsumer(FeatureGroup):
-    """Consumer on the third framework reading both root A variants and root B."""
+_REMEDY_INPUTS = {
+    "mid": ("SidePathArrowP", "mlg_a1", "mlg_bd"),
+    "direct": ("mlg_a", "mlg_a1", "mlg_bd"),
+}
+
+
+class _RemedyConsumer(FeatureGroup):
+    """Consumer reading both root A variants and root B on a ClassVar framework."""
+
+    FRAMEWORK: ClassVar[type[ComputeFramework]] = ThirdCfw
+    INPUTS: ClassVar[tuple[str, ...]] = _REMEDY_INPUTS["mid"]
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature("SidePathArrowP"), Feature("mlg_a1"), Feature("mlg_bd")}
+        return {Feature(name) for name in self.INPUTS}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1465,26 +1475,106 @@ class RemedyThirdConsumer(FeatureGroup):
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {ThirdCfw}
+        return {cls.FRAMEWORK}
 
 
-@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-def test_a_consumer_on_a_framework_of_a_polymorphic_link_side_but_neither_nearest_side_is_rejected(
-    swap_link_sides: bool,
-) -> None:
+def _remedy_consumer(name: str, framework: type[ComputeFramework], inputs: str) -> type[FeatureGroup]:
+    attrs = {"FRAMEWORK": framework, "INPUTS": _REMEDY_INPUTS[inputs], "__module__": __name__}
+    return type(name, (_RemedyConsumer,), attrs)
+
+
+RemedyThirdConsumer = _remedy_consumer("RemedyThirdConsumer", ThirdCfw, "mid")
+RemedyThirdDirectConsumer = _remedy_consumer("RemedyThirdDirectConsumer", ThirdCfw, "direct")
+RemedyArrowConsumer = _remedy_consumer("RemedyArrowConsumer", PyArrowTable, "mid")
+RemedyArrowDirectConsumer = _remedy_consumer("RemedyArrowDirectConsumer", PyArrowTable, "direct")
+_REMEDY_CONSUMERS = {
+    ("third", "mid"): RemedyThirdConsumer,
+    ("third", "direct"): RemedyThirdDirectConsumer,
+    ("arrow", "mid"): RemedyArrowConsumer,
+    ("arrow", "direct"): RemedyArrowDirectConsumer,
+}
+
+
+class RemedySumConsumer(_RemedyConsumer):
+    """Third-framework consumer summing mlg_a1 and mlg_bd."""
+
+    INPUTS: ClassVar[tuple[str, ...]] = ("mlg_a1", "mlg_bd")
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): pc.add(data["mlg_a1"], data["mlg_bd"]).to_pylist()}
+
+
+def _remedy_prepare(consumer: type[FeatureGroup], swap_link_sides: bool) -> Any:
     left, right = (
         (MultiLinkRootBDistinct, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBDistinct)
     )
+    return mloda.prepare(
+        [consumer.get_class_name()],
+        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
+        compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw],
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {MultiLinkRootA, RemedyRootA1, MultiLinkRootBDistinct, SidePathArrowP, consumer}
+        ),
+    )
 
-    with pytest.raises(ValueError, match="read a link side through"):
-        mloda.prepare(
-            [RemedyThirdConsumer.get_class_name()],
-            links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
-            compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {MultiLinkRootA, RemedyRootA1, MultiLinkRootBDistinct, SidePathArrowP, RemedyThirdConsumer}
-            ),
-        )
+
+_REMEDY_CONSUMER_PARAMS = [
+    pytest.param(fw, inputs, id=f"{fw}_{inputs}") for fw in ("third", "arrow") for inputs in ("mid", "direct")
+]
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("framework, inputs", _REMEDY_CONSUMER_PARAMS)
+def test_a_consumer_joining_two_members_of_one_link_side_on_different_frameworks_is_rejected(
+    framework: str, inputs: str, swap_link_sides: bool
+) -> None:
+    consumer = _REMEDY_CONSUMERS[(framework, inputs)]
+
+    with pytest.raises(ValueError) as exc_info:
+        _remedy_prepare(consumer, swap_link_sides)
+
+    message = str(exc_info.value)
+    assert "members of one link side" in message
+    assert "MultiLinkRootA" in message
+    assert "RemedyRootA1" in message
+    assert "one member of the link side per consumer" in message
+
+
+_BACKSTOP_INNER = "one consumer cannot join members of one link side on different compute frameworks"
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_the_planner_backstop_messages_for_members_of_one_link_side_on_different_frameworks(
+    monkeypatch: pytest.MonkeyPatch, swap_link_sides: bool
+) -> None:
+    # Empty chooser rules reach the planner's backstop.
+    monkeypatch.setattr(ChooseComputeFrameworks, "_side_member_rules", lambda self, *args, **kwargs: [])
+
+    with pytest.raises(ValueError) as inner_info:
+        _remedy_prepare(RemedyThirdConsumer, swap_link_sides)
+    with pytest.raises(ValueError) as outer_info:
+        _remedy_prepare(RemedyArrowConsumer, swap_link_sides)
+
+    inner, outer = str(inner_info.value), str(outer_info.value)
+    assert "RemedyRootA1" in inner
+    assert _BACKSTOP_INNER in inner.lower()
+    assert "third compute framework" not in inner
+    assert ThirdCfw.get_class_name() in outer
+    assert SecondCfw.get_class_name() in outer
+    assert "SidePathArrowP" in outer
+    assert "RemedyRootA1" in outer
+    assert "third compute framework" not in outer
+    assert inner != outer
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_consumer_reading_one_member_per_link_side_on_the_third_framework_is_correct(
+    swap_link_sides: bool,
+) -> None:
+    results = _remedy_prepare(RemedySumConsumer, swap_link_sides).run()
+
+    assert _side_path_values(results, RemedySumConsumer) == [[17, 28, 39]]
 
 
 class SidePathPandasBP(_SidePathP):

@@ -2003,6 +2003,26 @@ Available join types:
             parts = [part for part in parts if part not in linked] + [merged]
         return [(part[0], varying) for part in parts]
 
+    @staticmethod
+    def _named(graph: Graph, uuids: set[UUID] | frozenset[UUID]) -> str:
+        nodes = graph.get_nodes()
+        return ", ".join(
+            sorted(
+                f"{format_feature_group_class(nodes[u].feature_group_class)} "
+                f"({nodes[u].feature.get_compute_framework().get_class_name()})"
+                for u in uuids
+            )
+        )
+
+    @staticmethod
+    def _polymorphic_member(
+        split: DeclaredSideSplit, graph: Graph, frameworks: set[type[ComputeFramework]]
+    ) -> UUID | None:
+        """First side member beyond the nearest split that runs on one of `frameworks`."""
+        nodes = graph.get_nodes()
+        beyond = (split.left_uuids_any_distance | split.right_uuids_any_distance) - split.left_uuids - split.right_uuids
+        return next((u for u in sorted(beyond) if nodes[u].feature.get_compute_framework() in frameworks), None)
+
     def _plan_link_join(
         self,
         link_fw: LinkFrameworkTrekker,
@@ -2061,15 +2081,30 @@ Available join types:
                             source_framework = destination_framework
                         destination_framework = consumer_framework
                     else:
+                        member = self._polymorphic_member(split, graph, {consumer_framework})
+                        name = (
+                            format_feature_group_class(graph.get_nodes()[member].feature_group_class)
+                            if member
+                            else "A side member"
+                        )
                         raise ValueError(
-                            f"The consumers of {link} read a link side through a feature on a third compute "
-                            "framework. Compute the consumer on one of the link sides' compute frameworks."
+                            f"The consumers {self._named(graph, children_uuids)} of {link} read a link side through "
+                            f"the carriers {self._named(graph, scanned)}, but {name} is a member of that side on "
+                            f"{consumer_framework.get_class_name()}, and one consumer cannot join members of one link "
+                            "side on different compute frameworks. Read one member of the link side per consumer."
                         )
                 else:
-                    raise ValueError(
-                        f"The consumers of {link} read a link side through a feature on a third compute framework. "
-                        "Compute the consumer on one of the link sides' compute frameworks."
+                    member = self._polymorphic_member(split, graph, {destination_framework, source_framework})
+                    message = (
+                        f"The consumers {self._named(graph, children_uuids)} of {link} read through the carriers "
+                        f"{self._named(graph, scanned)}, but the join runs on "
+                        f"{destination_framework.get_class_name()} and {source_framework.get_class_name()}. "
+                        "Compute the consumer on one of the join's frameworks."
                     )
+                    if member is not None:
+                        name = format_feature_group_class(graph.get_nodes()[member].feature_group_class)
+                        message += f" {name} is a polymorphic member of a link side and sets one of those frameworks."
+                    raise ValueError(message)
 
         # This filters the required_uuids to only the one with the final compute framework.
         destination_framework_uuids: set[UUID] = set()

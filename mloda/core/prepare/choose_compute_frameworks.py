@@ -498,6 +498,28 @@ class ChooseComputeFrameworks:
                 for _, second, _ in entries[i + 1 :]:
                     if first[2] != second[2]:
                         rules.append(_Rule(first + second, _no_side_mix, _RIGHT_ONE_SIDE))
+        rules += self._side_member_rules(blocks, by_child)
+        return rules
+
+    def _side_member_rules(
+        self, blocks: list[_Block], by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]]
+    ) -> list[_Rule]:
+        """Members of one link side joined by one consumer must share a framework."""
+        rules: list[_Rule] = []
+        for occurrences in by_child.values():
+            joinable = [(k, j) for k, j in occurrences if k.jointype not in (JoinType.APPEND, JoinType.UNION)]
+            for link_uuid in {k.uuid for k, _ in joinable}:
+                found = [j for k, j in joinable if k.uuid == link_uuid]
+                for pos in (0, 1):
+                    members = sorted({j[pos] for j in found}, key=lambda b: blocks[b].fg.__name__)
+                    for a, b in zip(members, members[1:]):
+                        if blocks[a].fg is not blocks[b].fg:
+                            why = (
+                                f"{blocks[found[0][2]].fg.__name__} joins {blocks[a].fg.__name__} and "
+                                f"{blocks[b].fg.__name__}, members of one link side, which must then run on one "
+                                "framework. Read one member of the link side per consumer"
+                            )
+                            rules.append(_Rule((a, b), lambda v: v[0] is v[1], why))
         return rules
 
     def _reach(self, start: UUID, neighbours: Mapping[UUID, set[UUID]]) -> set[UUID]:

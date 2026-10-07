@@ -319,7 +319,7 @@ class TestPlanContextOrigin:
         assert complete[2].origin == expected
 
     @pytest.mark.parametrize("entry, expected", [(_origin_run_all, "run_all"), (_origin_stream_all, "stream_all")])
-    def test_run_start_and_session_carry_the_origin(self, entry: Callable[[Extender], None], expected: str) -> None:
+    def test_run_start_carries_the_origin(self, entry: Callable[[Extender], None], expected: str) -> None:
         log: list[tuple[Any, ...]] = []
 
         entry(_Recorder("r", log))
@@ -339,8 +339,8 @@ class TestPlanContextOrigin:
 
         origins = [e[2].origin for e in log if e[1] == "plan_start"]
         assert origins == ["run_all", "explain"]
-        outer_complete = [e[2].origin for e in log if e[1] == "plan_complete"]
-        assert outer_complete[-1] == "run_all"
+        completes = [e[2].origin for e in log if e[1] == "plan_complete"]
+        assert completes == ["explain", "run_all"]
 
     @pytest.mark.parametrize("first", [_origin_diagnose, _origin_explain, _origin_diagnose_failing])
     def test_origin_does_not_leak_into_a_following_prepare(self, first: Callable[[Extender], None]) -> None:

@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class LifecycleOutcome:
-    """How a plan or run ended; error_type is the failing exception's module.qualname."""
+    """How a plan or run ended, passed to on_plan_complete and on_run_complete; error_type is the failing exception's module.qualname."""
 
     status: Literal["succeeded", "failed", "cancelled"]
     error_type: str | None = None

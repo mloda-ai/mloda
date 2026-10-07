@@ -36,6 +36,10 @@ class _Rule(NamedTuple):
 
 
 _UNFLIPPABLE = (JoinType.RIGHT, JoinType.APPEND, JoinType.UNION)
+_RIGHT_ONE_SIDE = (
+    "consumers of one RIGHT link join on one side. "
+    "Request them separately or restrict their compute frameworks to one side of the link"
+)
 
 PINNED = "pinned"
 ONLY_ALLOWED = "only allowed framework"
@@ -144,6 +148,22 @@ def _same_side(values: Values) -> bool:
     if (left_a, right_a) != (left_b, right_b) or left_a is right_a:
         return True
     return (child_a is left_a) == (child_b is left_b)
+
+
+def _no_side_mix(values: Values) -> bool:
+    left_a, right_a, child_a, left_b, right_b, child_b = values
+    if (left_a, right_a) != (left_b, right_b) or left_a is right_a:
+        return True
+    return not ((child_a is left_a and child_b is right_b) or (child_a is right_a and child_b is left_b))
+
+
+def _left_with_off_sibling(values: Values) -> bool:
+    """A consumer sits on the left of a RIGHT link only beside an off sibling on the same sides that does too."""
+    left, right, child = values[:3]
+    if child is not left or left is right:
+        return True
+    siblings = [values[i : i + 3] for i in range(3, len(values), 3)]
+    return any(sl is left and sr is right and sc is sl for sl, sr, sc in siblings)
 
 
 class ChooseComputeFrameworks:
@@ -410,22 +430,40 @@ class ChooseComputeFrameworks:
                 rules.append(_Rule((owner[host], owner[tied]), lambda v: v[0] is v[1], "filter tied to its host"))
         rules += self._side_path_rules(blocks, owner)
         by_link: dict[UUID, list[tuple[int, int, int]]] = {}
+        right_by_link: dict[UUID, list[tuple[UUID, tuple[int, int, int], bool]]] = {}
         by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]] = {}
         for link, left_uuid, right_uuid, child_uuid in self.occurrences:
             joined = (owner[left_uuid], owner[right_uuid], owner[child_uuid])
-            jointype = link.jointype
             by_child.setdefault(child_uuid, []).append((link, joined))
-            if jointype not in _UNFLIPPABLE:
+            if link.jointype not in _UNFLIPPABLE:
                 by_link.setdefault(link.uuid, []).append(joined)
-        for occurrences in by_child.values():
+            elif link.jointype is JoinType.RIGHT:
+                off = link.left_feature_group != link.right_feature_group and set(blocks[joined[2]].domain).isdisjoint(
+                    blocks[joined[1]].domain
+                )
+                right_by_link.setdefault(link.uuid, []).append((child_uuid, joined, off))
+        widened: dict[tuple[UUID, UUID, tuple[int, int, int]], bool] = {}
+        for link_uuid, entries in right_by_link.items():
+            for child_uuid, joined, off in entries:
+                siblings = [j for c, j, o in entries if o and c != child_uuid]
+                widened[(link_uuid, child_uuid, joined)] = off
+                if siblings and not off:
+                    widened[(link_uuid, child_uuid, joined)] = True
+                    rules.append(
+                        _Rule(
+                            joined + tuple(b for j in siblings for b in j),
+                            _left_with_off_sibling,
+                            _RIGHT_ONE_SIDE,
+                        )
+                    )
+        for child_uuid, occurrences in by_child.items():
             jointypes = [link.jointype for link, _ in occurrences]
             kinds = [
                 (
                     link.jointype,
                     link.left_feature_group != link.right_feature_group
                     and link.jointype not in (JoinType.APPEND, JoinType.UNION),
-                    link.left_feature_group != link.right_feature_group
-                    and set(blocks[joined[2]].domain).isdisjoint(blocks[joined[1]].domain),
+                    widened.get((link.uuid, child_uuid, joined), False),
                 )
                 for link, joined in occurrences
             ]
@@ -442,6 +480,11 @@ class ChooseComputeFrameworks:
                     if first[2] != second[2]:
                         rules.append(_Rule(first + second, _same_side, "one side per link"))
                         rules.append(_Rule(first + second, _swapped_pairs_differ, "swapped pairs join apart"))
+        for entries in right_by_link.values():
+            for i, (_, first, _) in enumerate(entries):
+                for _, second, _ in entries[i + 1 :]:
+                    if first[2] != second[2]:
+                        rules.append(_Rule(first + second, _no_side_mix, _RIGHT_ONE_SIDE))
         return rules
 
     def _reach(self, start: UUID, neighbours: Mapping[UUID, set[UUID]]) -> set[UUID]:

@@ -10,15 +10,14 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.utils import safe_field_with_error
 
 
-def read_declared_attributes(owner: Any, features: Any) -> dict[str, str | int | float | bool]:
-    """Return owner.declared_attributes(features) as a fresh dict; raise TypeError on a non-Mapping or non-str key."""
-    declared = owner.declared_attributes(features)
-    if not isinstance(declared, Mapping):
-        raise TypeError(f"declared_attributes must return a Mapping, got {type(declared).__name__}")
+def scalar_attributes(attributes: Any, label: str, mapping_error: str) -> dict[str, str | int | float | bool]:
+    """Return attributes as a fresh scalar-only dict; raise TypeError on a non-Mapping or non-str key."""
+    if not isinstance(attributes, Mapping):
+        raise TypeError(f"{label} {mapping_error}, got {type(attributes).__name__}")
     result: dict[str, str | int | float | bool] = {}
-    for key, value in declared.items():
+    for key, value in attributes.items():
         if not isinstance(key, str):
-            raise TypeError(f"declared_attributes keys must be str, got {type(key).__name__}")
+            raise TypeError(f"{label} keys must be str, got {type(key).__name__}")
         if isinstance(value, bool):
             result[key] = bool(value)
         elif isinstance(value, int):
@@ -28,6 +27,11 @@ def read_declared_attributes(owner: Any, features: Any) -> dict[str, str | int |
         elif isinstance(value, str):
             result[key] = str.__str__(value)
     return result
+
+
+def read_declared_attributes(owner: Any, features: Any) -> dict[str, str | int | float | bool]:
+    """Return owner.declared_attributes(features) as a fresh dict; raise TypeError on a non-Mapping or non-str key."""
+    return scalar_attributes(owner.declared_attributes(features), "declared_attributes", "must return a Mapping")
 
 
 def unmet_declaration_reason(

@@ -372,6 +372,54 @@ SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
         ["hunter2z9"],
         ["'host': 'h'"],
     ),
+    (
+        "x_authorization_basic",
+        "X-Authorization: Basic dXNlcjpwYXNz",
+        ["dXNlcjpwYXNz"],
+        ["X-Authorization: Basic ***"],
+    ),
+    (
+        "x_proxy_authorization_ntlm_equals",
+        "X-Proxy-Authorization=NTLM TlRMTVNTUAAB",
+        ["TlRMTVNTUAAB"],
+        ["X-Proxy-Authorization=NTLM ***"],
+    ),
+    (
+        "http_authorization_basic",
+        "HTTP_AUTHORIZATION: Basic dXNlcjpwYXNz",
+        ["dXNlcjpwYXNz"],
+        ["HTTP_AUTHORIZATION: Basic ***"],
+    ),
+    (
+        "http_authorization_quoted_dict_key",
+        "{'HTTP_AUTHORIZATION': 'Basic dXNlcjpwYXNz'}",
+        ["dXNlcjpwYXNz"],
+        ["{'HTTP_AUTHORIZATION': 'Basic ***"],
+    ),
+    (
+        "http_proxy_authorization_token_shaped",
+        "HTTP_PROXY_AUTHORIZATION=eyJhbGciOi.x.y",
+        ["eyJhbGciOi"],
+        ["HTTP_PROXY_AUTHORIZATION="],
+    ),
+    (
+        "proxy_authorization_underscored_basic",
+        "proxy_authorization: Basic dXNlcjpwYXNz",
+        ["dXNlcjpwYXNz"],
+        ["proxy_authorization: Basic ***"],
+    ),
+    (
+        "authorization_header_underscored_ntlm",
+        "authorization_header=NTLM TlRMTVNTUAAB",
+        ["TlRMTVNTUAAB"],
+        ["authorization_header=NTLM ***"],
+    ),
+    (
+        "x_authorization_header_dashed_basic",
+        "X-Authorization-Header: Basic dXNlcjpwYXNz",
+        ["dXNlcjpwYXNz"],
+        ["X-Authorization-Header: Basic ***"],
+    ),
     ("over_depth_nesting", "{'password': (a, (b, (c, (d, (e, (f, 'hunter2z9')))))), 'user': 'bob'}", ["hunter2z9"], []),
     (
         "over_depth_tuple_then_secret",
@@ -502,6 +550,10 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "option 'token': must be a str",
     "Missing bearer token",
     "invalid bearer token.",
+    "Pre-Authorization: Pending review",
+    "payment_authorization: Approved TXN-1234",
+    "user_authorization: Denied by policy",
+    "card_authorization=ABCDEF123456",
     "the bearer of bad news",
     "Bearer token required",
     "authorization: denied for role x",
@@ -509,6 +561,9 @@ UNCHANGED_LOOKALIKE_CASES: list[str] = [
     "Missing Bearer Token",
     "Bearer Token Usage",
     "Authorization: Required",
+    "author: bob",
+    'Authorization-Info: nextnonce="abc123def"',
+    "x_authorization: denied for role x",
 ]
 
 
@@ -578,6 +633,8 @@ def test_text_without_url_is_unchanged() -> None:
         "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/x, SignedHeaders=host, Signature=abc123def",
         "{'Authorization': 'Digest username=\"u\", response=\"hunter2z9\"', 'host': 'h'}",
         "access_token=Bearer hunter",
+        "HTTP_AUTHORIZATION: Basic dXNlcjpwYXNz",
+        "X-Proxy-Authorization=NTLM TlRMTVNTUAAB",
     ],
 )
 def test_scrub_credentials_is_idempotent(text: str) -> None:
@@ -601,6 +658,7 @@ def test_long_alphanumeric_run_scrubs_fast() -> None:
         pytest.param("Bearer " + "a" * 50_000, "a" * 100, id="long_run_after_bearer"),
         pytest.param("Authorization: " + "a" * 50_000, None, id="long_run_after_authorization"),
         pytest.param("Bearer " * 20_000, None, id="repeated_bearer_prefix"),
+        pytest.param("x_" * 50_000 + "authorization", None, id="long_prefix_run_before_authorization"),
     ],
 )
 def test_bearer_and_authorization_inputs_scrub_fast(text: str, leaked: str | None) -> None:

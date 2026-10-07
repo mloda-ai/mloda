@@ -833,31 +833,32 @@ def _tie_parents(options: Options) -> set[Feature]:
 
 
 class _TieConsumer(FeatureGroup):
-    """Consumer pulling both roots with its own tie_tag, computed in FRAMEWORK's native type."""
+    """Consumer pulling both roots with its own tie_tag, computed in the data's own type."""
 
-    FRAMEWORK: ClassVar[type[ComputeFramework]] = PyArrowTable
+    FRAMEWORKS: ClassVar[set[type[ComputeFramework]]] = {PyArrowTable}
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return _tie_parents(options)
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        if cls.FRAMEWORK is PandasDataFrame:
+        if isinstance(data, pd.DataFrame):
             data[cls.get_class_name()] = data["tie_left_val"] + data["tie_right_val"]
             return data
         return data.append_column(cls.get_class_name(), pc.add(data["tie_left_val"], data["tie_right_val"]))
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {cls.FRAMEWORK}
+        return cls.FRAMEWORKS
 
 
-def _tie_consumer(name: str, framework: type[ComputeFramework]) -> type[FeatureGroup]:
-    return type(name, (_TieConsumer,), {"FRAMEWORK": framework, "__module__": __name__})
+def _tie_consumer(name: str, frameworks: set[type[ComputeFramework]]) -> type[FeatureGroup]:
+    return type(name, (_TieConsumer,), {"FRAMEWORKS": frameworks, "__module__": __name__})
 
 
-TieConsumerPd = _tie_consumer("TieConsumerPd", PandasDataFrame)
-TieConsumerPa = _tie_consumer("TieConsumerPa", PyArrowTable)
+TieConsumerPd = _tie_consumer("TieConsumerPd", {PandasDataFrame})
+TieConsumerPa = _tie_consumer("TieConsumerPa", {PyArrowTable})
+TieConsumerAny = _tie_consumer("TieConsumerAny", {PandasDataFrame, PyArrowTable})
 
 
 _TIE_LEFT: dict[str, type[FeatureGroup]] = {"pd": TieLeftPd, "pa": TieLeftPa}
@@ -1125,6 +1126,45 @@ def test_two_consumers_of_one_right_link_on_the_left_and_the_right_framework_rai
             ),
             parallelization_modes={ParallelizationMode.SYNC},
         )
+
+
+def _right_link_sibling_run(mode: ParallelizationMode, flight_server: Any = None) -> dict[str, Any]:
+    return {
+        "features": [*_tie_features("pa", ["a"]), Feature("TieConsumerAny", options={"tie_tag": "a"})],
+        "links": {Link.right(JoinSpec(TieLeftPa, "tie_jid"), JoinSpec(TieRightExtraPd, "tie_jid"))},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "parallelization_modes": {mode},
+        "plugin_collector": PluginCollector.enabled_feature_groups(
+            {TieLeftPa, TieRightExtraPd, TieConsumerPa, TieConsumerAny}
+        ),
+    }
+
+
+def test_a_flexible_and_a_left_only_consumer_of_one_right_link_both_plan_on_the_left_framework() -> None:
+    kwargs = _right_link_sibling_run(ParallelizationMode.SYNC)
+    session = mloda.prepare(kwargs.pop("features"), **kwargs)
+
+    assert session.engine is not None
+    steps = [s for s in session.engine.execution_planner if isinstance(s, FeatureGroupStep)]
+    consumers = [s for s in steps if issubclass(s.feature_group, (TieConsumerPa, TieConsumerAny))]
+    assert len(consumers) == 2
+    assert {s.compute_framework for s in consumers} == {PyArrowTable}
+
+
+# Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING])
+def test_a_flexible_and_a_left_only_consumer_of_one_right_link_return_the_right_join_values(
+    flight_server: Any, mode: ParallelizationMode
+) -> None:
+    kwargs = _right_link_sibling_run(mode)
+    features = kwargs.pop("features")
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+
+    results = mloda.run_all(features, flight_server=server, **kwargs)
+
+    assert _nullable_column_values(results, "TieConsumerPa") == [[101, 202, 303, None]]
+    assert _nullable_column_values(results, "TieConsumerAny") == [[101, 202, 303, None]]
 
 
 def _tie_child_features(consumer: type[FeatureGroup], tags: list[str]) -> list[Feature | str]:

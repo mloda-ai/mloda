@@ -321,6 +321,34 @@ class TestDeclaredAttributesWiring:
         assert captured.declared_attributes is not _SHARED_DECLARATION
 
 
+class _PublishingFeatureGroup(FeatureGroup):
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
+        return {"unit": "m"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        HookContext.publish_result_attributes({"profile": "x", "lines": 3, "tags": ["a"]})
+        return [{"value": 1}]
+
+
+class TestResultAttributesWiring:
+    """Attributes published in calculate_feature are visible to extenders after func returns."""
+
+    def test_extender_sees_published_result_attributes_after_call(self) -> None:
+        result, captured = _captured_declared_attributes(_PublishingFeatureGroup)
+
+        assert result == [{"value": 1}]
+        assert captured is not None
+        assert captured.result_attributes == {"profile": "x", "lines": 3}
+        assert captured.declared_attributes == {"unit": "m"}
+
+    def test_publishing_without_extender_still_returns_result(self) -> None:
+        result = _build_framework(set()).run_calculate_feature(_PublishingFeatureGroup, _build_feature_set())
+
+        assert result == [{"value": 1}]
+
+
 class TestObservabilityFailureDoesNotBreakCalculation:
     """An observability read failing must never fail run_calculate_feature itself."""
 

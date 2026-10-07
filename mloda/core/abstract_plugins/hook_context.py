@@ -8,12 +8,13 @@ import contextlib
 import functools
 import threading
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from contextvars import ContextVar
 from dataclasses import FrozenInstanceError, dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.declared_attributes import scalar_attributes
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.function_extender import ExtenderHook
@@ -30,6 +31,7 @@ _WRITABLE_FIELDS = frozenset({"rows_out", "output_schema", "duration_seconds", "
 
 _gate_scopes = 0
 _gate_scopes_lock = threading.Lock()
+_result_attributes_lock = threading.Lock()
 
 
 @contextlib.contextmanager
@@ -91,8 +93,11 @@ class HookContext:
     plan_depth: int | None = None
     declared_attributes: dict[str, str | int | float | bool] | None = None
     reader_class: "type[BaseInputData] | None" = None
+    result_attributes: dict[str, str | int | float | bool] | None = None
 
     def __post_init__(self) -> None:
+        if self.result_attributes is not None:
+            self.result_attributes = _frozen_dict(self.result_attributes)
         if self.declared_attributes is not None:
             self.declared_attributes = _frozen_dict(self.declared_attributes)
         # Copy on ingest so a hook mutating the carrier or input_feature_edges never reaches the caller's dict.
@@ -136,6 +141,17 @@ class HookContext:
         """
         return _current_hook_context.get()
 
+    @classmethod
+    def publish_result_attributes(cls, attributes: Mapping[Any, Any]) -> None:
+        """Merge validated scalar attributes into the current context's result_attributes; no-op without one."""
+        validated = scalar_attributes(attributes, "result_attributes", "must be a Mapping")
+        current = cls.current()
+        if current is None:
+            return
+        with _result_attributes_lock:
+            merged = _frozen_dict({**(current.result_attributes or {}), **validated})
+            object.__setattr__(current, "result_attributes", merged)
+
     @contextlib.contextmanager
     def activate(self) -> Generator["HookContext", None, None]:
         """Make this instance the current() context for the scope, restoring the previous one on exit."""
@@ -168,6 +184,7 @@ def instrument(
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         context.rows_out = None
         context.output_schema = None
+        object.__setattr__(context, "result_attributes", None)
         succeeded = False
         start = time.perf_counter()
         try:

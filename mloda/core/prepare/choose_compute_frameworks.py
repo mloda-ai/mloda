@@ -1,5 +1,6 @@
 """Chooses one compute framework per block of features (one block is one plan step group) before links resolve.
-Arc consistency prunes the domains, then branch and bound with forward checking minimises conversions.
+Arc consistency prunes the domains, then branch and bound with forward checking minimises conversions,
+splitting into independent parts once assigned blocks separate them.
 """
 
 import re
@@ -23,6 +24,9 @@ Framework = type[ComputeFramework]
 Values = tuple[Framework, ...]
 
 
+Cost = tuple[int, int]
+
+
 class _Block(NamedTuple):
     fg: type[FeatureGroup]
     features: tuple[Feature, ...]
@@ -33,6 +37,17 @@ class _Rule(NamedTuple):
     blocks: tuple[int, ...]
     allows: Callable[[Values], bool]
     why: str
+
+
+class _Frame(NamedTuple):
+    block: int
+    at: int
+    before: Cost
+    values: Iterator[Framework]
+    current: dict[int, list[Framework]]
+    cost: Cost
+    parts: list[list[int]]
+    fixed: list[int]
 
 
 _UNFLIPPABLE = (JoinType.RIGHT, JoinType.APPEND, JoinType.UNION)
@@ -47,8 +62,6 @@ RULES = "rules exclude preferred frameworks"
 LIST_ORDER = "your list order"
 DEFAULT_ORDER = "default order"
 CONVERTS_LATER = "converts later"
-
-Cost = tuple[int, int]
 
 
 def saves_conversions(count: int) -> str:
@@ -559,10 +572,7 @@ class ChooseComputeFrameworks:
         count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
     ) -> list[list[int]]:
         """Per connected component, blocks breadth-first from the first in content order (neighbours in content order)."""
-        neighbors: list[set[int]] = [set() for _ in range(count)]
-        for members in [r.blocks for r in rules] + [(parent, *kids) for (parent, _), kids in groups.items()]:
-            for one in members:
-                neighbors[one].update(members)
+        neighbors = ChooseComputeFrameworks._neighbor_map(count, rules, groups)
         orders: list[list[int]] = []
         seen: set[int] = set()
         for start in range(count):
@@ -576,6 +586,17 @@ class ChooseComputeFrameworks:
                     order.append(other)
             orders.append(order)
         return orders
+
+    @staticmethod
+    def _neighbor_map(
+        count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
+    ) -> list[set[int]]:
+        """Blocks sharing a rule or a transform step; a step couples its children, so it is a hyperedge."""
+        neighbors: list[set[int]] = [set() for _ in range(count)]
+        for members in [r.blocks for r in rules] + [(parent, *kids) for (parent, _), kids in groups.items()]:
+            for one in members:
+                neighbors[one].update(members)
+        return neighbors
 
     @staticmethod
     def _rule_blocks(rule: _Rule) -> list[int]:
@@ -698,9 +719,12 @@ class ChooseComputeFrameworks:
         for parent, children, depth in local:
             for b in (parent, *children):
                 steps[b].append((parent, children, depth))
+        linked = self._neighbor_map(
+            len(blocks), rules, {key: kids for key, kids in groups.items() if key[0] in touching}
+        )
+        search_order = [b for b in order if len(domains[b]) == 1] + [b for b in order if len(domains[b]) != 1]
+        position = {b: i for i, b in enumerate(search_order)}
         assigned: dict[int, Framework] = {}
-        best: dict[int, Framework] = {}
-        best_cost: list[Cost | None] = [None]
 
         def step_cost(parent: int, children: set[int], depth: int) -> Cost:
             if parent not in assigned:
@@ -728,42 +752,98 @@ class ChooseComputeFrameworks:
                     narrowed[open_block] = kept
             return narrowed
 
-        def open_frame(
-            depth: int, current: dict[int, list[Framework]], cost: Cost
-        ) -> tuple[int, Cost, Iterator[Framework], dict[int, list[Framework]], Cost] | None:
-            if depth == len(order):
-                best.update(assigned)
-                best_cost[0] = cost
-                return None
-            index = order[depth]
-            before = total(steps[index])
-            return index, before, iter(current[index]), current, cost
+        cuts: dict[int, list[list[int]]] = {}
 
-        frames = []
-        root = open_frame(0, {b: domains[b] for b in order}, (0, 0))
-        if root is not None:
-            frames.append(root)
-        while frames:
-            index, before, values, current, cost = frames[-1]
-            assigned.pop(index, None)
-            value = next(values, None)
-            if value is None:
-                frames.pop()
-                continue
-            assigned[index] = value
-            narrowed = narrow(index, current)
-            after = total(steps[index])
-            final = self._final_cost(blocks[index], value, index)
-            new_cost = (cost[0] + after[0] - before[0] + final[0], cost[1] + after[1] - before[1] + final[1])
-            incumbent = best_cost[0]
-            if narrowed is not None and (incumbent is None or new_cost < incumbent):
-                frame = open_frame(len(frames), narrowed, new_cost)
+        def separated(index: int) -> list[list[int]]:
+            """Open parts cut off by assigning index, except the largest, which continues in place."""
+            starts = sorted(b for b in linked[index] if b != index and b not in assigned)
+            if len(starts) < 2:
+                return []
+            seen = {index}
+            parts: list[list[int]] = []
+            for start in starts:
+                if start in seen:
+                    continue
+                seen.add(start)
+                found, stack = [start], [start]
+                while stack:
+                    for other in linked[stack.pop()]:
+                        if other not in seen and other not in assigned:
+                            seen.add(other)
+                            found.append(other)
+                            stack.append(other)
+                parts.append(found)
+            if len(parts) < 2:
+                return []
+            parts.remove(max(parts, key=len))
+            return [sorted(part, key=position.__getitem__) for part in parts]
+
+        def search(part: list[int], start: dict[int, list[Framework]]) -> tuple[dict[int, Framework], Cost] | None:
+            """Best assignment and cost of one part given the blocks assigned around it, or None when infeasible."""
+            best: dict[int, Framework] = {}
+            best_cost: list[Cost | None] = [None]
+
+            def open_frame(at: int, current: dict[int, list[Framework]], cost: Cost) -> _Frame | None:
+                while at < len(part) and part[at] in assigned:
+                    at += 1
+                if at == len(part):
+                    best.clear()
+                    best.update({b: assigned[b] for b in part})
+                    best_cost[0] = cost
+                    return None
+                index = part[at]
+                if index not in cuts:  # the assigned set at a block's opening depends only on the decomposition
+                    cuts[index] = separated(index)
+                return _Frame(index, at, total(steps[index]), iter(current[index]), current, cost, cuts[index], [])
+
+            frames: list[_Frame] = []
+            root = open_frame(0, start, (0, 0))
+            if root is not None:
+                frames.append(root)
+            while frames:
+                index, at, before, values, current, cost, parts, fixed = frames[-1]
+                assigned.pop(index, None)
+                for b in fixed:
+                    assigned.pop(b)
+                fixed.clear()
+                value = next(values, None)
+                if value is None:
+                    frames.pop()
+                    continue
+                assigned[index] = value
+                narrowed = narrow(index, current)
+                if narrowed is None:
+                    continue
+                after = total(steps[index])
+                final = self._final_cost(blocks[index], value, index)
+                new_cost = (cost[0] + after[0] - before[0] + final[0], cost[1] + after[1] - before[1] + final[1])
+                incumbent = best_cost[0]
+                if incumbent is not None and not new_cost < incumbent:
+                    continue
+                feasible = True
+                for other in parts:
+                    solved = search(other, narrowed)
+                    if solved is None:
+                        feasible = False
+                        break
+                    sub, sub_cost = solved
+                    assigned.update(sub)
+                    fixed.extend(sub)
+                    new_cost = (new_cost[0] + sub_cost[0], new_cost[1] + sub_cost[1])
+                if not feasible or (incumbent is not None and not new_cost < incumbent):
+                    continue
+                frame = open_frame(at + 1, narrowed, new_cost)
                 if frame is not None:
                     frames.append(frame)
-        found = best_cost[0]
-        if found is None:
+            found = best_cost[0]
+            if found is None:
+                return None
+            return dict(best), found
+
+        result = search(search_order, {b: domains[b] for b in order})
+        if result is None:
             raise ValueError(self._infeasible(blocks, order, rules))
-        return best, found
+        return result
 
     @staticmethod
     def _infeasible(blocks: list[_Block], order: list[int], rules: list[_Rule]) -> str:

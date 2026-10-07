@@ -106,6 +106,8 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
+from mloda_plugins.feature_group.input_data.read_db import ReadDB
 from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
 from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader  # noqa: F401
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
@@ -970,6 +972,39 @@ class TestPlanStepFeatureSetOptions:
 # ---------------------------------------------------------------------------
 
 
+class PlanInfoOverridingDBReader(ReadDB):
+    """Non-final reader storing the pinned plain dict itself, never calling wrap_feature_scoped_access."""
+
+    @classmethod
+    def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
+        pinned = options.get(cls.data_access_name())
+        if not isinstance(pinned, dict):
+            return False
+        cls.add_base_input_data_to_options(cls, dict(pinned), options)
+        return True
+
+    @classmethod
+    def global_scope_data_access(
+        cls,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> bool:
+        return False
+
+
+class PlanInfoOverridingDBReaderFeature(FeatureGroup):
+    """Feature group serving only the unique feature name through the overriding reader."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return PlanInfoOverridingDBReader()
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise NotImplementedError
+
+
 class TestPlanStepReaderDataAccess:
     """reader_data_access is a compare=False dataclass field snapshotted from the step's FeatureSet match."""
 
@@ -1075,6 +1110,45 @@ class TestPlanStepReaderDataAccess:
         assert db not in text
         records = json.loads(text)["compute"]
         assert [record["reader"] for record in records] == [f"{SQLITEReader.__module__}:{SQLITEReader.__qualname__}"]
+
+    @pytest.mark.parametrize(
+        "reader, feature_group, feature_name",
+        [
+            (SQLITEReader, ReadDBFeature, "plan_info_db_col"),
+            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col"),
+        ],
+        ids=["core_sqlite_reader", "overriding_reader"],
+    )
+    def test_pinned_dict_credential_is_redacted_in_plan_output(
+        self, tmp_path: Path, reader: type[BaseInputData], feature_group: type[FeatureGroup], feature_name: str
+    ) -> None:
+        db = str(tmp_path / "plan_info_pinned.db")
+        conn = sqlite3.connect(db)
+        conn.execute(f"CREATE TABLE t ({feature_name} INTEGER)")
+        conn.commit()
+        conn.close()
+        pinned = {"sqlite": db, "table_name": "t", "password": "hunter2"}  # nosec B105
+
+        explained = mloda.explain(
+            [Feature(feature_name, options={reader.__name__: pinned})],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
+        )
+
+        step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
+        assert step.reader_data_access is not None
+        assert type(step.reader_data_access[1]) is RegisteredCredential
+        assert "hunter2" not in repr(step)
+        assert step.feature_set_options is not None
+        assert "hunter2" not in str(step.feature_set_options)
+        assert type(step.feature_set_options.group[reader.__name__]) is RegisteredCredential
+
+    def test_non_db_reader_wrap_is_identity_and_keeps_the_pair(self) -> None:
+        access = {"path": "x", "password": "hunter2"}  # nosec B105
+        assert ParquetReader.wrap_feature_scoped_access(access) is access
+        options = Options(group={ParquetReader.__name__: access})
+        BaseInputData.add_base_input_data_to_options(ParquetReader, access, options)
+        assert options.get(ParquetReader.__name__) is access
 
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
         step = PlanStep(

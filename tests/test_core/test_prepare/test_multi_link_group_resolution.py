@@ -1603,6 +1603,9 @@ RemedyArrowSameBMidConsumer = _remedy_sum_consumer(
     "RemedyArrowSameBMidConsumer", PyArrowTable, ("SidePathArrowP", "mlg_a1", "mlg_b")
 )
 RemedyThirdBThirdConsumer = _remedy_sum_consumer("RemedyThirdBThirdConsumer", ThirdCfw, _REMEDY_DIRECT_INPUTS)
+RemedyThirdBThirdMidConsumer = _remedy_sum_consumer(
+    "RemedyThirdBThirdMidConsumer", ThirdCfw, ("SidePathArrowP", "mlg_a1", "mlg_b")
+)
 
 
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
@@ -1613,19 +1616,26 @@ RemedyThirdBThirdConsumer = _remedy_sum_consumer("RemedyThirdBThirdConsumer", Th
         pytest.param(RemedyArrowSameBConsumer, MultiLinkRootBSame, [[18, 30, 42]], id="arrow_direct_b_on_arrow"),
         pytest.param(RemedyArrowSameBMidConsumer, MultiLinkRootBSame, [[117, 228, 339]], id="arrow_mid_b_on_arrow"),
         pytest.param(RemedyThirdBThirdConsumer, RemedyRootBThird, [[18, 30, 42]], id="third_direct_b_on_third"),
+        pytest.param(RemedyThirdBThirdMidConsumer, RemedyRootBThird, [[117, 228, 339]], id="third_mid_b_on_third"),
     ],
 )
 def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_side_shares_a_framework(
     consumer: type[FeatureGroup], root_b: type[FeatureGroup], expected: list[list[int]], swap_link_sides: bool
 ) -> None:
-    results = _side_path_prepare(
+    session = _side_path_prepare(
         SidePathArrowP,
         False,
         swap_link_sides,
         consumer=consumer,
         features=[consumer.get_class_name()],
         **{**_REMEDY_KWARGS, "root_b": root_b},
-    ).run()
+    )
+
+    assert session.engine is not None
+    join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
+    assert not any(step.carriers for step in join_steps)
+
+    results = session.run()
 
     assert _side_path_values(results, consumer) == expected
 

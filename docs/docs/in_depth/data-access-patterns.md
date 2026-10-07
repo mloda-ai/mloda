@@ -56,6 +56,8 @@ class ReadFileFeature(FeatureGroup):
 
 Each reader family exposes a recommended hook seam. Overriding `load_data` wholesale remains supported in every family.
 
+A reader can also describe its data through `declared_attributes`, see [Declared Attributes and Input Requirements](feature-group-matching.md#declared-attributes-and-input-requirements).
+
 - **ReadDB**: implement `produce_rows`, `connect`, and `is_valid_credentials`; optionally `prepare_credentials`, `build_query`, and `claims_feature_name` (a name-only check that runs before any credential probe). To check credentials against `PropertySpec`s, use `validate_property_values`, converting its error, since any raise other than a soft `NotImplementedError` aborts matching:
 
     ```python

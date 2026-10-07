@@ -22,10 +22,15 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class LifecycleOutcome:
-    """How a plan or run ended, passed to on_plan_complete and on_run_complete."""
+    """How a plan or run ended; error_type is the failing exception's module.qualname."""
 
     status: Literal["succeeded", "failed", "cancelled"]
     error_type: str | None = None
+
+
+def qualified_type_name(error: BaseException) -> str:
+    """Return the exception's module.qualname."""
+    return f"{type(error).__module__}.{type(error).__qualname__}"
 
 
 class ExtenderHook(Enum):

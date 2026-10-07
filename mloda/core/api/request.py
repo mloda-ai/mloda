@@ -1,4 +1,5 @@
 import contextlib
+import contextvars
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -41,9 +42,10 @@ from mloda.core.abstract_plugins.function_extender import (
     call_contained_hook,
     call_run_complete_hook,
     call_run_start_hook,
+    qualified_type_name,
     reject_old_run_complete_signature,
 )
-from mloda.core.abstract_plugins.plan_context import PlanContext
+from mloda.core.abstract_plugins.plan_context import PlanContext, PlanOrigin
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -53,6 +55,18 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.runtime.run_id import generate_run_id
+
+
+_PLAN_ORIGIN: contextvars.ContextVar[PlanOrigin | None] = contextvars.ContextVar("_PLAN_ORIGIN", default=None)
+
+
+@contextlib.contextmanager
+def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
+    token = _PLAN_ORIGIN.set(origin)
+    try:
+        yield
+    finally:
+        _PLAN_ORIGIN.reset(token)
 
 
 class SetupConfigurationError(ValueError):
@@ -101,32 +115,34 @@ class mlodaAPI:
             project_id=verified.project_id if verified else None,
             principal=verified.principal if verified else None,
             created_at=datetime.now(timezone.utc),
+            origin=_PLAN_ORIGIN.get() or "prepare",
         )
         self.plan_id = self.plan_context.plan_id
 
-        call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
-        plan_outcome = LifecycleOutcome("succeeded")
-        try:
-            self._plan(
-                requested_features,
-                compute_frameworks,
-                links,
-                data_access_collection,
-                global_filter,
-                api_data,
-                copy_features,
-                strict_type_enforcement,
-                column_ordering,
-                parallelization_modes,
-                output_framework,
-            )
-            if self._extenders:
-                self._stamp_structure_hash()
-        except BaseException as error:
-            plan_outcome = LifecycleOutcome("failed", type(error).__name__)
-            raise
-        finally:
-            call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
+        with _plan_origin(None):
+            call_contained_hook(self._extenders, "on_plan_start", self.plan_context)
+            plan_outcome = LifecycleOutcome("succeeded")
+            try:
+                self._plan(
+                    requested_features,
+                    compute_frameworks,
+                    links,
+                    data_access_collection,
+                    global_filter,
+                    api_data,
+                    copy_features,
+                    strict_type_enforcement,
+                    column_ordering,
+                    parallelization_modes,
+                    output_framework,
+                )
+                if self._extenders:
+                    self._stamp_structure_hash()
+            except BaseException as error:
+                plan_outcome = LifecycleOutcome("failed", qualified_type_name(error))
+                raise
+            finally:
+                call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
 
     def _stamp_structure_hash(self) -> None:
         if self.engine is None:
@@ -287,21 +303,22 @@ class mlodaAPI:
                 api_data={"UserQuery": {"row_index": [0], "query": ["hello"]}}
             )
         """
-        session = cls.prepare(
-            features,
-            compute_frameworks,
-            links,
-            data_access_collection,
-            global_filter,
-            api_data=api_data,
-            plugin_collector=plugin_collector,
-            copy_features=copy_features,
-            strict_type_enforcement=strict_type_enforcement,
-            column_ordering=column_ordering,
-            parallelization_modes=parallelization_modes,
-            function_extender=function_extender,
-            output_framework=output_framework,
-        )
+        with _plan_origin("run_all"):
+            session = cls.prepare(
+                features,
+                compute_frameworks,
+                links,
+                data_access_collection,
+                global_filter,
+                api_data=api_data,
+                plugin_collector=plugin_collector,
+                copy_features=copy_features,
+                strict_type_enforcement=strict_type_enforcement,
+                column_ordering=column_ordering,
+                parallelization_modes=parallelization_modes,
+                function_extender=function_extender,
+                output_framework=output_framework,
+            )
         results = session.run(
             api_data=api_data,
             parallelization_modes=parallelization_modes,
@@ -352,21 +369,22 @@ class mlodaAPI:
             ``ResultStream`` yielding one complete result per feature group; ``stream.frames()`` pairs each
             result with the ``PlanStep`` that produced it.
         """
-        session = cls.prepare(
-            features,
-            compute_frameworks,
-            links,
-            data_access_collection,
-            global_filter,
-            api_data=api_data,
-            plugin_collector=plugin_collector,
-            copy_features=copy_features,
-            strict_type_enforcement=strict_type_enforcement,
-            column_ordering=column_ordering,
-            parallelization_modes=parallelization_modes,
-            function_extender=function_extender,
-            output_framework=output_framework,
-        )
+        with _plan_origin("stream_all"):
+            session = cls.prepare(
+                features,
+                compute_frameworks,
+                links,
+                data_access_collection,
+                global_filter,
+                api_data=api_data,
+                plugin_collector=plugin_collector,
+                copy_features=copy_features,
+                strict_type_enforcement=strict_type_enforcement,
+                column_ordering=column_ordering,
+                parallelization_modes=parallelization_modes,
+                function_extender=function_extender,
+                output_framework=output_framework,
+            )
         # Planning is eager in prepare, so the plan snapshot is available before iteration.
         return ResultStream(
             session._start_stream(
@@ -449,21 +467,22 @@ class mlodaAPI:
 
         Every parameter after ``features`` is keyword-only.
         """
-        session = cls.prepare(
-            features,
-            compute_frameworks,
-            links,
-            data_access_collection,
-            global_filter,
-            api_data=api_data,
-            plugin_collector=plugin_collector,
-            copy_features=copy_features,
-            strict_type_enforcement=strict_type_enforcement,
-            column_ordering=column_ordering,
-            parallelization_modes=parallelization_modes,
-            function_extender=function_extender,
-            output_framework=output_framework,
-        )
+        with _plan_origin("explain"):
+            session = cls.prepare(
+                features,
+                compute_frameworks,
+                links,
+                data_access_collection,
+                global_filter,
+                api_data=api_data,
+                plugin_collector=plugin_collector,
+                copy_features=copy_features,
+                strict_type_enforcement=strict_type_enforcement,
+                column_ordering=column_ordering,
+                parallelization_modes=parallelization_modes,
+                function_extender=function_extender,
+                output_framework=output_framework,
+            )
         return session.resolved_plan()
 
     @classmethod
@@ -498,21 +517,22 @@ class mlodaAPI:
         it is one of the types above. Every parameter after features is keyword-only.
         """
         try:
-            session = cls(
-                features,
-                compute_frameworks,
-                links,
-                data_access_collection,
-                global_filter,
-                api_data=api_data,
-                plugin_collector=plugin_collector,
-                copy_features=copy_features,
-                strict_type_enforcement=strict_type_enforcement,
-                column_ordering=column_ordering,
-                parallelization_modes=parallelization_modes,
-                function_extender=function_extender,
-                output_framework=output_framework,
-            )
+            with _plan_origin("diagnose"):
+                session = cls(
+                    features,
+                    compute_frameworks,
+                    links,
+                    data_access_collection,
+                    global_filter,
+                    api_data=api_data,
+                    plugin_collector=plugin_collector,
+                    copy_features=copy_features,
+                    strict_type_enforcement=strict_type_enforcement,
+                    column_ordering=column_ordering,
+                    parallelization_modes=parallelization_modes,
+                    function_extender=function_extender,
+                    output_framework=output_framework,
+                )
         except FeatureResolutionError as error:
             return ResolutionDiagnosis(
                 records=list(error.partial_records),
@@ -725,7 +745,7 @@ class mlodaAPI:
             outcome = LifecycleOutcome("cancelled")
             raise
         except BaseException as error:
-            outcome = LifecycleOutcome("failed", type(error).__name__)
+            outcome = LifecycleOutcome("failed", qualified_type_name(error))
             raise
         finally:
             self._complete_run(run_context, outcome)
@@ -759,7 +779,7 @@ class mlodaAPI:
             )
             return runner
         except BaseException as error:
-            outcome = LifecycleOutcome("failed", type(error).__name__)
+            outcome = LifecycleOutcome("failed", qualified_type_name(error))
             raise
         finally:
             self._complete_run(run_context, outcome)

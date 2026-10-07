@@ -564,19 +564,28 @@ def _ok_run(status: str = "succeeded", calculated: bool = True, error: str | Non
 def _planning_failure_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     with pytest.raises(FeatureResolutionError):
         mloda.prepare([Feature(name=_MISSING_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
-    return [("plan_start",), ("plan_complete", "failed", "FeatureResolutionError")]
+    return [
+        ("plan_start",),
+        ("plan_complete", "failed", "mloda.core.prepare.identify_feature_group.FeatureResolutionError"),
+    ]
 
 
 def _planning_failure_diagnose(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     diagnosis = mloda.diagnose([Feature(name=_MISSING_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
     assert not diagnosis.complete
-    return [("plan_start",), ("plan_complete", "failed", "FeatureResolutionError")]
+    return [
+        ("plan_start",),
+        ("plan_complete", "failed", "mloda.core.prepare.identify_feature_group.FeatureResolutionError"),
+    ]
 
 
 def _planning_failure_explain(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     with pytest.raises(FeatureResolutionError):
         mloda.explain([Feature(name=_MISSING_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
-    return [("plan_start",), ("plan_complete", "failed", "FeatureResolutionError")]
+    return [
+        ("plan_start",),
+        ("plan_complete", "failed", "mloda.core.prepare.identify_feature_group.FeatureResolutionError"),
+    ]
 
 
 def _explain_success(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
@@ -623,7 +632,7 @@ def _setup_failure(call_site: str) -> Any:
         )
         with pytest.raises(ValueError, match="cannot be pickled"):
             list(getattr(session, call_site)(parallelization_modes={mode}))
-        return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="ValueError")]
+        return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.ValueError")]
 
     return scenario
 
@@ -633,7 +642,10 @@ def _execution_failure(call_site: str) -> Any:
         session = _matrix_session(ext, _FAIL_COLUMN)
         with pytest.raises(Exception, match="calculate failed") as raised:
             list(getattr(session, call_site)(parallelization_modes=_SYNC))
-        return [*_OK_PLAN, *_ok_run("failed", error=type(raised.value).__name__)]
+        return [
+            *_OK_PLAN,
+            *_ok_run("failed", error=f"{type(raised.value).__module__}.{type(raised.value).__qualname__}"),
+        ]
 
     return scenario
 
@@ -650,7 +662,7 @@ def _finalizing_failure_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, mp:
     _break_join(mp)
     with pytest.raises(RuntimeError, match="join failed"):
         session.run(parallelization_modes=_SYNC)
-    return [*_OK_PLAN, *_ok_run("failed", error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", error="builtins.RuntimeError")]
 
 
 def _finalizing_failure_stream_consumed(
@@ -660,7 +672,7 @@ def _finalizing_failure_stream_consumed(
     _break_join(mp)
     with pytest.raises(RuntimeError, match="join failed"):
         list(session.stream_run(parallelization_modes=_SYNC))
-    return [*_OK_PLAN, *_ok_run("failed", error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", error="builtins.RuntimeError")]
 
 
 def _finalizing_failure_stream_closed_early(
@@ -672,7 +684,7 @@ def _finalizing_failure_stream_closed_early(
     next(stream)
     with pytest.raises(RuntimeError, match="join failed"):
         stream.close()
-    return [*_OK_PLAN, *_ok_run("failed", error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", error="builtins.RuntimeError")]
 
 
 def _refused_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
@@ -680,7 +692,7 @@ def _refused_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.Mon
     session = _matrix_session(ext)
     with pytest.raises(RuntimeError, match="run start refused"):
         session.run(parallelization_modes=_SYNC)
-    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
 def _refused_at_stream_run_call(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
@@ -688,7 +700,7 @@ def _refused_at_stream_run_call(ext: _LifecycleMatrixExtender, tmp_path: Path, m
     session = _matrix_session(ext)
     with pytest.raises(RuntimeError, match="run start refused"):
         session.stream_run(parallelization_modes=_SYNC)
-    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
 def _break_engine_setup(mp: pytest.MonkeyPatch) -> None:
@@ -703,7 +715,7 @@ def _engine_setup_failure_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, m
     _break_engine_setup(mp)
     with pytest.raises(RuntimeError, match="engine setup failed"):
         session.run(parallelization_modes=_SYNC)
-    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
 def _engine_setup_failure_at_stream_run_call(
@@ -713,14 +725,14 @@ def _engine_setup_failure_at_stream_run_call(
     _break_engine_setup(mp)
     with pytest.raises(RuntimeError, match="engine setup failed"):
         session.stream_run(parallelization_modes=_SYNC)
-    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
 def _refused_at_stream_all_call(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     ext.refuse_run_start = True
     with pytest.raises(RuntimeError, match="run start refused"):
         mloda.stream_all([Feature(name=_RUN_COMPLETE_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
-    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="RuntimeError")]
+    return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
 def _stream_consumed(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:

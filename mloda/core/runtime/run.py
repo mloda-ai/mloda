@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pickle  # nosec B403
 import threading
 import time
@@ -14,6 +15,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.worker_manager import WorkerManager
+from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.core.cfw_manager import CfwManager, MyManager
@@ -76,6 +78,24 @@ def _describe_step(step: Any) -> str:
         if from_framework is not None and to_framework is not None:
             return f"TransformFrameworkStep {from_framework.get_class_name()} to {to_framework.get_class_name()}"
     return f"{type(step).__name__} {getattr(step, 'uuid', None)}"
+
+
+def planned_worker_count(execution_plan: Any, register_modes: set[ParallelizationMode]) -> int:
+    """Under-counting only cold-spawns later workers; over-counting leaves an idle standby that join reaps."""
+    count = 0
+    chain_children: dict[Any, set[UUID]] = {}
+    for step in execution_plan:
+        if ParallelizationMode.MULTIPROCESSING not in register_modes & step.get_parallelization_mode():
+            continue
+        if isinstance(step, TransformFrameworkStep):
+            count += 1
+        elif isinstance(step, FeatureGroupStep) and not step.tfs_ids:
+            seen = chain_children.setdefault(step.compute_framework, set())
+            if step.features.any_uuid in seen:
+                continue
+            count += 1
+            seen.update(step.children_if_root)
+    return count
 
 
 class ExecutionOrchestrator:
@@ -540,6 +560,11 @@ class ExecutionOrchestrator:
                 pickle.dumps((function_extender, hook_extenders)) if function_extender is not None else None
             )
 
+            # Cold starts overlap Manager and flight server startup; count is capped at the CPU count.
+            self.worker_manager.prestart_workers(
+                min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
+                standby_worker,
+            )
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_start_context()).__enter__()
             self.cfw_register = self.manager.CfwManager(parallelization_modes)
@@ -566,13 +591,14 @@ class ExecutionOrchestrator:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """
-        Exits the context of the ExecutionOrchestrator, shutting the manager down; safe if __enter__ raised.
+        Stops standby workers and the manager; safe if __enter__ raised.
 
         Args:
             exc_type: The exception type.
             exc_val: The exception value.
             exc_tb: The exception traceback.
         """
+        self.worker_manager.stop_standbys()
         if self.manager is not None:
             self.manager.shutdown()
 

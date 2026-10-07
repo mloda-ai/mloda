@@ -31,7 +31,8 @@ from tests.helpers.plan_stubs import ReiterablePlan
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
-from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count
+from tests.test_core.test_prepare.test_multi_link_group_resolution import SidePathPandasP, _side_path_prepare
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -539,6 +540,207 @@ class TestRegisterModesCache:
         orchestrator.executor._get_execution_function.assert_called_once_with(
             cached_modes, step.get_parallelization_mode()
         )
+
+
+_CHAIN_COLUMN = "planned_worker_chain_root_col"
+
+
+class _ChainRootFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_CHAIN_COLUMN})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_CHAIN_COLUMN: [1, 2, 3]}
+
+
+class _ChainChildFG(FeatureGroup):
+    def input_features(self, options: Any, feature_name: Any) -> Any:
+        return {Feature(_CHAIN_COLUMN)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"planned_worker_chain_child_col": [1, 2, 3]}
+
+
+def _chain_plan() -> Any:
+    session = mloda.prepare(
+        [Feature(name="_ChainChildFG")],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=PluginCollector.enabled_feature_groups({_ChainRootFG, _ChainChildFG}),
+        parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+    )
+    assert session.engine is not None
+    return session.engine.execution_planner
+
+
+class TestPlannedWorkerCount:
+    """planned_worker_count mirrors how many workers an MP run will create."""
+
+    @pytest.mark.parametrize(
+        ("register_modes", "expected"),
+        [({ParallelizationMode.MULTIPROCESSING}, 4), ({ParallelizationMode.SYNC}, 0)],
+        ids=["multiprocessing", "sync"],
+    )
+    def test_side_path_plan_count(self, register_modes: set[ParallelizationMode], expected: int) -> None:
+        plan = _side_path_prepare(
+            SidePathPandasP, False, False, ParallelizationMode.MULTIPROCESSING
+        ).engine.execution_planner
+
+        assert planned_worker_count(plan, register_modes) == expected
+
+    def test_same_framework_chain_shares_one_worker(self) -> None:
+        assert planned_worker_count(_chain_plan(), {ParallelizationMode.MULTIPROCESSING}) == 1
+
+
+class TestEnterPrestartsStandbyWorkers:
+    """__enter__ prestarts standbys (MULTIPROCESSING only, after preflight); compute never does."""
+
+    @staticmethod
+    def _orchestrator(mode: ParallelizationMode) -> ExecutionOrchestrator:
+        orchestrator = ExecutionOrchestrator(ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
+        orchestrator.cfw_register = CfwManager({mode})
+        orchestrator.worker_manager = Mock()
+        orchestrator.worker_manager.find_dead_workers.return_value = []
+        orchestrator.worker_manager.find_orphaned_steps.return_value = []
+        orchestrator._execute_step = Mock(  # type: ignore[method-assign]
+            side_effect=lambda step: setattr(step, "step_is_done", True)
+        )
+        orchestrator._process_step_result = Mock(return_value=True)  # type: ignore[method-assign]
+        orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+        orchestrator.join = Mock()  # type: ignore[method-assign]
+        return orchestrator
+
+    @staticmethod
+    def _entering(worker_manager: Mock) -> ExecutionOrchestrator:
+        plan = ExecutionPlan()
+        plan.execution_plan = []
+        orchestrator = ExecutionOrchestrator(plan)
+        orchestrator.worker_manager = worker_manager
+        orchestrator.flight_server = None
+        return orchestrator
+
+    def test_multiprocessing_enter_prestarts_the_planned_count(self) -> None:
+        from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
+
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+        modes = {ParallelizationMode.MULTIPROCESSING}
+
+        with (
+            patch("mloda.core.runtime.run.planned_worker_count", return_value=3) as count,
+            patch("mloda.core.runtime.run.MyManager"),
+            patch("mloda.core.runtime.run.mp_start_context"),
+        ):
+            orchestrator.__enter__(modes)
+
+        count.assert_called_once_with(orchestrator.execution_planner, modes)
+        worker_manager.prestart_workers.assert_called_once_with(3, standby_worker)
+
+    def test_prestart_happens_before_the_manager_starts(self) -> None:
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+        calls: list[str] = []
+        worker_manager.prestart_workers.side_effect = lambda *a: calls.append("prestart")
+
+        with (
+            patch("mloda.core.runtime.run.planned_worker_count", return_value=1),
+            patch("mloda.core.runtime.run.MyManager") as manager_cls,
+            patch("mloda.core.runtime.run.mp_start_context"),
+        ):
+            manager_instance = Mock()
+
+            def _enter() -> Mock:
+                calls.append("manager")
+                return manager_instance
+
+            manager_cls.return_value.__enter__.side_effect = _enter
+            orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING})
+
+        assert calls == ["prestart", "manager"]
+
+    def test_sync_enter_does_not_prestart(self) -> None:
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+
+        orchestrator.__enter__({ParallelizationMode.SYNC})
+
+        worker_manager.prestart_workers.assert_not_called()
+
+    def test_failing_preflight_does_not_prestart(self) -> None:
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+
+        with (
+            patch("mloda.core.runtime.run.raise_on_unpicklable_join_link", side_effect=ValueError("bad link")),
+            patch("mloda.core.runtime.run.planned_worker_count", return_value=1),
+        ):
+            with pytest.raises(ValueError, match="bad link"):
+                orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING})
+
+        worker_manager.prestart_workers.assert_not_called()
+
+    def test_exit_stops_unbound_standbys_before_shutting_the_manager_down(self) -> None:
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+        calls: list[str] = []
+        worker_manager.stop_standbys.side_effect = lambda: calls.append("standbys")
+        orchestrator.manager = Mock()
+        orchestrator.manager.shutdown.side_effect = lambda: calls.append("shutdown")
+
+        orchestrator.__exit__(None, None, None)
+
+        assert calls == ["standbys", "shutdown"]
+
+    def test_exit_stops_standbys_without_a_manager(self) -> None:
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+
+        orchestrator.__exit__(None, None, None)
+
+        worker_manager.stop_standbys.assert_called_once_with()
+
+    @pytest.mark.parametrize(
+        "run",
+        [lambda o: o.compute(), lambda o: list(o.compute_stream())],
+        ids=["compute", "compute_stream"],
+    )
+    def test_multiprocessing_compute_does_not_prestart(self, run: Callable[[Any], Any]) -> None:
+        worker_manager = Mock()
+        worker_manager.find_dead_workers.return_value = []
+        worker_manager.find_orphaned_steps.return_value = []
+        orchestrator = self._orchestrator(ParallelizationMode.MULTIPROCESSING)
+        orchestrator.worker_manager = worker_manager
+
+        with patch("mloda.core.runtime.run.time.sleep"):
+            run(orchestrator)
+
+        worker_manager.prestart_workers.assert_not_called()
+
+    @pytest.mark.parametrize(("cpus", "expected"), [(4, 4), (None, 1)], ids=["cpu_count", "cpu_count_unknown"])
+    def test_prestart_count_is_capped_at_the_cpu_count(self, cpus: int | None, expected: int) -> None:
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+
+        with (
+            patch("mloda.core.runtime.run.planned_worker_count", return_value=64),
+            patch("mloda.core.runtime.run.os.cpu_count", return_value=cpus),
+            patch("mloda.core.runtime.run.MyManager"),
+            patch("mloda.core.runtime.run.mp_start_context"),
+        ):
+            orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING})
+
+        assert worker_manager.prestart_workers.call_args.args[0] == expected
 
 
 class TestGetResultItemsPlanOrder:

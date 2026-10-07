@@ -6,6 +6,7 @@ import threading
 import time
 import logging
 from multiprocessing.process import BaseProcess
+from multiprocessing.reduction import ForkingPickler
 from typing import Any, Callable
 from uuid import UUID
 
@@ -29,6 +30,7 @@ class WorkerManager:
         # exits cleanly is invisible to find_dead_workers, so the only way to notice the
         # loss is that steps were assigned to it and no result ever arrived.
         self.assigned_steps: dict[UUID, set[UUID]] = {}
+        self.standby: list[tuple[Any, Any, Any]] = []
 
     def add_thread_task(self, task: threading.Thread) -> None:
         """Add task to list and call task.start()."""
@@ -42,11 +44,26 @@ class WorkerManager:
 
         Appends a zero-based worker_index as a trailing positional arg to the target.
         """
-        ctx = mp_start_context()
-        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
-        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
-
         worker_index = len(self.process_register)
+        if self.standby:
+            binding = bytes(ForkingPickler.dumps((target, args, worker_index)))
+            while self.standby:
+                process, command_queue, result_queue = self.standby.pop(0)
+                if not process.is_alive():
+                    logger.warning(
+                        "Standby worker exited with code %s before binding; trying the next one", process.exitcode
+                    )
+                    continue
+                command_queue.put(binding)
+                # A standby dying right after the put is reported via find_dead_workers / find_orphaned_steps.
+                self.process_register[cfw_uuid] = (process, command_queue, result_queue)
+                self.result_queues_collection.add(result_queue)
+                return process, command_queue, result_queue
+
+        ctx = mp_start_context()
+        command_queue = ctx.Queue()
+        result_queue = ctx.Queue()
+
         # As a side effect of daemon=True, code running inside a worker cannot itself
         # spawn multiprocessing children (Python raises on that).
         process = start_daemon_process(ctx, target, (command_queue, result_queue, *args, worker_index))
@@ -57,6 +74,24 @@ class WorkerManager:
         process.start()
 
         return process, command_queue, result_queue
+
+    def prestart_workers(self, count: int, target: Callable[..., None]) -> None:
+        """Start unbound daemon workers that create_worker_process later binds to a cfw."""
+        for _ in range(max(count, 0)):
+            ctx = mp_start_context()
+            command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+            result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+            process = start_daemon_process(ctx, target, (command_queue, result_queue))
+            self.standby.append((process, command_queue, result_queue))
+            self.tasks.append(process)
+            process.start()
+
+    def stop_standbys(self) -> None:
+        """Terminate and join every unbound standby worker."""
+        for process, _, _ in self.standby:
+            process.terminate()
+            process.join()
+        self.standby.clear()
 
     def get_process_queues(self, cfw_uuid: UUID) -> tuple[Any, Any, Any] | None:
         """Return registered tuple or None."""

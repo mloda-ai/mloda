@@ -1278,6 +1278,26 @@ def test_a_fully_infeasible_split_plan_names_its_features() -> None:
         assert name in str(raised.value)
 
 
+def test_a_two_thousand_block_chain_with_a_requested_leaf_per_block_chooses_quickly() -> None:
+    net = _Net()
+    chain = [net.add(ChooserLayerFG, "layer", {P}, {"layer": index}) for index in range(2000)]
+    for parent, child in zip(chain, chain[1:]):
+        net.edge(parent, child)
+    leaves = []
+    for index, block in enumerate(chain):
+        leaves.append(net.add(ChooserLeafFG, "leaf", {P, A}, {"layer": index}, requested=True))
+        net.edge(block, leaves[-1])
+
+    chooser = net.chooser(output_framework=P)
+    started = time.perf_counter()
+    chooser.choose()
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 6.0, f"choosing took {elapsed:.1f}s"
+    assert {(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in chain} == {(P, ONLY_ALLOWED)}
+    assert {(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in leaves} == {(P, DEFAULT_ORDER)}
+
+
 # --- RIGHT self-merge guard (F4) -------------------------------------------------------------------------
 
 

@@ -102,6 +102,8 @@ class TestTimeWindowPandasIntegration:
 
         results = session.run()
         assert len(results) == 1
+        # max(temperature)=25 for every row; 2-day sum is 25 on the first row (min_periods=1), then 50.
+        assert results[0]["tw"].tolist() == [25] + [50] * 9
 
 
 class TestTimeWindowPyArrowIntegration:

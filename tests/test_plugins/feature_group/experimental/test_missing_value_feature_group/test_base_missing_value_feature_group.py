@@ -149,8 +149,24 @@ class TestMissingValueFeatureGroup:
         assert {str(f.name) for f in result} == expected
         assert len(result) == len(expected)
 
-    def test_group_by_features_carry_no_group_options_of_scoped_source(self) -> None:
-        source = Feature("income", Options(group={"scope": "a"}))
+    @pytest.mark.parametrize(
+        ("source", "source_name", "expected_group"),
+        [
+            pytest.param(Feature("income", Options(group={"scope": "a"})), "income", {}, id="scoped_source"),
+            pytest.param(
+                Feature(
+                    "income_sum",
+                    Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "income"}),
+                ),
+                "income_sum",
+                {"aggregation_type": "sum"},
+                id="chained_source",
+            ),
+        ],
+    )
+    def test_group_by_features_carry_only_forwarded_group_options_of_source(
+        self, source: Feature, source_name: str, expected_group: dict[str, Any]
+    ) -> None:
         options = Options(
             group={"imputation_method": "mean"},
             context={DefaultOptionKeys.in_features: frozenset([source]), "group_by_features": ["region"]},
@@ -158,20 +174,8 @@ class TestMissingValueFeatureGroup:
         result = ConcreteMissingValueFeatureGroup().input_features(options, FeatureName("x"))
         assert result is not None
         by_name = {str(f.name): f for f in result}
-        assert set(by_name) == {"income", "region"}
-        assert by_name["region"] == Feature("region")
-        assert not by_name["region"].options.group
-
-    def test_group_by_features_carry_forwarded_group_options_of_chained_source(self) -> None:
-        source = Feature(
-            "income_sum", Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "income"})
-        )
-        options = Options(
-            context={DefaultOptionKeys.in_features: frozenset([source]), "group_by_features": ["region"]},
-        )
-        result = ConcreteMissingValueFeatureGroup().input_features(options, FeatureName("x"))
-        assert result is not None
-        by_name = {str(f.name): f for f in result}
-        assert set(by_name) == {"income_sum", "region"}
-        assert dict(by_name["region"].options.group) == {"aggregation_type": "sum"}
+        assert set(by_name) == {source_name, "region"}
+        assert dict(by_name["region"].options.group) == expected_group
         assert DefaultOptionKeys.in_features not in by_name["region"].options.group
+        if not expected_group:
+            assert by_name["region"] == Feature("region")

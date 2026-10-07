@@ -1412,27 +1412,29 @@ def test_the_carrier_join_is_planned_on_the_consumers_framework(consumer_kind: s
 
 _A_KEPT = [110, 220, 330, None]
 _B_KEPT = [110, 220, 330, None, None]
-_FULL_ROOTS = (MultiLinkRootA, MultiLinkRootBDistinct, None)
-_PARTIAL_ROOTS = (MultiLinkRootAPartial, MultiLinkRootBDistinctPartial, "partial")
+_FULL_MATCH = [110, 220, 330]
 
 
-@pytest.mark.parametrize("roots", [_FULL_ROOTS, _PARTIAL_ROOTS], ids=["full_match", "partial_match"])
+@pytest.mark.parametrize(
+    "root_a, root_b, partial",
+    [
+        pytest.param(MultiLinkRootA, MultiLinkRootBDistinct, False, id="full_match"),
+        pytest.param(MultiLinkRootAPartial, MultiLinkRootBDistinctPartial, True, id="partial_match"),
+    ],
+)
 @pytest.mark.parametrize("link_factory", [Link.left, Link.right], ids=["left", "right"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @_CARRIER_KIND_PARAMS
-def test_a_carrier_consumer_over_a_left_or_right_link_matches_the_inner_values(
-    consumer_kind: str, swap_link_sides: bool, link_factory: Any, roots: Any
+def test_a_carrier_consumer_over_a_left_or_right_link_keeps_the_link_rows(
+    consumer_kind: str, swap_link_sides: bool, link_factory: Any, root_a: Any, root_b: Any, partial: bool
 ) -> None:
     carrier = _CARRIER_CONSUMERS[consumer_kind][0]
-    root_a, root_b, partial = roots
+    a_side_kept = (link_factory == Link.left) != swap_link_sides
+    expected = ([_A_KEPT] if a_side_kept else [_B_KEPT]) if partial else [_FULL_MATCH]
 
     results = _carrier_alone(carrier, swap_link_sides, link_factory=link_factory, root_a=root_a, root_b=root_b).run()
 
-    if partial is None:
-        assert _side_path_values(results, carrier) == [[110, 220, 330]]
-    else:
-        a_side_kept = (link_factory == Link.left) != swap_link_sides
-        assert _nullable_column_values(results, carrier.get_class_name()) == [_A_KEPT if a_side_kept else _B_KEPT]
+    assert _nullable_column_values(results, carrier.get_class_name()) == expected
 
 
 class RemedyRootA1(MultiLinkRootA):

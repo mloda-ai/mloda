@@ -147,13 +147,27 @@ class TestNodeCentralityFeatureGroup:
         assert {str(f.name) for f in result} == expected
         assert len(result) == len(expected)
 
-    def test_edge_columns_carry_no_group_options_of_scoped_source(self) -> None:
-        source = Feature("user", Options(group={"scope": "a"}))
+    @pytest.mark.parametrize(
+        ("source", "expected_group"),
+        [
+            pytest.param(Feature("user", Options(group={"scope": "a"})), {}, id="scoped_source"),
+            pytest.param(
+                Feature("user", Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "raw_user"})),
+                {"aggregation_type": "sum"},
+                id="chained_source",
+            ),
+        ],
+    )
+    def test_edge_columns_carry_only_forwarded_group_options_of_source(
+        self, source: Feature, expected_group: dict[str, Any]
+    ) -> None:
         options = Options(context={DefaultOptionKeys.in_features: frozenset([source]), "weight_column": "w"})
         result = PandasNodeCentralityFeatureGroup().input_features(options, FeatureName("user__degree_centrality"))
         assert result is not None
         by_name = {str(f.name): f for f in result}
         assert set(by_name) == {"user", "source", "target", "w"}
         for name in ("source", "target", "w"):
-            assert by_name[name] == Feature(name)
-            assert not by_name[name].options.group
+            assert dict(by_name[name].options.group) == expected_group
+            assert DefaultOptionKeys.in_features not in by_name[name].options.group
+            if not expected_group:
+                assert by_name[name] == Feature(name)

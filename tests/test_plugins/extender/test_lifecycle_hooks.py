@@ -2,8 +2,7 @@
 
 import dataclasses
 import logging
-from collections.abc import Mapping
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import pytest
@@ -296,11 +295,6 @@ class _OriginExplainer(_Recorder):
             mloda.explain([Feature(name=_COLUMN)], **_kwargs(self))
 
 
-class _Outer:
-    class Inner(Exception):
-        pass
-
-
 class TestPlanContextOrigin:
     @pytest.mark.parametrize(
         "entry, expected",
@@ -454,6 +448,16 @@ class _WarningOnlyRefuser(_BreakingRefuser):
         self.raise_on_error = False
 
 
+class _Outer:
+    class Inner(Exception):
+        pass
+
+
+class _InnerRefuser(_BreakingRefuser):
+    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
+        raise _Outer.Inner("nested-boom")
+
+
 class TestOnRunStartRefusalSemantics:
     @pytest.mark.parametrize("refuser_type", [_BreakingRefuser, _GateRefuser])
     def test_raise_on_error_or_never_fall_back_propagates_and_the_run_is_refused(
@@ -501,13 +505,6 @@ class TestOnRunStartRefusalSemantics:
 
         assert calculated == []
 
-
-class _InnerRefuser(_BreakingRefuser):
-    def on_run_start(self, run: Any, plan: Any, steps: Any) -> None:
-        raise _Outer.Inner("nested-boom")
-
-
-class TestErrorTypeIsQualified:
     def test_nested_exception_class_reports_module_and_qualname(self) -> None:
         log: list[tuple[Any, ...]] = []
         session = _prepare({_InnerRefuser("refuser", log), _Recorder("later", log, priority=200)})

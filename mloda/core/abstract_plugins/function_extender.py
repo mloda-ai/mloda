@@ -29,7 +29,6 @@ class LifecycleOutcome:
 
 
 def qualified_type_name(error: BaseException) -> str:
-    """Return the exception's module.qualname."""
     return f"{type(error).__module__}.{type(error).__qualname__}"
 
 

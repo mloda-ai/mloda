@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing
+import pickle  # nosec B403
 import time
 import traceback
 from typing import Any
@@ -12,6 +13,7 @@ from mloda.core.abstract_plugins.close_context import CloseContext, CloseReason
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -26,6 +28,29 @@ def _handle_stop_command(command_queue: multiprocessing.Queue[Any]) -> None:
     """Puts a 'STOP' command in the command queue."""
     if command_queue:
         command_queue.put("STOP", block=False)
+
+
+def _parent_gone() -> bool:
+    parent = multiprocessing.parent_process()
+    return parent is not None and not parent.is_alive()
+
+
+def standby_worker(command_queue: multiprocessing.Queue[Any], result_queue: multiprocessing.Queue[Any]) -> None:
+    """Pre-warm backend imports, then wait to be bound to a cfw and run `worker`."""
+    ComputeFrameworkTransformer()
+    while True:
+        try:
+            command = command_queue.get(block=False)
+        except Empty:
+            if _parent_gone():
+                return
+            time.sleep(0.01)
+            continue
+        if command == "STOP":
+            return
+        target, args, worker_index = pickle.loads(command)  # nosec B301  # bytes from this run's parent queue
+        target(command_queue, result_queue, *args, worker_index)
+        return
 
 
 def _close_extenders(cfw: ComputeFramework, context: CloseContext) -> None:
@@ -157,8 +182,7 @@ def worker(
                 # Lets an orphaned worker exit on its own if its parent dies (e.g. SIGKILL).
                 # Only checked here at poll time, so a command already in progress runs to
                 # completion before this loop is reached again (best-effort, not preemptive).
-                parent = multiprocessing.parent_process()
-                if parent is not None and not parent.is_alive():
+                if _parent_gone():
                     reason = "parent_gone"
                     break
                 time.sleep(0.01)

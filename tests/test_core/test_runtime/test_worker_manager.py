@@ -2,6 +2,7 @@
 
 import logging
 import multiprocessing
+import pickle  # nosec B403
 import queue
 import threading
 import time
@@ -25,6 +26,11 @@ def _loop_forever_target(command_queue: Any, result_queue: Any, worker_index: in
     result_queue.put("READY")
     while True:
         time.sleep(0.1)
+
+
+def _report_target(command_queue: Any, result_queue: Any, tag: str, worker_index: int) -> None:
+    """Picklable bound target; reports its args and worker_index on the result queue."""
+    result_queue.put(f"{tag}:{worker_index}")
 
 
 class TestWorkerManagerInit:
@@ -169,6 +175,153 @@ class TestWorkerManagerProcessCreation:
             manager.create_worker_process(cfw_uuid, target_func, args)
 
         assert mock_ctx.Process.call_args.kwargs.get("daemon") is True
+
+
+def _mock_ctx(*processes: Any) -> Mock:
+    ctx = Mock()
+    ctx.Process.side_effect = list(processes) if processes else None
+    ctx.Queue.side_effect = lambda: MagicMock()
+    return ctx
+
+
+def _live_process() -> Mock:
+    process = Mock()
+    process.is_alive.return_value = True
+    return process
+
+
+class TestWorkerManagerStandbyWorkers:
+    """prestart_workers spawns unbound standbys that create_worker_process binds instead of spawning."""
+
+    def test_prestart_spawns_n_unbound_processes(self) -> None:
+        manager = WorkerManager()
+        processes = [_live_process(), _live_process(), _live_process()]
+        ctx = _mock_ctx(*processes)
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(3, _noop_target)
+
+        assert ctx.Process.call_count == 3
+        assert all(p.start.call_count == 1 for p in processes)
+        assert len(manager.standby) == 3
+        assert len(manager.tasks) == 3
+        assert manager.process_register == {}
+        assert manager.result_queues_collection == set()
+
+    def test_prestart_targets_get_their_own_queues(self) -> None:
+        manager = WorkerManager()
+        ctx = _mock_ctx(_live_process(), _live_process())
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(2, _noop_target)
+
+        (_, first_cmd, first_res), (_, second_cmd, second_res) = manager.standby
+        assert len({id(first_cmd), id(first_res), id(second_cmd), id(second_res)}) == 4
+        assert ctx.Process.call_args_list[0].kwargs["args"] == (first_cmd, first_res)
+
+    @pytest.mark.parametrize("count", [0, -1])
+    def test_prestart_with_non_positive_count_spawns_nothing(self, count: int) -> None:
+        manager = WorkerManager()
+        ctx = _mock_ctx()
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(count, _noop_target)
+
+        ctx.Process.assert_not_called()
+        assert manager.standby == []
+
+    def test_stop_standbys_terminates_joins_and_clears_unbound_standbys(self) -> None:
+        manager = WorkerManager()
+        processes = [_live_process(), _live_process()]
+        ctx = _mock_ctx(*processes)
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(2, _noop_target)
+
+        manager.stop_standbys()
+
+        assert all(p.terminate.call_count == 1 and p.join.call_count == 1 for p in processes)
+        assert manager.standby == []
+
+    def test_stop_standbys_is_a_noop_without_standbys(self) -> None:
+        manager = WorkerManager()
+
+        manager.stop_standbys()
+
+        assert manager.standby == []
+
+    def test_create_worker_process_reuses_a_standby(self) -> None:
+        manager = WorkerManager()
+        standby_process = _live_process()
+        ctx = _mock_ctx(standby_process)
+        cfw_uuid = uuid4()
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(1, _noop_target)
+            standby = manager.standby[0]
+            registered = manager.create_worker_process(cfw_uuid, _noop_target, ("a", 1))
+
+        assert ctx.Process.call_count == 1
+        assert registered == standby
+        assert manager.process_register[cfw_uuid] == standby
+        assert standby[2] in manager.result_queues_collection
+        assert manager.standby == []
+        assert manager.tasks.count(standby_process) == 1
+        payload = standby[1].put.call_args.args[0]
+        assert isinstance(payload, bytes)
+        assert pickle.loads(payload) == (_noop_target, ("a", 1), 0)  # nosec B301
+
+    def test_standbys_are_bound_first_in_first_out(self) -> None:
+        manager = WorkerManager()
+        ctx = _mock_ctx(_live_process(), _live_process())
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(2, _noop_target)
+            first, second = manager.standby
+            bound = manager.create_worker_process(uuid4(), _noop_target, ())
+
+        assert bound == first
+        assert manager.standby == [second]
+
+    def test_dead_standby_is_skipped_and_a_fresh_process_is_spawned(self) -> None:
+        manager = WorkerManager()
+        dead = Mock()
+        dead.is_alive.return_value = False
+        fresh = _live_process()
+        ctx = _mock_ctx(dead, fresh)
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(1, _noop_target)
+            process, _, _ = manager.create_worker_process(uuid4(), _noop_target, ())
+
+        assert process is fresh
+        fresh.start.assert_called_once()
+        assert dead in manager.tasks
+        assert manager.standby == []
+
+    def test_dead_standby_is_skipped_in_favor_of_the_next_live_one(self) -> None:
+        manager = WorkerManager()
+        dead = Mock()
+        dead.is_alive.return_value = False
+        live = _live_process()
+        ctx = _mock_ctx(dead, live)
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(2, _noop_target)
+            process, _, _ = manager.create_worker_process(uuid4(), _noop_target, ())
+
+        assert process is live
+        assert ctx.Process.call_count == 2
+
+    @pytest.mark.parametrize("make_arg", [lambda: lambda: None, threading.Lock], ids=["lambda", "lock"])
+    def test_unpicklable_arg_raises_in_the_parent_on_the_standby_path(self, make_arg: Any) -> None:
+        manager = WorkerManager()
+        ctx = _mock_ctx(_live_process())
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(1, _noop_target)
+            with pytest.raises((TypeError, AttributeError, pickle.PicklingError)):
+                manager.create_worker_process(uuid4(), _noop_target, (make_arg(),))
 
 
 class TestWorkerManagerProcessRetrieval:
@@ -643,6 +796,39 @@ class TestWorkerManagerJoinAll:
                 process.join(timeout=5)
             if join_thread.ident is not None:
                 join_thread.join(timeout=1.0)
+
+    @pytest.mark.timeout(30)
+    def test_join_all_terminates_an_unbound_real_standby(self) -> None:
+        from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
+
+        manager = WorkerManager()
+        manager.prestart_workers(1, standby_worker)
+        process = manager.standby[0][0]
+        try:
+            assert process.is_alive()
+
+            manager.join_all(graceful_timeout=0.3)
+
+            assert not process.is_alive()
+        finally:
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
+
+    @pytest.mark.timeout(30)
+    def test_real_standby_bound_to_a_target_runs_it_with_the_worker_index(self) -> None:
+        from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
+
+        manager = WorkerManager()
+        manager.prestart_workers(2, standby_worker)
+        try:
+            _, _, first_results = manager.create_worker_process(uuid4(), _report_target, ("one",))
+            _, _, second_results = manager.create_worker_process(uuid4(), _report_target, ("two",))
+
+            assert first_results.get(timeout=20) == "one:0"
+            assert second_results.get(timeout=20) == "two:1"
+        finally:
+            manager.join_all(graceful_timeout=0.3)
 
     def test_join_all_sends_graceful_stop_to_registered_processes_before_final_terminate(self) -> None:
         """Sends a graceful STOP to every alive registered process, and the final

@@ -45,17 +45,23 @@ def _worker_is_gone(pid: int) -> bool:
     return stat_text.rsplit(")", 1)[1].split()[0] == "Z"
 
 
-def _fake_parent_main(pid_file: str) -> None:
-    """Spawns a real worker() child via WorkerManager, writes its pid to pid_file, then blocks for SIGKILL."""
+def _fake_parent_main(pid_file: str, standby: bool = False) -> None:
+    """Spawns a real worker() child (or an unbound standby) via WorkerManager, writes its pid to pid_file, then blocks for SIGKILL."""
     manager = WorkerManager()
-    cfw_register = _FakeCfwManager()
-    cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+    if standby:
+        from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 
-    process, _, _ = manager.create_worker_process(
-        cfw_uuid=uuid4(),
-        target=worker,
-        args=(cfw_register, cfw, uuid4()),
-    )
+        manager.prestart_workers(1, standby_worker)
+        process = manager.standby[0][0]
+    else:
+        cfw_register = _FakeCfwManager()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+
+        process, _, _ = manager.create_worker_process(
+            cfw_uuid=uuid4(),
+            target=worker,
+            args=(cfw_register, cfw, uuid4()),
+        )
 
     with open(pid_file, "w") as pid_handle:
         pid_handle.write(str(process.pid))
@@ -133,10 +139,13 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
     """A worker spawned via WorkerManager.create_worker_process must exit once its parent dies."""
 
     @pytest.mark.timeout(30)
-    def test_real_worker_process_exits_after_its_real_parent_process_is_sigkilled(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("standby", [False, True], ids=["bound_worker", "unbound_standby"])
+    def test_real_worker_process_exits_after_its_real_parent_process_is_sigkilled(
+        self, tmp_path: Path, standby: bool
+    ) -> None:
         pid_file = tmp_path / "worker.pid"
         ctx = mp_start_context()
-        fake_parent = ctx.Process(target=_fake_parent_main, args=(str(pid_file),))
+        fake_parent = ctx.Process(target=_fake_parent_main, args=(str(pid_file), standby))
         fake_parent.start()
 
         worker_pid: int | None = None

@@ -1640,6 +1640,59 @@ def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_s
     assert _side_path_values(results, consumer) == expected
 
 
+class RemedyRootBArrowX(RemedyRootBThird):
+    """Root B variant on PyArrow providing mlg_bx."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"mlg_bx"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mlg_bx": [1000, 2000, 3000], "mlg_idx": ["x", "y", "z"]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class RemedyBothSidesMid(FeatureGroup):
+    """PyArrow mid reading members of both link sides."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("mlg_a"), Feature("mlg_bx")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data["mlg_a"], data["mlg_bx"]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+RemedyBothSidesConsumer = _remedy_sum_consumer(
+    "RemedyBothSidesConsumer", ThirdCfw, ("RemedyBothSidesMid", "mlg_a1", "mlg_b")
+)
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_mid_over_both_link_sides_beside_a_same_framework_join_is_rejected(swap_link_sides: bool) -> None:
+    with pytest.raises(ValueError, match="read both sides of a link"):
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=RemedyBothSidesConsumer,
+            features=[RemedyBothSidesConsumer.get_class_name()],
+            **{
+                **_REMEDY_KWARGS,
+                "root_b": RemedyRootBThird,
+                "extra_groups": {*_REMEDY_KWARGS["extra_groups"], RemedyRootBArrowX, RemedyBothSidesMid},
+            },
+        )
+
+
 class SidePathPandasBP(_SidePathP):
     """Pandas mid reading root B (mlg_bd)."""
 

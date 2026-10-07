@@ -1045,9 +1045,13 @@ Available join types:
                 above = graph.parent_to_children_mapping.get(parent, set())
                 from_left = bool(above & split.left_uuids_any_distance)
                 from_right = bool(above & split.right_uuids_any_distance)
-                # Same-framework join: mids over side members on other frameworks arrive via another join of the link.
-                if side_frameworks is not None and not any(
-                    nodes[a].feature.get_compute_framework() in side_frameworks for a in above & side_members
+                # Same-framework join: one-sided mids over other-framework members arrive via another join of the link.
+                if (
+                    side_frameworks is not None
+                    and not (from_left and from_right)
+                    and not any(
+                        nodes[a].feature.get_compute_framework() in side_frameworks for a in above & side_members
+                    )
                 ):
                     continue
                 if from_left or from_right:

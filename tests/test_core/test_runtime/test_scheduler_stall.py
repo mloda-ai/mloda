@@ -7,7 +7,6 @@ schedules nothing, completes nothing and has nothing in flight must raise MlodaR
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 from unittest.mock import Mock
 from uuid import UUID, uuid4
@@ -27,22 +26,13 @@ from mloda.core.runtime.run import ExecutionOrchestrator, _describe_step
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import make_fg
+from tests.test_core.test_runtime.plan_stubs import ReiterablePlan
 
 # Below the suite-wide timeout on purpose: a stall regression must fail fast, not hang.
 pytestmark = pytest.mark.timeout(5)
 
 
 StallFeatureGroup = make_fg("StallFeatureGroup")
-
-
-class ReiterablePlan:
-    """A planner stub that yields the same steps on every pass, like a real ExecutionPlan."""
-
-    def __init__(self, *steps: Any) -> None:
-        self._steps = steps
-
-    def __iter__(self) -> Iterator[Any]:
-        return iter(self._steps)
 
 
 class InFlightStep:

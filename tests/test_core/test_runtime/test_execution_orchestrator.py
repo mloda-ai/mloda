@@ -10,7 +10,7 @@ import inspect
 import logging
 import threading
 import uuid as uuid_mod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
@@ -27,6 +27,7 @@ from mloda.provider import (  # noqa: F401
 from mloda.user import Feature, PluginCollector, mloda
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
+from tests.test_core.test_runtime.plan_stubs import ReiterablePlan
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
@@ -455,16 +456,6 @@ class TestExecutionOrchestratorStepLock:
         )
 
 
-class _ReiterablePlan:
-    """A planner mock that yields the same step on each iteration."""
-
-    def __init__(self, step: object) -> None:
-        self._step = step
-
-    def __iter__(self) -> Iterator[object]:
-        yield self._step
-
-
 def _single_step_mock() -> MagicMock:
     step_uuid = uuid_mod.uuid4()
     step = MagicMock()
@@ -487,7 +478,7 @@ class TestSyncModeSkipsSleep:
 
     def test_sync_mode_does_not_call_time_sleep(self) -> None:
         """In SYNC mode, compute() should not call time.sleep."""
-        planner = _ReiterablePlan(_single_step_mock())
+        planner = ReiterablePlan(_single_step_mock())
 
         orchestrator = ExecutionOrchestrator(planner)  # type: ignore[arg-type]
         orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
@@ -510,7 +501,7 @@ class TestRegisterModesCache:
 
     def test_multiprocessing_loop_reads_parallelization_modes_once(self) -> None:
         """Across several loop passes the Manager is asked for the modes only once."""
-        orchestrator = ExecutionOrchestrator(_ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
+        orchestrator = ExecutionOrchestrator(ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
         register = Mock(wraps=CfwManager({ParallelizationMode.MULTIPROCESSING}))
         orchestrator.cfw_register = register
 

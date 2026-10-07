@@ -10,7 +10,7 @@ import logging
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.runtime.flight.flight_server import FlightServer, create_location, _require_pyarrow_flight
-from mloda.core.runtime.mp_context import mp_spawn_context, spawn_daemon_process
+from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process
 from mloda.core.runtime.parent_death_watchdog import start_parent_death_watchdog
 
 logger = logging.getLogger(__name__)
@@ -36,9 +36,9 @@ class ParallelRunnerFlightServer:
         _require_pyarrow_flight()
         if not self.flight_server_process:
             location = create_location()
-            ctx = mp_spawn_context()
+            ctx = mp_start_context()
             location_queue: multiprocessing.Queue[Any] = ctx.Queue()
-            self.flight_server_process = spawn_daemon_process(ctx, self.start_flight_server, (location, location_queue))
+            self.flight_server_process = start_daemon_process(ctx, self.start_flight_server, (location, location_queue))
             self.flight_server_process.start()
             try:
                 self.location = self.wait_for_flight_server_location(location_queue)

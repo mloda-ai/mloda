@@ -27,6 +27,7 @@ from mloda.provider import (  # noqa: F401
 from mloda.user import Feature, PluginCollector, mloda
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
+from tests.helpers.plan_stubs import ReiterablePlan
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
@@ -455,6 +456,16 @@ class TestExecutionOrchestratorStepLock:
         )
 
 
+def _single_step_mock() -> MagicMock:
+    step_uuid = uuid_mod.uuid4()
+    step = MagicMock()
+    step.get_uuids.return_value = {step_uuid}
+    step.required_uuids = set()
+    step.step_is_done = False
+    step.uuid = step_uuid
+    return step
+
+
 class TestSyncModeSkipsSleep:
     """Tests that SYNC mode does not call time.sleep in the compute loop.
 
@@ -467,24 +478,7 @@ class TestSyncModeSkipsSleep:
 
     def test_sync_mode_does_not_call_time_sleep(self) -> None:
         """In SYNC mode, compute() should not call time.sleep."""
-        step_uuid = uuid_mod.uuid4()
-
-        mock_step = MagicMock()
-        mock_step.get_uuids.return_value = {step_uuid}
-        mock_step.required_uuids = set()
-        mock_step.step_is_done = False
-        mock_step.uuid = step_uuid
-
-        class ReiterablePlan:
-            """A planner mock that yields the same step on each iteration."""
-
-            def __init__(self, step: object) -> None:
-                self._step = step
-
-            def __iter__(self):  # type: ignore[no-untyped-def]
-                yield self._step
-
-        planner = ReiterablePlan(mock_step)
+        planner = ReiterablePlan(_single_step_mock())
 
         orchestrator = ExecutionOrchestrator(planner)  # type: ignore[arg-type]
         orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
@@ -500,6 +494,51 @@ class TestSyncModeSkipsSleep:
         with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
             orchestrator.compute()
             mock_sleep.assert_not_called()
+
+
+class TestRegisterModesCache:
+    """The compute loop and _execute_step read the parallelization modes cached on the orchestrator."""
+
+    def test_multiprocessing_loop_reads_parallelization_modes_once(self) -> None:
+        """Across several loop passes the Manager is asked for the modes only once."""
+        orchestrator = ExecutionOrchestrator(ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
+        register = Mock(wraps=CfwManager({ParallelizationMode.MULTIPROCESSING}))
+        orchestrator.cfw_register = register
+
+        polls = 0
+
+        def fake_process_step_result(step: object) -> bool:
+            nonlocal polls
+            polls += 1
+            return polls >= 3
+
+        orchestrator._execute_step = Mock()  # type: ignore[method-assign]
+        orchestrator._process_step_result = Mock(side_effect=fake_process_step_result)  # type: ignore[method-assign]
+        orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+        orchestrator.join = Mock()  # type: ignore[method-assign]
+
+        with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
+            orchestrator.compute()
+
+        mock_sleep.assert_called()
+        register.get_parallelization_modes.assert_called_once()
+
+    def test_execute_step_uses_cached_register_modes(self) -> None:
+        orchestrator = ExecutionOrchestrator(MagicMock())
+        register = Mock(wraps=CfwManager({ParallelizationMode.SYNC}))
+        orchestrator.cfw_register = register
+        cached_modes = {ParallelizationMode.THREADING}
+        orchestrator._register_modes = cached_modes
+        orchestrator.executor = Mock()
+        step = Mock()
+
+        orchestrator._execute_step(step)
+
+        register.get_parallelization_modes.assert_not_called()
+        orchestrator.executor._get_execution_function.assert_called_once_with(
+            cached_modes, step.get_parallelization_mode()
+        )
 
 
 class TestGetResultItemsPlanOrder:

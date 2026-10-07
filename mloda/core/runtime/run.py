@@ -20,7 +20,7 @@ from mloda.core.core.cfw_manager import CfwManager, MyManager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
-from mloda.core.runtime.mp_context import mp_spawn_context
+from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -333,7 +333,7 @@ class ExecutionOrchestrator:
 
                 self._raise_if_stalled(made_progress, finished_ids, currently_running_steps)
 
-                if ParallelizationMode.MULTIPROCESSING in self.cfw_register.get_parallelization_modes():
+                if ParallelizationMode.MULTIPROCESSING in self._register_modes:
                     time.sleep(0.01)
 
             # A cfw's last dependent can finish in the same pass that visited its own
@@ -479,7 +479,7 @@ class ExecutionOrchestrator:
         Executes a step based on its parallelization mode.
         """
         execution_function = self.executor._get_execution_function(
-            self.cfw_register.get_parallelization_modes(), step.get_parallelization_mode()
+            self._register_modes, step.get_parallelization_mode()
         )
         execution_function(step)
 
@@ -541,7 +541,7 @@ class ExecutionOrchestrator:
             )
 
             MyManager.register("CfwManager", CfwManager)
-            self.manager = MyManager(ctx=mp_spawn_context()).__enter__()
+            self.manager = MyManager(ctx=mp_start_context()).__enter__()
             self.cfw_register = self.manager.CfwManager(parallelization_modes)
 
         self.cfw_register.set_run_context(run_context)

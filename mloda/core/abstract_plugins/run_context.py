@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 
 @dataclass(frozen=True)
 class RunContext:
-    """Per-run values every ComputeFramework carries into hooks and spawn workers; keep it picklable.
+    """Per-run values every ComputeFramework carries into hooks and worker processes; keep it picklable.
 
     Exported from mloda.steward as the argument of on_run_start and on_run_complete; the other facades do not export it.
     """

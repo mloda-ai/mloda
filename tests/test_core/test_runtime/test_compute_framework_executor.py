@@ -444,15 +444,14 @@ class TestGetCfw:
 
         # Mock register lookup
         mock_cfw_class = Mock()
+        mock_cfw_class.get_class_name.return_value = "PandasDataFrame"
         feature_uuid = uuid4()
-        cfw_register.get_initialized_compute_framework_uuid.return_value = cfw_uuid
+        cfw_register.get_cfw_uuid.return_value = cfw_uuid
 
         result = executor.get_cfw(mock_cfw_class, feature_uuid)
 
         assert result is mock_cfw
-        cfw_register.get_initialized_compute_framework_uuid.assert_called_once_with(
-            mock_cfw_class, feature_uuid=feature_uuid
-        )
+        cfw_register.get_cfw_uuid.assert_called_once_with("PandasDataFrame", feature_uuid)
 
     def test_raises_value_error_if_cfw_uuid_is_none(self) -> None:
         """Should raise ValueError if CFW UUID is not found in register."""
@@ -460,9 +459,10 @@ class TestGetCfw:
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
-        cfw_register.get_initialized_compute_framework_uuid.return_value = None
+        cfw_register.get_cfw_uuid.return_value = None
 
         mock_cfw_class = Mock()
+        mock_cfw_class.get_class_name.return_value = "PandasDataFrame"
 
         with pytest.raises(ValueError, match="cfw_uuid should not be none"):
             executor.get_cfw(mock_cfw_class, uuid4())

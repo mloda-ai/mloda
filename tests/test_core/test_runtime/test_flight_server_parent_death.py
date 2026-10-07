@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
-from mloda.core.runtime.mp_context import mp_spawn_context
+from mloda.core.runtime.mp_context import mp_start_context
 
 
 def _flight_server_is_gone(pid: int) -> bool:
@@ -42,7 +42,7 @@ class TestFlightServerProcessDoesNotOutliveASigkilledParent:
     @pytest.mark.timeout(45)
     def test_real_flight_server_process_exits_after_its_real_parent_process_is_sigkilled(self, tmp_path: Path) -> None:
         pid_file = tmp_path / "flight_server.pid"
-        ctx = mp_spawn_context()
+        ctx = mp_start_context()
         fake_parent = ctx.Process(target=_fake_parent_main, args=(str(pid_file),))
         fake_parent.start()
 

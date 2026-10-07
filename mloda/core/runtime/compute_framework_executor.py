@@ -159,15 +159,13 @@ class ComputeFrameworkExecutor:
             tfs_ids: The step's own tfs_ids, tried first when given.
         """
         cfw_uuid: UUID | None = None
+        cls_name = compute_framework.get_class_name()
         if tfs_ids:
-            cls_name = compute_framework.get_class_name()
             # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain.
             cfw_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, tfs_ids, feature_uuid)
 
         if cfw_uuid is None:
-            cfw_uuid = self.cfw_register.get_initialized_compute_framework_uuid(
-                compute_framework, feature_uuid=feature_uuid
-            )
+            cfw_uuid = self.cfw_register.get_cfw_uuid(cls_name, feature_uuid)
         if cfw_uuid is None:
             raise ValueError(f"cfw_uuid should not be none: {compute_framework}.")
         return self.cfw_collection[cfw_uuid]

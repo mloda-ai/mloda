@@ -1278,8 +1278,10 @@ def test_a_fully_infeasible_split_plan_names_its_features() -> None:
         assert name in str(raised.value)
 
 
-def test_a_two_thousand_block_chain_with_a_requested_leaf_per_block_chooses_quickly() -> None:
-    net = _Net()
+_Expected = list[tuple[list[Feature], str, type[ComputeFramework]]]
+
+
+def _many_chain(net: _Net) -> _Expected:
     chain = [net.add(ChooserLayerFG, "layer", {P}, {"layer": index}) for index in range(2000)]
     for parent, child in zip(chain, chain[1:]):
         net.edge(parent, child)
@@ -1287,15 +1289,37 @@ def test_a_two_thousand_block_chain_with_a_requested_leaf_per_block_chooses_quic
     for index, block in enumerate(chain):
         leaves.append(net.add(ChooserLeafFG, "leaf", {P, A}, {"layer": index}, requested=True))
         net.edge(block, leaves[-1])
+    return [(chain, ONLY_ALLOWED, P), (leaves, DEFAULT_ORDER, P)]
 
-    chooser = net.chooser(output_framework=P)
+
+def _many_single(net: _Net) -> _Expected:
+    leaves = [net.add(ChooserLeafFG, "leaf", {P, A}, {"component": i}, requested=True) for i in range(3000)]
+    return [(leaves, DEFAULT_ORDER, P)]
+
+
+def _many_pair(net: _Net) -> _Expected:
+    roots, leaves = [], []
+    for i in range(3000):
+        roots.append(net.add(ChooserRootFG, "root", {D}, {"component": i}))
+        leaves.append(net.add(ChooserLeafFG, "leaf", {P, A, D}, {"component": i}, requested=True))
+        net.edge(roots[-1], leaves[-1])
+    return [(roots, ONLY_ALLOWED, D), (leaves, CONVERTS_LATER, D)]
+
+
+@pytest.mark.parametrize("build", [_many_chain, _many_single, _many_pair], ids=["chain", "single", "pair"])
+def test_many_blocks_or_components_are_chosen_quickly(build: Callable[[_Net], _Expected]) -> None:
+    net = _Net()
+    expected = build(net)
+    chooser = net.chooser(output_framework=P)  # built before the timer
     started = time.perf_counter()
     chooser.choose()
     elapsed = time.perf_counter() - started
 
     assert elapsed < 6.0, f"choosing took {elapsed:.1f}s"
-    assert {(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in chain} == {(P, ONLY_ALLOWED)}
-    assert {(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in leaves} == {(P, DEFAULT_ORDER)}
+    for features, reason, framework in expected:
+        assert {(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in features} == {
+            (framework, reason)
+        }
 
 
 # --- RIGHT self-merge guard (F4) -------------------------------------------------------------------------

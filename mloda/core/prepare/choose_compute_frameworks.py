@@ -229,11 +229,10 @@ class ChooseComputeFrameworks:
             for block in blocks
         ]
         domains = self._prune(blocks, rules)
-        for order in self._search_orders(len(blocks), rules, groups):
-            members = set(order)
-            local_rules = [r for r in rules if r.blocks[0] in members]
-            touching, steps = self._component_indexes(order, local_rules, groups)
-            assignment, _ = self._solve(blocks, order, local_rules, groups, domains, touching, steps)
+        linked = self._neighbor_map(len(blocks), rules, groups)
+        touching, steps = self._component_indexes(len(blocks), rules, groups)
+        for order in self._search_orders(len(blocks), linked):
+            assignment, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
             for index, framework in assignment.items():
                 reason = self._reason(blocks, touching, steps, assignment, index)
                 for feature in blocks[index].features:
@@ -242,18 +241,17 @@ class ChooseComputeFrameworks:
         self._require_all_chosen()
 
     def _component_indexes(
-        self, order: list[int], rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
+        self, count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
     ) -> tuple[dict[int, list[_Rule]], dict[int, list[tuple[int, set[int], int]]]]:
-        """Per block of one component: the rules touching it and the transform steps it takes part in."""
-        touching: dict[int, list[_Rule]] = {b: [] for b in order}
+        """Per block: the rules touching it and the transform steps it takes part in."""
+        touching: dict[int, list[_Rule]] = {b: [] for b in range(count)}
         for rule in rules:
             for b in self._rule_blocks(rule):
                 touching[b].append(rule)
-        steps: dict[int, list[tuple[int, set[int], int]]] = {b: [] for b in order}
+        steps: dict[int, list[tuple[int, set[int], int]]] = {b: [] for b in range(count)}
         for key, children in groups.items():
-            if key[0] in touching:
-                for b in (key[0], *children):
-                    steps[b].append((key[0], children, self._step_depth[key]))
+            for b in (key[0], *children):
+                steps[b].append((key[0], children, self._step_depth[key]))
         return touching, steps
 
     def _require_all_chosen(self) -> None:
@@ -614,11 +612,8 @@ class ChooseComputeFrameworks:
         return groups
 
     @staticmethod
-    def _search_orders(
-        count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
-    ) -> list[list[int]]:
+    def _search_orders(count: int, neighbors: list[set[int]]) -> list[list[int]]:
         """Per connected component, blocks breadth-first from the first in content order (neighbours in content order)."""
-        neighbors = ChooseComputeFrameworks._neighbor_map(count, rules, groups)
         orders: list[list[int]] = []
         seen: set[int] = set()
         for start in range(count):
@@ -754,15 +749,12 @@ class ChooseComputeFrameworks:
         blocks: list[_Block],
         order: list[int],
         rules: list[_Rule],
-        groups: dict[tuple[int, type[FeatureGroup]], set[int]],
+        linked: list[set[int]],
         domains: list[list[Framework]],
         touching: dict[int, list[_Rule]],
         steps: dict[int, list[tuple[int, set[int], int]]],
     ) -> tuple[dict[int, Framework], Cost]:
         """Branch and bound; returns the best assignment and its cost, raising when no assignment is feasible."""
-        linked = self._neighbor_map(
-            len(blocks), rules, {key: kids for key, kids in groups.items() if key[0] in touching}
-        )
         search_order = [b for b in order if len(domains[b]) == 1] + [b for b in order if len(domains[b]) != 1]
         position = {b: i for i, b in enumerate(search_order)}
         assigned: dict[int, Framework] = {}
@@ -914,7 +906,8 @@ class ChooseComputeFrameworks:
 
         result = search(search_order, {b: domains[b] for b in order})
         if result is None:
-            raise ValueError(self._infeasible(blocks, order, rules))
+            members = set(order)
+            raise ValueError(self._infeasible(blocks, order, [r for r in rules if r.blocks[0] in members]))
         return result
 
     @staticmethod

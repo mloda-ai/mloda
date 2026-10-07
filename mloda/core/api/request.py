@@ -8,6 +8,7 @@ from typing import Any, Callable, Generator
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatPointerError
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
@@ -519,6 +520,7 @@ class mlodaAPI:
             )
         except (
             ComputeFrameworkPinError,
+            FormatPointerError,
             EnvironmentPreconditionError,
             RedefinitionConflictError,
             FrameworkDeclarationError,

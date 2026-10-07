@@ -96,7 +96,7 @@ class TestTwoReader:
         del sibling_a, sibling_b, excinfo
         gc.collect()
 
-    def test_load_data_access_collection_feature_scope_data_double_reader_fail(self) -> None:
+    def test_a_pointer_wins_over_the_same_column_in_the_collection(self) -> None:
         feature_list: list[Feature] = []
         for feature in self.feature_list:
             f = Feature(
@@ -105,15 +105,13 @@ class TestTwoReader:
             )
             feature_list.append(f)
 
-        with pytest.raises(ValueError) as excinfo:
-            mloda.run_all(
-                feature_list,  # type: ignore
-                compute_frameworks=["PyArrowTable"],
-                data_access_collection=DataAccessCollection(files={self.file_path}),
-                plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG, CsvFG}),
-            )
-        assert "Multiple feature groups found" in str(excinfo.value)
-        assert "BaseInputData already set" not in str(excinfo.value)
+        result = mloda.run_all(
+            feature_list,  # type: ignore
+            compute_frameworks=["PyArrowTable"],
+            data_access_collection=DataAccessCollection(files={self.file_path}),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG, CsvFG}),
+        )
+        assert result[0].to_pydict()["id"] == [1, 2]
 
     def _agg_groups(self) -> tuple[type[CsvFG], type[SqliteFG], Link]:
         index = Index(("id",))

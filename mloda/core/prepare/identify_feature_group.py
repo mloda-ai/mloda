@@ -1,5 +1,6 @@
 import inspect
-from collections.abc import Sequence
+import os
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
@@ -33,6 +34,11 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
 )
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader, feature_group_scope
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+    FormatFeatureGroup,
+    FormatPointerError,
+    concrete_format_groups,
+)
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
@@ -119,6 +125,85 @@ def validate_single_framework_pin(feature: Feature) -> None:
         )
 
 
+_NOT_ACCESSIBLE = "it is not among this run's accessible feature groups"
+
+
+def _pinned_path(feature: Feature, collection: DataAccessCollection | None) -> str | None:
+    if collection is None or collection.column_to_file is None:
+        return None
+    handle = collection.column_to_file.get(str(feature.name))
+    return None if handle is None else collection.files.get(handle)
+
+
+def _pin_conflict(
+    feature: Feature, collection: DataAccessCollection | None, loaded: dict[str, type[FormatFeatureGroup]]
+) -> str | None:
+    from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+
+    pinned = _pinned_path(feature, collection)
+    if pinned is None:
+        return None
+    pinned_abs = os.path.abspath(pinned)
+    for key in sorted(k for k in feature.options.keys() if isinstance(k, str)):
+        group = loaded.get(key)
+        if group is None:
+            continue
+        value = feature.options[key]
+        if issubclass(group, ReadFileFG) and isinstance(value, (str, os.PathLike)):
+            pointer = os.path.abspath(value)
+            if pointer == pinned_abs:
+                continue
+            return (
+                f"options point {key} at {pointer}, but column_to_file pins '{feature.name}' to {pinned_abs}; "
+                "drop the pointer or the pin."
+            )
+        return (
+            f"options point at {key}, but column_to_file pins '{feature.name}' to {pinned_abs}; "
+            "drop the pointer or the pin."
+        )
+    return None
+
+
+def validate_format_pointers(
+    feature: Feature,
+    accessible_plugins: FeatureGroupEnvironmentMapping,
+    excluded: Mapping[type[FeatureGroup], str] | None,
+    data_access_collection: DataAccessCollection | None,
+) -> None:
+    """Raise FormatPointerError for an unreachable pointer or scope, or a pointer against a pin."""
+    scope = feature.feature_group_scope
+    keys = sorted(key for key in feature.options.keys() if isinstance(key, str))
+    if not keys and scope is None:
+        return
+    excluded = excluded or {}
+    loaded = concrete_format_groups()
+    accessible_formats = [fg for fg in accessible_plugins if issubclass(fg, FormatFeatureGroup)]
+    for key in keys:
+        group = loaded.get(key)
+        if group is not None and not any(key in fg.pointer_keys() for fg in accessible_formats):
+            reason = excluded.get(group, _NOT_ACCESSIBLE)
+            raise FormatPointerError(f"options point at {key}, but {key} is not accessible in this run: {reason}.")
+    if scope is not None:
+        scope_name = scope if isinstance(scope, str) else scope.__name__
+        group = loaded.get(scope_name)
+        if group is not None and not any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
+            reason = excluded.get(group, _NOT_ACCESSIBLE)
+            raise FormatPointerError(
+                f"feature_group={scope_name}, but {scope_name} is not accessible in this run: {reason}."
+            )
+        for key in keys:
+            if key in loaded and not any(
+                matches_feature_group_scope(fg, scope) and key in fg.pointer_keys() for fg in accessible_formats
+            ):
+                raise FormatPointerError(
+                    f"feature_group={scope_name} and an options pointer at {key} name different groups; "
+                    "drop one of them."
+                )
+    conflict = _pin_conflict(feature, data_access_collection, loaded)
+    if conflict is not None:
+        raise FormatPointerError(conflict)
+
+
 class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
@@ -168,11 +253,14 @@ class IdentifyFeatureGroupClass:
         accessible_plugins: FeatureGroupEnvironmentMapping,
         links: set[Link] | None,
         data_access_collection: DataAccessCollection | None = None,
+        *,
+        excluded: Mapping[type[FeatureGroup], str] | None = None,
     ) -> EvaluationResult:
         """Run the matching/filter logic without raising, returning a structured result."""
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
+        validate_format_pointers(feature, accessible_plugins, excluded, data_access_collection)
         self = cls(data_access_collection)
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
@@ -871,10 +959,14 @@ def evaluate_and_render(
     accessible_plugins: FeatureGroupEnvironmentMapping,
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
+    *,
+    excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> tuple[EvaluationResult, str | None]:
     """One resolution pass plus its failure message; the message is None iff the feature resolved."""
     # Unguarded: ComputeFrameworkPinError is a misuse validated before matching, so it escapes unconverted.
-    result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links, data_access_collection)
+    result = IdentifyFeatureGroupClass.evaluate(
+        feature, accessible_plugins, links, data_access_collection, excluded=excluded
+    )
     return result, render_resolution_failure(result, feature)
 
 
@@ -884,9 +976,11 @@ def resolve_or_raise(
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
     partial_records: Sequence[ResolutionRecord] = (),
+    *,
+    excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
-    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection)
+    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection, excluded=excluded)
     if message is not None:
         # The constructor does the cap-then-deepcopy snapshot, so the records are forwarded as they are.
         raise FeatureResolutionError(message, str(feature.name), result, partial_records=partial_records)

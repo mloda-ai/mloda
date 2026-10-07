@@ -1,7 +1,9 @@
 """FormatFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
 
+import gc
 from abc import abstractmethod
 from collections.abc import Collection
+from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
@@ -11,6 +13,9 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+    FormatPointerError,
+)
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
@@ -18,6 +23,8 @@ from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_parquet
+from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     ToyDeclaredFG,
     ToyFormatBase,
@@ -127,7 +134,8 @@ class TestOpenNames:
 
     def test_scope_does_not_point_other_groups_candidates_when_out_of_scope(self) -> None:
         feature = Feature("toyfmt_any", feature_group=ToyOpenFG)
-        assert not _claims(feature, toy_dac(h1={COL: [1]}), ToyFormatFG)
+        result = _identify(feature, toy_dac(h1={COL: [1]}), ToyFormatFG, ToyOpenFG)
+        assert ToyFormatFG not in result.identified
 
 
 class TestRequiredOptionRoute:
@@ -388,6 +396,20 @@ class TestPointingIsExplicitOnly:
 _DERIVED = "toyfmt_col__sum_aggr"
 
 
+class _PlainClaimsDerived(FeatureGroup):
+    """Non-format survivor claiming the derived name."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: FeatureName | str, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        return str(feature_name) == _DERIVED
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
 class TestPointedGroupDefersToAComputingCandidate:
     DERIVED = _DERIVED
 
@@ -405,14 +427,14 @@ class TestPointedGroupDefersToAComputingCandidate:
         ("name", "groups", "dac"),
         [
             ("toyfmt_unclaimed", (ToyFormatFG, PyArrowAggregatedFeatureGroup), None),
-            (_DERIVED, (ToyFormatFG, ToyOtherFormatFG, PyArrowAggregatedFeatureGroup), toy_dac(h1={_DERIVED: [1]})),
+            (_DERIVED, (ToyFormatFG, _PlainClaimsDerived, PyArrowAggregatedFeatureGroup), None),
         ],
         ids=["no_other_claimant", "another_reader_survives"],
     )
     def test_pointed_reader_still_aborts(
         self, name: str, groups: tuple[type, ...], dac: DataAccessCollection | None
     ) -> None:
-        feature = Feature(name, Options({"ToyFormatFG": {COL: [1]}}))
+        feature = Feature(name, Options({"ToyFormatFG": {COL: [1]}, "toyfmt_required": "yes"}))
         with pytest.raises(ValueError, match=rf"column '{name}' is in none of the sources of ToyFormatFG"):
             evaluate_or_raise(feature, _plugins(*groups), None, dac)
 
@@ -735,3 +757,118 @@ class TestMatchesAreSharedWithinOneRun:
 
         self._run()
         assert CACHED_CALLS == ["hcache:toy", "hcache:toy"]
+
+
+def _stock(module: str, name: str) -> Any:
+    return load_group(module, name)
+
+
+def _write_csv_and_parquet(folder: Path) -> tuple[str, str]:
+    csv_path = folder / "fpg_a.csv"
+    parquet_path = folder / "fpg_b.parquet"
+    write_csv(csv_path, {"fpg_x": [1, 2]})
+    write_parquet(parquet_path, {"fpg_x": [9, 9]})
+    return str(csv_path), str(parquet_path)
+
+
+class TestForeignPointerMakesSearchedRoutesDecline:
+    def test_an_option_key_naming_no_format_group_is_ignored(self) -> None:
+        feature = Feature(COL, Options({"toyfmt_not_a_group": 1}))
+
+        assert _claims(feature, toy_dac(h1={COL: [1]}), ToyFormatFG)
+
+    @pytest.mark.parametrize(
+        ("key", "feature_group"),
+        [("CsvReader", None), (None, "ReadFileFeature")],
+        ids=["option_key", "scope"],
+    )
+    def test_a_former_reader_name_is_an_unknown_name_and_raises_no_pointer_error(
+        self, key: str | None, feature_group: str | None
+    ) -> None:
+        feature = Feature("fpg_x", Options({key: "x"} if key else {}), feature_group=feature_group)
+        result = IdentifyFeatureGroupClass.evaluate(feature, _plugins(_stock("csv_fg", "CsvFG")), None, None)
+        assert not result.identified
+
+    def test_a_csv_pointer_returns_the_pointed_value_though_the_collection_holds_the_column_elsewhere(
+        self, tmp_path: Path
+    ) -> None:
+        csv_path, _ = _write_csv_and_parquet(tmp_path)
+        result = mloda.run_all(
+            [Feature("fpg_x", Options({"CsvFG": csv_path}))],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {_stock("csv_fg", "CsvFG"), _stock("parquet_fg", "ParquetFG")}
+            ),
+            data_access_collection=DataAccessCollection(folders={"fpg_dir": str(tmp_path)}),
+        )
+
+        assert column_values(result, "fpg_x") == [1, 2]
+
+    def test_a_foreign_pointer_also_declines_a_required_option_route(self) -> None:
+        from mloda.provider import ReadDBFG
+        from tests.test_plugins.feature_group.input_data.test_read_dbs.test_read_db_fg import KEY, ToyBaseDB
+
+        routes = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)
+        group_a = type("_QueryDBA", (ToyBaseDB,), {"CLAIM_ROUTES": routes})
+        group_b = type("_QueryDBB", (ToyBaseDB,), {"CLAIM_ROUTES": routes})
+        feature = Feature("anything", Options({"query_text": "SELECT 1", "_QueryDBA": {KEY: "a"}}))
+        result = _identify(feature, DataAccessCollection(credentials={"toy_handle": {KEY: "a"}}), group_a, group_b)
+
+        assert set(result.identified) == {group_a}
+        assert "options point at _QueryDBA" in result.eliminations[group_b].reason
+        del group_a, group_b, result, feature
+        gc.collect()
+
+
+class TestUnreachablePointerRaises:
+    def _run(self, options: Options | None, feature_group: Any, collector: PluginCollector, folder: Path) -> None:
+        write_csv(folder / "fpg_a.csv", {"fpg_x": [1]})
+        mloda.run_all(
+            [Feature("fpg_x", options if options is not None else Options(), feature_group=feature_group)],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=collector,
+            data_access_collection=DataAccessCollection(folders={"fpg_dir": str(folder)}),
+        )
+
+    @pytest.mark.parametrize(
+        ("scope", "expected"),
+        [
+            (False, "JsonFG is not accessible in this run"),
+            (True, "feature_group=JsonFG"),
+        ],
+        ids=["pointer", "scope"],
+    )
+    def test_a_disabled_group_raises_naming_the_group_and_the_collector(
+        self, scope: bool, expected: str, tmp_path: Path
+    ) -> None:
+        collector = PluginCollector.disabled_feature_groups({_stock("json_fg", "JsonFG")})
+        options = None if scope else Options({"JsonFG": str(tmp_path / "b.json")})
+        with pytest.raises(FormatPointerError) as exc_info:
+            self._run(options, "JsonFG" if scope else None, collector, tmp_path)
+
+        message = str(exc_info.value)
+        assert expected in message
+        assert "disabled by the PluginCollector" in message
+
+    def test_a_pointer_at_a_strict_dropped_group_raises_naming_strict_mode(self, tmp_path: Path) -> None:
+        from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin
+
+        csv_fg = _stock("csv_fg", "CsvFG")
+        json_fg = _stock("json_fg", "JsonFG")
+        PluginRegistry.default().clear()
+        register_plugin(csv_fg, replace=True)
+        collector = PluginCollector.enabled_feature_groups({csv_fg, json_fg}).set_strict_mode("strict")
+        with pytest.raises(FormatPointerError) as exc_info:
+            self._run(Options({"JsonFG": str(tmp_path / "b.json")}), None, collector, tmp_path)
+
+        assert "dropped by strict mode" in str(exc_info.value)
+
+    def test_a_scope_with_a_pointer_at_a_different_group_raises_naming_both(self, tmp_path: Path) -> None:
+        csv_fg = _stock("csv_fg", "CsvFG")
+        json_fg = _stock("json_fg", "JsonFG")
+        feature = Feature("fpg_x", Options({"JsonFG": str(tmp_path / "b.json")}), feature_group="CsvFG")
+        with pytest.raises(FormatPointerError) as exc_info:
+            IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg, json_fg), None, None)
+
+        assert "CsvFG" in str(exc_info.value)
+        assert "JsonFG" in str(exc_info.value)

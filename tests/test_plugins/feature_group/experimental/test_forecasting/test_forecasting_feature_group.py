@@ -81,6 +81,24 @@ class TestForecastingFeatureGroup:
         assert any(f.name == "sales" for f in input_features)  # type: ignore
         assert any(f.name == "time_filter" for f in input_features)  # type: ignore
 
+        source = Feature(
+            "sales_max", Options(group={"aggregation_type": "max", DefaultOptionKeys.in_features: "sales"})
+        )
+        chained = Options(
+            group={DefaultOptionKeys.reference_time: "time_filter"},
+            context={
+                ForecastingFeatureGroup.ALGORITHM: "linear",
+                ForecastingFeatureGroup.HORIZON: 7,
+                ForecastingFeatureGroup.TIME_UNIT: "day",
+                DefaultOptionKeys.in_features: frozenset([source]),
+            },
+        )
+        result = feature_group.input_features(chained, FeatureName("fc"))
+        assert result is not None
+        time_feature = next(f for f in result if f.name == "time_filter")
+        assert dict(time_feature.options.group) == {"aggregation_type": "max"}
+        assert DefaultOptionKeys.in_features not in time_feature.options.group
+
     def test_zero_horizon_is_a_recorded_non_match_naming_the_horizon(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:

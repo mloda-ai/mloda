@@ -20,6 +20,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec, is_positive_int
+from mloda_plugins.feature_group.experimental.key_features import with_key_features
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
@@ -135,7 +136,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Source features from the shared resolution plus the reference-time feature."""
         source_features = super().input_features(options, feature_name) or set()
-        return source_features | {Feature(self.get_reference_time_column(options))}
+        return with_key_features(source_features, [self.get_reference_time_column(options)])
 
     @classmethod
     def _has_valid_time_window_suffix(cls, feature_name: str) -> bool:

@@ -4,15 +4,25 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from mloda.user import Feature
+from mloda.user import Feature, Options
+from mloda.provider import DefaultOptionKeys
+
+
+def _forwarded(source: Feature) -> Options:
+    forwarded = Options()
+    forwarded.inherit_from(source.options)
+    return forwarded
 
 
 def with_key_features(sources: set[Feature], key_names: Iterable[str]) -> set[Feature]:
-    """Add one plain Feature per new key name, without any group options of the sources."""
+    """Add one key Feature per new name; carries the options chained sources forward, else none."""
+    chained = [_forwarded(f) for f in sources if DefaultOptionKeys.in_features in f.options]
+    chained_sources = [f for f in sources if DefaultOptionKeys.in_features in f.options]
+    shared = bool(chained) and all(o == chained[0] for o in chained)
     taken = {str(f.name) for f in sources}
     result = set(sources)
     for name in key_names:
         if name not in taken:
             taken.add(name)
-            result.add(Feature(name))
+            result.add(Feature(name, _forwarded(chained_sources[0])) if shared else Feature(name))
     return result

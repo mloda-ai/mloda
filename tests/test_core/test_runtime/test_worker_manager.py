@@ -29,7 +29,7 @@ def _loop_forever_target(command_queue: Any, result_queue: Any, worker_index: in
 
 
 def _report_target(command_queue: Any, result_queue: Any, tag: str, worker_index: int) -> None:
-    """Picklable bound target; reports its args and worker_index on the result queue."""
+    """Reports tag and worker_index on the result queue."""
     result_queue.put(f"{tag}:{worker_index}")
 
 

@@ -46,7 +46,7 @@ def _worker_is_gone(pid: int) -> bool:
 
 
 def _fake_parent_main(pid_file: str, standby: bool = False) -> None:
-    """Spawns a real worker() child (or an unbound standby) via WorkerManager, writes its pid to pid_file, then blocks for SIGKILL."""
+    """Spawns a real worker (or unbound standby), writes its pid to pid_file, then blocks for SIGKILL."""
     manager = WorkerManager()
     if standby:
         from mloda.core.runtime.worker.multiprocessing_worker import standby_worker

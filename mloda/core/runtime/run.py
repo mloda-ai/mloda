@@ -589,7 +589,7 @@ class ExecutionOrchestrator:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """
-        Exits the context of the ExecutionOrchestrator, stopping standby workers and the manager; safe if __enter__ raised.
+        Stops standby workers and the manager; safe if __enter__ raised.
 
         Args:
             exc_type: The exception type.

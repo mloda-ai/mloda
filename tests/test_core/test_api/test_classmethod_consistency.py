@@ -45,7 +45,7 @@ _api_data: dict[str, dict[str, Any]] = {
     }
 }
 
-_features: list[Feature | str] = [Feature(name="ClassMethodFeature")]
+_features: list[Feature] = [Feature(name="ClassMethodFeature")]
 
 
 class TestEntryPointsAreClassMethods:
@@ -135,6 +135,27 @@ class TestBaseClassBehaviorUnchanged:
         assert isinstance(result, collections.abc.Generator)
         assert isinstance(result, ResultStream)
         assert not isinstance(result, list)
+
+    def test_explain_accepts_list_of_features(self) -> None:
+        from mloda.core.api.plan_info import PlanStep
+
+        plan = mlodaAPI.explain(
+            _features,
+            compute_frameworks=[PandasDataFrame],
+            api_data=_api_data,
+            plugin_collector=_enabled,
+        )
+        assert len(plan) > 0
+        assert all(isinstance(step, PlanStep) for step in plan)
+
+    def test_diagnose_accepts_tuple_of_features(self) -> None:
+        diagnosis = mlodaAPI.diagnose(
+            tuple(_features),
+            compute_frameworks=[PandasDataFrame],
+            api_data=_api_data,
+            plugin_collector=_enabled,
+        )
+        assert diagnosis.complete is True
 
     def test_mloda_alias_run_all_works(self) -> None:
         result = mloda.run_all(

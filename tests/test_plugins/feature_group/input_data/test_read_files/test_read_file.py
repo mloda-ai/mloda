@@ -101,7 +101,7 @@ class TestInputData:
 
     def test_global_scope_file(self) -> Any:
         result = mloda.run_all(
-            self.feature_list,  # type: ignore
+            self.feature_list,
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self.file_path}),
         )
@@ -110,7 +110,7 @@ class TestInputData:
     def test_global_scope_folder(self) -> Any:
         file_path = self.file_path.replace("creditcard_2023_short.csv", "")
         result = mloda.run_all(
-            self.feature_list,  # type: ignore
+            self.feature_list,
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(folders={file_path}),
         )

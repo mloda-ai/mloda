@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
+import sys
 from importlib.util import find_spec
 from multiprocessing.process import BaseProcess
 from typing import TYPE_CHECKING, Any, Callable
@@ -34,7 +35,8 @@ def mp_start_context() -> SpawnContext | ForkServerContext:
     ctx = multiprocessing.get_context("forkserver")
     preload = [m.strip() for m in os.environ.get("MLODA_MP_PRELOAD", "").split(",") if m.strip()]
     for name in preload:
-        if name not in _warned_missing_preload and find_spec(name.split(".")[0]) is None:
+        top = name.split(".")[0]
+        if name not in _warned_missing_preload and top not in sys.modules and find_spec(top) is None:
             _warned_missing_preload.add(name)
             logger.warning("MLODA_MP_PRELOAD entry %r: no such top-level module", name)
     if preload:

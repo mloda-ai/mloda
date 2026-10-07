@@ -5,6 +5,7 @@ import pathlib
 import logging
 import multiprocessing
 import multiprocessing.context
+import sys
 from unittest.mock import Mock
 
 import pytest
@@ -82,6 +83,7 @@ def test_unsupported_value_raises(monkeypatch: pytest.MonkeyPatch, value: str) -
         (" a, b ,,", ["a", "b"], ["a", "b"]),
         ("json, os.path", ["json", "os.path"], []),
         ("json,mloda_no_such_pkg.sub", ["json", "mloda_no_such_pkg.sub"], ["mloda_no_such_pkg.sub"]),
+        ("__main__,json", ["__main__", "json"], []),
     ],
 )
 def test_preload_forwarded_to_forkserver(
@@ -92,6 +94,7 @@ def test_preload_forwarded_to_forkserver(
     missing: list[str],
 ) -> None:
     monkeypatch.setattr(WARNED_PRELOAD, set())
+    monkeypatch.setattr(sys.modules["__main__"], "__spec__", None)
     monkeypatch.setenv("MLODA_MP_START_METHOD", "forkserver")
     monkeypatch.setenv("MLODA_MP_PRELOAD", raw)
     preload = Mock()

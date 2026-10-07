@@ -610,11 +610,11 @@ class TestWorkerManagerJoinAll:
         mock_process2.join.assert_called_once()
 
     @pytest.mark.timeout(30)
-    def test_join_all_terminates_real_spawn_worker_process(self) -> None:
-        """join_all should terminate a real spawn-context worker and return promptly.
+    def test_join_all_terminates_real_worker_process(self) -> None:
+        """join_all should terminate a real worker and return promptly.
 
-        create_worker_process builds workers from the spawn context, so they are
-        multiprocessing.context.SpawnProcess instances, which subclass BaseProcess
+        create_worker_process builds workers from the configured start context, so they are
+        SpawnProcess or ForkServerProcess instances, which subclass BaseProcess
         and are NOT instances of multiprocessing.Process. join_all's isinstance
         check therefore never calls terminate() on real workers, and join() blocks
         forever on a worker that does not exit on its own (GitHub issue #514).
@@ -632,7 +632,7 @@ class TestWorkerManagerJoinAll:
             while join_thread.is_alive() and time.time() < deadline:
                 join_thread.join(timeout=0.1)
 
-            assert not join_thread.is_alive(), "join_all() did not terminate the spawn worker process; it hung"
+            assert not join_thread.is_alive(), "join_all() did not terminate the worker process; it hung"
         finally:
             # Never leak the worker or hang the suite: kill it directly so the
             # daemon join_all thread can finish its blocking join().

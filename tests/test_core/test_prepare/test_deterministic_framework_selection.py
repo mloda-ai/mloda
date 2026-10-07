@@ -669,11 +669,13 @@ def _plan(
     groups: set[type[FeatureGroup]],
     frameworks: list[type[ComputeFramework]],
     links: set[Link] | None = None,
+    output_framework: type[ComputeFramework] | None = None,
 ) -> list[PlanStep]:
     return mloda.explain(
         features,
         compute_frameworks=frameworks,
         links=links,
+        output_framework=output_framework,
         plugin_collector=PluginCollector.enabled_feature_groups(groups),
     )
 
@@ -1448,21 +1450,29 @@ def _bd_values(frame: Any) -> dict[str, list[Any]]:
     return {name: table[name].to_pylist() for name in table.column_names}
 
 
+@pytest.mark.parametrize("output", [None, PyArrowTable], ids=["no_output", "pyarrow_output"])
 @pytest.mark.parametrize("order", _BD_ORDERS)
 def test_a_consumer_of_a_duckdb_native_parent_plans_on_duckdb_and_receives_the_relation(
-    order: list[str], monkeypatch: pytest.MonkeyPatch
+    order: list[str], output: type[ComputeFramework] | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     seen: list[str] = []
     monkeypatch.setattr(BdDuckConsumer, "SEEN", seen)
     frameworks = _bd_frameworks(order)
     collector = PluginCollector.enabled_feature_groups({BdDuckRoot, BdDuckConsumer})
 
-    steps = _plan(["bd_out"], {BdDuckRoot, BdDuckConsumer}, frameworks)
+    steps = _plan(["bd_out"], {BdDuckRoot, BdDuckConsumer}, frameworks, output_framework=output)
     assert _compute_names(steps, BdDuckConsumer) == {"DuckDBFramework"}
     assert _transforms(steps) == []
+    if output is not None and order[0] == "PyArrowTable":
+        (consumer_step,) = _compute_steps(steps, BdDuckConsumer)
+        assert consumer_step.compute_framework_reason == "converts later"
 
-    result = mloda.run_all(["bd_out"], compute_frameworks=frameworks, plugin_collector=collector)
+    result = mloda.run_all(
+        ["bd_out"], compute_frameworks=frameworks, plugin_collector=collector, output_framework=output
+    )
     assert seen == ["DuckdbRelation"]
+    if output is not None:
+        assert isinstance(result[0], pa.Table)
     assert _bd_values(result[0]) == {"bd_out": [1, 2, 3]}
 
 

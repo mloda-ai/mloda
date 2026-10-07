@@ -16,7 +16,7 @@ from mloda.core.prepare.choose_compute_frameworks import stable_text
 
 _SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
 
-PLAN_LOCK_FORMAT = 4
+PLAN_LOCK_FORMAT = 5
 
 
 class PlanLockMismatchError(Exception):

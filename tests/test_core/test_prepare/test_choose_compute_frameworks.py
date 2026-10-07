@@ -38,6 +38,7 @@ LIST_ORDER = "your list order"
 DEFAULT_ORDER = "default order"
 SAVES_ONE = "saves 1 conversion"
 SAVES_TWO = "saves 2 conversions"
+CONVERTS_LATER = "converts later"
 
 _PROBE = Path(__file__).with_name("choose_probe.py")
 _PROBE_EXPECTED = {
@@ -782,6 +783,7 @@ def test_the_reason_texts_are_the_pinned_lock_contract() -> None:
     assert choose_compute_frameworks.RULES == RULES
     assert choose_compute_frameworks.LIST_ORDER == LIST_ORDER
     assert choose_compute_frameworks.DEFAULT_ORDER == DEFAULT_ORDER
+    assert choose_compute_frameworks.CONVERTS_LATER == CONVERTS_LATER
     assert choose_compute_frameworks.saves_conversions(1) == SAVES_ONE
     assert choose_compute_frameworks.saves_conversions(2) == SAVES_TWO
     assert choose_compute_frameworks.saves_conversions(7) == "saves 7 conversions"
@@ -817,27 +819,111 @@ def _reason_shared_list_position(net: _Net) -> list[Feature]:
     return [net.add(ChooserRootFG, "reason_shared_position", {P, A})]
 
 
+def _reason_output_converts_later(net: _Net) -> list[Feature]:
+    source = net.add(ChooserRootFG, "reason_out_source", {D})
+    consumer = net.add(ChooserLeafFG, "reason_out_consumer", {P, D}, requested=True)
+    net.edge(source, consumer)
+    return [consumer]
+
+
+def _reason_chain_converts_later(net: _Net) -> list[Feature]:
+    source = net.add(ChooserRootFG, "reason_chain_source", {D})
+    mid = net.add(ChooserLeafFG, "reason_chain_mid", {P, D})
+    sink = net.add(ChooserSinkFG, "reason_chain_sink", {P})
+    net.edge(source, mid)
+    net.edge(mid, sink)
+    return [mid]
+
+
+def _reason_two_free_blocks(net: _Net) -> list[Feature]:
+    source = net.add(ChooserRootFG, "reason_two_free_source", {D})
+    mid_one = net.add(ChooserLeafFG, "reason_two_free_mid_one", {P, D})
+    mid_two = net.add(ChooserOtherLeafFG, "reason_two_free_mid_two", {P, D})
+    request = net.add(ChooserSinkFG, "reason_two_free_request", {P}, requested=True)
+    net.edge(source, mid_one)
+    net.edge(mid_one, mid_two)
+    net.edge(mid_two, request)
+    return [mid_one, mid_two]
+
+
+def _reason_non_db_converts_at_the_end(net: _Net) -> list[Feature]:
+    source = net.add(ChooserRootFG, "reason_end_source", {P})
+    consumer = net.add(ChooserLeafFG, "reason_end_consumer", {P, A}, requested=True)
+    net.edge(source, consumer)
+    return [consumer]
+
+
+def _reason_fan_in_no_signal(net: _Net) -> list[Feature]:
+    left = net.add(ChooserLeftFG, "reason_fan_left", {P})
+    right = net.add(ChooserRightFG, "reason_fan_right", {A})
+    child = net.add(ChooserChildFG, "reason_fan_child", {P, A})
+    extra = net.add(ChooserLeafFG, "reason_fan_extra", {P})
+    net.join(_link(Link.inner, ChooserLeftFG, ChooserRightFG), left, right, child)
+    net.edge(left, extra)
+    return [child]
+
+
+def _reason_mixed_depth_block(net: _Net) -> list[Feature]:
+    x_shallow = net.add(ChooserRootFG, "reason_mixed_shallow", {D})
+    layers = [net.add(ChooserLayerFG, "reason_mixed_layer", {D}, {"layer": index}) for index in range(3)]
+    net.edge(layers[0], layers[1])
+    net.edge(layers[1], layers[2])
+    x_deep = net.add(ChooserRootFG, "reason_mixed_deep", {D})
+    net.edge(layers[2], x_deep)
+    mid = net.add(ChooserLeafFG, "reason_mixed_mid", {P, D})
+    sink = net.add(ChooserSinkFG, "reason_mixed_sink", {P})
+    net.edge(x_shallow, mid)
+    net.edge(mid, sink)
+    return [mid]
+
+
 @pytest.mark.parametrize(
-    ("build", "positions", "expected"),
+    ("build", "positions", "output", "expected", "frameworks"),
     [
-        (_reason_pinned, None, PINNED),
-        (_reason_saves_two, None, SAVES_TWO),
-        (_reason_rules_via_join, None, RULES),
-        (_reason_equal_cost_tie, None, DEFAULT_ORDER),
-        (_reason_equal_cost_tie, {A: 0}, LIST_ORDER),
-        (_reason_shared_list_position, {D: 0}, DEFAULT_ORDER),
+        (_reason_pinned, None, None, [PINNED], [None]),
+        (_reason_saves_two, None, None, [SAVES_TWO], [None]),
+        (_reason_rules_via_join, None, None, [RULES], [None]),
+        (_reason_equal_cost_tie, None, None, [DEFAULT_ORDER], [None]),
+        (_reason_equal_cost_tie, {A: 0}, None, [LIST_ORDER], [None]),
+        (_reason_shared_list_position, {D: 0}, None, [DEFAULT_ORDER], [None]),
+        (_reason_output_converts_later, None, P, [CONVERTS_LATER], [D]),
+        (_reason_chain_converts_later, None, None, [CONVERTS_LATER], [D]),
+        (_reason_two_free_blocks, None, P, [SAVES_TWO, CONVERTS_LATER], [D, D]),
+        (_reason_non_db_converts_at_the_end, {A: 0}, A, [CONVERTS_LATER], [P]),
+        (_reason_fan_in_no_signal, {A: 0}, None, [LIST_ORDER], [A]),
+        (_reason_mixed_depth_block, None, None, [CONVERTS_LATER], [D]),
     ],
-    ids=["pinned", "saves_two", "rules_via_join", "tie_default_order", "tie_list_order", "shared_list_position"],
+    ids=[
+        "pinned",
+        "saves_two",
+        "rules_via_join",
+        "tie_default_order",
+        "tie_list_order",
+        "shared_list_position",
+        "output_converts_later",
+        "chain_converts_later",
+        "two_free_blocks",
+        "non_db_converts_at_the_end",
+        "fan_in_no_signal",
+        "mixed_depth_block",
+    ],
 )
 def test_the_reason_names_why_the_framework_was_chosen(
-    build: Callable[[_Net], list[Feature]], positions: dict[type[ComputeFramework], int] | None, expected: str
+    build: Callable[[_Net], list[Feature]],
+    positions: dict[type[ComputeFramework], int] | None,
+    output: type[ComputeFramework] | None,
+    expected: list[str],
+    frameworks: list[type[ComputeFramework] | None],
 ) -> None:
     net = _Net()
     judged = build(net)
 
-    net.choose(positions)
+    net.choose(positions, output_framework=output)
 
-    assert [f.chosen_compute_framework_reason for f in judged] == [expected]
+    assert [f.chosen_compute_framework_reason for f in judged] == expected
+    for feature, framework in zip(judged, frameworks):
+        if framework is not None:
+            assert feature.chosen_compute_framework is framework
 
 
 def test_a_child_on_the_swapped_side_of_one_inner_link_reports_rules() -> None:

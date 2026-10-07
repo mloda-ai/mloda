@@ -97,7 +97,7 @@ def collect_address_options() -> dict[str, str]:
 
 
 def collect() -> dict[str, str]:
-    """x feeds y and kp, y feeds ka; x and y are free, kp is Pandas-only, ka is PyArrow-only (a tied optimum)."""
+    """x feeds y and kp, y feeds ka; x and y are free, kp is Pandas-only, ka is PyArrow-only (equal conversions)."""
     both: set[type[ComputeFramework]] = {PandasDataFrame, PyArrowTable}
     graph = Graph()
     nodes: dict[type[FeatureGroup], set[Feature]] = {}

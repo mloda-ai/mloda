@@ -45,14 +45,20 @@ class WorkerManager:
         Appends a zero-based worker_index as a trailing positional arg to the target.
         """
         worker_index = len(self.process_register)
-        while self.standby:
-            process, command_queue, result_queue = self.standby.pop(0)
-            if not process.is_alive():
-                continue
-            command_queue.put(bytes(ForkingPickler.dumps((target, args, worker_index))))
-            self.process_register[cfw_uuid] = (process, command_queue, result_queue)
-            self.result_queues_collection.add(result_queue)
-            return process, command_queue, result_queue
+        if self.standby:
+            binding = bytes(ForkingPickler.dumps((target, args, worker_index)))
+            while self.standby:
+                process, command_queue, result_queue = self.standby.pop(0)
+                if not process.is_alive():
+                    logger.warning(
+                        "Standby worker exited with code %s before binding; trying the next one", process.exitcode
+                    )
+                    continue
+                command_queue.put(binding)
+                # A standby dying right after the put is reported via find_dead_workers / find_orphaned_steps.
+                self.process_register[cfw_uuid] = (process, command_queue, result_queue)
+                self.result_queues_collection.add(result_queue)
+                return process, command_queue, result_queue
 
         ctx = mp_start_context()
         command_queue = ctx.Queue()

@@ -37,7 +37,7 @@ def _parent_gone() -> bool:
 
 def standby_worker(command_queue: multiprocessing.Queue[Any], result_queue: multiprocessing.Queue[Any]) -> None:
     """Pre-warm backend imports, then wait to be bound to a cfw and run `worker`."""
-    ComputeFrameworkTransformer()
+    ComputeFrameworkTransformer()  # called for its import side effect: loads every backend a bound cfw needs
     while True:
         try:
             command = command_queue.get(block=False)

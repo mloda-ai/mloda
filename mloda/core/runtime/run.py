@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import pickle  # nosec B403
 import threading
 import time
@@ -559,9 +560,10 @@ class ExecutionOrchestrator:
                 pickle.dumps((function_extender, hook_extenders)) if function_extender is not None else None
             )
 
-            # Cold starts overlap Manager and flight server startup.
+            # Cold starts overlap Manager and flight server startup; count is capped at the CPU count.
             self.worker_manager.prestart_workers(
-                planned_worker_count(self.execution_planner, parallelization_modes), standby_worker
+                min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
+                standby_worker,
             )
             MyManager.register("CfwManager", CfwManager)
             self.manager = MyManager(ctx=mp_start_context()).__enter__()

@@ -290,18 +290,21 @@ class TestWorkerManagerStandbyWorkers:
         assert second_bound == second
         assert pickle.loads(second[1].put.call_args.args[0])[2] == 1  # nosec B301
 
-    def test_dead_standby_is_skipped_and_a_fresh_process_is_spawned(self) -> None:
+    def test_dead_standby_is_skipped_and_a_fresh_process_is_spawned(self, caplog: pytest.LogCaptureFixture) -> None:
         manager = WorkerManager()
         dead = Mock()
         dead.is_alive.return_value = False
+        dead.exitcode = 137
         fresh = _live_process()
         ctx = _mock_ctx(dead, fresh)
 
         with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
             manager.prestart_workers(1, _noop_target)
-            process, _, _ = manager.create_worker_process(uuid4(), _noop_target, ())
+            with caplog.at_level(logging.WARNING):
+                process, _, _ = manager.create_worker_process(uuid4(), _noop_target, ())
 
         assert process is fresh
+        assert any(r.levelno == logging.WARNING and "137" in r.getMessage() for r in caplog.records)
         fresh.start.assert_called_once()
         assert dead in manager.tasks
         assert manager.standby == []
@@ -327,8 +330,12 @@ class TestWorkerManagerStandbyWorkers:
 
         with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
             manager.prestart_workers(1, _noop_target)
+            standby = manager.standby[0]
             with pytest.raises((TypeError, AttributeError, pickle.PicklingError)):
                 manager.create_worker_process(uuid4(), _noop_target, (make_arg(),))
+
+        assert manager.standby == [standby]
+        assert manager.process_register == {}
 
 
 class TestWorkerManagerProcessRetrieval:

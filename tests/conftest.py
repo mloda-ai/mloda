@@ -31,17 +31,17 @@ _ALL_MP_PRELOAD_MODULES = [
     "pyiceberg.table",
     "pyspark.sql",
 ]
-OPTIONAL_BACKEND_PACKAGES = {"pyarrow", "pandas", "polars", "duckdb", "pyiceberg", "pyspark"}
+_OPTIONAL_BACKEND_PACKAGES = {"pyarrow", "pandas", "pyiceberg", "pyspark"}
 MP_PRELOAD_MODULES = [
     m
     for m in _ALL_MP_PRELOAD_MODULES
-    if m.split(".")[0] not in OPTIONAL_BACKEND_PACKAGES or importlib.util.find_spec(m.split(".")[0]) is not None
+    if m.split(".")[0] not in _OPTIONAL_BACKEND_PACKAGES or importlib.util.find_spec(m.split(".")[0]) is not None
 ]
 # Must run before anything starts a worker process.
 os.environ.setdefault("MLODA_MP_START_METHOD", "forkserver")
 os.environ.setdefault("MLODA_MP_PRELOAD", ",".join(MP_PRELOAD_MODULES))
-# OPENBLAS_NUM_THREADS=1 stops numpy's thread pool; pyarrow's jemalloc thread is fork-safe (atfork handlers).
-# polars and duckdb are left out of the preload because they start thread pools at import.
+# OPENBLAS_NUM_THREADS=1 keeps numpy's thread pool out of the forkserver; pyarrow's jemalloc background thread is
+# stopped in the child by jemalloc's postfork handler; polars and duckdb stay out of the preload (thread pools).
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 

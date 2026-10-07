@@ -13,20 +13,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _warned_forkserver_unavailable = False
-_warned_missing_preload: set[str] = set()
+_checked_preload: set[str] = set()
 
 
 def mp_start_context() -> SpawnContext | ForkServerContext:
     """Return the spawn (default) or forkserver context chosen by MLODA_MP_START_METHOD.
 
-    Never fork: a forked child inherits locks held by the parent's live threads (xdist, asyncio) and deadlocks."""
+    Never fork: a child inherits locks held by the parent's live threads and deadlocks.
+    Forkserver is safe as it forks from a single-threaded server, so preloads must not start threads."""
     global _warned_forkserver_unavailable
     raw = os.environ.get("MLODA_MP_START_METHOD", "")
     method = raw.strip().lower()
     if method in ("", "spawn"):
         return multiprocessing.get_context("spawn")
     if method != "forkserver":
-        raise ValueError(f"MLODA_MP_START_METHOD must be one of 'spawn', 'forkserver', got {raw!r}")
+        raise ValueError(
+            f"MLODA_MP_START_METHOD must be one of 'spawn', 'forkserver', got {raw!r}; "
+            "'fork' is unsupported because forked children of a threaded parent can deadlock"
+        )
     if "forkserver" not in multiprocessing.get_all_start_methods():
         if not _warned_forkserver_unavailable:
             _warned_forkserver_unavailable = True
@@ -36,9 +40,11 @@ def mp_start_context() -> SpawnContext | ForkServerContext:
     preload = [m.strip() for m in os.environ.get("MLODA_MP_PRELOAD", "").split(",") if m.strip()]
     for name in preload:
         top = name.split(".")[0]
-        if name not in _warned_missing_preload and top not in sys.modules and find_spec(top) is None:
-            _warned_missing_preload.add(name)
-            logger.warning("MLODA_MP_PRELOAD entry %r: no such top-level module", name)
+        if top in _checked_preload or top in sys.modules:
+            continue
+        _checked_preload.add(top)
+        if find_spec(top) is None:
+            logger.warning("MLODA_MP_PRELOAD entry %r: top-level module %r not found", name, top)
     if preload:
         ctx.set_forkserver_preload(preload)
     return ctx

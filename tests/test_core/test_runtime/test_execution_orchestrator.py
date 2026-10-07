@@ -10,7 +10,7 @@ import inspect
 import logging
 import threading
 import uuid as uuid_mod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
@@ -455,6 +455,26 @@ class TestExecutionOrchestratorStepLock:
         )
 
 
+class _ReiterablePlan:
+    """A planner mock that yields the same step on each iteration."""
+
+    def __init__(self, step: object) -> None:
+        self._step = step
+
+    def __iter__(self) -> Iterator[object]:
+        yield self._step
+
+
+def _single_step_mock() -> MagicMock:
+    step_uuid = uuid_mod.uuid4()
+    step = MagicMock()
+    step.get_uuids.return_value = {step_uuid}
+    step.required_uuids = set()
+    step.step_is_done = False
+    step.uuid = step_uuid
+    return step
+
+
 class TestSyncModeSkipsSleep:
     """Tests that SYNC mode does not call time.sleep in the compute loop.
 
@@ -467,24 +487,7 @@ class TestSyncModeSkipsSleep:
 
     def test_sync_mode_does_not_call_time_sleep(self) -> None:
         """In SYNC mode, compute() should not call time.sleep."""
-        step_uuid = uuid_mod.uuid4()
-
-        mock_step = MagicMock()
-        mock_step.get_uuids.return_value = {step_uuid}
-        mock_step.required_uuids = set()
-        mock_step.step_is_done = False
-        mock_step.uuid = step_uuid
-
-        class ReiterablePlan:
-            """A planner mock that yields the same step on each iteration."""
-
-            def __init__(self, step: object) -> None:
-                self._step = step
-
-            def __iter__(self):  # type: ignore[no-untyped-def]
-                yield self._step
-
-        planner = ReiterablePlan(mock_step)
+        planner = _ReiterablePlan(_single_step_mock())
 
         orchestrator = ExecutionOrchestrator(planner)  # type: ignore[arg-type]
         orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
@@ -501,24 +504,13 @@ class TestSyncModeSkipsSleep:
             orchestrator.compute()
             mock_sleep.assert_not_called()
 
+
+class TestRegisterModesCache:
+    """The compute loop and _execute_step read the parallelization modes cached on the orchestrator."""
+
     def test_multiprocessing_loop_reads_parallelization_modes_once(self) -> None:
         """Across several loop passes the Manager is asked for the modes only once."""
-        step_uuid = uuid_mod.uuid4()
-
-        mock_step = MagicMock()
-        mock_step.get_uuids.return_value = {step_uuid}
-        mock_step.required_uuids = set()
-        mock_step.step_is_done = False
-        mock_step.uuid = step_uuid
-
-        class ReiterablePlan:
-            def __init__(self, step: object) -> None:
-                self._step = step
-
-            def __iter__(self):  # type: ignore[no-untyped-def]
-                yield self._step
-
-        orchestrator = ExecutionOrchestrator(ReiterablePlan(mock_step))  # type: ignore[arg-type]
+        orchestrator = ExecutionOrchestrator(_ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
         register = Mock(wraps=CfwManager({ParallelizationMode.MULTIPROCESSING}))
         orchestrator.cfw_register = register
 
@@ -535,14 +527,11 @@ class TestSyncModeSkipsSleep:
         orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
         orchestrator.join = Mock()  # type: ignore[method-assign]
 
-        with patch("mloda.core.runtime.run.time.sleep"):
+        with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
             orchestrator.compute()
 
+        mock_sleep.assert_called()
         register.get_parallelization_modes.assert_called_once()
-
-
-class TestRegisterModesCache:
-    """_execute_step reads the parallelization modes cached on the orchestrator."""
 
     def test_execute_step_uses_cached_register_modes(self) -> None:
         orchestrator = ExecutionOrchestrator(MagicMock())

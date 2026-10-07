@@ -23,11 +23,11 @@ def _watchdog_then_initializer(initializer: Callable[..., object] | None, initar
 
 class MyManager(BaseManager):
     def start(self, initializer: Callable[..., object] | None = None, initargs: Iterable[Any] = ()) -> None:
-        # BaseManager._run_server() runs initializer inside the freshly spawned manager server
+        # BaseManager._run_server() runs initializer inside the freshly started manager server
         # process, so the watchdog must always run there; a caller-supplied initializer is
         # chained after it rather than replaced. A module-level function plus functools.partial
         # is used, not a closure, because BaseManager.start() pickles the initializer to send it
-        # to the spawned server process, and closures are not picklable.
+        # to the server process, and closures are not picklable.
         super().start(functools.partial(_watchdog_then_initializer, initializer, initargs), ())
 
 

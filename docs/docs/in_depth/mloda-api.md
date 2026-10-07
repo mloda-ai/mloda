@@ -34,13 +34,16 @@ This means, depending on your needs, you can run them all at once (**batch run**
 #### Runner & Execution Configuration
 
 -   parallelization_modes (optional): Choose between sync, threading, or multiprocessing modes. (Default: sync)
-    Multiprocessing uses `spawn` by default. `MLODA_MP_START_METHOD=forkserver` opts into forkserver (falls back to
-    spawn where unavailable; `fork` is rejected). `MLODA_MP_PRELOAD` lists modules the forkserver imports once.
-    Caveats: preload only modules whose import-time threads are fork-safe (e.g. not polars or duckdb); children
-    share preloaded module state (e.g. numpy's global random seed, so seed per process); the environment is fixed
-    when the forkserver starts; children skip `atexit`; the preload is process-wide and ignored once the forkserver
-    runs; `MLODA_MP_PRELOAD` replaces any `multiprocessing.set_forkserver_preload` value, and entries whose
-    top-level package is not installed are logged as a warning.
+    -   Multiprocessing uses `spawn` by default. `MLODA_MP_START_METHOD=forkserver` opts into forkserver (falls back
+        to spawn where unavailable; `fork` is rejected because forked children of a threaded parent can deadlock).
+    -   `MLODA_MP_PRELOAD` lists modules the forkserver imports once. It replaces Python's default preload
+        `['__main__']` (list `__main__` to keep it); unset or empty leaves that default. Entries whose top-level
+        package is not installed are logged as a warning; a preload that raises anything other than `ImportError`
+        stops the forkserver and every multiprocessing run fails.
+    -   Caveats: preload only modules that start no threads at import (not polars or duckdb; set
+        `OPENBLAS_NUM_THREADS=1` when preloading numpy or pandas); children share preloaded module state (e.g.
+        numpy's global random seed, so seed per process); the environment is fixed when the forkserver starts;
+        children skip `atexit`; the preload is process-wide and ignored once the forkserver runs.
 -   flight_server (optional): Specify a flight server for multiprocessing only.
 -   **column_ordering** (optional): Control the ordering of result columns.
     Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`

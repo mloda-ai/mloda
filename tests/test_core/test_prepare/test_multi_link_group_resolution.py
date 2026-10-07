@@ -1454,17 +1454,11 @@ class RemedyRootA1(MultiLinkRootA):
         return {ThirdCfw}
 
 
-_REMEDY_INPUTS = {
-    "mid": ("SidePathArrowP", "mlg_a1", "mlg_bd"),
-    "direct": ("mlg_a", "mlg_a1", "mlg_bd"),
-}
-
-
 class _RemedyConsumer(FeatureGroup):
     """Consumer reading both root A variants and root B on a ClassVar framework."""
 
     FRAMEWORK: ClassVar[type[ComputeFramework]] = ThirdCfw
-    INPUTS: ClassVar[tuple[str, ...]] = _REMEDY_INPUTS["mid"]
+    INPUTS: ClassVar[tuple[str, ...]] = ("SidePathArrowP", "mlg_a1", "mlg_bd")
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name) for name in self.INPUTS}
@@ -1478,21 +1472,15 @@ class _RemedyConsumer(FeatureGroup):
         return {cls.FRAMEWORK}
 
 
-def _remedy_consumer(name: str, framework: type[ComputeFramework], inputs: str) -> type[FeatureGroup]:
-    attrs = {"FRAMEWORK": framework, "INPUTS": _REMEDY_INPUTS[inputs], "__module__": __name__}
-    return type(name, (_RemedyConsumer,), attrs)
+def _remedy_consumer(name: str, framework: type[ComputeFramework], direct: bool) -> type[FeatureGroup]:
+    inputs = ("mlg_a" if direct else "SidePathArrowP", "mlg_a1", "mlg_bd")
+    return type(name, (_RemedyConsumer,), {"FRAMEWORK": framework, "INPUTS": inputs, "__module__": __name__})
 
 
-RemedyThirdConsumer = _remedy_consumer("RemedyThirdConsumer", ThirdCfw, "mid")
-RemedyThirdDirectConsumer = _remedy_consumer("RemedyThirdDirectConsumer", ThirdCfw, "direct")
-RemedyArrowConsumer = _remedy_consumer("RemedyArrowConsumer", PyArrowTable, "mid")
-RemedyArrowDirectConsumer = _remedy_consumer("RemedyArrowDirectConsumer", PyArrowTable, "direct")
-_REMEDY_CONSUMERS = {
-    ("third", "mid"): RemedyThirdConsumer,
-    ("third", "direct"): RemedyThirdDirectConsumer,
-    ("arrow", "mid"): RemedyArrowConsumer,
-    ("arrow", "direct"): RemedyArrowDirectConsumer,
-}
+RemedyThirdConsumer = _remedy_consumer("RemedyThirdConsumer", ThirdCfw, False)
+RemedyThirdDirectConsumer = _remedy_consumer("RemedyThirdDirectConsumer", ThirdCfw, True)
+RemedyArrowConsumer = _remedy_consumer("RemedyArrowConsumer", PyArrowTable, False)
+RemedyArrowDirectConsumer = _remedy_consumer("RemedyArrowDirectConsumer", PyArrowTable, True)
 
 
 class RemedySumConsumer(_RemedyConsumer):
@@ -1505,34 +1493,35 @@ class RemedySumConsumer(_RemedyConsumer):
         return {cls.get_class_name(): pc.add(data["mlg_a1"], data["mlg_bd"]).to_pylist()}
 
 
-def _remedy_prepare(consumer: type[FeatureGroup], swap_link_sides: bool) -> Any:
-    left, right = (
-        (MultiLinkRootBDistinct, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBDistinct)
-    )
-    return mloda.prepare(
-        [consumer.get_class_name()],
-        links={Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))},
-        compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw],
-        plugin_collector=PluginCollector.enabled_feature_groups(
-            {MultiLinkRootA, RemedyRootA1, MultiLinkRootBDistinct, SidePathArrowP, consumer}
-        ),
-    )
-
-
-_REMEDY_CONSUMER_PARAMS = [
-    pytest.param(fw, inputs, id=f"{fw}_{inputs}") for fw in ("third", "arrow") for inputs in ("mid", "direct")
-]
+_REMEDY_KWARGS: dict[str, Any] = {
+    "root_b": MultiLinkRootBDistinct,
+    "extra_groups": {RemedyRootA1},
+    "compute_frameworks": [PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw],
+}
 
 
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-@pytest.mark.parametrize("framework, inputs", _REMEDY_CONSUMER_PARAMS)
+@pytest.mark.parametrize(
+    "consumer",
+    [
+        pytest.param(RemedyThirdConsumer, id="third_mid"),
+        pytest.param(RemedyThirdDirectConsumer, id="third_direct"),
+        pytest.param(RemedyArrowConsumer, id="arrow_mid"),
+        pytest.param(RemedyArrowDirectConsumer, id="arrow_direct"),
+    ],
+)
 def test_a_consumer_joining_two_members_of_one_link_side_on_different_frameworks_is_rejected(
-    framework: str, inputs: str, swap_link_sides: bool
+    consumer: type[FeatureGroup], swap_link_sides: bool
 ) -> None:
-    consumer = _REMEDY_CONSUMERS[(framework, inputs)]
-
     with pytest.raises(ValueError) as exc_info:
-        _remedy_prepare(consumer, swap_link_sides)
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=consumer,
+            features=[consumer.get_class_name()],
+            **_REMEDY_KWARGS,
+        )
 
     message = str(exc_info.value)
     assert "members of one link side" in message
@@ -1552,9 +1541,23 @@ def test_the_planner_backstop_messages_for_members_of_one_link_side_on_different
     monkeypatch.setattr(ChooseComputeFrameworks, "_side_member_rules", lambda self, *args, **kwargs: [])
 
     with pytest.raises(ValueError) as inner_info:
-        _remedy_prepare(RemedyThirdConsumer, swap_link_sides)
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=RemedyThirdConsumer,
+            features=[RemedyThirdConsumer.get_class_name()],
+            **_REMEDY_KWARGS,
+        )
     with pytest.raises(ValueError) as outer_info:
-        _remedy_prepare(RemedyArrowConsumer, swap_link_sides)
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=RemedyArrowConsumer,
+            features=[RemedyArrowConsumer.get_class_name()],
+            **_REMEDY_KWARGS,
+        )
 
     inner, outer = str(inner_info.value), str(outer_info.value)
     assert "RemedyRootA1" in inner
@@ -1572,7 +1575,14 @@ def test_the_planner_backstop_messages_for_members_of_one_link_side_on_different
 def test_a_consumer_reading_one_member_per_link_side_on_the_third_framework_is_correct(
     swap_link_sides: bool,
 ) -> None:
-    results = _remedy_prepare(RemedySumConsumer, swap_link_sides).run()
+    results = _side_path_prepare(
+        SidePathArrowP,
+        False,
+        swap_link_sides,
+        consumer=RemedySumConsumer,
+        features=[RemedySumConsumer.get_class_name()],
+        **_REMEDY_KWARGS,
+    ).run()
 
     assert _side_path_values(results, RemedySumConsumer) == [[17, 28, 39]]
 

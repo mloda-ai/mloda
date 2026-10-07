@@ -177,27 +177,23 @@ class TestMissingValueGroupByColumnSelectiveRoot:
         assert results[0]["income__mean_imputed"].tolist() == [10.0, 20.0, 30.0, 100.0, 100.0]
 
     @pytest.mark.parametrize(
-        ("source", "root_names", "expected"),
+        ("source", "expected"),
         [
             pytest.param(
                 Feature(
                     "income_sum", Options(group={"aggregation_type": "sum", DefaultOptionKeys.in_features: "income"})
                 ),
-                {"income", "region"},
                 [140.0] * 5,
                 id="chained_source",
             ),
             pytest.param(
                 Feature("income", Options(group={"scope": "a"})),
-                {"income", "region"},
                 [10.0, 20.0, 30.0, 100.0, 100.0],
                 id="scoped_source",
             ),
         ],
     )
-    def test_source_shares_one_root_step_with_group_by_column(
-        self, source: Feature, root_names: set[str], expected: list[float]
-    ) -> None:
+    def test_source_shares_one_root_step_with_group_by_column(self, source: Feature, expected: list[float]) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
             {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup, PandasAggregatedFeatureGroup}
         )
@@ -219,7 +215,7 @@ class TestMissingValueGroupByColumnSelectiveRoot:
             if isinstance(s, FeatureGroupStep) and s.feature_group is GroupedMissingValueDataCreator
         ]
         assert len(root_steps) == 1
-        assert {str(n) for n in root_steps[0].features.get_all_names()} == root_names
+        assert {str(n) for n in root_steps[0].features.get_all_names()} == {"income", "region"}
 
         results = session.run()
         assert len(results) == 1

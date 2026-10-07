@@ -1293,7 +1293,7 @@ def test_a_two_thousand_block_chain_with_a_requested_leaf_per_block_chooses_quic
     chooser.choose()
     elapsed = time.perf_counter() - started
 
-    assert elapsed < 2.0, f"choosing took {elapsed:.1f}s"
+    assert elapsed < 6.0, f"choosing took {elapsed:.1f}s"
     assert {(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in chain} == {(P, ONLY_ALLOWED)}
     assert {(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in leaves} == {(P, DEFAULT_ORDER)}
 

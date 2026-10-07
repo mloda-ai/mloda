@@ -29,28 +29,21 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 
 _MAX_LISTED_COLUMNS = 20
 
-RETIRED_READER_NAMES: dict[str, str] = {
-    "CsvReader": "CsvFG",
-    "ParquetReader": "ParquetFG",
-    "FeatherReader": "FeatherFG",
-    "OrcReader": "OrcFG",
-    "JsonReader": "JsonFG",
-    "SQLITEReader": "SqliteFG",
-    "JsonDocumentReader": "JsonDocumentFG",
-    "YamlDocumentReader": "YamlFG",
-    "MarkdownDocumentReader": "MarkdownFG",
-    "TextFileReader": "TextFG",
-    "PyFileReader": "PyFG",
-    "ReadFile": "ReadFileFG",
-    "ReadFileFeature": "ReadFileFG",
-    "ReadDB": "ReadDBFG",
-    "ReadDBFeature": "ReadDBFG",
-    "ReadDocument": "ReadDocumentFG",
-    "ReadDocumentFeature": "ReadDocumentFG",
-}
-
-_ABSTRACT_REPLACEMENTS = frozenset({"ReadFileFG", "ReadDBFG", "ReadDocumentFG"})
-STOCK_FORMAT_GROUP_NAMES = frozenset(RETIRED_READER_NAMES.values()) - _ABSTRACT_REPLACEMENTS
+STOCK_FORMAT_GROUP_NAMES = frozenset(
+    {
+        "CsvFG",
+        "ParquetFG",
+        "FeatherFG",
+        "OrcFG",
+        "JsonFG",
+        "SqliteFG",
+        "JsonDocumentFG",
+        "YamlFG",
+        "MarkdownFG",
+        "TextFG",
+        "PyFG",
+    }
+)
 
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(

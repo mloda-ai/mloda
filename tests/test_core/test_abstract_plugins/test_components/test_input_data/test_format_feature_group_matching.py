@@ -1,7 +1,6 @@
 """FormatFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
 
 import gc
-import importlib
 from abc import abstractmethod
 from collections.abc import Collection
 from pathlib import Path
@@ -15,7 +14,6 @@ from mloda.core.prepare.identify_feature_group import FeatureResolutionError, Id
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
-    RETIRED_READER_NAMES,
     FormatPointerError,
 )
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
@@ -779,6 +777,18 @@ class TestForeignPointerMakesSearchedRoutesDecline:
 
         assert _claims(feature, toy_dac(h1={COL: [1]}), ToyFormatFG)
 
+    @pytest.mark.parametrize(
+        ("key", "feature_group"),
+        [("CsvReader", None), (None, "ReadFileFeature")],
+        ids=["option_key", "scope"],
+    )
+    def test_a_former_reader_name_is_an_unknown_name_and_raises_no_pointer_error(
+        self, key: str | None, feature_group: str | None
+    ) -> None:
+        feature = Feature("fpg_x", Options({key: "x"} if key else {}), feature_group=feature_group)
+        result = IdentifyFeatureGroupClass.evaluate(feature, _plugins(_stock("csv_fg", "CsvFG")), None, None)
+        assert not result.identified
+
     def test_a_csv_pointer_returns_the_pointed_value_though_the_collection_holds_the_column_elsewhere(
         self, tmp_path: Path
     ) -> None:
@@ -853,25 +863,6 @@ class TestUnreachablePointerRaises:
 
         assert "dropped by strict mode" in str(exc_info.value)
 
-    @pytest.mark.parametrize(
-        ("key", "feature_group", "fragments"),
-        [
-            ("CsvReader", None, ['"CsvReader" was retired', "point at CsvFG instead"]),
-            ("ReadFile", None, ['"ReadFile" was retired', "concrete group for the format", "CsvFG"]),
-            (None, "ReadFileFeature", ['"ReadFileFeature" was retired', "feature_group=ReadFileFG"]),
-            ("YamlDocumentReader", None, ['"YamlDocumentReader" was retired', "point at YamlFG instead"]),
-        ],
-    )
-    def test_a_retired_reader_name_raises_naming_the_replacement(
-        self, key: str | None, feature_group: str | None, fragments: list[str]
-    ) -> None:
-        feature = Feature("fpg_x", Options({key: "x"} if key else {}), feature_group=feature_group)
-        with pytest.raises(FormatPointerError) as exc_info:
-            IdentifyFeatureGroupClass.evaluate(feature, _plugins(_stock("csv_fg", "CsvFG")), None, None)
-
-        for fragment in fragments:
-            assert fragment in str(exc_info.value)
-
     @pytest.mark.parametrize("as_scope", [False, True], ids=["pointer", "scope"])
     def test_an_unloaded_stock_group_raises_naming_the_loader(
         self, as_scope: bool, monkeypatch: pytest.MonkeyPatch
@@ -891,19 +882,6 @@ class TestUnreachablePointerRaises:
         assert "JsonFG is not loaded" in str(exc_info.value)
         assert "PluginLoader.all()" in str(exc_info.value)
 
-    def test_an_abstract_replacement_key_without_loaded_subclasses_prints_no_empty_examples(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from mloda.core.prepare import identify_feature_group as module
-
-        monkeypatch.setattr(module, "concrete_format_groups", lambda: {})
-        feature = Feature("fpg_x", Options({"ReadFile": "x"}))
-        with pytest.raises(FormatPointerError) as exc_info:
-            IdentifyFeatureGroupClass.evaluate(feature, _plugins(_stock("csv_fg", "CsvFG")), None, None)
-
-        assert '"ReadFile" was retired' in str(exc_info.value)
-        assert "e.g. ." not in str(exc_info.value)
-
     def test_a_scope_with_a_pointer_at_a_different_group_raises_naming_both(self, tmp_path: Path) -> None:
         csv_fg = _stock("csv_fg", "CsvFG")
         json_fg = _stock("json_fg", "JsonFG")
@@ -913,35 +891,3 @@ class TestUnreachablePointerRaises:
 
         assert "CsvFG" in str(exc_info.value)
         assert "JsonFG" in str(exc_info.value)
-
-    def test_a_loaded_shim_named_like_a_retired_reader_is_not_rejected(self, tmp_path: Path) -> None:
-        csv_fg = _stock("csv_fg", "CsvFG")
-
-        def never(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
-            return False
-
-        shim = type("CsvReader", (csv_fg,), {"match_feature_group_criteria": classmethod(never)})
-        feature = Feature("fpg_x", Options({"CsvReader": "x"}))
-        result = IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg, shim), None, None)
-
-        assert shim not in result.identified
-        del shim, result, feature
-        gc.collect()
-
-
-class TestRetiredReaderNames:
-    def test_every_replacement_names_an_existing_format_group(self) -> None:
-        for module in ("csv_fg", "parquet_fg", "feather_fg", "orc_fg", "json_fg"):
-            importlib.import_module(f"mloda_plugins.feature_group.input_data.file_formats.{module}")
-        importlib.import_module("mloda_plugins.feature_group.input_data.db_formats.sqlite_fg")
-        for module in ("json_document_fg", "markdown_fg", "text_fg", "yaml_fg"):
-            importlib.import_module(f"mloda_plugins.feature_group.input_data.document_formats.{module}")
-
-        known: set[str] = set()
-        stack: list[type] = [FormatFeatureGroup]
-        while stack:
-            current = stack.pop()
-            known.add(current.__name__)
-            stack.extend(current.__subclasses__())
-
-        assert set(RETIRED_READER_NAMES.values()) <= known

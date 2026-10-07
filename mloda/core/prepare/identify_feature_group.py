@@ -35,7 +35,6 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader, feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
-    RETIRED_READER_NAMES,
     STOCK_FORMAT_GROUP_NAMES,
     FormatFeatureGroup,
     FormatPointerError,
@@ -53,7 +52,6 @@ from mloda.core.abstract_plugins.components.utils import (
     is_deferred_match_abort,
     is_match_abort,
     contained_raise_reason,
-    get_all_subclasses,
     safe_exc_str,
     safe_field,
 )
@@ -131,18 +129,6 @@ def validate_single_framework_pin(feature: Feature) -> None:
 _NOT_ACCESSIBLE = "it is not among this run's accessible feature groups"
 
 
-def _retired_message(old: str, new: str, as_scope: bool, loaded: dict[str, type[FormatFeatureGroup]]) -> str:
-    base = next((k for k in get_all_subclasses(FormatFeatureGroup) if k.__name__ == new), None)
-    if base is None or not inspect.isabstract(base):
-        return f'"{old}" was retired; point at {new} instead.'
-    if as_scope:
-        return f'"{old}" was retired; use feature_group={new} or a concrete group.'
-    examples = ", ".join(sorted(name for name, group in loaded.items() if issubclass(group, base))[:3])
-    if not examples:
-        return f'"{old}" was retired; point at the concrete group for the format.'
-    return f'"{old}" was retired; point at the concrete group for the format, e.g. {examples}.'
-
-
 def _pinned_path(feature: Feature, collection: DataAccessCollection | None) -> str | None:
     if collection is None or collection.column_to_file is None:
         return None
@@ -185,7 +171,7 @@ def validate_format_pointers(
     excluded: Mapping[type[FeatureGroup], str] | None,
     data_access_collection: DataAccessCollection | None,
 ) -> None:
-    """Raise FormatPointerError for a retired name, an unreachable pointer or scope, or a pointer against a pin."""
+    """Raise FormatPointerError for an unloaded stock group, an unreachable pointer or scope, or a pointer against a pin."""
     scope = feature.feature_group_scope
     keys = sorted(key for key in feature.options.keys() if isinstance(key, str))
     if not keys and scope is None:
@@ -195,11 +181,6 @@ def validate_format_pointers(
     named = [(key, False) for key in keys]
     if isinstance(scope, str):
         named.append((scope, True))
-    if any(name in RETIRED_READER_NAMES for name, _ in named):
-        loaded_names = {fg.__name__ for fg in get_all_subclasses(FeatureGroup)}
-        for name, as_scope in named:
-            if name in RETIRED_READER_NAMES and name not in loaded_names:
-                raise FormatPointerError(_retired_message(name, RETIRED_READER_NAMES[name], as_scope, loaded))
     for name, as_scope in named:
         if name in STOCK_FORMAT_GROUP_NAMES and name not in loaded:
             source = "feature_group=" if as_scope else "options point at "

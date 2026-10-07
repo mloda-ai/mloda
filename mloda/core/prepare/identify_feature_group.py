@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
@@ -84,31 +84,6 @@ class FeatureResolutionError(ValueError):
 
 class ComputeFrameworkPinError(ValueError):
     """User pinned more than one compute framework; validated before matching (#851)."""
-
-
-def _wrap_scoped_access(written: tuple[Any, Any], feature: Feature, options: Options) -> Any:
-    """Apply the reader's wrap_feature_scoped_access to feature-scoped access, however the matcher wrote it."""
-    if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
-        return written
-    reader, access = written
-    names = {
-        klass.data_access_name()
-        for klass in getattr(reader, "__mro__", ())
-        if isinstance(klass, type) and issubclass(klass, BaseInputData)
-    }
-    scoped = False
-    for key in [k for k in options.group if isinstance(k, str) and k in names]:
-        scoped = True
-        value = options.group[key]
-        wrapped = reader.wrap_feature_scoped_access(value)
-        if wrapped is not value:
-            options.set(key, wrapped)
-    if not scoped:
-        return written
-    wrapped_access: Any = reader.wrap_feature_scoped_access(access)
-    if wrapped_access is access:
-        return written
-    return (reader, wrapped_access)
 
 
 def matches_feature_group_scope(feature_group: type[FeatureGroup], scope: str | type[FeatureGroup]) -> bool:
@@ -772,7 +747,11 @@ class IdentifyFeatureGroupClass:
         if probe.matched:
             self._matched_options[feature_group] = options
             if isinstance(written, tuple) and len(written) == 2:
-                self._input_data_matches[feature_group] = _wrap_scoped_access(written, feature, options)
+                if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
+                    # A pair the candidate inherited rather than wrote.
+                    self._input_data_matches[feature_group] = cast(tuple[type[BaseInputData], Any], written)
+                else:
+                    self._input_data_matches[feature_group] = BaseInputData._wrap_scoped_access(written, options)
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

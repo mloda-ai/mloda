@@ -26,7 +26,9 @@ class Features:
         parent_domain: str | None = None,
     ) -> None:
         if isinstance(features, str):
-            raise ValueError("features must be a list of names or Feature objects, wrap a single name in a list")
+            raise ValueError(
+                "features must be a list or tuple of names or Feature objects; wrap a single name in a list"
+            )
 
         self.collection: list[Feature] = []
         self.child_uuid: UUID | None = child_uuid

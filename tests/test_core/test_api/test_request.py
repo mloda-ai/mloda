@@ -82,10 +82,6 @@ class TestmlodaAPI:
 
 
 class TestBareStringRejected:
-    def test_features_rejects_bare_string(self) -> None:
-        with pytest.raises(ValueError, match="list"):
-            Features("abc")
-
     def test_api_rejects_bare_string(self) -> None:
         with pytest.raises(SetupConfigurationError):
             mlodaAPI.prepare("abc")

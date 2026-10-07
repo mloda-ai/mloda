@@ -1,5 +1,7 @@
 """Tests for domain propagation in Features class."""
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
 
@@ -48,3 +50,9 @@ class TestFeaturesDomainPropagation:
 
         result_feature = collection.collection[0]
         assert result_feature.domain is None
+
+
+class TestFeaturesRejectsBareString:
+    def test_features_rejects_bare_string(self) -> None:
+        with pytest.raises(ValueError, match="wrap a single name"):
+            Features("abc")

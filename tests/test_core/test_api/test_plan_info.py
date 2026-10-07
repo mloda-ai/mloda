@@ -993,6 +993,17 @@ class PlanInfoOverridingDBReader(ReadDB):
         return False
 
 
+class PlanInfoNonIdempotentWrapReader(ReadDB):
+    """Non-final reader not overriding feature_scope_data_access; its wrap returns a fresh object per call."""
+
+    wrap_calls = 0
+
+    @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        cls.wrap_calls += 1
+        return [data_access]
+
+
 class PlanInfoOverridingDBReaderFeature(FeatureGroup):
     """Feature group serving only the unique feature name through the overriding reader."""
 
@@ -1112,15 +1123,21 @@ class TestPlanStepReaderDataAccess:
         assert [record["reader"] for record in records] == [f"{SQLITEReader.__module__}:{SQLITEReader.__qualname__}"]
 
     @pytest.mark.parametrize(
-        "reader, feature_group, feature_name",
+        "reader, feature_group, feature_name, in_context",
         [
-            (SQLITEReader, ReadDBFeature, "plan_info_db_col"),
-            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col"),
+            (SQLITEReader, ReadDBFeature, "plan_info_db_col", False),
+            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", False),
+            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", True),
         ],
-        ids=["core_sqlite_reader", "overriding_reader"],
+        ids=["core_sqlite_reader", "overriding_reader", "overriding_reader_context_pin"],
     )
     def test_pinned_dict_credential_is_redacted_in_plan_output(
-        self, tmp_path: Path, reader: type[BaseInputData], feature_group: type[FeatureGroup], feature_name: str
+        self,
+        tmp_path: Path,
+        reader: type[BaseInputData],
+        feature_group: type[FeatureGroup],
+        feature_name: str,
+        in_context: bool,
     ) -> None:
         db = str(tmp_path / "plan_info_pinned.db")
         conn = sqlite3.connect(db)
@@ -1128,9 +1145,10 @@ class TestPlanStepReaderDataAccess:
         conn.commit()
         conn.close()
         pinned = {"sqlite": db, "table_name": "t", "password": "hunter2"}  # nosec B105
+        options = Options(context={reader.__name__: pinned}) if in_context else {reader.__name__: pinned}
 
         explained = mloda.explain(
-            [Feature(feature_name, options={reader.__name__: pinned})],
+            [Feature(feature_name, options=options)],
             compute_frameworks=[PythonDictFramework],
             plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
         )
@@ -1139,9 +1157,23 @@ class TestPlanStepReaderDataAccess:
         assert step.reader_data_access is not None
         assert type(step.reader_data_access[1]) is RegisteredCredential
         assert "hunter2" not in repr(step)
-        assert step.feature_set_options is not None
-        assert "hunter2" not in str(step.feature_set_options)
-        assert type(step.feature_set_options.group[reader.__name__]) is RegisteredCredential
+        assert type(pinned) is dict
+        if not in_context:
+            assert step.feature_set_options is not None
+            assert "hunter2" not in str(step.feature_set_options)
+            assert type(step.feature_set_options.group[reader.__name__]) is RegisteredCredential
+
+    def test_wrap_scoped_access_leaves_pairs_of_non_overriding_readers_untouched(self) -> None:
+        PlanInfoNonIdempotentWrapReader.wrap_calls = 0
+        reader = PlanInfoNonIdempotentWrapReader
+        written = (reader, {"k": "v"})
+        options = Options(group={reader.__name__: {"k": "v"}})
+
+        result = BaseInputData._wrap_scoped_access(written, options)
+
+        assert result is written
+        assert options.group[reader.__name__] == {"k": "v"}
+        assert reader.wrap_calls == 0
 
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
         step = PlanStep(

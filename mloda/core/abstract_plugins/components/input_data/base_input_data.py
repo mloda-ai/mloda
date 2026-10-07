@@ -282,6 +282,30 @@ class BaseInputData(ABC):
         """Normalize a feature-scoped data access before matching; default is identity."""
         return data_access
 
+    @staticmethod
+    def _wrap_scoped_access(
+        written: tuple[type["BaseInputData"], Any], options: Options
+    ) -> tuple[type["BaseInputData"], Any]:
+        """Apply the reader's wrap_feature_scoped_access to feature-scoped access, however the matcher wrote it."""
+        reader, access = written
+        if not reader._is_overridden(BaseInputData, "feature_scope_data_access"):
+            return written
+        names = {klass.data_access_name() for klass in reader.__mro__ if issubclass(klass, BaseInputData)}
+        scoped = False
+        for key, value in options.items():
+            if BaseInputData.deal_with_base_input_data_name_as_cls_or_str(key) not in names:
+                continue
+            scoped = True
+            wrapped = reader.wrap_feature_scoped_access(value)
+            if wrapped is not value:
+                options.set(key, wrapped)
+        if not scoped:
+            return written
+        wrapped_access: Any = reader.wrap_feature_scoped_access(access)
+        if wrapped_access is access:
+            return written
+        return (reader, wrapped_access)
+
     @classmethod
     def data_access_identity(cls, data_access: Any) -> str:
         """Mapping keys, a parsed URI's projection, an existing local path, else the type name."""

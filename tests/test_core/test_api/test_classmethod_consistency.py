@@ -138,7 +138,6 @@ class TestBaseClassBehaviorUnchanged:
         assert not isinstance(result, list)
 
     def test_explain_accepts_list_of_features(self) -> None:
-
         plan = mlodaAPI.explain(
             _features,
             compute_frameworks=[PandasDataFrame],

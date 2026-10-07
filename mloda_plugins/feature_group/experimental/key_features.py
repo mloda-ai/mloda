@@ -15,7 +15,7 @@ def _forwarded(source: Feature) -> Options:
 
 
 def with_key_features(sources: set[Feature], key_names: Iterable[str]) -> set[Feature]:
-    """Add one key Feature per new name; carries the options chained sources forward, else none."""
+    """Add a key Feature per new name, carrying the options chained sources forward (none otherwise)."""
     chained = [_forwarded(f) for f in sources if DefaultOptionKeys.in_features in f.options]
     chained_sources = [f for f in sources if DefaultOptionKeys.in_features in f.options]
     shared = bool(chained) and all(o == chained[0] for o in chained)

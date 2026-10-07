@@ -88,7 +88,7 @@ class MultiLinkRootBDistinct(FeatureGroup):
 
 
 class MultiLinkRootAPartial(MultiLinkRootA):
-    """Root A with a row (w) root B lacks and without a row (v, u) root B has."""
+    """Root A with an extra row (w) and without root B's rows (v, u)."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -96,7 +96,7 @@ class MultiLinkRootAPartial(MultiLinkRootA):
 
 
 class MultiLinkRootBDistinctPartial(MultiLinkRootBDistinct):
-    """Root B with rows (v, u) root A lacks and without root A's row w."""
+    """Root B with extra rows (v, u) and without root A's row (w)."""
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -1452,7 +1452,7 @@ class RemedyRootA1(MultiLinkRootA):
 
 
 class RemedyThirdConsumer(FeatureGroup):
-    """Consumer on the third framework reading both root A variants' frameworks and root B."""
+    """Consumer on the third framework reading both root A variants and root B."""
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature("SidePathArrowP"), Feature("mlg_a1"), Feature("mlg_bd")}

@@ -91,21 +91,20 @@ def test_preload_forwarded_to_forkserver(
     expected: list[str],
     missing: list[str],
 ) -> None:
-    monkeypatch.setattr(WARNED_PRELOAD, set(), raising=False)
+    monkeypatch.setattr(WARNED_PRELOAD, set())
     monkeypatch.setenv("MLODA_MP_START_METHOD", "forkserver")
     monkeypatch.setenv("MLODA_MP_PRELOAD", raw)
     preload = Mock()
     monkeypatch.setattr("multiprocessing.forkserver.set_forkserver_preload", preload)
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING, logger="mloda.core.runtime.mp_context"):
         mp_start_context()
         mp_start_context()
 
     preload.assert_called_with(expected)
-    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(warnings) == len(missing)
-    for name in missing:
-        assert len([w for w in warnings if name in w]) == 1
+    assert preload.call_count == 2
+    records = [r for r in caplog.records if r.name == "mloda.core.runtime.mp_context" and r.levelno == logging.WARNING]
+    assert [r.args[0] for r in records] == missing  # type: ignore[index]
 
 
 def test_module_loads_without_forkserver_context_class(monkeypatch: pytest.MonkeyPatch) -> None:

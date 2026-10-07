@@ -282,7 +282,7 @@ class TestSparkIntegrationWithMlodaAPI:
 
         # Run with Spark framework
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             flight_server=flight_server,
             parallelization_modes=modes,
             plugin_collector=plugin_collector,
@@ -322,7 +322,7 @@ class TestSparkIntegrationWithMlodaAPI:
 
         # Run with Spark framework
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks=[SparkFramework],
@@ -370,7 +370,7 @@ class TestSparkIntegrationWithMlodaAPI:
 
         # Run the multi-step pipeline
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             flight_server=flight_server,
             compute_frameworks=[SparkFramework],
             plugin_collector=plugin_collector,
@@ -406,7 +406,7 @@ class TestSparkIntegrationWithMlodaAPI:
 
         # Run the multi-step pipeline with cross-framework transformation
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             flight_server=flight_server,
             compute_frameworks=[PyArrowTable, SparkFramework],
             plugin_collector=plugin_collector,
@@ -431,7 +431,7 @@ class TestSparkIntegrationWithMlodaAPI:
 
         # Run with Spark framework
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks=[SparkFramework],
@@ -487,7 +487,7 @@ class TestSparkIntegrationWithMlodaAPI:
         # This should raise an exception due to the non-existent column
         with pytest.raises(Exception):
             mloda.run_all(
-                feature_list,  # type: ignore
+                feature_list,
                 flight_server=flight_server,
                 parallelization_modes={ParallelizationMode.SYNC},
                 compute_frameworks=[SparkFramework],

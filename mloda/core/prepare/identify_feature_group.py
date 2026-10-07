@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 
@@ -747,7 +747,11 @@ class IdentifyFeatureGroupClass:
         if probe.matched:
             self._matched_options[feature_group] = options
             if isinstance(written, tuple) and len(written) == 2:
-                self._input_data_matches[feature_group] = written
+                if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
+                    # A pair the candidate inherited rather than wrote.
+                    self._input_data_matches[feature_group] = cast(tuple[type[BaseInputData], Any], written)
+                else:
+                    self._input_data_matches[feature_group] = BaseInputData._wrap_scoped_access(written, options)
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

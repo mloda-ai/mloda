@@ -327,7 +327,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
 
         # Run the multi-step pipeline
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             flight_server=flight_server,
             compute_frameworks=[DuckDBFramework],
             plugin_collector=plugin_collector,
@@ -361,7 +361,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
 
         # Run the multi-step pipeline
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             flight_server=flight_server,
             compute_frameworks=[PyArrowTable, DuckDBFramework],
             plugin_collector=plugin_collector,

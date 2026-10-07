@@ -86,7 +86,7 @@ class mlodaAPI:
 
     def __init__(
         self,
-        requested_features: Features | list[Feature | str],
+        requested_features: Features | Sequence[Feature | str],
         compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
@@ -157,7 +157,7 @@ class mlodaAPI:
 
     def _plan(
         self,
-        requested_features: Features | list[Feature | str],
+        requested_features: Features | Sequence[Feature | str],
         compute_frameworks: Sequence[str | type[ComputeFramework]] | None,
         links: set[Link] | None,
         data_access_collection: DataAccessCollection | None,
@@ -220,7 +220,7 @@ class mlodaAPI:
 
     def _process_features(
         self,
-        requested_features: Features | list[Feature | str],
+        requested_features: Features | Sequence[Feature | str],
         api_input_data_collection: ApiInputDataCollection | None,
     ) -> Features:
         """Processes the requested features, ensuring they are in the correct format and adding API input data."""
@@ -240,7 +240,7 @@ class mlodaAPI:
     @classmethod
     def run_all(
         cls,
-        features: Features | list[Feature | str],
+        features: Features | Sequence[Feature | str],
         compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
@@ -338,7 +338,7 @@ class mlodaAPI:
     @classmethod
     def stream_all(
         cls,
-        features: Features | list[Feature | str],
+        features: Features | Sequence[Feature | str],
         compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
@@ -403,7 +403,7 @@ class mlodaAPI:
     @classmethod
     def prepare(
         cls,
-        features: Features | list[Feature | str],
+        features: Features | Sequence[Feature | str],
         compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
         data_access_collection: DataAccessCollection | None = None,
@@ -441,7 +441,7 @@ class mlodaAPI:
     @classmethod
     def explain(
         cls,
-        features: Features | list[Feature | str],
+        features: Features | Sequence[Feature | str],
         *,
         compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,
@@ -488,7 +488,7 @@ class mlodaAPI:
     @classmethod
     def diagnose(
         cls,
-        features: Features | list[Feature | str],
+        features: Features | Sequence[Feature | str],
         *,
         compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
         links: set[Link] | None = None,

@@ -111,7 +111,7 @@ class TestDynamicFeatureGroupFactoryIntegration:
         ]
 
         # 5. Run mloda with the Dynamic Feature Group
-        result = mloda.run_all(features=features, compute_frameworks=[PandasDataFrame])  # type: ignore
+        result = mloda.run_all(features=features, compute_frameworks=[PandasDataFrame])
 
         # 6. Verification
         assert result

@@ -5,6 +5,7 @@ from mloda.provider import ComputeFramework
 from mloda.user import Features
 from mloda.user import Feature
 from mloda.user import mlodaAPI
+from mloda.core.api.request import SetupConfigurationError
 from mloda.core.core.engine import Engine
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.user import Index
@@ -38,7 +39,7 @@ class TestmlodaAPI:
             )
         }
 
-        api_request = mlodaAPI(features, compute_fws, links)  # type: ignore
+        api_request = mlodaAPI(features, compute_fws, links)
         assert isinstance(api_request.features, Features)
         assert len(api_request.compute_framework) == len(get_all_subclasses(ComputeFramework))
         assert api_request.links is not None
@@ -78,6 +79,14 @@ class TestmlodaAPI:
             api_feature = list(api_request.features)[0]
             assert api_feature is original_feature
             assert api_feature.name == original_feature.name
+
+
+class TestBareStringRejected:
+    def test_api_rejects_bare_string(self) -> None:
+        with pytest.raises(SetupConfigurationError):
+            mlodaAPI.prepare("abc")
+        with pytest.raises(SetupConfigurationError):
+            mlodaAPI.run_all("abc")
 
 
 class TestSetupEngineRunnerReturnsRunner:

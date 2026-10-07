@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Sequence
 from typing import Generator
 from uuid import UUID
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -19,11 +20,16 @@ class Features:
 
     def __init__(
         self,
-        features: list[Feature | str],
+        features: Sequence[Feature | str],
         child_options: Options | None = None,
         child_uuid: UUID | None = None,
         parent_domain: str | None = None,
     ) -> None:
+        if isinstance(features, str):
+            raise ValueError(
+                "features must be a list or tuple of names or Feature objects; wrap a single name in a list"
+            )
+
         self.collection: list[Feature] = []
         self.child_uuid: UUID | None = child_uuid
         self.parent_domain: str | None = parent_domain
@@ -37,7 +43,7 @@ class Features:
         self.build_feature_collection(features, child_options, child_uuid)
 
     def build_feature_collection(
-        self, features: list[Feature | str], child_options: Options, child_uuid: UUID | None = None
+        self, features: Sequence[Feature | str], child_options: Options, child_uuid: UUID | None = None
     ) -> None:
         for feature in features:
             if child_options.group == {} and child_options.context == {}:
@@ -90,7 +96,7 @@ class Features:
     def __iter__(self) -> Generator[Feature, None, None]:
         yield from self.collection
 
-    def check_for_duplicate_string_features(self, features: list[Feature | str]) -> None:
+    def check_for_duplicate_string_features(self, features: Sequence[Feature | str]) -> None:
         check_set: set[str] = set()
         for feature in features:
             if isinstance(feature, str):

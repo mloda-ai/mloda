@@ -324,7 +324,7 @@ def _(mo):
     class mlodaAPI:
         def __init__(
             self,
-            requested_features: Features | list[Feature | str],
+            requested_features: Features | Sequence[Feature | str],
             compute_frameworks: Sequence[str | type[ComputeFramework]] | None = None,
             links: set[Link] | None = None,
             data_access_collection: DataAccessCollection | None = None,

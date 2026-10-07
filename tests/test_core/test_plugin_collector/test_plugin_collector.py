@@ -57,14 +57,14 @@ class TestPluginCollectorIntegration:
     def test_enabled_plugins(self) -> Any:
         features = [f"InputDataTestFeatureGroup_{f}" for f in self.feature_list]
         mloda.run_all(
-            features,  # type: ignore
+            features,
             compute_frameworks=["PyArrowTable"],
             plugin_collector=PluginCollector.enabled_feature_groups({InputDataTestFeatureGroup}),
         )
 
         with pytest.raises(ValueError):
             mloda.run_all(
-                features,  # type: ignore
+                features,
                 compute_frameworks=["PyArrowTable"],
                 plugin_collector=PluginCollector.enabled_feature_groups({BTestFeatureGroup}),
             )
@@ -74,13 +74,13 @@ class TestPluginCollectorIntegration:
 
         with pytest.raises(ValueError):
             mloda.run_all(
-                features,  # type: ignore
+                features,
                 compute_frameworks=["PyArrowTable"],
                 plugin_collector=PluginCollector.disabled_feature_groups({InputDataTestFeatureGroup}),
             )
 
         mloda.run_all(
-            features,  # type: ignore
+            features,
             compute_frameworks=["PyArrowTable"],
             plugin_collector=PluginCollector.disabled_feature_groups({BTestFeatureGroup}),
         )

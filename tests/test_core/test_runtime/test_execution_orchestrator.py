@@ -27,7 +27,7 @@ from mloda.provider import (  # noqa: F401
 from mloda.user import Feature, PluginCollector, mloda
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from tests.helpers.uuid7_assertions import assert_valid_uuid7
-from tests.test_core.test_runtime.plan_stubs import ReiterablePlan
+from tests.helpers.plan_stubs import ReiterablePlan
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 

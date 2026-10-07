@@ -88,6 +88,12 @@ def test_unsupported_value_raises(monkeypatch: pytest.MonkeyPatch, value: str) -
             [("mloda_no_such_c.x", "mloda_no_such_c")],
             ["mloda_no_such_c"],
         ),
+        (
+            "mloda_fake_found.sub,mloda_fake_found",
+            ["mloda_fake_found.sub", "mloda_fake_found"],
+            [],
+            ["mloda_fake_found"],
+        ),
     ],
 )
 def test_preload_forwarded_to_forkserver(
@@ -104,7 +110,7 @@ def test_preload_forwarded_to_forkserver(
     monkeypatch.setenv("MLODA_MP_PRELOAD", raw)
     preload = Mock()
     monkeypatch.setattr("multiprocessing.forkserver.set_forkserver_preload", preload)
-    find_spec_mock = Mock(wraps=importlib.util.find_spec)
+    find_spec_mock = Mock(side_effect=lambda n: object() if n == "mloda_fake_found" else importlib.util.find_spec(n))
     monkeypatch.setattr("mloda.core.runtime.mp_context.find_spec", find_spec_mock)
 
     with caplog.at_level(logging.WARNING, logger="mloda.core.runtime.mp_context"):

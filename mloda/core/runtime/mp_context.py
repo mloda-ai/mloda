@@ -20,7 +20,7 @@ def mp_start_context() -> SpawnContext | ForkServerContext:
     """Return the spawn (default) or forkserver context chosen by MLODA_MP_START_METHOD.
 
     Never fork: a child inherits locks held by the parent's live threads and deadlocks.
-    Forkserver is safe as it forks from a single-threaded server, so preloads must not start threads."""
+    Forkserver is safe as it forks from a single-threaded server, so preloads must not start fork-unsafe threads."""
     global _warned_forkserver_unavailable
     raw = os.environ.get("MLODA_MP_START_METHOD", "")
     method = raw.strip().lower()

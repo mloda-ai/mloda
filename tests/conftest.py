@@ -40,8 +40,8 @@ MP_PRELOAD_MODULES = [
 # Must run before anything starts a worker process.
 os.environ.setdefault("MLODA_MP_START_METHOD", "forkserver")
 os.environ.setdefault("MLODA_MP_PRELOAD", ",".join(MP_PRELOAD_MODULES))
-# OPENBLAS_NUM_THREADS=1 keeps numpy's thread pool out of the forkserver; pyarrow's jemalloc background thread is
-# stopped in the child by jemalloc's postfork handler; polars and duckdb stay out of the preload (thread pools).
+# OPENBLAS_NUM_THREADS=1 keeps numpy's thread pool out of the forkserver; pyarrow's jemalloc thread is fork-safe
+# (jemalloc's atfork handlers reset its state in the child); polars and duckdb stay out of the preload.
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 

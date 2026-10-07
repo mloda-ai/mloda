@@ -26,7 +26,7 @@ from mloda.core.runtime.run import ExecutionOrchestrator, _describe_step
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import make_fg
-from tests.test_core.test_runtime.plan_stubs import ReiterablePlan
+from tests.helpers.plan_stubs import ReiterablePlan
 
 # Below the suite-wide timeout on purpose: a stall regression must fail fast, not hang.
 pytestmark = pytest.mark.timeout(5)

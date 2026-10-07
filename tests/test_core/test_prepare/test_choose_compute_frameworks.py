@@ -2,7 +2,9 @@
 Graphs are built by hand; no run or Engine is involved.
 """
 
+import inspect
 import itertools
+import sys
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -1150,6 +1152,121 @@ def test_a_twenty_five_block_six_framework_component_with_a_forced_conversion_so
     assert {f.chosen_compute_framework for f in fillers} == {fws[5]}
     assert [leaf.chosen_compute_framework for leaf in leaves] == pins
     assert net.conversions() == 4
+
+
+SAVES_THREE = "saves 3 conversions"
+SAVES_FIVE = "saves 5 conversions"
+
+
+def _fan_child(net: _Net, name: str, parents: list[Feature]) -> Feature:
+    child = net.add(type(f"Fan{name}FG", (FeatureGroup,), {}), name, {P, A, D}, requested=True)
+    for parent in parents:
+        net.edge(parent, child)
+    return child
+
+
+def _fan_flat(net: _Net, size: int) -> list[tuple[list[Feature], str, type[ComputeFramework]]]:
+    root = net.add(ChooserRootFG, "fan_root", {D})
+    children = [_fan_child(net, f"fan_flat_{i}", [root]) for i in range(size)]
+    return [([root], ONLY_ALLOWED, D), (children, CONVERTS_LATER, D)]
+
+
+def _fan_tree(net: _Net, levels: int) -> list[tuple[list[Feature], str, type[ComputeFramework]]]:
+    root = net.add(ChooserRootFG, "fan_root", {D})
+    expected: list[tuple[list[Feature], str, type[ComputeFramework]]] = [([root], ONLY_ALLOWED, D)]
+    saves = [SAVES_THREE, SAVES_FIVE, SAVES_TWO]
+    layer = [root]
+    for level in range(levels):
+        layer = [_fan_child(net, f"fan_tree_{level}_{i}", [layer[i // 3]]) for i in range(len(layer) * 3)]
+        expected.append((layer, saves[level], P))
+    return expected
+
+
+def _fan_two_parents(net: _Net, size: int) -> list[tuple[list[Feature], str, type[ComputeFramework]]]:
+    root = net.add(ChooserRootFG, "fan_root", {D})
+    root2 = net.add(ChooserLeafFG, "fan_root2", {P})
+    children = [_fan_child(net, f"fan_two_{i}", [root, root2]) for i in range(size)]
+    return [([root], ONLY_ALLOWED, D), ([root2], ONLY_ALLOWED, P), (children, SAVES_ONE, P)]
+
+
+_FAN_POSITIONS = {D: 0, A: 1, P: 2}
+
+
+@pytest.mark.parametrize(
+    ("build", "size", "positions"),
+    [(_fan_flat, 16, None), (_fan_tree, 3, _FAN_POSITIONS), (_fan_two_parents, 16, _FAN_POSITIONS)],
+    ids=["flat", "tree", "two_parents"],
+)
+def test_one_fixed_parent_feeding_many_free_children_is_chosen_quickly(
+    build: Callable[[_Net, int], list[tuple[list[Feature], str, type[ComputeFramework]]]],
+    size: int,
+    positions: dict[type[ComputeFramework], int] | None,
+) -> None:
+    net = _Net()
+    expected = build(net, size)
+    chooser = net.chooser(positions, output_framework=P)  # built before the timer
+    started = time.perf_counter()
+    chooser.choose()
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 1.0, f"choosing took {elapsed:.1f}s"
+    for features, reason, framework in expected:
+        assert {f.chosen_compute_framework for f in features} == {framework}
+        assert {f.chosen_compute_framework_reason for f in features} == {reason}
+
+
+def test_a_long_chain_of_separating_blocks_is_chosen_within_a_low_recursion_limit() -> None:
+    net = _Net()
+    chain = [net.add(ChooserLayerFG, "sep_chain", {A}, {"layer": i}) for i in range(200)]
+    leaves = [net.add(ChooserLeafFG, "sep_leaf", {P, A, D}, {"leaf": i}, requested=True) for i in range(200)]
+    for i, (block, leaf) in enumerate(zip(chain, leaves)):
+        net.edge(block, leaf)
+        if i + 1 < len(chain):
+            net.edge(block, chain[i + 1])
+    chooser = net.chooser(output_framework=P)
+
+    limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(len(inspect.stack(0)) + 100)
+    try:
+        chooser.choose()
+    finally:
+        sys.setrecursionlimit(limit)
+
+    assert {f.chosen_compute_framework for f in leaves} == {A}
+    assert {f.chosen_compute_framework_reason for f in leaves} == {CONVERTS_LATER}
+
+
+def _separator_net(
+    child_allowed: Callable[[list[type[ComputeFramework]]], set[type[ComputeFramework]]],
+) -> tuple[_Net, list[type[ComputeFramework]], list[Feature]]:
+    fws = _six_frameworks()
+    net = _Net()
+    sep = net.add(ChooserChildFG, "split_sep", {fws[4], fws[0]})
+    right = net.add(ChooserRightFG, "split_right", {fws[2], fws[3]})
+    child = net.add(ChooserRootFG, "split_child", child_allowed(fws))
+    other = net.add(ChooserOtherLeafFG, "split_other", {fws[0], fws[4]})
+    net.join(_link(Link.inner, ChooserChildFG, ChooserRightFG), sep, right, child)
+    net.edge(sep, other)
+    return net, fws, [sep, right, child, other]
+
+
+def test_a_separator_value_that_leaves_one_part_infeasible_is_undone() -> None:
+    net, fws, features = _separator_net(lambda f: {f[0], f[1]})
+
+    net.choose({fws[4]: 0, fws[0]: 1}, chooser_class=_AllConvertibleChooser)
+
+    assert [f.chosen_compute_framework for f in features] == [fws[0], fws[2], fws[0], fws[0]]
+    assert [f.chosen_compute_framework_reason for f in features] == [RULES, DEFAULT_ORDER, RULES, SAVES_ONE]
+
+
+def test_a_fully_infeasible_split_plan_names_its_features() -> None:
+    net, fws, _features = _separator_net(lambda f: {f[1]})
+
+    with pytest.raises(ValueError, match="^No compute framework assignment satisfies the hard rules") as raised:
+        net.choose({fws[4]: 0, fws[0]: 1}, chooser_class=_AllConvertibleChooser)
+
+    for name in ("split_sep", "split_right", "split_child", "split_other"):
+        assert name in str(raised.value)
 
 
 # --- RIGHT self-merge guard (F4) -------------------------------------------------------------------------

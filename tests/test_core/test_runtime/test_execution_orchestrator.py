@@ -31,7 +31,8 @@ from tests.helpers.plan_stubs import ReiterablePlan
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.prepare.execution_plan import ExecutionPlan
 
-from mloda.core.runtime.run import ExecutionOrchestrator
+from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count
+from tests.test_core.test_prepare.test_multi_link_group_resolution import SidePathPandasP, _side_path_prepare
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -584,35 +585,19 @@ def _chain_plan() -> Any:
 class TestPlannedWorkerCount:
     """planned_worker_count mirrors how many workers an MP run will create."""
 
-    def test_side_path_plan_counts_four_with_multiprocessing(self) -> None:
-        from mloda.core.runtime.run import planned_worker_count
-        from tests.test_core.test_prepare.test_multi_link_group_resolution import (
-            SidePathPandasP,
-            _side_path_prepare,
-        )
-
+    @pytest.mark.parametrize(
+        ("register_modes", "expected"),
+        [({ParallelizationMode.MULTIPROCESSING}, 4), ({ParallelizationMode.SYNC}, 0)],
+        ids=["multiprocessing", "sync"],
+    )
+    def test_side_path_plan_count(self, register_modes: set[ParallelizationMode], expected: int) -> None:
         plan = _side_path_prepare(
             SidePathPandasP, False, False, ParallelizationMode.MULTIPROCESSING
         ).engine.execution_planner
 
-        assert planned_worker_count(plan, {ParallelizationMode.MULTIPROCESSING}) == 4
-
-    def test_side_path_plan_counts_zero_without_multiprocessing(self) -> None:
-        from mloda.core.runtime.run import planned_worker_count
-        from tests.test_core.test_prepare.test_multi_link_group_resolution import (
-            SidePathPandasP,
-            _side_path_prepare,
-        )
-
-        plan = _side_path_prepare(
-            SidePathPandasP, False, False, ParallelizationMode.MULTIPROCESSING
-        ).engine.execution_planner
-
-        assert planned_worker_count(plan, {ParallelizationMode.SYNC}) == 0
+        assert planned_worker_count(plan, register_modes) == expected
 
     def test_same_framework_chain_shares_one_worker(self) -> None:
-        from mloda.core.runtime.run import planned_worker_count
-
         assert planned_worker_count(_chain_plan(), {ParallelizationMode.MULTIPROCESSING}) == 1
 
 
@@ -718,19 +703,16 @@ class TestEnterPrestartsStandbyWorkers:
 
         orchestrator.worker_manager.stop_standbys.assert_called_once_with()
 
-    def test_multiprocessing_compute_does_not_prestart(self) -> None:
+    @pytest.mark.parametrize(
+        "run",
+        [lambda o: o.compute(), lambda o: list(o.compute_stream())],
+        ids=["compute", "compute_stream"],
+    )
+    def test_multiprocessing_compute_does_not_prestart(self, run: Callable[[Any], Any]) -> None:
         orchestrator = self._orchestrator(ParallelizationMode.MULTIPROCESSING)
 
         with patch("mloda.core.runtime.run.time.sleep"):
-            orchestrator.compute()
-
-        orchestrator.worker_manager.prestart_workers.assert_not_called()
-
-    def test_multiprocessing_compute_stream_does_not_prestart(self) -> None:
-        orchestrator = self._orchestrator(ParallelizationMode.MULTIPROCESSING)
-
-        with patch("mloda.core.runtime.run.time.sleep"):
-            list(orchestrator.compute_stream())
+            run(orchestrator)
 
         orchestrator.worker_manager.prestart_workers.assert_not_called()
 

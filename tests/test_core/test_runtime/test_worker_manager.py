@@ -282,6 +282,13 @@ class TestWorkerManagerStandbyWorkers:
 
         assert bound == first
         assert manager.standby == [second]
+        assert pickle.loads(first[1].put.call_args.args[0])[2] == 0  # nosec B301
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            second_bound = manager.create_worker_process(uuid4(), _noop_target, ())
+
+        assert second_bound == second
+        assert pickle.loads(second[1].put.call_args.args[0])[2] == 1  # nosec B301
 
     def test_dead_standby_is_skipped_and_a_fresh_process_is_spawned(self) -> None:
         manager = WorkerManager()

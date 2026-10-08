@@ -1586,7 +1586,8 @@ def _remedy_sum_consumer(name: str, framework: type[ComputeFramework], inputs: t
         total = data[inputs[0]]
         for column in inputs[1:]:
             total = pc.add(total, data[column])
-        return {cls.get_class_name(): total.to_pylist()}
+        # Pass the frame through: sibling consumers can share it, and a dict result would replace it.
+        return data.append_column(cls.get_class_name(), total)
 
     namespace = {
         "FRAMEWORK": framework,
@@ -1606,6 +1607,7 @@ RemedyThirdBThirdConsumer = _remedy_sum_consumer("RemedyThirdBThirdConsumer", Th
 RemedyThirdBThirdMidConsumer = _remedy_sum_consumer(
     "RemedyThirdBThirdMidConsumer", ThirdCfw, ("SidePathArrowP", "mlg_a1", "mlg_b")
 )
+RemedyThirdPairConsumer = _remedy_sum_consumer("RemedyThirdPairConsumer", ThirdCfw, ("mlg_a1", "mlg_b"))
 
 
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
@@ -1638,6 +1640,62 @@ def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_s
     results = session.run()
 
     assert _side_path_values(results, consumer) == expected
+
+
+@pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize(
+    "first, first_expected, second, second_expected",
+    [
+        pytest.param(
+            RemedyThirdBThirdMidConsumer,
+            [[117, 228, 339]],
+            RemedyThirdPairConsumer,
+            [[17, 28, 39]],
+            id="mid_and_pair",
+        ),
+        pytest.param(
+            RemedyThirdBThirdMidConsumer,
+            [[117, 228, 339]],
+            RemedyThirdBThirdConsumer,
+            [[18, 30, 42]],
+            id="mid_and_direct",
+        ),
+        pytest.param(
+            RemedyThirdBThirdConsumer,
+            [[18, 30, 42]],
+            RemedyThirdPairConsumer,
+            [[17, 28, 39]],
+            id="direct_and_pair",
+        ),
+    ],
+)
+def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_together(
+    first: type[FeatureGroup],
+    first_expected: list[list[int]],
+    second: type[FeatureGroup],
+    second_expected: list[list[int]],
+    swap_link_sides: bool,
+    link_factory: Any,
+) -> None:
+    session = _side_path_prepare(
+        SidePathArrowP,
+        False,
+        swap_link_sides,
+        consumer=first,
+        features=[first.get_class_name(), second.get_class_name()],
+        link_factory=link_factory,
+        **{**_REMEDY_KWARGS, "root_b": RemedyRootBThird, "extra_groups": {*_REMEDY_KWARGS["extra_groups"], second}},
+    )
+
+    assert session.engine is not None
+    join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
+    assert all(step.split_consumers is None for step in join_steps)
+
+    results = session.run()
+
+    assert _side_path_values(results, first) == first_expected
+    assert _side_path_values(results, second) == second_expected
 
 
 class RemedyRootBArrowX(RemedyRootBThird):

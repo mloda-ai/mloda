@@ -1933,10 +1933,12 @@ Available join types:
         unsplit = [(component, varying_side, False)]
         if link.jointype in (JoinType.APPEND, JoinType.UNION) or len(component) < 2:
             return unsplit
+        # Same framework scope _plan_link_join uses for same-framework joins; the scan here stays per child.
+        side_frameworks = frameworks if len(frameworks) == 1 else None
         by_carriers: dict[frozenset[UUID], set[UUID]] = {}
         for child in sorted(component):
             split = split_by_declared_side(link, set(graph.parent_to_children_mapping[child]), graph)
-            carriers, sides, _ = self._carrier_scan({child}, split, graph, frameworks)
+            carriers, sides, _ = self._carrier_scan({child}, split, graph, frameworks, side_frameworks)
             if len(sides) > 1:
                 return unsplit
             by_carriers.setdefault(carriers, set()).add(child)
@@ -1947,7 +1949,7 @@ Available join types:
         carried_split = split_by_declared_side(
             link, {p for c in carried_children for p in graph.parent_to_children_mapping[c]}, graph
         )
-        _, carriers_on_left = self._join_carriers(carried_children, carried_split, frameworks, graph)
+        _, carriers_on_left = self._join_carriers(carried_children, carried_split, frameworks, graph, side_frameworks)
         side = JoinSide.LEFT if carriers_on_left else JoinSide.RIGHT
         return [(members, side, not key) for key, members in by_carriers.items()]
 

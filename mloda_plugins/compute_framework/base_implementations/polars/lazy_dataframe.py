@@ -61,7 +61,12 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         rows = data.select(pl.len()).collect().item()
         if any(len(values) != rows for values in columns.values()):
             return None
-        return data.with_columns([pl.Series(name, values) for name, values in columns.items()])
+        appended = data.with_columns([pl.Series(name, values) for name, values in columns.items()])
+        return appended.collect().lazy()
+
+    @classmethod
+    def _positional_append_needs_pinned_frame(cls) -> bool:
+        return True
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         schema = data.collect_schema()

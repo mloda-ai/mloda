@@ -251,6 +251,13 @@ class TestPolarsLazyEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFram
     def non_empty_data(self) -> Any:
         return pl.DataFrame({"a": [1]}).lazy()
 
+    needs_pinned_frame = True
+
+    @pytest.fixture
+    def joined_data(self) -> Any:
+        left = pl.LazyFrame({"a": [1, 2, 3]})
+        return left.join(pl.LazyFrame({"a": [3, 1, 2], "b": [30, 10, 20]}), on="a")
+
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyDataTypeValidator(DataTypeValidatorFrameworkTestMixin):

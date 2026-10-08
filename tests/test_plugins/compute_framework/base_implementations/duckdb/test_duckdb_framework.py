@@ -355,6 +355,14 @@ class TestDuckDBEmptyResult(
     def non_empty_data(self, connection: Any) -> Any:
         return DuckdbRelation.from_arrow(connection, pa.table({"a": [1]}))
 
+    needs_pinned_frame = True
+
+    @pytest.fixture
+    def joined_data(self, connection: Any) -> Any:
+        left = DuckdbRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
+        right = DuckdbRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
+        return left.join(right, "a")
+
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
 from unittest.mock import patch  # noqa: E402

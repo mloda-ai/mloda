@@ -329,3 +329,9 @@ class TestSqliteEmptyResult(
     @pytest.fixture
     def non_empty_data(self, connection: sqlite3.Connection) -> Any:
         return SqliteRelation.from_arrow(connection, pa.table({"a": [1]}))
+
+    @pytest.fixture
+    def joined_data(self, connection: sqlite3.Connection) -> Any:
+        left = SqliteRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
+        right = SqliteRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
+        return left.join(right, "a")

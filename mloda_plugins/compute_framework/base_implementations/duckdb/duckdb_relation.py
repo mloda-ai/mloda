@@ -226,7 +226,7 @@ class DuckdbRelation(SqlBaseRelation):
         joined = left.join(right, f'"__l__".{qrn} = "__r__".{qrn}')
         keep = ", ".join(f'"__l__".{quote_ident(c)}' for c in self.columns)
         keep += "".join(f', "__r__".{quote_ident(n)}' for n in columns)
-        result = joined.project(keep)
+        result = joined.order(f'"__l__".{qrn}').project(keep)
         return DuckdbRelation(self._connection, result)
 
     @classmethod

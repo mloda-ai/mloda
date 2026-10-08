@@ -296,7 +296,7 @@ Framework authors declare the connection rule by overriding `connection_requirem
 
 ## Appending Dict Results
 
-Override `_append_columns(data, columns)` to append a non-root dict result to the frame. The default returns `None`, which replaces the frame.
+Override `_append_columns(data, columns)` to append a non-root dict result to the frame. The default returns `None`, which replaces the frame. Frameworks holding a lazy plan with unstable row order override the classmethod `_positional_append_needs_pinned_frame` to return `True`, which appends only onto a frame mloda built itself.
 
 ## Data Transformation
 

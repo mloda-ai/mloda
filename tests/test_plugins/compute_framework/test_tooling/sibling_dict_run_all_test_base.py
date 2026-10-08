@@ -25,6 +25,9 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
 )
 
 
+SD_A_VALUES = [1, 2, 3]
+
+
 def _column(data: Any, name: str) -> list[Any]:
     return [row[name] for row in records_from_frame(data)]
 
@@ -38,7 +41,7 @@ class SiblingDictRoot(FeatureGroup, _EmptyResultMatchData):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"sd_a": [1, 2, 3]}
+        return {"sd_a": list(SD_A_VALUES)}
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -118,12 +121,14 @@ def _columns_of(result: list[Any]) -> dict[str, list[Any]]:
     return columns
 
 
-def _assert_columns(expected: dict[str, list[Any]]) -> PolicySuccess:
+def _assert_column_values(expected: dict[str, list[Any]]) -> PolicySuccess:
+    """Each output column holds exactly the expected values in row order."""
+
     def check(result: list[Any]) -> None:
         columns = _columns_of(result)
         for name, values in expected.items():
             assert name in columns, f"missing {name}, got {sorted(columns)}"
-            assert sorted(columns[name]) == sorted(values)
+            assert columns[name] == values
 
     return PolicySuccess(assert_result=check)
 
@@ -135,11 +140,17 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
     def connection_keyed_feature_groups(cls) -> set[type[FeatureGroup]]:
         return {SiblingDictRoot}
 
-    def _run(self, names: list[str], expected: dict[str, list[Any]], mode: ParallelizationMode, server: Any) -> None:
+    def _run(
+        self,
+        names: list[str],
+        expectation: PolicySuccess,
+        mode: ParallelizationMode,
+        server: Any,
+    ) -> None:
         self.assert_policy_case(
             feature_name=names,
             plugin_collector=_COLLECTOR,
-            expectation=_assert_columns(expected),
+            expectation=expectation,
             mode=mode,
             flight_server=server,
         )
@@ -147,19 +158,22 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
     def _run_siblings_together(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run(
             ["SiblingDictDouble", "SiblingDictTriple"],
-            {"SiblingDictDouble": [2, 4, 6], "SiblingDictTriple": [3, 6, 9]},
+            _assert_column_values(
+                {"SiblingDictDouble": [v * 2 for v in SD_A_VALUES], "SiblingDictTriple": [v * 3 for v in SD_A_VALUES]}
+            ),
             mode,
             flight_server,
         )
 
     def _run_overlap(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run(["SiblingDictOverlap"], {"SiblingDictOverlap": [11, 12, 13]}, mode, flight_server)
+        expectation = _assert_column_values({"SiblingDictOverlap": [11, 12, 13]})
+        self._run(["SiblingDictOverlap"], expectation, mode, flight_server)
 
     def _run_aggregate(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run(["SiblingDictAggregate"], {"SiblingDictAggregate": [6]}, mode, flight_server)
+        self._run(["SiblingDictAggregate"], _assert_column_values({"SiblingDictAggregate": [6]}), mode, flight_server)
 
     def _run_case_fold(self, mode: ParallelizationMode, flight_server: Any) -> None:
-        self._run(["SD_A"], {"SD_A": [2, 4, 6]}, mode, flight_server)
+        self._run(["SD_A"], _assert_column_values({"SD_A": [2, 4, 6]}), mode, flight_server)
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_case_differing_dict_key_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:

@@ -434,6 +434,14 @@ class TestSparkEmptyResult(
     def non_empty_data(self, spark_session: Any) -> Any:
         return spark_session.createDataFrame([{"a": 1}])
 
+    needs_pinned_frame = True
+
+    @pytest.fixture
+    def joined_data(self, spark_session: Any) -> Any:
+        left = spark_session.createDataFrame([{"a": 1}, {"a": 2}, {"a": 3}])
+        right = spark_session.createDataFrame([{"a": 3, "b": 30}, {"a": 1, "b": 10}, {"a": 2, "b": 20}])
+        return left.join(right, on="a")
+
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402
 

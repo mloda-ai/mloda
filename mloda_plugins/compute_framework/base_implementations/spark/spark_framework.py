@@ -277,7 +277,7 @@ class SparkFramework(ComputeFramework):
         new_data_df = spark.createDataFrame(
             [(i + 1, *(column[i] for column in values)) for i in range(len(values[0]))], StructType(fields)
         )
-        return existing_with_row_num.join(new_data_df, rn).drop(rn)
+        return existing_with_row_num.join(new_data_df, rn).orderBy(rn).drop(rn)
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, DataFrame):
@@ -288,7 +288,12 @@ class SparkFramework(ComputeFramework):
         row_count = data.count()
         if any(len(values) != row_count for values in columns.values()):
             return None
-        return self._join_columns(data, {name: list(values) for name, values in columns.items()})
+        joined = self._join_columns(data, {name: list(values) for name, values in columns.items()})
+        return joined.localCheckpoint()
+
+    @classmethod
+    def _positional_append_needs_pinned_frame(cls) -> bool:
+        return True
 
     @classmethod
     def filter_engine(cls) -> type[BaseFilterEngine]:

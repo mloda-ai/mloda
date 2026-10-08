@@ -122,6 +122,7 @@ class ComputeFramework(ABC):
     # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
     _pending_extender_payload: bytes | None = None
     _hook_extenders: dict[ExtenderHook, Extender] | None = None
+    _pinned_frame: Any = None
 
     def __init__(
         self,
@@ -133,6 +134,7 @@ class ComputeFramework(ABC):
         """This class is initialized for step execution."""
         self.mode = mode
         self.data: Any = None
+        self._pinned_frame = None
         self.children_if_root = children_if_root
         self.already_calculated_children_tracker: set[UUID] = set()
         self.column_names: set[str] = set()
@@ -409,7 +411,10 @@ class ComputeFramework(ABC):
             connection = features.get_options_key(feature_group.get_class_name())
             if connection is not None or self.framework_connection_object is None:
                 self.set_framework_connection_object(connection)
+            was_dict = isinstance(data, dict)
             data = self.transform(data, names)
+            if was_dict:
+                self._pinned_frame = data
         else:
             self._adopt_connection(data)
             # already the native type: transform is skipped, so enforce the framework's
@@ -668,6 +673,11 @@ class ComputeFramework(ABC):
         """Returns data with columns appended positionally, None when the row counts differ."""
         return None
 
+    @classmethod
+    def _positional_append_needs_pinned_frame(cls) -> bool:
+        """True when the held frame is a lazy plan whose row order can change between executions."""
+        return False
+
     def _append_dict_to_frame(self, feature_group: Any, result: Any) -> Any:
         if not isinstance(result, dict) or not result or self.data is None:
             return result
@@ -676,8 +686,13 @@ class ComputeFramework(ABC):
         existing = self._extract_column_names(self.data)
         if any(key in existing for key in result):
             return result
+        if type(self)._positional_append_needs_pinned_frame() and self.data is not self._pinned_frame:
+            return result
         appended = self._append_columns(self.data, result)
-        return result if appended is None else appended
+        if appended is None:
+            return result
+        self._pinned_frame = appended
+        return appended
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Best-effort (column, dtype) pairs sorted by name; the dict interchange shape is read directly.
@@ -1151,6 +1166,7 @@ Available join types:
 
         self.object_ids = []
         self.data = None
+        self._pinned_frame = None
 
     @final
     def get_uuid(self) -> UUID:

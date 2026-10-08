@@ -135,6 +135,7 @@ class ComputeFramework(ABC):
         self.data: Any = None
         self.children_if_root = children_if_root
         self.already_calculated_children_tracker: set[UUID] = set()
+        self.completed_feature_group_steps: set[UUID] = set()
         self.column_names: set[str] = set()
         self.function_extender: AbstractSet[Extender] = function_extender if function_extender is not None else set()
         # Raw pickled payload attached by the worker dispatch path; materialized into
@@ -387,7 +388,12 @@ class ComputeFramework(ABC):
 
     @final
     def run_calculation(
-        self, feature_group: Any, features: Any, location: str | None, data: Any | None = None
+        self,
+        feature_group: Any,
+        features: Any,
+        location: str | None,
+        data: Any | None = None,
+        pending_sibling_inputs: frozenset[str] = frozenset(),
     ) -> Any | None:
         # case multiprocessing or case base api input feature
         if data is not None:
@@ -399,7 +405,21 @@ class ComputeFramework(ABC):
         features = self.set_filter_engine(features)
         features = self.set_mask_engine(features)
         self._adopt_connection(self.data)
+        protected_columns = (
+            pending_sibling_inputs.intersection(self._extract_column_names(self.data))
+            if pending_sibling_inputs
+            else frozenset()
+        )
         data = self.run_calculate_feature(feature_group, features)
+
+        if isinstance(data, dict) and data:
+            missing = protected_columns.difference(data)
+            if missing:
+                raise ValueError(
+                    f"{feature_group.get_class_name()} returned a dict that drops columns "
+                    f"{sorted(missing)} required by pending direct siblings. "
+                    "Preserve those input columns when returning the dict."
+                )
 
         names = features.get_all_names()
 

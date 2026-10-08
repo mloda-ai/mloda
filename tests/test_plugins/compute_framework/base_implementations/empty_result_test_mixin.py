@@ -126,10 +126,27 @@ class AppendColumnsFrameworkTestMixin:
         keys = [row[key] for row in rows]
         values = [f"v{k}" for k in keys]
 
-        result = framework_instance._append_columns(joined_data, {"appended": values})
+        if not self.needs_pinned_frame:
+            result = framework_instance._append_columns(joined_data, {"appended": values})
+            assert result is not None
+            assert [(r[key], r["appended"]) for r in records_from_frame(result)] == list(zip(keys, values))
+            return
 
-        assert result is not None
-        assert [(r[key], r["appended"]) for r in records_from_frame(result)] == list(zip(keys, values))
+        framework_instance.data = joined_data
+        unpinned = {"appended": values}
+        assert framework_instance._append_dict_to_frame(_NonRootFeatureGroup, unpinned) is unpinned
+
+        connection = getattr(joined_data, "connection", None)
+        if connection is not None:
+            framework_instance.set_framework_connection_object(connection)
+        columns = {k: [r[k] for r in rows] for k in rows[0]}
+        framework_instance.data = framework_instance._pinned_frame = framework_instance.transform(
+            columns, list(columns)
+        )
+
+        out = framework_instance._append_dict_to_frame(_NonRootFeatureGroup, {"appended": values})
+
+        assert [(r[key], r["appended"]) for r in records_from_frame(out)] == list(zip(keys, values))
 
     def test_set_data_to_other_frame_clears_pin(
         self, framework_instance: Any, appendable_data: Any, joined_data: Any

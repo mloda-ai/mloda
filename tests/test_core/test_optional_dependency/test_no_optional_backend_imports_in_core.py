@@ -37,15 +37,7 @@ def _is_type_checking_test(test: ast.expr) -> bool:
 
 def _type_checking_imports(tree: ast.Module) -> set[int]:
     """Node ids of imports inside the body of an `if TYPE_CHECKING:` block. Annotations only, never executed."""
-    guarded: set[int] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.If) or not _is_type_checking_test(node.test):
-            continue
-        for statement in node.body:
-            for child in ast.walk(statement):
-                if isinstance(child, (ast.Import, ast.ImportFrom)):
-                    guarded.add(id(child))
-    return guarded
+    return _scan(tree).guarded
 
 
 def _imported_roots(node: ast.Import | ast.ImportFrom) -> set[str]:
@@ -59,14 +51,7 @@ def _imported_roots(node: ast.Import | ast.ImportFrom) -> set[str]:
 
 def _dynamic_import_aliases(tree: ast.Module) -> set[str]:
     """Bare names that reach a module by name: the builtins plus any `from importlib import import_module as X`."""
-    aliases = set(DYNAMIC_IMPORT_NAMES)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom) or node.module != "importlib":
-            continue
-        for alias in node.names:
-            if alias.name == "import_module":
-                aliases.add(alias.asname or alias.name)
-    return aliases
+    return _scan(tree).aliases
 
 
 def _is_dynamic_import(node: ast.Call, aliases: set[str]) -> bool:
@@ -87,22 +72,69 @@ def _dynamic_import_root(node: ast.Call, aliases: set[str]) -> str | None:
     return first.value.partition(".")[0]
 
 
+class _Scan(ast.NodeVisitor):
+    """One walk: TYPE_CHECKING imports, import_module aliases, and candidate calls."""
+
+    def __init__(self) -> None:
+        self.guarded: set[int] = set()
+        self.aliases = set(DYNAMIC_IMPORT_NAMES)
+        self.imports: list[ast.Import | ast.ImportFrom] = []
+        self.calls: list[ast.Call] = []
+        self._type_checking_depth = 0
+
+    def visit_If(self, node: ast.If) -> None:
+        if not _is_type_checking_test(node.test):
+            self.generic_visit(node)
+            return
+        # Only the body is annotation-only. The else branch still executes.
+        self._type_checking_depth += 1
+        for statement in node.body:
+            self.visit(statement)
+        self._type_checking_depth -= 1
+        for statement in node.orelse:
+            self.visit(statement)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self._record_import(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module == "importlib":
+            for alias in node.names:
+                if alias.name == "import_module":
+                    self.aliases.add(alias.asname or alias.name)
+        self._record_import(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        self.calls.append(node)
+        self.generic_visit(node)
+
+    def _record_import(self, node: ast.Import | ast.ImportFrom) -> None:
+        if self._type_checking_depth:
+            self.guarded.add(id(node))
+        self.imports.append(node)
+        self.generic_visit(node)
+
+
+def _scan(tree: ast.Module) -> _Scan:
+    scan = _Scan()
+    scan.visit(tree)
+    return scan
+
+
 def _violations(root: Path) -> list[str]:
     found: list[str] = []
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        guarded = _type_checking_imports(tree)
-        aliases = _dynamic_import_aliases(tree)
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                if id(node) in guarded:
-                    continue
-                for backend in sorted(_imported_roots(node) & OPTIONAL_BACKEND_ROOTS):
-                    found.append(f"{path}:{node.lineno}: imports {backend}")
-            elif isinstance(node, ast.Call):
-                dynamic = _dynamic_import_root(node, aliases)
-                if dynamic in OPTIONAL_BACKEND_ROOTS:
-                    found.append(f"{path}:{node.lineno}: imports {dynamic}")
+        scan = _scan(tree)
+        for node in scan.imports:
+            if id(node) in scan.guarded:
+                continue
+            for backend in sorted(_imported_roots(node) & OPTIONAL_BACKEND_ROOTS):
+                found.append(f"{path}:{node.lineno}: imports {backend}")
+        for node in scan.calls:
+            dynamic = _dynamic_import_root(node, scan.aliases)
+            if dynamic in OPTIONAL_BACKEND_ROOTS:
+                found.append(f"{path}:{node.lineno}: imports {dynamic}")
     return found
 
 
@@ -220,3 +252,16 @@ def test_guard_allows_non_backend_imports(tmp_path: Path) -> None:
     (tmp_path / "plain.py").write_text("import json\nfrom pathlib import Path\nfrom . import sibling\n")
 
     assert _violations(tmp_path) == []
+
+def test_guard_flags_imports_in_the_else_of_type_checking(tmp_path: Path) -> None:
+    """Only the TYPE_CHECKING body is annotation-only. The else branch still runs."""
+    (tmp_path / "else_branch.py").write_text(
+        "from typing import TYPE_CHECKING\n\n"
+        "if TYPE_CHECKING:\n"
+        "    import pyarrow\n"
+        "else:\n"
+        "    import pandas\n"
+    )
+
+    assert _backends(_violations(tmp_path)) == ["pandas"]
+

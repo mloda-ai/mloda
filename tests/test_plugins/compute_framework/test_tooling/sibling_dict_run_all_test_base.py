@@ -83,8 +83,23 @@ class SiblingDictAggregate(_SiblingDictConsumer):
         return {cls.get_class_name(): [sum(_column(data, "sd_a"))]}
 
 
+class SiblingDictCaseFold(_SiblingDictConsumer):
+    """Dict whose only key differs from the root column only in case."""
+
+    FACTOR = 2
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"SD_A"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"SD_A": [v * cls.FACTOR for v in _column(data, "sd_a")]}
+
+
 _ALL_FGS = {
     SiblingDictRoot,
+    SiblingDictCaseFold,
     SiblingDictDouble,
     SiblingDictTriple,
     SiblingDictOverlap,
@@ -142,6 +157,13 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
 
     def _run_aggregate(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run(["SiblingDictAggregate"], {"SiblingDictAggregate": [6]}, mode, flight_server)
+
+    def _run_case_fold(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run(["SD_A"], {"SD_A": [2, 4, 6]}, mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_case_differing_dict_key_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_case_fold(mode, flight_server)
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_sibling_dict_consumers_return_both_outputs(self, mode: ParallelizationMode, flight_server: Any) -> None:

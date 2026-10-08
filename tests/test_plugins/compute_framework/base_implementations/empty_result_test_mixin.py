@@ -119,6 +119,16 @@ class AppendColumnsFrameworkTestMixin:
         assert [row["appended_col"] for row in after] == values
         assert [{k: v for k, v in row.items() if k != "appended_col"} for row in after] == before
 
+    @pytest.fixture
+    def foreign_data(self) -> Any:
+        """Data that is not this framework's frame type; default is a plain dict."""
+        return {"a": [1, 2]}
+
+    def test_append_columns_returns_none_for_foreign_data_type(
+        self, framework_instance: Any, foreign_data: Any
+    ) -> None:
+        assert framework_instance._append_columns(foreign_data, {"appended_col": [1, 2]}) is None
+
     def test_append_columns_returns_none_on_length_mismatch(
         self, framework_instance: Any, appendable_data: Any
     ) -> None:
@@ -128,10 +138,11 @@ class AppendColumnsFrameworkTestMixin:
 
 
 class AppendColumnsCaseFoldTestMixin:
-    """Case-folding frameworks (DuckDB, SQLite, Spark) raise ValueError on a folded collision."""
+    """Case-folding frameworks (DuckDB, SQLite, Spark) return None on a folded collision."""
 
-    def test_append_columns_case_folded_collision_raises(self, framework_instance: Any, non_empty_data: Any) -> None:
+    def test_append_columns_case_folded_collision_returns_none(
+        self, framework_instance: Any, non_empty_data: Any
+    ) -> None:
         rows = len(records_from_frame(non_empty_data))
 
-        with pytest.raises(ValueError):
-            framework_instance._append_columns(non_empty_data, {"A": list(range(rows))})
+        assert framework_instance._append_columns(non_empty_data, {"A": list(range(rows))}) is None

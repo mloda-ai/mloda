@@ -44,6 +44,8 @@ def arrow_schema_field_type(schema: Any, column_name: str) -> Any | None:
 
 def arrow_append_columns(data: Any, columns: dict[str, Any]) -> Any | None:
     """Appends columns to a pa.Table positionally, None when any length differs."""
+    if not isinstance(data, pa.Table):
+        return None
     if any(len(values) != data.num_rows for values in columns.values()):
         return None
     for name, values in columns.items():

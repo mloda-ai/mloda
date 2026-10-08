@@ -282,6 +282,9 @@ class SparkFramework(ComputeFramework):
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, DataFrame):
             return None
+        fold = spark_name_fold(data)
+        if {fold(c) for c in data.columns} & {fold(n) for n in columns}:
+            return None
         row_count = data.count()
         if any(len(values) != row_count for values in columns.values()):
             return None

@@ -56,6 +56,8 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         return set(data.collect_schema().names())
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, pl.LazyFrame):
+            return None
         rows = data.select(pl.len()).collect().item()
         if any(len(values) != rows for values in columns.values()):
             return None

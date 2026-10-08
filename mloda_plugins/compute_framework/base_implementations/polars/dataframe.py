@@ -53,6 +53,8 @@ class PolarsDataFrame(ComputeFramework):
         return set(data.columns)
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, pl.DataFrame):
+            return None
         if any(len(values) != data.height for values in columns.values()):
             return None
         return data.with_columns([pl.Series(name, values) for name, values in columns.items()])

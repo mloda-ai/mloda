@@ -79,3 +79,7 @@ class TestDuckDBSiblingDictRunAll(SiblingDictRunAllTestBase):
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
     def test_different_row_count_dict_still_replaces_frame(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run_aggregate(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_case_differing_dict_key_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_case_fold(mode, flight_server)

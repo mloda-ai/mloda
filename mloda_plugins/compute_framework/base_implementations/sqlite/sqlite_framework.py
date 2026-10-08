@@ -10,6 +10,7 @@ from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import OutputSchema
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.user import FeatureName, ParallelizationMode
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import fold_identifier
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine import SqliteFilterEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine import SqliteMaskEngine
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
@@ -96,6 +97,8 @@ class SqliteFramework(ComputeFramework):
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, SqliteRelation):
+            return None
+        if {fold_identifier(c) for c in data.columns} & {fold_identifier(n) for n in columns}:
             return None
         rows = len(data)
         if any(len(values) != rows for values in columns.values()):

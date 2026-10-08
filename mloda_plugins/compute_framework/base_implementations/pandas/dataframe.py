@@ -60,6 +60,8 @@ class PandasDataFrame(ComputeFramework):
         return None
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, pd.DataFrame):
+            return None
         if any(len(values) != len(data) for values in columns.values()):
             return None
         return data.assign(**{name: list(values) for name, values in columns.items()})

@@ -197,6 +197,10 @@ class TestPythonDictEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFram
     empty_data_carries_schema = True
 
     @pytest.fixture
+    def foreign_data(self) -> Any:
+        return [{"a": 1}, {"a": 2}]
+
+    @pytest.fixture
     def framework_instance(self) -> Any:
         return _framework()
 

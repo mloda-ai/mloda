@@ -94,6 +94,14 @@ class SqliteFramework(ComputeFramework):
             return None
         return super()._row_count(data)
 
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, SqliteRelation):
+            return None
+        rows = len(data)
+        if any(len(values) != rows for values in columns.values()):
+            return None
+        return data.append_columns({name: list(values) for name, values in columns.items()})
+
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Report propagated hints (None per unresolved column) or, without any hints, PRAGMA affinity types.
 

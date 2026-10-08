@@ -55,6 +55,12 @@ class PolarsLazyDataFrame(PolarsDataFrame):
     def extract_column_names(cls, data: Any) -> set[str]:
         return set(data.collect_schema().names())
 
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        rows = data.select(pl.len()).collect().item()
+        if any(len(values) != rows for values in columns.values()):
+            return None
+        return data.with_columns([pl.Series(name, values) for name, values in columns.items()])
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         schema = data.collect_schema()
         if column_name in schema.names():

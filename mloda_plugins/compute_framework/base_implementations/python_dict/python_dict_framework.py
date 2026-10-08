@@ -21,6 +21,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictMaskEngine,
 )
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+    row_count,
     rows_to_columnar,
     validate_columnar_dict,
 )
@@ -101,6 +102,14 @@ class PythonDictFramework(ComputeFramework):
         if isinstance(data, list):
             return [row.get(column_name) for row in data if isinstance(row, dict)]
         return data.get(column_name, [])  # type: ignore[no-any-return]
+
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, dict):
+            return None
+        validate_columnar_dict(columns)
+        if row_count(columns) != row_count(data):
+            return None
+        return {**data, **columns}
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         for value in self._column_values(data, column_name):

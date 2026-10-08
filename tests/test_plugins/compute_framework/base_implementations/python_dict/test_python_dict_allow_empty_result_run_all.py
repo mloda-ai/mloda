@@ -20,6 +20,9 @@ from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRunAllTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     _ENABLED_ALLOWED,
     _ENABLED_DEFAULT,
@@ -121,3 +124,11 @@ def test_empty_result_none_raises_python_dict(flight_server: Any) -> None:
             parallelization_modes={ParallelizationMode.SYNC},
             flight_server=flight_server,
         )
+
+
+class TestPythonDictSiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PythonDictFramework"

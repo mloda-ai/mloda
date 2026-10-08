@@ -76,6 +76,8 @@ PythonDict framework this means a row-oriented `[]` is *not* a valid empty
 result: return `{"my_feature": []}` instead, keeping the column and dropping the
 rows. See [Empty Result Handling](../in_depth/compute-framework-integration.md#empty-results).
 
+A dict returned by a non-root feature group is appended to the frame when its columns are all new and its length matches; otherwise it replaces the frame. Appended columns are aligned by position, so a feature group that reorders or drops rows should return the full frame.
+
 #### 6. Advanced Feature Group Topics
 
 For more in-depth information about feature groups, check out these advanced topics:

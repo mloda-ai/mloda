@@ -19,6 +19,7 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -230,7 +231,7 @@ class TestPolarsLazyDtypeExtraction(DtypeExtractionTestMixin):
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsLazyEmptyResult(EmptyResultFrameworkTestMixin):
+class TestPolarsLazyEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
     """Test PolarsLazyDataFrame schema detection via shared mixin.
 
     Pins that ``_extract_column_names`` (``data.collect_schema().names()``) does not

@@ -244,49 +244,48 @@ class SparkFramework(ComputeFramework):
             """Added data: Add column to DataFrame"""
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
-
-                fold = spark_name_fold(self.data)
-                for existing in self.data.columns:
-                    if fold(existing) == fold(feature_name):
-                        raise ValueError(f"Feature {feature_name!r} collides with existing column {existing!r}")
-
-                # Convert data to list if it's not already
-                data_list = list(data) if hasattr(data, "__iter__") else [data]
-
-                # Add row numbers to both DataFrames for joining
-                from pyspark.sql.window import Window
-
-                window_spec = Window.orderBy(F.monotonically_increasing_id())
-
-                rn = pick_helper_column_name(taken={*self.data.columns, feature_name})
-
-                # Add row numbers to existing DataFrame
-                existing_with_row_num = self.data.withColumn(rn, F.row_number().over(window_spec))
-
-                # Create new DataFrame with the new column
-                if self.framework_connection_object is None:
-                    self.set_framework_connection_object()
-
-                spark = self.framework_connection_object
-                if spark is None:
-                    raise RuntimeError("Failed to initialize Spark session")
-                new_data_df = spark.createDataFrame(
-                    [(i + 1, val) for i, val in enumerate(data_list)],
-                    StructType(
-                        [
-                            StructField(rn, IntegerType(), False),
-                            StructField(feature_name, self._infer_spark_type(data_list[0] if data_list else ""), True),
-                        ]
-                    ),
-                )
-
-                # Join the DataFrames and drop the row number column
-                result = existing_with_row_num.join(new_data_df, rn).drop(rn)
-                return result
+                return self._join_columns(self.data, {feature_name: list(data)})
 
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 
         raise ValueError(f"Data {type(data)} is not supported by {self.__class__.__name__}")
+
+    def _join_columns(self, base: Any, columns: dict[str, list[Any]]) -> Any:
+        """Appends columns positionally to base with one row-number join; raises on a case-folded collision."""
+        from pyspark.sql.window import Window
+
+        fold = spark_name_fold(base)
+        for name in columns:
+            for existing in base.columns:
+                if fold(existing) == fold(name):
+                    raise ValueError(f"Feature {name!r} collides with existing column {existing!r}")
+
+        rn = pick_helper_column_name(taken={*base.columns, *columns})
+        window_spec = Window.orderBy(F.monotonically_increasing_id())
+        existing_with_row_num = base.withColumn(rn, F.row_number().over(window_spec))
+
+        if self.framework_connection_object is None:
+            self.set_framework_connection_object()
+        spark = self.framework_connection_object
+        if spark is None:
+            raise RuntimeError("Failed to initialize Spark session")
+
+        values = list(columns.values())
+        fields = [StructField(rn, IntegerType(), False)]
+        for name, column_values in columns.items():
+            fields.append(StructField(name, self._infer_spark_type(column_values[0] if column_values else ""), True))
+        new_data_df = spark.createDataFrame(
+            [(i + 1, *(column[i] for column in values)) for i in range(len(values[0]))], StructType(fields)
+        )
+        return existing_with_row_num.join(new_data_df, rn).drop(rn)
+
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, DataFrame):
+            return None
+        row_count = data.count()
+        if any(len(values) != row_count for values in columns.values()):
+            return None
+        return self._join_columns(data, {name: list(values) for name, values in columns.items()})
 
     @classmethod
     def filter_engine(cls) -> type[BaseFilterEngine]:

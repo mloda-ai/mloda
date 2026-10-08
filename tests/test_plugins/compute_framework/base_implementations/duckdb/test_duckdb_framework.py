@@ -21,6 +21,8 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
+    AppendColumnsCaseFoldTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -331,7 +333,9 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBEmptyResult(EmptyResultFrameworkTestMixin):
+class TestDuckDBEmptyResult(
+    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
+):
     """Test DuckDBFramework schema detection via shared mixin.
 
     DuckDB data is a relation, so the data fixtures are built via ``from_arrow`` and pull in

@@ -41,6 +41,8 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
+    AppendColumnsCaseFoldTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -409,7 +411,9 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkEmptyResult(EmptyResultFrameworkTestMixin):
+class TestSparkEmptyResult(
+    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
+):
     """Test SparkFramework schema detection via shared mixin.
 
     A Spark DataFrame has no rows-without-data form: the empty case needs an explicit

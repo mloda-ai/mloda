@@ -33,6 +33,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.single_filter import SingleFilter
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -185,7 +186,7 @@ class TestIsSchemalessEmptyHook:
         assert pyarrow_framework._is_schemaless_empty(pa.table({})) is False
 
 
-class TestPythonDictEmptyResult(EmptyResultFrameworkTestMixin):
+class TestPythonDictEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
     """Test PythonDictFramework schema detection via the shared mixin.
 
     PythonDict's native data is a columnar dict. A schema-bearing zero-row frame keeps its

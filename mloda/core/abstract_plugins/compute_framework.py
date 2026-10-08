@@ -400,6 +400,7 @@ class ComputeFramework(ABC):
         features = self.set_mask_engine(features)
         self._adopt_connection(self.data)
         data = self.run_calculate_feature(feature_group, features)
+        data = self._append_dict_to_frame(feature_group, data)
 
         names = features.get_all_names()
 
@@ -662,6 +663,21 @@ class ComputeFramework(ABC):
         """Best-effort row count for observability; override when __len__ is missing, wrong,
         or would materialize/query."""
         return HookContext.row_count(data)
+
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        """Returns data with columns appended positionally, None when the row counts differ."""
+        return None
+
+    def _append_dict_to_frame(self, feature_group: Any, result: Any) -> Any:
+        if not isinstance(result, dict) or not result or self.data is None:
+            return result
+        if feature_group.input_data() is not None:
+            return result
+        existing = self._extract_column_names(self.data)
+        if any(key in existing for key in result):
+            return result
+        appended = self._append_columns(self.data, result)
+        return result if appended is None else appended
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Best-effort (column, dtype) pairs sorted by name; the dict interchange shape is read directly.

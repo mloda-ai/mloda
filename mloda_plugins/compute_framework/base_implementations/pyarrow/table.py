@@ -42,6 +42,16 @@ def arrow_schema_field_type(schema: Any, column_name: str) -> Any | None:
     return None
 
 
+def arrow_append_columns(data: Any, columns: dict[str, Any]) -> Any | None:
+    """Appends columns to a pa.Table positionally, None when any length differs."""
+    if any(len(values) != data.num_rows for values in columns.values()):
+        return None
+    for name, values in columns.items():
+        arrow_values = values if isinstance(values, (pa.Array, pa.ChunkedArray)) else pa.array(values)
+        data = data.append_column(name, arrow_values)
+    return data
+
+
 class PyArrowTable(ComputeFramework):
     @staticmethod
     def is_available() -> bool:
@@ -97,6 +107,9 @@ class PyArrowTable(ComputeFramework):
         if arrow_type is None:
             return None
         return DataType.from_arrow_type_safe(arrow_type)
+
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        return arrow_append_columns(data, columns)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         if isinstance(data, dict):

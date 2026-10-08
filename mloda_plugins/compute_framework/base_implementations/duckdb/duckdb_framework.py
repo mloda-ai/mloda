@@ -139,6 +139,14 @@ class DuckDBFramework(ComputeFramework):
             return None
         return super()._row_count(data)
 
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, DuckdbRelation):
+            return None
+        rows = len(data)
+        if any(len(values) != rows for values in columns.values()):
+            return None
+        return data.append_columns({name: list(values) for name, values in columns.items()})
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:
             dtypes = data.types

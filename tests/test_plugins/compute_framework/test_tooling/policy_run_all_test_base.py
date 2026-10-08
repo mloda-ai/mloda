@@ -11,6 +11,7 @@ base that concrete per-framework conformance suites build on.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -112,31 +113,34 @@ class PolicyRunAllTestBase(ABC):
         """FeatureGroup classes whose ``get_class_name()`` keys the connection in options."""
         return set()
 
-    def _feature_and_dac(self, feature_name: str) -> tuple[Feature, DataAccessCollection | None]:
+    def _features_and_dac(self, feature_names: Sequence[str]) -> tuple[list[Feature], DataAccessCollection | None]:
         conn = self.get_connection()
         if conn is not None:
-            feature = Feature(
-                name=feature_name,
-                options={fg.get_class_name(): conn for fg in self.connection_keyed_feature_groups()},
-            )
-            return feature, DataAccessCollection(connections={conn})
-        return Feature(name=feature_name), None
+            options = {fg.get_class_name(): conn for fg in self.connection_keyed_feature_groups()}
+            features = [Feature(name=name, options=dict(options)) for name in feature_names]
+            return features, DataAccessCollection(connections={conn})
+        return [Feature(name=name) for name in feature_names], None
+
+    def _feature_and_dac(self, feature_name: str) -> tuple[Feature, DataAccessCollection | None]:
+        features, dac = self._features_and_dac([feature_name])
+        return features[0], dac
 
     def assert_policy_case(
         self,
         *,
-        feature_name: str,
+        feature_name: str | Sequence[str],
         plugin_collector: PluginCollector,
         expectation: PolicyExpectation,
         mode: ParallelizationMode,
         flight_server: Any,
     ) -> list[Any] | None:
-        feature, dac = self._feature_and_dac(feature_name)
+        names = [feature_name] if isinstance(feature_name, str) else list(feature_name)
+        features, dac = self._features_and_dac(names)
 
         if isinstance(expectation, PolicyRaises):
             with pytest.raises(Exception) as excinfo:
                 mloda.run_all(
-                    [feature],
+                    features,
                     compute_frameworks=[self.compute_framework_name()],
                     plugin_collector=plugin_collector,
                     parallelization_modes={mode},
@@ -147,7 +151,7 @@ class PolicyRunAllTestBase(ABC):
             return None
 
         result = mloda.run_all(
-            [feature],
+            features,
             compute_frameworks=[self.compute_framework_name()],
             plugin_collector=plugin_collector,
             parallelization_modes={mode},

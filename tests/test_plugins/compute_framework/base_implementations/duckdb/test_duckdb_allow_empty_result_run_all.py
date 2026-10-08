@@ -10,6 +10,9 @@ import pytest
 
 from mloda.user import ParallelizationMode
 
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRunAllTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
 )
@@ -55,3 +58,24 @@ class TestDuckDBAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
     def test_empty_result_allowed_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
         """DuckDBFramework only supports SYNC; run the inherited allowed case SYNC only."""
         self._run_allowed_case(mode, flight_server)
+
+
+@pytest.mark.skipif(duckdb is None or pa is None, reason="DuckDB or PyArrow is not installed. Skipping this test.")
+class TestDuckDBSiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all (SYNC only)."""
+
+    compute_framework_name = TestDuckDBAllowEmptyResultRunAll.compute_framework_name
+    get_connection = TestDuckDBAllowEmptyResultRunAll.get_connection
+    teardown_method = TestDuckDBAllowEmptyResultRunAll.teardown_method
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_sibling_dict_consumers_return_both_outputs(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_siblings_together(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_overlapping_dict_still_replaces_frame(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_overlap(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_different_row_count_dict_still_replaces_frame(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        self._run_aggregate(mode, flight_server)

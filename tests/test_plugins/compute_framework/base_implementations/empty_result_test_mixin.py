@@ -29,6 +29,8 @@ from typing import Any
 
 import pytest
 
+from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
+
 
 class EmptyResultFrameworkTestMixin:
     """Shared schema-detection (``extract_column_names``) tests for all compute frameworks."""
@@ -94,3 +96,42 @@ class EmptyResultFrameworkTestMixin:
             assert empty_columns == set()
 
         assert framework_instance.extract_column_names(non_empty_data) == columns
+
+
+class AppendColumnsFrameworkTestMixin:
+    """Shared ``_append_columns`` hook tests; reuses the ``framework_instance`` / ``non_empty_data`` fixtures."""
+
+    @pytest.fixture
+    def appendable_data(self, non_empty_data: Any) -> Any:
+        """Native frame the hook can append to; override when ``non_empty_data`` is not one."""
+        return non_empty_data
+
+    def test_append_columns_keeps_existing_and_adds_new_in_order(
+        self, framework_instance: Any, appendable_data: Any
+    ) -> None:
+        before = records_from_frame(appendable_data)
+        values = list(range(100, 100 + len(before)))
+
+        result = framework_instance._append_columns(appendable_data, {"appended_col": values})
+
+        assert result is not None
+        after = records_from_frame(result)
+        assert [row["appended_col"] for row in after] == values
+        assert [{k: v for k, v in row.items() if k != "appended_col"} for row in after] == before
+
+    def test_append_columns_returns_none_on_length_mismatch(
+        self, framework_instance: Any, appendable_data: Any
+    ) -> None:
+        rows = len(records_from_frame(appendable_data))
+
+        assert framework_instance._append_columns(appendable_data, {"appended_col": list(range(rows + 1))}) is None
+
+
+class AppendColumnsCaseFoldTestMixin:
+    """Case-folding frameworks (DuckDB, SQLite, Spark) raise ValueError on a folded collision."""
+
+    def test_append_columns_case_folded_collision_raises(self, framework_instance: Any, non_empty_data: Any) -> None:
+        rows = len(records_from_frame(non_empty_data))
+
+        with pytest.raises(ValueError):
+            framework_instance._append_columns(non_empty_data, {"A": list(range(rows))})

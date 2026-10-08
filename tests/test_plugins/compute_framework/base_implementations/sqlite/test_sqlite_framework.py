@@ -22,6 +22,8 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
+    AppendColumnsCaseFoldTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -306,7 +308,9 @@ class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         pytest.skip("SQLite stores timestamps as TEXT; TIMESTAMP precision cannot be distinguished")
 
 
-class TestSqliteEmptyResult(EmptyResultFrameworkTestMixin):
+class TestSqliteEmptyResult(
+    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
+):
     """Test SqliteFramework schema detection via shared mixin.
 
     SQLite data is a relation, so the data fixtures are built via ``from_arrow`` and pull in

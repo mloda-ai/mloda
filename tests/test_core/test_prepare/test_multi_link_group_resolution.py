@@ -1586,7 +1586,7 @@ def _remedy_sum_consumer(name: str, framework: type[ComputeFramework], inputs: t
         total = data[inputs[0]]
         for column in inputs[1:]:
             total = pc.add(total, data[column])
-        # Pass the frame through: sibling consumers can share it, and a dict result would replace it.
+        # Pass the frame through so sibling consumers share it.
         return data.append_column(cls.get_class_name(), total)
 
     namespace = {

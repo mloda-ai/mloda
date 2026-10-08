@@ -13,6 +13,9 @@ from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import mloda
 
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRunAllTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
     _ENABLED_NONE,
@@ -70,3 +73,11 @@ def test_zero_column_raises_pandas(flight_server: Any) -> None:
             flight_server=flight_server,
         )
     assert isinstance(excinfo.value, EmptyResultError)
+
+
+class TestPandasSiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PandasDataFrame"

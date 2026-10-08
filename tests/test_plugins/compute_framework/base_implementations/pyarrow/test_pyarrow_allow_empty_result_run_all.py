@@ -12,6 +12,9 @@ from mloda.core.abstract_plugins.compute_framework import EmptyResultError
 from mloda.user import Feature
 from mloda.user import ParallelizationMode
 from mloda.user import mloda
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRunAllTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
     _ENABLED_SCHEMALESS_ALLOWED,
@@ -56,3 +59,12 @@ def test_zero_column_raises_pyarrow(flight_server: Any) -> None:
             flight_server=flight_server,
         )
     assert isinstance(excinfo.value, EmptyResultError)
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestPyArrowSiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PyArrowTable"

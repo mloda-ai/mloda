@@ -9,6 +9,9 @@ IcebergTable (schema) branch is covered by the unit mixin test.
 
 import pytest
 
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRunAllTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
 )
@@ -31,6 +34,17 @@ except ImportError:
 )
 class TestIcebergAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
     """Drives the allow_empty_result policy end-to-end through run_all on Iceberg."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "IcebergFramework"
+
+
+@pytest.mark.skipif(
+    pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
+)
+class TestIcebergSiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all."""
 
     @classmethod
     def compute_framework_name(cls) -> str:

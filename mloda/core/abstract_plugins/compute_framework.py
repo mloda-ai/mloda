@@ -422,7 +422,9 @@ class ComputeFramework(ABC):
             self.validate_native_data(data)
 
         # filter runs on the normalized native representation, not the raw FG output
+        was_pinned = data is self._pinned_frame
         data = self.run_final_filter(data, features, feature_group)
+        self._pinned_frame = data if was_pinned else None
         self.data = data
 
         self.set_column_names()
@@ -686,7 +688,7 @@ class ComputeFramework(ABC):
         existing = self._extract_column_names(self.data)
         if any(key in existing for key in result):
             return result
-        if type(self)._positional_append_needs_pinned_frame() and self.data is not self._pinned_frame:
+        if self._positional_append_needs_pinned_frame() and self.data is not self._pinned_frame:
             return result
         appended = self._append_columns(self.data, result)
         if appended is None:
@@ -1094,6 +1096,8 @@ Available join types:
 
     @final
     def set_data(self, data: Any) -> None:
+        if data is not self._pinned_frame:
+            self._pinned_frame = None
         self.data = data
 
     @final

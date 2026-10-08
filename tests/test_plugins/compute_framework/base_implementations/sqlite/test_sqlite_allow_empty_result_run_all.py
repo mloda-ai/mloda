@@ -83,3 +83,9 @@ class TestSqliteSiblingDictRunAll(SiblingDictRunAllTestBase):
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
     def test_case_differing_dict_key_succeeds(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run_case_fold(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC])
+    def test_sibling_dict_consumers_return_both_outputs_under_final_filter(
+        self, mode: ParallelizationMode, flight_server: Any
+    ) -> None:
+        self._run_siblings_with_final_filter(mode, flight_server)

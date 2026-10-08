@@ -131,6 +131,16 @@ class AppendColumnsFrameworkTestMixin:
         assert result is not None
         assert [(r[key], r["appended"]) for r in records_from_frame(result)] == list(zip(keys, values))
 
+    def test_set_data_to_other_frame_clears_pin(
+        self, framework_instance: Any, appendable_data: Any, joined_data: Any
+    ) -> None:
+        other = joined_data if joined_data is not appendable_data else object()
+        framework_instance.data = framework_instance._pinned_frame = appendable_data
+
+        framework_instance.set_data(other)
+
+        assert framework_instance._pinned_frame is None
+
     def test_dict_append_on_unpinned_joined_frame(self, framework_instance: Any, joined_data: Any) -> None:
         rows = len(records_from_frame(joined_data))
         framework_instance.data = joined_data

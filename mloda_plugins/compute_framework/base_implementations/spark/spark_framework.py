@@ -288,8 +288,7 @@ class SparkFramework(ComputeFramework):
         row_count = data.count()
         if any(len(values) != row_count for values in columns.values()):
             return None
-        joined = self._join_columns(data, {name: list(values) for name, values in columns.items()})
-        return joined.localCheckpoint()
+        return self._join_columns(data, {name: list(values) for name, values in columns.items()})
 
     @classmethod
     def _positional_append_needs_pinned_frame(cls) -> bool:

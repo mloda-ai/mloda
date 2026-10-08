@@ -20,6 +20,7 @@ import pytest
 from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
+from mloda.user import GlobalFilter
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -133,6 +134,7 @@ class PolicyRunAllTestBase(ABC):
         expectation: PolicyExpectation,
         mode: ParallelizationMode,
         flight_server: Any,
+        global_filter: GlobalFilter | None = None,
     ) -> list[Any] | None:
         names = [feature_name] if isinstance(feature_name, str) else list(feature_name)
         features, dac = self._features_and_dac(names)
@@ -146,6 +148,7 @@ class PolicyRunAllTestBase(ABC):
                     parallelization_modes={mode},
                     flight_server=flight_server,
                     data_access_collection=dac,
+                    global_filter=global_filter,
                 )
             assert expectation.match_substring in str(excinfo.value)
             return None
@@ -157,6 +160,7 @@ class PolicyRunAllTestBase(ABC):
             parallelization_modes={mode},
             flight_server=flight_server,
             data_access_collection=dac,
+            global_filter=global_filter,
         )
         expectation.assert_result(result)
         return result

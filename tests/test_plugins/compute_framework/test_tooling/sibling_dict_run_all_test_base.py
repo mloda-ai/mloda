@@ -12,6 +12,7 @@ from mloda.provider import DataCreator
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
+from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
@@ -146,8 +147,10 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
         expectation: PolicySuccess,
         mode: ParallelizationMode,
         server: Any,
+        global_filter: GlobalFilter | None = None,
     ) -> None:
         self.assert_policy_case(
+            global_filter=global_filter,
             feature_name=names,
             plugin_collector=_COLLECTOR,
             expectation=expectation,
@@ -164,6 +167,12 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
             mode,
             flight_server,
         )
+
+    def _run_siblings_with_final_filter(self, mode: ParallelizationMode, flight_server: Any) -> None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter("sd_a", "min", {"value": 2})
+        expectation = _assert_column_values({"SiblingDictDouble": [4, 6], "SiblingDictTriple": [6, 9]})
+        self._run(["SiblingDictDouble", "SiblingDictTriple"], expectation, mode, flight_server, global_filter)
 
     def _run_overlap(self, mode: ParallelizationMode, flight_server: Any) -> None:
         expectation = _assert_column_values({"SiblingDictOverlap": [11, 12, 13]})
@@ -190,3 +199,9 @@ class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_different_row_count_dict_still_replaces_frame(self, mode: ParallelizationMode, flight_server: Any) -> None:
         self._run_aggregate(mode, flight_server)
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_sibling_dict_consumers_return_both_outputs_under_final_filter(
+        self, mode: ParallelizationMode, flight_server: Any
+    ) -> None:
+        self._run_siblings_with_final_filter(mode, flight_server)

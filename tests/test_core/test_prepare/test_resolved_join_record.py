@@ -1240,8 +1240,16 @@ def _same_framework_overlap() -> tuple[Built, dict[str, Any]]:
 
 def _destination_holds_declared_left_member() -> tuple[Built, dict[str, Any]]:
     built = _right_join_both_sides_claim_destination_framework()
+    # extra_right_uuid holds nearest_left, a declared-left parent, in this shape.
     assert built.sides.extra_right_uuid is not None
     return built, {"destination_uuids": frozenset({built.sides.right_uuid, built.sides.extra_right_uuid})}
+
+
+def _destination_shares_none_with_its_side() -> tuple[Built, dict[str, Any]]:
+    built = _right_join_nearest_left_and_farther_right_share_destination_framework()
+    nodes = built.graph.get_nodes()
+    [nearest_right] = [uuid for uuid, node in nodes.items() if node.feature_group_class is ResolvedJoinPairRight]
+    return built, {"destination_uuids": frozenset({nearest_right})}
 
 
 def _append_overlap() -> tuple[Built, dict[str, Any]]:
@@ -1253,17 +1261,33 @@ def _append_overlap() -> tuple[Built, dict[str, Any]]:
 @pytest.mark.parametrize(
     "build, message, carried",
     [
-        pytest.param(_wrong_side_membership, "ResolvedJoinPairRight", False, id="right_side_holds_left_group_uuid"),
-        pytest.param(_cross_framework_overlap, "Internal error", False, id="cross_framework_overlap"),
-        pytest.param(_ends_swapped, "ResolvedJoinPairLeft", False, id="destination_holds_source_group_uuid"),
+        pytest.param(
+            _wrong_side_membership,
+            "right side holds members of ['ResolvedJoinPairLeft']",
+            False,
+            id="right_side_holds_left_group_uuid",
+        ),
+        pytest.param(_cross_framework_overlap, "Both name [", False, id="cross_framework_overlap"),
+        pytest.param(
+            _ends_swapped,
+            "destination uuids hold members of ['ResolvedJoinPairRight']",
+            False,
+            id="destination_holds_source_group_uuid",
+        ),
         pytest.param(_same_framework_overlap, None, False, id="same_framework_overlap_exempt"),
-        pytest.param(_same_framework_overlap, "Internal error", True, id="same_framework_overlap_with_carriers"),
+        pytest.param(_same_framework_overlap, "Both name [", True, id="same_framework_overlap_with_carriers"),
         pytest.param(_append_overlap, None, False, id="append_overlap_exempt"),
         pytest.param(
             _destination_holds_declared_left_member,
-            "ResolvedJoinPairRight",
+            "destination uuids hold members of ['ResolvedJoinPairLeft']",
             False,
             id="destination_holds_declared_left_member",
+        ),
+        pytest.param(
+            _destination_shares_none_with_its_side,
+            "share none with the side",
+            False,
+            id="destination_shares_none_with_its_side",
         ),
     ],
 )

@@ -751,11 +751,8 @@ def _right_join_declared_left_spans_frameworks_declared_right_is_pyarrow_only() 
 
 
 def _inner_join_ambiguous_split_stays_on_the_tiebreak_answer() -> Built:
-    """Same nearest/farther shape as _case_override_disagrees_with_the_nearest_split, but the consumer
-    sits on a third framework so no case-override branch masks swap_merge_sides_by_declared_side's own
-    answer. The declared-side escalation added for issue #1173 must only ever apply to RIGHT joins; an
-    INNER join's identity tiebreak answer must not flip just because a farther, subclass parent shares a
-    framework with the other declared side."""
+    """Same shape as _case_override_disagrees_with_the_nearest_split, consumer on a third framework; planning it
+    is refused as a dishonest record."""
     planned = _planned()
     link = _pair_link()
 
@@ -1223,6 +1220,14 @@ def _cross_framework_overlap() -> tuple[Built, dict[str, Any]]:
     }
 
 
+def _ends_swapped() -> tuple[Built, dict[str, Any]]:
+    built = _declared_pair()
+    return built, {
+        "destination_uuids": frozenset({built.sides.right_uuid}),
+        "source_uuids": frozenset({built.sides.left_uuid}),
+    }
+
+
 def _same_framework_overlap() -> tuple[Built, dict[str, Any]]:
     built = _right_join_both_declared_sides_share_one_framework_child_on_a_third()
     shared = frozenset({built.sides.left_uuid})
@@ -1240,6 +1245,7 @@ def _append_overlap() -> tuple[Built, dict[str, Any]]:
     [
         pytest.param(_wrong_side_membership, "ResolvedJoinPairRight", False, id="right_side_holds_left_group_uuid"),
         pytest.param(_cross_framework_overlap, "Internal error", False, id="cross_framework_overlap"),
+        pytest.param(_ends_swapped, "ResolvedJoinPairLeft", False, id="destination_holds_source_group_uuid"),
         pytest.param(_same_framework_overlap, None, False, id="same_framework_overlap_exempt"),
         pytest.param(_same_framework_overlap, "Internal error", True, id="same_framework_overlap_with_carriers"),
         pytest.param(_append_overlap, None, False, id="append_overlap_exempt"),
@@ -1266,8 +1272,8 @@ def test_raise_on_dishonest_join_record(
     assert message in str(exc_info.value)
 
 
-def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_steps_side() -> None:
-    """run_link ranks the left side over all required parents; the record must not re-rank over fewer of them."""
+def test_a_nearest_left_parent_on_a_third_framework_is_refused_as_a_dishonest_record() -> None:
+    """The engine rejects this shape earlier; the record check refuses it if planning is reached."""
     planned = _planned()
     link = _pair_link()
 
@@ -1286,14 +1292,8 @@ def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_step
     _add_child(planned, child, descendant, nearest_left, right)
     trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child.uuid)
 
-    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
-
-    assert len(_join_steps(planned.plan)) == 1, "the shape must plan exactly one JoinStep for this to say anything"
-    assert planned.plan.resolved_join_plan.signatures() == planned.plan.join_signatures_at_build
-    record = _one_record(planned.plan, link)
-    assert record.destination_side is JoinSide.RIGHT
-    assert record.destination.uuids <= record.destination_uuids
-    assert record.source.uuids <= record.source_uuids
+    with pytest.raises(ValueError, match="Internal error"):
+        planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
 
 
 def test_a_case_override_survives_a_right_destination_side() -> None:
@@ -1533,17 +1533,10 @@ def test_fresh_interpreters_build_the_same_record_signature() -> None:
         assert output == _PROBE_EXPECTED, f"probe {position} signed {output}, expected {_PROBE_EXPECTED}"
 
 
-def test_an_inner_joins_ambiguous_split_keeps_the_identity_tiebreak_answer() -> None:
-    built = _inner_join_ambiguous_split_stays_on_the_tiebreak_answer()
-
-    record = _one_record(built.plan, built.link)
-
-    assert record.jointype is JoinType.INNER
-    assert record.destination_side is JoinSide.RIGHT
-    assert record.inverted is True
-    join_steps = _join_steps(built.plan)
-    assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
-    assert join_steps[0].swap_merge_sides is True
+def test_an_inner_joins_ambiguous_split_is_refused_as_a_dishonest_record() -> None:
+    """The engine rejects this shape earlier; the record check refuses it if planning is reached."""
+    with pytest.raises(ValueError, match="Internal error"):
+        _inner_join_ambiguous_split_stays_on_the_tiebreak_answer()
 
 
 def test_a_right_joins_declared_left_side_is_not_double_counted_as_a_right_side_claim() -> None:

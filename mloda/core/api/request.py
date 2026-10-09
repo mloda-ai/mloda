@@ -42,7 +42,7 @@ from mloda.core.abstract_plugins.function_extender import (
     call_contained_hook,
     call_run_complete_hook,
     call_run_start_hook,
-    qualified_type_name,
+    error_outcome,
     reject_old_run_complete_signature,
 )
 from mloda.core.abstract_plugins.plan_context import PlanContext, PlanOrigin
@@ -139,7 +139,7 @@ class mlodaAPI:
                 if self._extenders:
                     self._stamp_structure_hash()
             except BaseException as error:
-                plan_outcome = LifecycleOutcome("failed", qualified_type_name(error))
+                plan_outcome = error_outcome(error)
                 raise
             finally:
                 call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
@@ -745,7 +745,7 @@ class mlodaAPI:
             outcome = LifecycleOutcome("cancelled")
             raise
         except BaseException as error:
-            outcome = LifecycleOutcome("failed", qualified_type_name(error))
+            outcome = error_outcome(error)
             raise
         finally:
             self._complete_run(run_context, outcome)
@@ -779,7 +779,7 @@ class mlodaAPI:
             )
             return runner
         except BaseException as error:
-            outcome = LifecycleOutcome("failed", qualified_type_name(error))
+            outcome = error_outcome(error)
             raise
         finally:
             self._complete_run(run_context, outcome)

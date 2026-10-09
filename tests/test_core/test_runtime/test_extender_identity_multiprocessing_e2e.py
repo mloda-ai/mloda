@@ -637,17 +637,34 @@ def _setup_failure(call_site: str) -> Any:
     return scenario
 
 
-def _execution_failure(call_site: str) -> Any:
+def _execution_failure(call_site: str, error: type[BaseException] = RuntimeError) -> Any:
     def scenario(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
+        if error is not RuntimeError:
+
+            def interrupted(cls: Any, data: Any, features: FeatureSet) -> Any:
+                raise error("calculate failed")
+
+            mp.setattr(_FailingLifecycleFeatureGroup, "calculate_feature", classmethod(interrupted))
         session = _matrix_session(ext, _FAIL_COLUMN)
-        with pytest.raises(Exception, match="calculate failed") as raised:
+        with pytest.raises(error, match="calculate failed") as raised:
             list(getattr(session, call_site)(parallelization_modes=_SYNC))
+        status = "failed" if issubclass(error, Exception) else "cancelled"
         return [
             *_OK_PLAN,
-            *_ok_run("failed", error=f"{type(raised.value).__module__}.{type(raised.value).__qualname__}"),
+            *_ok_run(status, error=f"{type(raised.value).__module__}.{type(raised.value).__qualname__}"),
         ]
 
     return scenario
+
+
+def _planning_interrupted_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
+    def interrupted(self: Any, *args: Any, **kwargs: Any) -> None:
+        raise KeyboardInterrupt()
+
+    mp.setattr(mloda, "_plan", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        _matrix_session(ext)
+    return [("plan_start",), ("plan_complete", "cancelled", "builtins.KeyboardInterrupt")]
 
 
 def _break_join(mp: pytest.MonkeyPatch) -> None:
@@ -784,6 +801,11 @@ _MATRIX: dict[str, Any] = {
     "setup_failure_stream_run": _setup_failure("stream_run"),
     "execution_failure_run": _execution_failure("run"),
     "execution_failure_stream_run": _execution_failure("stream_run"),
+    "interrupted_run_keyboard_interrupt": _execution_failure("run", KeyboardInterrupt),
+    "interrupted_stream_run_keyboard_interrupt": _execution_failure("stream_run", KeyboardInterrupt),
+    "interrupted_run_system_exit": _execution_failure("run", SystemExit),
+    "interrupted_stream_run_system_exit": _execution_failure("stream_run", SystemExit),
+    "planning_interrupted_prepare": _planning_interrupted_prepare,
     "finalizing_failure_batch": _finalizing_failure_batch,
     "finalizing_failure_stream_consumed": _finalizing_failure_stream_consumed,
     "finalizing_failure_stream_closed_early": _finalizing_failure_stream_closed_early,

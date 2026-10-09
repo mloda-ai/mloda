@@ -40,7 +40,10 @@ MODES_WITH_MULTIPROCESSING = pytest.mark.parametrize(
         {ParallelizationMode.SYNC},
         {ParallelizationMode.THREADING},
         # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-        pytest.param({ParallelizationMode.MULTIPROCESSING}, marks=pytest.mark.timeout(30)),
+        pytest.param(
+            {ParallelizationMode.MULTIPROCESSING},
+            marks=[pytest.mark.timeout(30), pytest.mark.multiprocessing],
+        ),
     ],
 )
 

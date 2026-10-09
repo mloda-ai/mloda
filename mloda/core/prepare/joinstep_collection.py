@@ -34,7 +34,7 @@ class JoinStepCollection:
         self.collection[join_step] = required_join_uuids
 
     def earlier_joins_sharing_destination(self, join_step: JoinStep) -> set[UUID]:
-        """Uuids of joins planned before join_step on the same link that write into its destination frames."""
+        """Uuids of earlier joins of the same link writing into join_step's destination."""
         uuids: set[UUID] = set()
         for step in self.collection:
             if step == join_step:

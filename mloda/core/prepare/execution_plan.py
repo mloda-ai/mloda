@@ -2270,8 +2270,7 @@ Available join types:
                     shared_destination = True
             shared_source = varying_side is not None and destination_framework == source_framework
 
-            # Each end names only members of its own declared side, regardless of which branch above ran;
-            # any-distance widening keeps a nearer wrong-framework sibling from hiding a farther, correct one.
+            # Any-distance widening keeps a nearer wrong-framework sibling from hiding a farther, correct one.
             join_uuids_left = resolved_left & split.left_uuids_any_distance
             join_uuids_right = resolved_right & split.right_uuids_any_distance
 

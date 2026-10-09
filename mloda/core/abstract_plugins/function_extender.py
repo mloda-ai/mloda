@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class LifecycleOutcome:
-    """How a plan or run ended, passed to on_plan_complete and on_run_complete; error_type is the module.qualname of the exception that ended it (None for success and a stream closed early)."""
+    """How a plan or run ended, passed to on_plan_complete and on_run_complete; error_type is the ending exception's module.qualname."""
 
     status: Literal["succeeded", "failed", "cancelled"]
     error_type: str | None = None
@@ -170,11 +170,10 @@ class Extender(ABC):
         """Called once per run() or stream, in the PARENT on the caller's own extender objects, after the
         workers were joined and the runner exited, in every mode (close() is MULTIPROCESSING worker only).
         Fires with a failed outcome when setup, execution, finalizing or a run_start refusal raised, and
-        with cancelled when a stream is closed early or never iterated, or an interrupt such as KeyboardInterrupt or
-        SystemExit ended it (error_type set). An Exception raised here is
-        logged, unless raise_on_run_complete is True and the outcome succeeded, then the first such one
-        is re-raised after every extender was called. The worker copy is pickled once per run at setup,
-        so its changes never flow back to the parent."""
+        with cancelled when a stream is closed early or never iterated, or a non-Exception such as KeyboardInterrupt
+        ended it (error_type set). An Exception raised here is logged, unless raise_on_run_complete is True
+        and the outcome succeeded, then the first such one is re-raised after every extender was called.
+        The worker copy is pickled once per run at setup, so its changes never flow back to the parent."""
 
     @staticmethod
     def feature_group_name(func: Any) -> str:

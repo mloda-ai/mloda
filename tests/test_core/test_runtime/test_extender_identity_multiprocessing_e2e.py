@@ -637,7 +637,11 @@ def _setup_failure(call_site: str) -> Any:
     return scenario
 
 
-def _execution_failure(call_site: str, error: type[BaseException] = RuntimeError) -> Any:
+def _execution_failure(
+    call_site: str,
+    error: type[BaseException] = RuntimeError,
+    mode: ParallelizationMode = ParallelizationMode.SYNC,
+) -> Any:
     def scenario(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
         if error is not RuntimeError:
 
@@ -645,9 +649,9 @@ def _execution_failure(call_site: str, error: type[BaseException] = RuntimeError
                 raise error("calculate failed")
 
             mp.setattr(_FailingLifecycleFeatureGroup, "calculate_feature", classmethod(interrupted))
-        session = _matrix_session(ext, _FAIL_COLUMN)
+        session = _matrix_session(ext, _FAIL_COLUMN, mode)
         with pytest.raises(error, match="calculate failed") as raised:
-            list(getattr(session, call_site)(parallelization_modes=_SYNC))
+            list(getattr(session, call_site)(parallelization_modes={mode}))
         status = "failed" if issubclass(error, Exception) else "cancelled"
         return [
             *_OK_PLAN,
@@ -805,6 +809,10 @@ _MATRIX: dict[str, Any] = {
     "interrupted_stream_run_keyboard_interrupt": _execution_failure("stream_run", KeyboardInterrupt),
     "interrupted_run_system_exit": _execution_failure("run", SystemExit),
     "interrupted_stream_run_system_exit": _execution_failure("stream_run", SystemExit),
+    "interrupted_run_system_exit_threading": _execution_failure("run", SystemExit, ParallelizationMode.THREADING),
+    "interrupted_stream_run_system_exit_threading": _execution_failure(
+        "stream_run", SystemExit, ParallelizationMode.THREADING
+    ),
     "planning_interrupted_prepare": _planning_interrupted_prepare,
     "finalizing_failure_batch": _finalizing_failure_batch,
     "finalizing_failure_stream_consumed": _finalizing_failure_stream_consumed,

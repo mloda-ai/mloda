@@ -15,6 +15,6 @@ def thread_worker(
     try:
         command.execute(cfw_register, cfw, from_cfw=from_cfw)
         command.step_is_done = True
-    except Exception as e:
+    except BaseException as e:  # a BaseException escaping a thread is dropped and the run would hang
         msg, exc_info = failure_report(e)
         cfw_register.set_error(msg, exc_info, exception=e)

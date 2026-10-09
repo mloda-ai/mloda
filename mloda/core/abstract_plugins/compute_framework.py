@@ -122,6 +122,7 @@ class ComputeFramework(ABC):
     # returns a filtered dict that omits it (e.g. dropping unpicklable live state).
     _pending_extender_payload: bytes | None = None
     _hook_extenders: dict[ExtenderHook, Extender] | None = None
+    _pinned_frame: Any = None
 
     def __init__(
         self,
@@ -133,6 +134,7 @@ class ComputeFramework(ABC):
         """This class is initialized for step execution."""
         self.mode = mode
         self.data: Any = None
+        self._pinned_frame = None
         self.children_if_root = children_if_root
         self.already_calculated_children_tracker: set[UUID] = set()
         self.column_names: set[str] = set()
@@ -400,6 +402,7 @@ class ComputeFramework(ABC):
         features = self.set_mask_engine(features)
         self._adopt_connection(self.data)
         data = self.run_calculate_feature(feature_group, features)
+        data = self._append_dict_to_frame(feature_group, data)
 
         names = features.get_all_names()
 
@@ -408,7 +411,10 @@ class ComputeFramework(ABC):
             connection = features.get_options_key(feature_group.get_class_name())
             if connection is not None or self.framework_connection_object is None:
                 self.set_framework_connection_object(connection)
+            was_dict = isinstance(data, dict)
             data = self.transform(data, names)
+            if was_dict:
+                self._pinned_frame = data
         else:
             self._adopt_connection(data)
             # already the native type: transform is skipped, so enforce the framework's
@@ -416,7 +422,9 @@ class ComputeFramework(ABC):
             self.validate_native_data(data)
 
         # filter runs on the normalized native representation, not the raw FG output
+        was_pinned = data is self._pinned_frame
         data = self.run_final_filter(data, features, feature_group)
+        self._pinned_frame = data if was_pinned else None
         self.data = data
 
         self.set_column_names()
@@ -662,6 +670,31 @@ class ComputeFramework(ABC):
         """Best-effort row count for observability; override when __len__ is missing, wrong,
         or would materialize/query."""
         return HookContext.row_count(data)
+
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        """Returns data with columns appended positionally, None when the row counts differ."""
+        return None
+
+    @classmethod
+    def _positional_append_needs_pinned_frame(cls) -> bool:
+        """True when the held frame is a lazy plan whose row order can change between executions."""
+        return False
+
+    def _append_dict_to_frame(self, feature_group: Any, result: Any) -> Any:
+        if not isinstance(result, dict) or not result or self.data is None:
+            return result
+        if feature_group.input_data() is not None:
+            return result
+        existing = self._extract_column_names(self.data)
+        if any(key in existing for key in result):
+            return result
+        if self._positional_append_needs_pinned_frame() and self.data is not self._pinned_frame:
+            return result
+        appended = self._append_columns(self.data, result)
+        if appended is None:
+            return result
+        self._pinned_frame = appended
+        return appended
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Best-effort (column, dtype) pairs sorted by name; the dict interchange shape is read directly.
@@ -1063,6 +1096,8 @@ Available join types:
 
     @final
     def set_data(self, data: Any) -> None:
+        if data is not self._pinned_frame:
+            self._pinned_frame = None
         self.data = data
 
     @final
@@ -1135,6 +1170,7 @@ Available join types:
 
         self.object_ids = []
         self.data = None
+        self._pinned_frame = None
 
     @final
     def get_uuid(self) -> UUID:

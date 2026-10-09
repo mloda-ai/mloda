@@ -210,9 +210,14 @@ class DuckdbRelation(SqlBaseRelation):
 
         Raises ``ValueError`` if ``name`` collides with an existing column (comparison is ASCII case-insensitive).
         """
-        self._ensure_column_absent(name)
-        new_col_rel = DuckdbRelation.from_dict(self._connection, {name: values})
-        rn = self._pick_helper_column(name)
+        return self.append_columns({name: values})
+
+    def append_columns(self, columns: dict[str, list[Any]]) -> "DuckdbRelation":
+        """Like ``append_column`` for several columns, in one positional join."""
+        for name in columns:
+            self._ensure_column_absent(name)
+        new_col_rel = DuckdbRelation.from_dict(self._connection, columns)
+        rn = self._pick_helper_column(*columns)
         qrn = quote_ident(rn)
         left = self._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
         right = new_col_rel._relation.project(f"*, ROW_NUMBER() OVER () AS {qrn}")
@@ -220,8 +225,8 @@ class DuckdbRelation(SqlBaseRelation):
         right = right.set_alias("__r__")
         joined = left.join(right, f'"__l__".{qrn} = "__r__".{qrn}')
         keep = ", ".join(f'"__l__".{quote_ident(c)}' for c in self.columns)
-        keep += f', "__r__".{quote_ident(name)}'
-        result = joined.project(keep)
+        keep += "".join(f', "__r__".{quote_ident(n)}' for n in columns)
+        result = joined.order(f'"__l__".{qrn}').project(keep)
         return DuckdbRelation(self._connection, result)
 
     @classmethod

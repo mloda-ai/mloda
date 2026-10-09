@@ -17,6 +17,7 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -148,7 +149,7 @@ class TestPolarsDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
-class TestPolarsEmptyResult(EmptyResultFrameworkTestMixin):
+class TestPolarsEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
     """Test PolarsDataFrame schema detection via shared mixin.
 
     PolarsDataFrame carries an eager ``pl.DataFrame``; a zero-row frame still carries its

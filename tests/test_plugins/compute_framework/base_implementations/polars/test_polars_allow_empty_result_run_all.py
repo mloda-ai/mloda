@@ -11,6 +11,9 @@ representation).
 
 import pytest
 
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRunAllTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
 )
@@ -38,6 +41,24 @@ class TestPolarsAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
 @pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
 class TestPolarsLazyAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
     """Drives the allow_empty_result policy end-to-end through run_all on lazy polars."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PolarsLazyDataFrame"
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsSiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all."""
+
+    @classmethod
+    def compute_framework_name(cls) -> str:
+        return "PolarsDataFrame"
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsLazySiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all on lazy polars."""
 
     @classmethod
     def compute_framework_name(cls) -> str:

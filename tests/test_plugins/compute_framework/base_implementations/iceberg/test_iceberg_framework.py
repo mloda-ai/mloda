@@ -16,6 +16,7 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
@@ -419,7 +420,7 @@ def test_extract_column_data_type_pyarrow_table_returns_int64() -> None:
 @pytest.mark.skipif(
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
-class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
+class TestIcebergEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
     """Test IcebergFramework schema detection via shared mixin, covering both branches.
 
     ``IcebergFramework.extract_column_names`` has two branches and the fixtures exercise
@@ -448,6 +449,13 @@ class TestIcebergEmptyResult(EmptyResultFrameworkTestMixin):
         mock_table = Mock(spec=IcebergTable)
         mock_table.schema.return_value.column_names = ["a"]
         return mock_table
+
+    @pytest.fixture
+    def appendable_data(self) -> Any:
+        return pa.table({"a": [1, 2]})
+
+    def test_append_columns_on_iceberg_table_returns_none(self, framework_instance: Any, non_empty_data: Any) -> None:
+        assert framework_instance._append_columns(non_empty_data, {"appended_col": [1]}) is None
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

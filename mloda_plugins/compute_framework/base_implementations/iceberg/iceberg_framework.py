@@ -11,6 +11,7 @@ from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter
     scan_columns,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import (
+    arrow_append_columns,
     arrow_schema_field_type,
     arrow_schema_output_schema,
 )
@@ -205,6 +206,11 @@ class IcebergFramework(ComputeFramework):
                 return None
             return DataType.from_arrow_type_safe(arrow_type)
         return None
+
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, pa.Table):
+            return None
+        return arrow_append_columns(data, columns)
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
         """Read the schema once and build the sorted (name, dtype) pairs directly: for a native

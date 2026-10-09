@@ -59,6 +59,13 @@ class PandasDataFrame(ComputeFramework):
                 return dtype
         return None
 
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, pd.DataFrame):
+            return None
+        if any(len(values) != len(data) for values in columns.values()):
+            return None
+        return data.assign(**{name: list(values) for name, values in columns.items()})
+
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         dtype = self._first_column_dtype(data, column_name)
         if dtype is None:

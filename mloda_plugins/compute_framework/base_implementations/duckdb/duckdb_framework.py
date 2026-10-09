@@ -4,6 +4,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
+from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import fold_identifier
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_merge_engine import DuckDBMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework, ConnectionRequirement
@@ -138,6 +139,21 @@ class DuckDBFramework(ComputeFramework):
         if isinstance(data, DuckdbRelation):
             return None
         return super()._row_count(data)
+
+    def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
+        if not isinstance(data, DuckdbRelation):
+            return None
+        if {fold_identifier(c) for c in data.columns} & {fold_identifier(n) for n in columns}:
+            return None
+        rows = len(data)
+        if any(len(values) != rows for values in columns.values()):
+            return None
+        appended = data.append_columns({name: list(values) for name, values in columns.items()})
+        return DuckdbRelation.from_arrow(appended._connection, appended.to_arrow_table())
+
+    @classmethod
+    def _positional_append_needs_pinned_frame(cls) -> bool:
+        return True
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:

@@ -294,6 +294,10 @@ List order is a tie-break after cost, not "first listed wins". To force a framew
 
 Framework authors declare the connection rule by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`). A `REQUIRED` framework also overrides `connection_of(data)` to return the connection its native data carries, so a step after a parent on the same framework needs no connection of its own.
 
+## Appending Dict Results
+
+Override `_append_columns(data, columns)` to append a non-root dict result to the frame. The default returns `None`, which replaces the frame. Frameworks holding a lazy plan with unstable row order override the classmethod `_positional_append_needs_pinned_frame` to return `True`, which appends only onto a frame mloda built itself.
+
 ## Data Transformation
 
 When data needs to move between compute frameworks:

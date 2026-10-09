@@ -14,6 +14,9 @@ from tests.test_plugins.compute_framework.base_implementations.spark.conftest im
     PYSPARK_AVAILABLE,
     SKIP_REASON,
 )
+from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRunAllTestBase,
+)
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (
     EmptyResultRunAllTestBase,
 )
@@ -34,3 +37,12 @@ class TestSparkAllowEmptyResultRunAll(EmptyResultRunAllTestBase):
     def get_connection(self) -> Any | None:
         """Spark requires the shared SparkSession as its connection object."""
         return self._spark_session
+
+
+@pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
+class TestSparkSiblingDictRunAll(SiblingDictRunAllTestBase):
+    """Dict-returning sibling consumers end-to-end through run_all on Spark."""
+
+    _bind_spark_session = TestSparkAllowEmptyResultRunAll._bind_spark_session
+    compute_framework_name = TestSparkAllowEmptyResultRunAll.compute_framework_name
+    get_connection = TestSparkAllowEmptyResultRunAll.get_connection

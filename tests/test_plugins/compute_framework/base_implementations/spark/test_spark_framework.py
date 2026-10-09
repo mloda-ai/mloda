@@ -41,6 +41,8 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
+    AppendColumnsCaseFoldTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -409,7 +411,9 @@ class TestSparkDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 @pytest.mark.skipif(not PYSPARK_AVAILABLE, reason=SKIP_REASON or "PySpark is not available")
-class TestSparkEmptyResult(EmptyResultFrameworkTestMixin):
+class TestSparkEmptyResult(
+    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
+):
     """Test SparkFramework schema detection via shared mixin.
 
     A Spark DataFrame has no rows-without-data form: the empty case needs an explicit
@@ -429,6 +433,14 @@ class TestSparkEmptyResult(EmptyResultFrameworkTestMixin):
     @pytest.fixture
     def non_empty_data(self, spark_session: Any) -> Any:
         return spark_session.createDataFrame([{"a": 1}])
+
+    needs_pinned_frame = True
+
+    @pytest.fixture
+    def joined_data(self, spark_session: Any) -> Any:
+        left = spark_session.createDataFrame([{"a": 1}, {"a": 2}, {"a": 3}])
+        right = spark_session.createDataFrame([{"a": 3, "b": 30}, {"a": 1, "b": 10}, {"a": 2, "b": 20}])
+        return left.join(right, on="a")
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

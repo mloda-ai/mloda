@@ -22,6 +22,8 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
+    AppendColumnsCaseFoldTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -306,7 +308,9 @@ class TestSqliteDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         pytest.skip("SQLite stores timestamps as TEXT; TIMESTAMP precision cannot be distinguished")
 
 
-class TestSqliteEmptyResult(EmptyResultFrameworkTestMixin):
+class TestSqliteEmptyResult(
+    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
+):
     """Test SqliteFramework schema detection via shared mixin.
 
     SQLite data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
@@ -325,3 +329,9 @@ class TestSqliteEmptyResult(EmptyResultFrameworkTestMixin):
     @pytest.fixture
     def non_empty_data(self, connection: sqlite3.Connection) -> Any:
         return SqliteRelation.from_arrow(connection, pa.table({"a": [1]}))
+
+    @pytest.fixture
+    def joined_data(self, connection: sqlite3.Connection) -> Any:
+        left = SqliteRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
+        right = SqliteRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
+        return left.join(right, "a")

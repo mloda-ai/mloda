@@ -530,11 +530,16 @@ class SqliteRelation(SqlBaseRelation):
 
     def append_column(self, name: str, values: list[Any]) -> "SqliteRelation":
         """Return a new relation with an additional column appended positionally."""
-        self._ensure_column_absent(name)
+        return self.append_columns({name: values})
+
+    def append_columns(self, columns: dict[str, list[Any]]) -> "SqliteRelation":
+        """Like ``append_column`` for several columns, in one positional join."""
+        for name in columns:
+            self._ensure_column_absent(name)
         current_types = self._types_for_current_columns()
-        new_col_rel = SqliteRelation.from_dict(self._connection, {name: values})
+        new_col_rel = SqliteRelation.from_dict(self._connection, columns)
         new_col_types = new_col_rel._types_for_current_columns()
-        rn = self._pick_helper_column(name)
+        rn = self._pick_helper_column(*columns)
         qrn = quote_ident(rn)
         left_name = _next_table_name()
         right_name = _next_table_name()
@@ -548,12 +553,12 @@ class SqliteRelation(SqlBaseRelation):
         )
         self._connection.execute(
             f"CREATE TEMP VIEW {quote_ident(right_name)} AS "  # nosec
-            f"SELECT {quote_ident(name)}, ROW_NUMBER() OVER () AS {qrn} "
+            f"SELECT {', '.join(quote_ident(n) for n in columns)}, ROW_NUMBER() OVER () AS {qrn} "
             f"FROM {quote_ident(new_col_rel._table_name)}"
         )
 
         keep = ", ".join(f"{quote_ident(left_name)}.{quote_ident(c)}" for c in self.columns)
-        keep += f", {quote_ident(right_name)}.{quote_ident(name)}"
+        keep += "".join(f", {quote_ident(right_name)}.{quote_ident(n)}" for n in columns)
         self._connection.execute(
             f"CREATE TEMP VIEW {quote_ident(result_name)} AS "  # nosec
             f"SELECT {keep} FROM {quote_ident(left_name)} "

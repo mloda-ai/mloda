@@ -22,6 +22,7 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -149,7 +150,7 @@ class TestPyArrowDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
         return table
 
 
-class TestPyArrowEmptyResult(EmptyResultFrameworkTestMixin):
+class TestPyArrowEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
     """Test PyArrowTable schema detection via shared mixin (zero-row table keeps columns)."""
 
     @pytest.fixture

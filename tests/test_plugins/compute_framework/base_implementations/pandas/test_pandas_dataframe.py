@@ -18,6 +18,7 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DuplicateColumnDtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 from tests.test_plugins.compute_framework.test_tooling.availability_test_helper import (
@@ -207,7 +208,7 @@ class TestPandasDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 @pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
-class TestPandasEmptyResult(EmptyResultFrameworkTestMixin):
+class TestPandasEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFrameworkTestMixin):
     """Test PandasDataFrame schema detection via shared mixin (zero-row frame keeps columns)."""
 
     @pytest.fixture

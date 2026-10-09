@@ -21,6 +21,8 @@ from tests.test_plugins.compute_framework.base_implementations.dtype_extraction_
     DtypeExtractionTestMixin,
 )
 from tests.test_plugins.compute_framework.base_implementations.empty_result_test_mixin import (
+    AppendColumnsFrameworkTestMixin,
+    AppendColumnsCaseFoldTestMixin,
     EmptyResultFrameworkTestMixin,
 )
 
@@ -331,7 +333,9 @@ class TestDuckDBDataTypeValidator(DataTypeValidatorFrameworkTestMixin):
 
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed. Skipping this test.")
-class TestDuckDBEmptyResult(EmptyResultFrameworkTestMixin):
+class TestDuckDBEmptyResult(
+    AppendColumnsFrameworkTestMixin, AppendColumnsCaseFoldTestMixin, EmptyResultFrameworkTestMixin
+):
     """Test DuckDBFramework schema detection via shared mixin.
 
     DuckDB data is a relation, so the data fixtures are built via ``from_arrow`` and pull in
@@ -350,6 +354,14 @@ class TestDuckDBEmptyResult(EmptyResultFrameworkTestMixin):
     @pytest.fixture
     def non_empty_data(self, connection: Any) -> Any:
         return DuckdbRelation.from_arrow(connection, pa.table({"a": [1]}))
+
+    needs_pinned_frame = True
+
+    @pytest.fixture
+    def joined_data(self, connection: Any) -> Any:
+        left = DuckdbRelation.from_arrow(connection, pa.table({"a": [1, 2, 3]})).set_alias("l")
+        right = DuckdbRelation.from_arrow(connection, pa.table({"a": [3, 1, 2], "b": [30, 10, 20]})).set_alias("r")
+        return left.join(right, "a")
 
 
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_test_mixin import TfsConnectionInitMixin  # noqa: E402

@@ -1,5 +1,5 @@
-"""Guards a resolved join plan against two joins draining a shared parent that no join writes
-back into for the consumer(s) the two joins actually share."""
+"""Guards a resolved join plan against orphaned shared sources and against records that
+disagree with the plan (foreign side members, overlapping destination and source)."""
 
 from collections import defaultdict
 from collections.abc import Iterable

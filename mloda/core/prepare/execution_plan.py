@@ -2241,7 +2241,7 @@ Available join types:
                 # step/framework hop and is dropped by design.
                 left_uuids, right_uuids = left_from_split, right_from_split
             else:
-                # The step's own sets (a same-framework self link lands here too), kept to declared members.
+                # Kept to declared members; a same-framework self link lands here too.
                 left_uuids = resolved_left & split.left_uuids_any_distance
                 right_uuids = resolved_right & split.right_uuids_any_distance
             join_step_required_uuids = required_uuids

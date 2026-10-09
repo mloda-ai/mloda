@@ -37,6 +37,7 @@ class FeatureGroupStep(Step):
         self.need_to_upload = False
 
         self.tfs_ids: set[UUID] = set()
+        self.direct_sibling_readers: tuple[tuple[UUID, UUID, frozenset[str]], ...] = ()
 
     def get_uuids(self) -> set[UUID]:
         return {feature.uuid for feature in self.features.features}
@@ -57,7 +58,20 @@ class FeatureGroupStep(Step):
         if self.api_input_data:
             data = self.get_api_input_data(data, cfw_register)
 
-        data = self.run_calculate_feature(cfw, data)
+        pending_inputs = frozenset(
+            name
+            for step_uuid, feature_uuid, names in self.direct_sibling_readers
+            if step_uuid not in cfw.completed_feature_group_steps
+            and cfw_register.resolve_cfw_uuid_by_tfs_ids(self.compute_framework.get_class_name(), set(), feature_uuid)
+            == cfw.uuid
+            for name in names
+        )
+        if pending_inputs:
+            data = self.run_calculate_feature(cfw, data, pending_inputs)
+        else:
+            data = self.run_calculate_feature(cfw, data)
+        if self.direct_sibling_readers:
+            cfw.completed_feature_group_steps.add(self.uuid)
         self.save_artifact(self.features, cfw_register)
 
         # return_data_type_rule
@@ -74,11 +88,16 @@ class FeatureGroupStep(Step):
             return data
         return None
 
-    def run_calculate_feature(self, cfw: ComputeFramework, data: Any | None = None) -> Any:
+    def run_calculate_feature(
+        self, cfw: ComputeFramework, data: Any | None = None, pending_inputs: frozenset[str] = frozenset()
+    ) -> Any:
         if self.feature_group.calculate_feature is None:
             raise ValueError("FeatureGroup calculate_feature is not implemented")
 
-        data = cfw.run_calculation(self.feature_group, self.features, self.location, data)
+        if pending_inputs:
+            data = cfw.run_calculation(self.feature_group, self.features, self.location, data, pending_inputs)
+        else:
+            data = cfw.run_calculation(self.feature_group, self.features, self.location, data)
         cfw.validate_expected_framework(self.location)
         return data
 

@@ -207,6 +207,7 @@ class ExecutionPlan:
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
         self.raise_on_step_cycle(self.execution_plan)
+        self._stamp_direct_sibling_readers()
 
         # Only read during add_joinstep above; ExecutionPlan gets deepcopy'd on every Engine.compute()
         # call, so this (potentially O(#features), UUID-keyed) dict and its live reference into
@@ -215,6 +216,48 @@ class ExecutionPlan:
         self.declared_frameworks = {}
         self.resolved_input_feature_names = None
         self.specialized_from = None
+
+    def _stamp_direct_sibling_readers(self) -> None:
+        """Protect only isolated root/reader stars; joins and hops can redirect shared frames."""
+        steps = {step.uuid: step for step in self.execution_plan}
+        by_token: dict[UUID, set[UUID]] = {}
+        for step in steps.values():
+            for token in step.get_uuids() | step.required_uuids | {step.uuid}:
+                by_token.setdefault(token, set()).add(step.uuid)
+        remaining = set(steps)
+        while remaining:
+            pending = {next(iter(remaining))}
+            component: set[UUID] = set()
+            while pending:
+                step_uuid = pending.pop()
+                if step_uuid in component:
+                    continue
+                component.add(step_uuid)
+                step = steps[step_uuid]
+                for token in step.get_uuids() | step.required_uuids | {step.uuid}:
+                    pending.update(by_token[token] - component)
+            remaining.difference_update(component)
+            members = [steps[uuid] for uuid in component]
+            groups = [step for step in members if isinstance(step, FeatureGroupStep) and not step.tfs_ids]
+            roots = [step for step in groups if not step.required_uuids]
+            if len(groups) != len(members) or len(roots) != 1:
+                continue
+            root = roots[0]
+            readers = [step for step in groups if step is not root]
+            if any(
+                step.compute_framework is not root.compute_framework
+                or not step.required_uuids.issubset(root.get_uuids())
+                for step in readers
+            ):
+                continue
+            for step in readers:
+                step.direct_sibling_readers = tuple(
+                    (reader.uuid, reader.features.any_uuid, reader.features.declared_input_feature_names)
+                    for reader in readers
+                    if reader is not step
+                    and reader.features.any_uuid is not None
+                    and reader.features.declared_input_feature_names is not None
+                )
 
     def add_feature_group_step(
         self,

@@ -1,10 +1,16 @@
-"""Guards a resolved join plan against two joins draining a shared parent that no join writes
-back into for the consumer(s) the two joins actually share."""
+"""Guards a resolved join plan against orphaned shared sources and against records that
+disagree with the plan (foreign side members, overlapping destination and source)."""
 
 from collections import defaultdict
+from collections.abc import Iterable
 from itertools import combinations
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.link import JoinType
+from mloda.core.core.step.join_step import JoinStep
+from mloda.core.prepare.graph.graph import Graph
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
 
 
@@ -52,3 +58,51 @@ def raise_on_orphaned_join_source(plan: ResolvedJoinPlan) -> None:
             if _shared_consumer_writes_back(plan.records, uuid, shared_consumers):
                 continue
             raise ValueError(_orphaned_join_source_error(first, second))
+
+
+def _foreign_members(group: type[FeatureGroup], uuids: Iterable[UUID], graph: Graph) -> list[str]:
+    nodes = graph.get_nodes()
+    return sorted(
+        nodes[uuid].feature_group_class.get_class_name()
+        for uuid in uuids
+        if not issubclass(nodes[uuid].feature_group_class, group)
+    )
+
+
+def raise_on_dishonest_join_record(plan: ResolvedJoinPlan, join_steps: Iterable[JoinStep], graph: Graph) -> None:
+    """Raise when a record's sides hold parents outside their declared group, or its ends overlap or miss their side."""
+    step_of = {step.uuid: step for step in join_steps}
+    for record in plan.records:
+        step = step_of[record.token]
+        for label, side in (("left", record.left), ("right", record.right)):
+            foreign = _foreign_members(side.feature_group, side.uuids, graph)
+            if foreign:
+                raise ValueError(
+                    internal_invariant_error(
+                        f"Every {label} member of link {step.link} is a {side.feature_group.get_class_name()}.",
+                        f"{label} side holds members of {foreign}.",
+                    )
+                )
+        if record.jointype in (JoinType.APPEND, JoinType.UNION):
+            continue
+        if record.destination_framework is record.source_framework and not step.carriers:
+            continue
+        overlap = record.destination_uuids & record.source_uuids
+        if overlap:
+            raise ValueError(
+                internal_invariant_error(
+                    f"Join destination and source of link {step.link} are disjoint.",
+                    f"Both name {sorted(str(uuid) for uuid in overlap)}.",
+                )
+            )
+        for label, end, uuids in (
+            ("destination", record.destination, record.destination_uuids),
+            ("source", record.source, record.source_uuids),
+        ):
+            if not uuids & end.uuids:
+                raise ValueError(
+                    internal_invariant_error(
+                        f"The {label} end of link {step.link} reads a member of its {end.feature_group.get_class_name()} side.",
+                        f"{label} uuids {sorted(str(uuid) for uuid in uuids)} share none with the side.",
+                    )
+                )

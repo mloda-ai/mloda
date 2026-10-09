@@ -34,7 +34,7 @@ from mloda.core.prepare.resolved_join_builder import (
     raise_on_join_plan_divergence,
     wire_join_dependencies,
 )
-from mloda.core.prepare.validate_resolved_join import raise_on_orphaned_join_source
+from mloda.core.prepare.validate_resolved_join import raise_on_dishonest_join_record, raise_on_orphaned_join_source
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -201,6 +201,7 @@ class ExecutionPlan:
         self.resolved_join_plan = ResolvedJoinPlan(resolved_records, declined)
         self.join_signatures_at_build = joinstep_signatures(join_steps)
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
+        raise_on_dishonest_join_record(self.resolved_join_plan, join_steps, graph)
         if validate:
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
@@ -2240,9 +2241,9 @@ Available join types:
                 # step/framework hop and is dropped by design.
                 left_uuids, right_uuids = left_from_split, right_from_split
             else:
-                # The step's own sets; a same-framework self link lands here too. Framework-broad, so
-                # join_uuids_left/right below narrow independently rather than reusing these.
-                left_uuids, right_uuids = resolved_left, resolved_right
+                # Kept to declared members; a same-framework self link lands here too.
+                left_uuids = resolved_left & split.left_uuids_any_distance
+                right_uuids = resolved_right & split.right_uuids_any_distance
             join_step_required_uuids = required_uuids
 
             carriers, carriers_on_left = self._join_carriers(

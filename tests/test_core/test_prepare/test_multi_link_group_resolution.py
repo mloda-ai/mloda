@@ -1402,6 +1402,13 @@ def test_the_carrier_join_is_planned_on_the_consumers_framework(consumer_kind: s
     assert carried[0].destination_framework is consumer_framework
     records = [record for record in planner.resolved_join_plan.records if record.token == carried[0].uuid]
     assert [record.destination_framework for record in records] == [consumer_framework]
+    hops = [
+        step
+        for step in planner
+        if isinstance(step, TransformFrameworkStep) and step.uuid == carried[0].destination_hop_uuid
+    ]
+    assert len(hops) == 1
+    assert hops[0].to_framework is records[0].destination_framework
     sides = [(record.left, record.right) for record in records]
     for left, right in sides:
         for side in (left, right):

@@ -1,7 +1,7 @@
 """One record per join decision, built next to the join steps and signing the same joins they do."""
 
 import pickle  # nosec B403
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, NamedTuple
 from uuid import UUID
@@ -16,7 +16,13 @@ from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_compute_frameworks import ResolveComputeFrameworks
 from mloda.core.prepare.resolve_links import LinkTrekker
-from mloda.core.prepare.resolved_join import DeclinedOrientation, JoinSide, JoinSignature, ResolvedJoin
+from mloda.core.prepare.resolved_join import (
+    DeclinedOrientation,
+    JoinSide,
+    JoinSignature,
+    ResolvedJoin,
+    ResolvedJoinPlan,
+)
 from mloda.core.prepare.resolved_join_builder import joinstep_signatures
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
@@ -947,9 +953,8 @@ def test_a_right_joins_destination_stays_right_when_both_declared_sides_claim_th
     assert record.jointype is JoinType.RIGHT
     assert record.destination_side is JoinSide.RIGHT
     assert record.left.uuids == {built.sides.left_uuid}
-    # destination_framework_uuids is a framework filter, not a side filter: the declared-left
-    # parent that also sits on the destination framework lands here alongside the declared right.
-    assert record.right.uuids == {built.sides.right_uuid, built.sides.extra_right_uuid}
+    # The declared-left parent on the destination framework is not a member of the right side.
+    assert record.right.uuids == {built.sides.right_uuid}
     join_steps = _join_steps(built.plan)
     assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
     assert join_steps[0].swap_merge_sides is True
@@ -964,7 +969,8 @@ def test_a_right_joins_destination_stays_right_when_a_farther_right_parent_share
     assert record.destination_side is JoinSide.RIGHT
     assert record.destination_framework is PandasDataFrame
     assert record.left.uuids == {built.sides.left_uuid}
-    assert record.right.uuids == {built.sides.right_uuid, built.sides.extra_right_uuid}
+    # The declared-left parent on the destination framework is not a member of the right side.
+    assert record.right.uuids == {built.sides.right_uuid}
     join_steps = _join_steps(built.plan)
     assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
     assert join_steps[0].swap_merge_sides is True
@@ -1196,6 +1202,68 @@ def test_raise_on_join_plan_divergence_raises_on_a_mutated_step() -> None:
 
     with pytest.raises(ValueError):
         raise_on_join_plan_divergence(built.plan.resolved_join_plan, join_steps)
+
+
+def _with_record(built: Built, **changes: Any) -> ResolvedJoinPlan:
+    record = _one_record(built.plan, built.link)
+    return replace(built.plan.resolved_join_plan, records=(replace(record, **changes),))
+
+
+def _wrong_side_membership() -> tuple[Built, dict[str, Any]]:
+    built = _declared_pair()
+    record = _one_record(built.plan, built.link)
+    return built, {"right": replace(record.right, uuids=frozenset({built.sides.left_uuid}))}
+
+
+def _cross_framework_overlap() -> tuple[Built, dict[str, Any]]:
+    built = _declared_pair()
+    return built, {
+        "source_uuids": frozenset({built.sides.left_uuid}),
+        "destination_uuids": frozenset({built.sides.left_uuid}),
+    }
+
+
+def _same_framework_overlap() -> tuple[Built, dict[str, Any]]:
+    built = _right_join_both_declared_sides_share_one_framework_child_on_a_third()
+    shared = frozenset({built.sides.left_uuid})
+    return built, {"source_uuids": shared, "destination_uuids": shared}
+
+
+def _append_overlap() -> tuple[Built, dict[str, Any]]:
+    built = _append_pair()
+    shared = frozenset({built.sides.left_uuid})
+    return built, {"source_uuids": shared, "destination_uuids": shared}
+
+
+@pytest.mark.parametrize(
+    "build, message, carried",
+    [
+        pytest.param(_wrong_side_membership, "ResolvedJoinPairRight", False, id="right_side_holds_left_group_uuid"),
+        pytest.param(_cross_framework_overlap, "Internal error", False, id="cross_framework_overlap"),
+        pytest.param(_same_framework_overlap, None, False, id="same_framework_overlap_exempt"),
+        pytest.param(_same_framework_overlap, "Internal error", True, id="same_framework_overlap_with_carriers"),
+        pytest.param(_append_overlap, None, False, id="append_overlap_exempt"),
+    ],
+)
+def test_raise_on_dishonest_join_record(
+    build: Callable[[], tuple[Built, dict[str, Any]]], message: str | None, carried: bool
+) -> None:
+    from mloda.core.prepare.validate_resolved_join import raise_on_dishonest_join_record
+
+    built, changes = build()
+    join_steps = _join_steps(built.plan)
+    raise_on_dishonest_join_record(built.plan.resolved_join_plan, join_steps, built.graph)
+
+    dishonest = _with_record(built, **changes)
+    if carried:
+        join_steps[0].carriers = frozenset({built.sides.left_uuid})
+
+    if message is None:
+        raise_on_dishonest_join_record(dishonest, join_steps, built.graph)
+        return
+    with pytest.raises(ValueError, match=r"Internal error") as exc_info:
+        raise_on_dishonest_join_record(dishonest, join_steps, built.graph)
+    assert message in str(exc_info.value)
 
 
 def test_a_nearest_left_parent_on_a_third_framework_keeps_the_record_on_the_steps_side() -> None:

@@ -2,10 +2,15 @@
 back into for the consumer(s) the two joins actually share."""
 
 from collections import defaultdict
+from collections.abc import Iterable
 from itertools import combinations
 from uuid import UUID
 
-from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.link import JoinType
+from mloda.core.core.step.join_step import JoinStep
+from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan, ResolvedJoinSide
 
 
 def _stays_in_source_framework(record: ResolvedJoin) -> bool:
@@ -52,3 +57,40 @@ def raise_on_orphaned_join_source(plan: ResolvedJoinPlan) -> None:
             if _shared_consumer_writes_back(plan.records, uuid, shared_consumers):
                 continue
             raise ValueError(_orphaned_join_source_error(first, second))
+
+
+def _foreign_members(side: ResolvedJoinSide, graph: Graph) -> list[str]:
+    nodes = graph.get_nodes()
+    return [
+        nodes[uuid].feature_group_class.get_class_name()
+        for uuid in side.uuids
+        if not issubclass(nodes[uuid].feature_group_class, side.feature_group)
+    ]
+
+
+def raise_on_dishonest_join_record(plan: ResolvedJoinPlan, join_steps: Iterable[JoinStep], graph: Graph) -> None:
+    """Raise when a record's sides hold parents outside their declared group or its two ends overlap."""
+    step_of = {step.uuid: step for step in join_steps}
+    for record in plan.records:
+        for label, side in (("left", record.left), ("right", record.right)):
+            foreign = _foreign_members(side, graph)
+            if foreign:
+                raise ValueError(
+                    internal_invariant_error(
+                        f"Every {label} member of link {record.link_uuid} is a {side.feature_group.get_class_name()}.",
+                        f"{label} side holds members of {sorted(foreign)}.",
+                    )
+                )
+        if record.jointype in (JoinType.APPEND, JoinType.UNION):
+            continue
+        step = step_of.get(record.token)
+        if record.destination_framework is record.source_framework and not (step and step.carriers):
+            continue
+        overlap = record.destination_uuids & record.source_uuids
+        if overlap:
+            raise ValueError(
+                internal_invariant_error(
+                    f"Join destination and source of link {record.link_uuid} are disjoint.",
+                    f"Both name {sorted(str(uuid) for uuid in overlap)}.",
+                )
+            )

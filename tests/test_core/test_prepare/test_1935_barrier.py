@@ -46,15 +46,15 @@ link2 = Link.right(JoinSpec(Left2, 'key'), JoinSpec(RightTarget, 'key'))
 class Consumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name='Left1'), Feature(name='Left2'), Feature(name='RightTarget')}
-        
+
     @classmethod
     def depends_on(cls):
         return {link1, link2}
-        
+
     @classmethod
     def match_feature(cls, feature: Feature) -> bool:
         return feature.name == 'Consumer'
-        
+
     @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> Any:
         assert 'Left1' in data, 'Left1 missing due to race'
@@ -70,5 +70,5 @@ def test_1935_issue_barrier():
                             plugin_collector=PluginCollector.enabled_feature_groups({Left1, Left2, RightTarget, Consumer}),
                             compute_frameworks=[PythonDictFramework],
                             parallelization_modes={ParallelizationMode.THREADING})
-    
+
     result = list(session.run(parallelization_modes={ParallelizationMode.THREADING}))

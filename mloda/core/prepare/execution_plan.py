@@ -1148,6 +1148,9 @@ Available join types:
                     # 2) The child feature using this join needs to know which cfw to use. We use the tfs vehicle for this.
                     store_val = None
 
+                    # Serialize concurrent joins mutating the exact same runtime object.
+                    ep.required_uuids.update(self.joinstep_collection.earlier_joins_sharing_destination(ep))
+
                     if ep.carriers or ep.shared_destination:
                         destination_hop = self._destination_hop(
                             ep, graph, owning_step_of, not ep.carriers or ep.split_consumers is not None

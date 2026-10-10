@@ -41,15 +41,15 @@ from mloda.user import Index
 class Consumer(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return {Feature(name='Left1', index=Index(('key',))), Feature(name='Left2', index=Index(('key',))), Feature(name='RightTarget', index=Index(('key',)))}
-        
+
     @classmethod
     def depends_on(cls):
         return {link1, link2}
-        
+
     @classmethod
     def match_feature(cls, feature: Feature) -> bool:
         return feature.name == 'Consumer'
-        
+
     @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> Any:
         assert 'Left1' in data, 'Left1 missing due to race'
@@ -64,23 +64,23 @@ def test_1935_issue():
                             plugin_collector=PluginCollector.enabled_feature_groups({Left1, Left2, RightTarget, Consumer}),
                             compute_frameworks=[PythonDictFramework],
                             parallelization_modes={ParallelizationMode.THREADING})
-    
+
     join_steps = [s for s in session.engine.execution_planner.execution_plan if isinstance(s, JoinStep)]
-    
+
     # Check if the join steps are ordered by required_uuids
     print('JoinSteps uuids:', [s.uuid for s in join_steps])
     print('JoinSteps required:', [s.required_uuids for s in join_steps])
     print('JoinSteps dest:', [s.destination_framework_uuids for s in join_steps])
-    
+
     unordered = True
     for s in join_steps:
         # if one join step requires the other, they are ordered
         if any(other.uuid in s.required_uuids for other in join_steps if other is not s):
             unordered = False
             break
-    
+
     print('Are they unordered?', unordered)
-    
+
     # Run multiple times to trigger the race condition
     for i in range(10):
         result = list(session.run(parallelization_modes={ParallelizationMode.THREADING}))

@@ -485,6 +485,21 @@ class TestPrepareOnceRunTwiceMultiprocessingWorkerIdentity:
 
 _FAIL_COLUMN = "lifecycle_matrix_fail_col"
 _MISSING_COLUMN = "lifecycle_matrix_missing_col"
+_SYSTEM_EXIT_COLUMN = "lifecycle_matrix_system_exit_col"
+
+
+class _SystemExitFeatureGroup(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({_SYSTEM_EXIT_COLUMN})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise SystemExit("calculate failed")
 
 
 class _FailingLifecycleFeatureGroup(FeatureGroup):
@@ -657,6 +672,31 @@ def _execution_failure(call_site: str, error: type[BaseException] = RuntimeError
     return scenario
 
 
+def _multiprocessing_system_exit(call_site: str) -> Any:
+    def scenario(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
+        from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
+        server = ParallelRunnerFlightServer()
+        server.start_flight_server_process()
+        try:
+            session = mloda.prepare(
+                [Feature(name=_SYSTEM_EXIT_COLUMN)],
+                parallelization_modes={ParallelizationMode.MULTIPROCESSING},
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector.enabled_feature_groups({_SystemExitFeatureGroup}),
+                function_extender={ext},
+            )
+            with pytest.raises(SystemExit, match="calculate failed"):
+                list(getattr(session, call_site)(parallelization_modes={ParallelizationMode.MULTIPROCESSING}, flight_server=server))
+        finally:
+            server.end_flight_server_process()
+
+        return [
+            *_OK_PLAN,
+            *_ok_run("cancelled", calculated=False, error="builtins.SystemExit"),
+        ]
+    return scenario
+
+
 def _planning_interrupted_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     def interrupted(self: Any, *args: Any, **kwargs: Any) -> None:
         raise KeyboardInterrupt()
@@ -805,6 +845,7 @@ _MATRIX: dict[str, Any] = {
     "interrupted_stream_run_keyboard_interrupt": _execution_failure("stream_run", KeyboardInterrupt),
     "interrupted_run_system_exit": _execution_failure("run", SystemExit),
     "interrupted_stream_run_system_exit": _execution_failure("stream_run", SystemExit),
+    "multiprocessing_interrupted_run_system_exit": _multiprocessing_system_exit("run"),
     "planning_interrupted_prepare": _planning_interrupted_prepare,
     "finalizing_failure_batch": _finalizing_failure_batch,
     "finalizing_failure_stream_consumed": _finalizing_failure_stream_consumed,

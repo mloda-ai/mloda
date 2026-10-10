@@ -33,5 +33,14 @@ class JoinStepCollection:
         )
         self.collection[join_step] = required_join_uuids
 
+    def earlier_joins_sharing_destination(self, join_step: JoinStep) -> set[UUID]:
+        uuids: set[UUID] = set()
+        for step in self.collection:
+            if step == join_step:
+                break
+            if step.destination_framework_uuids & join_step.destination_framework_uuids:
+                uuids.update(step.get_uuids())
+        return uuids
+
     def get_required_join_uuids(self, join_step: JoinStep) -> set[UUID]:
         return self.collection.get(join_step, set())

@@ -8,5 +8,6 @@ include mloda/core/py.typed
 include mloda/provider/py.typed
 include mloda/steward/py.typed
 include mloda/user/py.typed
+include mloda/interfaces/py.typed
 include mloda_plugins/py.typed
 prune tests*

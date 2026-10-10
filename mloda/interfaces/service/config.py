@@ -1,0 +1,200 @@
+"""Settings for the mloda service layer: TOML file, then MLODA_MCP_* env vars, then explicit overrides."""
+
+import hashlib
+import importlib.util
+import json
+import re
+import sys
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any
+
+MODES = ("plan", "execute")
+_MCP_KEYS = frozenset(
+    {
+        "mode",
+        "compute_frameworks",
+        "max_rows",
+        "deny_feature_groups",
+        "alternatives",
+        "preview_allows",
+        "max_preview_rows",
+        "plan_ttl",
+        "sources",
+        "classification",
+    }
+)
+_SOURCE_KEYS = frozenset({"files", "folders"})
+_ENV_PREFIX = "MLODA_MCP_"
+_ENV_INT_KEYS = frozenset({"max_rows"})
+_ENV_LIST_KEYS = frozenset({"compute_frameworks"})
+_ENV_STR_KEYS = frozenset({"mode"})
+_TTL_PATTERN = re.compile(r"(\d+)([hms])")
+_TTL_UNITS = {"h": 3600, "m": 60, "s": 1}
+
+
+class ConfigError(ValueError):
+    """Invalid or unreadable service configuration."""
+
+
+@dataclass(frozen=True)
+class SourceConfig:
+    """A named data source: absolute file and folder paths."""
+
+    alias: str
+    files: tuple[str, ...] = ()
+    folders: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Settings:
+    """Resolved service settings."""
+
+    mode: str = "plan"
+    compute_frameworks: tuple[str, ...] = ("PythonDictFramework",)
+    max_rows: int | None = None
+    deny_feature_groups: tuple[str, ...] = ()
+    alternatives: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    preview_allows: tuple[str, ...] = ("public", "internal")
+    max_preview_rows: int = 20
+    plan_ttl_seconds: int = 86400
+    sources: Mapping[str, SourceConfig] = field(default_factory=dict)
+    classification: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.mode not in MODES:
+            raise ConfigError(f"'mode' must be one of {list(MODES)}, got {self.mode!r}")
+        if self.max_preview_rows <= 0:
+            raise ConfigError("'max_preview_rows' must be a positive integer")
+
+    def config_hash(self) -> str:
+        """SHA-256 hex digest of the settings, independent of mapping insertion order."""
+        canonical = json.dumps(asdict(self), sort_keys=True, default=dict)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def load_settings(
+    config_path: str | Path | None, env: Mapping[str, str], overrides: Mapping[str, Any] | None = None
+) -> Settings:
+    """Merge file, env and overrides (later wins) into validated Settings."""
+    raw: dict[str, Any] = {}
+    base_dir = Path.cwd()
+    if config_path is not None:
+        path = Path(config_path)
+        raw.update(_read_mcp_table(path))
+        base_dir = path.resolve().parent
+    raw.update(_from_env(env))
+    raw.update(overrides or {})
+    _reject_unknown(raw, _MCP_KEYS, "[mcp]")
+    return _build(raw, base_dir)
+
+
+def _read_mcp_table(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise ConfigError(f"Config file not found: {path}")
+    if sys.version_info >= (3, 11):
+        import tomllib
+    elif importlib.util.find_spec("tomli") is not None:
+        import tomli as tomllib
+    else:
+        raise ConfigError("Reading mloda.toml needs Python 3.11+ or `pip install tomli`.")
+    with path.open("rb") as handle:
+        # TOMLDecodeError subclasses ValueError; tomli's equivalent too.
+        try:
+            data = tomllib.load(handle)
+        except ValueError as error:
+            raise ConfigError(f"{path.name} is not valid TOML: {error}") from None
+    table = data.get("mcp", {})
+    if not isinstance(table, dict):
+        raise ConfigError("'mcp' must be a table")
+    return table
+
+
+def _from_env(env: Mapping[str, str]) -> dict[str, Any]:
+    raw: dict[str, Any] = {}
+    for key in _ENV_STR_KEYS | _ENV_INT_KEYS | _ENV_LIST_KEYS:
+        value = env.get(_ENV_PREFIX + key.upper())
+        if value is None:
+            continue
+        if key in _ENV_INT_KEYS:
+            if not re.fullmatch(r"-?\d+", value.strip()):
+                raise ConfigError(f"{_ENV_PREFIX}{key.upper()} must be an integer")
+            raw[key] = int(value)
+        elif key in _ENV_LIST_KEYS:
+            raw[key] = [item.strip() for item in value.split(",") if item.strip()]
+        else:
+            raw[key] = value
+    return raw
+
+
+def _reject_unknown(table: Mapping[str, Any], allowed: frozenset[str], where: str) -> None:
+    unknown = sorted(set(table) - allowed)
+    if unknown:
+        raise ConfigError(f"Unknown key(s) in {where}: {unknown}; allowed: {sorted(allowed)}")
+
+
+def _str_tuple(value: Any, key: str) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)) or not all(isinstance(item, str) for item in value):
+        raise ConfigError(f"'{key}' must be a list of strings")
+    return tuple(value)
+
+
+def _str_mapping(value: Any, key: str) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or not all(isinstance(k, str) for k in value):
+        raise ConfigError(f"'{key}' must be a table")
+    return dict(value)
+
+
+def _int(value: Any, key: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ConfigError(f"'{key}' must be an integer")
+    return value
+
+
+def _parse_ttl(value: Any) -> int:
+    match = _TTL_PATTERN.fullmatch(value) if isinstance(value, str) else None
+    if match is None:
+        raise ConfigError("'plan_ttl' must be a number followed by h, m or s, e.g. '24h'")
+    return int(match.group(1)) * _TTL_UNITS[match.group(2)]
+
+
+def _resolve_paths(value: Any, key: str, base_dir: Path) -> tuple[str, ...]:
+    return tuple(str((base_dir / item).resolve()) for item in _str_tuple(value, key))
+
+
+def _build_source(alias: str, value: Any, base_dir: Path) -> SourceConfig:
+    table = _str_mapping(value, f"sources.{alias}")
+    _reject_unknown(table, _SOURCE_KEYS, f"[mcp.sources.{alias}]")
+    return SourceConfig(
+        alias=alias,
+        files=_resolve_paths(table.get("files", []), "files", base_dir),
+        folders=_resolve_paths(table.get("folders", []), "folders", base_dir),
+    )
+
+
+def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
+    kwargs: dict[str, Any] = {}
+    if "mode" in raw:
+        kwargs["mode"] = raw["mode"]
+    for key in ("compute_frameworks", "deny_feature_groups", "preview_allows"):
+        if key in raw:
+            kwargs[key] = _str_tuple(raw[key], key)
+    if raw.get("max_rows") is not None:
+        kwargs["max_rows"] = _int(raw["max_rows"], "max_rows")
+    if "max_preview_rows" in raw:
+        kwargs["max_preview_rows"] = _int(raw["max_preview_rows"], "max_preview_rows")
+    if "plan_ttl" in raw:
+        kwargs["plan_ttl_seconds"] = _parse_ttl(raw["plan_ttl"])
+    if "alternatives" in raw:
+        alternatives = _str_mapping(raw["alternatives"], "alternatives")
+        kwargs["alternatives"] = {k: _str_tuple(v, f"alternatives.{k}") for k, v in alternatives.items()}
+    if "classification" in raw:
+        classification = _str_mapping(raw["classification"], "classification")
+        if not all(isinstance(v, str) for v in classification.values()):
+            raise ConfigError("'classification' values must be strings")
+        kwargs["classification"] = classification
+    if "sources" in raw:
+        sources = _str_mapping(raw["sources"], "sources")
+        kwargs["sources"] = {alias: _build_source(alias, v, base_dir) for alias, v in sources.items()}
+    return Settings(**kwargs)

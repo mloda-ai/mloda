@@ -70,6 +70,7 @@ sklearn = [
     "joblib>=1.0.0",
 ]
 text_cleaning = ["nltk>=3.8"]
+mcp = ["mcp>=2.3,<3"]
 nopyarrow_test = [
     "pytest>=9.0.3",
     "pytest-xdist",
@@ -101,6 +102,7 @@ all = [
     "mloda[iceberg]",
     "mloda[sklearn]",
     "mloda[text_cleaning]",
+    "mloda[mcp]",
     "mloda[docs]",
 ]
 

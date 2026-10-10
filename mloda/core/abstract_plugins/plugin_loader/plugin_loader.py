@@ -45,6 +45,7 @@ OPTIONAL_PLUGIN_DEPENDENCIES: frozenset[str] = frozenset(
         "openai",
         "google",
         "yaml",
+        "mcp",
     }
 )
 

@@ -163,7 +163,7 @@ def worker(
         if bootstrap is not None:
             try:
                 bootstrap()
-            except Exception as e:
+            except BaseException as e:
                 msg, exc_info = failure_report(e)
                 if cfw_register:
                     try:
@@ -202,7 +202,7 @@ def worker(
                 data = _execute_command(command, cfw_register, cfw, data, from_cfw)
                 _handle_command_result(command, cfw, location, data, result_queue)
 
-            except Exception as e:
+            except BaseException as e:
                 msg, exc_info = failure_report(e)
                 if cfw_register:
                     try:

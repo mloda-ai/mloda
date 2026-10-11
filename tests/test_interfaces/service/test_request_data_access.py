@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.user import PluginLoader
 from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from mloda.interfaces.service.request import Problem, data_access_option_keys, data_access_violations
@@ -26,6 +27,22 @@ def test_option_keys_contain_builtin_file_reader() -> None:
     keys = data_access_option_keys()
     assert isinstance(keys, frozenset)
     assert KEY in keys
+
+
+def test_option_keys_contain_reserved_reader_key() -> None:
+    """mloda stores the chosen reader and its data access under this key, so a request must not set it."""
+    assert RESERVED_READER_OPTION_KEY == "BaseInputData"
+    assert RESERVED_READER_OPTION_KEY in data_access_option_keys()
+
+
+def test_reserved_reader_key_is_reported() -> None:
+    request = {"features": [{"name": "x", "options": {RESERVED_READER_OPTION_KEY: "anything"}}]}
+
+    problems = data_access_violations(request)
+
+    assert [p.path for p in problems] == [f"/features/0/options/{RESERVED_READER_OPTION_KEY}"]
+    assert problems[0].problem == "data_access_option"
+    assert all("anything" not in p.message for p in problems)
 
 
 def test_clean_request_has_no_violations() -> None:

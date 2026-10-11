@@ -12,7 +12,10 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.input_data.base_input_data import (
+    RESERVED_READER_OPTION_KEY,
+    BaseInputData,
+)
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import feature_config_schema
@@ -244,8 +247,9 @@ def validate_request(request: Any, settings: Settings) -> list[Problem]:
 
 
 def data_access_option_keys() -> frozenset[str]:
-    """Option keys that configure data access: the data access names of all loaded readers."""
-    return frozenset(reader.data_access_name() for reader in get_all_subclasses(BaseInputData))
+    """Option keys that configure data access: the reserved reader key and every loaded reader's name."""
+    names = {reader.data_access_name() for reader in get_all_subclasses(BaseInputData)}
+    return frozenset({RESERVED_READER_OPTION_KEY, *names})
 
 
 def _scan_feature_config(item: Mapping[str, Any], path: str, keys: frozenset[str]) -> list[Problem]:

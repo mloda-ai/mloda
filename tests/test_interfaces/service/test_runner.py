@@ -503,8 +503,13 @@ class TestPreviewBounds:
 
 
 class TestOtherFrameworks:
-    @pytest.mark.parametrize("framework", ["PandasDataFrame", "PolarsDataFrame", "PyArrowTable"])
-    def test_frames_give_json_native_preview(self, tmp_path: Path, framework: str) -> None:
+    @pytest.mark.parametrize(
+        ("framework", "backend"),
+        [("PandasDataFrame", "pandas"), ("PolarsDataFrame", "polars"), ("PyArrowTable", "pyarrow")],
+        ids=["PandasDataFrame", "PolarsDataFrame", "PyArrowTable"],
+    )
+    def test_frames_give_json_native_preview(self, tmp_path: Path, framework: str, backend: str) -> None:
+        pytest.importorskip(backend)
         result = _run(tmp_path, compute_frameworks=(framework,))
 
         table = _only_table(result)

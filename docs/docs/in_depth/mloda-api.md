@@ -48,7 +48,8 @@ This means, depending on your needs, you can run them all at once (**batch run**
         forkserver runs.
     -   All multiprocessing runs of one interpreter share one Manager server process, which stops with the
         interpreter. It keeps the modules it loaded, so a class added to an already imported module afterwards is not
-        visible to it until `sys.path` changes or the interpreter restarts.
+        visible to it until `sys.path` changes or the interpreter restarts. Every worker of every multiprocessing
+        run of the interpreter can reach that server, so runs are not isolated from each other's plugin code.
 -   flight_server (optional): Specify a flight server for multiprocessing only.
 -   **column_ordering** (optional): Control the ordering of result columns.
     Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`

@@ -1,7 +1,9 @@
 import functools
+import multiprocessing.process
 import os
 import sys
 import threading
+import weakref
 from collections.abc import Callable, Iterable
 from multiprocessing.managers import BaseManager
 from typing import Any
@@ -25,17 +27,26 @@ def _watchdog_then_initializer(initializer: Callable[..., object] | None, initar
         initializer(*initargs)
 
 
+_started_managers: "weakref.WeakSet[MyManager]" = weakref.WeakSet()
+
+
 class MyManager(BaseManager):
+    users: int = 0
+
     def start(self, initializer: Callable[..., object] | None = None, initargs: Iterable[Any] = ()) -> None:
         # BaseManager._run_server() runs initializer inside the freshly started manager server
         # process, so the watchdog must always run there; a caller-supplied initializer is
         # chained after it rather than replaced. A module-level function plus functools.partial
         # is used, not a closure, because BaseManager.start() pickles the initializer to send it
         # to the server process, and closures are not picklable.
+        _started_managers.add(self)
         super().start(functools.partial(_watchdog_then_initializer, initializer, initargs), ())
 
     def is_alive(self) -> bool:
-        return bool(self._process.is_alive())  # type: ignore[attr-defined]
+        # A temp cleaner can remove the listener socket file while the server process lives.
+        address = self.address
+        socket_present = os.name != "posix" or not isinstance(address, str) or os.path.exists(address)
+        return bool(self._process.is_alive()) and socket_present  # type: ignore[attr-defined]
 
 
 class CfwManager:
@@ -416,13 +427,46 @@ _shared_manager: tuple[MyManager, int, tuple[str, ...]] | None = None
 def shared_manager() -> MyManager:
     """Returns the interpreter-wide Manager server, starting a new one when the cached one is unusable."""
     global _shared_manager
+    replaced: MyManager | None = None
     with _shared_manager_lock:
         cached = _shared_manager
         # The pid check must precede is_alive(): in a forked child Process.is_alive() raises.
         # The sys.path check is needed because the server only sees the import path it started with.
         if cached is None or cached[1] != os.getpid() or not cached[0].is_alive() or cached[2] != tuple(sys.path):
+            if cached is not None and cached[1] == os.getpid() and cached[0].users == 0:
+                replaced = cached[0]
             manager = MyManager(ctx=mp_start_context())
             manager.start()
             cached = (manager, os.getpid(), tuple(sys.path))
             _shared_manager = cached
-        return cached[0]
+        cached[0].users += 1
+        result = cached[0]
+    if replaced is not None:
+        replaced.shutdown()
+    return result
+
+
+def release_shared_manager(manager: MyManager) -> None:
+    """Drops one user of a shared manager and stops it once unused and replaced."""
+    with _shared_manager_lock:
+        if manager.users == 0:
+            return
+        manager.users -= 1
+        cached = _shared_manager
+        stop = manager.users == 0 and (cached is None or cached[0] is not manager)
+    if stop:
+        manager.shutdown()
+
+
+def _forget_shared_manager_after_fork() -> None:
+    global _shared_manager, _shared_manager_lock
+    for manager in list(_started_managers):
+        process = getattr(manager, "_process", None)
+        # The child's exit hook would otherwise try to join a process it does not own.
+        getattr(multiprocessing.process, "_children", set()).discard(process)
+    _shared_manager_lock = threading.Lock()
+    _shared_manager = None
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_forget_shared_manager_after_fork)

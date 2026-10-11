@@ -34,7 +34,8 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count
 from mloda.core.runtime.worker_manager import WorkerManager
 from tests.test_core.test_prepare.test_multi_link_group_resolution import SidePathPandasP, _side_path_prepare
-from mloda.core.core.cfw_manager import CfwManager
+import mloda.core.core.cfw_manager as cfw_manager_module
+from mloda.core.core.cfw_manager import CfwManager, shared_manager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -43,6 +44,9 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
+
+
+cfw_module: Any = cfw_manager_module
 
 
 class TestExecutionOrchestratorImport:
@@ -695,14 +699,23 @@ class TestEnterPrestartsStandbyWorkers:
         calls: list[str] = []
         worker_manager.stop_standbys.side_effect = lambda: calls.append("standbys")
         worker_manager.terminate_alive_processes.side_effect = lambda: calls.append("terminate")
-        orchestrator.manager = Mock()
+        manager = Mock()
+        orchestrator.manager = manager
         orchestrator.cfw_register = Mock()
         orchestrator.cfw_register.release.side_effect = lambda: calls.append("release")
 
-        orchestrator.__exit__(None, None, None)
+        with patch(
+            "mloda.core.runtime.run.release_shared_manager", side_effect=lambda m: calls.append("manager_release")
+        ) as release_manager:
+            orchestrator.__exit__(None, None, None)
+            assert calls == ["standbys", "terminate", "release", "manager_release"]
+            release_manager.assert_called_once_with(manager)
+            assert orchestrator.manager is None
 
-        assert calls == ["standbys", "terminate", "release"]
-        orchestrator.manager.shutdown.assert_not_called()
+            orchestrator.__exit__(None, None, None)
+            release_manager.assert_called_once_with(manager)
+
+        manager.shutdown.assert_not_called()
 
     @pytest.mark.timeout(30)
     def test_two_multiprocessing_orchestrators_share_the_manager_and_get_their_own_register(self) -> None:
@@ -710,43 +723,63 @@ class TestEnterPrestartsStandbyWorkers:
         first = self._entering(WorkerManager())
         second = self._entering(WorkerManager())
 
-        first.__enter__(modes)
-        second.__enter__(modes)
+        held: Any = shared_manager()
+        users_before = held.users
+        try:
+            first.__enter__(modes)
+            second.__enter__(modes)
 
-        assert first.manager is not None
-        assert first.manager is second.manager
-        assert first.manager.is_alive()
-        first.cfw_register.set_location("here")
-        assert second.cfw_register.get_location() is None
+            manager = first.manager
+            assert manager is not None
+            assert manager is second.manager
+            assert manager.is_alive()
+            first.cfw_register.set_location("here")
+            assert second.cfw_register.get_location() is None
 
-        first.__exit__(None, None, None)
-        second.__exit__(None, None, None)
+            first.__exit__(None, None, None)
+            second.__exit__(None, None, None)
 
-        assert first.manager.is_alive()
+            assert manager.users == users_before
+            assert manager.is_alive()
+        finally:
+            cfw_module.release_shared_manager(held)
 
     @pytest.mark.parametrize(
-        "error, propagates",
-        [(RuntimeError("release failed"), False), (KeyboardInterrupt(), True)],
-        ids=["exception_swallowed", "keyboard_interrupt_propagates"],
+        "failing_step, error, propagates",
+        [
+            ("register_release", RuntimeError("release failed"), False),
+            ("register_release", KeyboardInterrupt(), True),
+            ("terminate_alive_processes", RuntimeError("terminate failed"), True),
+        ],
+        ids=["exception_swallowed", "keyboard_interrupt_propagates", "terminate_error_propagates"],
     )
     def test_exit_release_failure_is_best_effort_except_for_base_exceptions(
-        self, error: BaseException, propagates: bool, caplog: pytest.LogCaptureFixture
+        self, failing_step: str, error: BaseException, propagates: bool, caplog: pytest.LogCaptureFixture
     ) -> None:
-        orchestrator = self._entering(Mock())
-        orchestrator.manager = Mock()
+        worker_manager = Mock()
+        orchestrator = self._entering(worker_manager)
+        manager = Mock()
+        orchestrator.manager = manager
         orchestrator.cfw_register = Mock()
-        orchestrator.cfw_register.release.side_effect = error
-
-        if propagates:
-            with pytest.raises(KeyboardInterrupt):
-                orchestrator.__exit__(None, None, None)
+        if failing_step == "register_release":
+            orchestrator.cfw_register.release.side_effect = error
         else:
-            with caplog.at_level(logging.WARNING):
-                orchestrator.__exit__(None, None, None)
-            assert [r for r in caplog.records if r.levelno == logging.WARNING]
+            worker_manager.terminate_alive_processes.side_effect = error
 
-        orchestrator.cfw_register.release.assert_called_once_with()
-        orchestrator.manager.shutdown.assert_not_called()
+        with patch("mloda.core.runtime.run.release_shared_manager") as release_manager:
+            if propagates:
+                with pytest.raises(type(error)):
+                    orchestrator.__exit__(None, None, None)
+            else:
+                with caplog.at_level(logging.WARNING):
+                    orchestrator.__exit__(None, None, None)
+                assert [r for r in caplog.records if r.levelno == logging.WARNING]
+
+        manager.shutdown.assert_not_called()
+        release_manager.assert_called_once_with(manager)
+        assert orchestrator.manager is None
+        if failing_step == "register_release":
+            orchestrator.cfw_register.release.assert_called_once_with()
 
     def test_exit_without_a_manager_does_not_release_the_register(self) -> None:
         orchestrator = self._entering(Mock())
@@ -1097,7 +1130,7 @@ class TestExitOfANeverEnteredOrchestrator:
     def test_exit_on_a_never_entered_orchestrator_does_not_raise(self) -> None:
         ExecutionOrchestrator(Mock(spec=ExecutionPlan)).__exit__(None, None, None)
 
-    def test_exit_after_a_register_creation_failure_does_not_raise(self) -> None:
+    def test_exit_after_a_register_creation_failure_does_not_raise(self, caplog: pytest.LogCaptureFixture) -> None:
         plan = ExecutionPlan()
         plan.execution_plan = []
         orchestrator = ExecutionOrchestrator(plan)
@@ -1109,12 +1142,18 @@ class TestExitOfANeverEnteredOrchestrator:
         with (
             patch("mloda.core.runtime.run.planned_worker_count", return_value=0),
             patch("mloda.core.runtime.run.shared_manager", return_value=manager),
+            patch("mloda.core.runtime.run.release_shared_manager") as release_manager,
         ):
             with pytest.raises(RuntimeError, match="register creation failed"):
                 orchestrator.__enter__({ParallelizationMode.MULTIPROCESSING})
 
+            assert orchestrator.manager is manager
+            with caplog.at_level(logging.WARNING):
+                orchestrator.__exit__(None, None, None)
+
+        release_manager.assert_called_once_with(manager)
         assert orchestrator.manager is None
-        orchestrator.__exit__(None, None, None)
+        assert not [r for r in caplog.records if r.levelno == logging.WARNING]
 
 
 class TestRequestNotifiesExtendersOfRunCompletion:
@@ -1144,6 +1183,7 @@ class TestRequestNotifiesExtendersOfRunCompletion:
         real_exit = ExecutionOrchestrator.__exit__
         manager_spy = Mock()
         release_spy = Mock()
+        monkeypatch.setattr("mloda.core.runtime.run.release_shared_manager", Mock())
 
         def logged_exit(self: ExecutionOrchestrator, *args: Any) -> None:
             if self.manager is None:

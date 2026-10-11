@@ -203,6 +203,46 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
                     pass
 
 
+class TestForkedChildOfAProcessWithASharedManager:
+    @pytest.mark.parametrize("variant", ["single_manager", "replaced_manager_still_in_use"])
+    @pytest.mark.timeout(40)
+    def test_forked_child_exits_cleanly_and_the_parents_server_survives(self, variant: str, tmp_path: Path) -> None:
+        replace = (
+            "    sys.path.append(os.path.dirname(stderr_path))\n    m.shared_manager()\n"
+            if variant == "replaced_manager_still_in_use"
+            else ""
+        )
+        probe = tmp_path / "probe.py"
+        stderr_file = tmp_path / "child_stderr.txt"
+        probe.write_text(
+            "import json\n"
+            "import os\n"
+            "import sys\n"
+            "import mloda.core.core.cfw_manager as m\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    manager = m.shared_manager()\n"
+            f"    stderr_path = {str(stderr_file)!r}\n" + replace + "    pid = os.fork()\n"
+            "    if pid == 0:\n"
+            "        fd = os.open(stderr_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)\n"
+            "        os.dup2(fd, 2)\n"
+            "        sys.exit(0)\n"
+            "    _, status = os.waitpid(pid, 0)\n"
+            "    with open(stderr_path) as handle:\n"
+            "        text = handle.read()\n"
+            '    print(json.dumps({"stderr": text, "status": str(os.waitstatus_to_exitcode(status)),'
+            ' "alive": str(manager.is_alive())}))\n'
+        )
+
+        result = run_probes(probe, 1)[0]
+
+        assert result["status"] == "0"
+        assert "AssertionError" not in result["stderr"]
+        # The interpreter's own resource tracker may write to a forked child's stderr.
+        assert "can only join a child process" not in result["stderr"]
+        assert result["alive"] == "True"
+
+
 class TestSharedManagerServerDoesNotOutliveACleanParentExit:
     @pytest.mark.timeout(40)
     def test_server_is_gone_after_the_parent_interpreter_exits_normally(self, tmp_path: Path) -> None:

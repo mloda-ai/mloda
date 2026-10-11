@@ -327,6 +327,7 @@ class PreFilterPlugins:
         compute_frameworks: set[type[ComputeFramework]],
         plugin_collector: PluginCollector | None = None,
     ) -> None:
+        self.excluded_feature_groups: dict[type[FeatureGroup], str] = {}
         feature_groups = self._set_feature_groups(plugin_collector)
         compute_frameworks = self._set_compute_frameworks(compute_frameworks, plugin_collector)
 
@@ -345,6 +346,7 @@ class PreFilterPlugins:
             for accessible_fg in deepcopy(accessible_feature_groups):
                 if not plugin_collector.applicable_feature_group_class(accessible_fg):
                     accessible_feature_groups.remove(accessible_fg)
+                    self.excluded_feature_groups[accessible_fg] = "disabled by the PluginCollector"
         collector_filtered_everything = (
             plugin_collector is not None and loaded_universe_was_non_empty and len(accessible_feature_groups) == 0
         )
@@ -361,6 +363,10 @@ class PreFilterPlugins:
             accessible_feature_groups = {
                 fg for fg in accessible_feature_groups if fg in registered or inspect.isabstract(fg)
             }
+            for fg in before_strict - accessible_feature_groups:
+                self.excluded_feature_groups[fg] = (
+                    "dropped by strict mode: not registered in the plugin registry (a plugin policy may have denied it)"
+                )
             if plugin_collector is not None:
                 dropped_enabled = sorted(
                     f"{fg.__module__}:{fg.__qualname__}"

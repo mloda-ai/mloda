@@ -97,7 +97,7 @@ The stdlib reader does not yet cover pyarrow's full surface. Where they differ, 
 
 ### Pointing a feature at a source
 
-- `options={"CsvFG": path}` points the group at one file (or folder). A subclass also answers to its parent's name, so `Feature("x", options={"CsvFG": path})` reaches a `CsvFG` subclass.
+- `options={"CsvFG": path}` points the group at one file (or folder). A subclass also answers to its parent's name, so `Feature("x", options={"CsvFG": path})` reaches a `CsvFG` subclass. A pointer makes the other format groups skip the collection, and a pointer at a group that is not accessible in the run raises, naming the filter that dropped it.
 - `options={"SqliteFG": Credential(sqlite="/x.db")}` points a database group at one database. Prefer `Credential` for secrets: a plain-dict pointer shows its values in `str(options)`.
 - `Feature(name, options={"query_text": ..., "<Group>": Credential(...)})` runs a query on a database group that opts into `ReadDBFG.QUERY_ROUTE`.
 - `Feature(..., feature_group=CsvFG)` scopes resolution to that group (and its subclasses) without choosing a source.

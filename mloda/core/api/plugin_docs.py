@@ -419,9 +419,8 @@ def resolve_feature(
         compute_frameworks if compute_frameworks is not None else get_all_subclasses(ComputeFramework)
     )
     try:
-        accessible_plugins: FeatureGroupEnvironmentMapping = PreFilterPlugins(
-            restricted_frameworks, plugin_collector
-        ).get_accessible_plugins()
+        pre_filter = PreFilterPlugins(restricted_frameworks, plugin_collector)
+        accessible_plugins: FeatureGroupEnvironmentMapping = pre_filter.get_accessible_plugins()
     except (RedefinitionConflictError, EnvironmentPreconditionError, FrameworkDeclarationError) as exc:
         # mloda's own environment failure: already a complete sentence. Project it bare, no candidates.
         return ResolvedFeature(feature_name, None, [], error=f"{exc}{scope_suffix}")
@@ -445,7 +444,11 @@ def resolve_feature(
     # renderer can raise; resolve_feature must not, so degrade any raise into an error result.
     evaluation, eval_error = safe_field_with_error(
         lambda: evaluate_and_render(
-            feature_obj, accessible_plugins, links=links, data_access_collection=data_access_collection
+            feature_obj,
+            accessible_plugins,
+            links=links,
+            data_access_collection=data_access_collection,
+            excluded=pre_filter.excluded_feature_groups,
         ),
         None,
     )

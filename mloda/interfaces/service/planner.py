@@ -14,6 +14,7 @@ import re
 import secrets
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
@@ -40,6 +41,7 @@ from mloda.user import (
     PluginCollector,
     PluginLoader,
     ResolutionDiagnosis,
+    RunResult,
     mloda,
 )
 from mloda_plugins.feature_group.input_data.read_file import ReadFile
@@ -146,6 +148,28 @@ def _plan_invalid(message: str) -> dict[str, Any]:
     return error_result("plan_invalid", message)
 
 
+def _producers(steps: Sequence[PlanStep], aliases: Sequence[str | None]) -> dict[str, tuple[PlanStep, str | None]]:
+    producers: dict[str, tuple[PlanStep, str | None]] = {}
+    for step, alias in zip(steps, aliases):
+        for name in step.feature_names:
+            producers.setdefault(name, (step, alias))
+    return producers
+
+
+@dataclass(frozen=True)
+class PlannedRequest:
+    """A request that passed validation, policy, filter and row-limit checks, with its resolved plan."""
+
+    parsed: ParsedRequest
+    names: tuple[str, ...]
+    sources: Mapping[str, SourceConfig]
+    steps: tuple[PlanStep, ...]
+    aliases: tuple[str | None, ...]
+    producers: Mapping[str, tuple[PlanStep, str | None]]
+    estimate: dict[str, Any]
+    digest: str
+
+
 class Planner:
     """Plans feature requests under one Settings and signs each plan into a verifiable plan id."""
 
@@ -167,8 +191,20 @@ class Planner:
         self._base = plugin_collector
         self._clock = clock
 
+    @property
+    def settings(self) -> Settings:
+        """The settings this planner plans under."""
+        return self._settings
+
     def explain(self, request: Any) -> dict[str, Any]:
         """Plan ``request`` and describe the plan, or return an error result."""
+        planned = self.plan(request)
+        if isinstance(planned, dict):
+            return planned
+        return self._described(planned)
+
+    def plan(self, request: Any) -> PlannedRequest | dict[str, Any]:
+        """Validate, policy-check and plan ``request`` within the row limits, or return the error result."""
         problems = validate_request(request, self._settings)
         if problems:
             return error_result("validation_failed", "The request is invalid.", problems_to_details(problems))
@@ -193,7 +229,33 @@ class Planner:
         unmatched = self._unmatched_filters(parsed, request.get("filters", []))
         if unmatched is not None:
             return unmatched
-        return self._described(parsed, steps, sources)
+        aliases = tuple(_alias_of(step, sources) for step in steps)
+        estimate = self._estimate(steps, aliases)
+        limited = self._limit_exceeded(estimate["sources"])
+        if limited is not None:
+            return limited
+        return PlannedRequest(
+            parsed=parsed,
+            names=tuple(dict.fromkeys(_feature_name(feature) for feature in parsed.features)),
+            sources=sources,
+            steps=tuple(steps),
+            aliases=aliases,
+            producers=_producers(steps, aliases),
+            estimate=estimate,
+            digest=_digest(steps),
+        )
+
+    def execute(self, planned: PlannedRequest) -> RunResult:
+        """Run a planned request with mloda under the service lock and this planner's principal."""
+        with verified_context(principal=self._principal), MLODA_LOCK:
+            PluginLoader.all()
+            kwargs = self._plan_kwargs(planned.parsed, planned.sources)
+            return mloda.run_all(planned.parsed.features, output_framework="PythonDictFramework", **kwargs)
+
+    def classifications(self, names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, str]:
+        """Each name's classification: explicit in the settings, else the strictest of its inputs'."""
+        producers = _producers(steps, [_alias_of(step, self._settings.sources) for step in steps])
+        return {name: self._classification(name, producers, frozenset()) for name in names}
 
     def verify_plan_id(self, plan_id: Any) -> dict[str, Any]:
         """The request and plan digest of an unexpired plan id this planner issued, else a plan_invalid error."""
@@ -303,28 +365,17 @@ class Planner:
             return None
         return error_result("validation_failed", "A filter matches no planned feature.", details)
 
-    def _described(
-        self, parsed: ParsedRequest, steps: Sequence[PlanStep], sources: Mapping[str, SourceConfig]
-    ) -> dict[str, Any]:
-        aliases = [_alias_of(step, sources) for step in steps]
-        producers: dict[str, tuple[PlanStep, str | None]] = {}
-        for step, alias in zip(steps, aliases):
-            for name in step.feature_names:
-                producers.setdefault(name, (step, alias))
-        names = list(dict.fromkeys(_feature_name(feature) for feature in parsed.features))
-        estimate = self._estimate(steps, aliases)
-        limited = self._limit_exceeded(estimate["sources"])
-        if limited is not None:
-            return limited
+    def _described(self, planned: PlannedRequest) -> dict[str, Any]:
         expires = math.floor(self._clock()) + self._settings.plan_ttl_seconds
+        steps = zip(planned.steps, planned.aliases)
         return {
-            "plan_id": self._sign(parsed.normalized, _digest(steps), expires),
+            "plan_id": self._sign(planned.parsed.normalized, planned.digest, expires),
             "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "normalized_request": parsed.normalized,
-            "steps": [_step_record(index, step, alias) for index, (step, alias) in enumerate(zip(steps, aliases), 1)],
-            "lineage": {name: sorted(self._lineage(name, producers, frozenset())) for name in names},
-            "estimate": estimate,
-            "egress": self._egress(names, producers),
+            "normalized_request": planned.parsed.normalized,
+            "steps": [_step_record(index, step, alias) for index, (step, alias) in enumerate(steps, 1)],
+            "lineage": {name: sorted(self._lineage(name, planned.producers, frozenset())) for name in planned.names},
+            "estimate": planned.estimate,
+            "egress": self._egress(planned.names, planned.producers),
             "policy": {"verdict": "allowed"},
         }
 

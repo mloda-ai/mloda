@@ -101,7 +101,8 @@ class _JoinServedParent(NamedTuple):
 class _LineageMemo:
     """Per-add_tfs memo of same-framework lineages and the graph's reverse edges, the latter built on first use."""
 
-    def __init__(self) -> None:
+    def __init__(self, join_adjacency: dict[UUID, set[UUID]] | None = None) -> None:
+        self.join_adjacency = join_adjacency
         self.lineages: dict[UUID, set[UUID]] = {}
         self._edge_parents: dict[UUID, set[UUID]] | None = None
 
@@ -139,6 +140,9 @@ class ExecutionPlan:
 
         # Helper variable
         self.feature_set_collections: list[set[UUID]] = []
+        self._feature_set_index_cache: dict[UUID, list[int]] = {}
+        self._feature_set_index_source: list[set[UUID]] | None = None
+        self._feature_set_index_length = 0
 
         # Report each divergence once, then at DEBUG.
         self.reported_unmatched: set[tuple[type[FeatureGroup], str, tuple[str, ...]]] = set()
@@ -215,6 +219,9 @@ class ExecutionPlan:
         self.declared_frameworks = {}
         self.resolved_input_feature_names = None
         self.specialized_from = None
+        self._feature_set_index_cache = {}
+        self._feature_set_index_source = None
+        self._feature_set_index_length = 0
 
     def add_feature_group_step(
         self,
@@ -224,6 +231,7 @@ class ExecutionPlan:
         nodes: dict[UUID, NodeProperties] | None = None,
     ) -> list[LinkFrameworkTrekker | FeatureGroupStep]:
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep] = []
+        root_parent_children_mapping = self.get_parent_children_mapping(parent_to_children_mapping)
 
         for element in queue:
             if isinstance(element[0], Link):
@@ -236,7 +244,11 @@ class ExecutionPlan:
 
                 links_pre_calulated = self.retrieve_links_which_must_be_calculated_before(element[1], child_links)
                 feature_group_steps = self.run_feature_group(
-                    element, parent_to_children_mapping, links_pre_calulated, nodes
+                    element,
+                    parent_to_children_mapping,
+                    links_pre_calulated,
+                    nodes,
+                    root_parent_children_mapping=root_parent_children_mapping,
                 )
                 for fg_step in feature_group_steps.values():
                     pre_execution_plan.append(fg_step)
@@ -301,6 +313,11 @@ class ExecutionPlan:
         parent_to_children_mapping: dict[UUID, set[UUID]],
     ) -> None:
         """Stamp link-read columns on the join members and every step upstream of them, which may pass them through."""
+        steps_holding: dict[UUID, list[FeatureGroupStep]] = defaultdict(list)
+        for plan_step in plan:
+            if isinstance(plan_step, FeatureGroupStep):
+                for held in plan_step.get_uuids():
+                    steps_holding[held].append(plan_step)
         for join_step in plan:
             if not isinstance(join_step, JoinStep):
                 continue
@@ -317,9 +334,9 @@ class ExecutionPlan:
                     reached.add(parent)
                     stack.append(parent)
 
-            for step in plan:
-                if isinstance(step, FeatureGroupStep) and step.get_uuids() & reached:
-                    step.features.link_index_columns = step.features.link_index_columns | index_columns
+            stamped = {id(step): step for uuid in reached for step in steps_holding.get(uuid, ())}
+            for step in stamped.values():
+                step.features.link_index_columns = step.features.link_index_columns | index_columns
 
     def _exclude_link_resolved_buckets(
         self,
@@ -462,6 +479,21 @@ class ExecutionPlan:
         return bool(closure_a & closure_b)
 
     @staticmethod
+    def _join_adjacency(join_steps: set[JoinStep]) -> dict[UUID, set[UUID]]:
+        """Feature uuid to the uuids it is joined with through a JoinStep's sides and carriers."""
+        adjacency: dict[UUID, set[UUID]] = defaultdict(set)
+        for js in join_steps:
+            for dest_uuid in js.destination_framework_uuids:
+                adjacency[dest_uuid].update(js.source_framework_uuids)
+            for src_uuid in js.source_framework_uuids:
+                adjacency[src_uuid].update(js.destination_framework_uuids)
+            for carrier in js.carriers:
+                adjacency[carrier].update(js.destination_framework_uuids | js.source_framework_uuids)
+                for side_uuid in js.destination_framework_uuids | js.source_framework_uuids:
+                    adjacency[side_uuid].add(carrier)
+        return adjacency
+
+    @staticmethod
     def _parents_linked_by_join(
         uuid_a: UUID,
         uuid_b: UUID,
@@ -474,16 +506,10 @@ class ExecutionPlan:
         if uuid_a == uuid_b:
             return True
 
-        adjacency: dict[UUID, set[UUID]] = defaultdict(set)
-        for js in join_steps:
-            for dest_uuid in js.destination_framework_uuids:
-                adjacency[dest_uuid].update(js.source_framework_uuids)
-            for src_uuid in js.source_framework_uuids:
-                adjacency[src_uuid].update(js.destination_framework_uuids)
-            for carrier in js.carriers:
-                adjacency[carrier].update(js.destination_framework_uuids | js.source_framework_uuids)
-                for side_uuid in js.destination_framework_uuids | js.source_framework_uuids:
-                    adjacency[side_uuid].add(carrier)
+        if memo is not None and memo.join_adjacency is not None:
+            adjacency = memo.join_adjacency
+        else:
+            adjacency = ExecutionPlan._join_adjacency(join_steps)
 
         starts = ExecutionPlan._same_framework_lineage(uuid_a, graph, memo)
         targets = ExecutionPlan._same_framework_lineage(uuid_b, graph, memo)
@@ -492,7 +518,7 @@ class ExecutionPlan:
         visited = set(starts)
         frontier = set(starts)
         while frontier:
-            reached = set().union(*(adjacency[node] for node in frontier))
+            reached = set().union(*(adjacency.get(node, set()) for node in frontier))
             if reached & targets:
                 return True
             frontier = reached - visited
@@ -552,17 +578,17 @@ class ExecutionPlan:
         nodes: dict[UUID, NodeProperties],
     ) -> list[set[Feature]]:
         """Bucket members so none holds two that read one name from differing variants of one source class."""
-        producer_of: dict[UUID, int] = {}
-        for index, uuids in enumerate(self.feature_set_collections):
-            for uuid in uuids:
-                producer_of[uuid] = index
+        producer_index = self._feature_set_index()
+
+        def producer_of(uuid: UUID) -> int:
+            return producer_index[uuid][-1]
 
         member_uuids = {f.uuid: f for f in features}
 
         def direct_parents(feature: Feature) -> list[UUID]:
             ancestors = parent_to_children_mapping.get(feature.uuid, set())
             direct = ancestors - {p for a in ancestors for p in parent_to_children_mapping.get(a, set())}
-            return sorted(uuid for uuid in direct if uuid in producer_of)
+            return sorted(uuid for uuid in direct if uuid in producer_index)
 
         def same_group_ancestors(feature: Feature) -> list[Feature]:
             ancestors = parent_to_children_mapping.get(feature.uuid, set())
@@ -581,7 +607,7 @@ class ExecutionPlan:
             for a in parents_a:
                 for b in parents_b:
                     if (
-                        producer_of[a] == producer_of[b]
+                        producer_of(a) == producer_of(b)
                         or nodes[a].feature_group_class is not nodes[b].feature_group_class
                     ):
                         continue
@@ -890,14 +916,19 @@ Available join types:
             step.uuid: {producer_of[token] for token in step.get_wait_uuids() if token in producer_of} for step in steps
         }
 
-        while True:
-            ready = {uuid for uuid, waits_for in pending.items() if not waits_for}
-            if not ready:
-                break
-            for uuid in ready:
-                del pending[uuid]
-            for waits_for in pending.values():
-                waits_for -= ready
+        dependents: dict[UUID, list[UUID]] = defaultdict(list)
+        unmet = {uuid: len(waits_for) for uuid, waits_for in pending.items()}
+        for uuid, waits_for in pending.items():
+            for producer in waits_for:
+                dependents[producer].append(uuid)
+        queue = [uuid for uuid, count in unmet.items() if count == 0]
+        while queue:
+            done = queue.pop()
+            del pending[done]
+            for dependent in dependents.get(done, ()):
+                unmet[dependent] -= 1
+                if unmet[dependent] == 0:
+                    queue.append(dependent)
 
         if pending:
             raise ValueError(
@@ -1001,15 +1032,25 @@ Available join types:
         )
 
     @staticmethod
+    def _both_side_readers(ep: JoinStep, required_by: Mapping[UUID, Sequence[int]]) -> set[int]:
+        """Plan positions of the steps requiring a destination uuid and a source uuid of the join."""
+        destination = {p for u in ep.destination_framework_uuids for p in required_by.get(u, ())}
+        return destination & {p for u in ep.source_framework_uuids for p in required_by.get(u, ())}
+
+    @staticmethod
     def _redirect_consumers_to_hop(
         ep: JoinStep,
         hop: TransformFrameworkStep,
         execution_plan: Sequence[JoinStep | FeatureGroupStep],
         only_consumers: frozenset[UUID] | None = None,
+        required_by: Mapping[UUID, Sequence[int]] | None = None,
     ) -> None:
         """Point the join's consumers on its destination framework at the hop's frame."""
         readers: set[UUID] = set()
-        for inner_ep in execution_plan:
+        candidates: Sequence[JoinStep | FeatureGroupStep] = execution_plan
+        if required_by is not None:
+            candidates = [execution_plan[p] for p in sorted(ExecutionPlan._both_side_readers(ep, required_by))]
+        for inner_ep in candidates:
             if (
                 isinstance(inner_ep, FeatureGroupStep)
                 and inner_ep.compute_framework == ep.destination_framework
@@ -1126,7 +1167,24 @@ Available join types:
         steps_by_uuid: dict[UUID, Step] = {ep.uuid: ep for ep in execution_plan}
         producer_of: dict[UUID, UUID] = {token: ep.uuid for ep in execution_plan for token in ep.get_uuids()}
 
-        memo = _LineageMemo()
+        join_side_uuids: set[UUID] = set()
+        for js in left_join_frameworks:
+            join_side_uuids |= js.destination_framework_uuids | js.source_framework_uuids
+        positions_holding: dict[UUID, list[int]] = defaultdict(list)
+        required_by: dict[UUID, list[int]] = defaultdict(list)
+        if join_side_uuids:
+            for position, plan_step in enumerate(execution_plan):
+                if isinstance(plan_step, FeatureGroupStep):
+                    for held in plan_step.get_uuids():
+                        positions_holding[held].append(position)
+                    for required in plan_step.required_uuids & join_side_uuids:
+                        required_by[required].append(position)
+
+        memo = _LineageMemo(self._join_adjacency(left_join_frameworks))
+        joins_by_feature: dict[UUID, list[JoinStep]] = defaultdict(list)
+        for js in left_join_frameworks:
+            for side_uuid in js.destination_framework_uuids | js.source_framework_uuids | js.carriers:
+                joins_by_feature[side_uuid].append(js)
         # (consumer step, its hop, same-framework parent) triples, resolved once the plan list is complete.
         hop_same_framework_pairs: list[tuple[FeatureGroupStep, TransformFrameworkStep, UUID]] = []
         for ep in execution_plan:
@@ -1148,7 +1206,9 @@ Available join types:
                         ep.required_uuids.add(destination_hop.uuid)
                         ep.destination_hop_uuid = destination_hop.uuid
                         need_to_upload_collector.update(ep.carriers or ep.destination_framework_uuids)
-                        self._redirect_consumers_to_hop(ep, destination_hop, execution_plan, ep.split_consumers)
+                        self._redirect_consumers_to_hop(
+                            ep, destination_hop, execution_plan, ep.split_consumers, required_by
+                        )
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -1181,9 +1241,16 @@ Available join types:
                             mids = self._same_framework_mids(ep, ep.split_consumers or frozenset(), graph)
                             destination_hop.order_after_uuids |= mids
                             need_to_upload_collector.update(mids | ep.destination_framework_uuids)
-                        self._redirect_consumers_to_hop(ep, destination_hop, execution_plan, ep.split_consumers)
+                        self._redirect_consumers_to_hop(
+                            ep, destination_hop, execution_plan, ep.split_consumers, required_by
+                        )
 
-                    for inner_ep in execution_plan:
+                    candidate_positions = {
+                        p
+                        for u in ep.source_framework_uuids | ep.destination_framework_uuids
+                        for p in positions_holding.get(u, ())
+                    } | self._both_side_readers(ep, required_by)
+                    for inner_ep in (execution_plan[p] for p in sorted(candidate_positions)):
                         if isinstance(inner_ep, FeatureGroupStep):
                             # 1) We do 1 here:
                             for uuid in inner_ep.get_uuids():
@@ -1245,10 +1312,11 @@ Available join types:
 
                 for parent in parents:
                     parent_node_property = graph.get_nodes()[parent]
+                    parent_feature_uuid = parent_node_property.feature.uuid
                     matching_join_steps = [
                         js
-                        for js in left_join_frameworks
-                        if js.matched(ep.compute_framework, parent_node_property.feature.uuid, ep.required_uuids)
+                        for js in joins_by_feature.get(parent_feature_uuid, ())
+                        if js.matched(ep.compute_framework, parent_feature_uuid, ep.required_uuids)
                     ]
                     if matching_join_steps:
                         # Served by a join, no explicit hop needed.
@@ -1379,7 +1447,7 @@ Available join types:
                     if nodes[declared].feature.get_compute_framework() != ep.compute_framework
                     and not any(
                         declared in js.carriers and js.matched(ep.compute_framework, declared, ep.required_uuids)
-                        for js in left_join_frameworks
+                        for js in joins_by_feature.get(declared, ())
                     )
                 ]
                 if cycle_errors:
@@ -1580,6 +1648,10 @@ Available join types:
         # A hop's own source, keyed by hop uuid; always resolved (see the invariant checks below),
         # read by the transitive reach walk further down.
         hop_source_owner_by_hop: dict[UUID, UUID] = {}
+        join_uuids_by_owner: dict[UUID, set[UUID]] = defaultdict(set)
+        for js in joinsteps_by_uuid.values():
+            for side_uuid in js.source_framework_uuids | js.destination_framework_uuids:
+                join_uuids_by_owner[_owning_step(side_uuid)].add(js.uuid)
         for _ep in new_execution_plan:
             if not isinstance(_ep, TransformFrameworkStep):
                 continue
@@ -1630,13 +1702,7 @@ Available join types:
 
             hop_source_owner_by_hop[_ep.uuid] = hop_source_owner
 
-            other_join_source_owners = {
-                _owning_step(uuid)
-                for js in joinsteps_by_uuid.values()
-                if js.uuid not in served_joinstep_uuids
-                for uuid in (js.source_framework_uuids | js.destination_framework_uuids)
-            }
-            if hop_source_owner in other_join_source_owners:
+            if join_uuids_by_owner.get(hop_source_owner, set()) - served_joinstep_uuids:
                 continue
 
             eligible_hops[_ep.uuid] = _ep
@@ -1979,13 +2045,13 @@ Available join types:
         self, link: Link, children_uuids: set[UUID], graph: Graph
     ) -> list[tuple[set[UUID], JoinSide | None]]:
         """Split children reading disjoint side steps (e.g. option variants), each getting a join, with the varying side."""
-        step_of = {uuid: index for index, uuids in enumerate(self.feature_set_collections) for uuid in uuids}
+        step_index = self._feature_set_index()
         components: list[tuple[set[UUID], set[int]]] = []
         side_steps: dict[UUID, tuple[frozenset[int], frozenset[int]]] = {}
         for child in sorted(children_uuids):
             split = split_by_declared_side(link, set(graph.parent_to_children_mapping[child]), graph)
-            left = frozenset(step_of[uuid] for uuid in split.left_uuids_any_distance if uuid in step_of)
-            right = frozenset(step_of[uuid] for uuid in split.right_uuids_any_distance if uuid in step_of)
+            left = frozenset(step_index[uuid][-1] for uuid in split.left_uuids_any_distance if uuid in step_index)
+            right = frozenset(step_index[uuid][-1] for uuid in split.right_uuids_any_distance if uuid in step_index)
             steps = set(left | right)
             if not steps:
                 return [(children_uuids, None)]
@@ -2522,8 +2588,7 @@ Available join types:
     ) -> bool | tuple[set[UUID], set[UUID]]:
         # get feature which could be left
         parents = graph.parent_to_children_mapping[children_uuid]
-        local_feature_set_collection = deepcopy(self.feature_set_collections)
-        feature_set_collection_per_uuid = self.find_feature_uuids(parents, local_feature_set_collection)
+        feature_set_collection_per_uuid = self.find_feature_uuids(parents)
 
         if len(feature_set_collection_per_uuid) == 0:
             raise ValueError(
@@ -2649,8 +2714,7 @@ Available join types:
 
         # get feature which could be left
         parents = graph.parent_to_children_mapping[children_uuid]
-        local_feature_set_collection = deepcopy(self.feature_set_collections)
-        feature_set_collection_per_uuid = self.find_feature_uuids(parents, local_feature_set_collection)
+        feature_set_collection_per_uuid = self.find_feature_uuids(parents)
 
         if len(feature_set_collection_per_uuid) == 0:
             raise ValueError(
@@ -2768,21 +2832,43 @@ Available join types:
 
         return self._matches_discriminator(pointer_dict, graph, uuid)
 
-    def find_feature_uuids(
-        self, parents: set[UUID], local_feature_set_collection: list[set[UUID]]
-    ) -> dict[UUID, set[UUID]]:
+    def _feature_set_index(self) -> dict[UUID, list[int]]:
+        """Feature uuid to the ascending indices of the feature sets holding it, rebuilt when the list changed.
+        In-place replacement of an element or mutation of a member set is not detected."""
+        collections = self.feature_set_collections
+        if self._feature_set_index_source is not collections or self._feature_set_index_length != len(collections):
+            index: dict[UUID, list[int]] = {}
+            for position, uuids in enumerate(collections):
+                for uuid in uuids:
+                    index.setdefault(uuid, []).append(position)
+            self._feature_set_index_cache = index
+            self._feature_set_index_source = collections
+            self._feature_set_index_length = len(collections)
+        return self._feature_set_index_cache
+
+    def _append_feature_set(self, uuids: set[UUID]) -> None:
+        index = self._feature_set_index()
+        position = len(self.feature_set_collections)
+        self.feature_set_collections.append(uuids)
+        for uuid in uuids:
+            index.setdefault(uuid, []).append(position)
+        self._feature_set_index_length = len(self.feature_set_collections)
+
+    def find_feature_uuids(self, parents: set[UUID]) -> dict[UUID, set[UUID]]:
         """
         We group the feature_uuids by the feature_set_collection, which represent features of one concrete feature group (step).
         """
+        index = self._feature_set_index()
+        collections = self.feature_set_collections
         feature_set_collection_per_uuid = defaultdict(set)
         already_used_parents = set()
         for parent in parents:
             if parent in already_used_parents:
                 continue
-            for feature_uuids in local_feature_set_collection:
-                if parent in feature_uuids:
-                    feature_set_collection_per_uuid[parent].update(feature_uuids)
-                    already_used_parents.update(feature_uuids)
+            for position in index.get(parent, ()):
+                feature_uuids = collections[position]
+                feature_set_collection_per_uuid[parent].update(feature_uuids)
+                already_used_parents.update(feature_uuids)
         return feature_set_collection_per_uuid
 
     def _split_features_by_dependency_levels(
@@ -2820,6 +2906,7 @@ Available join types:
         parent_to_children_mapping: dict[UUID, set[UUID]],
         pre_required_uuids: set[UUID],
         nodes: dict[UUID, NodeProperties] | None = None,
+        root_parent_children_mapping: dict[UUID, set[UUID]] | None = None,
     ) -> dict[Any, FeatureGroupStep]:
         feature_group, features = feature_group_features[0], feature_group_features[1]
         features_grouped_by_framework_and_options: dict[Any, set[Feature]] = (
@@ -2849,7 +2936,8 @@ Available join types:
 
         fg_steps: dict[Any, FeatureGroupStep] = {}
 
-        root_parent_children_mapping = self.get_parent_children_mapping(parent_to_children_mapping)
+        if root_parent_children_mapping is None:
+            root_parent_children_mapping = self.get_parent_children_mapping(parent_to_children_mapping)
 
         split_groups: list[tuple[Any, int, set[Feature]]] = []
         for f_hash, features in features_grouped_by_framework_and_options.items():
@@ -2886,7 +2974,7 @@ Available join types:
                     feature_set.add(feature)
                     feature.name
 
-                self.feature_set_collections.append(feature_set.get_all_feature_ids())
+                self._append_feature_set(feature_set.get_all_feature_ids())
 
                 if self.resolved_input_feature_names is not None:
                     # An injected filter or index feature is batched with its host and takes the host's

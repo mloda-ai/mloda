@@ -1,6 +1,8 @@
 """One record per join decision, built next to the join steps and signing the same joins they do."""
 
+import cProfile
 import pickle  # nosec B403
+import pstats
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, NamedTuple
@@ -9,6 +11,7 @@ from uuid import UUID
 import pytest
 
 from mloda.core.core.engine import Engine
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
@@ -1589,3 +1592,125 @@ def test_a_right_joins_declared_left_side_is_not_double_counted_as_a_right_side_
     join_steps = _join_steps(built.plan)
     assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
     assert join_steps[0].swap_merge_sides is False
+
+
+BASE_JOINS = 100
+MAX_CALL_RATIO_FOR_DOUBLED_JOINS = 3
+PAIR_SHAPES = ("cross_framework", "same_framework")
+
+
+class IndependentPairs(NamedTuple):
+    planned: Planned
+    links: list[Link]
+    sides: list[Sides]
+
+
+def _independent_pairs(count: int, shape: str) -> IndependentPairs:
+    """``count`` pairs sharing nothing; ``same_framework`` puts every feature on PyArrowTable."""
+    planned = _planned()
+    links: list[Link] = []
+    all_sides: list[Sides] = []
+    right_cfw = PyArrowTable if shape == "same_framework" else PandasDataFrame
+    for i in range(count):
+        left_fg = type(f"IndependentPairLeft{shape}{i}", (FeatureGroup,), {})
+        right_fg = type(f"IndependentPairRight{shape}{i}", (FeatureGroup,), {})
+        link = Link.inner(
+            JoinSpec(left_fg, Index((f"independent_{shape}_left_key_{i}",))),
+            JoinSpec(right_fg, Index((f"independent_{shape}_right_key_{i}",))),
+        )
+        links.append(link)
+        all_sides.append(_branch(planned, link, f"independent_{shape}_{i}", right_cfw=right_cfw))
+    return IndependentPairs(planned, links, all_sides)
+
+
+def _planning_calls(count: int, shape: str) -> tuple[int, IndependentPairs]:
+    """Plan ``count`` independent joins under a profiler and return the total function calls made."""
+    pairs = _independent_pairs(count, shape)
+    planned = pairs.planned
+    profiler = cProfile.Profile()
+    profiler.runcall(planned.plan.create_execution_plan, planned.queue, planned.graph, planned.link_trekker, {})
+    return pstats.Stats(profiler).total_calls, pairs  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("shape", PAIR_SHAPES, ids=list(PAIR_SHAPES))
+def test_planning_work_grows_linearly_with_independent_joins(shape: str) -> None:
+    warm = _independent_pairs(2, shape).planned
+    # The first plan in a process pays a one-time plugin import, which must not be counted.
+    warm.plan.create_execution_plan(warm.queue, warm.graph, warm.link_trekker, {})
+
+    calls_at_base, _ = _planning_calls(BASE_JOINS, shape)
+    calls_at_double, pairs = _planning_calls(2 * BASE_JOINS, shape)
+
+    ratio = calls_at_double / calls_at_base
+    assert calls_at_double < MAX_CALL_RATIO_FOR_DOUBLED_JOINS * calls_at_base, (
+        f"calls at {BASE_JOINS} joins: {calls_at_base}, at {2 * BASE_JOINS}: {calls_at_double}, ratio {ratio:.2f}, "
+        f"bound {MAX_CALL_RATIO_FOR_DOUBLED_JOINS} (linear is 2, quadratic is 4)"
+    )
+    planned = pairs.planned
+    join_steps = _join_steps(planned.plan)
+    assert sorted(str(step.link.uuid) for step in join_steps) == sorted(str(link.uuid) for link in pairs.links)
+    for link in pairs.links:
+        assert len(_records(planned.plan, link)) == 1
+
+
+def _fg_step(plan: ExecutionPlan, uuid: UUID) -> FeatureGroupStep:
+    matching = [step for step in plan if isinstance(step, FeatureGroupStep) and step.get_uuids() == {uuid}]
+    assert len(matching) == 1, f"expected one step for {uuid}; got {matching}"
+    return matching[0]
+
+
+@pytest.mark.parametrize("shape", PAIR_SHAPES, ids=list(PAIR_SHAPES))
+def test_independent_pairs_plan_the_same_structure_per_pair(shape: str) -> None:
+    """Pins the plan shape the planner rewrite must keep, expressed relative to each pair."""
+    pairs = _independent_pairs(4, shape)
+    planned = pairs.planned
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, {})
+    plan = planned.plan
+    cross = shape == "cross_framework"
+
+    join_steps = _join_steps(plan)
+    join_of = {link.uuid: [step for step in join_steps if step.link.uuid == link.uuid] for link in pairs.links}
+    assert all(len(steps) == 1 for steps in join_of.values())
+    assert len(join_steps) == len(pairs.links)
+    all_hops = [step for step in plan if isinstance(step, TransformFrameworkStep)]
+    assert len(all_hops) == (len(pairs.links) if cross else 0)
+
+    for index, (link, sides) in enumerate(zip(pairs.links, pairs.sides)):
+        join = join_of[link.uuid][0]
+        assert join.destination_framework_uuids == {sides.left_uuid}
+        assert join.source_framework_uuids == {sides.right_uuid}
+
+        hops = _transform_steps(plan, link)
+        assert len(hops) == (1 if cross else 0)
+        # Each join waits on its own sides and hop, and on every join of an earlier pair when the pairs
+        # cross frameworks; same framework joins wait on nothing else.
+        expected_required = {sides.left_uuid, sides.right_uuid} | {hop.uuid for hop in hops}
+        if cross:
+            expected_required |= {join_of[earlier.uuid][0].uuid for earlier in pairs.links[:index]}
+        assert join.required_uuids == expected_required
+        for hop in hops:
+            assert hop.link_id == join.uuid
+            assert hop.required_uuids == {sides.left_uuid, sides.right_uuid}
+            assert hop.owed_tokens == {sides.child_uuid}
+
+        consumer = _fg_step(plan, sides.child_uuid)
+        # A same framework consumer is anchored on the destination parent, which also is its only tfs id.
+        assert consumer.features.any_uuid == (sides.child_uuid if cross else sides.left_uuid)
+        assert consumer.tfs_ids == (set() if cross else {sides.left_uuid})
+        assert consumer.children_if_root == {sides.child_uuid}
+        assert consumer.need_to_upload is False
+        assert consumer.required_uuids == {join.uuid, sides.left_uuid, sides.right_uuid}
+        assert set(consumer.features.link_index_columns) == set()
+
+        pair_columns = {*link.left_index.index, *link.right_index.index}
+        left_step = _fg_step(plan, sides.left_uuid)
+        right_step = _fg_step(plan, sides.right_uuid)
+        assert left_step.children_if_root == {sides.left_uuid, sides.child_uuid}
+        assert right_step.children_if_root == {sides.right_uuid, sides.child_uuid} | (set() if cross else {join.uuid})
+        assert left_step.need_to_upload is False
+        assert right_step.need_to_upload is True
+        for parent in (left_step, right_step):
+            assert parent.features.any_uuid == (sides.left_uuid if parent is left_step else sides.right_uuid)
+            assert parent.tfs_ids == set()
+            assert parent.required_uuids == set()
+            assert set(parent.features.link_index_columns) == pair_columns

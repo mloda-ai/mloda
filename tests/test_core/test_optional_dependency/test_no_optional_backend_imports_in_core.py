@@ -8,7 +8,11 @@ place where the sys.modules gating and the "install the extra" message are imple
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 import mloda
 
@@ -35,10 +39,10 @@ def _is_type_checking_test(test: ast.expr) -> bool:
     return False
 
 
-def _type_checking_imports(tree: ast.Module) -> set[int]:
+def _type_checking_imports(nodes: Iterable[ast.AST]) -> set[int]:
     """Node ids of imports inside the body of an `if TYPE_CHECKING:` block. Annotations only, never executed."""
     guarded: set[int] = set()
-    for node in ast.walk(tree):
+    for node in nodes:
         if not isinstance(node, ast.If) or not _is_type_checking_test(node.test):
             continue
         for statement in node.body:
@@ -57,10 +61,10 @@ def _imported_roots(node: ast.Import | ast.ImportFrom) -> set[str]:
     return {node.module.partition(".")[0]}
 
 
-def _dynamic_import_aliases(tree: ast.Module) -> set[str]:
+def _dynamic_import_aliases(nodes: Iterable[ast.AST]) -> set[str]:
     """Bare names that reach a module by name: the builtins plus any `from importlib import import_module as X`."""
     aliases = set(DYNAMIC_IMPORT_NAMES)
-    for node in ast.walk(tree):
+    for node in nodes:
         if not isinstance(node, ast.ImportFrom) or node.module != "importlib":
             continue
         for alias in node.names:
@@ -91,9 +95,10 @@ def _violations(root: Path) -> list[str]:
     found: list[str] = []
     for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        guarded = _type_checking_imports(tree)
-        aliases = _dynamic_import_aliases(tree)
-        for node in ast.walk(tree):
+        nodes = list(ast.walk(tree))
+        guarded = _type_checking_imports(nodes)
+        aliases = _dynamic_import_aliases(nodes)
+        for node in nodes:
             if isinstance(node, (ast.Import, ast.ImportFrom)):
                 if id(node) in guarded:
                     continue
@@ -214,6 +219,40 @@ def test_guard_allows_type_checking_imports(tmp_path: Path) -> None:
     )
 
     assert _violations(tmp_path) == []
+
+
+def test_guard_parses_each_file_once_and_walks_each_tree_at_most_twice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "annotations_only.py").write_text(
+        "from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n    import pyarrow as pa\n"
+    )
+    (tmp_path / "aliased.py").write_text(
+        "from importlib import import_module as _im\n\n\ndef f():\n    return _im('pandas')\n"
+    )
+    real_parse = ast.parse
+    real_walk = ast.walk
+    parses: list[str] = []
+    tree_walks: list[ast.AST] = []
+
+    def counting_parse(source: str, *args: Any, **kwargs: Any) -> ast.Module:
+        parses.append(str(kwargs.get("filename", "")))
+        tree: ast.Module = real_parse(source, *args, **kwargs)
+        return tree
+
+    def counting_walk(node: ast.AST) -> Iterator[ast.AST]:
+        if isinstance(node, ast.Module):
+            tree_walks.append(node)
+        return real_walk(node)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(ast, "parse", counting_parse)
+        patch.setattr(ast, "walk", counting_walk)
+        violations = _violations(tmp_path)
+
+    assert len(parses) == 2, f"expected one parse per file, got {len(parses)}"
+    assert len(tree_walks) <= 4, f"expected at most 2 whole-tree walks per file (4), got {len(tree_walks)}"
+    assert _backends(violations) == ["pandas"]
 
 
 def test_guard_allows_non_backend_imports(tmp_path: Path) -> None:

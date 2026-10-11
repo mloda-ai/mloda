@@ -9,6 +9,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -21,6 +22,7 @@ from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import feature_config_schema
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.global_filter import GlobalFilter
+from mloda.core.filter.single_filter import SingleFilter
 from mloda.interfaces.service.config import Settings
 
 SCHEMA_ID = "mloda://schema/feature-request"
@@ -63,12 +65,13 @@ class Problem:
 
 @dataclass(frozen=True)
 class ParsedRequest:
-    """A request built into mloda Features, an optional GlobalFilter and a canonical form."""
+    """A request built into mloda Features, an optional GlobalFilter, each filter's uuid and a canonical form."""
 
     features: list[Feature | str]
     global_filter: GlobalFilter | None
     restrict_sources: tuple[str, ...]
     normalized: dict[str, Any]
+    filter_uuids: tuple[UUID, ...] = ()
 
 
 def _feature_config_def() -> dict[str, Any]:
@@ -252,6 +255,11 @@ def data_access_option_keys() -> frozenset[str]:
     return frozenset({RESERVED_READER_OPTION_KEY, *names})
 
 
+def option_data_access_violations(options: Mapping[str, Any], path: str = "") -> list[Problem]:
+    """Report every data-access key in a group ``options`` mapping, including nested in_features configs."""
+    return _scan_feature_config({"options": dict(options)}, path, data_access_option_keys())
+
+
 def _scan_feature_config(item: Mapping[str, Any], path: str, keys: frozenset[str]) -> list[Problem]:
     problems: list[Problem] = []
     for container in _OPTION_CONTAINERS:
@@ -294,17 +302,21 @@ def _load_feature_config(item: dict[str, Any], path: str) -> list[Feature | str]
         return Problem(path=path, problem="invalid_feature_config", message=str(error))
 
 
-def _build_filter(filters: list[dict[str, Any]]) -> GlobalFilter | None:
+def _build_filter(filters: list[dict[str, Any]]) -> tuple[GlobalFilter | None, tuple[UUID, ...]]:
     if not filters:
-        return None
+        return None, ()
     global_filter = GlobalFilter()
+    uuids: list[UUID] = []
     for item in filters:
         op = item["op"]
         parameter = {key: item[key] for key in _OP_PARAMETERS[op] if key in item}
         if "values" in parameter:
             parameter["values"] = tuple(parameter["values"])
         global_filter.add_filter(item["feature"], _OP_FILTER_TYPES[op], parameter)
-    return global_filter
+        # An equal filter merges into the stored one, so look the stored uuid up by equality.
+        declared = SingleFilter(item["feature"], _OP_FILTER_TYPES[op], parameter)
+        uuids.append(next(stored.uuid for stored in global_filter.filters if stored == declared))
+    return global_filter, tuple(uuids)
 
 
 def build_request(request: Mapping[str, Any]) -> ParsedRequest | list[Problem]:
@@ -322,9 +334,11 @@ def build_request(request: Mapping[str, Any]) -> ParsedRequest | list[Problem]:
             features.extend(loaded)
     if problems:
         return problems
+    global_filter, filter_uuids = _build_filter(request.get("filters", []))
     return ParsedRequest(
         features=features,
-        global_filter=_build_filter(request.get("filters", [])),
+        global_filter=global_filter,
         restrict_sources=tuple(request.get("restrict_sources", ())),
         normalized=json.loads(json.dumps(request, sort_keys=True)),
+        filter_uuids=filter_uuids,
     )

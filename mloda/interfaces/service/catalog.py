@@ -22,7 +22,7 @@ from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import error_result, problems_to_details, strip_control_characters
-from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem, _scan_feature_config, data_access_option_keys
+from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem, option_data_access_violations
 
 MAX_DESCRIPTION_LENGTH = 300
 MAX_SEARCH_LIMIT = 50
@@ -217,7 +217,7 @@ class Catalog:
         if not isinstance(name, str) or not 1 <= len(name) <= MAX_NAME_LENGTH:
             return _invalid("/name", f"'name' must be a string of 1 to {MAX_NAME_LENGTH} characters.")
         group = dict(options or {})
-        violations = _scan_feature_config({"options": group}, "", data_access_option_keys())
+        violations = option_data_access_violations(group)
         if violations:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
@@ -229,7 +229,7 @@ class Catalog:
             return error_result(
                 "validation_failed", message, [{"path": "/name", "problem": "unresolved", "message": message}]
             )
-        if self._is_denied(name):
+        if self.is_denied(name):
             alternatives = self._settings.alternatives.get(name)
             extra: dict[str, Any] = {"alternatives": list(alternatives)} if alternatives else {}
             return error_result("policy_denied", "This feature is not available under the service policy.", **extra)
@@ -264,7 +264,7 @@ class Catalog:
             "metadata_missing": ([] if description else ["description"]) + missing,
         }
 
-    def _is_denied(self, name: str) -> bool:
+    def is_denied(self, name: str) -> bool:
         """Match ``name`` against denied FeatureGroups' class name, prefix and supported names, never their matchers."""
         enabled = self._collector.enabled_feature_group_classes
         for fg in self._collector.disabled_feature_group_classes:

@@ -1,0 +1,584 @@
+"""Planner.explain: request checks, policy, row limits, and a path-free plan with lineage, estimate and egress."""
+
+import json
+import threading
+from collections.abc import Iterator, Mapping
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, ClassVar
+
+import pytest
+
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.interfaces.service.catalog import Catalog
+from mloda.interfaces.service.config import Settings, SourceConfig
+from mloda.interfaces.service.errors import ERROR_CODES, is_error
+from mloda.interfaces.service.lock import MLODA_LOCK
+from mloda.interfaces.service.planner import PLAN_TOKEN_PREFIX, Planner
+from mloda.provider import FeatureSet
+from mloda.user import PluginCollector
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
+from tests.helpers.plugin_stubs import StubFeatureGroup
+
+# Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
+pytestmark = pytest.mark.timeout(30)
+
+SECRET = "s3://user:pw@host/x"  # nosec B105
+DENIED = "PlannerDeniedMcp4"
+DOUBLE_SUFFIX = "__mcp4_double"
+DERIVED = "income" + DOUBLE_SUFFIX
+CLOCK_START = 1_800_000_000.0
+KEY = b"k" * 32
+STEP_KEYS = {
+    "step",
+    "kind",
+    "features",
+    "feature_group",
+    "compute_framework",
+    "compute_framework_reason",
+    "specialized_from",
+    "source",
+    "inputs",
+}
+SUCCESS_KEYS = {"plan_id", "expires_at", "normalized_request", "steps", "lineage", "estimate", "egress", "policy"}
+DENIED_CALLS: list[str] = []
+LOCK_PROBES: list[bool] = []
+
+
+def _lock_free_elsewhere() -> bool:
+    outcome: list[bool] = []
+
+    def attempt() -> None:
+        acquired = MLODA_LOCK.acquire(blocking=False)
+        if acquired:
+            MLODA_LOCK.release()
+        outcome.append(acquired)
+
+    thread = threading.Thread(target=attempt)
+    thread.start()
+    thread.join(5)
+    return outcome == [True]
+
+
+class PlannerDoubleMcp4(FeatureGroup):
+    """Doubles a numeric input feature named by the prefix before the suffix."""
+
+    PROBE_LOCK: ClassVar[bool] = False
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        name = str(feature_name)
+        return name.endswith(DOUBLE_SUFFIX) and len(name) > len(DOUBLE_SUFFIX)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if type(self).PROBE_LOCK:
+            LOCK_PROBES.append(_lock_free_elsewhere())
+        return {Feature(str(feature_name)[: -len(DOUBLE_SUFFIX)])}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        name = str(features.get_name_of_one_feature())
+        source = name[: -len(DOUBLE_SUFFIX)]
+        return {name: [value * 2 for value in data[source]]}
+
+
+class PlannerDeniedMcp4(StubFeatureGroup):
+    """Restricted payroll data."""
+
+    MATCHED_NAMES: ClassVar[frozenset[str]] = frozenset({"mcp4_salary"})
+    SUPPORTED_NAMES: ClassVar[frozenset[str]] = MATCHED_NAMES
+    FRAMEWORK_RULE: ClassVar[set[type[ComputeFramework]] | None] = {PythonDictFramework}
+    ARMED: ClassVar[bool] = False
+
+    @classmethod
+    def _record(cls, hook: str) -> None:
+        if cls.ARMED:
+            DENIED_CALLS.append(hook)
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        cls._record("match_feature_group_criteria")
+        return str(feature_name) in cls.MATCHED_NAMES
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        cls._record("compute_framework_rule")
+        return cls.FRAMEWORK_RULE
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        type(self)._record("input_features")
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls._record("calculate_feature")
+        return {"mcp4_salary": [1]}
+
+
+def _base() -> PluginCollector:
+    return PluginCollector.enabled_feature_groups({ReadFileFeature, PlannerDoubleMcp4, PlannerDeniedMcp4})
+
+
+def _write_sales(tmp_path: Path) -> Path:
+    path = tmp_path / "sales.csv"
+    path.write_text("customer_id,income,segment\n1,10,a\n2,20,b\n3,30,a\n4,40,b\n5,50,a\n")
+    return path
+
+
+def _write_orders(tmp_path: Path) -> Path:
+    path = tmp_path / "orders.csv"
+    path.write_text("order_id,amount\n1,3\n2,4\n")
+    return path
+
+
+def _write_events(tmp_path: Path) -> Path:
+    path = tmp_path / "events.json"
+    path.write_text('{"event_id": 1, "kind": "x"}\n{"event_id": 2, "kind": "y"}\n{"event_id": 3, "kind": "x"}\n')
+    return path
+
+
+def _source(alias: str, path: Path) -> SourceConfig:
+    return SourceConfig(alias=alias, files=(str(path),))
+
+
+def _settings(tmp_path: Path, sources: Mapping[str, SourceConfig] | None = None, **kwargs: Any) -> Settings:
+    if sources is None:
+        sources = {"sales": _source("sales", _write_sales(tmp_path))}
+    return Settings(deny_feature_groups=(DENIED,), sources=sources, **kwargs)
+
+
+def _planner(settings: Settings) -> Planner:
+    base = _base()
+    catalog = Catalog.build(settings, base)
+    return Planner(
+        settings, catalog, signing_key=KEY, principal="alice", plugin_collector=base, clock=lambda: CLOCK_START
+    )
+
+
+def _explain(tmp_path: Path, request: Any, **kwargs: Any) -> dict[str, Any]:
+    result: dict[str, Any] = _planner(_settings(tmp_path, **kwargs)).explain(request)
+    return result
+
+
+def _error(result: dict[str, Any], code: str) -> dict[str, Any]:
+    assert is_error(result), result
+    error: dict[str, Any] = result["error"]
+    assert error["code"] == code, error
+    return error
+
+
+def _success(result: dict[str, Any]) -> dict[str, Any]:
+    assert not is_error(result), result
+    return result
+
+
+def _has_detail(error: Mapping[str, Any], **expected: Any) -> bool:
+    return any(all(detail.get(key) == value for key, value in expected.items()) for detail in error["details"])
+
+
+def _assert_no_paths(result: Mapping[str, Any], tmp_path: Path, *file_names: str) -> None:
+    dumped = json.dumps(result)
+    assert str(tmp_path) not in dumped
+    assert tmp_path.name not in dumped
+    for name in file_names:
+        assert name not in dumped
+
+
+@pytest.fixture
+def denied_calls() -> Iterator[list[str]]:
+    DENIED_CALLS.clear()
+    PlannerDeniedMcp4.ARMED = True
+    yield DENIED_CALLS
+    PlannerDeniedMcp4.ARMED = False
+    DENIED_CALLS.clear()
+
+
+@pytest.fixture
+def lock_probes() -> Iterator[list[bool]]:
+    LOCK_PROBES.clear()
+    PlannerDoubleMcp4.PROBE_LOCK = True
+    yield LOCK_PROBES
+    PlannerDoubleMcp4.PROBE_LOCK = False
+    LOCK_PROBES.clear()
+
+
+class TestRequestChecks:
+    def test_unknown_top_level_key_is_validation_failed(self, tmp_path: Path) -> None:
+        error = _error(_explain(tmp_path, {"features": ["income"], "optons": {}}), "validation_failed")
+        assert _has_detail(error, path="/optons")
+
+    @pytest.mark.parametrize("request_value", [None, "income", ["income"], 3])
+    def test_non_object_request_is_validation_failed(self, tmp_path: Path, request_value: Any) -> None:
+        error = _error(_explain(tmp_path, request_value), "validation_failed")
+        assert _has_detail(error, path="")
+
+    def test_unknown_restricted_source_is_validation_failed(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": ["income"], "restrict_sources": ["sals"]})
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/restrict_sources/0", problem="unknown_source", suggestion="sales")
+
+    @pytest.mark.parametrize("key", [CsvReader.data_access_name(), RESERVED_READER_OPTION_KEY])
+    def test_data_access_option_is_policy_denied(self, tmp_path: Path, key: str) -> None:
+        request = {"features": ["customer_id", {"name": "income", "options": {key: SECRET}}]}
+
+        result = _explain(tmp_path, request)
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == [f"/features/1/options/{key}"]
+        assert SECRET not in json.dumps(result)
+
+    def test_semantic_feature_config_error_is_validation_failed(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "options": {"x": 1}, "group_options": {"y": 1}}]}
+
+        error = _error(_explain(tmp_path, request), "validation_failed")
+
+        assert _has_detail(error, path="/features/0", problem="invalid_feature_config")
+
+
+class TestUnresolved:
+    def test_unresolved_name_has_path_and_suggestion_from_source_columns(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": ["customer_id", "incme"]})
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features/1", problem="unresolved", suggestion="income")
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_unresolved_name_without_close_match_has_no_suggestion(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": ["qqqzzzwww_mcp4"]})
+
+        error = _error(result, "validation_failed")
+        details = [detail for detail in error["details"] if detail.get("path") == "/features/0"]
+        assert len(details) == 1
+        assert details[0]["problem"] == "unresolved"
+        assert "suggestion" not in details[0]
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+
+class TestPolicy:
+    def test_denied_feature_is_policy_denied_without_running_its_code(
+        self, tmp_path: Path, denied_calls: list[str]
+    ) -> None:
+        result = _explain(tmp_path, {"features": ["mcp4_salary"]})
+
+        error = _error(result, "policy_denied")
+        assert "alternatives" not in error
+        assert "deny_feature_groups" not in json.dumps(result)
+        assert denied_calls == []
+
+    def test_denied_feature_carries_alternatives(self, tmp_path: Path, denied_calls: list[str]) -> None:
+        result = _explain(tmp_path, {"features": ["mcp4_salary"]}, alternatives={"mcp4_salary": ("income",)})
+
+        error = _error(result, "policy_denied")
+        assert error["alternatives"] == ["income"]
+        assert denied_calls == []
+
+    def test_allowed_request_never_calls_into_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
+        _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))
+        assert denied_calls == []
+
+
+class TestFilters:
+    def test_unmatched_filter_is_validation_failed(self, tmp_path: Path) -> None:
+        request = {
+            "features": ["customer_id"],
+            "filters": [
+                {"feature": "segment", "op": "eq", "value": "a"},
+                {"feature": "nope_mcp4", "op": "eq", "value": 1},
+            ],
+        }
+
+        result = _explain(tmp_path, request)
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/filters/1", problem="unmatched_filter")
+        assert not _has_detail(error, path="/filters/0")
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_matched_filter_on_unrequested_column_is_allowed(self, tmp_path: Path) -> None:
+        request = {"features": ["customer_id"], "filters": [{"feature": "segment", "op": "in", "values": ["a"]}]}
+
+        result = _success(_explain(tmp_path, request))
+
+        assert result["policy"] == {"verdict": "allowed"}
+        assert result["normalized_request"] == request
+
+
+class TestSuccess:
+    def test_result_keys(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
+        assert set(result) == SUCCESS_KEYS
+
+    def test_plan_id_and_expiry(self, tmp_path: Path) -> None:
+        settings = _settings(tmp_path)
+
+        result = _success(_planner(settings).explain({"features": ["customer_id", "income"]}))
+
+        assert isinstance(result["plan_id"], str)
+        assert result["plan_id"].startswith(PLAN_TOKEN_PREFIX + ".")
+        expires_at = result["expires_at"]
+        assert isinstance(expires_at, str)
+        assert expires_at.endswith("Z")
+        parsed = datetime.fromisoformat(expires_at[:-1]).replace(tzinfo=timezone.utc)
+        assert parsed.timestamp() == CLOCK_START + settings.plan_ttl_seconds
+
+    def test_normalized_request_and_policy(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
+
+        assert result["normalized_request"] == {"features": ["customer_id", "income"]}
+        assert result["policy"] == {"verdict": "allowed"}
+
+    def test_read_step(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
+
+        (step,) = result["steps"]
+        assert set(step) == STEP_KEYS
+        assert step["step"] == 1
+        assert step["kind"] == "compute"
+        assert sorted(step["features"]) == ["customer_id", "income"]
+        assert step["feature_group"] == "ReadFileFeature"
+        assert step["compute_framework"] == "PythonDictFramework"
+        assert step["compute_framework_reason"] == "only allowed framework"
+        assert step["specialized_from"] == []
+        assert step["source"] == "sales"
+        assert step["inputs"] == []
+
+    def test_lineage_of_source_columns(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
+        assert result["lineage"] == {"customer_id": ["sales.customer_id"], "income": ["sales.income"]}
+
+    def test_estimate_of_countable_source(self, tmp_path: Path) -> None:
+        estimate = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))["estimate"]
+
+        assert set(estimate) == {"sources", "rows_read", "rows_returned", "rows_returned_note"}
+        assert estimate["sources"] == [{"alias": "sales", "rows": 5, "rows_exact": True}]
+        assert estimate["rows_read"] == 5
+        assert estimate["rows_returned"] is None
+        assert isinstance(estimate["rows_returned_note"], str)
+        assert estimate["rows_returned_note"]
+
+    def test_no_paths_anywhere(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}))
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_only_sources_the_plan_reads_are_estimated(self, tmp_path: Path) -> None:
+        sources = {
+            "sales": _source("sales", _write_sales(tmp_path)),
+            "other": _source("other", _write_orders(tmp_path)),
+        }
+
+        result = _success(_explain(tmp_path, {"features": ["customer_id"]}, sources=sources))
+
+        assert [entry["alias"] for entry in result["estimate"]["sources"]] == ["sales"]
+        _assert_no_paths(result, tmp_path, "sales.csv", "orders.csv")
+
+
+class TestDerived:
+    def test_steps_in_dependency_order(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))
+
+        steps = result["steps"]
+        assert [step["step"] for step in steps] == [1, 2]
+        assert all(set(step) == STEP_KEYS for step in steps)
+        read, derived = steps
+        assert read["feature_group"] == "ReadFileFeature"
+        assert read["source"] == "sales"
+        assert sorted(read["features"]) == ["customer_id", "income"]
+        assert derived["kind"] == "compute"
+        assert derived["feature_group"] == "PlannerDoubleMcp4"
+        assert derived["features"] == [DERIVED]
+        assert derived["compute_framework"] == "PythonDictFramework"
+        assert derived["source"] is None
+        assert derived["inputs"] == ["income"]
+
+    def test_lineage_traces_derived_feature_to_source_column(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))
+        assert result["lineage"] == {"customer_id": ["sales.customer_id"], DERIVED: ["sales.income"]}
+
+    def test_estimate_counts_source_of_derived_feature(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, {"features": [DERIVED]}))
+        assert result["estimate"]["sources"] == [{"alias": "sales", "rows": 5, "rows_exact": True}]
+
+
+class TestEgress:
+    def test_classified_columns(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "personal", "income": "internal"}
+
+        result = _success(_explain(tmp_path, {"features": ["customer_id", "income"]}, classification=classification))
+
+        assert result["egress"] == {
+            "preview_columns": ["income"],
+            "withheld": [{"column": "customer_id", "reason": "classification: personal"}],
+        }
+
+    def test_unclassified_column_is_withheld(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "personal", "income": "internal"}
+        request = {"features": ["customer_id", "income", "segment"]}
+
+        egress = _success(_explain(tmp_path, request, classification=classification))["egress"]
+
+        assert egress["preview_columns"] == ["income"]
+        assert egress["withheld"] == [
+            {"column": "customer_id", "reason": "classification: personal"},
+            {"column": "segment", "reason": "classification: unclassified"},
+        ]
+
+    def test_preview_allows_is_honoured(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "public", "income": "internal"}
+
+        result = _explain(
+            tmp_path, {"features": ["customer_id", "income"]}, classification=classification, preview_allows=("public",)
+        )
+
+        assert _success(result)["egress"] == {
+            "preview_columns": ["customer_id"],
+            "withheld": [{"column": "income", "reason": "classification: internal"}],
+        }
+
+    def test_derived_feature_inherits_input_classification(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "internal", "income": "personal"}
+
+        result = _explain(tmp_path, {"features": ["customer_id", DERIVED]}, classification=classification)
+
+        assert _success(result)["egress"] == {
+            "preview_columns": ["customer_id"],
+            "withheld": [{"column": DERIVED, "reason": "classification: personal"}],
+        }
+
+    def test_explicit_classification_of_derived_feature_wins(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "internal", "income": "personal", DERIVED: "internal"}
+
+        result = _explain(tmp_path, {"features": ["customer_id", DERIVED]}, classification=classification)
+
+        assert _success(result)["egress"] == {"preview_columns": ["customer_id", DERIVED], "withheld": []}
+
+
+class TestRowLimits:
+    def test_source_over_max_rows_is_limit_exceeded(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, {"features": ["customer_id", "income"]}, max_rows=3)
+
+        error = _error(result, "limit_exceeded")
+        assert "sales" in error["message"]
+        assert _has_detail(error, source="sales", rows=5, max_rows=3)
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_source_at_max_rows_is_allowed(self, tmp_path: Path) -> None:
+        _success(_explain(tmp_path, {"features": ["customer_id", "income"]}, max_rows=5))
+
+    def test_uncountable_source_with_max_rows_is_limit_exceeded(self, tmp_path: Path) -> None:
+        sources = {"events": _source("events", _write_events(tmp_path))}
+
+        result = _explain(tmp_path, {"features": ["event_id"]}, sources=sources, max_rows=1000)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, source="events", reason="uncountable")
+        _assert_no_paths(result, tmp_path, "events.json")
+
+    def test_uncountable_source_without_max_rows_is_estimated_as_unknown(self, tmp_path: Path) -> None:
+        sources = {"events": _source("events", _write_events(tmp_path))}
+
+        result = _success(_explain(tmp_path, {"features": ["event_id"]}, sources=sources))
+
+        assert result["estimate"]["sources"] == [{"alias": "events", "rows": None, "rows_exact": False}]
+        assert result["estimate"]["rows_read"] is None
+        assert result["steps"][0]["source"] == "events"
+        assert result["lineage"] == {"event_id": ["events.event_id"]}
+        _assert_no_paths(result, tmp_path, "events.json")
+
+    def test_json_reader_does_not_count_rows(self, tmp_path: Path) -> None:
+        assert JsonReader.count_rows(str(_write_events(tmp_path)), PythonDictFramework) is None
+
+
+class TestRestrictSources:
+    def _sources(self, tmp_path: Path) -> dict[str, SourceConfig]:
+        return {
+            "sales": _source("sales", _write_sales(tmp_path)),
+            "other": _source("other", _write_orders(tmp_path)),
+        }
+
+    def test_feature_outside_restricted_sources_is_unresolved(self, tmp_path: Path) -> None:
+        request = {"features": ["income"], "restrict_sources": ["other"]}
+
+        result = _explain(tmp_path, request, sources=self._sources(tmp_path))
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/features/0", problem="unresolved")
+        _assert_no_paths(result, tmp_path, "sales.csv", "orders.csv")
+
+    def test_feature_inside_restricted_sources_resolves(self, tmp_path: Path) -> None:
+        request = {"features": ["order_id"], "restrict_sources": ["other"]}
+
+        result = _success(_explain(tmp_path, request, sources=self._sources(tmp_path)))
+
+        assert result["steps"][0]["source"] == "other"
+        assert result["lineage"] == {"order_id": ["other.order_id"]}
+        assert result["estimate"]["sources"] == [{"alias": "other", "rows": 2, "rows_exact": True}]
+
+
+class TestDeterminismAndShape:
+    def test_same_request_gives_same_plan(self, tmp_path: Path) -> None:
+        planner = _planner(_settings(tmp_path, classification={"income": "personal"}))
+        request = {"features": ["customer_id", DERIVED]}
+
+        first = _success(planner.explain(request))
+        second = _success(planner.explain(request))
+
+        for key in ("steps", "lineage", "estimate", "egress", "normalized_request", "expires_at"):
+            assert first[key] == second[key], key
+
+    @pytest.mark.parametrize(
+        "request_value",
+        [
+            {"features": ["customer_id", "income"]},
+            {"features": ["customer_id", DERIVED]},
+            {"features": ["incme"]},
+            {"features": ["mcp4_salary"]},
+            {"features": [{"name": "income", "options": {RESERVED_READER_OPTION_KEY: SECRET}}]},
+            {"features": ["customer_id"], "filters": [{"feature": "nope_mcp4", "op": "eq", "value": 1}]},
+            {"features": []},
+            None,
+        ],
+    )
+    def test_every_result_is_json_and_errors_are_well_formed(self, tmp_path: Path, request_value: Any) -> None:
+        result = _explain(tmp_path, request_value)
+
+        assert isinstance(result, dict)
+        json.dumps(result)
+        if is_error(result):
+            assert result["error"]["code"] in ERROR_CODES
+            assert result["error"]["audit_id"].startswith("aud_")
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+
+class TestLock:
+    def test_lock_is_reentrant(self) -> None:
+        assert isinstance(MLODA_LOCK, type(threading.RLock()))
+
+    def test_planning_holds_the_lock_and_releases_it(self, tmp_path: Path, lock_probes: list[bool]) -> None:
+        _success(_explain(tmp_path, {"features": [DERIVED]}))
+
+        assert lock_probes
+        assert not any(lock_probes)
+        assert _lock_free_elsewhere()

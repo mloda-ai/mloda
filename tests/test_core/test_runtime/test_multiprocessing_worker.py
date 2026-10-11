@@ -84,8 +84,11 @@ class _UnprintableError(Exception):
 class _RaisingCommand:
     """Module-level so it pickles through the spawn-context queue."""
 
+    def __init__(self, error: type[BaseException] = RuntimeError) -> None:
+        self.error = error
+
     def execute(self, *args: Any, **kwargs: Any) -> Any:
-        raise RuntimeError("command boom")
+        raise self.error("command boom")
 
 
 class _UnprintableRaisingCommand:
@@ -110,6 +113,8 @@ class _ChainedLeakRaisingCommand:
 
 
 _WORKER_LOGGER_NAME = "mloda.core.runtime.worker.multiprocessing_worker"
+
+_BASE_ERRORS = pytest.mark.parametrize("error", [RuntimeError, SystemExit, KeyboardInterrupt])
 
 
 class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:
@@ -167,15 +172,16 @@ class TestWorkerRunsChildBootstrapBeforeTheCommandLoop:
 
 
 class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
+    @_BASE_ERRORS
     def test_bootstrap_exception_is_reported_via_set_error_and_stop_without_propagating(
-        self, caplog: pytest.LogCaptureFixture
+        self, error: type[BaseException], caplog: pytest.LogCaptureFixture
     ) -> None:
         ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
         result_queue: multiprocessing.Queue[Any] = ctx.Queue()
         cfw_register = Mock(spec=CfwManager)
         cfw_register.get_location.return_value = "grpc://localhost:9999"
-        boom = RuntimeError("boom")
+        boom = error("boom")
         bootstrap = Mock(side_effect=boom)
         cfw_register.get_run_context.return_value = RunContext(child_bootstrap=bootstrap)
         cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
@@ -197,6 +203,25 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
         # The parent logs the traceback once; the child must not log it, least of all on the root logger.
         assert "root" not in {r.name for r in caplog.records}
         assert not [r for r in caplog.records if "Traceback" in r.getMessage()]
+
+    def test_bootstrap_report_falling_back_to_string_only_still_stops(self) -> None:
+        ctx = mp_start_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.set_error.side_effect = [TypeError("cannot pickle"), None]
+        boom = SystemExit(3)
+        cfw_register.get_run_context.return_value = RunContext(child_bootstrap=Mock(side_effect=boom))
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert cfw_register.set_error.call_count == 2
+        first, second = cfw_register.set_error.call_args_list
+        assert first.kwargs.get("exception") is boom
+        assert len(second.args) == 2 and not second.kwargs
+        assert command_queue.get(timeout=2) == "STOP"
 
     def test_bootstrap_exception_whose_str_raises_is_still_reported_and_stops(self) -> None:
         ctx = mp_start_context()
@@ -240,8 +265,9 @@ class TestWorkerReportsChildBootstrapExceptionThroughTheErrorChannel:
 
 
 class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
+    @_BASE_ERRORS
     def test_command_exception_is_reported_via_set_error_and_stop_without_logging_a_traceback(
-        self, caplog: pytest.LogCaptureFixture
+        self, error: type[BaseException], caplog: pytest.LogCaptureFixture
     ) -> None:
         ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
@@ -253,14 +279,14 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         contexts: list[CloseContext | None] = []
         extender = _CloseRecordingExtender(contexts=contexts)
         cfw.function_extender = {extender}
-        command_queue.put(_RaisingCommand())
+        command_queue.put(_RaisingCommand(error))
 
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         cfw_register.set_error.assert_called_once()
         call_args = cfw_register.set_error.call_args
         assert "command boom" in call_args.args[0]
-        assert isinstance(call_args.kwargs.get("exception"), RuntimeError)
+        assert isinstance(call_args.kwargs.get("exception"), error)
         assert command_queue.get(timeout=2) == "STOP"
 
         assert "root" not in {r.name for r in caplog.records}
@@ -268,6 +294,25 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         assert len(contexts) == 1
         recorded = contexts[0]
         assert recorded is not None and recorded.reason == "error"
+
+    def test_command_report_falling_back_to_string_only_still_stops(self) -> None:
+        ctx = mp_start_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw_register.set_error.side_effect = [TypeError("cannot pickle"), None]
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        command_queue.put(_RaisingCommand(SystemExit))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert cfw_register.set_error.call_count == 2
+        first, second = cfw_register.set_error.call_args_list
+        assert isinstance(first.kwargs.get("exception"), SystemExit)
+        assert len(second.args) == 2 and not second.kwargs
+        assert command_queue.get(timeout=2) == "STOP"
 
     def test_command_exception_whose_str_raises_is_still_reported_and_stops(self) -> None:
         ctx = mp_start_context()

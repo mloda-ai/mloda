@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Mapping
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.step.join_step import JoinStep
@@ -33,12 +34,17 @@ class JoinStepCollection:
         )
         self.collection[join_step] = required_join_uuids
 
-    def earlier_joins_sharing_destination(self, join_step: JoinStep) -> set[UUID]:
+    def earlier_joins_sharing_destination(
+        self, join_step: JoinStep, owning_step_of: Mapping[UUID, UUID] | None = None
+    ) -> set[UUID]:
+        """Uuids of earlier joins of any link whose destination shares a feature uuid, or owning step if given."""
+        owner = owning_step_of or {}
+        wanted = {owner.get(u, u) for u in join_step.destination_framework_uuids}
         uuids: set[UUID] = set()
         for step in self.collection:
             if step == join_step:
                 break
-            if step.destination_framework_uuids & join_step.destination_framework_uuids:
+            if wanted & {owner.get(u, u) for u in step.destination_framework_uuids}:
                 uuids.update(step.get_uuids())
         return uuids
 

@@ -16,6 +16,7 @@ caller's own object, not a worker's copy, is notified in the parent."""
 from __future__ import annotations
 
 import gc
+import inspect
 import json
 import os
 import pickle  # nosec B403
@@ -553,7 +554,11 @@ class _LifecycleMatrixExtender(Extender):
 
 
 def _matrix_kwargs(extenders: set[Extender], column: str = _RUN_COMPLETE_COLUMN) -> dict[str, Any]:
-    group = _FailingLifecycleFeatureGroup if column == _FAIL_COLUMN else _RunCompleteFeatureGroup
+    groups: dict[str, type[FeatureGroup]] = {
+        _FAIL_COLUMN: _FailingLifecycleFeatureGroup,
+        _SYSTEM_EXIT_COLUMN: _SystemExitFeatureGroup,
+    }
+    group = groups.get(column, _RunCompleteFeatureGroup)
     return {
         "compute_frameworks": ["PythonDictFramework"],
         "plugin_collector": PluginCollector.enabled_feature_groups({group}),
@@ -657,47 +662,34 @@ def _execution_failure(
     error: type[BaseException] = RuntimeError,
     mode: ParallelizationMode = ParallelizationMode.SYNC,
 ) -> Any:
-    def scenario(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
-        if error is not RuntimeError:
+    def scenario(
+        ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch, flight_server: Any = None
+    ) -> list[Any]:
+        multiprocessing = mode is ParallelizationMode.MULTIPROCESSING
+        column = _SYSTEM_EXIT_COLUMN if multiprocessing else _FAIL_COLUMN
+        if error is not RuntimeError and not multiprocessing:
 
             def interrupted(cls: Any, data: Any, features: FeatureSet) -> Any:
                 raise error("calculate failed")
 
             mp.setattr(_FailingLifecycleFeatureGroup, "calculate_feature", classmethod(interrupted))
-        session = _matrix_session(ext, _FAIL_COLUMN, mode)
+        session = _matrix_session(ext, column, mode)
         with pytest.raises(error, match="calculate failed") as raised:
-            list(getattr(session, call_site)(parallelization_modes={mode}))
+            list(
+                getattr(session, call_site)(
+                    parallelization_modes={mode}, flight_server=flight_server if multiprocessing else None
+                )
+            )
         status = "failed" if issubclass(error, Exception) else "cancelled"
         return [
             *_OK_PLAN,
-            *_ok_run(status, error=f"{type(raised.value).__module__}.{type(raised.value).__qualname__}"),
+            *_ok_run(
+                status,
+                calculated=not multiprocessing,
+                error=f"{type(raised.value).__module__}.{type(raised.value).__qualname__}",
+            ),
         ]
 
-    return scenario
-
-
-def _multiprocessing_system_exit(call_site: str) -> Any:
-    def scenario(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
-        from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
-        server = ParallelRunnerFlightServer()
-        server.start_flight_server_process()
-        try:
-            session = mloda.prepare(
-                [Feature(name=_SYSTEM_EXIT_COLUMN)],
-                parallelization_modes={ParallelizationMode.MULTIPROCESSING},
-                compute_frameworks=["PythonDictFramework"],
-                plugin_collector=PluginCollector.enabled_feature_groups({_SystemExitFeatureGroup}),
-                function_extender={ext},
-            )
-            with pytest.raises(SystemExit, match="calculate failed"):
-                list(getattr(session, call_site)(parallelization_modes={ParallelizationMode.MULTIPROCESSING}, flight_server=server))
-        finally:
-            server.end_flight_server_process()
-
-        return [
-            *_OK_PLAN,
-            *_ok_run("cancelled", calculated=False, error="builtins.SystemExit"),
-        ]
     return scenario
 
 
@@ -853,7 +845,12 @@ _MATRIX: dict[str, Any] = {
     "interrupted_stream_run_system_exit_threading": _execution_failure(
         "stream_run", SystemExit, ParallelizationMode.THREADING
     ),
-    "multiprocessing_interrupted_run_system_exit": _multiprocessing_system_exit("run"),
+    "interrupted_run_system_exit_multiprocessing": _execution_failure(
+        "run", SystemExit, ParallelizationMode.MULTIPROCESSING
+    ),
+    "interrupted_stream_run_system_exit_multiprocessing": _execution_failure(
+        "stream_run", SystemExit, ParallelizationMode.MULTIPROCESSING
+    ),
     "planning_interrupted_prepare": _planning_interrupted_prepare,
     "finalizing_failure_batch": _finalizing_failure_batch,
     "finalizing_failure_stream_consumed": _finalizing_failure_stream_consumed,
@@ -871,25 +868,35 @@ _MATRIX: dict[str, Any] = {
 }
 
 
+def _play(
+    scenario: str, extender: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch, flight_server: Any
+) -> list[Any]:
+    """Run a matrix row, handing the shared flight server only to rows that declare they take it."""
+    row = _MATRIX[scenario]
+    if "flight_server" in inspect.signature(row).parameters:
+        return list(row(extender, tmp_path, mp, flight_server))
+    return list(row(extender, tmp_path, mp))
+
+
 @pytest.mark.timeout(30)
 class TestLifecycleHooksFireExactlyOnceInOrder:
     @pytest.mark.parametrize("scenario", list(_MATRIX))
     def test_hooks_fire_exactly_once_and_in_order(
-        self, scenario: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, scenario: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flight_server: Any
     ) -> None:
         extender = _LifecycleMatrixExtender()
 
-        expected = _MATRIX[scenario](extender, tmp_path, monkeypatch)
+        expected = _play(scenario, extender, tmp_path, monkeypatch, flight_server)
 
         assert extender.events == expected
 
     @pytest.mark.parametrize("scenario", ["batch_twice", "stream_closed_early", "run_start_refusal_batch"])
     def test_ids_are_consistent_across_the_hooks(
-        self, scenario: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, scenario: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flight_server: Any
     ) -> None:
         extender = _LifecycleMatrixExtender()
 
-        _MATRIX[scenario](extender, tmp_path, monkeypatch)
+        _play(scenario, extender, tmp_path, monkeypatch, flight_server)
 
         plan_ids = {plan_id for _, plan_id, _ in extender.ids}
         assert len(plan_ids) == 1

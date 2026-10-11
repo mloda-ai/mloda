@@ -1,4 +1,7 @@
 import functools
+import os
+import sys
+import threading
 from collections.abc import Callable, Iterable
 from multiprocessing.managers import BaseManager
 from typing import Any
@@ -7,6 +10,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
+from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.parent_death_watchdog import start_parent_death_watchdog
 
 import logging
@@ -29,6 +33,9 @@ class MyManager(BaseManager):
         # is used, not a closure, because BaseManager.start() pickles the initializer to send it
         # to the server process, and closures are not picklable.
         super().start(functools.partial(_watchdog_then_initializer, initializer, initargs), ())
+
+    def is_alive(self) -> bool:
+        return bool(self._process.is_alive())  # type: ignore[attr-defined]
 
 
 class CfwManager:
@@ -75,6 +82,10 @@ class CfwManager:
         self.api_data: dict[str, Any] | None = None
 
         self.run_context: RunContext = RunContext()
+
+    def release(self) -> None:
+        """Resets the register to its freshly constructed state."""
+        CfwManager.__init__(self, self.parallelization_modes)
 
     def add_uuid_flyway_datasets(self, cf_uuid: UUID, object_ids: set[UUID]) -> None:
         """Unions a set of Flyway dataset UUIDs into those already associated with a Compute Framework UUID."""
@@ -394,3 +405,24 @@ class CfwManager:
     def get_run_context(self) -> RunContext:
         """Retrieves the run context."""
         return self.run_context
+
+
+MyManager.register("CfwManager", CfwManager)
+
+_shared_manager_lock = threading.Lock()
+_shared_manager: tuple[MyManager, int, tuple[str, ...]] | None = None
+
+
+def shared_manager() -> MyManager:
+    """Returns the interpreter-wide Manager server, starting a new one when the cached one is unusable."""
+    global _shared_manager
+    with _shared_manager_lock:
+        cached = _shared_manager
+        # The pid check must precede is_alive(): in a forked child Process.is_alive() raises.
+        # The sys.path check is needed because the server only sees the import path it started with.
+        if cached is None or cached[1] != os.getpid() or not cached[0].is_alive() or cached[2] != tuple(sys.path):
+            manager = MyManager(ctx=mp_start_context())
+            manager.start()
+            cached = (manager, os.getpid(), tuple(sys.path))
+            _shared_manager = cached
+        return cached[0]

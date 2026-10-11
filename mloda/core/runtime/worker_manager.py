@@ -93,6 +93,13 @@ class WorkerManager:
             process.join()
         self.standby.clear()
 
+    def terminate_alive_processes(self) -> None:
+        """Terminate and join every worker process that is still alive."""
+        for task in self.tasks:
+            if isinstance(task, BaseProcess) and task.is_alive():
+                task.terminate()
+                task.join()
+
     def get_process_queues(self, cfw_uuid: UUID) -> tuple[Any, Any, Any] | None:
         """Return registered tuple or None."""
         return self.process_register.get(cfw_uuid)

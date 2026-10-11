@@ -243,6 +243,25 @@ class TestWorkerManagerStandbyWorkers:
         assert all(p.terminate.call_count == 1 and p.join.call_count == 1 for p in processes)
         assert manager.standby == []
 
+    def test_terminate_alive_processes_terminates_then_joins_only_alive_processes(self) -> None:
+        manager = WorkerManager()
+        alive = Mock(spec=multiprocessing.Process)
+        alive.is_alive.return_value = True
+        exited = Mock(spec=multiprocessing.Process)
+        exited.is_alive.return_value = False
+        thread = Mock(spec=threading.Thread)
+        manager.tasks.extend([alive, exited, thread])
+        order = Mock()
+        order.attach_mock(alive.terminate, "terminate")
+        order.attach_mock(alive.join, "join")
+
+        manager.terminate_alive_processes()
+
+        assert [c[0] for c in order.mock_calls] == ["terminate", "join"]
+        exited.terminate.assert_not_called()
+        exited.join.assert_not_called()
+        thread.join.assert_not_called()
+
     def test_stop_standbys_is_a_noop_without_standbys(self) -> None:
         manager = WorkerManager()
 

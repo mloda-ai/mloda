@@ -1,15 +1,24 @@
 """Tests for CfwManager RunContext get/set round-trip and merge-relation cycles."""
 
+import os
+import sys
+import threading
+import time
+from collections.abc import Iterator
 from multiprocessing.managers import BaseManager
+from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
 
+import mloda.core.core.cfw_manager as cfw_manager_module
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager, MyManager
+
+cfw_module: Any = cfw_manager_module
 
 
 def _module_level_bootstrap() -> None:
@@ -334,3 +343,152 @@ class TestMyManagerStartAlwaysChainsTheParentDeathWatchdog:
 
         watchdog_mock.assert_called_once()
         assert caller_calls == [("a", "b")]
+
+
+@pytest.fixture
+def isolated_shared_manager(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Empties the process-wide cache and shuts down every real manager the test started."""
+    started: list[MyManager] = []
+    real_start = MyManager.start
+
+    def recording_start(self: MyManager, initializer: Any = None, initargs: Any = ()) -> None:
+        real_start(self, initializer, initargs)
+        started.append(self)
+
+    monkeypatch.setattr(cfw_manager_module, "_shared_manager", None)
+    monkeypatch.setattr(MyManager, "start", recording_start)
+    yield
+    for manager in started:
+        manager.shutdown()
+
+
+@pytest.mark.usefixtures("isolated_shared_manager")
+class TestSharedManagerWithARealServer:
+    @pytest.mark.timeout(30)
+    def test_two_calls_return_the_same_alive_manager(self) -> None:
+        first = cfw_module.shared_manager()
+        second = cfw_module.shared_manager()
+
+        assert first is second
+        assert first.is_alive()
+
+    @pytest.mark.timeout(30)
+    def test_registers_from_one_manager_do_not_share_state(self) -> None:
+        manager: Any = cfw_module.shared_manager()
+        modes = {ParallelizationMode.MULTIPROCESSING}
+        register_a = manager.CfwManager(modes)
+        register_b = manager.CfwManager(modes)
+
+        register_a.set_location("grpc://a")
+
+        assert register_a.get_location() == "grpc://a"
+        assert register_b.get_location() is None
+
+        register_a.release()
+
+        assert register_a.get_location() is None
+        register_b.set_location("grpc://b")
+        assert register_b.get_location() == "grpc://b"
+
+    @pytest.mark.timeout(30)
+    def test_after_shutdown_the_next_call_returns_a_different_alive_manager(self) -> None:
+        first = cfw_module.shared_manager()
+        first.shutdown()
+
+        second = cfw_module.shared_manager()
+
+        assert second is not first
+        assert second.is_alive()
+
+
+@pytest.mark.usefixtures("isolated_shared_manager")
+class TestSharedManagerWithAFakedStart:
+    @staticmethod
+    def _fake_start(monkeypatch: pytest.MonkeyPatch, delay: float = 0.0) -> list[MyManager]:
+        starts: list[MyManager] = []
+
+        def fake_start(self: MyManager, initializer: Any = None, initargs: Any = ()) -> None:
+            time.sleep(delay)
+            starts.append(self)
+
+        monkeypatch.setattr(MyManager, "start", fake_start)
+        monkeypatch.setattr(MyManager, "is_alive", lambda self: True, raising=False)
+        return starts
+
+    @pytest.mark.parametrize("reason", ["unchanged", "sys_path_changed", "pid_changed", "dead"])
+    def test_restarts_only_when_the_cached_manager_is_stale(
+        self, reason: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        starts = self._fake_start(monkeypatch)
+        first = cfw_module.shared_manager()
+
+        if reason == "sys_path_changed":
+            monkeypatch.syspath_prepend(str(tmp_path))
+        if reason == "dead":
+            monkeypatch.setattr(MyManager, "is_alive", lambda self: False, raising=False)
+        if reason == "pid_changed":
+            cached_manager, cached_pid, cached_path = cfw_module._shared_manager
+            monkeypatch.setattr(cfw_manager_module, "_shared_manager", (cached_manager, cached_pid + 1, cached_path))
+
+            def is_alive_must_not_run(self: MyManager) -> bool:
+                raise AssertionError("is_alive called for a manager started in another pid")
+
+            monkeypatch.setattr(MyManager, "is_alive", is_alive_must_not_run, raising=False)
+
+        second = cfw_module.shared_manager()
+
+        if reason == "unchanged":
+            assert second is first
+            assert len(starts) == 1
+            assert cfw_module._shared_manager == (first, os.getpid(), tuple(sys.path))
+        else:
+            assert second is not first
+            assert starts == [first, second]
+
+    def test_manager_is_built_with_the_mp_start_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._fake_start(monkeypatch)
+        sentinel = object()
+        monkeypatch.setattr(cfw_manager_module, "mp_start_context", lambda: sentinel)
+
+        manager = cfw_module.shared_manager()
+
+        assert manager._ctx is sentinel
+
+    def test_concurrent_calls_share_one_manager_and_one_start(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        starts = self._fake_start(monkeypatch, delay=0.2)
+        results: list[Any] = []
+        barrier = threading.Barrier(6)
+
+        def call() -> None:
+            barrier.wait()
+            results.append(cfw_module.shared_manager())
+
+        threads = [threading.Thread(target=call) for _ in range(6)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len(results) == 6
+        assert all(result is results[0] for result in results)
+        assert len(starts) == 1
+
+
+class TestCfwManagerRelease:
+    def test_release_resets_the_register_to_its_fresh_state(self) -> None:
+        modes = {ParallelizationMode.MULTIPROCESSING}
+        register = CfwManager(modes)
+        cfw_uuid, left_uuid, right_uuid, dataset_uuid = uuid4(), uuid4(), uuid4(), uuid4()
+        register.set_location("grpc://somewhere")
+        register.set_error("msg", ("exc_info",), ValueError("boom"))
+        register.set_artifact_to_save("artifact", {"k": 1})
+        register.set_runtime_artifacts({"runtime": 1})
+        register.set_api_data({"api": 1})
+        register.set_run_context(RunContext(run_id="run-1"))
+        register.add_cfw_to_compute_frameworks(cfw_uuid, "SomeComputeFramework", {uuid4()})
+        register.add_to_merge_relation(left_uuid, right_uuid, "SomeComputeFramework")
+        register.add_uuid_flyway_datasets(cfw_uuid, {dataset_uuid})
+
+        register.release()
+
+        assert vars(register) == vars(CfwManager(modes))

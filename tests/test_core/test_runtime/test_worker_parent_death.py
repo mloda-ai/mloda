@@ -18,6 +18,7 @@ from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker.multiprocessing_worker import worker
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.helpers.probe_runner import run_probes
 
 
 class _FakeCfwManager:
@@ -45,10 +46,28 @@ def _worker_is_gone(pid: int) -> bool:
     return stat_text.rsplit(")", 1)[1].split()[0] == "Z"
 
 
-def _fake_parent_main(pid_file: str, standby: bool = False) -> None:
-    """Spawns a real worker (or unbound standby), writes its pid to pid_file, then blocks for SIGKILL."""
+def _wait_until_gone(pid: int, timeout: float) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _worker_is_gone(pid):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def _fake_parent_main(pid_file: str, kind: str = "bound_worker") -> None:
+    """Spawns a real worker, standby, or shared Manager server, writes its pid to pid_file, then blocks for SIGKILL."""
     manager = WorkerManager()
-    if standby:
+    process: Any
+    if kind == "shared_manager":
+        import multiprocessing
+
+        import mloda.core.core.cfw_manager as cfw_manager_module
+
+        cfw_module: Any = cfw_manager_module
+        cfw_module.shared_manager()
+        process = multiprocessing.active_children()[0]
+    elif kind == "unbound_standby":
         from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 
         manager.prestart_workers(1, standby_worker)
@@ -139,13 +158,13 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
     """A worker spawned via WorkerManager.create_worker_process must exit once its parent dies."""
 
     @pytest.mark.timeout(30)
-    @pytest.mark.parametrize("standby", [False, True], ids=["bound_worker", "unbound_standby"])
+    @pytest.mark.parametrize("kind", ["bound_worker", "unbound_standby", "shared_manager"])
     def test_real_worker_process_exits_after_its_real_parent_process_is_sigkilled(
-        self, tmp_path: Path, standby: bool
+        self, tmp_path: Path, kind: str
     ) -> None:
         pid_file = tmp_path / "worker.pid"
         ctx = mp_start_context()
-        fake_parent = ctx.Process(target=_fake_parent_main, args=(str(pid_file), standby))
+        fake_parent = ctx.Process(target=_fake_parent_main, args=(str(pid_file), kind))
         fake_parent.start()
 
         worker_pid: int | None = None
@@ -169,12 +188,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
             fake_parent.join(timeout=5)
             assert not fake_parent.is_alive(), "fake parent process survived SIGKILL"
 
-            deadline = time.time() + 10.0
-            while time.time() < deadline:
-                if _worker_is_gone(worker_pid):
-                    worker_gone = True
-                    break
-                time.sleep(0.1)
+            worker_gone = _wait_until_gone(worker_pid, 10.0)
 
             assert worker_gone, "worker process outlived its SIGKILLed parent process"
         finally:
@@ -185,5 +199,32 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
             if worker_pid is not None and not worker_gone:
                 try:
                     os.kill(worker_pid, signal.SIGKILL)
+                except OSError:
+                    pass
+
+
+class TestSharedManagerServerDoesNotOutliveACleanParentExit:
+    @pytest.mark.timeout(40)
+    def test_server_is_gone_after_the_parent_interpreter_exits_normally(self, tmp_path: Path) -> None:
+        probe = tmp_path / "probe.py"
+        probe.write_text(
+            "import json\n"
+            "import multiprocessing\n"
+            "import mloda.core.core.cfw_manager as m\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    m.shared_manager()\n"
+            '    print(json.dumps({"pid": str(multiprocessing.active_children()[0].pid)}))\n'
+        )
+        server_pid = int(run_probes(probe, 1)[0]["pid"])
+
+        server_gone = False
+        try:
+            server_gone = _wait_until_gone(server_pid, 10.0)
+            assert server_gone, "shared manager server outlived its cleanly exited parent"
+        finally:
+            if not server_gone:
+                try:
+                    os.kill(server_pid, signal.SIGKILL)
                 except OSError:
                     pass

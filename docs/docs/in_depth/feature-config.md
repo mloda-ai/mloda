@@ -78,7 +78,7 @@ Combine strings and objects:
 | `in_features` | array | No | Array of source feature names for chained features |
 | `group_options` | object | No | Group parameters (affect Feature Group resolution) |
 | `context_options` | object | No | Context parameters (metadata, doesn't affect resolution) |
-| `propagate_context_keys` | array | No | Context keys that propagate to dependent features |
+| `propagate_context_keys` | array | No | Context keys pushed to the feature's direct input features |
 | `column_index` | integer | No | Index for multi-output features (adds `~N` suffix) |
 | `feature_group` | string | No | Feature Group class name the feature resolves to (scope read by feature resolution and filter matching) |
 
@@ -251,7 +251,7 @@ This produces a feature named `pca_result~0`.
 
 ## Context Propagation
 
-By default, context parameters are local to each feature and do not propagate through feature chains. Use `propagate_context_keys` to specify which context keys should flow to dependent features:
+By default, context parameters are local to each feature and do not propagate through feature chains. Use `propagate_context_keys` to push specific context keys to the feature's direct input features:
 
 ```json
 [
@@ -266,7 +266,7 @@ By default, context parameters are local to each feature and do not propagate th
 ]
 ```
 
-In this example, `session_id` propagates to any features that depend on `my_feature`, while `window_function` stays local.
+In this example, `session_id` is pushed to the direct input features of `my_feature`, while `window_function` stays local. The push is one hop; see [Context propagation](property-mapping.md#context-propagation) for inputs further down a chain.
 
 ## Complete Example
 

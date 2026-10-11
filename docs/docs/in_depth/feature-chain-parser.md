@@ -477,7 +477,7 @@ PROPERTY_MAPPING = {
 
 The [Context Propagation](property-mapping.md#context-propagation) docs describe the
 **caller side**: context options stay local by default, and `propagate_context_keys`
-opts specific keys in. This section describes the **author side**: what happens to a
+opts specific keys in for the direct input features only. This section describes the **author side**: what happens to a
 feature group's own options when it declares an input feature.
 
 ### Forwarding is the default

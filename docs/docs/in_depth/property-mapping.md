@@ -766,8 +766,15 @@ Options(
 )
 ```
 
-Only listed keys propagate; the rest stay local. Group options differ: they forward
-to input features by default. A feature group keeps consumer-local keys off its
+Only listed keys propagate; the rest stay local. The push is one hop: listed keys land
+in the context of the feature's direct input features, and an input feature does not
+push them on to its own inputs. For a name-chained feature such as `a__b__c`, a key
+pushed from the requested feature reaches `a__b`, not the root `a`. A value every
+level needs belongs in group options, which forward down the whole chain by default
+and are part of feature identity and resolution at every level. A feature group
+author can instead pull a key level by level with `inherit_context_keys`.
+
+Group options differ: they forward to input features by default. A feature group keeps consumer-local keys off its
 upstreams with `forward_group_exclude`, an allowlist, or `forward_group=False` on the
 child `Feature`. `propagate_context_keys` is the caller-side **push**; its
 counterpart is the child-side **pull** `inherit_context_keys`. For both author-side

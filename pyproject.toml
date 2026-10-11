@@ -106,6 +106,9 @@ all = [
     "mloda[docs]",
 ]
 
+[project.scripts]
+mloda = "mloda.interfaces.cli.main:main"
+
 [project.entry-points.pytest11]
 mloda = "mloda.core.abstract_plugins.plugin_registry.fixtures"
 

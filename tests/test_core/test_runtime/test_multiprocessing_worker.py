@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.runtime.mp_context import mp_start_context
+from mloda.core.runtime.worker import multiprocessing_worker as worker_module
 from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, worker
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -295,6 +296,81 @@ class TestWorkerReportsCommandExceptionThroughTheErrorChannel:
         recorded = contexts[0]
         assert recorded is not None and recorded.reason == "error"
 
+    @_BASE_ERRORS
+    def test_idle_poll_exception_is_reported_and_stops_without_propagating(
+        self, error: type[BaseException], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = mp_start_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
+        cfw.function_extender = {extender}
+        boom = error("poll boom")
+        monkeypatch.setattr(worker_module, "_parent_gone", Mock(side_effect=boom))
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        assert cfw_register.set_error.call_args.kwargs.get("exception") is boom
+        assert command_queue.get(timeout=2) == "STOP"
+        assert extender.close_calls == [True]
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None and recorded.reason == "error"
+
+    @_BASE_ERRORS
+    def test_data_dropping_exception_is_reported_and_stops_without_propagating(
+        self, error: type[BaseException], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ctx = mp_start_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        contexts: list[CloseContext | None] = []
+        extender = _CloseRecordingExtender(contexts=contexts)
+        cfw.function_extender = {extender}
+        boom = error("drop boom")
+        monkeypatch.setattr(worker_module, "_handle_data_dropping", Mock(side_effect=boom))
+        command_queue.put({uuid4()})
+
+        worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        assert cfw_register.set_error.call_args.kwargs.get("exception") is boom
+        assert command_queue.get(timeout=2) == "STOP"
+        assert extender.close_calls == [True]
+        assert len(contexts) == 1
+        recorded = contexts[0]
+        assert recorded is not None and recorded.reason == "error"
+
+    def test_set_error_raising_keyboard_interrupt_still_stops_closes_and_propagates(self) -> None:
+        ctx = mp_start_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw_register.set_error.side_effect = KeyboardInterrupt()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        extender = _CloseRecordingExtender()
+        cfw.function_extender = {extender}
+        command_queue.put(_RaisingCommand(RuntimeError))
+
+        with pytest.raises(KeyboardInterrupt):
+            worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        cfw_register.set_error.assert_called_once()
+        assert command_queue.get(timeout=2) == "STOP"
+        assert extender.close_calls == [True]
+
     def test_command_report_falling_back_to_string_only_still_stops(self) -> None:
         ctx = mp_start_context()
         command_queue: multiprocessing.Queue[Any] = ctx.Queue()
@@ -488,6 +564,45 @@ class TestWorkerSwallowsExtenderCloseExceptions:
         args = record.args
         arg_values = args.values() if isinstance(args, Mapping) else (args or ())
         assert not [a for a in arg_values if isinstance(a, BaseException)]
+
+    @pytest.mark.parametrize("error", [SystemExit, KeyboardInterrupt])
+    def test_close_base_exception_does_not_stop_other_extenders_and_is_reraised(
+        self, error: type[BaseException], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        ok_extender = _CloseRecordingExtender()
+        cfw = Mock(spec=ComputeFramework)
+        cfw.function_extender = [_RaisingCloseExtender(error=error), ok_extender]
+        context = CloseContext(deadline=time.monotonic() + 5.0, reason="stop")
+
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(error):
+                _close_extenders(cfw, context)
+
+        assert ok_extender.close_calls == [True]
+        error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+        assert len(error_records) == 1
+        assert error_records[0].name == _WORKER_LOGGER_NAME
+        assert "_RaisingCloseExtender" in error_records[0].getMessage()
+
+    @pytest.mark.parametrize("error", [SystemExit, KeyboardInterrupt])
+    def test_worker_closes_remaining_extenders_and_reraises_close_base_exception(
+        self, error: type[BaseException]
+    ) -> None:
+        ctx = mp_start_context()
+        command_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        result_queue: multiprocessing.Queue[Any] = ctx.Queue()
+        cfw_register = Mock(spec=CfwManager)
+        cfw_register.get_location.return_value = "grpc://localhost:9999"
+        cfw_register.get_run_context.return_value = RunContext()
+        cfw = PythonDictFramework(mode=ParallelizationMode.MULTIPROCESSING, children_if_root=frozenset())
+        ok_extender = _CloseRecordingExtender()
+        cfw.function_extender = [_RaisingCloseExtender(error=error), ok_extender]  # type: ignore[assignment]
+        command_queue.put("STOP")
+
+        with pytest.raises(error):
+            worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
+
+        assert ok_extender.close_calls == [True]
 
 
 class TestWorkerClosesExtendersEvenWhenChildBootstrapRaises:

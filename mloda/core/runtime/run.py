@@ -298,31 +298,36 @@ class ExecutionOrchestrator:
             # real exception is propagating (e.g. a dead flight server) with this one.
             logger.warning("Failed to drop uploaded flight tables during finalize: %s", contained_raise_reason(e))
 
+    def _raise_reported_error(self) -> None:
+        if not self.cfw_register.get_error():
+            return
+        logger.error(self.cfw_register.get_error_exc_info())
+        # The register outlives the raise; on SYNC/THREADING a retained exception pins its
+        # traceback frames and through them the plugin class (pickling drops __traceback__).
+        original = self.cfw_register.take_error_exception()
+        if isinstance(original, BaseException):
+            raise original
+        raise MlodaRunError(self.cfw_register.get_error_msg())
+
     def _check_for_error(self) -> bool:
         """Return True if the run loop should stop (compute framework manager gone).
 
         Raises if a worker reported an error.
         """
         if self.cfw_register:
-            error = self.cfw_register.get_error()
-            if error:
-                logger.error(self.cfw_register.get_error_exc_info())
-                # The register outlives the raise; on SYNC/THREADING a retained exception pins its
-                # traceback frames and through them the plugin class (pickling drops __traceback__).
-                original = self.cfw_register.take_error_exception()
-                if isinstance(original, BaseException):
-                    raise original
-                raise MlodaRunError(self.cfw_register.get_error_msg())
+            self._raise_reported_error()
             # Drain queues first: a fast worker can exit before its queue is ever polled,
             # which would otherwise false-positive as orphaned below.
             self.worker_manager.poll_result_queues()
             dead = self.worker_manager.find_dead_workers()
             if dead:
+                self._raise_reported_error()
                 raise MlodaRunError(f"Worker process(es) died unexpectedly: {dead}")
             # A clean exit is invisible above, so check assignments too: a worker that is
             # gone will never answer, and waiting on it hangs the run instead of failing it.
             orphaned = self.worker_manager.find_orphaned_steps()
             if orphaned:
+                self._raise_reported_error()
                 detail = "; ".join(
                     f"cfw {cfw_uuid} exited with code {exitcode} owing step(s) {', '.join(str(step) for step in steps)}"
                     for cfw_uuid, exitcode, steps in orphaned

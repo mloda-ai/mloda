@@ -99,6 +99,14 @@ def raise_on_dishonest_join_record(plan: ResolvedJoinPlan, join_steps: Iterable[
             ("destination", record.destination, record.destination_uuids),
             ("source", record.source, record.source_uuids),
         ):
+            foreign = _foreign_members(end.feature_group, uuids, graph)
+            if foreign:
+                raise ValueError(
+                    internal_invariant_error(
+                        f"Every {label} member of link {step.link} is a {end.feature_group.get_class_name()}.",
+                        f"{label} uuids hold members of {foreign}.",
+                    )
+                )
             if not uuids & end.uuids:
                 raise ValueError(
                     internal_invariant_error(

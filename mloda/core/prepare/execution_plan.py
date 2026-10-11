@@ -1148,6 +1148,10 @@ Available join types:
                     # 2) The child feature using this join needs to know which cfw to use. We use the tfs vehicle for this.
                     store_val = None
 
+                    # Two joins of one link writing the same destination frame must not run at once.
+                    if ep.link.jointype not in (JoinType.APPEND, JoinType.UNION):
+                        ep.required_uuids.update(self.joinstep_collection.earlier_joins_sharing_destination(ep))
+
                     if ep.carriers or ep.shared_destination:
                         destination_hop = self._destination_hop(
                             ep, graph, owning_step_of, not ep.carriers or ep.split_consumers is not None
@@ -2266,12 +2270,9 @@ Available join types:
                     shared_destination = True
             shared_source = varying_side is not None and destination_framework == source_framework
 
-            # destination_uuids/source_uuids must only ever name genuine declared-side members, regardless
-            # of which branch above ran; any-distance widening keeps a nearer wrong-framework sibling from
-            # hiding a farther, correct one.
-            declared_side_uuids = split.left_uuids_any_distance | split.right_uuids_any_distance
-            join_uuids_left = resolved_left & declared_side_uuids
-            join_uuids_right = resolved_right & declared_side_uuids
+            # Any-distance widening keeps a nearer wrong-framework sibling from hiding a farther, correct one.
+            join_uuids_left = resolved_left & split.left_uuids_any_distance
+            join_uuids_right = resolved_right & split.right_uuids_any_distance
 
         destination_uuids, source_uuids = (
             (join_uuids_right, join_uuids_left) if side is JoinSide.RIGHT else (join_uuids_left, join_uuids_right)

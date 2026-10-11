@@ -673,8 +673,8 @@ def _right_join_both_sides_claim_destination_framework() -> Built:
     # The trekker key matches the queued key directly, so run_link never flips here.
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
-    # far_left (PyArrowTable) is the sole source-side uuid; nearest_left also sits on the
-    # destination framework, so it lands on the destination side alongside right.uuid.
+    # far_left (PyArrowTable) is the sole source-side uuid; nearest_left shares the destination
+    # framework but is declared left, so it belongs to neither join end.
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid, nearest_left.uuid))
 
 
@@ -952,6 +952,7 @@ def test_a_right_joins_destination_stays_right_when_both_declared_sides_claim_th
     assert record.left.uuids == {built.sides.left_uuid}
     # The declared-left parent on the destination framework is not a member of the right side.
     assert record.right.uuids == {built.sides.right_uuid}
+    assert record.destination_uuids == {built.sides.right_uuid}
     join_steps = _join_steps(built.plan)
     assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
     assert join_steps[0].swap_merge_sides is True
@@ -968,6 +969,7 @@ def test_a_right_joins_destination_stays_right_when_a_farther_right_parent_share
     assert record.left.uuids == {built.sides.left_uuid}
     # The declared-left parent on the destination framework is not a member of the right side.
     assert record.right.uuids == {built.sides.right_uuid}
+    assert record.destination_uuids == {built.sides.right_uuid}
     join_steps = _join_steps(built.plan)
     assert len(join_steps) == 1, "the shape must plan exactly one JoinStep for this to say anything"
     assert join_steps[0].swap_merge_sides is True
@@ -982,6 +984,8 @@ def test_a_right_joins_destination_stays_right_when_both_declared_sides_share_on
 
     assert record.jointype is JoinType.RIGHT
     assert record.destination_side is JoinSide.RIGHT
+    assert record.destination_uuids == {built.sides.right_uuid}
+    assert record.source_uuids == {built.sides.left_uuid}
 
 
 def test_a_right_joins_destination_stays_right_when_declared_right_is_the_only_pyarrow_exclusive_side() -> None:
@@ -1234,6 +1238,20 @@ def _same_framework_overlap() -> tuple[Built, dict[str, Any]]:
     return built, {"source_uuids": shared, "destination_uuids": shared}
 
 
+def _destination_holds_declared_left_member() -> tuple[Built, dict[str, Any]]:
+    built = _right_join_both_sides_claim_destination_framework()
+    # extra_right_uuid holds nearest_left, a declared-left parent, in this shape.
+    assert built.sides.extra_right_uuid is not None
+    return built, {"destination_uuids": frozenset({built.sides.right_uuid, built.sides.extra_right_uuid})}
+
+
+def _destination_shares_none_with_its_side() -> tuple[Built, dict[str, Any]]:
+    built = _right_join_nearest_left_and_farther_right_share_destination_framework()
+    nodes = built.graph.get_nodes()
+    [nearest_right] = [uuid for uuid, node in nodes.items() if node.feature_group_class is ResolvedJoinPairRight]
+    return built, {"destination_uuids": frozenset({nearest_right})}
+
+
 def _append_overlap() -> tuple[Built, dict[str, Any]]:
     built = _append_pair()
     shared = frozenset({built.sides.left_uuid})
@@ -1243,12 +1261,34 @@ def _append_overlap() -> tuple[Built, dict[str, Any]]:
 @pytest.mark.parametrize(
     "build, message, carried",
     [
-        pytest.param(_wrong_side_membership, "ResolvedJoinPairRight", False, id="right_side_holds_left_group_uuid"),
-        pytest.param(_cross_framework_overlap, "Internal error", False, id="cross_framework_overlap"),
-        pytest.param(_ends_swapped, "ResolvedJoinPairLeft", False, id="destination_holds_source_group_uuid"),
+        pytest.param(
+            _wrong_side_membership,
+            "right side holds members of ['ResolvedJoinPairLeft']",
+            False,
+            id="right_side_holds_left_group_uuid",
+        ),
+        pytest.param(_cross_framework_overlap, "Both name [", False, id="cross_framework_overlap"),
+        pytest.param(
+            _ends_swapped,
+            "destination uuids hold members of ['ResolvedJoinPairRight']",
+            False,
+            id="destination_holds_source_group_uuid",
+        ),
         pytest.param(_same_framework_overlap, None, False, id="same_framework_overlap_exempt"),
-        pytest.param(_same_framework_overlap, "Internal error", True, id="same_framework_overlap_with_carriers"),
+        pytest.param(_same_framework_overlap, "Both name [", True, id="same_framework_overlap_with_carriers"),
         pytest.param(_append_overlap, None, False, id="append_overlap_exempt"),
+        pytest.param(
+            _destination_holds_declared_left_member,
+            "destination uuids hold members of ['ResolvedJoinPairLeft']",
+            False,
+            id="destination_holds_declared_left_member",
+        ),
+        pytest.param(
+            _destination_shares_none_with_its_side,
+            "share none with the side",
+            False,
+            id="destination_shares_none_with_its_side",
+        ),
     ],
 )
 def test_raise_on_dishonest_join_record(

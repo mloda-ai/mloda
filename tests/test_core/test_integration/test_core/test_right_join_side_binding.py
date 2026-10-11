@@ -4,6 +4,8 @@ from typing import Any
 
 import pytest
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.join_step import JoinStep
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
@@ -311,3 +313,123 @@ def test_right_join_binds_the_declared_left_side_when_a_sibling_subclass_is_a_se
 
     assert len(rows) == len(RIGHT_KEYS)
     assert sorted(rows) == sorted(RIGHT_JOIN_ROWS_WITH_SIBLING)
+
+
+SIDE_LEFT_KEYS = ["k1", "k2", "k3"]
+SIDE_ARROW_KEYS = ["k9", "k8"]
+SIDE_ARROW_PAYLOADS = ["a9", "a8"]
+# The arrow payload survives only at k9, the key the base left group lacks; the base payload is absent there.
+SIDE_ROWS = [f"k1|l1|{MISSING}|r1", f"k2|l2|{MISSING}|r2", f"k9|{MISSING}|a9|r9"]
+
+
+class RightBindSideBase(FeatureGroup):
+    """Declared left side, in the destination framework."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"rjsbs_left_key", "rjsbs_left_payload"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"rjsbs_left_key": SIDE_LEFT_KEYS, "rjsbs_left_payload": ["l1", "l2", "l3"]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class RightBindSideArrow(RightBindSideBase):
+    """Subclass of the declared left side, in another framework: its own payload feature, plus a key the base lacks."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"rjsbs_arrow_payload"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"rjsbs_left_key": SIDE_ARROW_KEYS, "rjsbs_arrow_payload": SIDE_ARROW_PAYLOADS}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class RightBindSideRight(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"rjsbs_right_key", "rjsbs_right_payload"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"rjsbs_right_key": RIGHT_KEYS, "rjsbs_right_payload": RIGHT_PAYLOADS}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class RightBindSideChild(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        names = ("left_key", "left_payload", "arrow_payload", "right_key", "right_payload")
+        return {Feature(name=f"rjsbs_{name}") for name in names}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        columns = _columns(data)
+        rows = [
+            "|".join(_cell(value) for value in row)
+            for row in zip(
+                columns["rjsbs_right_key"],
+                columns["rjsbs_left_payload"],
+                columns["rjsbs_arrow_payload"],
+                columns["rjsbs_right_payload"],
+            )
+        ]
+        return {cls.get_class_name(): rows}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+def _side_args(modes: set[ParallelizationMode]) -> dict[str, Any]:
+    link = Link.right(
+        JoinSpec(RightBindSideBase, Index(("rjsbs_left_key",))),
+        JoinSpec(RightBindSideRight, Index(("rjsbs_right_key",))),
+    )
+    return {
+        "links": {link},
+        "compute_frameworks": [PandasDataFrame, PyArrowTable],
+        "plugin_collector": PluginCollector.enabled_feature_groups(
+            {RightBindSideBase, RightBindSideArrow, RightBindSideRight, RightBindSideChild}
+        ),
+        "parallelization_modes": modes,
+    }
+
+
+@MODES
+def test_right_join_with_a_declared_left_subclass_in_another_framework_keeps_every_right_key(
+    modes: set[ParallelizationMode],
+) -> None:
+    for _ in range(4):
+        results = mloda.run_all([Feature(name=RightBindSideChild.get_class_name())], **_side_args(modes))
+        rows = _packed_rows(results, RightBindSideChild.get_class_name())
+
+        assert sorted(rows) == sorted(SIDE_ROWS)
+
+
+def test_right_join_destinations_hold_only_the_declared_right_group_and_the_link_steps_are_ordered() -> None:
+    features = [Feature(name=RightBindSideChild.get_class_name())]
+    session = mloda.prepare(features, **_side_args({ParallelizationMode.SYNC}))
+
+    assert session.engine is not None
+    steps = list(session.engine.execution_planner)
+    join_steps = [step for step in steps if isinstance(step, JoinStep)]
+    group_by_uuid = {
+        uuid: step.feature_group for step in steps if isinstance(step, FeatureGroupStep) for uuid in step.get_uuids()
+    }
+    assert len(join_steps) == 2
+    for join_step in join_steps:
+        assert {group_by_uuid[uuid] for uuid in join_step.destination_framework_uuids} == {RightBindSideRight}
+    first, second = join_steps
+    assert first.uuid in second.required_uuids or second.uuid in first.required_uuids

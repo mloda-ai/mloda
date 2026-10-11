@@ -1140,10 +1140,11 @@ class TestThreadExecuteStep:
 
         worker_manager.add_thread_task.assert_called_once_with(mock_thread)
 
-    def test_thread_worker_reports_error_without_reraising(self) -> None:
+    @pytest.mark.parametrize("error_type", [RuntimeError, SystemExit])
+    def test_thread_worker_reports_error_without_reraising(self, error_type: type[BaseException]) -> None:
         cfw_register = Mock(spec=CfwManager)
         step = Mock(spec=FeatureGroupStep)
-        boom = RuntimeError("Test error")
+        boom = error_type("Test error")
         step.execute.side_effect = boom
 
         thread_worker(step, cfw_register, Mock(spec=ComputeFramework), None)

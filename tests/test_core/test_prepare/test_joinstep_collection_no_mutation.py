@@ -1,5 +1,5 @@
 """JoinStepCollection: get_required_join_uuids must not insert a key on a cache miss, and
-earlier_joins_sharing_destination returns only earlier same-link joins with an overlapping destination."""
+earlier_joins_sharing_destination returns earlier joins (of any link) with an overlapping destination."""
 
 from __future__ import annotations
 
@@ -71,15 +71,15 @@ def test_earlier_joins_sharing_destination_orders_same_link_joins_by_insertion()
     assert coll.earlier_joins_sharing_destination(earlier) == set()
 
 
-def test_earlier_joins_sharing_destination_ignores_another_links_join() -> None:
+def test_earlier_joins_sharing_destination_returns_another_links_join() -> None:
     coll = JoinStepCollection()
     shared = uuid4()
-    other_link = _link()
-    coll.add(_step(other_link, {shared}))
+    earlier = _step(_link(), {shared})
+    coll.add(earlier)
     later = _step(_link(), {shared})
     coll.add(later)
 
-    assert coll.earlier_joins_sharing_destination(later) == set()
+    assert coll.earlier_joins_sharing_destination(later) == {earlier.uuid}
 
 
 def test_earlier_joins_sharing_destination_ignores_disjoint_destinations() -> None:

@@ -729,8 +729,16 @@ Available join types:
 
     @staticmethod
     def _step_waits_for(
-        start: UUID, goal: UUID, steps_by_uuid: Mapping[UUID, Step], producer_of: Mapping[UUID, UUID]
+        start: UUID,
+        goal: UUID,
+        steps_by_uuid: Mapping[UUID, Step],
+        producer_of: Mapping[UUID, UUID],
+        known_clear: set[UUID] | None = None,
     ) -> bool:
+        """Walks live wait sets; steps already known not to reach the goal are skipped and extended on False."""
+        clear = known_clear if known_clear is not None else set()
+        if start in clear:
+            return False
         stack, visited = [start], {start}
         while stack:
             step = steps_by_uuid[stack.pop()]
@@ -738,9 +746,10 @@ Available join types:
                 return True
             for token in step.get_wait_uuids():
                 owner = producer_of.get(token)
-                if owner is not None and owner not in visited:
+                if owner is not None and owner not in visited and owner not in clear:
                     visited.add(owner)
                     stack.append(owner)
+        clear |= visited
         return False
 
     def _order_hop_after_same_framework_parent(
@@ -1114,6 +1123,9 @@ Available join types:
             closure = {parent} | graph.parent_to_children_mapping.get(parent, set())
             return {owning_step_of.get(uuid, uuid) for uuid in closure} & root_steps
 
+        steps_by_uuid: dict[UUID, Step] = {ep.uuid: ep for ep in execution_plan}
+        producer_of: dict[UUID, UUID] = {token: ep.uuid for ep in execution_plan for token in ep.get_uuids()}
+
         memo = _LineageMemo()
         # (consumer step, its hop, same-framework parent) triples, resolved once the plan list is complete.
         hop_same_framework_pairs: list[tuple[FeatureGroupStep, TransformFrameworkStep, UUID]] = []
@@ -1148,8 +1160,14 @@ Available join types:
                     # 2) The child feature using this join needs to know which cfw to use. We use the tfs vehicle for this.
                     store_val = None
 
-                    # Serialize concurrent joins mutating the exact same runtime object.
-                    ep.required_uuids.update(self.joinstep_collection.earlier_joins_sharing_destination(ep))
+                    # Serialize joins merging into one owning step's frame (any link), unless the earlier one
+                    # already waits for this join. Edges added here leave ep, so non-reaching steps stay valid.
+                    known_clear: set[UUID] = set()
+                    for token in self.joinstep_collection.earlier_joins_sharing_destination(ep, owning_step_of):
+                        if not self._step_waits_for(
+                            producer_of[token], ep.uuid, steps_by_uuid, producer_of, known_clear
+                        ):
+                            ep.required_uuids.add(token)
 
                     if ep.carriers or ep.shared_destination:
                         destination_hop = self._destination_hop(

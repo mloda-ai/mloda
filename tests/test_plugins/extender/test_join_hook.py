@@ -3,11 +3,12 @@ no-extender baseline, and deny-before-merge / deny-with-fallback. For a keyed jo
 join_keys pairs each left column with its corresponding right column as ``"left=right"``
 strings; this is independent of ``swap_merge_sides`` since it reads off the immutable
 ``Link``, not whichever cfw is "self" at merge time. APPEND/UNION links merge without using
-keys, so their join_keys is None.
+keys, so their join_keys is None. The last sections pin ordering of joins that share a destination frame.
 """
 
 import logging
-from typing import Any
+import threading
+from typing import Any, ClassVar
 
 import pytest
 
@@ -342,7 +343,7 @@ class TestDenyWithFallback:
 class _JoinHookStarHubFeatureGroup(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_hub_value"})
+        return DataCreator({f"{_MARKER}_star_row_id", f"{_MARKER}_star_hub_value", f"{_MARKER}_star_hub_other"})
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -350,7 +351,11 @@ class _JoinHookStarHubFeatureGroup(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {f"{_MARKER}_star_row_id": [1, 2, 3], f"{_MARKER}_star_hub_value": ["h1", "h2", "h3"]}
+        return {
+            f"{_MARKER}_star_row_id": [1, 2, 3],
+            f"{_MARKER}_star_hub_value": ["h1", "h2", "h3"],
+            f"{_MARKER}_star_hub_other": ["g1", "g2", "g3"],
+        }
 
 
 class _JoinHookStarSpokeAFeatureGroup(FeatureGroup):
@@ -505,3 +510,284 @@ class TestJoinKeysIsNoneForAppendJoinType:
         assert len(extender.captured) == 1
         assert extender.captured[0].join_type == "append"
         assert extender.captured[0].join_keys is None
+
+
+# === Join ordering: joins of different links writing one destination frame are ordered ===
+
+
+def _star_plugins(*consumers: type[FeatureGroup]) -> PluginCollector:
+    return PluginCollector.enabled_feature_groups(
+        {_JoinHookStarHubFeatureGroup, _JoinHookStarSpokeAFeatureGroup, _JoinHookStarSpokeBFeatureGroup, *consumers}
+    )
+
+
+class _JoinOverlapExtender(Extender):
+    """Records the highest number of JOIN merges in flight at once."""
+
+    def __init__(self) -> None:
+        self.priority = 100
+        self.lock = threading.Lock()
+        self.active = 0
+        self.max_active = 0
+        self.calls = 0
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.JOIN}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        with self.lock:
+            self.active += 1
+            self.calls += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            with self.lock:
+                self.active -= 1
+
+
+class _JoinHookStarRowsConsumerFeatureGroup(FeatureGroup):
+    """Packs the hub and both spoke values of each row into one string."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        index = Index((f"{_MARKER}_star_row_id",))
+        return {
+            Feature(name=f"{_MARKER}_star_hub_value", index=index),
+            Feature(name=f"{_MARKER}_star_spoke_a_value", index=index),
+            Feature(name=f"{_MARKER}_star_spoke_b_value", index=index),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        hub, a, b = (data[f"{_MARKER}_star_{name}_value"] for name in ("hub", "spoke_a", "spoke_b"))
+        return {cls.get_class_name(): [f"{x}|{y}|{z}" for x, y, z in zip(hub, a, b)]}
+
+
+class _JoinHookStarPairConsumerFeatureGroup(FeatureGroup):
+    """Reads one hub column and one spoke column per row."""
+
+    hub_column: ClassVar[str]
+    spoke_column: ClassVar[str]
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        index = Index((f"{_MARKER}_star_row_id",))
+        return {Feature(name=self.hub_column, index=index), Feature(name=self.spoke_column, index=index)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {cls.get_class_name(): [f"{x}|{y}" for x, y in zip(data[cls.hub_column], data[cls.spoke_column])]}
+
+
+class _JoinHookStarHubValueWithSpokeAFeatureGroup(_JoinHookStarPairConsumerFeatureGroup):
+    hub_column = f"{_MARKER}_star_hub_value"
+    spoke_column = f"{_MARKER}_star_spoke_a_value"
+
+
+class _JoinHookStarHubOtherWithSpokeBFeatureGroup(_JoinHookStarPairConsumerFeatureGroup):
+    hub_column = f"{_MARKER}_star_hub_other"
+    spoke_column = f"{_MARKER}_star_spoke_b_value"
+
+
+def _ordering_edges(session: Any) -> int:
+    """Count join-to-join waits; fails unless the plan holds exactly two JoinSteps."""
+    assert session.engine is not None
+    joins = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
+    assert len(joins) == 2
+    return sum(1 for a in joins for b in joins if a is not b and a.uuid in b.required_uuids)
+
+
+def _prepare_star(links: set[Link], *consumers: type[FeatureGroup], extender: Extender | None = None) -> Any:
+    return mloda.prepare(
+        [Feature(name=consumer.get_class_name()) for consumer in consumers],
+        links=links,
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=_star_plugins(*consumers),
+        parallelization_modes={ParallelizationMode.THREADING},
+        function_extender={extender} if extender else None,
+    )
+
+
+class TestJoinsOfDifferentLinksSharingADestinationAreOrdered:
+    def test_two_right_links_sharing_the_right_frame_are_ordered_and_never_merge_concurrently(self) -> None:
+        index = Index((f"{_MARKER}_star_row_id",))
+        links = {
+            Link.right(JoinSpec(spoke, index), JoinSpec(_JoinHookStarHubFeatureGroup, index))
+            for spoke in (_JoinHookStarSpokeAFeatureGroup, _JoinHookStarSpokeBFeatureGroup)
+        }
+        extender = _JoinOverlapExtender()
+        consumer = _JoinHookStarRowsConsumerFeatureGroup
+
+        session = _prepare_star(links, consumer, extender=extender)
+        result = session.run(parallelization_modes={ParallelizationMode.THREADING})
+
+        assert _ordering_edges(session) == 1
+        assert extender.calls == 2
+        assert extender.max_active == 1
+        rows = [row for frame in result for row in frame.get(consumer.get_class_name(), [])]
+        assert sorted(rows) == ["h1|10|x", "h2|20|y", "h3|30|z"]
+
+    @pytest.mark.parametrize("join_type", ["append", "union"])
+    def test_two_row_stacking_links_sharing_the_left_frame_are_ordered_and_keep_every_row(self, join_type: str) -> None:
+        index = Index((f"{_MARKER}_star_row_id",))
+        make = getattr(Link, join_type)
+        links = {
+            make(JoinSpec(_JoinHookStarHubFeatureGroup, index), JoinSpec(spoke, index))
+            for spoke in (_JoinHookStarSpokeAFeatureGroup, _JoinHookStarSpokeBFeatureGroup)
+        }
+        extender = _JoinOverlapExtender()
+        consumer = _JoinHookStarRowsConsumerFeatureGroup
+
+        session = _prepare_star(links, consumer, extender=extender)
+        result = session.run(parallelization_modes={ParallelizationMode.THREADING})
+
+        assert _ordering_edges(session) == 1
+        assert extender.calls == 2
+        assert extender.max_active == 1
+        rows = [row for frame in result for row in frame.get(consumer.get_class_name(), [])]
+        assert len(rows) == 9
+        for value in ("h1", "h3", "10", "30", "x", "z"):
+            assert any(value in row.split("|") for row in rows), f"rows of {value} were lost: {rows}"
+
+    def test_two_links_joining_different_hub_columns_into_one_hub_frame_are_ordered(self) -> None:
+        index = Index((f"{_MARKER}_star_row_id",))
+        links = {
+            Link.inner(JoinSpec(_JoinHookStarHubFeatureGroup, index), JoinSpec(spoke, index))
+            for spoke in (_JoinHookStarSpokeAFeatureGroup, _JoinHookStarSpokeBFeatureGroup)
+        }
+        extender = _JoinOverlapExtender()
+        first = _JoinHookStarHubValueWithSpokeAFeatureGroup
+        second = _JoinHookStarHubOtherWithSpokeBFeatureGroup
+
+        session = _prepare_star(links, first, second, extender=extender)
+        result = session.run(parallelization_modes={ParallelizationMode.THREADING})
+
+        assert _ordering_edges(session) == 1
+        assert extender.calls == 2
+        assert extender.max_active == 1
+        for consumer, expected in ((first, ["h1|10", "h2|20", "h3|30"]), (second, ["g1|x", "g2|y", "g3|z"])):
+            rows = [row for frame in result for row in frame.get(consumer.get_class_name(), [])]
+            assert sorted(rows) == expected
+
+    def test_an_append_chain_plans_and_keeps_every_row(self) -> None:
+        index = Index((f"{_MARKER}_star_row_id",))
+        links = {
+            Link.append(
+                JoinSpec(_JoinHookStarHubFeatureGroup, index), JoinSpec(_JoinHookStarSpokeAFeatureGroup, index)
+            ),
+            Link.append(
+                JoinSpec(_JoinHookStarSpokeAFeatureGroup, index), JoinSpec(_JoinHookStarSpokeBFeatureGroup, index)
+            ),
+        }
+        consumer = _JoinHookStarRowsConsumerFeatureGroup
+
+        session = _prepare_star(links, consumer)
+        result = session.run(parallelization_modes={ParallelizationMode.THREADING})
+
+        rows = [row for frame in result for row in frame.get(consumer.get_class_name(), [])]
+        assert len(rows) == 9
+
+
+# === A source derived from an already joined group must not turn the ordering into a step cycle ===
+
+_ORDER_KEY = f"{_MARKER}_order_key"
+
+
+class _JoinOrderRootFeatureGroup(FeatureGroup):
+    keys: ClassVar[list[int]] = [1, 2]
+    value_prefix: ClassVar[str] = ""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({cls.get_class_name()})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {_ORDER_KEY: list(cls.keys), cls.get_class_name(): [f"{cls.value_prefix}{k}" for k in cls.keys]}
+
+
+class _JoinOrderOrdersFeatureGroup(_JoinOrderRootFeatureGroup):
+    value_prefix = "o"
+
+
+class _JoinOrderCustomersFeatureGroup(_JoinOrderRootFeatureGroup):
+    value_prefix = "c"
+
+
+class _JoinOrderScoreFeatureGroup(FeatureGroup):
+    """Derived from the Orders and Customers join; returns the input frame plus its own column."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature(name=_JoinOrderOrdersFeatureGroup.get_class_name()),
+            Feature(name=_JoinOrderCustomersFeatureGroup.get_class_name()),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        orders = data[_JoinOrderOrdersFeatureGroup.get_class_name()]
+        customers = data[_JoinOrderCustomersFeatureGroup.get_class_name()]
+        data = dict(data)
+        data[cls.get_class_name()] = [f"{o}|{c}" for o, c in zip(orders, customers)]
+        return data
+
+
+class _JoinOrderReportFeatureGroup(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature(name=_JoinOrderOrdersFeatureGroup.get_class_name()),
+            Feature(name=_JoinOrderScoreFeatureGroup.get_class_name()),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        orders = data[_JoinOrderOrdersFeatureGroup.get_class_name()]
+        scores = data[_JoinOrderScoreFeatureGroup.get_class_name()]
+        return {cls.get_class_name(): [f"{o}:{s}" for o, s in zip(orders, scores)]}
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+def test_a_source_derived_from_an_already_joined_group_plans_without_a_step_cycle(mode: ParallelizationMode) -> None:
+    index = Index((_ORDER_KEY,))
+    links = {
+        Link.inner(JoinSpec(_JoinOrderOrdersFeatureGroup, index), JoinSpec(_JoinOrderCustomersFeatureGroup, index)),
+        Link.inner(JoinSpec(_JoinOrderOrdersFeatureGroup, index), JoinSpec(_JoinOrderScoreFeatureGroup, index)),
+    }
+    enabled = PluginCollector.enabled_feature_groups(
+        {
+            _JoinOrderOrdersFeatureGroup,
+            _JoinOrderCustomersFeatureGroup,
+            _JoinOrderScoreFeatureGroup,
+            _JoinOrderReportFeatureGroup,
+        }
+    )
+
+    result = mloda.run_all(
+        [Feature(name=_JoinOrderReportFeatureGroup.get_class_name())],
+        links=links,
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=enabled,
+        parallelization_modes={mode},
+    )
+
+    rows = [row for frame in result for row in frame.get(_JoinOrderReportFeatureGroup.get_class_name(), [])]
+    assert sorted(rows) == ["o1:o1|c1", "o2:o2|c2"]

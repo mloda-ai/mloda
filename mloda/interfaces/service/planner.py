@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import json
 import math
-import os
 import re
 import secrets
 import time
@@ -20,7 +19,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import error_result, problems_to_details
@@ -32,9 +31,9 @@ from mloda.interfaces.service.request import (
     data_access_violations,
     validate_request,
 )
+from mloda.interfaces.service.sources import READER_ERRORS, data_access_collection, source_columns
 from mloda.steward import verified_context
 from mloda.user import (
-    DataAccessCollection,
     Feature,
     ParallelizationMode,
     PlanStep,
@@ -44,7 +43,6 @@ from mloda.user import (
     RunResult,
     mloda,
 )
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
 
 # A token format tag, not a secret.
 PLAN_TOKEN_PREFIX = "mpl1"  # nosec B105
@@ -54,8 +52,6 @@ STRICTNESS = ("public", "internal", "confidential", "personal", UNCLASSIFIED)
 ROWS_RETURNED_NOTE = "Rows returned depend on filters and joins; they are known only after execution."
 _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _PAYLOAD_KEYS = frozenset({"kid", "req", "digest", "cfg", "sub", "exp"})
-# The reader contract signals "cannot tell" by raising one of these.
-_READER_ERRORS: tuple[type[Exception], ...] = (NotImplementedError, ImportError, OSError, ValueError)
 _DENIED_MESSAGE = "This feature is not available under the service policy."
 
 
@@ -79,28 +75,6 @@ def _feature_name(feature: Feature | str) -> str:
 
 def _strictness(label: str) -> int:
     return STRICTNESS.index(label) if label in STRICTNESS else len(STRICTNESS)
-
-
-def _readers_for(path: str) -> list[type[ReadFile]]:
-    readers = get_all_subclasses(ReadFile)
-    matching = [r for r in readers if path.endswith(safe_field(r.suffix, (), catching=(NotImplementedError,)))]
-    return sorted(matching, key=lambda reader: reader.__qualname__)
-
-
-def _source_files(sources: Mapping[str, SourceConfig]) -> list[str]:
-    files = [file for source in sources.values() for file in source.files]
-    for folder in (folder for source in sources.values() for folder in source.folders):
-        if os.path.isdir(folder):
-            files.extend(os.path.join(folder, entry) for entry in sorted(os.listdir(folder)))
-    return [file for file in dict.fromkeys(files) if os.path.isfile(file)]
-
-
-def _source_columns(sources: Mapping[str, SourceConfig]) -> list[str]:
-    columns: set[str] = set()
-    for path in _source_files(sources):
-        for reader in _readers_for(path):
-            columns.update(safe_field(partial(reader.describe_columns, path), {}, catching=_READER_ERRORS))
-    return sorted(columns)
 
 
 def _alias_of(step: PlanStep, sources: Mapping[str, SourceConfig]) -> str | None:
@@ -305,11 +279,9 @@ class Planner:
         return {alias: self._settings.sources[alias] for alias in restrict}
 
     def _plan_kwargs(self, parsed: ParsedRequest, sources: Mapping[str, SourceConfig]) -> dict[str, Any]:
-        files = sorted({file for source in sources.values() for file in source.files})
-        folders = sorted({folder for source in sources.values() for folder in source.folders})
         return {
             "compute_frameworks": list(self._settings.compute_frameworks),
-            "data_access_collection": DataAccessCollection(files=files, folders=folders),
+            "data_access_collection": data_access_collection(sources),
             "global_filter": parsed.global_filter,
             "plugin_collector": plugin_collector_for(self._settings, self._base),
             "parallelization_modes": {ParallelizationMode.SYNC},
@@ -334,9 +306,7 @@ class Planner:
         if name is None:
             return error_result("internal", "The service configuration cannot plan this request.")
         known = diagnosis.failed_result.facts.known_names if diagnosis.failed_result is not None else ()
-        candidates = [
-            candidate for candidate in dict.fromkeys([*known, *_source_columns(sources)]) if candidate != name
-        ]
+        candidates = [candidate for candidate in dict.fromkeys([*known, *source_columns(sources)]) if candidate != name]
         close = difflib.get_close_matches(name, candidates, n=1)
         shown = sanitize_text(name, MAX_NAME_LENGTH)
         detail = {
@@ -439,7 +409,7 @@ class Planner:
         if step.reader_data_access is None or step.compute_framework is None:
             return None
         reader = step.reader_data_access[0]
-        return safe_field(partial(reader.count_rows, path, step.compute_framework), None, catching=_READER_ERRORS)
+        return safe_field(partial(reader.count_rows, path, step.compute_framework), None, catching=READER_ERRORS)
 
     def _limit_exceeded(self, entries: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
         max_rows = self._settings.max_rows

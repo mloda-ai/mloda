@@ -24,7 +24,7 @@ from mloda.interfaces.service.config import Settings, load_settings
 from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
-from mloda.user import PluginCollector
+from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 if sys.version_info >= (3, 11):
@@ -583,6 +583,24 @@ class TestBuildServices:
 
         assert result["status"] == "completed"
         assert result["tables"][0]["preview"]["rows"] == PREVIEW_ROWS
+
+    def test_catalog_without_collector_loads_and_lists_installed_plugins(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        loads: list[bool] = []
+        original_all = PluginLoader.all
+
+        def spy_all(cls: type[PluginLoader], force_reload: bool = False) -> PluginLoader:
+            loads.append(force_reload)
+            return original_all(force_reload=force_reload)
+
+        monkeypatch.setattr(PluginLoader, "all", classmethod(spy_all))
+
+        catalog, _, _ = build_services(self._settings(tmp_path), env=ENV, plugin_collector=None)
+
+        assert loads, "build_services built the catalog without calling PluginLoader.all"
+        result = catalog.search("AggregatedFeatureGroup", kinds=["feature_group"], limit=50)
+        assert "AggregatedFeatureGroup" in [item["feature_group"] for item in result["items"]], result
 
 
 class TestUsage:

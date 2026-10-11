@@ -18,11 +18,14 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.utils import as_str, get_all_subclasses, safe_field
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import error_result, problems_to_details, strip_control_characters
+from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem, option_data_access_violations
+from mloda.interfaces.service.sources import data_access_collection, source_columns
 
 MAX_DESCRIPTION_LENGTH = 300
 MAX_SEARCH_LIMIT = 50
@@ -167,9 +170,12 @@ class Catalog:
 
     @classmethod
     def build(cls, settings: Settings, base: PluginCollector | None = None) -> "Catalog":
-        """Index the FeatureGroups ``base`` enables minus the denied ones, once."""
-        collector = plugin_collector_for(settings, base)
-        return cls(settings, collector, [_entry(info) for info in get_feature_group_docs(plugin_collector=collector)])
+        """Load the installed plugins, then index the FeatureGroups ``base`` enables minus the denied ones, once."""
+        with MLODA_LOCK:
+            PluginLoader.all()
+            collector = plugin_collector_for(settings, base)
+            infos = get_feature_group_docs(plugin_collector=collector)
+        return cls(settings, collector, [_entry(info) for info in infos])
 
     def search(
         self,
@@ -221,11 +227,18 @@ class Catalog:
         if violations:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
-        resolved = resolve_feature(name, options=Options(group=group), plugin_collector=self._collector)
+        resolved = resolve_feature(
+            name,
+            options=Options(group=group),
+            plugin_collector=self._collector,
+            data_access_collection=data_access_collection(self._settings.sources),
+        )
         if resolved.feature_group is not None:
             return self._described(name, resolved.feature_group, resolved)
         if resolved.candidates:
-            message = sanitize_text(resolved.error)
+            # The core message may name configured sources, so only candidate class names are shown.
+            names = ", ".join(sorted(candidate.get_class_name() for candidate in resolved.candidates))
+            message = sanitize_text(f"'{sanitize_text(name, MAX_NAME_LENGTH)}' matches several FeatureGroups: {names}.")
             return error_result(
                 "validation_failed", message, [{"path": "/name", "problem": "unresolved", "message": message}]
             )
@@ -233,7 +246,8 @@ class Catalog:
             alternatives = self._settings.alternatives.get(name)
             extra: dict[str, Any] = {"alternatives": list(alternatives)} if alternatives else {}
             return error_result("policy_denied", "This feature is not available under the service policy.", **extra)
-        close = difflib.get_close_matches(name, self._known_names, n=1)
+        known = dict.fromkeys([*self._known_names, *source_columns(self._settings.sources)])
+        close = difflib.get_close_matches(name, list(known), n=1)
         problem = Problem(
             path="/name",
             problem="unknown_feature",

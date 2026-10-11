@@ -108,6 +108,7 @@ all = [
 
 [project.scripts]
 mloda = "mloda.interfaces.cli.main:main"
+mloda-mcp = "mloda.interfaces.mcp.main:main"
 
 [project.entry-points.pytest11]
 mloda = "mloda.core.abstract_plugins.plugin_registry.fixtures"

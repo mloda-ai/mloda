@@ -1,4 +1,4 @@
-"""The ``mloda`` command line: explain and run feature requests through the service layer.
+"""The ``mloda`` command line: explain and run feature requests through the service layer, or serve them over MCP.
 
 Results are printed as the services return them; exit code 2 means an error result or nothing could run.
 """
@@ -50,17 +50,22 @@ def build_services(
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mloda", description="Explain and run mloda feature requests.")
+    parser = argparse.ArgumentParser(prog="mloda", description="Explain, run or serve mloda feature requests.")
     commands = parser.add_subparsers(dest="command", required=True)
     explain = commands.add_parser("explain", help="Plan a feature request and print the plan.")
     run = commands.add_parser("run", help="Plan and execute a feature request and print its preview.")
     for command in (explain, run):
         command.add_argument("request", help="Path to a JSON feature request, or - for stdin.")
+    run.add_argument("--max-rows", type=int, help="Refuse sources with more rows than this.")
+    run.add_argument("--format", choices=FORMATS, default="json", help="Output format of the result.")
+    mcp = commands.add_parser("mcp", help="Serve the feature catalog, explain and run to MCP clients.")
+    serve = mcp.add_subparsers(dest="mcp_command", required=True).add_parser(
+        "serve", help="Serve over stdio; settings from the config file, then MLODA_MCP_* env vars."
+    )
+    for command in (explain, run, serve):
         config = command.add_mutually_exclusive_group()
         config.add_argument("--config", help=f"Settings file (default: ./{DEFAULT_CONFIG} if present).")
         config.add_argument("--no-config", action="store_true", help="Ignore any settings file.")
-    run.add_argument("--max-rows", type=int, help="Refuse sources with more rows than this.")
-    run.add_argument("--format", choices=FORMATS, default="json", help="Output format of the result.")
     return parser
 
 
@@ -92,6 +97,20 @@ def _settings(args: argparse.Namespace, env: Mapping[str, str]) -> Settings | st
         return load_settings(_config_path(args), env, overrides)
     except ConfigError as error:
         return str(error)
+
+
+def _serve_mcp(args: argparse.Namespace, env: Mapping[str, str], err: TextIO) -> int:
+    """Serve over MCP; the module is looked up at call time so ``mcp`` stays an optional extra."""
+    from mloda.interfaces.mcp import main as mcp_main
+
+    if not mcp_main.mcp_available():
+        err.write(f"mloda: error: {mcp_main.INSTALL_HINT}\n")
+        return FAILED
+    settings = _settings(args, env)
+    if isinstance(settings, str):
+        err.write(f"mloda: error: {settings}\n")
+        return FAILED
+    return mcp_main.serve(settings, env=env)
 
 
 def _read_request(source: str, stdin: TextIO) -> tuple[Any, str | None]:
@@ -142,6 +161,8 @@ def main(
     args = _parse(argv, out, err)
     if isinstance(args, int):
         return args
+    if args.command == "mcp":
+        return _serve_mcp(args, env, err)
     settings = _settings(args, env)
     if isinstance(settings, str):
         err.write(f"mloda: error: {settings}\n")

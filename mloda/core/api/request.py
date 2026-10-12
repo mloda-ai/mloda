@@ -286,7 +286,7 @@ class mlodaAPI:
                 MULTIPROCESSING worker before it processes its first command.
             graceful_shutdown_timeout: Seconds a MULTIPROCESSING worker gets to run its
                 extenders' close() before being terminated, shared across every extender in
-                that worker.
+                that worker. Also the longest a cancelled THREADING run waits for step threads.
 
         Returns:
             ``RunResult``, a list of computed results, one per feature group, in ``result.plan``
@@ -624,7 +624,7 @@ class mlodaAPI:
                 call), ``carrier`` may differ on each ``run()`` call.
             graceful_shutdown_timeout: Seconds a MULTIPROCESSING worker gets to run its
                 extenders' ``close()`` before being terminated, shared across every extender in
-                that worker.
+                that worker. Also the longest a cancelled THREADING run waits for step threads.
         """
         self._batch_run(
             parallelization_modes,

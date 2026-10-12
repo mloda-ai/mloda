@@ -502,6 +502,61 @@ class TestSyncModeSkipsSleep:
             mock_sleep.assert_not_called()
 
 
+class TestJoinAbandonsThreadsOnlyWhenCancelled:
+    """compute() and compute_stream() abandon in-flight threads only when unwinding with a non-Exception."""
+
+    @pytest.mark.parametrize(
+        "method, outcome, expected",
+        [
+            ("compute", SystemExit, True),
+            ("compute", KeyboardInterrupt, True),
+            ("compute", RuntimeError, False),
+            ("compute", None, False),
+            ("compute_stream", SystemExit, True),
+            ("compute_stream", KeyboardInterrupt, True),
+            ("compute_stream", RuntimeError, False),
+            ("compute_stream", None, False),
+            ("compute_stream", "close", True),
+        ],
+    )
+    def test_abandon_threads_kwarg(self, method: str, outcome: Any, expected: bool) -> None:
+        orchestrator = ExecutionOrchestrator(ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
+        orchestrator.cfw_register = CfwManager({ParallelizationMode.SYNC})
+
+        def fake_execute_step(step: object) -> None:
+            step.step_is_done = True  # type: ignore[attr-defined]
+
+        orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
+        orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+        orchestrator.data_lifecycle_manager.pop_result_data_collection = Mock(  # type: ignore[method-assign]
+            return_value=[(uuid_mod.uuid4(), 1)]
+        )
+        join_all = Mock()
+        orchestrator.worker_manager.join_all = join_all  # type: ignore[method-assign]
+
+        if isinstance(outcome, type) and issubclass(outcome, BaseException):
+            orchestrator._run_planner_pass = Mock(side_effect=outcome("boom"))  # type: ignore[method-assign]
+
+        if outcome == "close":
+            stream = orchestrator.compute_stream()
+            next(stream)
+            stream.close()
+        elif isinstance(outcome, type):
+            with pytest.raises(outcome):
+                if method == "compute":
+                    orchestrator.compute()
+                else:
+                    list(orchestrator.compute_stream())
+        elif method == "compute":
+            orchestrator.compute()
+        else:
+            list(orchestrator.compute_stream())
+
+        join_all.assert_called_once()
+        assert join_all.call_args.kwargs.get("abandon_threads", False) is expected
+
+
 class TestRegisterModesCache:
     """The compute loop and _execute_step read the parallelization modes cached on the orchestrator."""
 
@@ -1163,7 +1218,9 @@ class TestRequestNotifiesExtendersOfRunCompletion:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         log: _RunLog = []
-        monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self: log.append(("join", None)))
+        monkeypatch.setattr(
+            ExecutionOrchestrator, "join", lambda self, abandon_threads=False: log.append(("join", None))
+        )
         monkeypatch.setattr(
             ExecutionOrchestrator, "_drop_all_uploaded_flight_tables", lambda self: log.append(("sweep", None))
         )
@@ -1206,7 +1263,9 @@ class TestRequestNotifiesExtendersOfRunCompletion:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         log: _RunLog = []
-        monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self: log.append(("join", None)))
+        monkeypatch.setattr(
+            ExecutionOrchestrator, "join", lambda self, abandon_threads=False: log.append(("join", None))
+        )
 
         with pytest.raises(Exception, match="compute failed"):
             _run(_session({_RunCompleteRecorder("extender", log)}, failing=True))

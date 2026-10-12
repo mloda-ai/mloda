@@ -357,7 +357,7 @@ class TestComputeStreamNotifiesExtenders:
         order: list[str] = []
         probe = _RunCompleteProbe()
         monkeypatch.setattr(probe, "on_run_complete", lambda run, outcome: order.append("signal"))
-        monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self: order.append("join"))
+        monkeypatch.setattr(ExecutionOrchestrator, "join", lambda self, abandon_threads=False: order.append("join"))
         real_compute_stream = ExecutionOrchestrator.compute_stream
         inner_generators: list[Any] = []
 

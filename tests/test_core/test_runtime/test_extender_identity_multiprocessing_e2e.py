@@ -20,6 +20,8 @@ import inspect
 import json
 import os
 import pickle  # nosec B403
+import subprocess  # nosec B404
+import sys
 import threading
 import time
 from pathlib import Path
@@ -704,7 +706,7 @@ def _planning_interrupted_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path,
 
 
 def _break_join(mp: pytest.MonkeyPatch) -> None:
-    def broken(self: ExecutionOrchestrator) -> None:
+    def broken(self: ExecutionOrchestrator, abandon_threads: bool = False) -> None:
         raise RuntimeError("join failed")
 
     mp.setattr(ExecutionOrchestrator, "join", broken)
@@ -906,3 +908,77 @@ class TestLifecycleHooksFireExactlyOnceInOrder:
         completes = [run_id for hook, run_id in runs if hook == "run_complete"]
         assert starts == completes
         assert len(set(starts)) == len(starts)
+
+
+_CANCELLED_THREADING_SCRIPT = """
+import os
+import signal
+import sys
+import threading
+from typing import Any
+
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+
+
+class BlockingFG(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"cancelled_threading_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        os.kill(os.getpid(), signal.SIGTERM)
+        threading.Event().wait()
+
+
+class PrintingExtender(Extender):
+    def wraps(self) -> set[ExtenderHook]:
+        return set()
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return func(*args, **kwargs)
+
+    def on_run_complete(self, run: Any, outcome: Any) -> None:
+        print("RUN_COMPLETE", outcome.status, outcome.error_type, flush=True)
+
+    def close(self) -> None:
+        print("CLOSED", flush=True)
+
+
+def handler(signum: int, frame: Any) -> None:
+    sys.exit(7)
+
+
+signal.signal(signal.SIGTERM, handler)
+ext = PrintingExtender()
+try:
+    mloda.run_all(
+        [Feature(name="cancelled_threading_col")],
+        compute_frameworks=["PythonDictFramework"],
+        plugin_collector=PluginCollector.enabled_feature_groups({BlockingFG}),
+        parallelization_modes={ParallelizationMode.THREADING},
+        graceful_shutdown_timeout=0.2,
+        function_extender={ext},
+    )
+finally:
+    ext.close()
+"""
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM delivery via os.kill is POSIX only")
+def test_cancelled_threading_run_does_not_wait_for_the_step_thread_in_flight() -> None:
+    completed = subprocess.run(  # nosec B603
+        [sys.executable, "-c", _CANCELLED_THREADING_SCRIPT], capture_output=True, text=True, timeout=20
+    )
+
+    assert completed.returncode == 7, completed.stderr
+    assert "RUN_COMPLETE cancelled builtins.SystemExit" in completed.stdout
+    assert completed.stdout.index("RUN_COMPLETE") < completed.stdout.index("CLOSED")

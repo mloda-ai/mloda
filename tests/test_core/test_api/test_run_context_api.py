@@ -147,9 +147,9 @@ class TestBuildRunContextGracefulShutdownTimeout:
         recorded: list[float] = []
         original_join_all = WorkerManager.join_all
 
-        def spy_join_all(self: WorkerManager, graceful_timeout: float = 2.0) -> None:
+        def spy_join_all(self: WorkerManager, graceful_timeout: float = 2.0, abandon_threads: bool = False) -> None:
             recorded.append(graceful_timeout)
-            original_join_all(self, graceful_timeout=graceful_timeout)
+            original_join_all(self, graceful_timeout=graceful_timeout, abandon_threads=abandon_threads)
 
         monkeypatch.setattr(WorkerManager, "join_all", spy_join_all)
 

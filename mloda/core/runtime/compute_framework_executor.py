@@ -350,6 +350,7 @@ class ComputeFrameworkExecutor:
         task = threading.Thread(
             target=thread_worker,
             args=(step, self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
+            daemon=True,  # an abandoned step thread must not block interpreter exit
         )
 
         self.worker_manager.add_thread_task(task)

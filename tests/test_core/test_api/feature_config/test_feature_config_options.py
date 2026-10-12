@@ -11,7 +11,6 @@ import pytest
 
 from mloda.core.api.feature_config.models import FeatureConfig
 from mloda.core.api.feature_config.parser import parse_json
-from mloda.user import Options
 
 
 def test_parse_group_options() -> None:
@@ -200,24 +199,6 @@ def test_validate_options_mutual_exclusion() -> None:
 _KEY_FIELDS = ["propagate_context_keys", "cascade_context_keys"]
 
 
-def _config_with_keys(field: str, keys: list[str], **kwargs: Any) -> FeatureConfig:
-    if field == "cascade_context_keys":
-        return FeatureConfig(cascade_context_keys=keys, **kwargs)
-    return FeatureConfig(propagate_context_keys=keys, **kwargs)
-
-
-def _stored_keys(config: FeatureConfig, field: str) -> list[str] | None:
-    if field == "cascade_context_keys":
-        return config.cascade_context_keys
-    return config.propagate_context_keys
-
-
-def _option_keys(options: Options, field: str) -> frozenset[str]:
-    if field == "cascade_context_keys":
-        return options.cascade_context_keys
-    return options.propagate_context_keys
-
-
 @pytest.mark.parametrize("field", _KEY_FIELDS)
 def test_parse_context_push_keys(field: str) -> None:
     """parse_json stores the context push key list on the FeatureConfig."""
@@ -229,7 +210,7 @@ def test_parse_context_push_keys(field: str) -> None:
     assert isinstance(result[0], FeatureConfig)
     assert result[0].name == "f"
     assert result[0].context_options == {"session_id": "abc"}
-    assert _stored_keys(result[0], field) == ["session_id"]
+    assert getattr(result[0], field) == ["session_id"]
 
 
 @pytest.mark.parametrize("field", _KEY_FIELDS)
@@ -241,7 +222,7 @@ def test_parse_context_push_keys_defaults_none(field: str) -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], FeatureConfig)
-    assert _stored_keys(result[0], field) is None
+    assert getattr(result[0], field) is None
 
 
 @pytest.mark.parametrize("field", _KEY_FIELDS)
@@ -257,7 +238,7 @@ def test_load_threads_context_push_keys_into_options(field: str) -> None:
     assert len(result) == 1
     assert isinstance(result[0], Feature)
     assert result[0].options.context == {"session_id": "abc"}
-    assert _option_keys(result[0].options, field) == frozenset({"session_id"})
+    assert getattr(result[0].options, field) == frozenset({"session_id"})
 
 
 @pytest.mark.parametrize("field", _KEY_FIELDS)
@@ -272,18 +253,12 @@ def test_load_context_push_keys_defaults_empty_frozenset(field: str) -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert _option_keys(result[0].options, field) == frozenset()
+    assert getattr(result[0].options, field) == frozenset()
 
 
 @pytest.mark.parametrize("field", _KEY_FIELDS)
 def test_load_documented_context_push_keys_example(field: str) -> None:
-    """The documented end-to-end example yields one Feature pushing the documented key.
-
-    Example:
-        [{"name": "my_feature",
-          "context_options": {"session_id": "abc123", "window_function": "sum"},
-          "propagate_context_keys": ["session_id"]}]
-    """
+    """The documented example yields one Feature pushing the documented key."""
     from mloda.core.api.feature_config.loader import load_features_from_config
     from mloda.user import Feature
 
@@ -299,7 +274,7 @@ def test_load_documented_context_push_keys_example(field: str) -> None:
     assert isinstance(result[0], Feature)
     assert result[0].name == "my_feature"
     assert result[0].options.context == {"session_id": "abc123", "window_function": "sum"}
-    assert _option_keys(result[0].options, field) == frozenset({"session_id"})
+    assert getattr(result[0].options, field) == frozenset({"session_id"})
 
 
 def test_load_both_context_push_keys_arrive_in_options() -> None:
@@ -322,12 +297,13 @@ def test_load_both_context_push_keys_arrive_in_options() -> None:
 @pytest.mark.parametrize("field", _KEY_FIELDS)
 def test_context_push_keys_requires_context_options(field: str) -> None:
     """The context push keys require context_options, so the loader never silently drops them."""
+    kwargs: dict[str, Any] = {field: ["session_id"]}
     with pytest.raises(ValueError) as exc_info:
-        _config_with_keys(field, ["session_id"], name="bad_feature")
+        FeatureConfig(**kwargs, name="bad_feature")
     assert field in str(exc_info.value).lower()
 
     with pytest.raises(ValueError) as exc_info:
-        _config_with_keys(field, ["session_id"], name="bad_feature_2", options={"foo": "bar"})
+        FeatureConfig(**kwargs, name="bad_feature_2", options={"foo": "bar"})
     assert field in str(exc_info.value).lower()
 
 

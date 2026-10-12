@@ -1622,7 +1622,6 @@ RemedyThirdBThirdMidConsumer = _remedy_sum_consumer(
 RemedyThirdPairConsumer = _remedy_sum_consumer("RemedyThirdPairConsumer", ThirdCfw, ("mlg_a1", "mlg_b"))
 _REMEDY_SECOND_INPUTS = ("mlg_a", "mlg_a1", "mlg_bd")
 RemedySecondBConsumer = _remedy_sum_consumer("RemedySecondBConsumer", SecondCfw, _REMEDY_SECOND_INPUTS)
-RemedyArrowThirdBConsumer = _remedy_sum_consumer("RemedyArrowThirdBConsumer", PyArrowTable, _REMEDY_DIRECT_INPUTS)
 
 
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
@@ -1927,8 +1926,8 @@ def test_a_consumer_on_the_other_sides_framework_with_a_row_three_layout_stays_i
         _side_path_prepare(
             SidePathArrowP,
             False,
-            consumer=RemedyArrowThirdBConsumer,
-            features=[RemedyArrowThirdBConsumer.get_class_name()],
+            consumer=RemedyArrowSameBConsumer,
+            features=[RemedyArrowSameBConsumer.get_class_name()],
             **{**_REMEDY_KWARGS, "root_b": RemedyRootBThird},
         )
 

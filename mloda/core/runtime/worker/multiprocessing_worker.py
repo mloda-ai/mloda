@@ -48,7 +48,13 @@ def standby_worker(command_queue: multiprocessing.Queue[Any], result_queue: mult
             continue
         if command == "STOP":
             return
-        target, args, worker_index = pickle.loads(command)  # nosec B301  # bytes from this run's parent queue
+        process: Any = multiprocessing.current_process()
+        # Like spawn unpickling Process args: the register proxy then takes no server-side reference.
+        process._inheriting = True
+        try:
+            target, args, worker_index = pickle.loads(command)  # nosec B301  # bytes from this run's parent queue
+        finally:
+            del process._inheriting
         target(command_queue, result_queue, *args, worker_index)
         return
 

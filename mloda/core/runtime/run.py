@@ -18,11 +18,10 @@ from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 from mloda.core.runtime.data_lifecycle_manager import DataLifecycleManager
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
-from mloda.core.core.cfw_manager import CfwManager, MyManager
+from mloda.core.core.cfw_manager import CfwManager, release_shared_manager, shared_manager
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
-from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
@@ -565,9 +564,9 @@ class ExecutionOrchestrator:
                 min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
                 standby_worker,
             )
-            MyManager.register("CfwManager", CfwManager)
-            self.manager = MyManager(ctx=mp_start_context()).__enter__()
-            self.cfw_register = self.manager.CfwManager(parallelization_modes)
+            manager: Any = shared_manager()
+            self.manager = manager
+            self.cfw_register = manager.CfwManager(parallelization_modes)
 
         self.cfw_register.set_run_context(run_context)
 
@@ -591,16 +590,26 @@ class ExecutionOrchestrator:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """
-        Stops standby workers and the manager; safe if __enter__ raised.
+        Stops standby workers and releases this run's register and shared manager; safe if __enter__ raised.
 
         Args:
             exc_type: The exception type.
             exc_val: The exception value.
             exc_tb: The exception traceback.
         """
-        self.worker_manager.stop_standbys()
-        if self.manager is not None:
-            self.manager.shutdown()
+        try:
+            self.worker_manager.stop_standbys()
+            # A worker outliving its run could reach a later run's register on the shared manager.
+            self.worker_manager.terminate_alive_processes()
+            if self.manager is not None and hasattr(self, "cfw_register"):
+                try:
+                    self.cfw_register.release()
+                except Exception as e:
+                    logger.warning("Failed to release the cfw register during exit: %s", contained_raise_reason(e))
+        finally:
+            if self.manager is not None:
+                release_shared_manager(self.manager)
+                self.manager = None
 
     def get_artifacts(self) -> dict[str, Any]:
         """

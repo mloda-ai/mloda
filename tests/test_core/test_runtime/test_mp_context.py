@@ -5,6 +5,7 @@ import logging
 import multiprocessing
 import multiprocessing.context
 import sys
+import weakref
 from typing import Any
 from unittest.mock import Mock
 
@@ -168,12 +169,15 @@ def _noop_target() -> None:
     return None
 
 
-def test_forgetting_daemon_processes_after_a_fork_leaves_foreign_children_alone() -> None:
+def test_forgetting_daemon_processes_after_a_fork_leaves_foreign_children_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     tracked = [start_daemon_process(mp_start_context(), _noop_target) for _ in range(2)]
     foreign = object()
     children: Any = multiprocessing.process._children  # type: ignore[attr-defined]
 
     assert all(process in mp_context._daemon_processes for process in tracked)
+    monkeypatch.setattr(mp_context, "_daemon_processes", weakref.WeakSet(tracked))
 
     children.update([*tracked, foreign])
     try:

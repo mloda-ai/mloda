@@ -265,7 +265,7 @@ class TestForkedChildOfAProcessHoldingMlodaProcesses:
             "        sys.exit(0)\n"
             "    _, status = os.waitpid(pid, 0)\n"
             "    worker_process.join(timeout=1.5)\n"
-            "    server_process.join(timeout=1.5)\n"
+            "    server_process.join(timeout=0)\n"
             "    worker_code = str(worker_process.exitcode)\n"
             "    server_code = str(server_process.exitcode)\n"
             "    manager.stop_standbys()\n"

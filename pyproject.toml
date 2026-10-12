@@ -28,7 +28,7 @@ test = [
     "mypy",
     "mktestdocs",
     "pandera",
-    "pyarrow",
+    "pyarrow>=14.0.1",
     "ipykernel",
     "bandit",
     "pyyaml",
@@ -40,15 +40,16 @@ test = [
     "pip-licenses-cli",
     "tomli>=1.0.0; python_version < '3.11'",
 ]
-pyarrow = ["pyarrow"]
+# pyarrow >= 14.0.1 in every group that pulls it in: CVE-2023-47248 (arbitrary code execution when reading untrusted Arrow IPC, Feather or Parquet).
+pyarrow = ["pyarrow>=14.0.1"]
 pandas = ["pandas"]
 polars = ["polars>=1.21"]
 numpy = ["numpy"]
 yaml = ["pyyaml"]
-duckdb = ["duckdb", "pyarrow"]
-sqlite = ["pyarrow"]
-iceberg = ["pyiceberg", "pyarrow"]
-spark = ["pyspark>=3.5", "pyarrow"]
+duckdb = ["duckdb", "pyarrow>=14.0.1"]
+sqlite = ["pyarrow>=14.0.1"]
+iceberg = ["pyiceberg", "pyarrow>=14.0.1"]
+spark = ["pyspark>=3.5", "pyarrow>=14.0.1"]
 sklearn = [
     "scikit-learn>=1.0.0",
     "joblib>=1.0.0",

@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
+from packaging.requirements import Requirement
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -53,7 +55,50 @@ def test_all_extra_references(referenced_extra: str) -> None:
     )
 
 
-@pytest.mark.parametrize(("extra", "dependency"), [("numpy", "numpy"), ("yaml", "pyyaml"), ("test", "pyyaml")])
+def _load_project() -> dict[str, Any]:
+    with open(_PYPROJECT, "rb") as fh:
+        data = tomllib.load(fh)
+    result: dict[str, Any] = data["project"]
+    return result
+
+
+def test_core_dependencies_stay_empty() -> None:
+    """Core installs without pyarrow, so project.dependencies must stay empty."""
+    assert _load_project()["dependencies"] == []
+
+
+def test_every_pyarrow_requirement_has_floor() -> None:
+    """Every pyarrow requirement in any extra must carry the >=14.0.1 floor."""
+    bare: dict[str, str] = {}
+    found = 0
+    for group, deps in _load_optional_deps().items():
+        for dep in deps:
+            if dep.startswith("mloda["):
+                continue
+            req = Requirement(dep)
+            if req.name != "pyarrow":
+                continue
+            found += 1
+            if ">=14.0.1" not in {str(spec) for spec in req.specifier}:
+                bare[group] = dep
+    assert found > 0, "No pyarrow requirement found in any extra"
+    assert not bare, f"pyarrow requirements missing the >=14.0.1 floor: {bare}"
+
+
+@pytest.mark.parametrize(
+    ("extra", "dependency"),
+    [
+        ("numpy", "numpy"),
+        ("yaml", "pyyaml"),
+        ("test", "pyyaml"),
+        ("test", "pyarrow>=14.0.1"),
+        ("pyarrow", "pyarrow>=14.0.1"),
+        ("duckdb", "pyarrow>=14.0.1"),
+        ("sqlite", "pyarrow>=14.0.1"),
+        ("iceberg", "pyarrow>=14.0.1"),
+        ("spark", "pyarrow>=14.0.1"),
+    ],
+)
 def test_extra_exists_and_contains_dependency(extra: str, dependency: str) -> None:
     """The extras that install hints and tests rely on must exist and list their distribution."""
     optional = _load_optional_deps()

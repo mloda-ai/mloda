@@ -4,6 +4,8 @@ You can install mloda using either pip or by cloning the repository from Git.
 pip install mloda
 ```
 
+mloda core has no required dependencies, and backends are optional extras such as `pip install "mloda[pyarrow]"`. The extras that install pyarrow require `pyarrow>=14.0.1` (CVE-2023-47248), and an environment that installs plain `mloda` with its own pyarrow should use 14.0.1 or newer.
+
 ## 2. Install mloda via Git
 Alternatively, you can clone the repository and install from source:
 ```bash

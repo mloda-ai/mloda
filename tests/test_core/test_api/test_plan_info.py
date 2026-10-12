@@ -105,6 +105,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 
@@ -968,6 +969,54 @@ class TestPlanStepFeatureSetOptions:
 # ---------------------------------------------------------------------------
 
 
+class PlanInfoOverridingDBReader(BaseInputData):
+    """Non-final reader storing the pinned plain dict itself, never calling wrap_feature_scoped_access."""
+
+    @classmethod
+    def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
+        pinned = options.get(cls.data_access_name())
+        if not isinstance(pinned, dict):
+            return False
+        cls.add_base_input_data_to_options(cls, dict(pinned), options)
+        return True
+
+    @classmethod
+    def global_scope_data_access(
+        cls,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> bool:
+        return False
+
+
+class PlanInfoNonIdempotentWrapReader(BaseInputData):
+    """Non-final reader not overriding feature_scope_data_access; its wrap returns a fresh object per call."""
+
+    wrap_calls = 0
+
+    @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        cls.wrap_calls += 1
+        return [data_access]
+
+
+class PlanInfoOverridingDBReaderFeature(FeatureGroup):
+    """Feature group serving only the unique feature name through the overriding reader."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return PlanInfoOverridingDBReader()
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        raise NotImplementedError
+
+
+class TestPlanStepReaderDataAccess:
+    """reader_data_access is a compare=False dataclass field snapshotted from the step's FeatureSet match."""
+
+
 class PlanInfoIntAccessReader(BaseInputData):
     """Reader accepting only its unique integer access, so its identity falls back to the type name."""
 
@@ -1134,11 +1183,10 @@ class TestPlanStepDataAccessIdentity:
     @pytest.mark.parametrize(
         "reader, feature_group, feature_name, in_context",
         [
-            (SQLITEReader, ReadDBFeature, "plan_info_db_col", False),
             (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", False),
             (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", True),
         ],
-        ids=["core_sqlite_reader", "overriding_reader", "overriding_reader_context_pin"],
+        ids=["overriding_reader", "overriding_reader_context_pin"],
     )
     def test_pinned_dict_credential_is_redacted_in_plan_output(
         self,

@@ -106,7 +106,7 @@ class TestTwoReader:
             feature_list.append(f)
 
         result = mloda.run_all(
-            feature_list,  # type: ignore
+            feature_list,
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self.file_path}),
             plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG, CsvFG}),

@@ -55,6 +55,8 @@ class SyntheticFeature(FeatureGroup):
 
 Subclass the base that fits your source and write only what it asks for. The base owns the matching: claim routes, source discovery, pointers, `data_access_handle`, `column_to_file`, per-run caching, ambiguity and missing-column errors, and the extender hook around the load.
 
+A format group can also describe its data through `declared_attributes`, see [Declared Attributes and Input Requirements](feature-group-matching.md#declared-attributes-and-input-requirements).
+
 - **FormatFeatureGroup** (any source): declare `CLAIM_ROUTES`, implement `find_sources` and `load_neutral`; optionally `columns`, `has_column`, `ambiguity_fix`, `describe_columns`, `count_rows`.
 - **ReadFileFG**: implement `suffixes()` and `column_names(path)`. It inherits file and folder discovery, the pinned-file rule, and a default `load_neutral` that hands a `FileSource` to the compute framework; the stock `FileSource` transformers read csv, parquet, json, feather and orc.
 - **ReadDocumentFG**: implement `suffixes()`; optionally `read_text` and `handover_suffixes`. It inherits the three names `<Group>`, `<Group>~source` and `<Group>~file_type`.

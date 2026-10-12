@@ -77,6 +77,9 @@ class PlanStep:
 
     ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for the
     ``FeatureSet.input_data_match`` pair; they are credential-free, computed at plan build and excluded from equality.
+
+    ``join_keys`` is a join step's ``left=right`` index column pairs, as ``HookContext.join_keys``; None for
+    APPEND/UNION and non-join steps.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -99,6 +102,7 @@ class PlanStep:
     specialized_from: tuple[type["FeatureGroup"], ...] = ()
     compute_framework_reason: str | None = None
     result_framework: type["ComputeFramework"] | None = None
+    join_keys: tuple[str, ...] | None = None
     _data_access_identity: str | None = field(default=None, compare=False)
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
 

@@ -2,7 +2,7 @@
 
 ## What it records and why
 
-Strict mode and `PluginPolicy` decide which classes may take part in a request. The plan lock records which class wins per step (feature group, compute framework, specialization, joins, framework transforms) and fails when that changes. See [Plugin Registry](plugin_registry.md) for the policy side.
+Strict mode and `PluginPolicy` decide which classes may take part in a request. The plan lock records which class wins per step (feature group, compute framework, specialization, joins, framework transforms) plus input wiring and join keys, and fails when that changes. See [Plugin Registry](plugin_registry.md) for the policy side.
 
 ## Usage
 
@@ -26,7 +26,7 @@ write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMo
 
 ## What the file holds
 
-Sorted JSON with a `format` number (currently 4; there is no reader entry), the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Duplicate steps keep one record each.
+Sorted JSON with a `format` number (there is no reader entry), the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Compute records also hold each output feature's input names (`input_feature_edges`), join records the link's `join_keys` (`left=right` column pairs, null for append/union). Duplicate steps keep one record each. A `format` bump makes a lock file written by an older mloda fail `check_plan_lock` until rewritten with `write_plan_lock`.
 
 It never holds option values, `data_access_identity`, versions, per-run ids or the mloda version.
 

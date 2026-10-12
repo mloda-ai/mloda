@@ -94,6 +94,7 @@ class HookContext:
     plan_depth: int | None = None
     declared_attributes: dict[str, str | int | float | bool] | None = None
     reader_class: "DataAccessReader | None" = None
+    result_attributes: dict[str, str | int | float | bool] | None = None
 
     def __post_init__(self) -> None:
         if self.result_attributes is not None:

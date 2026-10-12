@@ -20,7 +20,12 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     current_feature_group_scope,
 )
 from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_format_group
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    drop_match_rejections_since,
+    match_rejection_owners,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
@@ -334,6 +339,7 @@ class FormatFeatureGroup(FeatureGroup):
         seen: dict[str, SourceMatch] = {}
         undeclared = False
         if selected:
+            known_owners = match_rejection_owners()
             outcome = probe_format_group(
                 cls,
                 lambda: cls._probe_routes(selected, name, base_name, options, data_access_collection),
@@ -342,6 +348,7 @@ class FormatFeatureGroup(FeatureGroup):
                 options,
             )
             if outcome.refused is not None:
+                drop_match_rejections_since(known_owners)
                 message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
                 if pointed:
                     return cls._abort(ValueError(f"{cls.get_class_name()} {message}"), deferrable=True)

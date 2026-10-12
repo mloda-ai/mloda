@@ -64,10 +64,11 @@ def _match_context(scope: ReaderProbeScope, reader: Any, feature_names: list[str
     )
 
 
-def _log_refusal(scope: ReaderProbeScope, reader: Any, reason: str) -> None:
+def _log_refusal(scope: ReaderProbeScope, reader: Any, reason: str, label: str = "Reader") -> None:
     logger.log(
         logging.INFO if scope.extender.never_fall_back else logging.WARNING,
-        "Reader %s refused at INPUT_DATA_MATCH by %s: %s",
+        "%s %s refused at INPUT_DATA_MATCH by %s: %s",
+        label,
         reader.get_class_name(),
         type(scope.extender).__name__,
         reason,
@@ -83,18 +84,20 @@ def probe_format_group(
         return FormatProbeOutcome(None, probe())
 
     names = [base_name]
-    ran = False
+    finished = False
     result: Any = None
     probe_raised = False
 
     def func(access: Any, feature_names: list[str], options: Any) -> Any:
-        nonlocal ran, result, probe_raised
-        ran = True
+        nonlocal finished, result, probe_raised
         try:
-            result = probe()
+            value = probe()
         except BaseException:
             probe_raised = True
             raise
+        if not finished:
+            finished = True
+            result = value
         return None
 
     with _match_context(scope, group, names).activate():
@@ -105,11 +108,11 @@ def probe_format_group(
             if probe_raised or is_match_abort(exc):
                 raise
             reason = contained_raise_reason(exc)
-            _log_refusal(scope, group, reason)
+            _log_refusal(scope, group, reason, "Format group")
             return FormatProbeOutcome(reason, None)
-    if not ran:
+    if not finished:
         reason = "the extender did not run the probe"
-        _log_refusal(scope, group, reason)
+        _log_refusal(scope, group, reason, "Format group")
         return FormatProbeOutcome(reason, None)
     return FormatProbeOutcome(None, result)
 

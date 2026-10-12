@@ -12,6 +12,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
+from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
@@ -214,6 +215,41 @@ class ImdMatchRaisingFindFormat(_ImdFmtBase):
     raises = True
 
 
+_PROBE_TEXT = "imdmatch own probe rejection"
+
+
+class ImdMatchRejectingFormat(_ImdFmtBase):
+    """Records its own rejection while probing and finds nothing."""
+
+    served = frozenset({_COL_A})
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        record_match_rejection(cls.get_class_name(), _PROBE_TEXT, stage=INPUT_DATA_STAGE)
+        return []
+
+
+class ImdMatchComputingGroup(FeatureGroup):
+    """Computing group (it has an input) for the column the pointed gate format serves."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {_COL_A}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return set()
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({_COL_A: [6]})
+
+
 class ImdMatchPlainGroup(FeatureGroup):
     """Plain computing group for one name; no source involved."""
 
@@ -304,12 +340,13 @@ class _ImdRefusingExtender(Extender):
 
 
 class _ImdSkippingExtender(_ImdRefusingExtender):
-    """Returns a forged match for the target without calling func and without raising."""
+    """Returns a forged probe result (fitting, seen, undeclared) for the target without calling func or raising."""
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         context = HookContext.current()
         if context is not None and context.reader_class is self._target:
-            return [SourceMatch(source="imdmatch_forged", access=dict(_FMT_COLUMNS))]
+            forged = SourceMatch(source="imdmatch_forged", access=dict(_FMT_COLUMNS))
+            return {forged.source: forged}, {}, False
         return func(*args, **kwargs)
 
 
@@ -428,6 +465,7 @@ class TestRefusal:
         with pytest.raises(error_type) as excinfo:
             _plan(scope, _COL_A, kind.gate, make_extender(kind.gate))
 
+        assert type(excinfo.value) is error_type
         assert "no clearance" in str(excinfo.value)
         assert text in str(excinfo.value)
         assert kind.gate.probes == 0
@@ -439,10 +477,11 @@ class TestRefusal:
     def test_post_probe_raise_still_refuses_the_reader(self, kind: _Kind, scope: str) -> None:
         error_type, _ = _refusal_error(kind, scope)
 
-        with pytest.raises(error_type):
+        with pytest.raises(error_type) as excinfo:
             _plan(scope, _COL_A, kind.gate, _ImdPostProbeRefusingExtender(kind.gate))
 
-        assert kind.gate.probes >= 1 if kind.is_format else kind.gate.probes == 1
+        assert type(excinfo.value) is error_type
+        assert kind.gate.probes == 1
 
     @_BY_KIND
     @pytest.mark.parametrize(
@@ -510,6 +549,8 @@ class TestContext:
 
         contexts = extender.for_reader(kind.gate)
         assert contexts
+        if kind.is_format:
+            assert len(contexts) == 1
         context = contexts[0]
         assert context.hook is ExtenderHook.INPUT_DATA_MATCH
         assert context.declared_attributes == {"classification": "restricted", "level": 3}
@@ -605,9 +646,11 @@ class TestFormatGroupHook:
     def test_an_extender_that_returns_without_running_the_probe_declines_the_group(self, scope: str) -> None:
         error_type, _ = _refusal_error(_FORMAT_KIND, scope)
 
-        with pytest.raises(error_type):
+        with pytest.raises(error_type) as excinfo:
             _plan(scope, _COL_A, ImdMatchGateFormat, _ImdSkippingExtender(ImdMatchGateFormat))
 
+        assert type(excinfo.value) is error_type
+        assert "the extender did not run the probe" in str(excinfo.value)
         assert ImdMatchGateFormat.probes == 0
         assert ImdMatchGateFormat.column_reads == 0
 
@@ -640,3 +683,26 @@ class TestFormatGroupHook:
         assert result[0].column_names == [_COL_P]
         assert ImdMatchGateFormat.probes == 0
         assert ImdMatchGateFormat.column_reads == 0
+
+    def test_a_refused_pointed_group_is_masked_by_a_computing_candidate(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchComputingGroup})
+        feature = Feature(_COL_A, options={ImdMatchGateFormat.__name__: dict(_FMT_COLUMNS)})
+
+        session = _prepare(feature, enabled, None, _gate(ImdMatchGateFormat))
+
+        assert session is not None
+        assert ImdMatchGateFormat.probes == 0
+
+    def test_a_post_probe_refusal_replaces_the_probes_own_rejection_for_an_unpointed_group(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchRejectingFormat})
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _prepare(
+                Feature(_COL_A),
+                enabled,
+                _global_access(True),
+                _ImdPostProbeRefusingExtender(ImdMatchRejectingFormat),
+            )
+
+        assert _REFUSED in str(excinfo.value)
+        assert _PROBE_TEXT not in str(excinfo.value)

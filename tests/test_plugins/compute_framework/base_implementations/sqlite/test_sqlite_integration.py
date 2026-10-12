@@ -1,6 +1,7 @@
 import sqlite3
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 from mloda.provider import MatchData
@@ -15,7 +16,9 @@ from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda.user import DataAccessCollection
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework, _regexp
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -208,12 +211,12 @@ class TestSqliteIntegrationWithMlodaAPI:
         )
 
         final_data = result[0]
-        assert hasattr(final_data, "columns")
+        assert isinstance(final_data, pa.Table)
 
-        assert "doubled_value" in final_data.columns
-        assert "score_plus_ten" in final_data.columns
+        assert "doubled_value" in final_data.column_names
+        assert "score_plus_ten" in final_data.column_names
 
-        final_df = final_data.df()
+        final_df = final_data.to_pandas()
         doubled_values = final_df["doubled_value"].tolist()
         assert doubled_values == [20, 40, 60, 80, 100]
 
@@ -239,10 +242,11 @@ class TestSqliteIntegrationWithMlodaAPI:
         )
 
         final_data = result[0]
-        assert "avg_value_by_category" in final_data.columns
-        assert "count_by_category" in final_data.columns
+        assert isinstance(final_data, pa.Table)
+        assert "avg_value_by_category" in final_data.column_names
+        assert "count_by_category" in final_data.column_names
 
-        final_df = final_data.df()
+        final_df = final_data.to_pandas()
         avg_values = final_df["avg_value_by_category"].tolist()
         count_values = final_df["count_by_category"].tolist()
 
@@ -269,9 +273,30 @@ class TestSqliteIntegrationWithMlodaAPI:
         assert len(result) == 1
         final_data = result[0]
 
-        assert "quadrupled_value" in final_data.columns
-        quadrupled_values = final_data.df()["quadrupled_value"].tolist()
+        assert isinstance(final_data, pa.Table)
+        assert "quadrupled_value" in final_data.column_names
+        quadrupled_values = final_data.to_pandas()["quadrupled_value"].tolist()
         assert quadrupled_values == [40, 80, 120, 160, 200]
+
+    @pytest.mark.parametrize("output", [PyArrowTable, PandasDataFrame, SqliteFramework])
+    def test_output_framework_with_a_sqlite_run(self, flight_server: Any, sqlite_conn: Any, output: Any) -> None:
+        result = mloda.run_all(
+            [Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn})],
+            flight_server=flight_server,
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
+            ),
+            data_access_collection=DataAccessCollection(connections={sqlite_conn}),
+            compute_frameworks=[SqliteFramework],
+            output_framework=output,
+        )
+
+        assert isinstance(result[0], output.expected_data_framework())
+        records = records_from_frame(result[0])
+        assert [record["doubled_value"] for record in records] == [20, 40, 60, 80, 100]
+        if output is SqliteFramework:
+            assert result[0].connection is sqlite_conn
 
     def test_transform_to_pyarrow(self, flight_server: Any, sqlite_conn: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(

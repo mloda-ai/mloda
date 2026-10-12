@@ -1471,8 +1471,7 @@ def test_a_consumer_of_a_duckdb_native_parent_plans_on_duckdb_and_receives_the_r
         ["bd_out"], compute_frameworks=frameworks, plugin_collector=collector, output_framework=output
     )
     assert seen == ["DuckdbRelation"]
-    if output is not None:
-        assert isinstance(result[0], pa.Table)
+    assert isinstance(result[0], pa.Table)
     assert _bd_values(result[0]) == {"bd_out": [1, 2, 3]}
 
 
@@ -1711,6 +1710,10 @@ class BdSqliteConsumer(_PlanConsumer):
     OUTPUT = "bd_sq_out"
     RULE = ("SqliteFramework", "PyArrowTable")
 
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.select(_raw_sql='"bd_sq_root" AS "bd_sq_out"')
+
 
 def test_a_consumer_of_a_sqlite_native_parent_plans_on_sqlite_without_a_transform() -> None:
     frameworks = [_load_framework(_MODULE_OF[name], name) for name in ("PyArrowTable", "SqliteFramework")]
@@ -1719,3 +1722,16 @@ def test_a_consumer_of_a_sqlite_native_parent_plans_on_sqlite_without_a_transfor
 
     assert _compute_names(steps, BdSqliteConsumer) == {"SqliteFramework"}
     assert _transforms(steps) == []
+
+
+def test_a_run_of_a_sqlite_native_consumer_returns_a_materialized_table() -> None:
+    frameworks = [_load_framework(_MODULE_OF[name], name) for name in ("PyArrowTable", "SqliteFramework")]
+
+    result = mloda.run_all(
+        ["bd_sq_out"],
+        compute_frameworks=frameworks,
+        plugin_collector=PluginCollector.enabled_feature_groups({BdSqliteRoot, BdSqliteConsumer}),
+    )
+
+    assert isinstance(result[0], pa.Table)
+    assert _bd_values(result[0]) == {"bd_sq_out": [1, 2, 3]}

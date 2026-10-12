@@ -88,7 +88,22 @@ class TestSqliteFrameworkBasics:
         data = SqliteRelation.from_arrow(connection, arrow)
 
         result = fw.select_data_by_column_names(data, [FeatureName("column1")])
-        assert "column1" in result.columns
+        assert isinstance(result, pa.Table)
+        assert result.column_names == ["column1"]
+
+    def test_select_data_by_column_names_leaves_no_temp_view(self, connection: sqlite3.Connection) -> None:
+        fw = SqliteFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        fw.set_framework_connection_object(connection)
+
+        arrow = pa.Table.from_pydict({"column1": [1, 2, 3], "column2": [4, 5, 6]})
+        data = SqliteRelation.from_arrow(connection, arrow)
+        view_count_sql = "SELECT COUNT(*) FROM sqlite_temp_master WHERE type = 'view'"
+        views_before = connection.execute(view_count_sql).fetchone()[0]
+
+        fw.select_data_by_column_names(data, [FeatureName("column1")])
+
+        assert connection.execute(view_count_sql).fetchone()[0] == views_before
+        assert len(data) == 3
 
     def test_set_framework_connection_object_none_raises(self) -> None:
         """Passing None when no connection is set should raise ValueError."""

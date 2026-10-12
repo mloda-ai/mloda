@@ -69,6 +69,6 @@ class TestSqliteTfsConnectionE2E(TfsConnectionEndToEndMixin):
         conn.close()
 
     def extract_doubled(self, final: Any) -> list[int]:
-        arrow_table = final.to_arrow_table()
-        assert "tfs_doubled" in arrow_table.column_names
-        return list(arrow_table.column("tfs_doubled").to_pylist())
+        assert isinstance(final, pa.Table)
+        assert "tfs_doubled" in final.column_names
+        return list(final.column("tfs_doubled").to_pylist())

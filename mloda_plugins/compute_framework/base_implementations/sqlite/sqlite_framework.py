@@ -77,13 +77,16 @@ class SqliteFramework(ComputeFramework):
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
     ) -> Any:
+        """Materialize the final result as a PyArrow Table."""
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
             selected_feature_names, column_names, ordering=column_ordering, request_feature_order=request_feature_order
         )
 
-        selected_columns = list(_selected_feature_names)
-        return data.select(*selected_columns)
+        selected = data.select(*list(_selected_feature_names))
+        table = selected.to_arrow_table()
+        selected.drop()
+        return table
 
     @classmethod
     def extract_column_names(cls, data: Any) -> set[str]:

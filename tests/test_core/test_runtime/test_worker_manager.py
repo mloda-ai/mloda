@@ -2,16 +2,18 @@
 
 import logging
 import multiprocessing
+import os
 import pickle  # nosec B403
 import queue
 import threading
 import time
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, Mock, patch
 from uuid import UUID, uuid4
 
 import pytest
 
+from mloda.core.runtime import mp_context
 from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker_manager import WorkerManager
 
@@ -261,6 +263,44 @@ class TestWorkerManagerStandbyWorkers:
         exited.terminate.assert_not_called()
         exited.join.assert_not_called()
         thread.join.assert_not_called()
+
+    def test_stop_standbys_leaves_an_inherited_standby_alone_and_still_clears_the_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        manager = WorkerManager()
+        inherited, own = _live_process(), _live_process()
+        ctx = _mock_ctx(inherited, own)
+
+        with patch("mloda.core.runtime.worker_manager.mp_start_context", return_value=ctx):
+            manager.prestart_workers(2, _noop_target)
+        monkeypatch.setitem(mp_context._daemon_processes, cast(Any, inherited), os.getpid() + 1)
+
+        manager.stop_standbys()
+
+        inherited.terminate.assert_not_called()
+        inherited.join.assert_not_called()
+        own.terminate.assert_called_once()
+        own.join.assert_called_once()
+        assert manager.standby == []
+
+    def test_terminate_alive_processes_leaves_an_inherited_process_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        manager = WorkerManager()
+        inherited = Mock(spec=multiprocessing.Process)
+        inherited.is_alive.return_value = True
+        own = Mock(spec=multiprocessing.Process)
+        own.is_alive.return_value = True
+        manager.tasks.extend([inherited, own])
+        monkeypatch.setitem(mp_context._daemon_processes, cast(Any, inherited), os.getpid() + 1)
+        order = Mock()
+        order.attach_mock(own.terminate, "terminate")
+        order.attach_mock(own.join, "join")
+
+        manager.terminate_alive_processes()
+
+        inherited.is_alive.assert_not_called()
+        inherited.terminate.assert_not_called()
+        inherited.join.assert_not_called()
+        assert [c[0] for c in order.mock_calls] == ["terminate", "join"]
 
     def test_stop_standbys_is_a_noop_without_standbys(self) -> None:
         manager = WorkerManager()
@@ -929,6 +969,31 @@ class TestWorkerManagerJoinAll:
 
         mock_command_queue.put.assert_called_once_with("STOP", block=False)
         mock_process.terminate.assert_called_once()
+
+    def test_join_all_leaves_an_inherited_process_alone_and_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        manager = WorkerManager()
+        inherited = Mock(spec=multiprocessing.Process)
+        inherited.is_alive.return_value = True
+        own = Mock(spec=multiprocessing.Process)
+        own.is_alive.return_value = True
+        inherited_queue, own_queue = MagicMock(), MagicMock()
+        manager.process_register[uuid4()] = (inherited, inherited_queue, MagicMock())
+        manager.process_register[uuid4()] = (own, own_queue, MagicMock())
+        manager.tasks.extend([inherited, own])
+        monkeypatch.setitem(mp_context._daemon_processes, cast(Any, inherited), os.getpid() + 1)
+
+        with caplog.at_level(logging.ERROR):
+            manager.join_all()
+
+        inherited_queue.put.assert_not_called()
+        inherited.is_alive.assert_not_called()
+        inherited.terminate.assert_not_called()
+        inherited.join.assert_not_called()
+        own_queue.put.assert_called_once_with("STOP", block=False)
+        own.terminate.assert_called_once()
+        assert not [r for r in caplog.records if r.levelno == logging.ERROR]
 
     @pytest.mark.timeout(30)
     def test_join_all_terminates_after_graceful_timeout_when_worker_ignores_stop(self) -> None:

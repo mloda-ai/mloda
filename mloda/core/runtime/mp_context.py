@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 _warned_forkserver_unavailable = False
 _checked_preload: set[str] = set()
-_daemon_processes: weakref.WeakSet[BaseProcess] = weakref.WeakSet()
+_daemon_processes: weakref.WeakKeyDictionary[BaseProcess, int] = weakref.WeakKeyDictionary()
 
 
 def mp_start_context() -> SpawnContext | ForkServerContext:
@@ -58,8 +58,13 @@ def start_daemon_process(
     """Creates ctx.Process(target, args, daemon=True): reaped automatically if the parent exits
     cleanly without an explicit join/terminate on this process."""
     process = ctx.Process(target=target, args=args, daemon=True)
-    _daemon_processes.add(process)
+    _daemon_processes[process] = os.getpid()
     return process
+
+
+def started_by_this_process(process: BaseProcess) -> bool:
+    """False for a process inherited across a fork, which must not be signalled; untracked counts as started here."""
+    return _daemon_processes.get(process, os.getpid()) == os.getpid()
 
 
 def _forget_daemon_processes_after_fork() -> None:

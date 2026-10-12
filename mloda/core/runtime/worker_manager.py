@@ -12,7 +12,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_exc_str
-from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process
+from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process, started_by_this_process
 
 logger = logging.getLogger(__name__)
 
@@ -89,14 +89,15 @@ class WorkerManager:
     def stop_standbys(self) -> None:
         """Terminate and join every unbound standby worker."""
         for process, _, _ in self.standby:
-            process.terminate()
-            process.join()
+            if started_by_this_process(process):
+                process.terminate()
+                process.join()
         self.standby.clear()
 
     def terminate_alive_processes(self) -> None:
         """Terminate and join every worker process that is still alive."""
         for task in self.tasks:
-            if isinstance(task, BaseProcess) and task.is_alive():
+            if isinstance(task, BaseProcess) and started_by_this_process(task) and task.is_alive():
                 task.terminate()
                 task.join()
 
@@ -172,7 +173,9 @@ class WorkerManager:
         (running their close() teardown) before terminating any that remain. With abandon_threads,
         threads get only the remaining timeout and are then left running. Raises an
         Exception if any task fails to join or terminate."""
-        for process, command_queue, _ in self.process_register.values():
+        # A process inherited across a fork belongs to the parent: never signal or join it.
+        owned = [entry for entry in self.process_register.values() if started_by_this_process(entry[0])]
+        for process, command_queue, _ in owned:
             try:
                 if process.is_alive():
                     command_queue.put("STOP", block=False)
@@ -180,7 +183,7 @@ class WorkerManager:
                 logger.error("Error sending graceful STOP: %s", contained_raise_reason(e))
 
         deadline = time.time() + graceful_timeout
-        for process, _, _ in self.process_register.values():
+        for process, _, _ in owned:
             try:
                 process.join(timeout=max(0.0, deadline - time.time()))
             except Exception as e:
@@ -189,6 +192,8 @@ class WorkerManager:
         failures: list[str] = []
         abandoned = 0
         for task in self.tasks:
+            if isinstance(task, BaseProcess) and not started_by_this_process(task):
+                continue
             try:
                 if abandon_threads and isinstance(task, threading.Thread):
                     task.join(timeout=min(max(0.0, deadline - time.time()), threading.TIMEOUT_MAX))

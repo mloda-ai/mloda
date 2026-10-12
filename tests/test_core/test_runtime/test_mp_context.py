@@ -4,6 +4,7 @@ import importlib.util
 import logging
 import multiprocessing
 import multiprocessing.context
+import os
 import sys
 import weakref
 from typing import Any
@@ -177,7 +178,9 @@ def test_forgetting_daemon_processes_after_a_fork_leaves_foreign_children_alone(
     children: Any = multiprocessing.process._children  # type: ignore[attr-defined]
 
     assert all(process in mp_context._daemon_processes for process in tracked)
-    monkeypatch.setattr(mp_context, "_daemon_processes", weakref.WeakSet(tracked))
+    monkeypatch.setattr(
+        mp_context, "_daemon_processes", weakref.WeakKeyDictionary({process: os.getpid() for process in tracked})
+    )
 
     children.update([*tracked, foreign])
     try:
@@ -187,3 +190,17 @@ def test_forgetting_daemon_processes_after_a_fork_leaves_foreign_children_alone(
         assert foreign in children
     finally:
         children.difference_update([*tracked, foreign])
+
+
+def test_started_by_this_process_is_false_only_for_a_process_another_pid_started(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = start_daemon_process(mp_start_context(), _noop_target)
+    untracked = Mock(spec=multiprocessing.Process)
+
+    assert mp_context.started_by_this_process(process) is True
+    assert mp_context.started_by_this_process(untracked) is True
+
+    monkeypatch.setitem(mp_context._daemon_processes, process, os.getpid() + 1)
+
+    assert mp_context.started_by_this_process(process) is False

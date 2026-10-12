@@ -106,6 +106,8 @@ class ExecutionOrchestrator:
     transform framework steps, and join steps, while also managing data dropping and result collection.
     """
 
+    _owner_pid: int | None = None
+
     def __init__(
         self,
         execution_planner: ExecutionPlan,
@@ -281,7 +283,12 @@ class ExecutionOrchestrator:
             self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
         finally:
             self.join(abandon_threads=cancelled)
-        self._drop_all_uploaded_flight_tables()
+        if not self._in_other_process():
+            self._drop_all_uploaded_flight_tables()
+
+    def _in_other_process(self) -> bool:
+        """True in a forked child: the run's flight tables and register belong to the parent."""
+        return self._owner_pid is not None and self._owner_pid != os.getpid()
 
     def _drop_all_uploaded_flight_tables(self) -> None:
         """Final sweep of every cfw's flight table by uuid key, including worker-dispatched cfws."""
@@ -550,6 +557,7 @@ class ExecutionOrchestrator:
         """
         Enters the context of the ExecutionOrchestrator.
         """
+        self._owner_pid = os.getpid()
         run_context = run_context if run_context is not None else self._default_run_context
         self.function_extender = function_extender
         hook_extenders = build_hook_extenders(function_extender or ())
@@ -614,7 +622,7 @@ class ExecutionOrchestrator:
             self.worker_manager.stop_standbys()
             # A worker outliving its run could reach a later run's register on the shared manager.
             self.worker_manager.terminate_alive_processes()
-            if self.manager is not None and hasattr(self, "cfw_register"):
+            if self.manager is not None and hasattr(self, "cfw_register") and not self._in_other_process():
                 try:
                     self.cfw_register.release()
                 except Exception as e:

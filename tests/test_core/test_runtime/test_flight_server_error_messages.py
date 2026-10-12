@@ -1,10 +1,13 @@
 """Tests for improved error messages in ParallelRunnerFlightServer."""
 
 import multiprocessing
-from typing import Any
+import os
+from typing import Any, cast
+from unittest.mock import Mock
 
 import pytest
 
+from mloda.core.runtime import mp_context
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 
 
@@ -140,6 +143,24 @@ class TestFlightServerProcessDaemon:
         server.start_flight_server_process()
 
         assert server.flight_server_process.daemon is True
+
+
+class TestEndFlightServerProcessOfAnInheritedProcess:
+    def test_inherited_process_is_neither_terminated_nor_joined(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        process = Mock(spec=multiprocessing.Process)
+        process.is_alive.return_value = True
+        monkeypatch.setitem(mp_context._daemon_processes, cast(Any, process), os.getpid() + 1)
+        server = ParallelRunnerFlightServer()
+        server.flight_server_process = process
+        server.location = "grpc://127.0.0.1:1"
+
+        server.end_flight_server_process()
+
+        process.is_alive.assert_not_called()
+        process.terminate.assert_not_called()
+        process.join.assert_not_called()
+        assert server.flight_server_process is None
+        assert server.location is None
 
 
 class TestFlightServerLocationNoneError:

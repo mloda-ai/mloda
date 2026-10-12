@@ -106,11 +106,11 @@ class ImdMatchRaisingProbeReader(_ImdBaseReader):
 class _ImdBaseGroup(FeatureGroup):
     """Root group serving one reader; `reader` is set per subclass."""
 
-    reader: type[BaseInputData]
+    reader: type[BaseInputData] | None = None
 
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return cls.reader()
+        return None if cls.reader is None else cls.reader()
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None

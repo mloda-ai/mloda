@@ -970,7 +970,22 @@ class TestPlanStepFeatureSetOptions:
 
 
 class PlanInfoOverridingDBReader(BaseInputData):
-    """Non-final reader storing the pinned plain dict itself, never calling wrap_feature_scoped_access."""
+    """Reader storing a plain dict copy of the pin; only the core wrap can make it a RegisteredCredential."""
+
+    received_types: list[type] = []
+    received_options: list[str] = []
+
+    @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        if isinstance(data_access, dict) and not isinstance(data_access, RegisteredCredential):
+            return RegisteredCredential(data_access)
+        return data_access
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        cls.received_types.append(type(data_access))
+        cls.received_options.append(str(features.options))
+        return {str(features.get_name_of_one_feature()): [1]}
 
     @classmethod
     def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
@@ -1009,12 +1024,16 @@ class PlanInfoOverridingDBReaderFeature(FeatureGroup):
         return PlanInfoOverridingDBReader()
 
     @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_override_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        raise NotImplementedError
-
-
-class TestPlanStepReaderDataAccess:
-    """reader_data_access is a compare=False dataclass field snapshotted from the step's FeatureSet match."""
+        return cls.input_data().load(features)  # type: ignore[union-attr]
 
 
 class PlanInfoIntAccessReader(BaseInputData):
@@ -1210,15 +1229,24 @@ class TestPlanStepDataAccessIdentity:
             plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
         )
 
-        step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
-        assert step.reader_data_access is not None
-        assert type(step.reader_data_access[1]) is RegisteredCredential
+        step = next(s for s in explained if s.step_kind == "compute")
         assert "hunter2" not in repr(step)
         assert type(pinned) is dict
         if not in_context:
             assert step.feature_set_options is not None
             assert "hunter2" not in str(step.feature_set_options)
-            assert type(step.feature_set_options.group[reader.__name__]) is RegisteredCredential
+
+        PlanInfoOverridingDBReader.received_types = []
+        PlanInfoOverridingDBReader.received_options = []
+        mloda.run_all(
+            [Feature(feature_name, options=options)],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
+        )
+
+        assert PlanInfoOverridingDBReader.received_types == [RegisteredCredential]
+        assert len(PlanInfoOverridingDBReader.received_options) == 1
+        assert "hunter2" not in PlanInfoOverridingDBReader.received_options[0]
 
     def test_wrap_scoped_access_leaves_pairs_of_non_overriding_readers_untouched(self) -> None:
         PlanInfoNonIdempotentWrapReader.wrap_calls = 0

@@ -32,7 +32,10 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
     DeclarationRequirement,
     declaration_requirement_scope,
 )
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.base_input_data import (
+    RESERVED_READER_OPTION_KEY,
+    BaseInputData,
+)
 from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader, feature_group_scope
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     FormatFeatureGroup,
@@ -885,9 +888,11 @@ class IdentifyFeatureGroupClass:
             if isinstance(written, tuple) and len(written) == 2:
                 if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
                     # A pair the candidate inherited rather than wrote.
-                    self._input_data_matches[feature_group] = cast(tuple[type[BaseInputData], Any], written)
-                else:
+                    self._input_data_matches[feature_group] = cast(tuple[DataAccessReader, Any], written)
+                elif isinstance(written[0], type) and issubclass(written[0], BaseInputData):
                     self._input_data_matches[feature_group] = BaseInputData._wrap_scoped_access(written, options)
+                else:
+                    self._input_data_matches[feature_group] = written
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

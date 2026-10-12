@@ -21,10 +21,15 @@ else:
 _PYPROJECT = Path(__file__).parent.parent.parent.parent / "pyproject.toml"
 
 
-def _load_optional_deps() -> dict[str, list[str]]:
+def _load_project() -> dict[str, Any]:
     with open(_PYPROJECT, "rb") as fh:
         data = tomllib.load(fh)
-    result: dict[str, list[str]] = data["project"]["optional-dependencies"]
+    result: dict[str, Any] = data["project"]
+    return result
+
+
+def _load_optional_deps() -> dict[str, list[str]]:
+    result: dict[str, list[str]] = _load_project()["optional-dependencies"]
     return result
 
 
@@ -53,13 +58,6 @@ def test_all_extra_references(referenced_extra: str) -> None:
     assert any(f"mloda[{referenced_extra}]" in dep for dep in all_deps), (
         f"Expected mloda[{referenced_extra}] in all extra. Got: {all_deps}"
     )
-
-
-def _load_project() -> dict[str, Any]:
-    with open(_PYPROJECT, "rb") as fh:
-        data = tomllib.load(fh)
-    result: dict[str, Any] = data["project"]
-    return result
 
 
 def test_core_dependencies_stay_empty() -> None:

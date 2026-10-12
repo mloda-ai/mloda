@@ -489,7 +489,7 @@ MISSING_OPTION_REASON_791 = (
     "required option(s) some_key_791m are absent after declared defaults and name bindings"
     "; pass it in Options(context=...); for a direct input of a feature you construct, "
     "list it in that feature's propagate_context_keys (the push is one hop); "
-    "for an input further down a chained name, pass it in Options(group=...), "
+    "for an input further down a chained name, pass it in Options(group=...) instead, "
     "which is forwarded down the chain by default"
 )
 

@@ -35,7 +35,7 @@ ROE_FEATURE_NAME = "roe_enforced_column"
 ROE_CONTEXT_REMEDY = (
     "; pass it in Options(context=...); for a direct input of a feature you construct, "
     "list it in that feature's propagate_context_keys (the push is one hop); "
-    "for an input further down a chained name, pass it in Options(group=...), "
+    "for an input further down a chained name, pass it in Options(group=...) instead, "
     "which is forwarded down the chain by default"
 )
 

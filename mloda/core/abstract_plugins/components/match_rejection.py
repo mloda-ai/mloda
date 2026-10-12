@@ -91,6 +91,6 @@ def context_forwarding_remedy(context: bool, keys: list[str] | None = None) -> s
     return (
         f"; pass {subject} in Options(context=...); for a direct input of a feature you construct, "
         f"list {pronoun} in that feature's propagate_context_keys (the push is one hop); "
-        f"for an input further down a chained name, pass {pronoun} in Options(group=...), "
+        f"for an input further down a chained name, pass {pronoun} in Options(group=...) instead, "
         "which is forwarded down the chain by default"
     )

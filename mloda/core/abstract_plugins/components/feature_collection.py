@@ -13,7 +13,8 @@ class Features:
     Input features inherit ALL consumer group options by default. Feature.forward_group=False
     isolates the input feature, a frozenset allowlist restricts the copy to the listed keys,
     and Feature.forward_group_exclude carves out single keys. Context flows only via the
-    consumer-side Options.propagate_context_keys push or the Feature.inherit_context_keys pull.
+    consumer-side Options.propagate_context_keys or cascade_context_keys push or the
+    Feature.inherit_context_keys pull.
 
     Parent uuid is internal logic for now. Don t give this parameter.
     """
@@ -72,7 +73,7 @@ class Features:
         keys by default; feature.forward_group=False isolates it, an allowlist restricts
         the copy, and feature.forward_group_exclude carves out single keys. Consumer
         context keys flow only when listed in feature.inherit_context_keys or pushed via
-        the consumer's propagate_context_keys. Conflict detection lives in inherit_from.
+        the consumer's propagate_context_keys or cascade_context_keys. Conflict detection lives in inherit_from.
 
         Args:
             feature: The input feature whose options are updated in place

@@ -679,8 +679,8 @@ class FeatureChainParser:
     ) -> Options:
         """Merge name-derived bindings into options; a present option wins, nothing to merge is identity.
 
-        Provenance (inherited_group_keys / inherited_context_keys) and propagate_context_keys survive
-        the rebuild, so forwarded-mismatch protection still reads it off the effective options.
+        Provenance (inherited_group_keys / inherited_context_keys), propagate_context_keys and cascade_context_keys
+        survive the rebuild, so forwarded-mismatch protection still reads it off the effective options.
         """
         if property_mapping is None or not bindings:
             return options

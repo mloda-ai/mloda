@@ -112,6 +112,8 @@ class Engine:
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
+        # Per feature uuid, the cascade_context_keys it had when its inputs were resolved.
+        self._cascade_keys_at_resolution: dict[UUID, frozenset[str]] = {}
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
@@ -279,10 +281,15 @@ class Engine:
         # them; intake materialization canonicalizes default-equivalent twins.
         declared_options = feature.options
         added = self.add_feature_to_collection(
-            feature_group_class, feature, features.child_uuid, specialized_from=result.specialized_from
+            feature_group_class,
+            feature,
+            features.child_uuid,
+            specialized_from=result.specialized_from,
+            check_cascade=True,
         )
 
         if added:
+            self._cascade_keys_at_resolution[feature.uuid] = feature.options.cascade_context_keys
             parent_domain = feature.domain.name if feature.domain else None
             self.resolved_input_feature_names[feature.uuid] = self._handle_input_features_recursion(
                 feature_group_class,
@@ -674,6 +681,8 @@ class Engine:
         child_uuid: UUID | None,
         if_index_feature: bool = False,
         specialized_from: tuple[type[FeatureGroup], ...] = (),
+        *,
+        check_cascade: bool = False,
     ) -> bool:
         # Materialize declared defaults at intake: default-equivalent twins become equal and merge
         # via the duplicate path below; identity no-op without concrete defaults.
@@ -699,6 +708,18 @@ class Engine:
         existing_feature = next((f for f in feature_collection if feature == f), None)
 
         if existing_feature is not None:
+            if check_cascade and self.resolved_input_feature_names.get(existing_feature.uuid):
+                resolved_keys = self._cascade_keys_at_resolution.get(
+                    existing_feature.uuid, existing_feature.options.cascade_context_keys
+                )
+                if resolved_keys != feature.options.cascade_context_keys:
+                    raise ValueError(
+                        f"Feature '{feature.name}' is requested with different cascade_context_keys: "
+                        f"{sorted(resolved_keys)} and {sorted(feature.options.cascade_context_keys)}. "
+                        f"Its inputs were already resolved, so the cascade would depend on request order. "
+                        f"Declare the same cascade_context_keys on every request that reaches the feature, "
+                        f"and list the cascading request first when a Feature object is shared between requests."
+                    )
             if specialized_from:
                 merged = set(self.specialized_from.get(existing_feature.uuid, ())) | set(specialized_from)
                 self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))

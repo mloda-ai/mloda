@@ -186,3 +186,19 @@ class TestConsumerAttributionsMergeOrderIndependence:
         assert engine.add_feature_to_collection(FeatureGroup, b, None) is False
 
         assert stored.consumer_attributions == [("ConsumerA", frozenset({"a"}))]
+
+
+class TestDirectIntakeIgnoresCascadeGuard:
+    """Only feature resolution guards differing cascade sets; a direct default-form intake merges silently."""
+
+    def test_default_intake_merges_twin_with_differing_cascade_silently(self) -> None:
+        engine = _intake_engine()
+        existing = Feature(
+            name="x",
+            options=Options(group={"g": 1}, context={"k": "v"}, cascade_context_keys=frozenset({"k"})),
+        )
+        twin = Feature(name="x", options=Options(group={"g": 1}, context={"k": "v"}))
+
+        assert engine.add_feature_to_collection(FeatureGroup, existing, None) is True
+        engine.resolved_input_feature_names = {existing.uuid: frozenset({"some_input"})}
+        assert engine.add_feature_to_collection(FeatureGroup, twin, None) is False

@@ -47,6 +47,7 @@ from mloda.user import DataAccessCollection
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
+from mloda.user import RunResult
 
 from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import (
     PolicyRaises,
@@ -168,10 +169,13 @@ _ENABLED_SCHEMALESS_ALLOWED = PluginCollector.enabled_feature_groups({EmptyResul
 _ENABLED_NONE = PluginCollector.enabled_feature_groups({EmptyResultNoneFeatureGroup})
 
 
-def _assert_single_empty_result(result: list[Any]) -> None:
-    """A run_all result that is exactly one schema-bearing frame with zero rows."""
+def _assert_single_empty_result(result: RunResult) -> None:
+    """A run_all result that is exactly one schema-bearing frame with zero rows, typed as its result_framework."""
     assert len(result) == 1
     assert len(records_from_frame(result[0])) == 0
+    for step, frame in result.frames():
+        assert step.result_framework is not None
+        assert isinstance(frame, step.result_framework.expected_data_framework())
 
 
 class EmptyResultRunAllTestBase(PolicyRunAllTestBase):

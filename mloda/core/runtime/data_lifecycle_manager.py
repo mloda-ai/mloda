@@ -154,7 +154,12 @@ class DataLifecycleManager:
         if not cfw._extract_column_names(data):
             return self._to_output_framework(cfw, data)
 
-        selected = cfw.select_data_by_column_names(
+        select = cfw.select_data_by_column_names
+        if self.output_framework is not None:
+            target = self.output_framework.expected_data_framework()
+            if isinstance(target, type) and isinstance(data, target):
+                select = cfw.select_native_data_by_column_names
+        selected = select(
             data,
             selected_feature_names,
             column_ordering=self.column_ordering,

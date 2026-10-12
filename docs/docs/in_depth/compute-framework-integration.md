@@ -322,9 +322,9 @@ The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `Sq
 
 ### Result type
 
-A requested feature computed on DuckDB or SQLite comes back as a `pa.Table`, fetched in full when the result is selected. With `output_framework=DuckDBFramework` or `output_framework=SqliteFramework`, a step that ran on that framework returns the relation it computed, on the connection the step used. It is lazy (every read runs the query again), it needs that connection to stay open, and on SQLite it leaves one temporary view on that connection. A result converted from another framework is loaded as a new relation onto the matching connection in the DataAccessCollection.
+A requested feature computed on DuckDB or SQLite comes back as a `pa.Table`, fetched in full when the result is selected. With `output_framework=DuckDBFramework` or `output_framework=SqliteFramework`, a step that ran on that framework returns the relation it computed, on the connection the step used. The relation is lazy: every read runs the query again, the connection must stay open, and SQLite leaves one temporary view on it. A result converted from another framework is loaded as a new relation onto the matching connection in the DataAccessCollection.
 
-Framework authors: `select_native_data_by_column_names` is the hook that returns the selection in the framework's own type; the default delegates to `select_data_by_column_names`. A framework whose `select_data_by_column_names` returns another framework's data type overrides `result_framework()` to name that framework; the two move together (a subclass that changes one changes the other).
+Framework authors: `select_native_data_by_column_names` returns the selection in the framework's own type (the default delegates to `select_data_by_column_names`). A framework whose `select_data_by_column_names` returns another framework's data type must also override `result_framework()` to name that framework.
 
 ### Reading column types
 
@@ -333,12 +333,12 @@ The `.types` property returns column types aligned with `.columns`. The element 
 - `DuckdbRelation.types` returns DuckDB-native dtype objects.
 - `SqliteRelation.types` returns PyArrow `pa.DataType` objects (from propagated hints, falling back to SQLite affinity inference).
 
-`SqliteRelation.to_arrow_table()` types each column the same way with and without rows: the propagated hint, else the non-null values (int and float mixed gives float64, any other mix gives string), else the type of one placeholder row run through the column's SQL expression, else string. A projection the placeholder row cannot evaluate, such as one reading `rowid`, is string without rows. A column Arrow cannot build raises a `ValueError` naming it.
-
 ```py
 relation.columns   # ["user_id", "amount"]
 relation.types     # backend-specific dtype objects, same order as columns
 ```
+
+`SqliteRelation.to_arrow_table()` types each column the same way with and without rows: the propagated hint, else the non-null values (int and float mixed gives float64, any other mix gives string), else the type of one placeholder row run through the column's SQL expression, else string. A projection the placeholder row cannot evaluate, such as one reading `rowid`, is string without rows. A column Arrow cannot build raises a `ValueError` naming it.
 
 ### Window functions
 

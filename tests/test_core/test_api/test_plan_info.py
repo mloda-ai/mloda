@@ -2441,13 +2441,15 @@ class TestPlanStepResultFramework:
 
     @pytest.mark.parametrize(
         ("output_framework", "expected"),
-        [(None, PyArrowTable), ("PyArrowTable", PyArrowTable), ("PandasDataFrame", PandasDataFrame)],
+        [(None, PythonDictFramework), ("PyArrowTable", PyArrowTable), ("PandasDataFrame", PandasDataFrame)],
         ids=["declared", "option_other", "option_own"],
     )
     def test_a_declared_result_framework_is_reported_and_the_option_still_wins(
         self, monkeypatch: pytest.MonkeyPatch, output_framework: str | None, expected: type[ComputeFramework]
     ) -> None:
-        monkeypatch.setattr(PandasDataFrame, "result_framework", classmethod(lambda cls: PyArrowTable), raising=False)
+        monkeypatch.setattr(
+            PandasDataFrame, "result_framework", classmethod(lambda cls: PythonDictFramework), raising=False
+        )
         options = {} if output_framework is None else {"output_framework": output_framework}
 
         source, requested = [step for step in self._chained_plan(**options) if step.step_kind == "compute"]

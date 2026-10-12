@@ -407,6 +407,12 @@ def _iceberg_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
     return cfw, None
 
 
+def _arrow_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
+    cfw = PyArrowTable()
+    cfw.data = arrow
+    return cfw, None
+
+
 class TestDataLifecycleManagerOutputFramework:
     """Results convert to the output framework once, after column selection."""
 
@@ -481,13 +487,16 @@ class TestDataLifecycleManagerOutputFramework:
 
         assert isinstance(result, output.expected_data_framework())
 
-    def test_a_relation_output_is_a_new_relation_on_the_output_connection(self) -> None:
+    @pytest.mark.parametrize(
+        "make_run_framework", [_arrow_run_framework, _duckdb_run_framework], ids=["pyarrow", "duckdb"]
+    )
+    def test_a_relation_output_is_a_new_relation_on_the_output_connection(self, make_run_framework: Any) -> None:
         import sqlite3
 
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 
-        cfw = self._arrow_cfw(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
+        cfw, _ = make_run_framework(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
         output_connection = sqlite3.connect(":memory:")
         _OPEN_CONNECTIONS.append(output_connection)
         manager = DataLifecycleManager(output_framework=SqliteFramework, output_connection=output_connection)
@@ -503,7 +512,7 @@ class TestDataLifecycleManagerOutputFramework:
         self, make_run_framework: Any
     ) -> None:
         cfw, run_connection = make_run_framework(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
-        other_cfw, output_connection = make_run_framework(pa.table({"feature1": [9]}))
+        _, output_connection = make_run_framework(pa.table({"feature1": [9]}))
         manager = DataLifecycleManager(output_framework=type(cfw), output_connection=output_connection)
 
         with patch.object(type(cfw), "select_data_by_column_names", side_effect=AssertionError("materialized")):
@@ -516,10 +525,9 @@ class TestDataLifecycleManagerOutputFramework:
         assert arrow.column_names == ["feature1"]
         assert arrow["feature1"].to_pylist() == [1, 2]
 
-    @pytest.mark.parametrize("framework, data", [(PyArrowTable, pa.table({"feature1": [1, 2], "feature2": [3, 4]}))])
-    def test_native_selection_defaults_to_select_data_by_column_names(self, framework: Any, data: Any) -> None:
-        cfw = framework()
-        cfw.data = data
+    def test_native_selection_defaults_to_select_data_by_column_names(self) -> None:
+        data = pa.table({"feature1": [1, 2], "feature2": [3, 4]})
+        cfw = PyArrowTable()
         names = [FeatureName("feature1")]
 
         native = cfw.select_native_data_by_column_names(data, names)

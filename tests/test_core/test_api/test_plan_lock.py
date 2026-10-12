@@ -174,7 +174,7 @@ def test_a_lock_written_in_the_previous_format_with_a_reader_entry_fails_check(t
     plan = _plan()
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
-    content["format"] = 5
+    content["format"] = PLAN_LOCK_FORMAT - 1
     for record in content["compute"]:
         record["reader"] = None
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")

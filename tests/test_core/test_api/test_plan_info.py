@@ -1200,33 +1200,20 @@ class TestPlanStepDataAccessIdentity:
         assert pointer == {"sqlite": db, "password": secret}
 
     @pytest.mark.parametrize(
-        "reader, feature_group, feature_name, in_context",
-        [
-            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", False),
-            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", True),
-        ],
+        "in_context",
+        [False, True],
         ids=["overriding_reader", "overriding_reader_context_pin"],
     )
-    def test_pinned_dict_credential_is_redacted_in_plan_output(
-        self,
-        tmp_path: Path,
-        reader: type[BaseInputData],
-        feature_group: type[FeatureGroup],
-        feature_name: str,
-        in_context: bool,
-    ) -> None:
-        db = str(tmp_path / "plan_info_pinned.db")
-        conn = sqlite3.connect(db)
-        conn.execute(f"CREATE TABLE t ({feature_name} INTEGER)")
-        conn.commit()
-        conn.close()
-        pinned = {"sqlite": db, "table_name": "t", "password": "hunter2"}  # nosec B105
-        options = Options(context={reader.__name__: pinned}) if in_context else {reader.__name__: pinned}
+    def test_pinned_dict_credential_is_redacted_in_plan_output(self, in_context: bool) -> None:
+        feature_name = "plan_info_override_col"
+        reader_name = PlanInfoOverridingDBReader.__name__
+        pinned = {"sqlite": "plan_info_pinned.db", "table_name": "t", "password": "hunter2"}  # nosec B105
+        options = Options(context={reader_name: pinned}) if in_context else {reader_name: pinned}
 
         explained = mloda.explain(
             [Feature(feature_name, options=options)],
             compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoOverridingDBReaderFeature}),
         )
 
         step = next(s for s in explained if s.step_kind == "compute")
@@ -1241,7 +1228,7 @@ class TestPlanStepDataAccessIdentity:
         mloda.run_all(
             [Feature(feature_name, options=options)],
             compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoOverridingDBReaderFeature}),
         )
 
         assert PlanInfoOverridingDBReader.received_types == [RegisteredCredential]

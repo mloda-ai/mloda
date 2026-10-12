@@ -331,6 +331,8 @@ The `.types` property returns column types aligned with `.columns`. The element 
 - `DuckdbRelation.types` returns DuckDB-native dtype objects.
 - `SqliteRelation.types` returns PyArrow `pa.DataType` objects (from propagated hints, falling back to SQLite affinity inference).
 
+`SqliteRelation.to_arrow_table()` types each column the same way with and without rows: the propagated hint, else the non-null values (int and float mixed gives float64, any other mix gives string), else the type of one placeholder row run through the column's SQL expression, else string. A projection the placeholder row cannot evaluate, such as one reading `rowid`, is string without rows. A column Arrow cannot build raises a `ValueError` naming it.
+
 ```py
 relation.columns   # ["user_id", "amount"]
 relation.types     # backend-specific dtype objects, same order as columns

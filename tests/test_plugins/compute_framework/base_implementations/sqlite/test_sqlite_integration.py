@@ -10,6 +10,7 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import FeatureName
+from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -297,6 +298,36 @@ class TestSqliteIntegrationWithMlodaAPI:
         assert [record["doubled_value"] for record in records] == [20, 40, 60, 80, 100]
         if output is SqliteFramework:
             assert result[0].connection is sqlite_conn
+
+    def test_zero_row_sqlite_run_has_the_schema_of_the_non_empty_run(
+        self, flight_server: Any, sqlite_conn: Any
+    ) -> None:
+        def run(minimum: int) -> pa.Table:
+            global_filter = GlobalFilter()
+            global_filter.add_filter("value", "min", {"value": minimum})
+            result = mloda.run_all(
+                [
+                    Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn}),
+                    Feature(name="score_plus_ten", options={"SqliteTestDataCreator": sqlite_conn}),
+                ],
+                flight_server=flight_server,
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
+                ),
+                data_access_collection=DataAccessCollection(connections={sqlite_conn}),
+                compute_frameworks=[SqliteFramework],
+                global_filter=global_filter,
+            )
+            assert isinstance(result[0], pa.Table)
+            return result[0]
+
+        full = run(0)
+        empty = run(1000)
+
+        assert (full.num_rows, empty.num_rows) == (5, 0)
+        assert empty.schema.field("doubled_value").type == full.schema.field("doubled_value").type == pa.int64()
+        assert empty.schema.field("score_plus_ten").type == full.schema.field("score_plus_ten").type == pa.float64()
 
     def test_transform_to_pyarrow(self, flight_server: Any, sqlite_conn: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(

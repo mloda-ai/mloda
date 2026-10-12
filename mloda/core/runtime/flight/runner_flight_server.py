@@ -10,7 +10,7 @@ import logging
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.runtime.flight.flight_server import FlightServer, create_location, _require_pyarrow_flight
-from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process
+from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process, started_by_this_process
 from mloda.core.runtime.parent_death_watchdog import start_parent_death_watchdog
 
 logger = logging.getLogger(__name__)
@@ -73,9 +73,10 @@ class ParallelRunnerFlightServer:
 
     def end_flight_server_process(self) -> None:
         if self.flight_server_process:
-            if self.flight_server_process.is_alive():
-                self.flight_server_process.terminate()
-            self.flight_server_process.join()
+            if started_by_this_process(self.flight_server_process):
+                if self.flight_server_process.is_alive():
+                    self.flight_server_process.terminate()
+                self.flight_server_process.join()
             self.flight_server_process = None
             self.location = None
 

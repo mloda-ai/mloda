@@ -1187,6 +1187,7 @@ Available join types:
                 joins_by_feature[side_uuid].append(js)
         # (consumer step, its hop, same-framework parent) triples, resolved once the plan list is complete.
         hop_same_framework_pairs: list[tuple[FeatureGroupStep, TransformFrameworkStep, UUID]] = []
+        destination_index = self.joinstep_collection.joins_by_destination_owner(owning_step_of)
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
@@ -1223,7 +1224,9 @@ Available join types:
                     # Serialize joins merging into one owning step's frame (any link), unless the earlier one
                     # already waits for this join. Edges added here leave ep, so non-reaching steps stay valid.
                     known_clear: set[UUID] = set()
-                    for token in self.joinstep_collection.earlier_joins_sharing_destination(ep, owning_step_of):
+                    for token in self.joinstep_collection.earlier_joins_sharing_destination(
+                        ep, owning_step_of, destination_index
+                    ):
                         if not self._step_waits_for(
                             producer_of[token], ep.uuid, steps_by_uuid, producer_of, known_clear
                         ):

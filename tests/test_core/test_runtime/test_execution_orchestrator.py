@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
 import threading
 import uuid as uuid_mod
 from collections.abc import Callable
@@ -845,6 +846,18 @@ class TestEnterPrestartsStandbyWorkers:
 
         orchestrator.cfw_register.release.assert_not_called()
 
+    @pytest.mark.parametrize("pid_offset, releases", [(0, True), (1, False)], ids=["owner", "other_process"])
+    def test_exit_releases_the_register_only_in_the_owning_process(self, pid_offset: int, releases: bool) -> None:
+        orchestrator = self._entering(Mock())
+        orchestrator._owner_pid = os.getpid() + pid_offset
+        orchestrator.manager = Mock()
+        orchestrator.cfw_register = Mock()
+
+        with patch("mloda.core.runtime.run.release_shared_manager"):
+            orchestrator.__exit__(None, None, None)
+
+        assert orchestrator.cfw_register.release.call_count == int(releases)
+
     def test_exit_stops_standbys_without_a_manager(self) -> None:
         worker_manager = Mock()
         orchestrator = self._entering(worker_manager)
@@ -1179,6 +1192,28 @@ class TestDropAllUploadedFlightTablesScrubsCredentials:
         assert not any(leak_marker in r.getMessage() for r in warning_records), (
             f"credential leaked into a WARNING record: {[r.getMessage() for r in warning_records]}"
         )
+
+
+class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
+    @pytest.mark.parametrize("pid_offset, owns", [(0, True), (1, False)], ids=["owner", "other_process"])
+    def test_finalize_drops_tables_and_reads_artifacts_only_in_the_owning_process(
+        self, pid_offset: int, owns: bool
+    ) -> None:
+        orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
+        orchestrator._owner_pid = os.getpid() + pid_offset
+        orchestrator.location = "flight-location"
+        orchestrator.cfw_register = Mock()
+        orchestrator.data_lifecycle_manager.set_artifacts = Mock()  # type: ignore[method-assign]
+        orchestrator.join = Mock()  # type: ignore[method-assign]
+        orchestrator.executor = Mock()
+        orchestrator.executor.cfw_collection = {uuid_mod.uuid4(): Mock(get_object_ids=Mock(return_value=[]))}
+
+        with patch("mloda.core.runtime.run.FlightServer.drop_tables") as drop_tables:
+            orchestrator._finalize()
+
+        orchestrator.join.assert_called_once()
+        assert drop_tables.call_count == int(owns)
+        assert orchestrator.cfw_register.get_artifacts.call_count == int(owns)
 
 
 class TestExitOfANeverEnteredOrchestrator:

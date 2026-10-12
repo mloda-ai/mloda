@@ -19,7 +19,7 @@
 | entrypoints             | 0.4             | MIT License                                        |
 | execnet                 | 2.1.2           | MIT License                                        |
 | executing               | 2.2.1           | MIT License                                        |
-| fsspec                  | 2026.4.0        | BSD-3-Clause                                       |
+| fsspec                  | 2026.9.0        | BSD-3-Clause                                       |
 | html5lib                | 1.1             | MIT License                                        |
 | idna                    | 3.15            | BSD-3-Clause                                       |
 | iniconfig               | 2.3.0           | MIT                                                |

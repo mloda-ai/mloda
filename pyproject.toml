@@ -186,6 +186,7 @@ exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
 # - nbconvert >= 7.17.1: arbitrary file read/write via path traversal; uncontrolled search path on Windows
 # - anyio >= 4.14.2: TLSStream IDNA 2003 host name encoding allows TLS certificate spoofing; process-pool
 #   workers can block indefinitely on undrained stderr
+# - fsspec >= 2026.6.0: template injection in ReferenceFileSystem
 constraint-dependencies = [
     "urllib3>=2.7.0",
     "idna>=3.15",
@@ -193,6 +194,7 @@ constraint-dependencies = [
     "soupsieve>=2.9.0",
     "nbconvert>=7.17.1",
     "anyio>=4.14.2",
+    "fsspec>=2026.6.0",
 ]
 # Overrides, not constraints: marimo pins `pymdown-extensions<11`, and the fix for the
 # b64 path-traversal advisory only ships in 11.0. A constraint cannot beat that upper

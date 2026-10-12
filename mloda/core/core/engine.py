@@ -191,19 +191,20 @@ class Engine:
             self.global_filter.reset_match_tracking()
 
         match_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_MATCH)
-        if match_extender is None:
-            self.setup_features_recursion(features)
-        else:
-            plan = self.plan_context
-            probe_scope = ReaderProbeScope(
+        plan = self.plan_context
+        probe_scope = (
+            None
+            if match_extender is None
+            else ReaderProbeScope(
                 match_extender,
                 self.run_context.plan_id,
                 plan.tenant_id if plan else None,
                 plan.project_id if plan else None,
                 plan.principal if plan else None,
             )
-            with reader_probe_scope(probe_scope):
-                self.setup_features_recursion(features)
+        )
+        with reader_probe_scope(probe_scope):
+            self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
 
         if self.global_filter:

@@ -490,6 +490,16 @@ class TestHookContextProviderExport:
         assert "HookContext" in provider.__all__
 
 
+class _HugeInt(int):
+    def __int__(self) -> int:
+        return 2**70
+
+
+class _NanFloat(float):
+    def __float__(self) -> float:
+        return float("nan")
+
+
 class TestHookContextResultAttributes:
     """result_attributes are published during calculate_feature and read after the call."""
 
@@ -550,6 +560,8 @@ class TestHookContextResultAttributes:
                     "small": -(2**63) - 1,
                     "max": 2**63 - 1,
                     "min": -(2**63),
+                    "huge_int": _HugeInt(1),
+                    "nan_float": _NanFloat(1.0),
                 }
             )
 

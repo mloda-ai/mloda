@@ -25,11 +25,13 @@ def scalar_attributes(attributes: Any, label: str, mapping_error: str) -> dict[s
         if isinstance(value, bool):
             result[key] = bool(value)
         elif isinstance(value, int):
-            if _INT_MIN <= value <= _INT_MAX:
-                result[key] = int(value)
+            number = int(value)
+            if _INT_MIN <= number <= _INT_MAX:
+                result[key] = number
         elif isinstance(value, float):
-            if math.isfinite(value):
-                result[key] = float(value)
+            decimal = float(value)
+            if math.isfinite(decimal):
+                result[key] = decimal
         elif isinstance(value, str):
             result[key] = str.__str__(value)
     return result

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -9,6 +10,9 @@ from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_ST
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, is_match_abort, safe_field
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -72,9 +76,17 @@ def probe_reader(reader: Any, data_access: Any, feature_names: list[str], option
         except Exception as exc:
             if probe_raised or is_match_abort(exc):
                 raise
+            reason = contained_raise_reason(exc)
+            logger.log(
+                logging.INFO if scope.extender.never_fall_back else logging.WARNING,
+                "Reader %s refused at INPUT_DATA_MATCH by %s: %s",
+                reader.get_class_name(),
+                type(scope.extender).__name__,
+                reason,
+            )
             record_match_rejection(
                 reader.get_class_name(),
-                f"refused at INPUT_DATA_MATCH: {contained_raise_reason(exc)}",
+                f"refused at INPUT_DATA_MATCH: {reason}",
                 stage=INPUT_DATA_STAGE,
             )
             return None

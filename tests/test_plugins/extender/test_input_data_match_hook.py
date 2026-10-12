@@ -10,9 +10,11 @@ import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import FeatureSet
 from mloda.user import Feature, GlobalFilter, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -27,6 +29,7 @@ _COL_C = "imdmatch_col_c"
 _COL_D = "imdmatch_col_d"
 _COL_F = "imdmatch_col_f"
 _COL_G = "imdmatch_col_g"
+_PROBE_LOGGER = "mloda.core.abstract_plugins.components.input_data.reader_probe"
 _ENABLED = PluginCollector.enabled_feature_groups({ReadFileFeature})
 
 
@@ -170,6 +173,39 @@ def _plan(
     )
 
 
+class _ImdPostProbeRefusingExtender(_ImdRefusingExtender):
+    """Runs the probe first, then raises for the target reader."""
+
+    def __init__(self) -> None:
+        super().__init__(ImdMatchGateReader, never_fall_back=True)
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        if context is not None and context.reader_class is self._target:
+            raise PermissionError("no clearance")
+        return result
+
+
+class _ImdColumnGate(Extender):
+    """Gate raising only when the probed feature names include the filter column."""
+
+    never_fall_back = True
+
+    def __init__(self) -> None:
+        self.priority = 100
+        self.name = "imdmatch_column_gate"
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_MATCH}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        if context is not None and _COL_F in context.feature_names:
+            raise PermissionError("no clearance")
+        return func(*args, **kwargs)
+
+
 def _gate() -> _ImdRefusingExtender:
     return _ImdRefusingExtender(ImdMatchGateReader, never_fall_back=True)
 
@@ -186,11 +222,38 @@ class TestRefusal:
         assert ImdMatchGateReader.probes >= 1
         ImdMatchGateReader.probes = 0
 
-        with pytest.raises(Exception) as excinfo:  # noqa: B017
+        with pytest.raises(FeatureResolutionError) as excinfo:
             _plan(scope, _COL_A, ImdMatchGateReader, make_extender())
 
-        assert not isinstance(excinfo.value, AttributeError)
+        assert "no clearance" in str(excinfo.value)
         assert ImdMatchGateReader.probes == 0
+
+    @pytest.mark.parametrize("scope", ["pinned", "global"])
+    def test_post_probe_raise_still_refuses_the_reader(self, scope: str) -> None:
+        with pytest.raises(FeatureResolutionError):
+            _plan(scope, _COL_A, ImdMatchGateReader, _ImdPostProbeRefusingExtender())
+
+        assert ImdMatchGateReader.probes == 1
+
+    @pytest.mark.parametrize(
+        ("make_extender", "level"), [(_gate, logging.INFO), (_breaking, logging.WARNING)], ids=["gate", "breaking"]
+    )
+    def test_refusal_is_logged_with_reader_extender_and_reason(
+        self, caplog: pytest.LogCaptureFixture, make_extender: Any, level: int
+    ) -> None:
+        extender = make_extender()
+
+        with caplog.at_level(logging.DEBUG):
+            _plan("global", _COL_B, ImdMatchGateReader, extender)
+
+        records = [r for r in caplog.records if r.name == _PROBE_LOGGER]
+        assert any(
+            "ImdMatchGateReader" in r.getMessage()
+            and type(extender).__name__ in r.getMessage()
+            and "no clearance" in r.getMessage()
+            and r.levelno == level
+            for r in records
+        )
 
     def test_pinned_gate_refusal_is_named_in_the_planning_error(self) -> None:
         with pytest.raises(Exception) as excinfo:  # noqa: B017
@@ -253,6 +316,28 @@ class TestContext:
 
         probed = [name for c in extender.for_reader(ImdMatchGateReader) for name in c.feature_names]
         assert _COL_F in probed
+
+
+class TestScopeAndFilter:
+    def test_refusing_gate_on_a_filter_column_leaves_the_filter_unattached_and_warns(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        global_filter = GlobalFilter()
+        global_filter.add_filter(_COL_F, "min", {"value": 0})
+
+        with caplog.at_level(logging.WARNING):
+            session = _plan("global", _COL_G, ImdMatchGateReader, _ImdColumnGate(), global_filter=global_filter)
+
+        assert session is not None
+        assert any(f"Filter feature '{_COL_F}' matched no feature group" in r.getMessage() for r in caplog.records)
+
+    def test_a_plan_without_its_own_extender_does_not_inherit_an_outer_probe_scope(self) -> None:
+        extender = _ImdRecordingExtender()
+
+        with reader_probe_scope(ReaderProbeScope(extender, None, None, None, None)):
+            _plan("pinned", _COL_A, ImdMatchGateReader, None)
+
+        assert extender.contexts == []
 
 
 class TestProbeRaise:

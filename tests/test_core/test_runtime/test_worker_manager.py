@@ -799,10 +799,19 @@ class TestWorkerManagerJoinAll:
             assert blocked.is_alive()
             warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
             assert len(warnings) == 1
-            assert "1" in warnings[0].getMessage()
+            assert "Abandoned 1 step thread" in warnings[0].getMessage()
         finally:
             release.set()
             blocked.join(timeout=5)
+
+    def test_abandon_threads_with_infinite_timeout_does_not_raise(self) -> None:
+        manager = WorkerManager()
+        quick = threading.Thread(target=lambda: None, daemon=True)
+        manager.add_thread_task(quick)
+
+        manager.join_all(graceful_timeout=float("inf"), abandon_threads=True)
+
+        assert not quick.is_alive()
 
     def test_join_all_handles_join_errors(self) -> None:
         """join_all should handle errors during join and raise exception."""

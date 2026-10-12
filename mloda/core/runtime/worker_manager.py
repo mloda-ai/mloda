@@ -191,7 +191,7 @@ class WorkerManager:
         for task in self.tasks:
             try:
                 if abandon_threads and isinstance(task, threading.Thread):
-                    task.join(timeout=max(0.0, deadline - time.time()))
+                    task.join(timeout=min(max(0.0, deadline - time.time()), threading.TIMEOUT_MAX))
                     if task.is_alive():
                         abandoned += 1
                     continue

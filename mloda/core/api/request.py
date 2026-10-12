@@ -69,6 +69,9 @@ def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
         _PLAN_ORIGIN.reset(token)
 
 
+_PLAN_TIME_HOOKS = (ExtenderHook.FEATURE_GROUP_MATCHED, ExtenderHook.INPUT_DATA_MATCH)
+
+
 class SetupConfigurationError(ValueError):
     """Invalid mlodaAPI setup argument, raised before any feature resolution runs."""
 
@@ -693,12 +696,9 @@ class mlodaAPI:
             plan.project_id,
             plan.principal,
         )
-        matched_hook = self.engine.get_function_extender(ExtenderHook.FEATURE_GROUP_MATCHED) if self.engine else None
-        if identity_changed and matched_hook is not None and matched_hook.never_fall_back:
-            gates = [
-                e for e in self._extenders if e.never_fall_back and ExtenderHook.FEATURE_GROUP_MATCHED in e.wraps()
-            ]
-            if not any(type(gate).on_run_start is not Extender.on_run_start for gate in gates):
+        if identity_changed:
+            gates = [e for e in self._extenders if e.never_fall_back and any(h in e.wraps() for h in _PLAN_TIME_HOOKS)]
+            if gates and not any(type(gate).on_run_start is not Extender.on_run_start for gate in gates):
                 raise GateBypassError(
                     "The run identity differs from the plan identity and no never_fall_back extender "
                     "overrides on_run_start to check it."

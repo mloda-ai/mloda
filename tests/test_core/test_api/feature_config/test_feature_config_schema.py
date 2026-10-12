@@ -5,6 +5,8 @@ This module tests the schema export function that provides JSON Schema
 for the FeatureConfig model.
 """
 
+import pytest
+
 from mloda.core.api.feature_config.models import feature_config_schema
 
 
@@ -33,16 +35,13 @@ def test_feature_config_schema_forbids_additional_properties() -> None:
     assert schema["additionalProperties"] is False, "Unknown config keys must not be allowed"
 
 
-def test_feature_config_schema_includes_propagate_context_keys() -> None:
-    """Test that the schema advertises the propagate_context_keys field.
-
-    The schema should expose propagate_context_keys as an array of strings so
-    that the documented configuration field is discoverable.
-    """
+@pytest.mark.parametrize("field", ["propagate_context_keys", "cascade_context_keys"])
+def test_feature_config_schema_includes_context_push_keys(field: str) -> None:
+    """The schema advertises each context push key field as an array of strings."""
     schema = feature_config_schema()
 
-    assert "propagate_context_keys" in schema["properties"], "'propagate_context_keys' should be in schema properties"
+    assert field in schema["properties"], f"'{field}' should be in schema properties"
 
-    prop = schema["properties"]["propagate_context_keys"]
-    assert prop["type"] == "array", "'propagate_context_keys' should be an array"
-    assert prop["items"] == {"type": "string"}, "'propagate_context_keys' items should be strings"
+    prop = schema["properties"][field]
+    assert prop["type"] == "array", f"'{field}' should be an array"
+    assert prop["items"] == {"type": "string"}, f"'{field}' items should be strings"

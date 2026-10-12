@@ -184,3 +184,84 @@ class TestContextIsolatedFeatureSetsE2E:
         )
         seen_tenants = sorted(str(context.get("tenant")) for context in ContextIsoSourceGroup.seen_contexts)
         assert seen_tenants == ["acme", "beta"]
+
+
+CASCADE_MIDDLE_NAME = "ctxiso_fs_e2e_cascade_middle"
+
+
+class ContextIsoCascadeMiddleGroup(_ContextIsoConsumerBase):
+    """Middle group that does not pull: the tenant can only arrive by cascade."""
+
+    FEATURE_NAME = CASCADE_MIDDLE_NAME
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(SOURCE_NAME)}
+
+
+class _ContextIsoCascadeConsumerBase(_ContextIsoConsumerBase):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(CASCADE_MIDDLE_NAME)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for feature in features.features:
+            data[feature.name] = data[CASCADE_MIDDLE_NAME]
+        return data
+
+
+class ContextIsoCascadeAcmeConsumer(_ContextIsoCascadeConsumerBase):
+    """Non-pulling consumer, first request."""
+
+    FEATURE_NAME = "ctxiso_fs_e2e_cascade_acme_consumer"
+
+
+class ContextIsoCascadeBetaConsumer(_ContextIsoCascadeConsumerBase):
+    """Non-pulling consumer, second request."""
+
+    FEATURE_NAME = "ctxiso_fs_e2e_cascade_beta_consumer"
+
+
+def _cascading_consumer(name: str, tenant: str) -> Feature:
+    return Feature(name, options=Options(context={"tenant": tenant}, cascade_context_keys=frozenset({"tenant"})))
+
+
+class TestCascadeContextIsolatedFeatureSetsE2E:
+    groups: set[type[FeatureGroup]] = {
+        ContextIsoSourceGroup,
+        ContextIsoCascadeMiddleGroup,
+        ContextIsoCascadeAcmeConsumer,
+        ContextIsoCascadeBetaConsumer,
+    }
+
+    def test_cascaded_tenants_reach_the_source_separately(self) -> None:
+        ContextIsoSourceGroup.reset_recording()
+        results = _run(
+            [
+                _cascading_consumer(ContextIsoCascadeAcmeConsumer.FEATURE_NAME, "acme"),
+                _cascading_consumer(ContextIsoCascadeBetaConsumer.FEATURE_NAME, "beta"),
+            ],
+            self.groups,
+        )
+
+        acme_frame = _frame_with_column(results, ContextIsoCascadeAcmeConsumer.FEATURE_NAME)
+        beta_frame = _frame_with_column(results, ContextIsoCascadeBetaConsumer.FEATURE_NAME)
+        assert acme_frame[ContextIsoCascadeAcmeConsumer.FEATURE_NAME].tolist() == TENANT_VALUES["acme"]
+        assert beta_frame[ContextIsoCascadeBetaConsumer.FEATURE_NAME].tolist() == TENANT_VALUES["beta"]
+        assert ContextIsoSourceGroup.invocation_count == 2
+        assert sorted(str(c.get("tenant")) for c in ContextIsoSourceGroup.seen_contexts) == ["acme", "beta"]
+
+    def test_cascaded_equal_tenants_share_one_source_computation(self) -> None:
+        ContextIsoSourceGroup.reset_recording()
+        results = _run(
+            [
+                _cascading_consumer(ContextIsoCascadeAcmeConsumer.FEATURE_NAME, "acme"),
+                _cascading_consumer(ContextIsoCascadeBetaConsumer.FEATURE_NAME, "acme"),
+            ],
+            self.groups,
+        )
+
+        acme_frame = _frame_with_column(results, ContextIsoCascadeAcmeConsumer.FEATURE_NAME)
+        beta_frame = _frame_with_column(results, ContextIsoCascadeBetaConsumer.FEATURE_NAME)
+        assert acme_frame[ContextIsoCascadeAcmeConsumer.FEATURE_NAME].tolist() == TENANT_VALUES["acme"]
+        assert beta_frame[ContextIsoCascadeBetaConsumer.FEATURE_NAME].tolist() == TENANT_VALUES["acme"]
+        assert ContextIsoSourceGroup.invocation_count == 1

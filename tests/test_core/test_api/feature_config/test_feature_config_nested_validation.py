@@ -144,6 +144,7 @@ TOP_LEVEL_ONLY_FIELDS: list[tuple[str, Any]] = [
     ("group_options", {"threshold": 0.5}),
     ("context_options", {"metadata": "test"}),
     ("propagate_context_keys", ["metadata"]),
+    ("cascade_context_keys", ["metadata"]),
 ]
 
 
@@ -188,13 +189,14 @@ def test_loader_nested_in_features_rejects_top_level_only_field(key: str, value:
 # ---------------------------------------------------------------------------
 
 
-def test_nested_propagate_context_keys_reports_top_level_not_missing_context_options() -> None:
-    """'propagate_context_keys' is top-level-only, so it must not be reported as needing 'context_options'."""
+@pytest.mark.parametrize("field", ["propagate_context_keys", "cascade_context_keys"])
+def test_nested_context_push_keys_reports_top_level_not_missing_context_options(field: str) -> None:
+    """A context push key field is top-level-only, so it must not be reported as needing 'context_options'."""
     options: dict[str, Any] = {
-        "in_features": {"name": "shared_token", "propagate_context_keys": ["metadata"]},
+        "in_features": {"name": "shared_token", field: ["metadata"]},
     }
 
-    with pytest.raises(ValueError, match="propagate_context_keys") as exc_info:
+    with pytest.raises(ValueError, match=field) as exc_info:
         process_nested_features(options)
 
     message = str(exc_info.value)
@@ -225,6 +227,11 @@ MISLEADING_INVARIANT_DICTS: list[Any] = [
         {"name": "shared_token", "propagate_context_keys": ["metadata"]},
         "propagate_context_keys",
         id="propagate_context_keys_without_context_options",
+    ),
+    pytest.param(
+        {"name": "shared_token", "cascade_context_keys": ["metadata"]},
+        "cascade_context_keys",
+        id="cascade_context_keys_without_context_options",
     ),
     pytest.param(
         {"name": "shared_token", "options": {"aggregation_function": "max"}, "group_options": {"threshold": 0.5}},

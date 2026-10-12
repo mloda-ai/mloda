@@ -148,6 +148,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                     propagate_context_keys=frozenset(item.propagate_context_keys)
                     if item.propagate_context_keys
                     else None,
+                    cascade_context_keys=frozenset(item.cascade_context_keys) if item.cascade_context_keys else None,
                 )
                 feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
                 features.append(feature)

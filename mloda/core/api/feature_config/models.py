@@ -55,6 +55,7 @@ class FeatureConfig:
     group_options: dict[str, Any] | None = None
     context_options: dict[str, Any] | None = None
     propagate_context_keys: list[str] | None = None
+    cascade_context_keys: list[str] | None = None
     column_index: int | None = None
     feature_group: str | None = field(default=None, metadata={"nested": True})
 
@@ -64,11 +65,12 @@ class FeatureConfig:
             raise ValueError(f"'name' must be a non-empty string, got: {self.name!r}")
         if self.options and (self.group_options or self.context_options):
             raise ValueError("Cannot use both 'options' and 'group_options'/'context_options'")
-        if self.propagate_context_keys and not self.context_options:
-            raise ValueError(
-                "'propagate_context_keys' requires 'context_options'; "
-                "it is meaningless without context options and would otherwise be silently dropped"
-            )
+        for key_field in ("propagate_context_keys", "cascade_context_keys"):
+            if getattr(self, key_field) and not self.context_options:
+                raise ValueError(
+                    f"'{key_field}' requires 'context_options'; "
+                    "it is meaningless without context options and would otherwise be silently dropped"
+                )
         validate_feature_group_scope(self.feature_group)
         validate_feature_group_not_in_options(self.options, "options")
         validate_feature_group_not_in_options(self.group_options, "group_options")
@@ -171,6 +173,7 @@ def feature_config_schema() -> dict[str, Any]:
             "group_options": {"type": "object"},
             "context_options": {"type": "object"},
             "propagate_context_keys": {"type": "array", "items": {"type": "string"}},
+            "cascade_context_keys": {"type": "array", "items": {"type": "string"}},
             "column_index": {"type": "integer"},
             "feature_group": {"type": "string", "minLength": 1},
         },

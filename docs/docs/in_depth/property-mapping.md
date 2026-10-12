@@ -78,7 +78,7 @@ does not understand can be absorbed silently.
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
-| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s); for a `context=True` key the reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name a group option) |
+| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s); for a `context=True` key the reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name the requested feature's `cascade_context_keys`, or a group option) |
 | Match time (plain group) | Present values, `match_guard`, required presence | Values and `match_guard` in the default matcher of every plain group; required presence on the raw options of a group without a pattern (a patterned plain group keeps the name-path rule) | The options | Non-match (`False`), with the reason recorded (for `match_guard`, only when the spec is strict or declares `expected`) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`), reported when the spec is strict or declares `expected` |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
@@ -130,7 +130,7 @@ differently because they consume values at different moments.
 | Surface | Declared on | What the framework does with it |
 | --- | --- | --- |
 | `PROPERTY_MAPPING` | a `FeatureGroup` | Enforces it and applies it: value validation (`allowed_values`, `element_validator`), presence and `required_when`, and materialization of declared defaults into `Options`. |
-| `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. An absent-required reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name a group option). Defaults are never materialized; only the reader's own code applies them. |
+| `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. An absent-required reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name the requested feature's `cascade_context_keys`, or a group option). Defaults are never materialized; only the reader's own code applies them. |
 
 Both surfaces run the same per-key validator, and the reader's MRO merge goes through the shared
 helper module (`mloda/core/abstract_plugins/components/declaration_surface.py`).
@@ -536,7 +536,8 @@ default matcher's verdict. Migration: a bare `property_spec("...")` on a plain g
 A flagged missing key makes the match a **non-match**: a warning names the group, the feature,
 and the missing key(s), and the resolution-failure report names the missing key(s) too. For missing
 keys declared `context=True` the reason also names the remedy (`Options(context=...)`; for a direct input
-feature the consumer's `propagate_context_keys`, for an input further down a chained name a group option),
+feature the consumer's `propagate_context_keys`, for an input further down a chained name the requested
+feature's `cascade_context_keys`, or a group option),
 naming those keys when several are missing. A group option is part of feature identity; see
 [Context propagation](#context-propagation).
 
@@ -646,7 +647,7 @@ a rejection reason naming the owning class and the missing key, so the resolutio
 carries a near-miss line for it; entries with `required_when` are otherwise optional. For a key
 declared with `context=True` (the default), the reason also names the remedy
 (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an
-input further down a chained name a group option). The predicate must be pure and must not raise. It
+input further down a chained name the requested feature's `cascade_context_keys`, or a group option). The predicate must be pure and must not raise. It
 is callable by construction, and a non-bool truthy return counts as `True`.
 
 The enforcement is installed on the class, not on one matcher, so overriding
@@ -771,20 +772,54 @@ Options(
 Only listed keys propagate; the rest stay local. The push is one hop: listed keys land
 in the context of the feature's direct input features, and an input feature does not
 push them on to its own inputs. For a name-chained feature such as `a__b__c`, a key
-pushed from the requested feature reaches `a__b`, not the root `a`. A value every
-level needs belongs in group options, which forward down the whole chain by default
-and are part of feature identity and resolution at every level. A feature group
-author can instead pull a key level by level with `inherit_context_keys`.
+pushed from the requested feature reaches `a__b`, not the root `a`. To continue the
+push down the chain, opt in with `cascade_context_keys`:
 
-Group options differ: they forward to input features by default. A feature group keeps consumer-local keys off its
+```python
+Options(
+    context={"session_id": "abc"},
+    cascade_context_keys=frozenset({"session_id"}),  # session_id reaches every level
+)
+```
+
+- Every input that receives a cascade key pushes it on to its own inputs, down to the
+  root, also through name-chained inputs such as `a__b__c`. The key must exist in
+  `context`; it need not be in `propagate_context_keys`.
+- The key splits FeatureSets by value at every level: each distinct value computes
+  every input again, including one root read per value. Equal values share one.
+- An input holding a different value, the key as a group option, or a name-bound
+  value that differs raises a `ValueError` naming the input and `cascade_context_keys`.
+- `forward_group=False` on an input stops the cascade there and cuts group forwarding
+  to it; there is no per-key stop. A pull (`inherit_context_keys`) on it still
+  delivers the value at that level only.
+- An input with inputs of its own raises a `ValueError` when it is reached with different
+  `cascade_context_keys` than it had when its inputs were resolved, for example when one
+  consumer cascades a key and another delivers it with a one-hop push or a pull, or when
+  a shared `Feature` object gains the cascade after an earlier request resolved it. Its
+  inputs are resolved once. Declare the same `cascade_context_keys` on every request
+  reaching it, and list the cascading request first when `Feature` objects are shared.
+  A shared root feature is exempt.
+- Two requests of one input that differ in compute framework resolve their inputs separately.
+  When only one of them cascades a key, the plan fails with an error that the input is read
+  from two steps whose options differ. Declare the same `cascade_context_keys` on both.
+- The value sits in the options of every input down the chain, so every feature group
+  there sees it, and it is pickled to MULTIPROCESSING workers.
+- The pull `inherit_context_keys` stays one hop.
+
+Group options remain the choice when the value should be part of feature identity and
+resolution at every level, and a feature group author can pull a key level by level
+with `inherit_context_keys`.
+
+Group options forward to input features by default. A feature group keeps consumer-local keys off its
 upstreams with `forward_group_exclude`, an allowlist, or `forward_group=False` on the
-child `Feature`. `propagate_context_keys` is the caller-side **push**; its
-counterpart is the child-side **pull** `inherit_context_keys`. For both author-side
+child `Feature`. `propagate_context_keys` (or `cascade_context_keys`) is the caller-side
+**push**; its counterpart is the child-side **pull** `inherit_context_keys`. For both author-side
 flows see
 [Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
 
 A forwarded key also splits FeatureSets by value. A context key delivered via the
-push (`propagate_context_keys`) or the pull (`inherit_context_keys`) enters the
+push (`propagate_context_keys` or `cascade_context_keys`) or the pull
+(`inherit_context_keys`) enters the
 child's `inherited_context_keys`, and features whose value for that key differs (e.g.
 `env=prod` vs `env=staging`) then compute in separate FeatureSets, one per value;
 equal values still share one computation. The split is per-FeatureGroup and by value,
@@ -811,7 +846,8 @@ assert child.group["algo"] == "mean"  # child keeps its own group value
 ```
 
 This holds for both differing and equal values, but only on that default path. Once
-a context key is explicitly forwarded (pushed via `propagate_context_keys` or pulled
+a context key is explicitly forwarded (pushed via `propagate_context_keys` or
+`cascade_context_keys`, or pulled
 via `inherit_context_keys`) it enters the child's context, and a same-named child
 `group` key then raises a cross-category conflict. The reverse of the default path (a
 consumer **group** key forwarded onto a child holding it in **context**) also raises.

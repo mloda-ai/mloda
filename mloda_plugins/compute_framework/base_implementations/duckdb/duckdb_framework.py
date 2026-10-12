@@ -117,18 +117,24 @@ class DuckDBFramework(ComputeFramework):
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
     ) -> Any:
-        """Materialize the final result as a PyArrow Table.
+        """Materialize the final result as a PyArrow Table."""
+        return self.select_native_data_by_column_names(
+            data, selected_feature_names, column_ordering, request_feature_order
+        ).to_arrow_table()
 
-        Override this method in a subclass to stay lazy (return a DuckdbRelation)
-        or to use a different output format.
-        """
+    def select_native_data_by_column_names(
+        self,
+        data: Any,
+        selected_feature_names: Sequence[FeatureName],
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
+    ) -> Any:
+        """The selected columns as a lazy DuckdbRelation."""
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
             selected_feature_names, column_names, ordering=column_ordering, request_feature_order=request_feature_order
         )
-
-        selected_columns = list(_selected_feature_names)
-        return data.select(*selected_columns).to_arrow_table()
+        return data.select(*list(_selected_feature_names))
 
     @classmethod
     def extract_column_names(cls, data: Any) -> set[str]:

@@ -306,6 +306,18 @@ class ComputeFramework(ABC):
         """
         return data
 
+    def select_native_data_by_column_names(
+        self,
+        data: Any,
+        selected_feature_names: Sequence[FeatureName],
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
+    ) -> Any:
+        """The selected columns in `expected_data_framework()`, used when that type is the run's `output_framework`."""
+        return self.select_data_by_column_names(
+            data, selected_feature_names, column_ordering=column_ordering, request_feature_order=request_feature_order
+        )
+
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:
         """

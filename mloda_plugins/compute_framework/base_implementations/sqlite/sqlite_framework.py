@@ -78,15 +78,26 @@ class SqliteFramework(ComputeFramework):
         request_feature_order: list[str] | None = None,
     ) -> Any:
         """Materialize the final result as a PyArrow Table."""
+        selected = self.select_native_data_by_column_names(
+            data, selected_feature_names, column_ordering, request_feature_order
+        )
+        table = selected.to_arrow_table()
+        selected.drop()
+        return table
+
+    def select_native_data_by_column_names(
+        self,
+        data: Any,
+        selected_feature_names: Sequence[FeatureName],
+        column_ordering: str | None = None,
+        request_feature_order: list[str] | None = None,
+    ) -> Any:
+        """The selected columns as a lazy SqliteRelation."""
         column_names = set(data.columns)
         _selected_feature_names = self.identify_naming_convention(
             selected_feature_names, column_names, ordering=column_ordering, request_feature_order=request_feature_order
         )
-
-        selected = data.select(*list(_selected_feature_names))
-        table = selected.to_arrow_table()
-        selected.drop()
-        return table
+        return data.select(*list(_selected_feature_names))
 
     @classmethod
     def extract_column_names(cls, data: Any) -> set[str]:

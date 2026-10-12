@@ -299,6 +299,30 @@ class TestSqliteIntegrationWithMlodaAPI:
         if output is SqliteFramework:
             assert result[0].connection is sqlite_conn
 
+    def test_output_framework_with_a_sqlite_run_on_a_step_connection(
+        self, flight_server: Any, sqlite_conn: Any
+    ) -> None:
+        collection_conn = sqlite3.connect(":memory:")
+        try:
+            result = mloda.run_all(
+                [Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn})],
+                flight_server=flight_server,
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
+                ),
+                data_access_collection=DataAccessCollection(connections={collection_conn}),
+                compute_frameworks=[SqliteFramework],
+                output_framework=SqliteFramework,
+            )
+
+            assert result[0].connection is sqlite_conn
+            assert result[0].connection is not collection_conn
+            records = records_from_frame(result[0])
+            assert [record["doubled_value"] for record in records] == [20, 40, 60, 80, 100]
+        finally:
+            collection_conn.close()
+
     def test_zero_row_sqlite_run_has_the_schema_of_the_non_empty_run(
         self, flight_server: Any, sqlite_conn: Any
     ) -> None:

@@ -487,7 +487,7 @@ class TestDataLifecycleManagerOutputFramework:
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
         from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
 
-        cfw, _ = _sqlite_run_framework(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
+        cfw = self._arrow_cfw(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
         output_connection = sqlite3.connect(":memory:")
         _OPEN_CONNECTIONS.append(output_connection)
         manager = DataLifecycleManager(output_framework=SqliteFramework, output_connection=output_connection)
@@ -497,6 +497,34 @@ class TestDataLifecycleManagerOutputFramework:
         assert isinstance(result, SqliteRelation)
         assert result.connection is output_connection
         assert result.to_arrow_table()["feature1"].to_pylist() == [1, 2]
+
+    @pytest.mark.parametrize("make_run_framework", [_duckdb_run_framework, _sqlite_run_framework])
+    def test_a_relation_already_in_the_output_framework_stays_on_the_run_connection(
+        self, make_run_framework: Any
+    ) -> None:
+        cfw, run_connection = make_run_framework(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
+        other_cfw, output_connection = make_run_framework(pa.table({"feature1": [9]}))
+        manager = DataLifecycleManager(output_framework=type(cfw), output_connection=output_connection)
+
+        with patch.object(type(cfw), "select_data_by_column_names", side_effect=AssertionError("materialized")):
+            result = manager.get_result_data(cfw, [FeatureName("feature1")])
+
+        assert isinstance(result, type(cfw).expected_data_framework())
+        assert result.connection is run_connection
+        assert result.connection is not output_connection
+        arrow = result.to_arrow_table()
+        assert arrow.column_names == ["feature1"]
+        assert arrow["feature1"].to_pylist() == [1, 2]
+
+    @pytest.mark.parametrize("framework, data", [(PyArrowTable, pa.table({"feature1": [1, 2], "feature2": [3, 4]}))])
+    def test_native_selection_defaults_to_select_data_by_column_names(self, framework: Any, data: Any) -> None:
+        cfw = framework()
+        cfw.data = data
+        names = [FeatureName("feature1")]
+
+        native = cfw.select_native_data_by_column_names(data, names)
+
+        assert native.equals(cfw.select_data_by_column_names(data, names))
 
     @pytest.mark.parametrize("make_run_framework", [_duckdb_run_framework, _sqlite_run_framework])
     def test_a_sql_run_without_an_output_framework_is_materialized(self, make_run_framework: Any) -> None:

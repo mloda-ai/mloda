@@ -15,6 +15,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda.user import ParallelizationMode
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 from mloda.user import DataAccessCollection
 
@@ -371,7 +372,31 @@ class TestDuckDBIntegrationWithMlodaAPI:
         assert len(result) == 1
         assert "pyarrow_avg_value_by_category" in result[0].column_names
 
-    @pytest.mark.parametrize("output", [PyArrowTable, PandasDataFrame])
+    def test_output_framework_with_a_duckdb_run_on_a_step_connection(
+        self, flight_server: Any, duckdb_conn: Any
+    ) -> None:
+        collection_conn = duckdb.connect()
+        try:
+            result = mloda.run_all(
+                [Feature(name="doubled_value", options={"DuckDBTestDataCreator": duckdb_conn})],
+                flight_server=flight_server,
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {DuckDBTestDataCreator, DuckDBSimpleTransformFeatureGroup}
+                ),
+                data_access_collection=DataAccessCollection(connections={collection_conn}),
+                compute_frameworks=[DuckDBFramework],
+                output_framework=DuckDBFramework,
+            )
+
+            assert result[0].connection is duckdb_conn
+            assert result[0].connection is not collection_conn
+            records = records_from_frame(result[0])
+            assert [record["doubled_value"] for record in records] == [20, 40, 60, 80, 100]
+        finally:
+            collection_conn.close()
+
+    @pytest.mark.parametrize("output", [PyArrowTable, PandasDataFrame, DuckDBFramework])
     def test_output_framework_with_a_duckdb_run(self, flight_server: Any, duckdb_conn: Any, output: Any) -> None:
         result = mloda.run_all(
             [Feature(name="doubled_value", options={"DuckDBTestDataCreator": duckdb_conn})],

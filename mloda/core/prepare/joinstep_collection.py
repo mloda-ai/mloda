@@ -8,36 +8,51 @@ from mloda.core.core.step.join_step import JoinStep
 class JoinStepCollection:
     def __init__(self) -> None:
         self.collection: dict[JoinStep, set[UUID]] = defaultdict(set)
-        self._uuids_by_framework: defaultdict[type[ComputeFramework], set[UUID]] = defaultdict(set)
+        self._open: defaultdict[type[ComputeFramework], set[UUID]] = defaultdict(set)
 
     def similar_dependent_joins_uuids(
         self, destination_framework: type[ComputeFramework], source_framework: type[ComputeFramework]
     ) -> set[UUID]:
-        """
-        This functionality makes sure that we do not write on the same datasets due to overlapping joins at once.
-        This can be optimized, but I just added a hard solution.
-        """
-        return self._uuids_by_framework[destination_framework] | self._uuids_by_framework[source_framework]
+        """The returned tokens plus what those joins wait on cover every earlier join sharing a framework."""
+        return self._open[destination_framework] | self._open[source_framework]
 
     def add(self, join_step: JoinStep) -> None:
-        required_join_uuids = self.similar_dependent_joins_uuids(
-            join_step.destination_framework, join_step.source_framework
-        )
-        self.collection[join_step] = required_join_uuids
-        self._uuids_by_framework[join_step.destination_framework].update(join_step.get_uuids())
-        self._uuids_by_framework[join_step.source_framework].update(join_step.get_uuids())
+        destination, source = join_step.destination_framework, join_step.source_framework
+        self.collection[join_step] = self.similar_dependent_joins_uuids(destination, source)
+        # A cross-framework join waits on everything open, so it replaces the open set; a same-framework
+        # join never carries these tokens, so it only adds itself.
+        if destination != source:
+            self._open[destination] = {join_step.uuid}
+            self._open[source] = {join_step.uuid}
+        else:
+            self._open[destination].add(join_step.uuid)
+
+    def joins_by_destination_owner(
+        self, owning_step_of: Mapping[UUID, UUID] | None = None
+    ) -> dict[UUID, list[JoinStep]]:
+        """Joins per destination owner, in registration order."""
+        owner = owning_step_of or {}
+        index: dict[UUID, list[JoinStep]] = defaultdict(list)
+        for step in self.collection:
+            for key in {owner.get(u, u) for u in step.destination_framework_uuids}:
+                index[key].append(step)
+        return index
 
     def earlier_joins_sharing_destination(
-        self, join_step: JoinStep, owning_step_of: Mapping[UUID, UUID] | None = None
+        self,
+        join_step: JoinStep,
+        owning_step_of: Mapping[UUID, UUID] | None = None,
+        index: Mapping[UUID, list[JoinStep]] | None = None,
     ) -> set[UUID]:
         """Uuids of earlier joins of any link whose destination shares a feature uuid, or owning step if given."""
         owner = owning_step_of or {}
-        wanted = {owner.get(u, u) for u in join_step.destination_framework_uuids}
+        if index is None:
+            index = self.joins_by_destination_owner(owning_step_of)
         uuids: set[UUID] = set()
-        for step in self.collection:
-            if step == join_step:
-                break
-            if wanted & {owner.get(u, u) for u in step.destination_framework_uuids}:
+        for key in {owner.get(u, u) for u in join_step.destination_framework_uuids}:
+            for step in index.get(key, ()):
+                if step == join_step:
+                    break
                 uuids.update(step.get_uuids())
         return uuids
 

@@ -1610,8 +1610,11 @@ def _independent_pairs(count: int, shape: str) -> IndependentPairs:
     planned = _planned()
     links: list[Link] = []
     all_sides: list[Sides] = []
-    right_cfw = PyArrowTable if shape == "same_framework" else PandasDataFrame
     for i in range(count):
+        if shape == "mixed":
+            right_cfw: type[ComputeFramework] = PandasDataFrame if i % 2 == 0 else PyArrowTable
+        else:
+            right_cfw = PyArrowTable if shape == "same_framework" else PandasDataFrame
         left_fg = type(f"IndependentPairLeft{shape}{i}", (FeatureGroup,), {})
         right_fg = type(f"IndependentPairRight{shape}{i}", (FeatureGroup,), {})
         link = Link.inner(
@@ -1623,13 +1626,61 @@ def _independent_pairs(count: int, shape: str) -> IndependentPairs:
     return IndependentPairs(planned, links, all_sides)
 
 
+def _total_calls(work: Callable[..., Any], *args: Any) -> int:
+    profiler = cProfile.Profile()
+    profiler.runcall(work, *args)
+    return int(pstats.Stats(profiler).total_calls)  # type: ignore[attr-defined]
+
+
 def _planning_calls(count: int, shape: str) -> tuple[int, IndependentPairs]:
     """Plan ``count`` independent joins under a profiler and return the total function calls made."""
     pairs = _independent_pairs(count, shape)
     planned = pairs.planned
-    profiler = cProfile.Profile()
-    profiler.runcall(planned.plan.create_execution_plan, planned.queue, planned.graph, planned.link_trekker, {})
-    return pstats.Stats(profiler).total_calls, pairs  # type: ignore[attr-defined]
+    calls = _total_calls(planned.plan.create_execution_plan, planned.queue, planned.graph, planned.link_trekker, {})
+    return calls, pairs
+
+
+def _destination_lookup_calls(count: int) -> int:
+    planned = _independent_pairs(count, "same_framework").planned
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, {})
+    coll = planned.plan.joinstep_collection
+
+    def lookups() -> None:
+        index = coll.joins_by_destination_owner()
+        for join in coll.collection:
+            coll.earlier_joins_sharing_destination(join, None, index)
+
+    return _total_calls(lookups)
+
+
+def test_destination_lookups_grow_linearly_with_independent_joins() -> None:
+    warm = _independent_pairs(2, "same_framework").planned
+    warm.plan.create_execution_plan(warm.queue, warm.graph, warm.link_trekker, {})
+
+    calls_at_base = _destination_lookup_calls(BASE_JOINS)
+    calls_at_double = _destination_lookup_calls(2 * BASE_JOINS)
+
+    assert calls_at_double < MAX_CALL_RATIO_FOR_DOUBLED_JOINS * calls_at_base, (
+        f"calls at {BASE_JOINS} joins: {calls_at_base}, at {2 * BASE_JOINS}: {calls_at_double}"
+    )
+
+
+def test_every_cross_framework_join_in_a_mixed_plan_still_waits_for_every_earlier_join() -> None:
+    """Guard: all joins share PyArrowTable, so each cross join must reach every earlier one."""
+    pairs = _independent_pairs(6, "mixed")
+    planned = pairs.planned
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, {})
+    plan = planned.plan
+    joins = _join_steps(plan)
+    assert joins == list(plan.joinstep_collection.collection)
+    steps_by_uuid = {step.uuid: step for step in plan}
+    producer_of = {token: step.uuid for step in plan for token in step.get_uuids()}
+
+    for index, join in enumerate(joins):
+        if join.destination_framework == join.source_framework:
+            continue
+        for earlier in joins[:index]:
+            assert ExecutionPlan._step_waits_for(join.uuid, earlier.uuid, steps_by_uuid, producer_of)
 
 
 @pytest.mark.parametrize("shape", PAIR_SHAPES, ids=list(PAIR_SHAPES))
@@ -1651,6 +1702,7 @@ def test_planning_work_grows_linearly_with_independent_joins(shape: str) -> None
     assert sorted(str(step.link.uuid) for step in join_steps) == sorted(str(link.uuid) for link in pairs.links)
     for link in pairs.links:
         assert len(_records(planned.plan, link)) == 1
+    assert all(len(step.required_uuids) <= 4 for step in join_steps)
 
 
 def _fg_step(plan: ExecutionPlan, uuid: UUID) -> FeatureGroupStep:
@@ -1682,11 +1734,11 @@ def test_independent_pairs_plan_the_same_structure_per_pair(shape: str) -> None:
 
         hops = _transform_steps(plan, link)
         assert len(hops) == (1 if cross else 0)
-        # Each join waits on its own sides and hop, and on every join of an earlier pair when the pairs
-        # cross frameworks; same framework joins wait on nothing else.
+        # Each join waits on its own sides and hop, and when the pairs cross frameworks on the join of
+        # the previous pair only; same framework joins wait on nothing else.
         expected_required = {sides.left_uuid, sides.right_uuid} | {hop.uuid for hop in hops}
-        if cross:
-            expected_required |= {join_of[earlier.uuid][0].uuid for earlier in pairs.links[:index]}
+        if cross and index > 0:
+            expected_required.add(join_of[pairs.links[index - 1].uuid][0].uuid)
         assert join.required_uuids == expected_required
         for hop in hops:
             assert hop.link_id == join.uuid

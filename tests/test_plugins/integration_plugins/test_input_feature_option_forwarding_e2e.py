@@ -335,6 +335,20 @@ class TestInputFeatureOptionForwardingE2E:
         assert upstream["group"].get("passthrough_marker") == "carried"
         assert DefaultOptionKeys.in_features not in upstream["group"]
 
+    def test_group_option_reaches_root_of_multi_level_chained_name(self) -> None:
+        """A group option on the top feature of a three-level chained name reaches the root source."""
+        ForwardingE2ESourceGroup.reset_recording()
+
+        chained_name = f"{SOURCE_NAME}__double_e2echain579fwd__double_e2echain579fwd"
+        chained = Feature(chained_name, options=Options(group={"backend": "premium"}))
+        results = _run([chained], {ForwardingE2ESourceGroup, ForwardingE2EChainedGroup})
+
+        frame = _frame_with_column(results, chained_name)
+        assert frame[chained_name].tolist() == [40, 80, 120]
+
+        assert len(ForwardingE2ESourceGroup.seen_options) == 1
+        assert ForwardingE2ESourceGroup.seen_options[0]["group"].get("backend") == "premium"
+
     def test_excluding_consumers_share_single_upstream_computation(self) -> None:
         """Consumers differing only in the excluded top_k share one upstream run: the
         forwarded backend is equal on both, so the upstream features stay identical."""

@@ -202,8 +202,10 @@ class TestNamePathPresenceRejectionReasonUnit:
         assert ENV_VAR not in reason, "the reason must not reference the retired env var"
         assert reason == (
             "required option(s) missing_r769rfu are absent after declared defaults and name bindings"
-            "; pass it in Options(context=...), and for an input feature, such as the child of a chained name,"
-            " list it in the consumer's propagate_context_keys"
+            "; pass it in Options(context=...); for a direct input of a feature you construct,"
+            " list it in that feature's propagate_context_keys (the push is one hop);"
+            " for an input further down a chained name, pass it in Options(group=...),"
+            " which is forwarded down the chain by default"
         )
 
     def test_context_false_missing_key_gets_no_remedy_clause(self) -> None:
@@ -232,8 +234,10 @@ class TestNamePathPresenceRejectionReasonUnit:
         assert reason == (
             "required option(s) ctx_a_r769rfu4, ctx_b_r769rfu4, grp_c_r769rfu4"
             " are absent after declared defaults and name bindings"
-            "; pass ctx_a_r769rfu4, ctx_b_r769rfu4 in Options(context=...), and for an input feature,"
-            " such as the child of a chained name, list them in the consumer's propagate_context_keys"
+            "; pass ctx_a_r769rfu4, ctx_b_r769rfu4 in Options(context=...);"
+            " for a direct input of a feature you construct, list them in that feature's propagate_context_keys"
+            " (the push is one hop); for an input further down a chained name, pass them in Options(group=...),"
+            " which is forwarded down the chain by default"
         )
 
     def test_none_when_nothing_missing(self) -> None:

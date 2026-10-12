@@ -89,6 +89,8 @@ def context_forwarding_remedy(context: bool, keys: list[str] | None = None) -> s
         subject = ", ".join(keys)
         pronoun = "them" if len(keys) > 1 else "it"
     return (
-        f"; pass {subject} in Options(context=...), and for an input feature, such as the child of a chained name, "
-        f"list {pronoun} in the consumer's propagate_context_keys"
+        f"; pass {subject} in Options(context=...); for a direct input of a feature you construct, "
+        f"list {pronoun} in that feature's propagate_context_keys (the push is one hop); "
+        f"for an input further down a chained name, pass {pronoun} in Options(group=...), "
+        "which is forwarded down the chain by default"
     )

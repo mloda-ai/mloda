@@ -1194,9 +1194,11 @@ class TestDropAllUploadedFlightTablesScrubsCredentials:
         )
 
 
-class TestFinalizeDropsFlightTablesOnlyInTheOwningProcess:
-    @pytest.mark.parametrize("pid_offset, drops", [(0, True), (1, False)], ids=["owner", "other_process"])
-    def test_finalize_drops_the_tables_only_in_the_owning_process(self, pid_offset: int, drops: bool) -> None:
+class TestFinalizeTouchesSharedStateOnlyInTheOwningProcess:
+    @pytest.mark.parametrize("pid_offset, owns", [(0, True), (1, False)], ids=["owner", "other_process"])
+    def test_finalize_drops_tables_and_reads_artifacts_only_in_the_owning_process(
+        self, pid_offset: int, owns: bool
+    ) -> None:
         orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
         orchestrator._owner_pid = os.getpid() + pid_offset
         orchestrator.location = "flight-location"
@@ -1210,7 +1212,8 @@ class TestFinalizeDropsFlightTablesOnlyInTheOwningProcess:
             orchestrator._finalize()
 
         orchestrator.join.assert_called_once()
-        assert drop_tables.call_count == int(drops)
+        assert drop_tables.call_count == int(owns)
+        assert orchestrator.cfw_register.get_artifacts.call_count == int(owns)
 
 
 class TestExitOfANeverEnteredOrchestrator:

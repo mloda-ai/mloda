@@ -144,8 +144,6 @@ class TestFlightServerProcessDaemon:
 
         assert server.flight_server_process.daemon is True
 
-
-class TestEndFlightServerProcessOfAnInheritedProcess:
     def test_inherited_process_is_neither_terminated_nor_joined(self, monkeypatch: pytest.MonkeyPatch) -> None:
         process = Mock(spec=multiprocessing.Process)
         process.is_alive.return_value = True

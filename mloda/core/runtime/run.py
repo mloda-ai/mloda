@@ -279,11 +279,13 @@ class ExecutionOrchestrator:
         )
 
     def _finalize(self, cancelled: bool = False) -> None:
+        in_other_process = self._in_other_process()
         try:
-            self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
+            if not in_other_process:
+                self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
         finally:
             self.join(abandon_threads=cancelled)
-        if not self._in_other_process():
+        if not in_other_process:
             self._drop_all_uploaded_flight_tables()
 
     def _in_other_process(self) -> bool:

@@ -491,15 +491,22 @@ class TestRefusal:
 
         assert session is not None
         assert kind.gate.probes >= 1
+        assert any(
+            r.levelno == logging.WARNING
+            and "_ImdRefusingExtender" in r.getMessage()
+            and "no clearance" in r.getMessage()
+            for r in caplog.records
+        )
 
 
 class TestContext:
     @_BY_KIND
-    def test_context_carries_reader_declaration_and_planning_identity(self, kind: _Kind) -> None:
+    @pytest.mark.parametrize("scope", ["pinned", "global"])
+    def test_context_carries_reader_declaration_and_planning_identity(self, kind: _Kind, scope: str) -> None:
         extender = _ImdRecordingExtender()
 
         with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
-            _plan("pinned", _COL_A, kind.gate, extender)
+            _plan(scope, _COL_A, kind.gate, extender)
 
         contexts = extender.for_reader(kind.gate)
         assert contexts
@@ -562,15 +569,22 @@ class TestScopeAndFilter:
 
         assert extender.contexts == []
 
+        with reader_probe_scope(ReaderProbeScope(extender, None, None, None, None)):
+            _plan("pinned", _COL_A, kind.gate, extender)
+
+        assert extender.for_reader(kind.gate)
+
 
 class TestProbeRaise:
     @_BY_KIND
     def test_probe_raise_is_unchanged_by_a_pass_through_extender(self, kind: _Kind) -> None:
         with pytest.raises(Exception) as baseline:  # noqa: B017
             _plan("pinned", _COL_D, kind.raising, None)
+        recorder = _ImdRecordingExtender()
         with pytest.raises(Exception) as wrapped:  # noqa: B017
-            _plan("pinned", _COL_D, kind.raising, _ImdRecordingExtender())
+            _plan("pinned", _COL_D, kind.raising, recorder)
 
+        assert recorder.for_reader(kind.raising)
         assert type(wrapped.value) is type(baseline.value)
         assert str(wrapped.value) == str(baseline.value)
         assert "imdmatch probe boom" in str(baseline.value)
@@ -626,14 +640,3 @@ class TestFormatGroupHook:
         assert result[0].column_names == [_COL_P]
         assert ImdMatchGateFormat.probes == 0
         assert ImdMatchGateFormat.column_reads == 0
-
-    def test_context_names_the_group_class_and_its_data_access_name(self) -> None:
-        extender = _ImdRecordingExtender()
-
-        _plan("global", _COL_A, ImdMatchGateFormat, extender)
-
-        contexts = extender.for_reader(ImdMatchGateFormat)
-        assert contexts
-        assert all(c.data_access_format == ImdMatchGateFormat.data_access_name() for c in contexts)
-        assert all(c.feature_group_class is None for c in contexts)
-        assert contexts[0].feature_names == (_COL_A,)

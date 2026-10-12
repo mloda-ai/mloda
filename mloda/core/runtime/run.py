@@ -280,7 +280,6 @@ class ExecutionOrchestrator:
         try:
             self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
         finally:
-            # The thread join is bounded exactly when the run ends as cancelled.
             self.join(abandon_threads=cancelled)
         self._drop_all_uploaded_flight_tables()
 

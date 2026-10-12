@@ -9,6 +9,7 @@ import uuid
 
 from mloda.core.abstract_plugins.components.index.add_index_feature import create_index_feature
 from mloda.core.abstract_plugins.components.index.index import Index
+from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
@@ -189,7 +190,21 @@ class Engine:
         if self.global_filter:
             self.global_filter.reset_match_tracking()
 
-        self.setup_features_recursion(features)
+        match_extender = self.get_function_extender(ExtenderHook.INPUT_DATA_MATCH)
+        plan = self.plan_context
+        probe_scope = (
+            None
+            if match_extender is None
+            else ReaderProbeScope(
+                match_extender,
+                self.run_context.plan_id,
+                plan.tenant_id if plan else None,
+                plan.project_id if plan else None,
+                plan.principal if plan else None,
+            )
+        )
+        with reader_probe_scope(probe_scope):
+            self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
 
         if self.global_filter:

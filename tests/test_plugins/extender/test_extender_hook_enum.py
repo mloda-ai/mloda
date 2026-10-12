@@ -12,5 +12,8 @@ class TestExtenderHookNewMembers:
     def test_input_data_load_member_exists_with_value(self) -> None:
         assert ExtenderHook.INPUT_DATA_LOAD.value == "input_data_load"
 
+    def test_input_data_match_member_exists_with_value(self) -> None:
+        assert ExtenderHook.INPUT_DATA_MATCH.value == "input_data_match"
+
     def test_join_member_exists_with_value(self) -> None:
         assert ExtenderHook.JOIN.value == "join"

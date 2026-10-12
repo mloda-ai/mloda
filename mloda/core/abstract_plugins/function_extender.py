@@ -43,6 +43,7 @@ class ExtenderHook(Enum):
     FEATURE_GROUP_MATCHED = "feature_group_matched"
     INPUT_DATA_LOAD = "input_data_load"
     JOIN = "join"
+    INPUT_DATA_MATCH = "input_data_match"
 
 
 class GateBypassError(RuntimeError):
@@ -173,6 +174,7 @@ class Extender(ABC):
         with cancelled when a stream is closed early or never iterated, or a non-Exception such as KeyboardInterrupt
         ended it (error_type set). An Exception raised here is logged, unless raise_on_run_complete is True
         and the outcome succeeded, then the first such one is re-raised after every extender was called.
+        A cancelled THREADING run may still have a step thread in flight.
         The worker copy is pickled once per run at setup, so its changes never flow back to the parent."""
 
     @staticmethod

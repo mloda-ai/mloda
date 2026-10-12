@@ -490,6 +490,16 @@ class TestHookContextProviderExport:
         assert "HookContext" in provider.__all__
 
 
+class _HugeInt(int):
+    def __int__(self) -> int:
+        return 2**70
+
+
+class _NanFloat(float):
+    def __float__(self) -> float:
+        return float("nan")
+
+
 class TestHookContextResultAttributes:
     """result_attributes are published during calculate_feature and read after the call."""
 
@@ -534,10 +544,35 @@ class TestHookContextResultAttributes:
 
         with context.activate():
             HookContext.publish_result_attributes(
-                {"s": "x", "i": 1, "f": 0.5, "b": False, "l": [1], "d": {"k": 1}, "n": None, "by": b"x"}
+                {
+                    "s": "x",
+                    "i": 1,
+                    "f": 0.5,
+                    "b": False,
+                    "l": [1],
+                    "d": {"k": 1},
+                    "n": None,
+                    "by": b"x",
+                    "nan": float("nan"),
+                    "inf": float("inf"),
+                    "ninf": float("-inf"),
+                    "big": 2**63,
+                    "small": -(2**63) - 1,
+                    "max": 2**63 - 1,
+                    "min": -(2**63),
+                    "huge_int": _HugeInt(1),
+                    "nan_float": _NanFloat(1.0),
+                }
             )
 
-        assert context.result_attributes == {"s": "x", "i": 1, "f": 0.5, "b": False}
+        assert context.result_attributes == {
+            "s": "x",
+            "i": 1,
+            "f": 0.5,
+            "b": False,
+            "max": 2**63 - 1,
+            "min": -(2**63),
+        }
 
     def test_instrument_resets_result_attributes_per_call(self) -> None:
         context = _make_context()

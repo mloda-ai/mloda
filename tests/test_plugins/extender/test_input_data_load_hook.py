@@ -1409,7 +1409,7 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
 class _DeclaringReader(_DirectLoadReader):
     @classmethod
     def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
-        return {"unit": "mm", "scale": 3, "skipped": [1]}  # type: ignore[dict-item]
+        return {"unit": "mm", "scale": 3, "skipped": [1], "bad": float("nan")}  # type: ignore[dict-item]
 
 
 class _RaisingDeclarationReader(_DirectLoadReader):

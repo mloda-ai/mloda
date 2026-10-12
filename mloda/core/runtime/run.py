@@ -276,11 +276,11 @@ class ExecutionOrchestrator:
             "A step producing a required token is missing from the plan, e.g. a dropped join step.",
         )
 
-    def _finalize(self) -> None:
+    def _finalize(self, cancelled: bool = False) -> None:
         try:
             self.data_lifecycle_manager.set_artifacts(self.cfw_register.get_artifacts())
         finally:
-            self.join()
+            self.join(abandon_threads=cancelled)
         self._drop_all_uploaded_flight_tables()
 
     def _drop_all_uploaded_flight_tables(self) -> None:
@@ -345,6 +345,7 @@ class ExecutionOrchestrator:
         It also handles errors, result collection, and data dropping.
         """
         finished_ids, to_finish_ids, currently_running_steps = self._init_run()
+        cancelled = False
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
                 if self._check_for_error():
@@ -364,8 +365,11 @@ class ExecutionOrchestrator:
             # drop-check with a stale finished_ids (see _run_planner_pass), so nothing
             # guarantees another FeatureGroupStep is iterated afterwards to flush it.
             self._drop_data_for_finished_cfws(finished_ids)
+        except BaseException as error:
+            cancelled = not isinstance(error, Exception)
+            raise
         finally:
-            self._finalize()
+            self._finalize(cancelled)
 
     def compute_stream(self) -> Generator[tuple[UUID, Any], None, None]:
         """Generator variant of ``compute()`` that yields results as they complete.
@@ -376,6 +380,7 @@ class ExecutionOrchestrator:
         streaming.
         """
         finished_ids, to_finish_ids, currently_running_steps = self._init_run()
+        cancelled = False
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
                 if self._check_for_error():
@@ -395,8 +400,11 @@ class ExecutionOrchestrator:
             # See compute(): flush anything left in track_data_to_drop once finished_ids
             # is fully up to date, since no further FeatureGroupStep iteration is guaranteed.
             self._drop_data_for_finished_cfws(finished_ids)
+        except BaseException as error:
+            cancelled = not isinstance(error, Exception)
+            raise
         finally:
-            self._finalize()
+            self._finalize(cancelled)
 
     def _process_step_result(self, step: Any) -> Any | bool:
         """
@@ -507,11 +515,11 @@ class ExecutionOrchestrator:
         )
         execution_function(step)
 
-    def join(self) -> None:
+    def join(self, abandon_threads: bool = False) -> None:
         """
         Joins all tasks (threads or processes) and terminates multiprocessing processes.
         """
-        self.worker_manager.join_all(graceful_timeout=self._graceful_shutdown_timeout)
+        self.worker_manager.join_all(graceful_timeout=self._graceful_shutdown_timeout, abandon_threads=abandon_threads)
 
     def add_to_result_data_collection(self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID) -> None:
         """

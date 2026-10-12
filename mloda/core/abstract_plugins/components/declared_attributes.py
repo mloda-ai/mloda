@@ -1,5 +1,6 @@
 """Reads a plugin's declared_attributes(features) into a validated, scalar-only, fresh dict."""
 
+import math
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -9,9 +10,12 @@ from typing import Any
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.utils import safe_field_with_error
 
+_INT_MIN = -(2**63)
+_INT_MAX = 2**63 - 1
+
 
 def scalar_attributes(attributes: Any, label: str, mapping_error: str) -> dict[str, str | int | float | bool]:
-    """Return attributes as a fresh scalar-only dict; raise TypeError on a non-Mapping or non-str key."""
+    """Return a fresh dict of finite, int64-range scalars; raise TypeError on a non-Mapping or non-str key."""
     if not isinstance(attributes, Mapping):
         raise TypeError(f"{label} {mapping_error}, got {type(attributes).__name__}")
     result: dict[str, str | int | float | bool] = {}
@@ -21,9 +25,13 @@ def scalar_attributes(attributes: Any, label: str, mapping_error: str) -> dict[s
         if isinstance(value, bool):
             result[key] = bool(value)
         elif isinstance(value, int):
-            result[key] = int(value)
+            number = int(value)
+            if _INT_MIN <= number <= _INT_MAX:
+                result[key] = number
         elif isinstance(value, float):
-            result[key] = float(value)
+            decimal = float(value)
+            if math.isfinite(decimal):
+                result[key] = decimal
         elif isinstance(value, str):
             result[key] = str.__str__(value)
     return result

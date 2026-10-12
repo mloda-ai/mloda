@@ -167,9 +167,10 @@ class WorkerManager:
         """Return step_uuid in result_uuids_collection."""
         return step_uuid in self.result_uuids_collection
 
-    def join_all(self, graceful_timeout: float = 2.0) -> None:
+    def join_all(self, graceful_timeout: float = 2.0, abandon_threads: bool = False) -> None:
         """Sends STOP to alive workers and waits up to graceful_timeout for them to exit
-        (running their close() teardown) before terminating any that remain. Raises an
+        (running their close() teardown) before terminating any that remain. With abandon_threads,
+        threads get only the remaining timeout and are then left running. Raises an
         Exception if any task fails to join or terminate."""
         for process, command_queue, _ in self.process_register.values():
             try:
@@ -186,14 +187,23 @@ class WorkerManager:
                 logger.error("Error joining process during graceful shutdown: %s", contained_raise_reason(e))
 
         failures: list[str] = []
+        abandoned = 0
         for task in self.tasks:
             try:
+                if abandon_threads and isinstance(task, threading.Thread):
+                    task.join(timeout=min(max(0.0, deadline - time.time()), threading.TIMEOUT_MAX))
+                    if task.is_alive():
+                        abandoned += 1
+                    continue
                 if isinstance(task, BaseProcess):
                     task.terminate()
                 task.join()
             except Exception as e:
                 logger.error("Error joining task: %s", contained_raise_reason(e))
                 failures.append(f"{getattr(task, 'name', None) or task}: {scrub_credentials(safe_exc_str(e))}")
+
+        if abandoned:
+            logger.warning("Abandoned %d step thread(s) still running after the graceful shutdown timeout", abandoned)
 
         if failures:
             raise Exception(

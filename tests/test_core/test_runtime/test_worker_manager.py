@@ -748,7 +748,7 @@ class TestWorkerManagerJoinAll:
 
         manager.join_all()
 
-        mock_thread.join.assert_called_once()
+        mock_thread.join.assert_called_once_with()
         mock_process.join.assert_called_once()
 
     def test_join_all_does_not_terminate_threads(self) -> None:
@@ -762,7 +762,56 @@ class TestWorkerManagerJoinAll:
 
         # Threads don't have terminate method, should only join
         assert not hasattr(mock_thread, "terminate") or mock_thread.terminate.call_count == 0
+        mock_thread.join.assert_called_once_with()
+
+    def test_abandon_threads_joins_threads_with_a_deadline_and_still_terminates_processes(self) -> None:
+        manager = WorkerManager()
+        mock_thread = MagicMock(spec=threading.Thread)
+        mock_thread.is_alive.return_value = False
+        mock_process = Mock(spec=multiprocessing.Process)
+        manager.tasks.extend([mock_thread, mock_process])
+
+        manager.join_all(graceful_timeout=5.0, abandon_threads=True)
+
         mock_thread.join.assert_called_once()
+        assert mock_thread.join.call_args.args == ()
+        timeout = mock_thread.join.call_args.kwargs["timeout"]
+        assert isinstance(timeout, float)
+        assert 0 <= timeout <= 5.0
+        mock_process.terminate.assert_called_once()
+        mock_process.join.assert_called_once_with()
+
+    @pytest.mark.timeout(30)
+    def test_abandon_threads_leaves_a_blocked_daemon_thread_running_and_warns_once(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        manager = WorkerManager()
+        release = threading.Event()
+        blocked = threading.Thread(target=release.wait, daemon=True)
+        manager.add_thread_task(blocked)
+        try:
+            start = time.time()
+            with caplog.at_level(logging.WARNING):
+                manager.join_all(graceful_timeout=0.2, abandon_threads=True)
+            elapsed = time.time() - start
+
+            assert elapsed < 5.0
+            assert blocked.is_alive()
+            warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+            assert len(warnings) == 1
+            assert "Abandoned 1 step thread" in warnings[0].getMessage()
+        finally:
+            release.set()
+            blocked.join(timeout=5)
+
+    def test_abandon_threads_with_infinite_timeout_does_not_raise(self) -> None:
+        manager = WorkerManager()
+        quick = threading.Thread(target=lambda: None, daemon=True)
+        manager.add_thread_task(quick)
+
+        manager.join_all(graceful_timeout=float("inf"), abandon_threads=True)
+
+        assert not quick.is_alive()
 
     def test_join_all_handles_join_errors(self) -> None:
         """join_all should handle errors during join and raise exception."""

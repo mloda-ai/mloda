@@ -222,7 +222,15 @@ class _RecordingFeatureGroup(FeatureGroup):
 class _MixedFeatureGroup(FeatureGroup):
     @classmethod
     def declared_attributes(cls, features: FeatureSet | None) -> dict[str, Any]:
-        return {"unit": "m", "tags": ["a"], "nested": {"k": 1}, "nothing": None, "raw": b"x", "n": 3}
+        return {
+            "unit": "m",
+            "tags": ["a"],
+            "nested": {"k": 1},
+            "nothing": None,
+            "raw": b"x",
+            "n": 3,
+            "bad": float("nan"),
+        }
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:

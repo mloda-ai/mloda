@@ -40,7 +40,7 @@ test = [
     "pip-licenses-cli",
     "tomli>=1.0.0; python_version < '3.11'",
 ]
-# pyarrow >= 14.0.1 in every group that pulls it in: CVE-2023-47248 (arbitrary code execution when reading untrusted Arrow IPC, Feather or Parquet).
+# Every group that pulls in pyarrow needs >=14.0.1 (CVE-2023-47248).
 pyarrow = ["pyarrow>=14.0.1"]
 pandas = ["pandas"]
 polars = ["polars>=1.21"]

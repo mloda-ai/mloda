@@ -4,6 +4,7 @@ import logging
 import multiprocessing
 import os
 import sys
+import weakref
 from importlib.util import find_spec
 from multiprocessing.process import BaseProcess
 from typing import TYPE_CHECKING, Any, Callable
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 _warned_forkserver_unavailable = False
 _checked_preload: set[str] = set()
+_daemon_processes: weakref.WeakSet[BaseProcess] = weakref.WeakSet()
 
 
 def mp_start_context() -> SpawnContext | ForkServerContext:
@@ -55,4 +57,16 @@ def start_daemon_process(
 ) -> BaseProcess:
     """Creates ctx.Process(target, args, daemon=True): reaped automatically if the parent exits
     cleanly without an explicit join/terminate on this process."""
-    return ctx.Process(target=target, args=args, daemon=True)
+    process = ctx.Process(target=target, args=args, daemon=True)
+    _daemon_processes.add(process)
+    return process
+
+
+def _forget_daemon_processes_after_fork() -> None:
+    for process in list(_daemon_processes):
+        # The child's exit hook would otherwise terminate processes it does not own.
+        getattr(multiprocessing.process, "_children", set()).discard(process)
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_forget_daemon_processes_after_fork)

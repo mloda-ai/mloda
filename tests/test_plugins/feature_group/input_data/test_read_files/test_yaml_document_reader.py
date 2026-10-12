@@ -1,172 +1,109 @@
-"""Tests for YamlDocumentReader - follows ReadDocument pattern returning PythonDict list format."""
+"""YamlFG: the shared document contract, framework loads, and YAML content (nested, multi-document)."""
 
-import os
-import tempfile
+from __future__ import annotations
+
+from pathlib import Path
 from typing import Any
 
 import yaml
 
-from mloda.user import Options
-from mloda_plugins.feature_group.input_data.read_files.yaml_document_reader import YamlDocumentReader
-from mloda_plugins.feature_group.input_data.read_document import ReadDocument
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.user import Feature, Options, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.mixins.compute_frameworks.framework_adapter_mixins import (
+    DocumentLoadsIntoFrameworkMixin,
+    PandasDataFrameAdapter,
+    PolarsDataFrameAdapter,
+    PyArrowTableAdapter,
+    PythonDictAdapter,
+)
+from tests.mixins.reader_feature_groups.document_format_feature_group_test_mixin import (
+    DocumentFormatFeatureGroupTestMixin,
+)
+from tests.mixins.reader_feature_groups.lazy_format_group import lazy_document_group, load_document_group
+
+FLOW_STYLE = "{b: two, a: 1}\n"
+CANONICAL = yaml.dump({"a": 1, "b": "two"})
 
 
-class MockFeatureSet:
-    """Mock FeatureSet for testing document readers."""
-
-    def __init__(self, options: dict[str, Any]) -> None:
-        self._options = options
-
-    def get_options_key(self, key: str) -> Any:
-        return self._options.get(key)
-
-
-class TestYamlDocumentReaderInheritance:
-    """Tests that YamlDocumentReader inherits from ReadDocument, not ReadFile."""
-
-    def test_yaml_document_reader_inherits_from_read_document(self) -> None:
-        """YamlDocumentReader must be a subclass of ReadDocument."""
-        assert issubclass(YamlDocumentReader, ReadDocument)
-
-    def test_yaml_document_reader_not_inherits_from_read_file(self) -> None:
-        """YamlDocumentReader must NOT be a subclass of ReadFile."""
-        assert not issubclass(YamlDocumentReader, ReadFile)
+class TestYamlFG(DocumentFormatFeatureGroupTestMixin):
+    feature_group_class = lazy_document_group("yaml_fg", "YamlFG")
+    present_column = "YamlFG"
+    missing_column = "docfmt_yaml_missing"
+    expected_suffixes = frozenset({".yaml", ".yml"})
+    sample_text = FLOW_STYLE
+    expected_content = CANONICAL
 
 
-class TestYamlDocumentReaderLoadData:
-    """Tests that load_data returns PythonDict list format with structured metadata."""
+class TestYamlLoadsIntoPythonDict(PythonDictAdapter, DocumentLoadsIntoFrameworkMixin):
+    document_group = lazy_document_group("yaml_fg", "YamlFG")
+    suffix = ".yml"
+    text = FLOW_STYLE
+    expected_text = CANONICAL
 
-    def test_load_simple_yaml_as_python_dict(self) -> None:
-        """Load a simple YAML file and verify result is a list of dicts with content, source, and file_type."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            simple_data = {"name": "test", "value": 42}
-            yaml.dump(simple_data, f)
-            temp_path = f.name
-
-        try:
-            features = MockFeatureSet({"YamlDocumentReader": temp_path})
-            result = YamlDocumentReader.load_data(None, features)  # type: ignore[arg-type]
-
-            assert isinstance(result, list)
-            assert len(result) == 1
-            row = result[0]
-            assert isinstance(row, dict)
-            assert "YamlDocumentReader" in row
-            assert "source" in row
-            assert "file_type" in row
-            assert row["source"] == temp_path
-            assert row["file_type"] == "yaml"
-            parsed = yaml.safe_load(row["YamlDocumentReader"])
-            assert parsed == simple_data
-        finally:
-            os.unlink(temp_path)
-
-    def test_load_nested_yaml_preserves_structure(self) -> None:
-        """Load nested YAML and verify full structure is preserved through YAML round-trip."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            nested_data = {
-                "level1": {"level2": {"level3": ["a", "b", "c"]}, "items": [1, 2, 3]},
-                "metadata": {"created": "2024-01-01", "tags": ["tag1", "tag2"]},
-            }
-            yaml.dump(nested_data, f)
-            temp_path = f.name
-
-        try:
-            features = MockFeatureSet({"YamlDocumentReader": temp_path})
-            result = YamlDocumentReader.load_data(None, features)  # type: ignore[arg-type]
-
-            assert isinstance(result, list)
-            assert len(result) == 1
-            row = result[0]
-            parsed = yaml.safe_load(row["YamlDocumentReader"])
-            assert parsed == nested_data
-            assert parsed["level1"]["level2"]["level3"] == ["a", "b", "c"]
-            assert parsed["metadata"]["tags"] == ["tag1", "tag2"]
-        finally:
-            os.unlink(temp_path)
-
-    def test_load_multi_document_yaml(self) -> None:
-        """Load YAML file with multiple documents separated by --- and verify all are loaded."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write("---\n")
-            f.write("name: document1\n")
-            f.write("value: 1\n")
-            f.write("---\n")
-            f.write("name: document2\n")
-            f.write("value: 2\n")
-            temp_path = f.name
-
-        try:
-            features = MockFeatureSet({"YamlDocumentReader": temp_path})
-            result = YamlDocumentReader.load_data(None, features)  # type: ignore[arg-type]
-
-            assert isinstance(result, list)
-            assert len(result) == 1
-            row = result[0]
-
-            # Multi-document YAML should be re-serialized as list of documents
-            parsed = yaml.safe_load(row["YamlDocumentReader"])
-            assert isinstance(parsed, list)
-            assert len(parsed) == 2
-            assert parsed[0] == {"name": "document1", "value": 1}
-            assert parsed[1] == {"name": "document2", "value": 2}
-        finally:
-            os.unlink(temp_path)
-
-    def test_yml_extension_has_correct_file_type(self) -> None:
-        """Verify .yml file has file_type='yml' and .yaml has file_type='yaml'."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
-            yaml.dump({"key": "value"}, f)
-            temp_path_yml = f.name
-
-        try:
-            features = MockFeatureSet({"YamlDocumentReader": temp_path_yml})
-            result = YamlDocumentReader.load_data(None, features)  # type: ignore[arg-type]
-
-            assert isinstance(result, list)
-            assert len(result) == 1
-            row = result[0]
-            assert row["file_type"] == "yml"
-        finally:
-            os.unlink(temp_path_yml)
-
-    def test_yaml_extension_has_correct_file_type(self) -> None:
-        """Verify .yaml file has file_type='yaml'."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump({"key": "value"}, f)
-            temp_path_yaml = f.name
-
-        try:
-            features = MockFeatureSet({"YamlDocumentReader": temp_path_yaml})
-            result = YamlDocumentReader.load_data(None, features)  # type: ignore[arg-type]
-
-            assert isinstance(result, list)
-            assert len(result) == 1
-            row = result[0]
-            assert row["file_type"] == "yaml"
-        finally:
-            os.unlink(temp_path_yaml)
+    def values_of(self, result: Any, column: str) -> list[Any]:
+        return list(result[column])
 
 
-class TestYamlDocumentReaderClassMethods:
-    """Tests for suffix and match_subclass_data_access."""
+class TestYamlLoadsIntoPyArrowTable(PyArrowTableAdapter, DocumentLoadsIntoFrameworkMixin):
+    document_group = lazy_document_group("yaml_fg", "YamlFG")
+    suffix = ".yaml"
+    text = FLOW_STYLE
+    expected_text = CANONICAL
 
-    def test_suffix_includes_both_yaml_and_yml(self) -> None:
-        """suffix() must return both .yaml and .yml."""
-        suffixes = YamlDocumentReader.suffix()
-        assert ".yaml" in suffixes
-        assert ".yml" in suffixes
+    def values_of(self, result: Any, column: str) -> list[Any]:
+        return list(result.column(column).to_pylist())
 
-    def test_match_subclass_data_access_returns_path_for_string(self) -> None:
-        """match_subclass_data_access returns path for explicit string (feature scope)."""
-        result = YamlDocumentReader.match_subclass_data_access("some_path.yaml", ["feature1"], options=Options({}))
-        assert result == "some_path.yaml"
 
-    def test_match_subclass_data_access_resolves_from_data_access_collection(self) -> None:
-        """match_subclass_data_access resolves file path from DataAccessCollection by suffix."""
-        from mloda.user import DataAccessCollection, Options
+class TestYamlLoadsIntoPandas(PandasDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
+    document_group = lazy_document_group("yaml_fg", "YamlFG")
+    suffix = ".yaml"
+    text = FLOW_STYLE
+    expected_text = CANONICAL
 
-        dac = DataAccessCollection(files={"some_path.yaml"})
-        result = YamlDocumentReader.match_subclass_data_access(dac, ["feature1"], options=Options({}))
-        assert result == "some_path.yaml"
+    def values_of(self, result: Any, column: str) -> list[Any]:
+        return list(result[column].tolist())
+
+
+class TestYamlLoadsIntoPolars(PolarsDataFrameAdapter, DocumentLoadsIntoFrameworkMixin):
+    document_group = lazy_document_group("yaml_fg", "YamlFG")
+    suffix = ".yaml"
+    text = FLOW_STYLE
+    expected_text = CANONICAL
+
+    def values_of(self, result: Any, column: str) -> list[Any]:
+        return list(result[column].to_list())
+
+
+class TestYamlContent:
+    def _content(self, path: Path) -> str:
+        result = mloda.run_all(
+            [Feature("YamlFG", Options({"YamlFG": str(path)}))],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({load_document_group("yaml_fg", "YamlFG")}),
+        )
+        content: str = result[0]["YamlFG"][0]
+        return content
+
+    def test_nested_yaml_round_trips(self, tmp_path: Path) -> None:
+        nested = {
+            "level1": {"level2": {"level3": ["a", "b", "c"]}, "items": [1, 2, 3]},
+            "metadata": {"created": "2024-01-01", "tags": ["tag1", "tag2"]},
+        }
+        path = tmp_path / "nested.yaml"
+        path.write_text(yaml.dump(nested), encoding="utf-8")
+
+        assert yaml.safe_load(self._content(path)) == nested
+
+    def test_a_single_document_is_not_wrapped_in_a_list(self, tmp_path: Path) -> None:
+        path = tmp_path / "single.yaml"
+        path.write_text("a: 1\nb: two\n", encoding="utf-8")
+
+        assert self._content(path) == yaml.dump({"a": 1, "b": "two"})
+
+    def test_a_multi_document_stream_stays_a_list_of_documents(self, tmp_path: Path) -> None:
+        path = tmp_path / "multi.yaml"
+        path.write_text("---\nname: document1\nvalue: 1\n---\nname: document2\nvalue: 2\n", encoding="utf-8")
+
+        parsed = yaml.safe_load(self._content(path))
+
+        assert parsed == [{"name": "document1", "value": 1}, {"name": "document2", "value": 2}]

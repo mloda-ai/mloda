@@ -59,7 +59,6 @@ def _():
     import os
     from mloda.user import mloda
     from mloda.user import Feature, DataAccessCollection, PluginLoader
-    from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
     from mloda.user.pyarrow import PyArrowTable
 
     plugin_loader = PluginLoader.all()
@@ -77,7 +76,7 @@ def _():
     data_access_collection.add_folder(base_data_path)
 
     # As a db cannot work with a folder, we need to add a connection for the db.
-    data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")})
+    data_access_collection.add_credentials({"sqlite": os.path.join(base_data_path, "example.sqlite")})
 
     order_features: list[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
     payment_features: list[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
@@ -86,13 +85,11 @@ def _():
     all_features = order_features + payment_features + location_features + categorical_features
 
     from mloda.user import PluginCollector
-    from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 
     mloda.run_all(
         all_features,
         data_access_collection=data_access_collection,
         compute_frameworks=[PyArrowTable],
-        plugin_collector=PluginCollector.disabled_feature_groups({ReadDocumentFeature}),
     )
     return (
         PluginCollector,
@@ -137,43 +134,21 @@ def _(mo):
 
     In the background, mloda loads the plugins, which were created before, like this one.
 
-    ```python
-    class ReadFileFeature(FeatureGroup):
-        @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return ReadFile()
-
-        @classmethod
-        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            reader = cls.input_data()
-            if reader is not None:
-                data = reader.load(features)
-                return data
-            raise ValueError(f"Reading file failed for feature {features.get_name_of_one_feature()}.")
-    ```
-
-    We use composition to read different data sources. A ReadFile object looks like this:
+    A file format is one feature group. `CsvFG` claims CSV files and lists their columns:
 
     ```python
-    class CsvReader(ReadFile):
+    class CsvFG(ReadFileFG):
         @classmethod
-        def suffix(cls) -> tuple[str, ...]:
-            return (
-                ".csv",
-                ".CSV",
-            )
+        def suffixes(cls) -> tuple[str, ...]:
+            return (".csv", ".CSV")
 
         @classmethod
-        def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-            return FileSource(path=data_access, format="csv", columns=tuple(sorted(features.get_all_names())))
-
-        @classmethod
-        def get_column_names(cls, file_name: str) -> Any:
-            with open(file_name, newline="", encoding="utf-8-sig") as f:
+        def column_names(cls, path: str) -> Collection[str]:
+            with open(path, newline="", encoding="utf-8-sig") as f:
                 return next(csv.reader(f), [])
     ```
 
-    `load_data` returns a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. Overriding `load_data` to return a concrete table directly is equally supported.
+    Its neutral form is a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. A loader registered with `register_loader` for a compute framework, called as `loader(group, match, features)`, replaces that for the framework.
 
     As you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion.
     """)
@@ -181,36 +156,24 @@ def _(mo):
 
 
 @app.cell
-def _():
-    # In the following, we will just adjust a bit the CsvReader to handle a different delimiter.
-    # CsvReader2 overrides load_data wholesale, returning a concrete table instead of a FileSource.
+def _(PyArrowTable):
+    # In the following, we will just adjust a bit the CsvFG to handle a different delimiter.
+    # CsvFG2 registers its own PyArrowTable loader, returning a concrete table instead of a FileSource.
 
     from typing import Any
 
     from pyarrow import csv as pyarrow_csv
 
-    from mloda.provider import FeatureSet, BaseInputData
-    from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-    from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+    from mloda.provider import FeatureSet, SourceMatch
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
-    class CsvReader2(CsvReader):
-        # Adjusted CsvReader2 to handle the new delimiter
+    class CsvFG2(CsvFG):
+        # Adjusted CsvFG2 to handle the new delimiter
         _parse_options = pyarrow_csv.ParseOptions(
             delimiter=",",  # Default delimiter
             quote_char='"',  # Handles quoted strings
             ignore_empty_lines=True,  # Skips empty lines
         )
-
-        @classmethod
-        def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-            result = pyarrow_csv.read_csv(data_access, parse_options=cls._parse_options)
-            print("We used CsvReader2 to load the data.")
-            return result.select(list(features.get_all_names()))
-
-    class ReadFileFeature2(ReadFileFeature):
-        @classmethod
-        def input_data(cls) -> BaseInputData | None:
-            return CsvReader2()
 
         @classmethod
         def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
@@ -220,25 +183,32 @@ def _():
                     if column.null_count == column.length:
                         raise ValueError(f"Column '{column_name}' contains only null values.")
 
-    return (ReadFileFeature2,)
+    def _load_csv_with_parse_options(group: Any, match: SourceMatch, features: FeatureSet) -> Any:
+        result = pyarrow_csv.read_csv(match.access, parse_options=group._parse_options)
+        print("We used CsvFG2 to load the data.")
+        return result.select(list(features.get_all_names()))
+
+    CsvFG2.register_loader(PyArrowTable, _load_csv_with_parse_options)
+
+    return (CsvFG2,)
 
 
 @app.cell
 def _(
     PluginCollector,
     PyArrowTable,
-    ReadFileFeature2,
+    CsvFG2,
     data_access_collection,
     mloda,
     order_features: "list[str | Feature]",
 ):
-    # We can see that the data was loaded using the new CsvReader2.
+    # We can see that the data was loaded using the new CsvFG2.
     # However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.
     result = mloda.run_all(
         order_features,
         data_access_collection=data_access_collection,
         compute_frameworks=[PyArrowTable],
-        plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature2}),
+        plugin_collector=PluginCollector.enabled_feature_groups({CsvFG2}),
     )
     return
 
@@ -278,8 +248,8 @@ def _(mo):
 
     An example of a unit test could look like:
     ```python
-    def test_csv_reader_2(self) -> None:
-       def test_parse_options_are_customized(self, mock_read_csv):
+    @patch("pyarrow.csv.read_csv")
+    def test_parse_options_are_customized(self, mock_read_csv):
             # Ensure the parse options are as expected
             expected_parse_options = pyarrow_csv.ParseOptions(
                 delimiter=",",
@@ -287,11 +257,12 @@ def _(mo):
                 ignore_empty_lines=True
             )
 
-            # Call the method to trigger parse options usage
-            CsvReader2.load_data(Mock(), Mock(spec=FeatureSet))
+            # The custom read lives in the loader registered for PyArrowTable
+            loader = CsvFG2._loader_for(PyArrowTable)
+            loader(CsvFG2, SourceMatch(source="data.csv", access="data.csv"), Mock(spec=FeatureSet))
 
-            # Verify that the _parse_options in CsvReader2 are customized
-            self.assertEqual(CsvReader2._parse_options, expected_parse_options)
+            # Verify that the read used the customized parse options
+            self.assertEqual(mock_read_csv.call_args.kwargs["parse_options"], expected_parse_options)
     ```
 
     This allows us to apply software engineering practices consistently throughout the entire data workflow.

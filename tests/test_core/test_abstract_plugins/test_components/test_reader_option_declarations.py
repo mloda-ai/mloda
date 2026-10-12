@@ -246,7 +246,7 @@ class TestReservedFrameworkKey:
         assert specs["BaseInputData"].framework_set is True
 
     def test_the_declaring_reader_family_marks_no_further_framework_keys(self) -> None:
-        """A reader family inherits the one framework-written key and adds no second one.
+        """A BaseInputData reader inherits the one framework-written key and adds no second one.
 
         The flag marks keys USERS never set, so a reader declaring its own user-facing keys must
         leave them ``framework_set=False``; otherwise the invariant above stops describing writes.
@@ -1283,20 +1283,12 @@ class TestCacheAttributeAssignmentIsRejected:
 
 
 class TestDeclarationsDoNotAffectDiscovery:
-    """The synthetic declaring classes stay invisible to reader selection."""
+    """The synthetic declaring classes override no load_data."""
 
-    def test_synthetic_declaring_classes_are_not_final_readers(self) -> None:
-        """No ``load_data`` override means ``get_all_filtered_subclasses`` never collects them."""
-        parent, child, override = _decl_family()
-
-        assert parent.is_final_reader() is False
-        assert child.is_final_reader() is False
-        assert override.is_final_reader() is False
-
-    def test_no_reader_this_module_leaks_is_a_final_reader(self) -> None:
+    def test_no_reader_this_module_leaks_overrides_load_data(self) -> None:
         """The module's leak policy, machine-checked over every reader of this module still reachable."""
         _decl_family()
         local = [cls for cls in get_all_subclasses(BaseInputData) if cls.__module__ == __name__]
 
         assert local, "expected this module's throwaway readers to be reachable through __subclasses__()"
-        assert [cls.__name__ for cls in local if cls.is_final_reader()] == []
+        assert [cls.__name__ for cls in local if "load_data" in vars(cls)] == []

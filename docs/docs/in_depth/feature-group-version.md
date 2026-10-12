@@ -59,7 +59,7 @@ class DependencyAgnostic(FeatureGroup):
 - mloda itself, beyond the version prefix. Edits to an editable mloda install do not change it.
 - Code reached only through runtime values:
     - registries filled elsewhere (`REGISTRY["k"] = f`, `REGISTRY.update(...)`),
-    - classes discovered by reflection, such as the file readers `ReadFileFeature` finds through `__subclasses__()` (see below),
+    - classes discovered by reflection, such as plugins found through `__subclasses__()` (see below),
     - imports by a computed name (`importlib.import_module(name)`),
     - attributes assigned outside the class body,
     - `getattr` on objects that are not modules,
@@ -94,7 +94,7 @@ class ScaledValue(FeatureGroup):
         return data
 ```
 
-Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version, and nothing under `ThirdPartyVersionMode.EXCLUDE`. `ReadFileFeature` and `ReadDocumentFeature` declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.
+Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version, and nothing under `ThirdPartyVersionMode.EXCLUDE`. The format groups shipped with mloda (`CsvFG`, `TextFG`, ...) are covered by the version prefix. To version a custom format group, subclass it and reference it in your feature group.
 
 ## When it is computed
 

@@ -5,9 +5,8 @@ import pyarrow as pa
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.user import DataAccessCollection, FeatureName, PluginCollector, mloda
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-from mloda.provider import BaseInputData
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda.provider import BaseInputData, SourceMatch
 from mloda.provider import DataCreator
 from mloda.user import Options
 from mloda.user import GlobalFilter
@@ -188,7 +187,7 @@ class TestGlobalFilterOnReaderBackedColumn:
             [Feature("gf_csv_val")],
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(files={self._csv(tmp_path)}),
-            plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
             global_filter=global_filter,
         )
 
@@ -201,12 +200,12 @@ class TestGlobalFilterOnReaderBackedColumn:
         global_filter.add_filter("gf_csv_val", "equal", {"value": 20})
 
         matched = global_filter.identify_matched_filters(
-            ReadFileFeature, Feature("gf_csv_val"), DataAccessCollection(files={csv_path})
+            CsvFG, Feature("gf_csv_val"), DataAccessCollection(files={csv_path})
         )
 
         assert len(matched) == 1
         filter_feature = next(iter(matched)).filter_feature
-        assert filter_feature.input_data_match == (CsvReader, csv_path)
+        assert filter_feature.input_data_match == (CsvFG, SourceMatch(source=csv_path, access=csv_path))
         assert RESERVED_READER_OPTION_KEY not in filter_feature.options.group
         assert RESERVED_READER_OPTION_KEY not in filter_feature.options.context
 
@@ -228,7 +227,7 @@ class TestGlobalFilterFromAnotherSource:
                 [Feature(feature)],
                 compute_frameworks=["PyArrowTable"],
                 data_access_collection=DataAccessCollection(files=files),
-                plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature}),
+                plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
                 global_filter=global_filter,
             )
         )
@@ -255,3 +254,76 @@ class TestGlobalFilterFromAnotherSource:
 
         assert results[0].to_pydict() == {"gf_other_a": [2]}
         assert global_filter.dropped_filters == {}
+
+
+class TestGlobalFilterOnFormatGroupColumn:
+    """A filter on a format-group column keeps its source match off the options."""
+
+    def test_matched_filter_feature_carries_the_source_match(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+            ToyFormatFG,
+            toy_dac,
+        )
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_toy_val", "equal", {"value": 20})
+
+        matched = global_filter.identify_matched_filters(
+            ToyFormatFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10, 20]})
+        )
+
+        assert len(matched) == 1
+        filter_feature = next(iter(matched)).filter_feature
+        pair = filter_feature.input_data_match
+        assert pair is not None
+        assert pair[0] is ToyFormatFG
+        assert pair[1].source == "h1:toy"
+        assert RESERVED_READER_OPTION_KEY not in filter_feature.options.group
+        assert RESERVED_READER_OPTION_KEY not in filter_feature.options.context
+
+    def test_filter_on_a_column_absent_from_every_source_is_not_matched(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+            ToyFormatFG,
+            toy_dac,
+        )
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_toy_missing", "equal", {"value": 1})
+
+        matched = global_filter.identify_matched_filters(
+            ToyFormatFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10]})
+        )
+
+        assert len(matched) == 0
+
+    def test_class_name_key_carried_over_with_a_missing_filter_column_drops_the_filter(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_toy_missing", "equal", {"value": 1})
+        host = Feature("gf_toy_val", Options({"ToyFormatFG": {"gf_toy_val": [10]}}))
+
+        matched = global_filter.identify_matched_filters(ToyFormatFG, host, None)
+
+        assert len(matched) == 0
+        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
+            "input_data"
+        ]
+
+    def test_filter_column_in_two_sources_drops_the_filter_instead_of_raising(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+            ToyFormatFG,
+            toy_dac,
+        )
+
+        global_filter = GlobalFilter()
+        global_filter.add_filter("gf_toy_val", "equal", {"value": 10})
+
+        matched = global_filter.identify_matched_filters(
+            ToyFormatFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10]}, h2={"gf_toy_val": [10]})
+        )
+
+        assert len(matched) == 0
+        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
+            "input_data"
+        ]

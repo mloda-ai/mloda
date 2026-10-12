@@ -4,7 +4,7 @@ This example demonstrates a simple request to the mloda API. You describe WHAT d
 
 > **Tip:** For AI agents or quick prototyping, you can also use inline data with `api_data`, see the [30-second example](installation.md#4-quick-start).
 
-In this example, mloda automatically determines that a **CsvReader** feature group will fulfill the request and respond with the resulting DataFrame.
+In this example, mloda automatically determines that the **CsvFG** feature group will fulfill the request and respond with the resulting DataFrame.
 
 #### 1. Import the Required Modules
 We first need to import the necessary components to set up our request:

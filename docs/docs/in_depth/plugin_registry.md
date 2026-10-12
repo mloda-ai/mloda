@@ -121,7 +121,7 @@ Recommended rollout for deployments: stay on `"off"`, switch CI or staging to `"
 
 ## Governance
 
-Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`.
+Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`. Readers are format FeatureGroups, so plugin policy enforcement for readers holds under strict mode with an allowlist policy; outside strict mode a policy-denied group can still serve.
 
 ### Plugin Policy
 

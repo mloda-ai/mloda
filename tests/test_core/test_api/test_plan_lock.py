@@ -103,7 +103,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 5
+    assert content["format"] == PLAN_LOCK_FORMAT == 6
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
@@ -112,7 +112,6 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "compute_framework",
         "compute_framework_reason",
         "specialized_from",
-        "reader",
         "result_framework",
         "input_feature_edges",
     }
@@ -164,6 +163,20 @@ def test_a_lock_with_an_edited_format_version_fails_check(tmp_path: Path) -> Non
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
     content["format"] = PLAN_LOCK_FORMAT + 1
+    lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+    with pytest.raises(PlanLockMismatchError, match="format"):
+        check_plan_lock(plan, lock)
+
+
+def test_a_lock_written_in_the_previous_format_with_a_reader_entry_fails_check(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    plan = _plan()
+    write_plan_lock(plan, lock)
+    content = json.loads(lock.read_text(encoding="utf-8"))
+    content["format"] = PLAN_LOCK_FORMAT - 1
+    for record in content["compute"]:
+        record["reader"] = None
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
     with pytest.raises(PlanLockMismatchError, match="format"):
@@ -258,7 +271,6 @@ def _content_plan() -> list[PlanStep]:
         _compute_step(
             feature_set_options=Options(group={"window": 3}),
             input_feature_edges={"lock_io_value": ("a",)},
-            reader_data_access=(cast(Any, int), "orig"),
         ),
         _join_step(join_keys=("l=r",)),
     ]
@@ -290,16 +302,15 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     assert digest != plan_structure_hash(plan)
     assert digest == plan_content_hash(_content_plan())
     # Pinned: moving wiring and join keys into the lock must not shift the content hash.
-    assert digest == "3795217432afaff05f341f680b5eac2047cb3145faed9cd78d114e79ccf7bd2f"
+    assert digest == "c025307c9c997682f1cbb6f4c891dc8c2a590acaf04f52047bbec7349d230b7a"
 
 
-def test_plan_content_hash_ignores_run_ids_reader_access_and_reason_text() -> None:
+def test_plan_content_hash_ignores_run_ids_and_reason_text() -> None:
     base = _content_plan()
     varied = [
         dataclasses.replace(
             base[0],
             step_uuid=uuid.uuid4(),
-            reader_data_access=(cast(Any, int), "somewhere"),
             compute_framework_reason="other reason",
         ),
         dataclasses.replace(base[1], join_token=uuid.uuid4()),
@@ -322,7 +333,6 @@ def _with(index: int, **overrides: object) -> list[PlanStep]:
         pytest.param(lambda: _with(0, compute_framework=PyArrowTable), id="compute_framework"),
         pytest.param(lambda: _with(0, feature_set_options=Options(group={"window": 4})), id="group_option"),
         pytest.param(lambda: _with(0, input_feature_edges={"lock_io_value": ("b",)}), id="input_edges"),
-        pytest.param(lambda: _with(0, reader_data_access=(cast(Any, str), "orig")), id="reader_class"),
         pytest.param(lambda: _with(1, join_type="left"), id="join_type"),
         pytest.param(lambda: _with(1, join_keys=("l=other",)), id="join_keys"),
     ],

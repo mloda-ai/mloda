@@ -1,5 +1,6 @@
 import inspect
-from collections.abc import Sequence
+import os
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from difflib import get_close_matches
 from dataclasses import replace
@@ -31,7 +32,16 @@ from mloda.core.abstract_plugins.components.declared_attributes import (
     DeclarationRequirement,
     declaration_requirement_scope,
 )
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.base_input_data import (
+    RESERVED_READER_OPTION_KEY,
+    BaseInputData,
+)
+from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader, feature_group_scope
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+    FormatFeatureGroup,
+    FormatPointerError,
+    concrete_format_groups,
+)
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
@@ -40,6 +50,8 @@ from mloda.core.abstract_plugins.components.match_hook import probe_match_criter
 from mloda.core.abstract_plugins.components.utils import (
     as_str,
     contained_raise_log_level,
+    escalate_match_abort,
+    is_deferred_match_abort,
     is_match_abort,
     contained_raise_reason,
     safe_exc_str,
@@ -48,6 +60,7 @@ from mloda.core.abstract_plugins.components.utils import (
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
@@ -115,6 +128,85 @@ def validate_single_framework_pin(feature: Feature) -> None:
         )
 
 
+_NOT_ACCESSIBLE = "it is not among this run's accessible feature groups"
+
+
+def _pinned_path(feature: Feature, collection: DataAccessCollection | None) -> str | None:
+    if collection is None or collection.column_to_file is None:
+        return None
+    handle = collection.column_to_file.get(str(feature.name))
+    return None if handle is None else collection.files.get(handle)
+
+
+def _pin_conflict(
+    feature: Feature, collection: DataAccessCollection | None, loaded: dict[str, type[FormatFeatureGroup]]
+) -> str | None:
+    from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+
+    pinned = _pinned_path(feature, collection)
+    if pinned is None:
+        return None
+    pinned_abs = os.path.abspath(pinned)
+    for key in sorted(k for k in feature.options.keys() if isinstance(k, str)):
+        group = loaded.get(key)
+        if group is None:
+            continue
+        value = feature.options[key]
+        if issubclass(group, ReadFileFG) and isinstance(value, (str, os.PathLike)):
+            pointer = os.path.abspath(value)
+            if pointer == pinned_abs:
+                continue
+            return (
+                f"options point {key} at {pointer}, but column_to_file pins '{feature.name}' to {pinned_abs}; "
+                "drop the pointer or the pin."
+            )
+        return (
+            f"options point at {key}, but column_to_file pins '{feature.name}' to {pinned_abs}; "
+            "drop the pointer or the pin."
+        )
+    return None
+
+
+def validate_format_pointers(
+    feature: Feature,
+    accessible_plugins: FeatureGroupEnvironmentMapping,
+    excluded: Mapping[type[FeatureGroup], str] | None,
+    data_access_collection: DataAccessCollection | None,
+) -> None:
+    """Raise FormatPointerError for an unreachable pointer or scope, or a pointer against a pin."""
+    scope = feature.feature_group_scope
+    keys = sorted(key for key in feature.options.keys() if isinstance(key, str))
+    if not keys and scope is None:
+        return
+    excluded = excluded or {}
+    loaded = concrete_format_groups()
+    accessible_formats = [fg for fg in accessible_plugins if issubclass(fg, FormatFeatureGroup)]
+    for key in keys:
+        group = loaded.get(key)
+        if group is not None and not any(key in fg.pointer_keys() for fg in accessible_formats):
+            reason = excluded.get(group, _NOT_ACCESSIBLE)
+            raise FormatPointerError(f"options point at {key}, but {key} is not accessible in this run: {reason}.")
+    if scope is not None:
+        scope_name = scope if isinstance(scope, str) else scope.__name__
+        group = loaded.get(scope_name)
+        if group is not None and not any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
+            reason = excluded.get(group, _NOT_ACCESSIBLE)
+            raise FormatPointerError(
+                f"feature_group={scope_name}, but {scope_name} is not accessible in this run: {reason}."
+            )
+        for key in keys:
+            if key in loaded and not any(
+                matches_feature_group_scope(fg, scope) and key in fg.pointer_keys() for fg in accessible_formats
+            ):
+                raise FormatPointerError(
+                    f"feature_group={scope_name} and an options pointer at {key} name different groups; "
+                    "drop one of them."
+                )
+    conflict = _pin_conflict(feature, data_access_collection, loaded)
+    if conflict is not None:
+        raise FormatPointerError(conflict)
+
+
 class IdentifyFeatureGroupClass:
     _criteria_matched_feature_groups: set[type[FeatureGroup]]
     _abstract_matched_feature_groups: set[type[FeatureGroup]]
@@ -133,7 +225,8 @@ class IdentifyFeatureGroupClass:
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
     _matched_options: dict[type[FeatureGroup], Options]
-    _input_data_matches: dict[type[FeatureGroup], tuple[type[BaseInputData], Any]]
+    _deferred_aborts: dict[type[FeatureGroup], Exception]
+    _input_data_matches: dict[type[FeatureGroup], tuple[DataAccessReader, Any]]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -152,6 +245,7 @@ class IdentifyFeatureGroupClass:
         self._declarations = {}
         self._replaced = set()
         self._matched_options = {}
+        self._deferred_aborts = {}
         self._input_data_matches = {}
         self._data_access_collection = data_access_collection
 
@@ -162,11 +256,14 @@ class IdentifyFeatureGroupClass:
         accessible_plugins: FeatureGroupEnvironmentMapping,
         links: set[Link] | None,
         data_access_collection: DataAccessCollection | None = None,
+        *,
+        excluded: Mapping[type[FeatureGroup], str] | None = None,
     ) -> EvaluationResult:
         """Run the matching/filter logic without raising, returning a structured result."""
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
+        validate_format_pointers(feature, accessible_plugins, excluded, data_access_collection)
         self = cls(data_access_collection)
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
@@ -199,6 +296,7 @@ class IdentifyFeatureGroupClass:
             self._domain_outcomes.clear()
             self._links_outcomes.clear()
             self._matched_options.clear()
+            self._deferred_aborts.clear()
             self._input_data_matches.clear()
         return result
 
@@ -263,7 +361,7 @@ class IdentifyFeatureGroupClass:
             sources[feature_group] = safe_field(
                 lambda: f"{reader.data_access_name()}: {reader.data_access_identity(access)}",
                 "",
-                field=f"{reader.__name__}.data_access_identity",
+                field=f"{getattr(reader, '__name__', 'reader')}.data_access_identity",
             )
         return {fg: text for fg, text in sources.items() if text}
 
@@ -526,6 +624,9 @@ class IdentifyFeatureGroupClass:
                     raise
                 if not self._filter_feature_group_by_domain(feature_group, feature):
                     self._record_elimination(feature_group, "domain", self._domain_reason(feature_group, feature))
+                elif is_deferred_match_abort(exc):
+                    self._deferred_aborts[feature_group] = exc
+                    self._record_elimination(feature_group, "input_data", safe_exc_str(exc))
                 else:
                     raise
                 continue
@@ -613,6 +714,7 @@ class IdentifyFeatureGroupClass:
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         self._replaced = candidates - set(_identified_feature_groups)
+        self._raise_unmasked_deferred_abort(feature, _identified_feature_groups)
         if len(_identified_feature_groups) == 1:
             winner = next(iter(_identified_feature_groups))
             winner_options = self._matched_options[winner]
@@ -631,6 +733,42 @@ class IdentifyFeatureGroupClass:
             survivors = {fg: self._matched_options[fg] for fg in _identified_feature_groups}
             self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
+
+    def _raise_unmasked_deferred_abort(self, feature: Feature, identified: FeatureGroupEnvironmentMapping) -> None:
+        """Re-raise a pointed group's deferred abort unless another candidate computes the feature."""
+        # A deferring group with a surviving strict subclass is subclass takeover: its abort is dropped.
+        remaining = [
+            fg
+            for fg in sorted(self._deferred_aborts, key=_candidate_sort_key)
+            if not any(survivor is not fg and issubclass(survivor, fg) for survivor in identified)
+        ]
+        if not remaining:
+            return
+        # Every criteria match counts as computing, so a computing group eliminated later still masks the abort;
+        # only survivors count as reading, because one of them would win.
+        computing = any(
+            self._computes(fg, feature) for fg in sorted(self._criteria_matched_feature_groups, key=_candidate_sort_key)
+        )
+        reading = [
+            fg
+            for fg in sorted(identified, key=_candidate_sort_key)
+            if fg().is_root(self._matched_options[fg], feature.name)
+        ]
+        for fg in remaining:
+            if not computing or any(not issubclass(survivor, fg) for survivor in reading):
+                raise escalate_match_abort(self._deferred_aborts[fg])
+
+    def _computes(self, feature_group: type[FeatureGroup], feature: Feature) -> bool:
+        """True when input_features returned a value; a raise is not computing, a marked abort still propagates."""
+        try:
+            return (
+                feature_group().input_features(self._matched_options[feature_group], FeatureName(feature.name))
+                is not None
+            )
+        except Exception as exc:  # noqa: BLE001  (an unmarked raise only says this candidate does not compute)
+            if is_match_abort(exc):
+                raise
+            return False
 
     @staticmethod
     def _replay_match_data_writes(target: Options, survivors: dict[type[FeatureGroup], Options]) -> None:
@@ -655,7 +793,7 @@ class IdentifyFeatureGroupClass:
         matched = self._input_data_matches.get(feature_group)
         if matched is original_group.get(RESERVED_READER_OPTION_KEY):
             return None
-        return matched[0] if matched else None
+        return cast("type | None", matched[0]) if matched else None
 
     def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
         """Record the first gate a non-winning name-matching candidate failed; one entry per candidate."""
@@ -741,7 +879,8 @@ class IdentifyFeatureGroupClass:
         Mark-or-contain policy: see call_match_hook.
         """
         options = feature.options._fork()
-        probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
+        with feature_group_scope(feature.feature_group_scope):
+            probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
         # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.
         written = options.group.pop(RESERVED_READER_OPTION_KEY, None)
         if probe.matched:
@@ -749,9 +888,11 @@ class IdentifyFeatureGroupClass:
             if isinstance(written, tuple) and len(written) == 2:
                 if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
                     # A pair the candidate inherited rather than wrote.
-                    self._input_data_matches[feature_group] = cast(tuple[type[BaseInputData], Any], written)
-                else:
+                    self._input_data_matches[feature_group] = cast(tuple[DataAccessReader, Any], written)
+                elif isinstance(written[0], type) and issubclass(written[0], BaseInputData):
                     self._input_data_matches[feature_group] = BaseInputData._wrap_scoped_access(written, options)
+                else:
+                    self._input_data_matches[feature_group] = written
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
@@ -827,10 +968,14 @@ def evaluate_and_render(
     accessible_plugins: FeatureGroupEnvironmentMapping,
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
+    *,
+    excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> tuple[EvaluationResult, str | None]:
     """One resolution pass plus its failure message; the message is None iff the feature resolved."""
     # Unguarded: ComputeFrameworkPinError is a misuse validated before matching, so it escapes unconverted.
-    result = IdentifyFeatureGroupClass.evaluate(feature, accessible_plugins, links, data_access_collection)
+    result = IdentifyFeatureGroupClass.evaluate(
+        feature, accessible_plugins, links, data_access_collection, excluded=excluded
+    )
     return result, render_resolution_failure(result, feature)
 
 
@@ -840,9 +985,11 @@ def resolve_or_raise(
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
     partial_records: Sequence[ResolutionRecord] = (),
+    *,
+    excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
-    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection)
+    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection, excluded=excluded)
     if message is not None:
         # The constructor does the cap-then-deepcopy snapshot, so the records are forwarded as they are.
         raise FeatureResolutionError(message, str(feature.name), result, partial_records=partial_records)

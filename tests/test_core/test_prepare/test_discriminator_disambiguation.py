@@ -21,28 +21,28 @@ class TestMatchesDiscriminator:
 
     def test_matches_when_key_value_present(self) -> None:
         ep = ExecutionPlan()
-        graph, uuid = self._make_graph_with_feature({"CsvReader": "customers.csv"})
-        assert ep._matches_discriminator({"CsvReader": "customers.csv"}, graph, uuid) is True
+        graph, uuid = self._make_graph_with_feature({"CsvFG": "customers.csv"})
+        assert ep._matches_discriminator({"CsvFG": "customers.csv"}, graph, uuid) is True
 
     def test_no_match_when_key_missing(self) -> None:
         ep = ExecutionPlan()
         graph, uuid = self._make_graph_with_feature({"other_key": "value"})
-        assert ep._matches_discriminator({"CsvReader": "customers.csv"}, graph, uuid) is False
+        assert ep._matches_discriminator({"CsvFG": "customers.csv"}, graph, uuid) is False
 
     def test_no_match_when_value_differs(self) -> None:
         ep = ExecutionPlan()
-        graph, uuid = self._make_graph_with_feature({"CsvReader": "orders.csv"})
-        assert ep._matches_discriminator({"CsvReader": "customers.csv"}, graph, uuid) is False
+        graph, uuid = self._make_graph_with_feature({"CsvFG": "orders.csv"})
+        assert ep._matches_discriminator({"CsvFG": "customers.csv"}, graph, uuid) is False
 
     def test_no_match_on_empty_options(self) -> None:
         ep = ExecutionPlan()
         graph, uuid = self._make_graph_with_feature({})
-        assert ep._matches_discriminator({"CsvReader": "customers.csv"}, graph, uuid) is False
+        assert ep._matches_discriminator({"CsvFG": "customers.csv"}, graph, uuid) is False
 
     def test_matches_with_multiple_options(self) -> None:
         ep = ExecutionPlan()
-        graph, uuid = self._make_graph_with_feature({"CsvReader": "customers.csv", "extra": "value"})
-        assert ep._matches_discriminator({"CsvReader": "customers.csv"}, graph, uuid) is True
+        graph, uuid = self._make_graph_with_feature({"CsvFG": "customers.csv", "extra": "value"})
+        assert ep._matches_discriminator({"CsvFG": "customers.csv"}, graph, uuid) is True
 
     def test_multi_key_discriminator_requires_every_key(self) -> None:
         """A discriminator with several keys must match all of them, not just one."""

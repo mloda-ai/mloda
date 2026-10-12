@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from typing import Any
 
+from mloda.core.optional_dependency import require
 from mloda.provider import BaseTransformer
 
 try:
@@ -7,9 +9,31 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
+SUPPORTED_FORMATS = ("csv", "parquet", "json", "feather", "orc")
+
+
+def unsupported_format_error(transformer: str, file_format: str) -> ValueError:
+    return ValueError(
+        f"{transformer} cannot read format {file_format!r}; supported: {', '.join(SUPPORTED_FORMATS)}. "
+        "Fix: override file_format() if the suffix is a supported format under another name, "
+        "register a loader for the framework with register_loader, or override load_neutral."
+    )
+
+
+def pyarrow_file_loader(file_format: str) -> Callable[[Any, Any, Any], Any]:
+    """Build a ``(group, match, features)`` loader reading one fixed file format into a pa.Table."""
+
+    def load(group: Any, match: Any, features: Any) -> Any:
+        from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+
+        source = FileSource(path=match.access, format=file_format, columns=tuple(sorted(features.get_all_names())))
+        return FileSourcePyArrowTransformer.transform_fw_to_other_fw(source)
+
+    return load
+
 
 class FileSourcePyArrowTransformer(BaseTransformer):
-    """Materialize a ``FileSource`` descriptor into a ``pa.Table`` using PyArrow's CSV reader."""
+    """Materialize a ``FileSource`` descriptor into a ``pa.Table`` using PyArrow readers."""
 
     @classmethod
     def framework(cls) -> Any:
@@ -33,11 +57,30 @@ class FileSourcePyArrowTransformer(BaseTransformer):
 
     @classmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:
-        if data.format != "csv":
-            raise ValueError(f"FileSourcePyArrowTransformer only supports the 'csv' format, got {data.format!r}.")
-        from pyarrow import csv as pyarrow_csv
+        columns = list(data.columns)
+        if data.format == "csv":
+            from pyarrow import csv as pyarrow_csv
 
-        return pyarrow_csv.read_csv(
-            data.path,
-            convert_options=pyarrow_csv.ConvertOptions(include_columns=list(data.columns)),
-        )
+            return pyarrow_csv.read_csv(
+                data.path,
+                convert_options=pyarrow_csv.ConvertOptions(include_columns=columns),
+            )
+        if data.format == "parquet":
+            pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
+            return pyarrow_parquet.read_table(data.path, columns=columns)
+        if data.format == "json":
+            pyarrow_json = require("pyarrow.json", "reading JSON files")
+            result = pyarrow_json.read_json(
+                data.path,
+                parse_options=pyarrow_json.ParseOptions(explicit_schema=None, unexpected_field_behavior="error"),
+            )
+            return result.select(columns)
+        if data.format == "feather":
+            pyarrow_ipc = require("pyarrow.ipc", "reading Feather files")
+            # Feather V2 is the Arrow IPC file format; ipc.open_file avoids the deprecated pyarrow.feather.read_table.
+            with pyarrow_ipc.open_file(data.path) as reader:
+                return reader.read_all().select(columns)
+        if data.format == "orc":
+            pyarrow_orc = require("pyarrow.orc", "reading ORC files")
+            return pyarrow_orc.read_table(source=data.path, columns=columns).select(columns)
+        raise unsupported_format_error("FileSourcePyArrowTransformer", data.format)

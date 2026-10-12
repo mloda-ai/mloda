@@ -421,6 +421,8 @@ class TestRefusal:
         _plan(scope, _COL_A, kind.gate, None)
         assert kind.gate.probes >= 1
         kind.gate.probes = 0
+        if kind.is_format:
+            kind.gate.column_reads = 0
         error_type, text = _refusal_error(kind, scope)
 
         with pytest.raises(error_type) as excinfo:

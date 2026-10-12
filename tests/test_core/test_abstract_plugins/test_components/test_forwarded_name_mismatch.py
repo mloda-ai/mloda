@@ -322,6 +322,32 @@ class TestForwardedContextNameMismatch:
         assert "inherit_context_keys" in message
         assert "propagate_context_keys" in message
 
+    def test_context_cascade_two_hops_differing_value_names_cascade(self) -> None:
+        """A value delivered through a two-hop cascade that contradicts the name names cascade_context_keys."""
+        consumer = Options(context={CONTEXT_KEY: "max"}, cascade_context_keys=frozenset({CONTEXT_KEY}))
+        middle = Options()
+        middle.inherit_from(consumer)
+        child_options = Options()
+        child_options.inherit_from(middle)
+        assert child_options.inherited_context_keys == frozenset({CONTEXT_KEY})  # precondition
+
+        with pytest.raises(ValueError) as exc_info:
+            _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+        message = str(exc_info.value)
+        assert CONTEXT_KEY in message
+        assert "cascade_context_keys" in message
+
+    def test_pull_and_one_hop_push_messages_do_not_name_cascade(self) -> None:
+        for child_options in (
+            _context_pull_child_options({CONTEXT_KEY: "max"}),
+            _context_propagate_child_options({CONTEXT_KEY: "max"}),
+        ):
+            with pytest.raises(ValueError) as exc_info:
+                _ContextMismatchChainedGroup.match_feature_group_criteria(STRING_FEATURE_NAME_CTX, child_options)
+
+            assert "cascade_context_keys" not in str(exc_info.value)
+
     def test_context_pull_equal_value_matches(self) -> None:
         """A pulled context value equal to the name-parsed value matches silently."""
         child_options = _context_pull_child_options({CONTEXT_KEY: "sum"})

@@ -1414,16 +1414,22 @@ def test_stable_text_of_a_set_option_value_ignores_insertion_order(build: Callab
     assert one == other
 
 
-def test_stable_text_of_propagate_context_keys_ignores_insertion_order() -> None:
+@pytest.mark.parametrize("argument", ["propagate_context_keys", "cascade_context_keys"])
+def test_stable_text_of_propagate_context_keys_ignores_insertion_order(argument: str) -> None:
     names = [f"key_{i}" for i in range(200)]
     first, second = next((a, b) for a in names for b in names if a < b and list({a, b}) != list({b, a}))
 
     def build(pair: tuple[str, str]) -> Options:
+        if argument == "cascade_context_keys":
+            return Options(context={first: 1, second: 2}, cascade_context_keys=frozenset(pair))
         return Options(context={first: 1, second: 2}, propagate_context_keys=frozenset(pair))
 
     one, other = _text_in_both_orders(build, first, second)
 
     assert one == other
+    assert f"{argument}=" in one
+    assert first in one
+    assert second in one
 
 
 def test_stable_text_keeps_a_reader_tuple_option_redacted() -> None:

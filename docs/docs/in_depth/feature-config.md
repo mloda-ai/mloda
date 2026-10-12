@@ -268,6 +268,8 @@ By default, context parameters are local to each feature and do not propagate th
 
 In this example, `session_id` is pushed to the direct input features of `my_feature`, while `window_function` stays local. The push is one hop; see [Context propagation](property-mapping.md#context-propagation) for inputs further down a chain.
 
+The cascading push (`cascade_context_keys`) is set on `Options` in Python and has no config field.
+
 ## Complete Example
 
 ```python

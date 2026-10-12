@@ -490,6 +490,11 @@ class FeatureChainParserMixin:
                     f"Carve the key out with forward_group_exclude={{'{prop_key}'}} on the child in the "
                     f"consumer's input_features, or use an allowlist / forward_group=False."
                 )
+            elif prop_key in options.cascade_context_keys:
+                remedy = (
+                    f"Remove '{prop_key}' from cascade_context_keys on the feature that declared it, which may be "
+                    f"further up the chain, or stop the cascade with forward_group=False on an input."
+                )
             else:
                 remedy = (
                     f"Adjust inherit_context_keys on the child or propagate_context_keys on the consumer "

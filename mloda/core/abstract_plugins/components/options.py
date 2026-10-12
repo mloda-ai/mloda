@@ -179,10 +179,12 @@ class Options:
         group: dict[str, Any] | None = None,
         context: dict[str, Any] | None = None,
         propagate_context_keys: frozenset[str] | None = None,
+        cascade_context_keys: frozenset[str] | None = None,
     ) -> None:
         self.group = _normalize_reader_class_keys(group) if group else {}
         self.context = _normalize_reader_class_keys(context) if context else {}
         self.propagate_context_keys: frozenset[str] = propagate_context_keys or frozenset()
+        self.cascade_context_keys: frozenset[str] = cascade_context_keys or frozenset()
         self.inherited_group_keys: frozenset[str] = frozenset()
         self.inherited_context_keys: frozenset[str] = frozenset()
         self.last_forwarded_group_keys: frozenset[str] = frozenset()
@@ -192,6 +194,9 @@ class Options:
         self._own_keys_locked: bool = False
         OptionsValidator.validate_no_duplicate_keys(self.group, self.context)
         OptionsValidator.validate_propagate_keys_in_context(self.propagate_context_keys, self.context)
+        OptionsValidator.validate_propagate_keys_in_context(
+            self.cascade_context_keys, self.context, "cascade_context_keys"
+        )
 
     @property
     def own_group_keys(self) -> frozenset[str]:
@@ -366,7 +371,12 @@ class Options:
 
     def rebuild(self, group: dict[str, Any], context: dict[str, Any]) -> "Options":
         """A new Options over the given dicts, carrying this one's provenance bookkeeping over."""
-        copied = Options(group=group, context=context, propagate_context_keys=self.propagate_context_keys)
+        copied = Options(
+            group=group,
+            context=context,
+            propagate_context_keys=self.propagate_context_keys,
+            cascade_context_keys=self.cascade_context_keys,
+        )
         copied.inherited_group_keys = self.inherited_group_keys
         copied.inherited_context_keys = self.inherited_context_keys
         copied.last_forwarded_group_keys = self.last_forwarded_group_keys
@@ -425,6 +435,8 @@ class Options:
         parts = f"Options(group={_str_option_dict(self.group)}, context={_str_option_dict(self.context)}"
         if self.propagate_context_keys:
             parts += f", propagate_context_keys={self.propagate_context_keys}"
+        if self.cascade_context_keys:
+            parts += f", cascade_context_keys={self.cascade_context_keys}"
         parts += ")"
         return parts
 
@@ -454,6 +466,7 @@ class Options:
         - consumer.propagate_context_keys: consumer-side push of context keys into self.context.
           The push is skipped when forward_group is False (only the literal False blocks it; an
           empty frozenset allowlist does not).
+        - consumer.cascade_context_keys: pushed the same way, and self then cascades the delivered keys on.
 
         DefaultOptionKeys.in_features is never inherited through any flow. A key in
         consumer.non_forwarded_group_keys IS still forwarded like any other key, but its mark
@@ -551,17 +564,32 @@ class Options:
             new_context[key] = value
             inherited_context.add(key)
 
-        if consumer.propagate_context_keys and forward_group is not False:
-            propagating = {
-                k: v
-                for k, v in consumer.context.items()
-                if k in consumer.propagate_context_keys and not is_non_forwarded_key(k)
-            }
+        cascaded: set[str] = set()
+        push_keys = consumer.propagate_context_keys | consumer.cascade_context_keys
+        if push_keys and forward_group is not False:
+            propagating = {k: v for k, v in consumer.context.items() if k in push_keys and not is_non_forwarded_key(k)}
+            cascaded = {k for k in propagating if k in consumer.cascade_context_keys}
+            owner_clause = f" on input feature '{owner}'" if owner is not None else ""
+            cascade_remedy = (
+                "Remove the key from cascade_context_keys on the feature that declared it, "
+                "or stop the cascade with forward_group=False on an input."
+            )
 
+            for key in sorted(cascaded & set(new_group.keys())):
+                raise ValueError(
+                    f"Cannot cascade context key '{key}' from cascade_context_keys{owner_clause}: "
+                    f"the key already exists in the group options. {cascade_remedy}"
+                )
             OptionsValidator.validate_no_context_group_conflicts(set(propagating.keys()), set(new_group.keys()))
 
             for key, value in propagating.items():
                 if key in new_context and new_context[key] != value:
+                    if key in cascaded:
+                        raise ValueError(
+                            f"Context key '{key}' conflict from cascade_context_keys{owner_clause}: "
+                            f"consumer={redact_option_value(value)!r}, "
+                            f"child={redact_option_value(new_context[key])!r}. {cascade_remedy}"
+                        )
                     raise ValueError(
                         f"Context key '{key}' conflict: consumer={redact_option_value(value)!r}, "
                         f"child={redact_option_value(new_context[key])!r}"
@@ -579,6 +607,7 @@ class Options:
         self.last_forwarded_group_keys = frozenset(inherited)
         self.inherited_context_keys = self.inherited_context_keys | frozenset(inherited_context)
         self.non_forwarded_group_keys = self.non_forwarded_group_keys | frozenset(propagated_non_forwarded)
+        self.cascade_context_keys = self.cascade_context_keys | frozenset(cascaded)
         return frozenset(inherited)
 
 

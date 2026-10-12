@@ -87,6 +87,8 @@ def stable_text(value: object) -> str:
         parts = f"group={stable_text(_str_option_dict(value.group))}, context={stable_text(_str_option_dict(value.context))}"
         if value.propagate_context_keys:
             parts += f", propagate_context_keys={stable_text(value.propagate_context_keys)}"
+        if value.cascade_context_keys:
+            parts += f", cascade_context_keys={stable_text(value.cascade_context_keys)}"
         return f"Options({parts})"
     if type(value) is dict:
         items = sorted((stable_text(k), stable_text(v)) for k, v in value.items())

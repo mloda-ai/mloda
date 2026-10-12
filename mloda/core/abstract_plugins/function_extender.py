@@ -43,6 +43,7 @@ class ExtenderHook(Enum):
     FEATURE_GROUP_MATCHED = "feature_group_matched"
     INPUT_DATA_LOAD = "input_data_load"
     JOIN = "join"
+    INPUT_DATA_MATCH = "input_data_match"
 
 
 class GateBypassError(RuntimeError):

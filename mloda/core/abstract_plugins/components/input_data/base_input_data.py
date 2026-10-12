@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     restamp_match_rejections_since,
 )
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_reader
 from mloda.core.abstract_plugins.components.declaration_surface import (
     DeclarationSurface,
     merged_declaration,
@@ -396,9 +397,7 @@ class BaseInputData(ABC):
                             options.set(key, wrapped)
                             value = wrapped
                         known_owners = match_rejection_owners()
-                        matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
-                            value, [feature_name], options=options
-                        )
+                        matched_data_access = probe_reader(subclass, value, [feature_name], options)
                         if matched_data_access:
                             unmet = subclass._unmet_current_declaration()
                             if unmet is None:
@@ -494,9 +493,7 @@ class BaseInputData(ABC):
             # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
             if not subclass._reader_options_admit(options, record_absence=False):
                 continue
-            matched_data_access = subclass.match_subclass_data_access(  # type: ignore[attr-defined]
-                data_access_collection, feature_names, options=options
-            )
+            matched_data_access = probe_reader(subclass, data_access_collection, feature_names, options)
             if matched_data_access:
                 unmet = subclass._unmet_current_declaration()
                 if unmet is not None:

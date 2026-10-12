@@ -62,6 +62,7 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": "the required_when guard",
     "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
     "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "reader matching and file pinning",
+    "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped reader probe",
     "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api reader's match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
     "mloda/core/abstract_plugins/components/match_data/match_data.py": "reader selection during matching",
@@ -106,6 +107,15 @@ _VALIDATE_PROPERTY_SPEC_RAISES = (
 _MERGED_DECLARATION_SWALLOWS_DIRECT = "name collision: dict.update inside merged_declaration, not a real swallow"
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
+        "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate reader in probe_reader"
+    ),
+    ("mloda/core/abstract_plugins/hook_context.py", "__post_init__"): (
+        "validates the framework-built HookContext fields; raises only on a framework bug"
+    ),
+    ("mloda/core/abstract_plugins/components/declared_attributes.py", "read_declared_attributes"): (
+        "read inside safe_field, so a raising reader declaration degrades to None"
+    ),
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/options.py", "add_to_group"): _DECIDED_ABOVE_BY_READER_SELECTION,
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
@@ -141,6 +151,12 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # Swallowing functions OUTSIDE the declared modules that the match path calls; the containment there is decided
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
+    ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
+        "a warning-only extender's own failure falls back to the probe; the probe's raise always propagates"
+    ),
+    ("mloda/core/abstract_plugins/hook_context.py", "__post_init__"): (
+        "guards the framework-built context's field coercion; not a match decision"
+    ),
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
         "it degrades one field in a rendering path, so swallowing a marked exception is its contract"

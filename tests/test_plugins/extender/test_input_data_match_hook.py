@@ -1,6 +1,7 @@
 """Tests for ExtenderHook.INPUT_DATA_MATCH: extenders wrap and may refuse a reader's match probe.
 
-Test readers only accept their own marker access, so they never hijack matching in other tests.
+Each test reader sits behind its own FeatureGroup and only accepts its own marker access,
+so it never hijacks matching in other tests.
 """
 
 import logging
@@ -15,11 +16,10 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
-from mloda.provider import FeatureSet
-from mloda.user import Feature, GlobalFilter, Options, ParallelizationMode, PluginCollector, mloda
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.provider import FeatureGroup, FeatureSet
+from mloda.user import Feature, FeatureName, GlobalFilter, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
 
 _ACCESS = "imdmatch_pinned_access"
 _CRED_KEY = "imdmatch_marker"
@@ -30,7 +30,6 @@ _COL_D = "imdmatch_col_d"
 _COL_F = "imdmatch_col_f"
 _COL_G = "imdmatch_col_g"
 _PROBE_LOGGER = "mloda.core.abstract_plugins.components.input_data.reader_probe"
-_ENABLED = PluginCollector.enabled_feature_groups({ReadFileFeature})
 
 
 def _in_scope(data_access: Any) -> bool:
@@ -39,7 +38,7 @@ def _in_scope(data_access: Any) -> bool:
     return bool(data_access == _ACCESS)
 
 
-class _ImdBaseReader(ReadFile):
+class _ImdBaseReader(BaseInputData):
     """Accepts only in-scope access and only the names in `served`; counts probes."""
 
     served: frozenset[str] = frozenset()
@@ -102,6 +101,44 @@ class ImdMatchRaisingProbeReader(_ImdBaseReader):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return pa.table({_COL_D: [4]})
+
+
+class _ImdBaseGroup(FeatureGroup):
+    """Root group serving one reader; `reader` is set per subclass."""
+
+    reader: type[BaseInputData]
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return cls.reader()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return cls.input_data().load(features)  # type: ignore[union-attr]
+
+
+class ImdMatchGateGroup(_ImdBaseGroup):
+    reader = ImdMatchGateReader
+
+
+class ImdMatchSiblingGroup(_ImdBaseGroup):
+    reader = ImdMatchSiblingReader
+
+
+class ImdMatchBrokenDeclGroup(_ImdBaseGroup):
+    reader = ImdMatchBrokenDeclReader
+
+
+class ImdMatchRaisingProbeGroup(_ImdBaseGroup):
+    reader = ImdMatchRaisingProbeReader
+
+
+_ENABLED = PluginCollector.enabled_feature_groups(
+    {ImdMatchGateGroup, ImdMatchSiblingGroup, ImdMatchBrokenDeclGroup, ImdMatchRaisingProbeGroup}
+)
 
 
 class _ImdRecordingExtender(Extender):
@@ -261,7 +298,7 @@ class TestRefusal:
 
         assert "no clearance" in str(excinfo.value)
 
-    def test_refused_reader_leaves_a_sibling_reader_able_to_serve(self) -> None:
+    def test_refused_reader_leaves_another_reader_able_to_serve(self) -> None:
         session = _plan("global", _COL_B, ImdMatchGateReader, _gate())
         result = session.run(parallelization_modes={ParallelizationMode.SYNC})
 

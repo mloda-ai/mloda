@@ -467,9 +467,7 @@ class BaseInputData(ABC):
                     options.set(key, wrapped)
                     value = wrapped
                 known_owners = match_rejection_owners()
-                matched_data_access = cls.match_subclass_data_access(  # type: ignore[attr-defined]
-                    value, [feature_name], options=options
-                )
+                matched_data_access = probe_reader(cls, value, [feature_name], options)
                 if matched_data_access:
                     unmet = cls._unmet_current_declaration()
                     if unmet is None:
@@ -539,9 +537,7 @@ class BaseInputData(ABC):
         """
         # A global probe never established ownership, so a silent absence veto cannot displace a real near-miss.
         if cls._reader_options_admit(options, record_absence=False):
-            matched_data_access = cls.match_subclass_data_access(  # type: ignore[attr-defined]
-                data_access_collection, feature_names, options=options
-            )
+            matched_data_access = probe_reader(cls, data_access_collection, feature_names, options)
             if matched_data_access:
                 unmet = cls._unmet_current_declaration()
                 if unmet is None:

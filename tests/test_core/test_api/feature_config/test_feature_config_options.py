@@ -5,10 +5,13 @@ This module tests the new Options architecture that separates group_options
 and context_options for performance optimization.
 """
 
+from typing import Any
+
 import pytest
 
 from mloda.core.api.feature_config.models import FeatureConfig
 from mloda.core.api.feature_config.parser import parse_json
+from mloda.user import Options
 
 
 def test_parse_group_options() -> None:
@@ -194,27 +197,31 @@ def test_validate_options_mutual_exclusion() -> None:
     assert "options" in str(exc_info.value).lower()
 
 
-def test_parse_propagate_context_keys() -> None:
-    """Test parsing JSON with a propagate_context_keys field.
+_KEY_FIELDS = ["propagate_context_keys", "cascade_context_keys"]
 
-    The propagate_context_keys field lists context option keys that should be
-    propagated. parse_json must accept this field and store it on the resulting
-    FeatureConfig instance.
 
-    Example:
-        {
-            "name": "f",
-            "context_options": {"session_id": "abc"},
-            "propagate_context_keys": ["session_id"]
-        }
-    """
-    config_str = """[
-        {
-            "name": "f",
-            "context_options": {"session_id": "abc"},
-            "propagate_context_keys": ["session_id"]
-        }
-    ]"""
+def _config_with_keys(field: str, keys: list[str], **kwargs: Any) -> FeatureConfig:
+    if field == "cascade_context_keys":
+        return FeatureConfig(cascade_context_keys=keys, **kwargs)
+    return FeatureConfig(propagate_context_keys=keys, **kwargs)
+
+
+def _stored_keys(config: FeatureConfig, field: str) -> list[str] | None:
+    if field == "cascade_context_keys":
+        return config.cascade_context_keys
+    return config.propagate_context_keys
+
+
+def _option_keys(options: Options, field: str) -> frozenset[str]:
+    if field == "cascade_context_keys":
+        return options.cascade_context_keys
+    return options.propagate_context_keys
+
+
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_parse_context_push_keys(field: str) -> None:
+    """parse_json stores the context push key list on the FeatureConfig."""
+    config_str = '[{"name": "f", "context_options": {"session_id": "abc"}, "' + field + '": ["session_id"]}]'
 
     result = parse_json(config_str)
 
@@ -222,84 +229,55 @@ def test_parse_propagate_context_keys() -> None:
     assert isinstance(result[0], FeatureConfig)
     assert result[0].name == "f"
     assert result[0].context_options == {"session_id": "abc"}
-    assert result[0].propagate_context_keys == ["session_id"]
+    assert _stored_keys(result[0], field) == ["session_id"]
 
 
-def test_parse_propagate_context_keys_defaults_none() -> None:
-    """Test that propagate_context_keys defaults to None when absent.
-
-    When a feature configuration does not include propagate_context_keys, the
-    FeatureConfig instance should report None for that field.
-    """
-    config_str = """[
-        {
-            "name": "f",
-            "context_options": {"session_id": "abc"}
-        }
-    ]"""
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_parse_context_push_keys_defaults_none(field: str) -> None:
+    """The context push key list is None when absent."""
+    config_str = '[{"name": "f", "context_options": {"session_id": "abc"}}]'
 
     result = parse_json(config_str)
 
     assert len(result) == 1
     assert isinstance(result[0], FeatureConfig)
-    assert result[0].propagate_context_keys is None
+    assert _stored_keys(result[0], field) is None
 
 
-def test_load_threads_propagate_context_keys_into_options() -> None:
-    """Test that the loader threads propagate_context_keys into the Feature's Options.
-
-    When a feature config specifies context_options and propagate_context_keys,
-    the loader should build a Feature whose Options carries the propagate keys as
-    a frozenset.
-    """
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_load_threads_context_push_keys_into_options(field: str) -> None:
+    """The loader threads the context push keys into the Feature's Options as a frozenset."""
     from mloda.core.api.feature_config.loader import load_features_from_config
     from mloda.user import Feature
 
-    config_str = """[
-        {
-            "name": "f",
-            "context_options": {"session_id": "abc"},
-            "propagate_context_keys": ["session_id"]
-        }
-    ]"""
+    config_str = '[{"name": "f", "context_options": {"session_id": "abc"}, "' + field + '": ["session_id"]}]'
 
     result = load_features_from_config(config_str)
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
     assert result[0].options.context == {"session_id": "abc"}
-    assert result[0].options.propagate_context_keys == frozenset({"session_id"})
+    assert _option_keys(result[0].options, field) == frozenset({"session_id"})
 
 
-def test_load_propagate_context_keys_defaults_empty_frozenset() -> None:
-    """Test that propagate_context_keys defaults to an empty frozenset in Options.
-
-    When propagate_context_keys is absent, the resulting Feature's Options should
-    use the default empty frozenset.
-    """
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_load_context_push_keys_defaults_empty_frozenset(field: str) -> None:
+    """Absent context push keys give the default empty frozenset in Options."""
     from mloda.core.api.feature_config.loader import load_features_from_config
     from mloda.user import Feature
 
-    config_str = """[
-        {
-            "name": "f",
-            "context_options": {"session_id": "abc"}
-        }
-    ]"""
+    config_str = '[{"name": "f", "context_options": {"session_id": "abc"}}]'
 
     result = load_features_from_config(config_str)
 
     assert len(result) == 1
     assert isinstance(result[0], Feature)
-    assert result[0].options.propagate_context_keys == frozenset()
+    assert _option_keys(result[0].options, field) == frozenset()
 
 
-def test_load_documented_propagate_context_keys_example() -> None:
-    """Test the documented end-to-end propagate_context_keys example.
-
-    The documentation advertises a config of the form below. It should produce a
-    single Feature whose context holds both keys and whose Options propagates the
-    documented key.
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_load_documented_context_push_keys_example(field: str) -> None:
+    """The documented end-to-end example yields one Feature pushing the documented key.
 
     Example:
         [{"name": "my_feature",
@@ -309,13 +287,11 @@ def test_load_documented_propagate_context_keys_example() -> None:
     from mloda.core.api.feature_config.loader import load_features_from_config
     from mloda.user import Feature
 
-    config_str = """[
-        {
-            "name": "my_feature",
-            "context_options": {"session_id": "abc123", "window_function": "sum"},
-            "propagate_context_keys": ["session_id"]
-        }
-    ]"""
+    config_str = (
+        '[{"name": "my_feature", "context_options": {"session_id": "abc123", "window_function": "sum"}, "'
+        + field
+        + '": ["session_id"]}]'
+    )
 
     result = load_features_from_config(config_str)
 
@@ -323,48 +299,44 @@ def test_load_documented_propagate_context_keys_example() -> None:
     assert isinstance(result[0], Feature)
     assert result[0].name == "my_feature"
     assert result[0].options.context == {"session_id": "abc123", "window_function": "sum"}
-    assert result[0].options.propagate_context_keys == frozenset({"session_id"})
+    assert _option_keys(result[0].options, field) == frozenset({"session_id"})
 
 
-def test_propagate_context_keys_requires_context_options() -> None:
-    """Test that propagate_context_keys requires context_options.
+def test_load_both_context_push_keys_arrive_in_options() -> None:
+    """Both key fields set on one feature both reach Options."""
+    from mloda.core.api.feature_config.loader import load_features_from_config
+    from mloda.user import Feature
 
-    propagate_context_keys only makes sense alongside context_options. A
-    FeatureConfig that sets propagate_context_keys without any context_options
-    (using plain options or nothing) must raise a ValueError in __post_init__,
-    so the field is never silently dropped by the loader's plain-options branch.
-    """
-    # No context_options at all
+    config_str = (
+        '[{"name": "f", "context_options": {"a": 1, "b": 2},'
+        ' "propagate_context_keys": ["a"], "cascade_context_keys": ["b"]}]'
+    )
+
+    result = load_features_from_config(config_str)
+
+    assert isinstance(result[0], Feature)
+    assert result[0].options.propagate_context_keys == frozenset({"a"})
+    assert result[0].options.cascade_context_keys == frozenset({"b"})
+
+
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_context_push_keys_requires_context_options(field: str) -> None:
+    """The context push keys require context_options, so the loader never silently drops them."""
     with pytest.raises(ValueError) as exc_info:
-        FeatureConfig(name="bad_feature", propagate_context_keys=["session_id"])
-    assert "propagate_context_keys" in str(exc_info.value).lower()
+        _config_with_keys(field, ["session_id"], name="bad_feature")
+    assert field in str(exc_info.value).lower()
 
-    # Plain options instead of context_options
     with pytest.raises(ValueError) as exc_info:
-        FeatureConfig(
-            name="bad_feature_2",
-            options={"foo": "bar"},
-            propagate_context_keys=["session_id"],
-        )
-    assert "propagate_context_keys" in str(exc_info.value).lower()
+        _config_with_keys(field, ["session_id"], name="bad_feature_2", options={"foo": "bar"})
+    assert field in str(exc_info.value).lower()
 
 
-def test_load_propagate_key_not_in_context_raises() -> None:
-    """Test that a propagate key absent from context surfaces a ValueError.
-
-    The Options validator requires every propagate key to be present in context.
-    When propagate_context_keys references a key not in context_options, the
-    error should surface end-to-end through load_features_from_config.
-    """
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_load_context_push_key_not_in_context_raises(field: str) -> None:
+    """A key absent from context_options surfaces the Options ValueError through the loader."""
     from mloda.core.api.feature_config.loader import load_features_from_config
 
-    config_str = """[
-        {
-            "name": "f",
-            "context_options": {"a": 1},
-            "propagate_context_keys": ["b"]
-        }
-    ]"""
+    config_str = '[{"name": "f", "context_options": {"a": 1}, "' + field + '": ["b"]}]'
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=field):
         load_features_from_config(config_str)

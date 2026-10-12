@@ -79,6 +79,7 @@ Combine strings and objects:
 | `group_options` | object | No | Group parameters (affect Feature Group resolution) |
 | `context_options` | object | No | Context parameters (metadata, doesn't affect resolution) |
 | `propagate_context_keys` | array | No | Context keys pushed to the feature's direct input features |
+| `cascade_context_keys` | array | No | Context keys pushed to every input feature down the chain |
 | `column_index` | integer | No | Index for multi-output features (adds `~N` suffix) |
 | `feature_group` | string | No | Feature Group class name the feature resolves to (scope read by feature resolution and filter matching) |
 
@@ -228,7 +229,7 @@ Inside `options`, `group_options` or `context_options`, an `in_features` key can
 ]
 ```
 
-A nested dict supports `name`, `options`, `in_features` and `feature_group` only, in `options`, `group_options` and `context_options` alike. A nested feature built from `group_options` stays in the group options, one built from `context_options` stays in the context options. In a nested `in_features` dict, the top-level-only fields (`column_index`, `group_options`, `context_options`, `propagate_context_keys`) are rejected, and so is an unknown key. A feature dict must be the direct value of `in_features`: an `in_features` list holds source feature names, not feature dicts.
+A nested dict supports `name`, `options`, `in_features` and `feature_group` only, in `options`, `group_options` and `context_options` alike. A nested feature built from `group_options` stays in the group options, one built from `context_options` stays in the context options. In a nested `in_features` dict, the top-level-only fields (`column_index`, `group_options`, `context_options`, `propagate_context_keys`, `cascade_context_keys`) are rejected, and so is an unknown key. A feature dict must be the direct value of `in_features`: an `in_features` list holds source feature names, not feature dicts.
 
 The container decides identity: a nested source feature declared under `group_options` is part of the feature's identity, so it affects Options hashing and equality and therefore Feature Group splitting, while one declared under `context_options` is not.
 
@@ -268,7 +269,19 @@ By default, context parameters are local to each feature and do not propagate th
 
 In this example, `session_id` is pushed to the direct input features of `my_feature`, while `window_function` stays local. The push is one hop; see [Context propagation](property-mapping.md#context-propagation) for inputs further down a chain.
 
-The cascading push (`cascade_context_keys`) is set on `Options` in Python and has no config field.
+`cascade_context_keys` pushes the listed keys on through every input down the chain. The value is then visible to every feature group down the chain, see [Context propagation](property-mapping.md#context-propagation) for the rules.
+
+```json
+[
+    {
+        "name": "my_feature",
+        "context_options": {
+            "session_id": "abc123"
+        },
+        "cascade_context_keys": ["session_id"]
+    }
+]
+```
 
 ## Complete Example
 

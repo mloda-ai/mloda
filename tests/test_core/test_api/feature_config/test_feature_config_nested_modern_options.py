@@ -244,6 +244,7 @@ TOP_LEVEL_ONLY_FIELDS: list[tuple[str, Any]] = [
     ("group_options", {"threshold": 0.5}),
     ("context_options", {"metadata": "test"}),
     ("propagate_context_keys", ["metadata"]),
+    ("cascade_context_keys", ["metadata"]),
 ]
 
 
@@ -496,18 +497,19 @@ def test_container_in_features_list_of_names_stays_a_list(container: str) -> Non
     assert _container_options(outer, container).get("in_features") == ["age", "weight"]
 
 
-def test_propagate_context_keys_still_threaded_into_options() -> None:
-    """The group/context branch keeps threading propagate_context_keys into Options."""
+@pytest.mark.parametrize("field", ["propagate_context_keys", "cascade_context_keys"])
+def test_context_push_keys_still_threaded_into_options(field: str) -> None:
+    """The group/context branch keeps threading the context push keys into Options."""
     config: dict[str, Any] = {
         "name": "outer",
         "context_options": {"session_id": "abc"},
-        "propagate_context_keys": ["session_id"],
+        field: ["session_id"],
     }
 
     outer = _single_feature(config)
 
     assert outer.options.context == {"session_id": "abc"}
-    assert outer.options.propagate_context_keys == frozenset({"session_id"})
+    assert getattr(outer.options, field) == frozenset({"session_id"})
 
 
 def test_top_level_in_features_with_group_options_still_lands_in_context() -> None:

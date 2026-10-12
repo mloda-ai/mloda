@@ -226,6 +226,88 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
         with pytest.raises(ValueError, match="bad_mix"):
             SqliteRelation(connection, "texty").select("bad_mix").to_arrow_table()
 
+    @pytest.mark.parametrize("rows", [False, True])
+    def test_relation_without_hints_types_raw_projection(self, connection: sqlite3.Connection, rows: bool) -> None:
+        connection.execute("CREATE TABLE plain (value INTEGER, score REAL)")
+        if rows:
+            connection.executemany("INSERT INTO plain VALUES (?, ?)", [(1, 1.5), (2, 2.5)])
+        built = SqliteRelation(connection, "plain").select(_raw_sql="*, value * 2 AS doubled")
+        schema = built.to_arrow_table().schema
+        types = dict(zip(built.columns, built.types, strict=True))
+        expected = {"value": pa.int64(), "score": pa.float64(), "doubled": pa.int64()}
+
+        assert {name: schema.field(name).type for name in expected} == expected
+        assert types == expected
+
+    @pytest.mark.parametrize("rows", [0, 1, 2])
+    def test_lag_window_type_is_int64_for_any_row_count(self, connection: sqlite3.Connection, rows: int) -> None:
+        source = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([1, 2][:rows], pa.int64())}))
+        built = source.window("LAG(value)", "prev", order_by=[OrderBy("value")])
+        types = dict(zip(built.columns, built.types, strict=True))
+
+        assert built.to_arrow_table().schema.field("prev").type == pa.int64()
+        assert types["prev"] == pa.int64()
+
+    @pytest.mark.parametrize(
+        "raw_sql, column, expected",
+        [
+            ("*, NULLIF(value, 1) AS n", "n", pa.int64()),
+            ("*, CASE WHEN value > 1 THEN value * 1.5 ELSE value END AS c", "c", pa.float64()),
+        ],
+    )
+    def test_value_dependent_expression_type_without_rows(
+        self, connection: sqlite3.Connection, raw_sql: str, column: str, expected: pa.DataType
+    ) -> None:
+        source = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([], pa.int64())}))
+        built = source.select(_raw_sql=raw_sql)
+
+        assert built.to_arrow_table().schema.field(column).type == expected
+        assert dict(zip(built.columns, built.types, strict=True))[column] == expected
+
+    def test_chained_projections_and_windows_do_not_scan_while_building(self, connection: sqlite3.Connection) -> None:
+        source = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([], pa.int64())}))
+        statements: list[str] = []
+        connection.set_trace_callback(statements.append)
+
+        built = (
+            source.select(_raw_sql="*, value * 2 AS doubled")
+            .select(_raw_sql="*, doubled * 2 AS quad")
+            .with_row_number("rn", order_by=[OrderBy("value")])
+            .order("value")
+        )
+
+        assert not [s for s in statements if s.startswith("SELECT *") and "LIMIT 0" not in s]
+        types = dict(zip(built.columns, built.types, strict=True))
+        assert (types["quad"], types["rn"]) == (pa.int64(), pa.int64())
+
+    def test_passthrough_types_survive_row_number_and_order(self, connection: sqlite3.Connection) -> None:
+        arrow = pa.table(
+            {
+                "flag": pa.array([True], pa.bool_()),
+                "ts": pa.array([datetime.datetime(2024, 1, 1)], pa.timestamp("us")),
+            }
+        )
+        source = SqliteRelation.from_arrow(connection, arrow)
+        numbered = source.with_row_number("rn", order_by=[OrderBy("flag")])
+        ordered = numbered.order("flag")
+
+        for rel in (numbered, ordered):
+            types = dict(zip(rel.columns, rel.types, strict=True))
+            assert (types["flag"], types["ts"]) == (pa.bool_(), pa.timestamp("us"))
+
+    def test_invalid_timestamp_text_raises_value_error_naming_column(self, connection: sqlite3.Connection) -> None:
+        rel = SqliteRelation.from_arrow(connection, pa.table({"when_ts": pa.array([], pa.timestamp("us"))}))
+        connection.execute(f"INSERT INTO {quote_ident(rel.table_name)} VALUES ('not a date')")  # nosec
+        with pytest.raises(ValueError, match="when_ts"):
+            rel.to_arrow_table()
+
+    def test_utf8_bytes_in_text_column_decode(self, connection: sqlite3.Connection) -> None:
+        rel = SqliteRelation.from_arrow(connection, pa.table({"txt": pa.array(["x"], pa.string())}))
+        connection.execute(f"INSERT INTO {quote_ident(rel.table_name)} VALUES (?)", (b"abc",))  # nosec
+        arrow = rel.to_arrow_table()
+
+        assert (arrow.schema.field("txt").type, arrow.column("txt").to_pylist()) == (pa.string(), ["x", "abc"])
+
     def test_all_null_column_without_hints_is_string(self, connection: sqlite3.Connection) -> None:
         connection.execute("CREATE TABLE nulls (a)")
         connection.executemany("INSERT INTO nulls VALUES (?)", [(None,), (None,)])

@@ -92,6 +92,8 @@ class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
             return {Feature("value")}
         elif feature_name_str == "score_plus_ten":
             return {Feature("score")}
+        elif feature_name_str == "unbuildable_text":
+            return {Feature("value")}
 
         return set()
 
@@ -106,12 +108,16 @@ class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
                 result_data = result_data.select(_raw_sql="*, value * 2 AS doubled_value")
             elif feature_name == "score_plus_ten":
                 result_data = result_data.select(_raw_sql="*, score + 10 AS score_plus_ten")
+            elif feature_name == "unbuildable_text":
+                result_data = result_data.select(
+                    _raw_sql="*, CASE WHEN value = 10 THEN 'a' ELSE X'FF' END AS unbuildable_text"
+                )
 
         return result_data
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return {"doubled_value", "score_plus_ten"}
+        return {"doubled_value", "score_plus_ten", "unbuildable_text"}
 
 
 class SqliteSecondTransformFeatureGroup(ATestSqliteFeatureGroup):
@@ -223,6 +229,22 @@ class TestSqliteIntegrationWithMlodaAPI:
 
         score_plus_ten = final_df["score_plus_ten"].tolist()
         assert score_plus_ten == [11.5, 12.5, 13.5, 14.5, 15.5]
+
+    def test_run_fails_naming_a_feature_whose_column_arrow_cannot_build(
+        self, flight_server: Any, sqlite_conn: Any
+    ) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
+        )
+
+        with pytest.raises(Exception, match="unbuildable_text"):
+            mloda.run_all(
+                [Feature(name="unbuildable_text", options={"SqliteTestDataCreator": sqlite_conn})],
+                flight_server=flight_server,
+                plugin_collector=plugin_collector,
+                data_access_collection=DataAccessCollection(connections={sqlite_conn}),
+                compute_frameworks=[SqliteFramework],
+            )
 
     def test_sqlite_aggregation_features(self, flight_server: Any, sqlite_conn: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(

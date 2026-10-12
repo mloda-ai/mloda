@@ -218,6 +218,15 @@ class TestOptions:
         assert optimized_options.get("aggregation_type") == "sum"
 
 
+_KEY_ARGUMENTS = ["propagate_context_keys", "cascade_context_keys"]
+
+
+def _options_with_keys(argument: str, context: dict[str, Any], keys: frozenset[str]) -> Options:
+    if argument == "cascade_context_keys":
+        return Options(context=context, cascade_context_keys=keys)
+    return Options(context=context, propagate_context_keys=keys)
+
+
 class TestPropagateContextKeys:
     """
     Test suite for the propagate_context_keys attribute on Options.
@@ -229,38 +238,54 @@ class TestPropagateContextKeys:
     the chain. Only keys listed here will be propagated; all others stay local.
     """
 
-    def test_propagate_context_keys_default_empty(self) -> None:
-        """Default propagate_context_keys should be an empty frozenset."""
+    @pytest.mark.parametrize("argument", _KEY_ARGUMENTS)
+    def test_propagate_context_keys_default_empty(self, argument: str) -> None:
+        """Default key set should be an empty frozenset."""
         options = Options()
-        assert options.propagate_context_keys == frozenset()
+        assert getattr(options, argument) == frozenset()
 
-    def test_propagate_context_keys_stored(self) -> None:
-        """propagate_context_keys should store the provided frozenset."""
-        options = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
-        assert options.propagate_context_keys == frozenset({"k"})
+    @pytest.mark.parametrize("argument", _KEY_ARGUMENTS)
+    def test_propagate_context_keys_stored(self, argument: str) -> None:
+        """The key set should store the provided frozenset."""
+        options = _options_with_keys(argument, {"k": "v"}, frozenset({"k"}))
+        assert getattr(options, argument) == frozenset({"k"})
+        assert isinstance(getattr(options, argument), frozenset)
 
-    def test_propagate_context_keys_validates_subset(self) -> None:
-        """propagate_context_keys must be a subset of context keys, else ValueError."""
-        with pytest.raises(ValueError, match="propagate_context_keys"):
+    @pytest.mark.parametrize("argument", _KEY_ARGUMENTS)
+    def test_propagate_context_keys_validates_subset(self, argument: str) -> None:
+        """The key set must be a subset of context keys, else ValueError naming the argument."""
+        with pytest.raises(ValueError, match=argument):
+            _options_with_keys(argument, {"a": 1}, frozenset({"b"}))
+
+    def test_propagate_error_text_does_not_mention_cascade(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
             Options(context={"a": 1}, propagate_context_keys=frozenset({"b"}))
+        assert "cascade_context_keys" not in str(excinfo.value)
 
-    def test_propagate_context_keys_not_in_hash(self) -> None:
-        """propagate_context_keys should not affect hash (same group+context, different propagate)."""
-        o1 = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
+    @pytest.mark.parametrize("argument", _KEY_ARGUMENTS)
+    def test_propagate_context_keys_not_in_hash(self, argument: str) -> None:
+        """The key set should not affect hash (same group+context, different key set)."""
+        o1 = _options_with_keys(argument, {"k": "v"}, frozenset({"k"}))
         o2 = Options(context={"k": "v"})
         assert hash(o1) == hash(o2)
 
-    def test_propagate_context_keys_not_in_eq(self) -> None:
-        """propagate_context_keys should not affect equality (same group+context, different propagate)."""
-        o1 = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
+    @pytest.mark.parametrize("argument", _KEY_ARGUMENTS)
+    def test_propagate_context_keys_not_in_eq(self, argument: str) -> None:
+        """The key set should not affect equality (same group+context, different key set)."""
+        o1 = _options_with_keys(argument, {"k": "v"}, frozenset({"k"}))
         o2 = Options(context={"k": "v"})
         assert o1 == o2
 
-    def test_propagate_context_keys_deepcopy(self) -> None:
-        """deepcopy should preserve propagate_context_keys."""
-        o = Options(context={"k": "v"}, propagate_context_keys=frozenset({"k"}))
+    @pytest.mark.parametrize("argument", _KEY_ARGUMENTS)
+    def test_propagate_context_keys_deepcopy(self, argument: str) -> None:
+        """deepcopy should preserve the key set."""
+        o = _options_with_keys(argument, {"k": "v"}, frozenset({"k"}))
         o2 = deepcopy(o)
-        assert o2.propagate_context_keys == frozenset({"k"})
+        assert getattr(o2, argument) == frozenset({"k"})
+
+    def test_str_shows_cascade_context_keys_only_when_non_empty(self) -> None:
+        assert "cascade_context_keys=" not in str(Options(context={"k": "v"}))
+        assert "cascade_context_keys=" in str(Options(context={"k": "v"}, cascade_context_keys=frozenset({"k"})))
 
     def test_deepcopy_falls_back_to_reference_when_value_deepcopy_raises(self) -> None:
         """A value whose deep-copy raises ANY exception must be shared by reference, and

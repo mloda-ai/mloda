@@ -477,7 +477,9 @@ PROPERTY_MAPPING = {
 
 The [Context Propagation](property-mapping.md#context-propagation) docs describe the
 **caller side**: context options stay local by default, and `propagate_context_keys`
-opts specific keys in for the direct input features only. This section describes the **author side**: what happens to a
+opts specific keys in for the direct input features only (`cascade_context_keys`
+continues the push down the chain). This section describes the **author side**: what
+happens to a
 feature group's own options when it declares an input feature.
 
 ### Forwarding is the default
@@ -519,7 +521,7 @@ directive on the child `Feature` you return from `input_features()`:
 
 | Directive | Effect |
 |-----------|--------|
-| `forward_group=False` | Nothing flows: no group options and no consumer-side context push. Only an explicit child-side `inherit_context_keys` pull can still deliver values. |
+| `forward_group=False` | Nothing flows: no group options and no consumer-side context push (the cascade stops here too). Only an explicit child-side `inherit_context_keys` pull can still deliver values. |
 | `forward_group={"kg_backend"}` | Allowlist: only the listed keys flow. |
 | `forward_group_exclude={"query_text"}` | Everything flows except the listed keys. |
 
@@ -556,7 +558,8 @@ child = Feature("knowledge_graph", inherit_context_keys={"tenant"})
 ```
 
 This is the child-side pull, symmetric to the caller-side push
-`propagate_context_keys`, which continues to work unchanged unless the child declared
+`propagate_context_keys` (one hop) or `cascade_context_keys` (all the way down), which
+continues to work unchanged unless the child declared
 `forward_group=False`: that skips the push entirely. Keys absent from the consumer's
 context are skipped silently. As with group forwarding, an inherited or pushed key
 whose child value differs raises a `ValueError`; equal values are a no-op. A child

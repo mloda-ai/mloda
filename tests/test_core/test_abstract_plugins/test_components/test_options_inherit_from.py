@@ -1,5 +1,6 @@
 from copy import deepcopy
 from enum import Enum
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -8,6 +9,17 @@ from mloda.provider import DefaultOptionKeys
 from mloda.user import Feature
 from mloda.user import Features
 from mloda.user import Options
+
+
+_PUSH_ARGUMENTS = ["propagate_context_keys", "cascade_context_keys"]
+
+
+def _pushing_consumer(argument: str, context: dict[str, Any]) -> Options:
+    """A consumer listing every context key under the given push argument."""
+    keys = frozenset(context)
+    if argument == "cascade_context_keys":
+        return Options(context=context, cascade_context_keys=keys)
+    return Options(context=context, propagate_context_keys=keys)
 
 
 class TestInheritFromDefaultForwarding:
@@ -314,19 +326,28 @@ class TestInheritFromForwardGroupFalseBlocksPush:
         with pytest.raises(ValueError, match="Context key.*conflict"):
             child.inherit_from(consumer)
 
-    def test_false_blocks_push_delivery_to_child_without_own_value(self) -> None:
+    @pytest.mark.parametrize("argument", _PUSH_ARGUMENTS)
+    def test_false_blocks_push_delivery_to_child_without_own_value(self, argument: str) -> None:
         """With forward_group=False, a pushed key does NOT land on a child that has
         no own value for it: nothing flows."""
-        consumer = Options(
-            context={"env": "prod"},
-            propagate_context_keys=frozenset({"env"}),
-        )
+        consumer = _pushing_consumer(argument, {"env": "prod"})
         child = Options()
 
         child.inherit_from(consumer, forward_group=False)
 
         assert "env" not in child.context
         assert "env" not in child.group
+        assert child.cascade_context_keys == frozenset()
+
+    def test_pull_with_false_does_not_cascade_the_key(self) -> None:
+        """A pull under forward_group=False delivers the value but the cascade stops there."""
+        consumer = Options(context={"env": "prod"}, cascade_context_keys=frozenset({"env"}))
+        child = Options()
+
+        child.inherit_from(consumer, forward_group=False, inherit_context_keys=frozenset({"env"}))
+
+        assert child.context["env"] == "prod"
+        assert child.cascade_context_keys == frozenset()
 
     def test_pull_with_false_still_delivers_pushed_key(self) -> None:
         """An explicit child-side pull (inherit_context_keys) wins over the isolation:
@@ -1150,12 +1171,10 @@ class TestInheritedContextKeys:
 
         assert child.inherited_context_keys == frozenset({"tenant"})
 
-    def test_push_records_delivered_key(self) -> None:
-        """A key delivered via the consumer-side propagate_context_keys push is recorded."""
-        consumer = Options(
-            context={"session_id": "abc"},
-            propagate_context_keys=frozenset({"session_id"}),
-        )
+    @pytest.mark.parametrize("argument", _PUSH_ARGUMENTS)
+    def test_push_records_delivered_key(self, argument: str) -> None:
+        """A key delivered via the consumer-side push (propagate or cascade) is recorded."""
+        consumer = _pushing_consumer(argument, {"session_id": "abc"})
         child = Options()
 
         child.inherit_from(consumer)
@@ -1172,12 +1191,10 @@ class TestInheritedContextKeys:
 
         assert child.inherited_context_keys == frozenset({"tenant"})
 
-    def test_push_with_equal_existing_value_records_key(self) -> None:
+    @pytest.mark.parametrize("argument", _PUSH_ARGUMENTS)
+    def test_push_with_equal_existing_value_records_key(self, argument: str) -> None:
         """A pushed key the child already held with an EQUAL value still counts."""
-        consumer = Options(
-            context={"session_id": "abc"},
-            propagate_context_keys=frozenset({"session_id"}),
-        )
+        consumer = _pushing_consumer(argument, {"session_id": "abc"})
         child = Options(context={"session_id": "abc"})
 
         child.inherit_from(consumer)
@@ -1320,12 +1337,10 @@ class TestInheritFromPropagateContextKeysPush:
 
         assert child.context["session_id"] == "abc"
 
-    def test_push_conflict_with_differing_child_context_value_raises(self) -> None:
+    @pytest.mark.parametrize("argument", _PUSH_ARGUMENTS)
+    def test_push_conflict_with_differing_child_context_value_raises(self, argument: str) -> None:
         """A pushed key conflicting with an existing differing child context value raises ValueError."""
-        consumer = Options(
-            context={"session_id": "abc"},
-            propagate_context_keys=frozenset({"session_id"}),
-        )
+        consumer = _pushing_consumer(argument, {"session_id": "abc"})
         child = Options(context={"session_id": "xyz"})
 
         with pytest.raises(ValueError, match="Context key.*conflict"):
@@ -1343,16 +1358,104 @@ class TestInheritFromPropagateContextKeysPush:
 
         assert child.context["session_id"] == "abc"
 
-    def test_push_key_existing_in_child_group_raises(self) -> None:
+    @pytest.mark.parametrize("argument", _PUSH_ARGUMENTS)
+    def test_push_key_existing_in_child_group_raises(self, argument: str) -> None:
         """A pushed context key that exists in child.group is a cross-conflict."""
-        consumer = Options(
-            context={"env": "prod"},
-            propagate_context_keys=frozenset({"env"}),
-        )
+        consumer = _pushing_consumer(argument, {"env": "prod"})
         child = Options(group={"env": "staging"})
 
         with pytest.raises(ValueError, match="env"):
             child.inherit_from(consumer)
+
+    def test_cascade_key_is_pushed_without_being_a_propagate_key(self) -> None:
+        consumer = Options(context={"session_id": "abc", "algo": "sum"}, cascade_context_keys=frozenset({"session_id"}))
+        child = Options()
+
+        child.inherit_from(consumer)
+
+        assert child.context["session_id"] == "abc"
+        assert "algo" not in child.context
+        assert child.inherited_context_keys == frozenset({"session_id"})
+        assert child.cascade_context_keys == frozenset({"session_id"})
+
+    def test_cascade_key_reaches_the_grandchild(self) -> None:
+        consumer = Options(context={"session_id": "abc"}, cascade_context_keys=frozenset({"session_id"}))
+        child = Options()
+        grandchild = Options()
+
+        child.inherit_from(consumer)
+        grandchild.inherit_from(child)
+
+        assert grandchild.context["session_id"] == "abc"
+        assert grandchild.inherited_context_keys == frozenset({"session_id"})
+        assert grandchild.cascade_context_keys == frozenset({"session_id"})
+
+    def test_propagate_key_stops_after_one_hop(self) -> None:
+        consumer = Options(context={"session_id": "abc"}, propagate_context_keys=frozenset({"session_id"}))
+        child = Options()
+        grandchild = Options()
+
+        child.inherit_from(consumer)
+        grandchild.inherit_from(child)
+
+        assert child.context["session_id"] == "abc"
+        assert child.cascade_context_keys == frozenset()
+        assert "session_id" not in grandchild.context
+
+    def test_cascade_never_pushes_in_features(self) -> None:
+        consumer = Options(
+            context={DefaultOptionKeys.in_features: "consumer_source", "tenant": "acme"},
+            cascade_context_keys=frozenset({DefaultOptionKeys.in_features, "tenant"}),
+        )
+        child = Options()
+
+        child.inherit_from(consumer)
+
+        assert DefaultOptionKeys.in_features not in child.context
+        assert DefaultOptionKeys.in_features not in child.cascade_context_keys
+        assert child.cascade_context_keys == frozenset({"tenant"})
+
+    def test_cascade_equal_existing_value_is_fine_and_still_cascades(self) -> None:
+        consumer = Options(context={"session_id": "abc"}, cascade_context_keys=frozenset({"session_id"}))
+        child = Options(context={"session_id": "abc"})
+
+        child.inherit_from(consumer)
+
+        assert child.context["session_id"] == "abc"
+        assert child.cascade_context_keys == frozenset({"session_id"})
+
+    def test_cascade_conflict_message_names_cascade_and_owner(self) -> None:
+        consumer = Options(context={"session_id": "abc"}, cascade_context_keys=frozenset({"session_id"}))
+        child = Options(context={"session_id": "xyz"})
+
+        with pytest.raises(ValueError, match="Context key.*conflict") as excinfo:
+            child.inherit_from(consumer, owner="some_input")
+
+        assert "cascade_context_keys" in str(excinfo.value)
+        assert "some_input" in str(excinfo.value)
+        assert "forward_group=False" in str(excinfo.value)
+
+    def test_propagate_conflict_message_does_not_mention_cascade(self) -> None:
+        consumer = Options(context={"session_id": "abc"}, propagate_context_keys=frozenset({"session_id"}))
+        child = Options(context={"session_id": "xyz"})
+
+        with pytest.raises(ValueError) as excinfo:
+            child.inherit_from(consumer, owner="some_input")
+
+        assert "cascade_context_keys" not in str(excinfo.value)
+
+    def test_cascade_group_conflict_message_names_key_cascade_and_owner(self) -> None:
+        consumer = Options(context={"env": "prod"}, cascade_context_keys=frozenset({"env"}))
+        child = Options(group={"env": "staging"})
+
+        with pytest.raises(ValueError) as excinfo:
+            child.inherit_from(consumer, owner="some_input")
+
+        message = str(excinfo.value)
+        assert "env" in message
+        assert "cascade_context_keys" in message
+        assert "some_input" in message
+        assert "forward_group=False" in message
 
 
 class TestInheritFromInteraction:
@@ -1883,6 +1986,23 @@ class TestInheritFromAtomicOnConflict:
         assert child.group == {}
         assert child.inherited_group_keys == frozenset()
         assert child.last_forwarded_group_keys == frozenset()
+
+    @pytest.mark.parametrize("child_kind", ["context", "group"])
+    def test_cascade_conflict_is_atomic(self, child_kind: str) -> None:
+        """A cascade conflict on a later key leaves self unchanged, including cascade_context_keys."""
+        consumer = Options(context={"aaa": 1, "zzz": 9}, cascade_context_keys=frozenset({"aaa", "zzz"}))
+        child = Options(context={"zzz": 8}) if child_kind == "context" else Options(group={"zzz": 8})
+        group_before = dict(child.group)
+        context_before = dict(child.context)
+
+        with pytest.raises(ValueError):
+            child.inherit_from(consumer)
+
+        assert child.group == group_before
+        assert child.context == context_before
+        assert child.inherited_group_keys == frozenset()
+        assert child.inherited_context_keys == frozenset()
+        assert child.cascade_context_keys == frozenset()
 
     def test_group_conflict_leaves_own_keys_locked_false(self) -> None:
         """A raising inherit_from leaves self fully unchanged, including the own-key lock."""
@@ -2442,14 +2562,12 @@ class TestInheritFromConflictMessagesMaskMappingValues:
         assert consumer_marker not in message
         assert child_marker not in message
 
+    @pytest.mark.parametrize("argument", _PUSH_ARGUMENTS)
     @pytest.mark.parametrize("consumer_value,child_value,consumer_marker,child_marker", _VALUE_SHAPES)
     def test_propagate_context_keys_conflict_masks_both_values(
-        self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
+        self, argument: str, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
     ) -> None:
-        consumer = Options(
-            context={"SQLITEReader": consumer_value},
-            propagate_context_keys=frozenset({"SQLITEReader"}),
-        )
+        consumer = _pushing_consumer(argument, {"SQLITEReader": consumer_value})
         child = Options(context={"SQLITEReader": child_value})
 
         with pytest.raises(ValueError, match="Context key.*conflict") as excinfo:
@@ -2457,5 +2575,29 @@ class TestInheritFromConflictMessagesMaskMappingValues:
 
         message = str(excinfo.value)
         assert "SQLITEReader" in message
+        assert consumer_marker not in message
+        assert child_marker not in message
+
+    @pytest.mark.parametrize(
+        "consumer_value,child_value,consumer_marker,child_marker",
+        [
+            *_VALUE_SHAPES,
+            pytest.param(
+                "acme-internal-id-42", "acme-other-id-77", "acme-internal-id-42", "acme-other-id-77", id="str"
+            ),
+        ],
+    )
+    def test_cascade_group_conflict_prints_no_option_values(
+        self, consumer_value: object, child_value: object, consumer_marker: str, child_marker: str
+    ) -> None:
+        consumer = Options(context={"SQLITEReader": consumer_value}, cascade_context_keys=frozenset({"SQLITEReader"}))
+        child = Options(group={"SQLITEReader": child_value})
+
+        with pytest.raises(ValueError, match="cascade_context_keys") as excinfo:
+            child.inherit_from(consumer, owner="some_input")
+
+        message = str(excinfo.value)
+        assert "SQLITEReader" in message
+        assert "some_input" in message
         assert consumer_marker not in message
         assert child_marker not in message

@@ -1278,6 +1278,33 @@ def test_a_fully_infeasible_split_plan_names_its_features() -> None:
         assert name in str(raised.value)
 
 
+def _infeasible_join_message(tail_allowed: set[type[ComputeFramework]]) -> str:
+    net = _Net()
+    left = net.add(ChooserLeftFG, "listed_left", {P})
+    right = net.add(ChooserRightFG, "listed_right", {A})
+    child = net.add(ChooserChildFG, "listed_child", {D})
+    tail = net.add(ChooserSinkFG, "listed_tail", tail_allowed)
+    net.join(_link(Link.inner, ChooserLeftFG, ChooserRightFG), left, right, child)
+    net.edge(child, tail)
+    with pytest.raises(ValueError, match="^No compute framework assignment satisfies the hard rules") as raised:
+        net.choose(chooser_class=_AllConvertibleChooser)
+    return str(raised.value)
+
+
+def test_a_satisfied_rule_over_single_framework_blocks_is_not_listed_as_involved() -> None:
+    message = _infeasible_join_message({D})
+
+    assert "join inner" in message
+    assert "transform path ChooserChildFG -> ChooserSinkFG" not in message
+
+
+def test_a_satisfied_looking_rule_over_a_block_with_two_frameworks_is_still_listed() -> None:
+    message = _infeasible_join_message({D, P})
+
+    assert "join inner" in message
+    assert "transform path ChooserChildFG -> ChooserSinkFG" in message
+
+
 _Expected = list[tuple[list[Feature], str, type[ComputeFramework]]]
 
 

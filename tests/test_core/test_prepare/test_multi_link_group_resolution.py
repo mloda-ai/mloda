@@ -1488,6 +1488,7 @@ RemedyThirdConsumer = _remedy_consumer("RemedyThirdConsumer", ThirdCfw, False)
 RemedyThirdDirectConsumer = _remedy_consumer("RemedyThirdDirectConsumer", ThirdCfw, True)
 RemedyArrowConsumer = _remedy_consumer("RemedyArrowConsumer", PyArrowTable, False)
 RemedyArrowDirectConsumer = _remedy_consumer("RemedyArrowDirectConsumer", PyArrowTable, True)
+RemedySecondMidConsumer = _remedy_consumer("RemedySecondMidConsumer", SecondCfw, False)
 
 
 class RemedySumConsumer(_RemedyConsumer):
@@ -1515,6 +1516,7 @@ _REMEDY_KWARGS: dict[str, Any] = {
         pytest.param(RemedyThirdDirectConsumer, id="third_direct"),
         pytest.param(RemedyArrowConsumer, id="arrow_mid"),
         pytest.param(RemedyArrowDirectConsumer, id="arrow_direct"),
+        pytest.param(RemedySecondMidConsumer, id="b_framework_mid"),
     ],
 )
 def test_a_consumer_joining_two_members_of_one_link_side_on_different_frameworks_is_rejected(
@@ -1535,6 +1537,9 @@ def test_a_consumer_joining_two_members_of_one_link_side_on_different_frameworks
     assert "MultiLinkRootA" in message
     assert "RemedyRootA1" in message
     assert "one member of the link side per consumer" in message
+    assert "only when both joins merge into the other link side's frame" in message
+    assert "reads both members directly" in message
+    assert "runs on neither" not in message
 
 
 _BACKSTOP_INNER = "one consumer cannot join members of one link side on different compute frameworks"
@@ -1615,6 +1620,9 @@ RemedyThirdBThirdMidConsumer = _remedy_sum_consumer(
     "RemedyThirdBThirdMidConsumer", ThirdCfw, ("SidePathArrowP", "mlg_a1", "mlg_b")
 )
 RemedyThirdPairConsumer = _remedy_sum_consumer("RemedyThirdPairConsumer", ThirdCfw, ("mlg_a1", "mlg_b"))
+_REMEDY_SECOND_INPUTS = ("mlg_a", "mlg_a1", "mlg_bd")
+RemedySecondBConsumer = _remedy_sum_consumer("RemedySecondBConsumer", SecondCfw, _REMEDY_SECOND_INPUTS)
+RemedyArrowThirdBConsumer = _remedy_sum_consumer("RemedyArrowThirdBConsumer", PyArrowTable, _REMEDY_DIRECT_INPUTS)
 
 
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
@@ -1626,6 +1634,7 @@ RemedyThirdPairConsumer = _remedy_sum_consumer("RemedyThirdPairConsumer", ThirdC
         pytest.param(RemedyArrowSameBMidConsumer, MultiLinkRootBSame, [[117, 228, 339]], id="arrow_mid_b_on_arrow"),
         pytest.param(RemedyThirdBThirdConsumer, RemedyRootBThird, [[18, 30, 42]], id="third_direct_b_on_third"),
         pytest.param(RemedyThirdBThirdMidConsumer, RemedyRootBThird, [[117, 228, 339]], id="third_mid_b_on_third"),
+        pytest.param(RemedySecondBConsumer, MultiLinkRootBDistinct, [[18, 30, 42]], id="second_direct_b_on_second"),
     ],
 )
 def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_side_shares_a_framework(
@@ -1800,3 +1809,157 @@ def test_a_carrier_descending_from_the_b_side_is_correct(swap_link_sides: bool) 
     ).run()
 
     assert _side_path_values(results, SidePathCarrierFromB) == [[1001, 2002, 3003]]
+
+
+_B_SIDE_KEPT_SHAPES = [
+    pytest.param(Link.inner, False, id="inner_a_b"),
+    pytest.param(Link.inner, True, id="inner_b_a"),
+    pytest.param(Link.outer, False, id="outer_a_b"),
+    pytest.param(Link.outer, True, id="outer_b_a"),
+    pytest.param(Link.left, True, id="left_keeps_b"),
+    pytest.param(Link.right, False, id="right_keeps_b"),
+]
+
+
+def _remedy_second_b_run(
+    link_factory: Any, swap_link_sides: bool, mode: ParallelizationMode, flight_server: Any = None
+) -> list[list[int]]:
+    session = _side_path_prepare(
+        SidePathArrowP,
+        False,
+        swap_link_sides,
+        mode,
+        consumer=RemedySecondBConsumer,
+        features=[RemedySecondBConsumer.get_class_name()],
+        link_factory=link_factory,
+        **_REMEDY_KWARGS,
+    )
+    results = session.run(parallelization_modes={mode}, flight_server=flight_server)
+    return _side_path_values(results, RemedySecondBConsumer)
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+@pytest.mark.parametrize("link_factory, swap_link_sides", _B_SIDE_KEPT_SHAPES)
+def test_a_consumer_on_the_other_sides_framework_joins_both_members_when_the_join_keeps_the_other_side(
+    link_factory: Any, swap_link_sides: bool, mode: ParallelizationMode
+) -> None:
+    assert _remedy_second_b_run(link_factory, swap_link_sides, mode) == [[18, 30, 42]]
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_consumer_on_the_other_sides_framework_joins_both_members_with_multiprocessing(
+    flight_server: Any, swap_link_sides: bool
+) -> None:
+    values = _remedy_second_b_run(Link.inner, swap_link_sides, ParallelizationMode.MULTIPROCESSING, flight_server)
+
+    assert values == [[18, 30, 42]]
+
+
+@pytest.mark.parametrize(
+    "link_factory, swap_link_sides",
+    [pytest.param(Link.left, False, id="left_keeps_members"), pytest.param(Link.right, True, id="right_keeps_members")],
+)
+def test_a_join_keeping_the_member_side_of_two_members_on_different_frameworks_is_rejected(
+    link_factory: Any, swap_link_sides: bool
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=RemedySecondBConsumer,
+            features=[RemedySecondBConsumer.get_class_name()],
+            link_factory=link_factory,
+            **_REMEDY_KWARGS,
+        )
+
+    message = str(exc_info.value)
+    assert "members of one link side" in message
+    assert "MultiLinkRootA" in message
+    assert "RemedyRootA1" in message
+    assert "one member of the link side per consumer" in message
+    assert "reads both members directly" not in message
+
+
+class RemedyTwoNameConsumer(FeatureGroup):
+    """B-framework consumer serving a direct and a mid-reading feature name."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"remedy_two_direct", "remedy_two_mid"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        first = "mlg_a" if str(feature_name) == "remedy_two_direct" else "SidePathArrowP"
+        return {Feature(first), Feature("mlg_a1"), Feature("mlg_bd")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {SecondCfw}
+
+
+@pytest.mark.parametrize(
+    "names",
+    [("remedy_two_direct", "remedy_two_mid"), ("remedy_two_mid", "remedy_two_direct")],
+    ids=["direct_first", "mid_first"],
+)
+def test_one_consumer_block_reading_the_members_both_directly_and_through_a_feature_is_rejected(
+    names: tuple[str, str],
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            consumer=RemedyTwoNameConsumer,
+            features=list(names),
+            **{**_REMEDY_KWARGS, "extra_groups": {RemedyRootA1, RemedyTwoNameConsumer}},
+        )
+
+    assert "members of one link side" in str(exc_info.value)
+
+
+def test_a_consumer_on_the_other_sides_framework_with_a_row_three_layout_stays_infeasible() -> None:
+    with pytest.raises(ValueError, match="No compute framework assignment satisfies the hard rules") as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            consumer=RemedyArrowThirdBConsumer,
+            features=[RemedyArrowThirdBConsumer.get_class_name()],
+            **{**_REMEDY_KWARGS, "root_b": RemedyRootBThird},
+        )
+
+    message = str(exc_info.value)
+    assert "join inner" in message
+    assert "members of one link side" not in message
+
+
+class RemedyRootASibling(MultiLinkRootA):
+    """Root A variant on A's own framework."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"mlg_a2"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mlg_a2": [4, 5, 6], "mlg_idx": ["x", "y", "z"]}
+
+
+RemedyArrowSiblingConsumer = _remedy_sum_consumer(
+    "RemedyArrowSiblingConsumer", PyArrowTable, ("mlg_a", "mlg_a2", "mlg_bd")
+)
+
+
+def test_two_members_of_one_link_side_on_one_framework_over_one_base_link_are_ambiguous() -> None:
+    with pytest.raises(ValueError, match="There are more than one solution for the join"):
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            consumer=RemedyArrowSiblingConsumer,
+            features=[RemedyArrowSiblingConsumer.get_class_name()],
+            **{**_REMEDY_KWARGS, "extra_groups": {RemedyRootASibling}},
+        )

@@ -191,7 +191,6 @@ _SEQUENCES = [
 
 @pytest.mark.parametrize("pairs", _SEQUENCES)
 def test_tokens_stay_within_sharing_joins_and_reach_all_of_them_through_cross_joins(pairs: list[_FwPair]) -> None:
-    """Guard: holds before and after the open-set change."""
     coll = JoinStepCollection()
     steps = [_fw_step(destination, source) for destination, source in pairs]
     for step in steps:

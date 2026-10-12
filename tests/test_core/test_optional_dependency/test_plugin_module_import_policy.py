@@ -342,7 +342,7 @@ def _call_import_target(call: ast.Call, aliases: set[str]) -> ImportTarget | Non
 
 
 def unconditional_import_targets(tree: ast.Module, package: str) -> frozenset[ImportTarget]:
-    aliases = _dynamic_import_aliases(tree)
+    aliases = _dynamic_import_aliases(ast.walk(tree))
     targets: set[ImportTarget] = set()
 
     for node in _unconditional_statements(tree.body):
@@ -361,7 +361,7 @@ def unconditional_import_targets(tree: ast.Module, package: str) -> frozenset[Im
 
 
 def reachable_import_targets(tree: ast.Module, package: str) -> frozenset[ImportTarget]:
-    aliases = _dynamic_import_aliases(tree)
+    aliases = _dynamic_import_aliases(ast.walk(tree))
     targets: set[ImportTarget] = set()
 
     stack: list[ast.AST] = [tree]

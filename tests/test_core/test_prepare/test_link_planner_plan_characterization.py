@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import Any, Callable, NamedTuple
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pyarrow as pa
 import pytest
@@ -703,3 +703,43 @@ def test_fresh_interpreters_plan_the_same_link_orientation() -> None:
     assert len(outputs) == _PROBE_PROCESSES, f"expected {_PROBE_PROCESSES} probe results, got {len(outputs)}"
     for position, output in enumerate(outputs):
         assert output == _PROBE_EXPECTED, f"probe {position} planned {output}, expected {_PROBE_EXPECTED}"
+
+
+def test_find_feature_uuids_unions_every_feature_set_holding_a_parent() -> None:
+    a, b, c = uuid4(), uuid4(), uuid4()
+    plan = ExecutionPlan()
+    plan.feature_set_collections = [{a, b}, {a, c}]
+
+    found = plan.find_feature_uuids({a})
+    found[a].add(uuid4())
+
+    assert plan.find_feature_uuids({a}) == {a: {a, b, c}}
+    assert plan.feature_set_collections == [{a, b}, {a, c}]
+
+
+def test_feature_set_index_lists_holding_positions_in_ascending_order() -> None:
+    a, b, c = uuid4(), uuid4(), uuid4()
+    plan = ExecutionPlan()
+    plan.feature_set_collections = [{a, b}, {a, c}]
+
+    assert plan._feature_set_index() == {a: [0, 1], b: [0], c: [1]}
+
+
+def test_feature_set_index_follows_every_way_the_list_changes() -> None:
+    a, b, c, d = uuid4(), uuid4(), uuid4(), uuid4()
+    plan = ExecutionPlan()
+    plan.feature_set_collections = [{a, b}]
+    assert plan._feature_set_index() == {a: [0], b: [0]}
+
+    plan.feature_set_collections = [{a}, {a, c}]
+    assert plan._feature_set_index() == {a: [0, 1], c: [1]}
+    assert plan.find_feature_uuids({c}) == {c: {a, c}}
+
+    plan.feature_set_collections.insert(0, {c, d})
+    assert plan._feature_set_index() == {a: [1, 2], c: [0, 2], d: [0]}
+    assert plan.find_feature_uuids({d}) == {d: {c, d}}
+
+    plan._append_feature_set({a, d})
+    assert plan._feature_set_index() == {a: [1, 2, 3], c: [0, 2], d: [0, 3]}
+    assert plan.find_feature_uuids({d}) == {d: {a, c, d}}
+    assert plan._feature_set_index()[a][-1] == 3

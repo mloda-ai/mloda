@@ -434,6 +434,27 @@ def test_raise_on_step_cycle_rejects_a_cycle_running_through_a_feature_group_ste
         ExecutionPlan().raise_on_step_cycle(steps)
 
 
+def test_raise_on_step_cycle_rejects_a_step_waiting_on_its_own_token() -> None:
+    join_step = JoinStep(_token_link(), PyArrowTable, PandasDataFrame, set(), set(), set())
+    join_step.required_uuids.add(join_step.uuid)
+
+    with pytest.raises(ValueError, match="(?i)cycl"):
+        ExecutionPlan().raise_on_step_cycle([join_step])
+
+
+def test_raise_on_step_cycle_accepts_a_waiter_on_several_tokens_one_other_step_produces() -> None:
+    first = feature("token_multi_first", PyArrowTable)
+    second = feature("token_multi_second", PyArrowTable)
+    feature_set = FeatureSet()
+    feature_set.add(first)
+    feature_set.add(second)
+    producer = FeatureGroupStep(TokenChild, feature_set, set(), PyArrowTable)
+    waiter = JoinStep(_token_link(), PyArrowTable, PandasDataFrame, {first.uuid, second.uuid}, set(), set())
+    steps: list[Step] = [waiter, producer]
+
+    ExecutionPlan().raise_on_step_cycle(steps)
+
+
 def test_raise_on_step_cycle_accepts_a_token_no_step_of_the_plan_produces() -> None:
     """The runtime already raises for an unproduced token; a missing producer is not a cycle."""
     steps: list[Step] = [JoinStep(_token_link(), PyArrowTable, PandasDataFrame, {uuid4()}, set(), set())]

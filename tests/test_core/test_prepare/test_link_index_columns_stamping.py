@@ -212,5 +212,33 @@ def test_transitive_ancestor_of_join_member_gets_stamped() -> None:
     assert unrelated_step.features.link_index_columns == frozenset()
 
 
+def test_every_step_holding_a_join_members_uuid_gets_stamped() -> None:
+    """The same feature object sits in two feature sets, so both steps hold the member uuid."""
+    left_payload = _feature("link_stamp_left_payload", PyArrowTable)
+    first_holder = _fg_step(LinkStampLeftFG, [left_payload], PyArrowTable)
+    second_holder = _fg_step(LinkStampUnrelatedFG, [left_payload], PyArrowTable)
+
+    right_payload = _feature("link_stamp_right_payload", PandasDataFrame)
+    right_step = _fg_step(LinkStampRightFG, [right_payload], PandasDataFrame)
+
+    link = Link.inner(JoinSpec(LinkStampLeftFG, LEFT_INDEX), JoinSpec(LinkStampRightFG, RIGHT_INDEX))
+    join_step = JoinStep(
+        link=link,
+        destination_framework=PyArrowTable,
+        source_framework=PandasDataFrame,
+        required_uuids={left_payload.uuid, right_payload.uuid},
+        destination_framework_uuids={left_payload.uuid},
+        source_framework_uuids={right_payload.uuid},
+    )
+
+    steps: list[JoinStep | FeatureGroupStep] = [first_holder, second_holder, right_step, join_step]
+
+    ExecutionPlan()._stamp_link_index_columns(steps, {})
+
+    expected = frozenset({LEFT_INDEX_COLUMN, RIGHT_INDEX_COLUMN})
+    assert first_holder.features.link_index_columns == expected
+    assert second_holder.features.link_index_columns == expected
+
+
 def test_link_index_columns_defaults_to_empty_frozenset() -> None:
     assert FeatureSet().link_index_columns == frozenset()

@@ -23,6 +23,7 @@ from mloda.user import Feature
 from mloda.user import GlobalFilter
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
+from mloda.user import RunResult
 from mloda.user import mloda
 
 import logging
@@ -79,7 +80,7 @@ def records_from_frame(data: Any) -> list[dict[str, Any]]:
 class PolicySuccess:
     """run_all returns results; ``assert_result`` is called on them."""
 
-    assert_result: Callable[[list[Any]], None]
+    assert_result: Callable[[RunResult], None]
 
 
 @dataclass(frozen=True)
@@ -135,7 +136,7 @@ class PolicyRunAllTestBase(ABC):
         mode: ParallelizationMode,
         flight_server: Any,
         global_filter: GlobalFilter | None = None,
-    ) -> list[Any] | None:
+    ) -> RunResult | None:
         names = [feature_name] if isinstance(feature_name, str) else list(feature_name)
         features, dac = self._features_and_dac(names)
 

@@ -206,6 +206,11 @@ class ComputeFramework(ABC):
         return None
 
     @classmethod
+    def result_framework(cls) -> type["ComputeFramework"]:
+        """The framework whose data type select_data_by_column_names returns; one that materializes there overrides it."""
+        return cls
+
+    @classmethod
     def filter_engine(cls) -> type[BaseFilterEngine]:
         """
         This function should return the filtered data.

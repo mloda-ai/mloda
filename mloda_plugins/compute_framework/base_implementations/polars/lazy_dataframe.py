@@ -4,7 +4,7 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.user import FeatureName
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
-from mloda.provider import BaseMergeEngine, BaseMaskEngine
+from mloda.provider import BaseMergeEngine, BaseMaskEngine, ComputeFramework
 from mloda_plugins.compute_framework.base_implementations.polars.polars_lazy_merge_engine import PolarsLazyMergeEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_expr_mask_engine import (
     PolarsExprMaskEngine,
@@ -27,6 +27,10 @@ class PolarsLazyDataFrame(PolarsDataFrame):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return cls.pl_lazy_frame()
+
+    @classmethod
+    def result_framework(cls) -> type[ComputeFramework]:
+        return PolarsDataFrame
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

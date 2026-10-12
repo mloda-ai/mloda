@@ -67,6 +67,12 @@ class SqliteFramework(ComputeFramework):
         return SqliteRelation
 
     @classmethod
+    def result_framework(cls) -> type[ComputeFramework]:
+        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+
+        return PyArrowTable
+
+    @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:
         return SqliteMergeEngine
 

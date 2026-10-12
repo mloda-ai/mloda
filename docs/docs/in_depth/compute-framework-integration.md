@@ -324,7 +324,7 @@ The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `Sq
 
 A requested feature computed on DuckDB or SQLite comes back as a `pa.Table`, fetched in full when the result is selected. With `output_framework=DuckDBFramework` or `output_framework=SqliteFramework`, a step that ran on that framework returns the relation it computed, on the connection the step used. It is lazy (every read runs the query again), it needs that connection to stay open, and on SQLite it leaves one temporary view on that connection. A result converted from another framework is loaded as a new relation onto the matching connection in the DataAccessCollection.
 
-Framework authors: `select_native_data_by_column_names` is the hook that returns the selection in the framework's own type; the default delegates to `select_data_by_column_names`.
+Framework authors: `select_native_data_by_column_names` is the hook that returns the selection in the framework's own type; the default delegates to `select_data_by_column_names`. A framework whose `select_data_by_column_names` returns another framework's data type overrides `result_framework()` to name that framework; the two move together (a subclass that changes one changes the other).
 
 ### Reading column types
 

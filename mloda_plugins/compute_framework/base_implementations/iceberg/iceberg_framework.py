@@ -11,6 +11,7 @@ from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_filter
     scan_columns,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import (
+    PyArrowTable,
     arrow_append_columns,
     arrow_schema_field_type,
     arrow_schema_output_schema,
@@ -116,6 +117,10 @@ class IcebergFramework(ComputeFramework):
         if IcebergTable is None:
             raise ImportError("PyIceberg is not installed. To use this framework, please install pyiceberg.")
         return IcebergTable
+
+    @classmethod
+    def result_framework(cls) -> type[ComputeFramework]:
+        return PyArrowTable
 
     @classmethod
     def merge_engine(cls) -> type[BaseMergeEngine]:

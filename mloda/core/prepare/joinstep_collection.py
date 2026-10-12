@@ -18,13 +18,14 @@ class JoinStepCollection:
 
     def add(self, join_step: JoinStep) -> None:
         destination, source = join_step.destination_framework, join_step.source_framework
-        self.collection[join_step] = self.similar_dependent_joins_uuids(destination, source)
-        # A cross-framework join waits on everything open, so it replaces the open set; a same-framework
-        # join never carries these tokens, so it only adds itself.
+        # Only a cross-framework join reads its tokens and replaces the open set; a same-framework
+        # join stores none and only adds itself.
         if destination != source:
+            self.collection[join_step] = self.similar_dependent_joins_uuids(destination, source)
             self._open[destination] = {join_step.uuid}
             self._open[source] = {join_step.uuid}
         else:
+            self.collection[join_step] = set()
             self._open[destination].add(join_step.uuid)
 
     def joins_by_destination_owner(
@@ -36,7 +37,7 @@ class JoinStepCollection:
         for step in self.collection:
             for key in {owner.get(u, u) for u in step.destination_framework_uuids}:
                 index[key].append(step)
-        return index
+        return dict(index)
 
     def earlier_joins_sharing_destination(
         self,

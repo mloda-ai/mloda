@@ -115,29 +115,36 @@ def _add_three(
 
 
 @pytest.mark.parametrize(
-    "build, third_waits_on_first",
+    "build, expected",
     [
-        pytest.param(lambda: _fw_step(PyArrowTable, PandasDataFrame), False, id="overlapping_frameworks"),
-        pytest.param(lambda: _fw_step(PyArrowTable, PyArrowTable), True, id="same_destination_and_source"),
+        pytest.param(
+            lambda: _fw_step(PyArrowTable, PandasDataFrame),
+            lambda a, b: (set(), {a}, {b}),
+            id="overlapping_frameworks",
+        ),
+        pytest.param(
+            lambda: _fw_step(PyArrowTable, PyArrowTable),
+            lambda a, b: (set(), set(), set()),
+            id="same_destination_and_source",
+        ),
     ],
 )
 def test_each_join_waits_on_its_open_joins_with_distinct_sets(
-    build: Callable[[], JoinStep], third_waits_on_first: bool
+    build: Callable[[], JoinStep],
+    expected: Callable[[UUID, UUID], tuple[set[UUID], set[UUID], set[UUID]]],
 ) -> None:
     first, second, third = build(), build(), build()
 
     coll, first_set, second_set, third_set = _add_three(first, second, third)
 
-    assert first_set == set()
-    assert second_set == {first.uuid}
-    assert third_set == ({first.uuid, second.uuid} if third_waits_on_first else {second.uuid})
+    assert (first_set, second_set, third_set) == expected(first.uuid, second.uuid)
     for step in (first, second, third):
         assert step.uuid not in coll.get_required_join_uuids(step)
     assert first_set is not second_set
     assert second_set is not third_set
     assert first_set is not third_set
     assert coll.get_required_join_uuids(first) == set()
-    assert coll.get_required_join_uuids(second) == {first.uuid}
+    assert coll.get_required_join_uuids(second) == expected(first.uuid, second.uuid)[1]
 
 
 def test_a_join_on_untouched_frameworks_waits_on_nothing() -> None:
@@ -251,7 +258,7 @@ def test_fifty_cross_framework_joins_each_carry_one_token() -> None:
         assert coll.get_required_join_uuids(step) == {previous.uuid}
 
 
-def test_destination_index_gives_the_same_answer_as_the_scan() -> None:
+def test_destination_index_gives_the_same_answer_as_a_brute_force_comparison() -> None:
     coll = JoinStepCollection()
     link = _link()
     feature_one, feature_two, owner_step, raw = uuid4(), uuid4(), uuid4(), uuid4()
@@ -267,10 +274,14 @@ def test_destination_index_gives_the_same_answer_as_the_scan() -> None:
 
     index = coll.joins_by_destination_owner(owner)
 
-    for step in [*steps, _step(link, {feature_two})]:
-        assert coll.earlier_joins_sharing_destination(step, owner, index) == coll.earlier_joins_sharing_destination(
-            step, owner
-        )
+    def owners(step: JoinStep) -> set[UUID]:
+        return {owner.get(u, u) for u in step.destination_framework_uuids}
+
+    never_added = _step(link, {feature_two})
+    for position, step in enumerate([*steps, never_added]):
+        expected = {earlier.uuid for earlier in steps[:position] if owners(earlier) & owners(step)}
+        assert coll.earlier_joins_sharing_destination(step, owner, index) == expected
+    assert type(index) is dict
     assert coll.earlier_joins_sharing_destination(second, owner, index) == {first.uuid}
     assert coll.earlier_joins_sharing_destination(fourth, owner, index) == {third.uuid}
     assert index[owner_step] == [first, second]

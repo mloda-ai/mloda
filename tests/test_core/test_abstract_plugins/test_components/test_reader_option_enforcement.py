@@ -33,8 +33,10 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 
 ROE_FEATURE_NAME = "roe_enforced_column"
 ROE_CONTEXT_REMEDY = (
-    "; pass it in Options(context=...), and for an input feature, such as the child of a chained name, "
-    "list it in the consumer's propagate_context_keys"
+    "; pass it in Options(context=...); for a direct input of a feature you construct, "
+    "list it in that feature's propagate_context_keys (the push is one hop); "
+    "for an input further down a chained name, pass it in Options(group=...) instead, "
+    "which is forwarded down the chain by default"
 )
 
 ROE_STRICT_ACCESS = "roe_strict_access"

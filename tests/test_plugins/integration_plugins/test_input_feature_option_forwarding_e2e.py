@@ -23,7 +23,9 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import pandas as pd
+import pytest
 
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
 from mloda.provider import DataCreator
@@ -200,6 +202,32 @@ class ForwardingE2EChainedGroup(FeatureChainParserMixin, FeatureGroup):
         return data
 
 
+REQ_ROOT_NAME = "forwarding_e2e_579_req_root"
+REQ_ROOT_KEY = "forwarding_e2e_579_req_key"
+
+
+class ForwardingE2EReqRootGroup(FeatureGroup):
+    """Chain root declaring a required context key with no default; records the value it receives."""
+
+    PROPERTY_MAPPING = {REQ_ROOT_KEY: PropertySpec("Required root option", context=True)}
+
+    received: ClassVar[list[Any]] = []
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({REQ_ROOT_NAME})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        value = features.get_options_key(REQ_ROOT_KEY)
+        cls.received.append(value)
+        return pd.DataFrame({REQ_ROOT_NAME: [10, 20, 30] if value == "premium" else [1, 2, 3]})
+
+
 def _frame_with_column(results: list[Any], column: str) -> Any:
     for frame in results:
         if column in frame.columns:
@@ -334,6 +362,27 @@ class TestInputFeatureOptionForwardingE2E:
         upstream = ForwardingE2ESourceGroup.seen_options[0]
         assert upstream["group"].get("passthrough_marker") == "carried"
         assert DefaultOptionKeys.in_features not in upstream["group"]
+
+    def test_group_option_satisfies_required_context_key_at_chain_root(self) -> None:
+        """A group option on the top of a three-level chain satisfies the root's required context key."""
+        ForwardingE2EReqRootGroup.received = []
+
+        chained_name = f"{REQ_ROOT_NAME}__double_e2echain579fwd__double_e2echain579fwd"
+        chained = Feature(chained_name, options=Options(group={REQ_ROOT_KEY: "premium"}))
+        results = _run([chained], {ForwardingE2EReqRootGroup, ForwardingE2EChainedGroup})
+
+        frame = _frame_with_column(results, chained_name)
+        assert frame[chained_name].tolist() == [40, 80, 120]
+        assert ForwardingE2EReqRootGroup.received == ["premium"]
+
+    def test_missing_required_context_key_at_chain_root_fails_to_resolve(self) -> None:
+        """Without the key the three-level chain cannot resolve and the error names the missing key."""
+        ForwardingE2EReqRootGroup.received = []
+
+        chained_name = f"{REQ_ROOT_NAME}__double_e2echain579fwd__double_e2echain579fwd"
+        with pytest.raises(FeatureResolutionError, match=REQ_ROOT_KEY):
+            _run([Feature(chained_name)], {ForwardingE2EReqRootGroup, ForwardingE2EChainedGroup})
+        assert ForwardingE2EReqRootGroup.received == []
 
     def test_excluding_consumers_share_single_upstream_computation(self) -> None:
         """Consumers differing only in the excluded top_k share one upstream run: the

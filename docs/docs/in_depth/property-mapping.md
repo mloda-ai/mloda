@@ -130,7 +130,7 @@ differently because they consume values at different moments.
 | Surface | Declared on | What the framework does with it |
 | --- | --- | --- |
 | `PROPERTY_MAPPING` | a `FeatureGroup` | Enforces it and applies it: value validation (`allowed_values`, `element_validator`), presence and `required_when`, and materialization of declared defaults into `Options`. |
-| `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. An absent-required reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name a group option). Defaults are never materialized; only the reader's own code applies them. |
+| `READER_OPTIONS` | a `BaseInputData` reader | Enforces it at reader selection: presence, `required_when` and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. An absent-required reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name the requested feature's `cascade_context_keys`, or a group option). Defaults are never materialized; only the reader's own code applies them. |
 
 Both surfaces run the same per-key validator, and the reader's MRO merge goes through the shared
 helper module (`mloda/core/abstract_plugins/components/declaration_surface.py`).
@@ -799,8 +799,9 @@ Options(
   inputs are resolved once. Declare the same `cascade_context_keys` on every request
   reaching it, and list the cascading request first when `Feature` objects are shared.
   A shared root feature is exempt.
-- Two requests of one input that differ in compute framework resolve their inputs separately and
-  fail at plan time (read "from two steps" that "differ in options"); declare the same keys on both.
+- Two requests of one input that differ in compute framework resolve their inputs separately.
+  When only one of them cascades a key, the plan fails with an error that the input is read
+  from two steps whose options differ. Declare the same `cascade_context_keys` on both.
 - The value sits in the options of every input down the chain, so every feature group
   there sees it, and it is pickled to MULTIPROCESSING workers.
 - The pull `inherit_context_keys` stays one hop.

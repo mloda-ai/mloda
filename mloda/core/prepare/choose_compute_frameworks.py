@@ -536,11 +536,18 @@ class ChooseComputeFrameworks:
     ) -> list[_Rule]:
         """Members of one link side differ in framework only if both joins merge into the other side's frame."""
         direct: dict[tuple[UUID, UUID, int], bool] = {}
-        for link, left_uuid, right_uuid, child_uuid in self.occurrences:
-            above_child = self._reach(child_uuid, parents)
-            for pos, side in enumerate((left_uuid, right_uuid)):
-                key = (child_uuid, link.uuid, pos)
-                direct[key] = direct.get(key, True) and not self._reach(side, children) & above_child
+
+        def reads_directly(child_uuid: UUID, link_uuid: UUID, pos: int) -> bool:
+            key = (child_uuid, link_uuid, pos)
+            if key not in direct:
+                direct[key] = True
+                for link, left_uuid, right_uuid, occ_child in self.occurrences:
+                    if occ_child == child_uuid and link.uuid == link_uuid:
+                        side = (left_uuid, right_uuid)[pos]
+                        if self._reach(side, children) & self._reach(child_uuid, parents):
+                            direct[key] = False
+            return direct[key]
+
         rules: dict[tuple[object, ...], _Rule] = {}
         for occurrences in by_child.values():
             joinable = [(k, j) for k, j in occurrences if k.jointype not in (JoinType.APPEND, JoinType.UNION)]
@@ -551,19 +558,31 @@ class ChooseComputeFrameworks:
                     members = sorted({j[pos] for j in found}, key=lambda b: (blocks[b].fg.__name__, b))
                     others = tuple(sorted({j[1 - pos] for j in found}))
                     consumer = found[0][2]
-                    keeps = jointype is (JoinType.LEFT, JoinType.RIGHT)[pos]
-                    reads_directly = all(direct.get((f.uuid, link_uuid, pos), True) for f in blocks[consumer].features)
-                    relaxed = reads_directly and not keeps
+                    offers = (
+                        jointype in (JoinType.INNER, JoinType.OUTER)
+                        or jointype
+                        is (
+                            JoinType.LEFT,
+                            JoinType.RIGHT,
+                        )[1 - pos]
+                    )
+                    relaxed: bool | None = None
                     for a, b in combinations(members, 2):
                         if blocks[a].fg is blocks[b].fg:
                             continue
+                        if relaxed is None:
+                            relaxed = (
+                                offers
+                                and len(others) == 1
+                                and all(reads_directly(f.uuid, link_uuid, pos) for f in blocks[consumer].features)
+                            )
                         name = blocks[consumer].fg.__name__
                         why = (
                             f"{name} joins {blocks[a].fg.__name__} and {blocks[b].fg.__name__}, members of one link "
                             "side, which can run on different frameworks only when both joins merge into the other "
                             "link side's frame: the other link side runs on one member's framework"
                         )
-                        if not keeps:
+                        if offers:
                             why += (
                                 f", or {name} reads both members directly and runs on the other link side's framework"
                             )

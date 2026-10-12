@@ -329,11 +329,12 @@ A base class and its subclass can both match one side of a link, for example a c
 | Members | Other side | Consumer | Result |
 | --- | --- | --- | --- |
 | On different frameworks | On one member's framework | On that framework | Planned |
-| On different frameworks | On a framework no member uses | On the other side's framework, reading both members directly | Planned for inner and outer joins, and for a left or right join that keeps the other side |
+| On different frameworks | On one member's framework | On another framework | Rejected: the consumer must run where that same-framework join runs |
+| On different frameworks | One feature group, on a framework no member uses | On the other side's framework, reading both members directly | Planned for inner and outer joins, and for a left or right join that keeps the other side |
 | On different frameworks | On a framework no member uses | On a member's framework, or reading a member through a feature in between | Rejected: read one member of the link side per consumer |
-| On one framework | Any | Any | Not supported over one base-class link: the join is ambiguous |
+| On one framework | Any | Any | Not supported over one base-class link: the join is ambiguous, and some layouts lose one member's column instead of raising |
 
-Known limits: with a left or right join that keeps the member side, rows can be lost when the members hold different keys. In `THREADING` mode the first layout, and several consumers of such a link, can fail intermittently with a missing column.
+Known limits of the layouts that are planned: in the first row, a left or right join that keeps the member side can return wrong rows when the members hold different keys. In `THREADING` mode the first row, and several consumers of one such link in either planned row, can fail intermittently with a missing column.
 
 #### mlodaAPI
 

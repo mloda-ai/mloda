@@ -443,7 +443,7 @@ class DeclMismatchFG1648(_DeclBaseFG1648):
     """Declares unit 'mm'."""
 
     MATCHES = frozenset({DECL_MISMATCH_FEATURE})
-    DECLARED = {"unit": "mm"}
+    DECLARED = {"unit": "mm", "ratio": float("nan")}
 
 
 class DeclSatisfiedFG1648(_DeclBaseFG1648):
@@ -893,6 +893,16 @@ class TestDeclarationRequirements:
         assert "'unit'" in elimination.reason
         assert "'m'" in elimination.reason
         assert "'mm'" in elimination.reason
+
+    def test_non_finite_declared_value_counts_as_no_such_key(self) -> None:
+        feature = _requiring(Feature(DECL_MISMATCH_FEATURE), {"ratio": None})
+        plugins: FeatureGroupEnvironmentMapping = {DeclMismatchFG1648: {ElimFwOne011}}
+
+        err = _fail(feature, plugins)
+
+        elimination = err.result.eliminations[DeclMismatchFG1648]
+        assert elimination.stage == "declarations"
+        assert "no such key" in elimination.reason
 
     def test_satisfied_requirement_resolves_without_elimination(self) -> None:
         feature = _requiring(Feature(DECL_SATISFIED_FEATURE), {"scale": None, "unit": "m"})

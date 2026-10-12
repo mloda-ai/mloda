@@ -534,10 +534,33 @@ class TestHookContextResultAttributes:
 
         with context.activate():
             HookContext.publish_result_attributes(
-                {"s": "x", "i": 1, "f": 0.5, "b": False, "l": [1], "d": {"k": 1}, "n": None, "by": b"x"}
+                {
+                    "s": "x",
+                    "i": 1,
+                    "f": 0.5,
+                    "b": False,
+                    "l": [1],
+                    "d": {"k": 1},
+                    "n": None,
+                    "by": b"x",
+                    "nan": float("nan"),
+                    "inf": float("inf"),
+                    "ninf": float("-inf"),
+                    "big": 2**63,
+                    "small": -(2**63) - 1,
+                    "max": 2**63 - 1,
+                    "min": -(2**63),
+                }
             )
 
-        assert context.result_attributes == {"s": "x", "i": 1, "f": 0.5, "b": False}
+        assert context.result_attributes == {
+            "s": "x",
+            "i": 1,
+            "f": 0.5,
+            "b": False,
+            "max": 2**63 - 1,
+            "min": -(2**63),
+        }
 
     def test_instrument_resets_result_attributes_per_call(self) -> None:
         context = _make_context()

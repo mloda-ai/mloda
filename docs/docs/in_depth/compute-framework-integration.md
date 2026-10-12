@@ -320,6 +320,10 @@ A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these framew
 
 The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `SqliteRelation`) inside `calculate_feature`. Both share the same helper surface so a feature group can be written once against either.
 
+### Result type
+
+A requested feature computed on DuckDB or SQLite comes back as a `pa.Table`: the relation is fetched in full when the result is selected, so the result does not depend on the connection. `output_framework=DuckDBFramework` or `output_framework=SqliteFramework` returns a relation instead: a new one, loaded from that table onto the matching connection in the DataAccessCollection, not the relation the run computed on.
+
 ### Reading column types
 
 The `.types` property returns column types aligned with `.columns`. The element type differs by backend:

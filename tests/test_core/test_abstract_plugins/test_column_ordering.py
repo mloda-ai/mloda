@@ -325,6 +325,22 @@ class TestComputeFrameworksColumnOrdering:
         result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
         assert result.column_names == ["A", "M", "Z"]
 
+    def test_sqlite_accepts_column_ordering(self) -> None:
+        import sqlite3
+
+        from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
+        from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+
+        conn = sqlite3.connect(":memory:")
+        cfw = SqliteFramework(ParallelizationMode.SYNC, frozenset(), uuid4())
+        cfw.set_framework_connection_object(conn)
+        data = SqliteRelation.from_arrow(conn, pa.table({"Z": [1], "A": [2], "M": [3]}))
+        features = [FeatureName("Z"), FeatureName("A"), FeatureName("M")]
+        result = cfw.select_data_by_column_names(data, features, column_ordering="alphabetical")
+        assert isinstance(result, pa.Table)
+        assert result.column_names == ["A", "M", "Z"]
+        conn.close()
+
     def test_python_dict_accepts_column_ordering(self) -> None:
         cfw = PythonDictFramework(ParallelizationMode.SYNC, frozenset(), uuid4())
         # PythonDictFramework expects a columnar dict format

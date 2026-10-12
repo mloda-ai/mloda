@@ -234,7 +234,7 @@ result = mloda.run_all(
     [feature],
     data_access_collection=data_access_collection
 )
-result[0]  # Returns duckdb.DuckDBPyRelation
+result[0]  # Returns pyarrow.Table
 ```
 
 **Note**: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.

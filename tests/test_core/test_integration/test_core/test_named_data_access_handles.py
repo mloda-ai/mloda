@@ -13,6 +13,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 from mloda.provider import (
@@ -214,7 +215,8 @@ class TestNamedDataAccessHandlesIntegration:
             plugin_collector=plugin_collector,
             parallelization_modes={ParallelizationMode.SYNC},
         )
-        doubled = result[0].df()["doubled_value"].tolist()
+        assert isinstance(result[0], pa.Table)
+        doubled = result[0].column("doubled_value").to_pylist()
         assert doubled == [20, 40, 60, 80, 100]
         conn.close()
 

@@ -375,6 +375,20 @@ def _duckdb_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
     return cfw, connection
 
 
+def _sqlite_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
+    import sqlite3
+
+    from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
+    from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+
+    connection = sqlite3.connect(":memory:")
+    _OPEN_CONNECTIONS.append(connection)
+    cfw = SqliteFramework()
+    cfw.set_framework_connection_object(connection)
+    cfw.data = SqliteRelation.from_arrow(connection, arrow)
+    return cfw, connection
+
+
 def _polars_lazy_run_framework(arrow: pa.Table) -> tuple[Any, Any]:
     pl = pytest.importorskip("polars")
     from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
@@ -447,6 +461,9 @@ class TestDataLifecycleManagerOutputFramework:
             (_duckdb_run_framework, PyArrowTable),
             (_duckdb_run_framework, PandasDataFrame),
             (_duckdb_run_framework, None),
+            (_sqlite_run_framework, PyArrowTable),
+            (_sqlite_run_framework, PandasDataFrame),
+            (_sqlite_run_framework, None),
             (_polars_lazy_run_framework, PandasDataFrame),
             (_polars_lazy_run_framework, PyArrowTable),
             (_polars_lazy_run_framework, None),
@@ -463,6 +480,32 @@ class TestDataLifecycleManagerOutputFramework:
         result = manager.get_result_data(cfw, [FeatureName("feature1")])
 
         assert isinstance(result, output.expected_data_framework())
+
+    def test_a_relation_output_is_a_new_relation_on_the_output_connection(self) -> None:
+        import sqlite3
+
+        from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
+        from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+
+        cfw, _ = _sqlite_run_framework(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
+        output_connection = sqlite3.connect(":memory:")
+        _OPEN_CONNECTIONS.append(output_connection)
+        manager = DataLifecycleManager(output_framework=SqliteFramework, output_connection=output_connection)
+
+        result = manager.get_result_data(cfw, [FeatureName("feature1")])
+
+        assert isinstance(result, SqliteRelation)
+        assert result.connection is output_connection
+        assert result.to_arrow_table()["feature1"].to_pylist() == [1, 2]
+
+    @pytest.mark.parametrize("make_run_framework", [_duckdb_run_framework, _sqlite_run_framework])
+    def test_a_sql_run_without_an_output_framework_is_materialized(self, make_run_framework: Any) -> None:
+        cfw, _ = make_run_framework(pa.table({"feature1": [1, 2], "feature2": [3, 4]}))
+
+        result = DataLifecycleManager().get_result_data(cfw, [FeatureName("feature1")])
+
+        assert isinstance(result, pa.Table)
+        assert result.column_names == ["feature1"]
 
 
 class TestDataLifecycleManagerGetResults:

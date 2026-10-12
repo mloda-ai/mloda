@@ -13,6 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -40,6 +41,42 @@ class _LoadCapture(Extender):
         if context is not None:
             self.contexts.append(context)
         return result
+
+
+class _MatchCapture(Extender):
+    def __init__(self) -> None:
+        self.priority = 100
+        self.contexts: list[HookContext] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_MATCH}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        assert context is not None
+        self.contexts.append(context)
+        return func(*args, **kwargs)
+
+
+class _MatchRefuseAll(Extender):
+    def __init__(self) -> None:
+        self.priority = 100
+        self.name = "mixin_match_gate"
+        self.never_fall_back = True
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_MATCH}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        raise PermissionError("no clearance")
+
+
+def _spy(name: str, original: Any, touched: list[str]) -> Any:
+    def spy(klass: Any, *args: Any, **kwargs: Any) -> Any:
+        touched.append(name)
+        return original(*args, **kwargs)
+
+    return classmethod(spy)
 
 
 class FormatFeatureGroupTestMixin:
@@ -181,6 +218,35 @@ class FormatFeatureGroupTestMixin:
         assert context.reader_class is self.feature_group_class
         assert context.data_access_identity == self.expected_source
         assert context.data_access_loader in self.load_loader_names
+
+    def test_a_refusing_input_data_match_gate_keeps_the_source_untouched_and_reports_the_reason(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        touched: list[str] = []
+        for name in ("find_sources", "columns", "has_column"):
+            monkeypatch.setattr(
+                self.feature_group_class, name, _spy(name, getattr(self.feature_group_class, name), touched)
+            )
+
+        with reader_probe_scope(ReaderProbeScope(_MatchRefuseAll(), None, None, None, None)):
+            result = self._evaluate(Feature(self.present_column), self.own_dac())
+
+        assert touched == []
+        assert self.feature_group_class not in result.identified
+        reason = result.eliminations[self.feature_group_class].reason
+        assert "refused at INPUT_DATA_MATCH" in reason
+        assert "no clearance" in reason
+
+    def test_fires_input_data_match_naming_the_group_class_and_format(self) -> None:
+        capture = _MatchCapture()
+
+        with reader_probe_scope(ReaderProbeScope(capture, None, None, None, None)):
+            assert self._claims(Feature(self.present_column), self.own_dac())
+
+        contexts = [c for c in capture.contexts if c.reader_class is self.feature_group_class]
+        assert contexts
+        assert all(c.hook is ExtenderHook.INPUT_DATA_MATCH for c in contexts)
+        assert all(c.data_access_format == self.feature_group_class.data_access_name() for c in contexts)
 
     def test_claims_via_feature_group_scope(self) -> None:
         feature = self._feature(self.present_column, feature_group=self.feature_group_class)

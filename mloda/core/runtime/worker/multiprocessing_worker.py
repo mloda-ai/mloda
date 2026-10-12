@@ -64,12 +64,17 @@ def _close_extenders(cfw: ComputeFramework, context: CloseContext) -> None:
 
     Activates one shared CloseContext, exposed via ``CloseContext.current()``, for every close() call.
     """
+    pending: BaseException | None = None
     with context.activate():
         for extender in getattr(cfw, "function_extender", None) or ():
             try:
                 extender.close()
-            except Exception as e:
+            except BaseException as e:
                 logger.error("Extender %s.close() %s", extender.__class__.__name__, contained_raise_reason(e))
+                if not isinstance(e, Exception) and pending is None:
+                    pending = e
+    if pending is not None:
+        raise pending
 
 
 def _handle_data_dropping(
@@ -144,6 +149,19 @@ def _handle_command_result(
         result_queue.put(str(command.uuid), block=False)
 
 
+def _report_failure(cfw_register: CfwManager, command_queue: multiprocessing.Queue[Any], e: BaseException) -> None:
+    try:
+        msg, exc_info = failure_report(e)
+        if cfw_register:
+            try:
+                cfw_register.set_error(msg, exc_info, exception=e)
+            except Exception:
+                # Unpicklable exception: fall back to string-only (surfaces as MlodaRunError), never skip the STOP.
+                cfw_register.set_error(msg, exc_info)
+    finally:
+        _handle_stop_command(command_queue)
+
+
 def worker(
     command_queue: multiprocessing.Queue[Any],
     result_queue: multiprocessing.Queue[Any],
@@ -167,19 +185,7 @@ def worker(
         run_context = cfw_register.get_run_context()
         bootstrap = run_context.child_bootstrap
         if bootstrap is not None:
-            try:
-                bootstrap()
-            except BaseException as e:
-                msg, exc_info = failure_report(e)
-                if cfw_register:
-                    try:
-                        cfw_register.set_error(msg, exc_info, exception=e)
-                    except Exception:
-                        # exception not picklable across the manager proxy; degrade to string-only
-                        cfw_register.set_error(msg, exc_info)
-
-                _handle_stop_command(command_queue)
-                return
+            bootstrap()
 
         while True:
             try:
@@ -204,25 +210,12 @@ def worker(
                     break
                 continue
 
-            try:
-                data = _execute_command(command, cfw_register, cfw, data, from_cfw)
-                _handle_command_result(command, cfw, location, data, result_queue)
-
-            except BaseException as e:
-                msg, exc_info = failure_report(e)
-                if cfw_register:
-                    try:
-                        cfw_register.set_error(msg, exc_info, exception=e)
-                    except Exception:
-                        # The exception object is not picklable across the manager
-                        # proxy; degrade to the string-only path (surfaces as MlodaRunError)
-                        # rather than let this raise and skip the STOP below (which would hang the run).
-                        cfw_register.set_error(msg, exc_info)
-
-                _handle_stop_command(command_queue)
-                break
+            data = _execute_command(command, cfw_register, cfw, data, from_cfw)
+            _handle_command_result(command, cfw, location, data, result_queue)
 
             time.sleep(0.0001)
+    except BaseException as e:
+        _report_failure(cfw_register, command_queue, e)
     finally:
         context = CloseContext(
             deadline=time.monotonic() + run_context.graceful_shutdown_timeout,

@@ -48,3 +48,38 @@ def test_check_for_error_raises_when_worker_dead_without_reported_error() -> Non
 
     with pytest.raises(MlodaRunError):
         orchestrator._check_for_error()
+
+
+@pytest.mark.parametrize(
+    ("exitcode", "assign_step"),
+    [(-9, False), (0, True)],
+    ids=["dead worker", "orphaned steps"],
+)
+def test_check_for_error_surfaces_error_reported_just_before_worker_exit(exitcode: int, assign_step: bool) -> None:
+    """An error reported after the first read but before the liveness raise wins over MlodaRunError."""
+    orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
+    reads: list[int] = []
+
+    def get_error() -> bool:
+        reads.append(1)
+        return len(reads) > 1
+
+    original = SystemExit(3)
+    cfw_register = MagicMock()
+    cfw_register.get_error.side_effect = get_error
+    cfw_register.take_error_exception.return_value = original
+    cfw_register.get_parallelization_modes.return_value = set()
+    orchestrator.cfw_register = cfw_register
+
+    cfw_uuid = uuid4()
+    process = MagicMock()
+    process.exitcode = exitcode
+    process.is_alive.return_value = False
+    orchestrator.worker_manager.process_register[cfw_uuid] = (process, MagicMock(), MagicMock())
+    if assign_step:
+        orchestrator.worker_manager.assigned_steps[cfw_uuid] = {uuid4()}
+
+    with pytest.raises(SystemExit) as exc_info:
+        orchestrator._check_for_error()
+
+    assert exc_info.value is original

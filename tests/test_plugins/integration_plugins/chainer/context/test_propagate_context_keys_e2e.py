@@ -7,14 +7,19 @@ import pytest
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import (
     CASCADE_ENV_ROOT,
+    CASCADE_FOLD_CASCADE_CONSUMER,
+    CASCADE_FOLD_PINNED_CONSUMER,
     CASCADE_GUARD_CASCADE_CONSUMER,
     CASCADE_GUARD_HOP_CONSUMER,
     CASCADE_GUARD_PULL_CONSUMER,
     CASCADE_GUARD_ROOT,
     CASCADE_GUARD_SHARED,
     CascadeEnvRootGroupTest,
+    CascadeFoldConsumerGroupTest,
+    CascadeFoldSharedGroupTest,
     CascadeGuardConsumerGroupTest,
     CascadeGuardRootGroupTest,
     CascadeGuardSharedGroupTest,
@@ -358,6 +363,26 @@ class TestPropagateContextKeysE2E:
             _run_guard(requests if cascade_first else requests[::-1])
         assert CASCADE_GUARD_SHARED in str(excinfo.value)
         assert "cascade_context_keys" in str(excinfo.value)
+
+    @pytest.mark.parametrize("cascade_first", [True, False])
+    def test_inputs_differing_in_compute_framework_fail_at_plan_time(self, cascade_first: bool) -> None:
+        requests = [
+            Feature(
+                CASCADE_FOLD_CASCADE_CONSUMER,
+                options=Options(context={"k": "v"}, cascade_context_keys=frozenset({"k"})),
+            ),
+            Feature(CASCADE_FOLD_PINNED_CONSUMER, options=Options(context={"k": "v"})),
+        ]
+        with pytest.raises(ValueError) as excinfo:
+            mloda.run_all(
+                list[Feature | str](requests if cascade_first else requests[::-1]),
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {CascadeGuardRootGroupTest, CascadeFoldSharedGroupTest, CascadeFoldConsumerGroupTest}
+                ),
+            )
+        assert "from two steps" in str(excinfo.value)
+        assert "differ in options" in str(excinfo.value)
 
     @pytest.mark.parametrize("other", [CASCADE_GUARD_PULL_CONSUMER, CASCADE_GUARD_HOP_CONSUMER])
     @pytest.mark.parametrize("cascade_first", [True, False])

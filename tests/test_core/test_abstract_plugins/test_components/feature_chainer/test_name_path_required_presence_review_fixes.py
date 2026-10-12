@@ -204,8 +204,8 @@ class TestNamePathPresenceRejectionReasonUnit:
             "required option(s) missing_r769rfu are absent after declared defaults and name bindings"
             "; pass it in Options(context=...); for a direct input of a feature you construct,"
             " list it in that feature's propagate_context_keys (the push is one hop);"
-            " for an input further down a chained name, pass it in Options(group=...) instead,"
-            " which is forwarded down the chain by default"
+            " for an input further down a chained name, list it in the requested feature's cascade_context_keys,"
+            " or pass it in Options(group=...) to make it part of feature identity"
         )
 
     def test_context_false_missing_key_gets_no_remedy_clause(self) -> None:
@@ -236,8 +236,9 @@ class TestNamePathPresenceRejectionReasonUnit:
             " are absent after declared defaults and name bindings"
             "; pass ctx_a_r769rfu4, ctx_b_r769rfu4 in Options(context=...);"
             " for a direct input of a feature you construct, list them in that feature's propagate_context_keys"
-            " (the push is one hop); for an input further down a chained name, pass them in"
-            " Options(group=...) instead, which is forwarded down the chain by default"
+            " (the push is one hop); for an input further down a chained name, list them in the"
+            " requested feature's cascade_context_keys, or pass them in Options(group=...) to make them"
+            " part of feature identity"
         )
 
     def test_none_when_nothing_missing(self) -> None:

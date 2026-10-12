@@ -78,7 +78,7 @@ does not understand can be absorbed silently.
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
-| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s); for a `context=True` key the reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name a group option) |
+| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s); for a `context=True` key the reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name the requested feature's `cascade_context_keys`, or a group option) |
 | Match time (plain group) | Present values, `match_guard`, required presence | Values and `match_guard` in the default matcher of every plain group; required presence on the raw options of a group without a pattern (a patterned plain group keeps the name-path rule) | The options | Non-match (`False`), with the reason recorded (for `match_guard`, only when the spec is strict or declares `expected`) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`), reported when the spec is strict or declares `expected` |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
@@ -536,7 +536,8 @@ default matcher's verdict. Migration: a bare `property_spec("...")` on a plain g
 A flagged missing key makes the match a **non-match**: a warning names the group, the feature,
 and the missing key(s), and the resolution-failure report names the missing key(s) too. For missing
 keys declared `context=True` the reason also names the remedy (`Options(context=...)`; for a direct input
-feature the consumer's `propagate_context_keys`, for an input further down a chained name a group option),
+feature the consumer's `propagate_context_keys`, for an input further down a chained name the requested
+feature's `cascade_context_keys`, or a group option),
 naming those keys when several are missing. A group option is part of feature identity; see
 [Context propagation](#context-propagation).
 
@@ -646,7 +647,7 @@ a rejection reason naming the owning class and the missing key, so the resolutio
 carries a near-miss line for it; entries with `required_when` are otherwise optional. For a key
 declared with `context=True` (the default), the reason also names the remedy
 (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an
-input further down a chained name a group option). The predicate must be pure and must not raise. It
+input further down a chained name the requested feature's `cascade_context_keys`, or a group option). The predicate must be pure and must not raise. It
 is callable by construction, and a non-bool truthy return counts as `True`.
 
 The enforcement is installed on the class, not on one matcher, so overriding
@@ -798,6 +799,8 @@ Options(
   inputs are resolved once. Declare the same `cascade_context_keys` on every request
   reaching it, and list the cascading request first when `Feature` objects are shared.
   A shared root feature is exempt.
+- Two requests of one input that differ in compute framework resolve their inputs separately and
+  fail at plan time (read "from two steps" that "differ in options"); declare the same keys on both.
 - The value sits in the options of every input down the chain, so every feature group
   there sees it, and it is pickled to MULTIPROCESSING workers.
 - The pull `inherit_context_keys` stays one hop.

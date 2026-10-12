@@ -8,6 +8,7 @@ import pandas as pd
 
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureChainParserMixin, FeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.user import Feature
 
 from mloda.user import FeatureName
@@ -227,4 +228,36 @@ class CascadeGuardConsumerGroupTest(_CascadeGuardNamedGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         for feature in features.features:
             data[feature.name] = data[str(feature.options.get("target"))] + 1
+        return data
+
+
+CASCADE_FOLD_SHARED = "cgf_shared"
+CASCADE_FOLD_CASCADE_CONSUMER = "cgf_consumer_cascade"
+CASCADE_FOLD_PINNED_CONSUMER = "cgf_consumer_pinned"
+
+
+class CascadeFoldSharedGroupTest(CascadeGuardSharedGroupTest):
+    """Shared input allowed on two compute frameworks."""
+
+    FEATURE_NAMES = frozenset({CASCADE_FOLD_SHARED})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame, PyArrowTable}
+
+
+class CascadeFoldConsumerGroupTest(_CascadeGuardNamedGroup):
+    """The pinned consumer pins PandasDataFrame on its input; the cascade consumer leaves it open."""
+
+    FEATURE_NAMES = frozenset({CASCADE_FOLD_CASCADE_CONSUMER, CASCADE_FOLD_PINNED_CONSUMER})
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        if str(feature_name) == CASCADE_FOLD_PINNED_CONSUMER:
+            return {Feature(CASCADE_FOLD_SHARED, inherit_context_keys={"k"}, compute_framework="PandasDataFrame")}
+        return {Feature(CASCADE_FOLD_SHARED)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for feature in features.features:
+            data[feature.name] = data[CASCADE_FOLD_SHARED] + 1
         return data

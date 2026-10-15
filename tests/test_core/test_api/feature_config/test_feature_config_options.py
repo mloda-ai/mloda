@@ -160,6 +160,26 @@ def test_load_creates_options_with_group_context() -> None:
     assert result[0].options.context == {"cache_enabled": True, "debug_mode": False}
 
 
+@pytest.mark.parametrize("value", ["session", 5, {"k": 1}, ["a", 1]])
+def test_propagate_context_keys_rejects_invalid_types(value: Any) -> None:
+    with pytest.raises(ValueError, match="propagate_context_keys"):
+        FeatureConfig(
+            name="f",
+            context_options={"session": "value"},
+            propagate_context_keys=value,
+        )
+
+
+@pytest.mark.parametrize("value", [None, [], ["session"]])
+def test_propagate_context_keys_accepts_valid_types(value):
+    config = FeatureConfig(
+        name="f",
+        context_options={"session": "value"},
+        propagate_context_keys=value,
+    )
+    assert config.propagate_context_keys == value
+
+
 def test_validate_options_mutual_exclusion() -> None:
     """Test that options and group_options/context_options are mutually exclusive.
 

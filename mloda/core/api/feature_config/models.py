@@ -42,7 +42,12 @@ def validate_feature_group_not_in_options(options: dict[str, Any] | None, contai
             "move it next to 'name' as a feature config field"
         )
 
-
+def validate_context_keys(value: Any, field_name: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError(f"'{field_name}' must be an array of strings")
+    
 @dataclass
 class FeatureConfig:
     """Model for a feature configuration with name and options."""
@@ -73,6 +78,7 @@ class FeatureConfig:
         validate_feature_group_not_in_options(self.options, "options")
         validate_feature_group_not_in_options(self.group_options, "group_options")
         validate_feature_group_not_in_options(self.context_options, "context_options")
+        validate_context_keys(self.propagate_context_keys, "propagate_context_keys")
 
 
 FEATURE_CONFIG_FIELDS = frozenset(f.name for f in fields(FeatureConfig))

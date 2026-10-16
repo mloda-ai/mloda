@@ -21,8 +21,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def leave_parent_working_directory() -> None:
+    """Windows only: moves this process out of the parent's working directory.
+
+    A spawned child chdirs into the parent's working directory at start, and Windows refuses to
+    delete or rename a directory while a process has it as its current directory. Long-lived
+    children (the shared Manager server, a kept flight server) would otherwise keep the first run's
+    working directory in use until interpreter exit. sys.path entries are made absolute first, so
+    user modules imported later while unpickling still resolve to the same places.
+    """
+    if os.name != "nt":
+        return
+    sys.path[:] = [os.path.abspath(entry) for entry in sys.path]
+    os.chdir(os.path.expanduser("~"))
+
+
 def _watchdog_then_initializer(initializer: Callable[..., object] | None, initargs: Iterable[Any]) -> None:
     start_parent_death_watchdog()
+    leave_parent_working_directory()
     if initializer is not None:
         initializer(*initargs)
 

@@ -9,6 +9,7 @@ from typing import Any
 import logging
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.core.cfw_manager import leave_parent_working_directory
 from mloda.core.runtime.flight.flight_server import FlightServer, create_location, _require_pyarrow_flight
 from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process
 from mloda.core.runtime.parent_death_watchdog import start_parent_death_watchdog
@@ -28,6 +29,7 @@ class ParallelRunnerFlightServer:
 
     def start_flight_server(self, location: Any, location_queue: Any) -> None:
         start_parent_death_watchdog()
+        leave_parent_working_directory()
         flight_server = FlightServer(location=location)
         location_queue.put(flight_server.location)
         flight_server.serve()

@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
 from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_format_group
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
+    MATCH_REJECTION_REASONS,
     drop_match_rejections_since,
     match_rejection_owners,
     record_match_rejection,
@@ -43,6 +44,8 @@ _MAX_LISTED_COLUMNS = 20
 _MAX_DESCRIBED = 5
 _MAX_COLUMN_NAME = 64
 _MAX_REASON = 200
+FOLDER_ESCAPE_MARK = "links outside its folder"
+REASON_DETAIL = "\x1f"  # splits a reason lead from detail (reader error text) that only pointed users see
 
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(
@@ -54,11 +57,6 @@ HANDLE_SPEC = PropertySpec(
     match_guard=lambda value: isinstance(value, str),
     expected="a str handle name",
 )
-
-
-def _capped(names: list[str]) -> str:
-    text = ", ".join(repr(name) for name in names[:_MAX_DESCRIBED])
-    return text if len(names) <= _MAX_DESCRIBED else f"{text}, and {len(names) - _MAX_DESCRIBED} more"
 
 
 def _clip(text: str, limit: int) -> str:
@@ -145,6 +143,11 @@ class FormatFeatureGroup(FeatureGroup):
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
         """Why the source cannot enumerate its columns, None when no reason is known."""
         return None
+
+    @classmethod
+    def _hidden_reason(cls, match: SourceMatch) -> str | None:
+        """The unknown_columns_reason safe to show a user who did not point at the group."""
+        return cls.unknown_columns_reason(match)
 
     @classmethod
     def has_column(cls, match: SourceMatch, column: str) -> bool | None:
@@ -392,8 +395,8 @@ class FormatFeatureGroup(FeatureGroup):
                 if known[source] is not None:
                     parts.append(f"{source} has columns {_listed(known[source])}" if show_columns else source)
                 else:
-                    why = cls.unknown_columns_reason(match)
-                    parts.append(source if why is None else f"{source}: {_clip(why, _MAX_REASON)}")
+                    why = cls.unknown_columns_reason(match) if show_columns else cls._hidden_reason(match)
+                    parts.append(source if why is None else f"{source}: {_clip(scrub_credentials(why), _MAX_REASON)}")
             if len(items) > _MAX_DESCRIBED:
                 parts.append(f"and {len(items) - _MAX_DESCRIBED} more")
             name = cls.get_class_name()
@@ -406,6 +409,9 @@ class FormatFeatureGroup(FeatureGroup):
             if show_columns:
                 text += _suggestion(base_name, [c for columns in known.values() for c in columns or ()])
             reason = scrub_credentials(text)
+            probed = (MATCH_REJECTION_REASONS.get() or {}).get(cls.get_class_name())
+            if probed is not None and FOLDER_ESCAPE_MARK in probed.reason and cls.get_class_name() not in known_owners:
+                reason += "; skipped folder entries that link outside their folder"
             if pointed:
                 return cls._abort(
                     ValueError(f"{reason}; request a column a source has or point at another source."),

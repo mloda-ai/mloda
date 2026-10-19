@@ -9,6 +9,7 @@ import hashlib
 import inspect
 from collections import OrderedDict
 from collections.abc import Collection, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -374,6 +375,13 @@ class ToySecretIdentityDB(ToyBaseDB):
         return f"kv://shop?pw={credentials[KEY]}"
 
 
+@dataclass(frozen=True)
+class _OpaqueSecret:
+    """Equality separates two values whose repr is identical."""
+
+    value: str = field(repr=False)
+
+
 class TestCatalogCache:
     def test_a_run_reads_a_database_catalog_once_and_a_second_database_separately(self) -> None:
         first, second = _match({KEY: "a"}), _match({KEY: "b"})
@@ -392,6 +400,15 @@ class TestCatalogCache:
     def test_credentials_differing_only_in_a_secret_read_two_catalogs_in_one_run(self) -> None:
         first = _match({KEY: "a", "password": "toyfmt-secret-one"})  # nosec B105
         second = _match({KEY: "a", "password": "toyfmt-secret-two"})  # nosec B105
+        with run_match_cache():
+            ToyBaseDB.columns(first)
+            ToyBaseDB.columns(second)
+        assert len(ToyBaseDB.list_calls) == 2
+
+    def test_secrets_with_an_identical_redacted_repr_still_read_two_catalogs_in_one_run(self) -> None:
+        first = _match({KEY: "a", "password": _OpaqueSecret("one")})  # nosec B105
+        second = _match({KEY: "a", "password": _OpaqueSecret("two")})  # nosec B105
+        assert repr(first.access.credentials["password"]) == repr(second.access.credentials["password"])
         with run_match_cache():
             ToyBaseDB.columns(first)
             ToyBaseDB.columns(second)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import importlib
 import inspect
+import os
 from pathlib import Path
 from typing import Any
 
@@ -191,6 +192,54 @@ class TestProviderHooks:
         message = str(exc_info.value)
         assert "document_suffixes" in message
         assert "ToyHandoverDocFG_" not in message
+
+    def test_the_handed_over_hint_skips_files_outside_the_named_data_access_handle(self, tmp_path: Path) -> None:
+        unrelated = _write(tmp_path, "unrelated_handed.toyhandover")
+        named = _write(tmp_path, "named.unrelatedsuffix")
+        dac = DataAccessCollection(files={"other_h": str(unrelated), "mine_h": str(named)})
+        feature = Feature("ToyHandoverDocFG", Options({"data_access_handle": "mine_h"}))
+        plugins: FeatureGroupEnvironmentMapping = {ToyHandoverDocFG: {PythonDictFramework}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None, dac)
+
+        assert ToyHandoverDocFG not in result.identified
+        elimination = result.eliminations.get(ToyHandoverDocFG)
+        assert elimination is None or "unrelated_handed" not in elimination.reason
+
+    def test_the_handed_over_hint_skips_a_folder_entry_that_is_not_a_regular_file(self, tmp_path: Path) -> None:
+        (tmp_path / "dir_entry.toyhandover").mkdir()
+        dac = DataAccessCollection(folders={"toy_dir": str(tmp_path)})
+        plugins: FeatureGroupEnvironmentMapping = {ToyHandoverDocFG: {PythonDictFramework}}
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature("ToyHandoverDocFG"), plugins, None, dac)
+
+        elimination = result.eliminations.get(ToyHandoverDocFG)
+        assert elimination is None or "dir_entry" not in elimination.reason
+
+    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
+    def test_the_handed_over_hint_skips_a_folder_entry_linking_outside_its_folder(self, tmp_path: Path) -> None:
+        target = _write(tmp_path, "elsewhere_target.toyhandover")
+        folder = tmp_path / "hint_folder"
+        folder.mkdir()
+        os.symlink(target, folder / "escape_link.toyhandover")
+        dac = DataAccessCollection(folders={"toy_dir": str(folder)})
+        plugins: FeatureGroupEnvironmentMapping = {ToyHandoverDocFG: {PythonDictFramework}}
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature("ToyHandoverDocFG"), plugins, None, dac)
+
+        elimination = result.eliminations.get(ToyHandoverDocFG)
+        assert elimination is None or "escape_link" not in elimination.reason
+
+    def test_the_matched_but_rejection_masks_a_credential_in_the_path(self, tmp_path: Path) -> None:
+        missing = tmp_path / "token=toyfmt-secret-1234.toydoc"
+        dac = DataAccessCollection(files={"toy": str(missing)})
+
+        result = IdentifyFeatureGroupClass.evaluate(Feature("ToyDocFG"), {ToyDocFG: {PythonDictFramework}}, None, dac)
+
+        reason = result.eliminations[ToyDocFG].reason
+        assert "matched" in reason
+        assert "toyfmt-secret-1234" not in reason
+        assert "token=***" in reason
 
     def test_a_marked_abort_from_suffixes_escapes_matching(self) -> None:
         """Function-local group: a module-level one raising from suffixes() would break every other test's discovery."""

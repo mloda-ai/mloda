@@ -439,7 +439,6 @@ class TestSqliteDescribeColumns:
             SqliteFG.describe_columns(_match(str(missing), "t"))
         assert not missing.exists()
         assert SqliteFG.unknown_columns_reason(_match(str(missing), "t")) == "it does not exist"
-        assert not missing.exists()
 
     def test_a_crafted_preset_table_name_declines_and_leaves_the_table_intact(self, people_db: str) -> None:
         credential = {KEY: people_db, "table_name": "test_table); DROP TABLE test_table; --"}

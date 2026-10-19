@@ -41,10 +41,10 @@ class SqliteFG(ReadDBFG):
         return sqlite3.connect(uri, uri=True)
 
     @classmethod
-    def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
+    def _raw_reason(cls, match: SourceMatch) -> str | None:
         if isinstance(match.access, DBTable) and not os.path.exists(match.access.credentials[cls.CREDENTIAL_KEY]):
             return "it does not exist"
-        return super().unknown_columns_reason(match)
+        return super()._raw_reason(match)
 
     @classmethod
     def list_tables(cls, connection: Any) -> Collection[str]:

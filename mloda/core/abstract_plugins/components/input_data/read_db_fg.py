@@ -18,8 +18,9 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     HANDLE_OPTION,
     HANDLE_SPEC,
+    REASON_DETAIL,
+    _MAX_DESCRIBED,
     FormatFeatureGroup,
-    _capped,
 )
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
@@ -32,6 +33,11 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
 
 QUERY_OPTION = "query_text"
+
+
+def _capped(names: list[str]) -> str:
+    text = ", ".join(repr(name) for name in names[:_MAX_DESCRIBED])
+    return text if len(names) <= _MAX_DESCRIBED else f"{text}, and {len(names) - _MAX_DESCRIBED} more"
 
 
 @dataclass(frozen=True, eq=False)
@@ -205,15 +211,20 @@ class ReadDBFG(FormatFeatureGroup):
         catalog, _ = cls._catalog(credentials)
         if catalog is None:
             return [SourceMatch(identity, DBTable(credentials, None))]
-        preset = credentials.get(cls.TABLE_KEY) if isinstance(credentials, Mapping) else None
-        tables = [preset] if isinstance(preset, str) and preset else list(catalog)
+        preset = cls._preset_table(credentials)
+        tables = [preset] if preset else list(catalog)
         return [SourceMatch(f"{identity}::{table}", DBTable(credentials, table)) for table in tables]
+
+    @classmethod
+    def _preset_table(cls, credentials: Any) -> str | None:
+        preset = credentials.get(cls.TABLE_KEY) if isinstance(credentials, Mapping) else None
+        return preset if isinstance(preset, str) and preset else None
 
     @classmethod
     def _catalog(cls, credentials: Any) -> tuple[dict[str, tuple[str, ...]] | None, str | None]:
         identity = cls.database_identity(credentials)
-        fingerprint = sha256(repr(_deep_hashable(credentials)).encode()).hexdigest()
-        return run_cached((cls, "catalog", identity, fingerprint), lambda: cls._read_catalog(credentials))
+        key = (cls, "catalog", identity, _deep_hashable(credentials))
+        return run_cached(key, lambda: cls._read_catalog(credentials))
 
     @classmethod
     def _read_catalog(cls, credentials: Any) -> tuple[dict[str, tuple[str, ...]] | None, str | None]:
@@ -221,8 +232,8 @@ class ReadDBFG(FormatFeatureGroup):
             connection = cls.get_connection(credentials)
             try:
                 tables = list(cls.list_tables(connection))
-                preset = credentials.get(cls.TABLE_KEY) if isinstance(credentials, Mapping) else None
-                if isinstance(preset, str) and preset:
+                preset = cls._preset_table(credentials)
+                if preset:
                     tables = [preset] if preset in tables else []
                 catalog = {table: tuple(cls.table_columns(connection, table)) for table in tables}
             finally:
@@ -236,7 +247,8 @@ class ReadDBFG(FormatFeatureGroup):
                     (v for v in credentials.values() if isinstance(v, str) and v), key=len, reverse=True
                 ):
                     text = text.replace(secret, "***")
-            return None, f"could not read its tables: {scrub_credentials(text)}"
+            detail = ": " if isinstance(exc, ImportError) else REASON_DETAIL
+            return None, f"could not read its tables{detail}{scrub_credentials(text)}"
         return catalog, None
 
     @classmethod
@@ -249,6 +261,16 @@ class ReadDBFG(FormatFeatureGroup):
 
     @classmethod
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
+        raw = cls._raw_reason(match)
+        return None if raw is None else raw.replace(REASON_DETAIL, ": ")
+
+    @classmethod
+    def _hidden_reason(cls, match: SourceMatch) -> str | None:
+        raw = cls._raw_reason(match)
+        return None if raw is None else raw.split(REASON_DETAIL)[0]
+
+    @classmethod
+    def _raw_reason(cls, match: SourceMatch) -> str | None:
         access = match.access
         if isinstance(access, DBQuery):
             return None

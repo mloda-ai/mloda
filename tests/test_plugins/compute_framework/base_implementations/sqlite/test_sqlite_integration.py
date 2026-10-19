@@ -321,8 +321,9 @@ class TestSqliteIntegrationWithMlodaAPI:
         if output is SqliteFramework:
             assert result[0].connection is sqlite_conn
 
+    @pytest.mark.parametrize("with_collection", [True, False], ids=["collection_conn", "no_dac"])
     def test_output_framework_with_a_sqlite_run_on_a_step_connection(
-        self, flight_server: Any, sqlite_conn: Any
+        self, flight_server: Any, sqlite_conn: Any, with_collection: bool
     ) -> None:
         collection_conn = sqlite3.connect(":memory:")
         try:
@@ -333,7 +334,7 @@ class TestSqliteIntegrationWithMlodaAPI:
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
                 ),
-                data_access_collection=DataAccessCollection(connections={collection_conn}),
+                data_access_collection=DataAccessCollection(connections={collection_conn}) if with_collection else None,
                 compute_frameworks=[SqliteFramework],
                 output_framework=SqliteFramework,
             )

@@ -101,7 +101,6 @@ class Engine:
         self.plugin_collector = plugin_collector
 
         self.data_access_collection = data_access_collection
-        self.output_connection = self._resolve_output_connection()
         self.column_ordering = column_ordering
         self.request_feature_order: list[str] = [str(f.name) for f in features]
         self._dual_consumption_warned: set[tuple[str, str, frozenset[str]]] = set()
@@ -122,6 +121,7 @@ class Engine:
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
         self.tfs_connection_map = self._resolve_tfs_connection_map()
+        self.output_connection = self._resolve_output_connection()
 
     def _resolve_plugin_versions(self) -> dict[str, str | None] | None:
         """Resolves each planned feature group module's owning-distribution version at plan time, so hooks only read it."""
@@ -133,13 +133,27 @@ class Engine:
         return versions or None
 
     def _resolve_output_connection(self) -> Any:
+        """Resolve the output_framework connection, needed only when a requested step's result is converted."""
         if self.output_framework is None:
             return None
-        connection = self.output_framework.pick_connection_from_dac(self.data_access_collection)
-        if connection is None and self.output_framework.connection_requirement() is ConnectionRequirement.REQUIRED:
-            raise ValueError(
-                f"output_framework {self.output_framework.get_class_name()} requires a connection, "
-                "but none was found in the data access collection."
+        output = self.output_framework
+        converting = [
+            step
+            for step in self.execution_planner
+            if isinstance(step, FeatureGroupStep)
+            and step.features.get_initial_requested_features()
+            and step.compute_framework.expected_data_framework() is not output.expected_data_framework()
+        ]
+        if not converting:
+            return None
+        connection = output.pick_connection_from_dac(self.data_access_collection)
+        if connection is None and output.connection_requirement() is ConnectionRequirement.REQUIRED:
+            steps = ", ".join(
+                f"{s.feature_group.get_class_name()} on {s.compute_framework.get_class_name()}" for s in converting
+            )
+            raise EnvironmentPreconditionError(
+                f"The result of {steps} converts to output_framework {output.get_class_name()}, "
+                "which needs a connection, so add a matching connection to the DataAccessCollection."
             )
         return connection
 

@@ -372,8 +372,9 @@ class TestDuckDBIntegrationWithMlodaAPI:
         assert len(result) == 1
         assert "pyarrow_avg_value_by_category" in result[0].column_names
 
+    @pytest.mark.parametrize("with_collection", [True, False], ids=["collection_conn", "no_dac"])
     def test_output_framework_with_a_duckdb_run_on_a_step_connection(
-        self, flight_server: Any, duckdb_conn: Any
+        self, flight_server: Any, duckdb_conn: Any, with_collection: bool
     ) -> None:
         collection_conn = duckdb.connect()
         try:
@@ -384,7 +385,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {DuckDBTestDataCreator, DuckDBSimpleTransformFeatureGroup}
                 ),
-                data_access_collection=DataAccessCollection(connections={collection_conn}),
+                data_access_collection=DataAccessCollection(connections={collection_conn}) if with_collection else None,
                 compute_frameworks=[DuckDBFramework],
                 output_framework=DuckDBFramework,
             )

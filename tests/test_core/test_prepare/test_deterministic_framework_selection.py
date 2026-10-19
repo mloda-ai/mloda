@@ -926,16 +926,37 @@ def test_stream_all_honors_output_framework() -> None:
     assert all(isinstance(frame, pd.DataFrame) for frame in frames)
 
 
-def test_a_required_connection_output_framework_without_a_connection_raises_at_prepare() -> None:
+@pytest.mark.parametrize("entry", ["prepare", "run_all"])
+def test_a_required_connection_output_framework_without_a_connection_raises_at_planning(entry: str) -> None:
     sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
 
-    with pytest.raises(ValueError, match="SqliteFramework"):
-        mloda.prepare(
+    with pytest.raises(EnvironmentPreconditionError, match="SqliteFramework") as raised:
+        getattr(mloda, entry)(
             ["rc_root"],
             compute_frameworks=_RC_FRAMEWORKS,
             plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
             output_framework=sqlite_fw,
         )
+
+    assert "RcRoot" in str(raised.value)
+    assert "DataAccessCollection" in str(raised.value)
+
+
+def test_diagnose_reports_a_required_connection_output_framework_without_a_connection() -> None:
+    sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+
+    diagnosis = mloda.diagnose(
+        ["rc_root"],
+        compute_frameworks=_RC_FRAMEWORKS,
+        plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
+        output_framework=sqlite_fw,
+    )
+
+    assert diagnosis.complete is False
+    assert diagnosis.message is not None
+    assert "SqliteFramework" in diagnosis.message
+    assert "RcRoot" in diagnosis.message
+    assert "DataAccessCollection" in diagnosis.message
 
 
 def test_a_required_connection_output_framework_with_a_connection_prepares(sqlite_conn: sqlite3.Connection) -> None:

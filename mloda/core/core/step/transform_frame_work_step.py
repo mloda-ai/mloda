@@ -117,9 +117,13 @@ class TransformFrameworkStep(Step):
             )
 
         data = self.get_data(from_cfw)
-        data = self.transform(cfw, data)
+        source = data
+        data = self.transform(cfw, source)
 
-        cfw.set_data(data)
+        if data is source and not (isinstance(from_cfw, ComputeFramework) and source is from_cfw._pinned_frame):
+            cfw.set_data(data)
+        else:
+            cfw._set_pinned_data(data)
         cfw.set_column_names()
 
         if self.location:

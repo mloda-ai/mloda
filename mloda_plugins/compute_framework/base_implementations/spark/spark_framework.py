@@ -244,6 +244,7 @@ class SparkFramework(ComputeFramework):
             """Added data: Add column to DataFrame"""
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
+                self._require_pinned_frame_for_column(feature_name)
                 return self._join_columns(self.data, {feature_name: list(data)})
 
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")

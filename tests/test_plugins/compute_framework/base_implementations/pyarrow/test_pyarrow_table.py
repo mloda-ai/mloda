@@ -161,6 +161,9 @@ class TestPyArrowEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFramewo
     def empty_data(self) -> Any:
         return pa.table({"a": pa.array([], pa.int64())})
 
+    def single_column(self, values: list[Any]) -> Any | None:
+        return pa.array(values)
+
     @pytest.fixture
     def non_empty_data(self) -> Any:
         return pa.table({"a": [1]})

@@ -428,10 +428,8 @@ class ComputeFramework(ABC):
             connection = features.get_options_key(feature_group.get_class_name())
             if connection is not None or self.framework_connection_object is None:
                 self.set_framework_connection_object(connection)
-            was_dict = isinstance(data, dict)
             data = self.transform(data, names)
-            if was_dict:
-                self._pinned_frame = data
+            self._pinned_frame = data
         else:
             self._adopt_connection(data)
             # already the native type: transform is skipped, so enforce the framework's
@@ -696,6 +694,17 @@ class ComputeFramework(ABC):
     def _positional_append_needs_pinned_frame(cls) -> bool:
         """True when the held frame is a lazy plan whose row order can change between executions."""
         return False
+
+    @final
+    def _require_pinned_frame_for_column(self, feature_name: str) -> None:
+        if self._positional_append_needs_pinned_frame() and self.data is not self._pinned_frame:
+            raise ValueError(
+                f"Feature '{feature_name}' returned a single column, but the {self.__class__.__name__} frame was "
+                "not pinned by mloda (not built from a dict, converted by mloda, or appended onto a pinned frame), "
+                "so its row order is not guaranteed between executions and the column could land on the wrong "
+                "rows. Return the column inside the frame the feature group received, in the framework's own "
+                "data type (lazy Polars with_columns, a DuckDB relation projection, Spark withColumn)."
+            )
 
     def _append_dict_to_frame(self, feature_group: Any, result: Any) -> Any:
         if not isinstance(result, dict) or not result or self.data is None:
@@ -1110,6 +1119,11 @@ Available join types:
 - Link.inner_on(left, right) - Shorthand using index_columns() definitions
 """
         raise ValueError(error_message.strip())
+
+    @final
+    def _set_pinned_data(self, data: Any) -> None:
+        self.data = data
+        self._pinned_frame = data
 
     @final
     def set_data(self, data: Any) -> None:

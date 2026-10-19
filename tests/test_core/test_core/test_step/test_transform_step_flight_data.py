@@ -1,5 +1,6 @@
 """The flight server hands transform a pa.Table whatever the source framework is, so transform must accept it."""
 
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pandas as pd
@@ -122,3 +123,42 @@ def test_equal_expected_frameworks_return_native_data_unchanged() -> None:
     result = step.transform(cfw, frame)
 
     assert result is frame
+
+
+def _execute(step: TransformFrameworkStep, source: ComputeFramework, target: ComputeFramework) -> None:
+    register = MagicMock()
+    register.get_location.return_value = None
+    step.execute(register, target, from_cfw=source)
+
+
+def test_converted_frame_is_pinned_on_the_target() -> None:
+    source = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
+    source.data = pd.DataFrame({"flight_data_key": KEYS, "flight_data_payload": PAYLOADS})
+    target = _cfw(PyArrowTable, ParallelizationMode.SYNC)
+
+    _execute(_step(PandasDataFrame, PyArrowTable), source, target)
+
+    assert isinstance(target.data, pa.Table)
+    assert target._pinned_frame is target.data
+
+
+def test_same_framework_pass_through_of_a_pinned_source_is_pinned_on_the_target() -> None:
+    source = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
+    source.data = source._pinned_frame = pd.DataFrame({"flight_data_key": KEYS, "flight_data_payload": PAYLOADS})
+    target = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
+
+    _execute(_step(PandasDataFrame, PandasDataFrame), source, target)
+
+    assert target.data is source.data
+    assert target._pinned_frame is target.data
+
+
+def test_same_framework_pass_through_of_an_unpinned_source_stays_unpinned() -> None:
+    source = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
+    source.data = pd.DataFrame({"flight_data_key": KEYS, "flight_data_payload": PAYLOADS})
+    target = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
+
+    _execute(_step(PandasDataFrame, PandasDataFrame), source, target)
+
+    assert target.data is source.data
+    assert target._pinned_frame is None

@@ -294,9 +294,11 @@ List order is a tie-break after cost, not "first listed wins". To force a framew
 
 Framework authors declare the connection rule by overriding `connection_requirement()` (default `ConnectionRequirement.NONE`). A `REQUIRED` framework also overrides `connection_of(data)` to return the connection its native data carries, so a step after a parent on the same framework needs no connection of its own.
 
-## Appending Dict Results
+## Appending Results
 
 Override `_append_columns(data, columns)` to append a non-root dict result to the frame. The default returns `None`, which replaces the frame. Frameworks holding a lazy plan with unstable row order override the classmethod `_positional_append_needs_pinned_frame` to return `True`, which appends only onto a frame mloda built itself.
+
+A single returned column (a list or Series) follows the same rule: on such a framework `transform` raises a `ValueError` naming the feature unless the frame is pinned. The fix is to return the column inside the frame the feature group received, in the framework's own data type. A frame counts as pinned when it was built from a dict, converted by a transformer in a step or at a framework transfer, appended onto a pinned frame, filtered from one, or passed unchanged through a same-framework hop from a pinned frame. The output of a framework's own `transform()` for a non-native result is treated as pinned too, so it must not reorder rows. A feature group that returns its own native frame leaves it unpinned for the next feature group on that frame.
 
 ## Data Transformation
 

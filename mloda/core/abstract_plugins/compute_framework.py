@@ -455,6 +455,11 @@ class ComputeFramework(ABC):
         if len(self.children_if_root) > len(self.already_calculated_children_tracker) + len(features.features):
             return self.data
 
+        # a consumer kept alive by a join sharing its frame may still read it in this process
+        computed = {feature.uuid for feature in features.features}
+        if self.keep_alive - self.already_calculated_children_tracker - computed:
+            return self.data
+
         # upload finished dataset to flight server
         self.data = self.upload_finished_data(location)
         return self.data

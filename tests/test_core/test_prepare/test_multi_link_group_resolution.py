@@ -1724,11 +1724,20 @@ def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_togeth
 RemedyArrowPairConsumer = _remedy_sum_consumer("RemedyArrowPairConsumer", PyArrowTable, ("mlg_a1", "mlg_b"))
 
 
-@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+@pytest.mark.parametrize(
+    "mode",
+    [
+        ParallelizationMode.SYNC,
+        ParallelizationMode.THREADING,
+        # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+        pytest.param(ParallelizationMode.MULTIPROCESSING, marks=pytest.mark.timeout(60)),
+    ],
+)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_return_their_values_together(
-    swap_link_sides: bool, mode: ParallelizationMode
+    flight_server: Any, swap_link_sides: bool, mode: ParallelizationMode
 ) -> None:
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
     first, second = RemedyArrowSameBConsumer, RemedyArrowPairConsumer
     repeats = 4 if mode == ParallelizationMode.THREADING else 1
     for _ in range(repeats):
@@ -1742,7 +1751,7 @@ def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_return_thei
             **{**_REMEDY_KWARGS, "root_b": MultiLinkRootBSame, "extra_groups": {RemedyRootA1, second}},
         )
 
-        results = session.run(parallelization_modes={mode})
+        results = session.run(parallelization_modes={mode}, flight_server=server)
 
         assert _side_path_values(results, first) == [[18, 30, 42]]
         assert _side_path_values(results, second) == [[17, 28, 39]]

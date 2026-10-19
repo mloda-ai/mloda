@@ -211,6 +211,10 @@ class ExecutionPlan:
         # split already bridged by a Link must not be blamed (see _stamp_option_split_hints).
         self._stamp_option_split_hints(fw_execution_plan, graph.parent_to_children_mapping)
         self._stamp_link_index_columns(fw_execution_plan, graph.parent_to_children_mapping)
+        all_consumers = frozenset().union(*(r.consumers for r in self.planned_records))
+        for planned_step in fw_execution_plan:
+            if isinstance(planned_step, FeatureGroupStep):
+                planned_step.reads_join_result = bool(planned_step.get_uuids() & all_consumers)
 
         # Built before add_tfs, whose write serialization edges are not part of the join decision.
         join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]

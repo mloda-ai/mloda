@@ -2548,3 +2548,145 @@ def test_a_left_or_right_join_keeping_two_members_of_one_link_side_with_differen
         ("MultiLinkRootAPartial", "RemedyRootA1Partial"),
         root_b.get_class_name(),
     )
+
+
+def _below_root(name: str, column: str, values: list[int], framework: type[ComputeFramework]) -> type[FeatureGroup]:
+    def input_data(cls: Any) -> BaseInputData | None:
+        return DataCreator({column})
+
+    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        return {column: values, "mlg_idx": ["x", "y", "z"]}
+
+    def compute_framework_rule(cls: Any) -> set[type[ComputeFramework]]:
+        return {framework}
+
+    namespace = {
+        "__module__": __name__,
+        "input_data": classmethod(input_data),
+        "calculate_feature": classmethod(calculate_feature),
+        "compute_framework_rule": classmethod(compute_framework_rule),
+    }
+    created = type(name, (FeatureGroup,), namespace)
+    globals()[name] = created  # module level, so multiprocessing can pickle the link back
+    return created
+
+
+def _below_list(column: Any) -> list[Any]:
+    return list(column.to_pylist() if hasattr(column, "to_pylist") else column.tolist())
+
+
+def _below_values(column: Any) -> list[int]:
+    return [int(v) for v in _below_list(column)]
+
+
+def _below_consumer(
+    name: str, framework: type[ComputeFramework], inputs: tuple[str, ...], scale: int = 1
+) -> type[FeatureGroup]:
+    def input_features(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(column) for column in inputs}
+
+    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        columns = [_below_values(data[column]) for column in inputs]
+        total = [scale * columns[0][i] + sum(c[i] for c in columns[1:]) for i in range(len(columns[0]))]
+        # Keep the key so a later link can join this consumer's frame.
+        return {name: total, "mlg_idx": [str(v) for v in _below_list(data["mlg_idx"])]}
+
+    def compute_framework_rule(cls: Any) -> set[type[ComputeFramework]]:
+        return {framework}
+
+    namespace = {
+        "__module__": __name__,
+        "input_features": input_features,
+        "calculate_feature": classmethod(calculate_feature),
+        "compute_framework_rule": classmethod(compute_framework_rule),
+    }
+    created = type(name, (FeatureGroup,), namespace)
+    globals()[name] = created  # module level, so multiprocessing can pickle the link back
+    return created
+
+
+def _below_layout(tag: str, source: type[ComputeFramework], other: type[ComputeFramework]) -> dict[str, Any]:
+    """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework."""
+    root_a = _below_root(f"BelowRootA{tag}", f"below_a_{tag}", [1, 2, 3], source)
+    root_b = _below_root(f"BelowRootB{tag}", f"below_b_{tag}", [10, 20, 30], other)
+    root_d = _below_root(f"BelowRootD{tag}", f"below_d_{tag}", [7, 8, 9], PandasDataFrame)
+    joined_inputs = (f"below_a_{tag}", f"below_b_{tag}")
+    joined = _below_consumer(f"BelowJoined{tag}", source, joined_inputs)
+    return {
+        "a": root_a,
+        "b": root_b,
+        "d": root_d,
+        "joined": joined,
+        "below": _below_consumer(f"BelowChild{tag}", other, (joined.get_class_name(),), scale=2),
+        "bd": _below_consumer(f"BelowBD{tag}", PandasDataFrame, (f"below_b_{tag}", f"below_d_{tag}")),
+    }
+
+
+_BELOW_LAYOUTS = {
+    "arrow_source": _below_layout("Pa", PyArrowTable, PandasDataFrame),
+    "pandas_source": _below_layout("Pd", PandasDataFrame, PyArrowTable),
+}
+
+
+def _below_run(
+    layout_name: str,
+    swap_link_sides: bool,
+    mode: ParallelizationMode,
+    requested: tuple[str, ...],
+    links: tuple[tuple[str, str], ...] = (("a", "b"),),
+    flight_server: Any = None,
+) -> dict[str, list[list[int]]]:
+    layout = _BELOW_LAYOUTS[layout_name]
+    # Only the first link flips; the extra link keeps its orientation.
+    link_set = {
+        Link.inner(
+            JoinSpec(layout[right if swap_link_sides and position == 0 else left], MLG_INDEX),
+            JoinSpec(layout[left if swap_link_sides and position == 0 else right], MLG_INDEX),
+        )
+        for position, (left, right) in enumerate(links)
+    }
+    names = [layout[key].get_class_name() for key in requested]
+    results = mloda.run_all(
+        names,
+        links=link_set,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={mode},
+        flight_server=flight_server,
+        plugin_collector=PluginCollector.enabled_feature_groups(set(layout.values())),
+    )
+    return {key: _column_values(results, layout[key].get_class_name()) for key in requested}
+
+
+_BELOW_MULTIPROCESSING = pytest.param(
+    "arrow_source",
+    False,
+    ParallelizationMode.MULTIPROCESSING,
+    # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+    marks=pytest.mark.timeout(60),
+    id="arrow_source-a_b-multiprocessing",
+)
+_BELOW_CASES = [
+    pytest.param(layout, swap, mode, id=f"{layout}-{'b_a' if swap else 'a_b'}-{mode.name.lower()}")
+    for layout in _BELOW_LAYOUTS
+    for swap in (False, True)
+    for mode in (ParallelizationMode.SYNC, ParallelizationMode.THREADING)
+]
+
+
+@pytest.mark.parametrize("layout, swap_link_sides, mode", [*_BELOW_CASES, _BELOW_MULTIPROCESSING])
+def test_a_feature_below_a_join_consumer_on_the_non_consumer_side_framework_reads_the_joined_frame(
+    request: pytest.FixtureRequest, layout: str, swap_link_sides: bool, mode: ParallelizationMode
+) -> None:
+    server = request.getfixturevalue("flight_server") if mode == ParallelizationMode.MULTIPROCESSING else None
+    values = _below_run(layout, swap_link_sides, mode, ("below",), flight_server=server)
+
+    assert values == {"below": [[22, 44, 66]]}
+
+
+@pytest.mark.parametrize("layout, swap_link_sides, mode", _BELOW_CASES)
+def test_a_feature_below_a_join_consumer_is_correct_next_to_a_second_link_and_its_consumer(
+    layout: str, swap_link_sides: bool, mode: ParallelizationMode
+) -> None:
+    values = _below_run(layout, swap_link_sides, mode, ("below", "bd"), links=(("a", "b"), ("b", "d")))
+
+    assert values == {"below": [[22, 44, 66]], "bd": [[17, 28, 39]]}

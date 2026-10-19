@@ -237,7 +237,11 @@ class CfwManager:
         return None
 
     def resolve_cfw_uuid_by_tfs_ids(
-        self, cf_class_name: str, tfs_ids: set[UUID], own_feature_uuid: UUID | None
+        self,
+        cf_class_name: str,
+        tfs_ids: set[UUID],
+        own_feature_uuid: UUID | None,
+        reads_join_result: bool = True,
     ) -> UUID | None:
         """Resolves a step's tfs_ids to at most one cfw uuid, the shared fallback chain behind
         `ComputeFrameworkExecutor.prepare_execute_step`, `ComputeFrameworkExecutor.get_cfw`, and
@@ -251,10 +255,18 @@ class CfwManager:
         tfs_ids are each independently some cfw's own key - an ordinary shape, see
         `get_unique_cfw_uuid`'s own docstring), `own_feature_uuid` is tried first, then each tfs_id
         candidate directly, since any one of them beats treating the step as having no cfw at all.
+
+        The override applies only when `reads_join_result` (a join consumer whose own hop may be
+        redundant); any other step keeps the frame its own tfs_ids resolved.
         """
         resolved_uuid = self.get_unique_cfw_uuid(cf_class_name, tfs_ids)
 
-        if resolved_uuid is not None and resolved_uuid in tfs_ids and own_feature_uuid is not None:
+        if (
+            reads_join_result
+            and resolved_uuid is not None
+            and resolved_uuid in tfs_ids
+            and own_feature_uuid is not None
+        ):
             by_feature_uuid = self.get_cfw_uuid(cf_class_name, own_feature_uuid)
             if by_feature_uuid is not None:
                 resolved_uuid = by_feature_uuid

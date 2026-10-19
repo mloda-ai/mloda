@@ -442,7 +442,9 @@ class ExecutionOrchestrator:
             if step.features.any_uuid is None:
                 raise ValueError(f"from_feature_uuid should not be none. {step}")
 
-            cfw = self.executor.get_cfw(step.compute_framework, step.features.any_uuid, step.tfs_ids)
+            cfw = self.executor.get_cfw(
+                step.compute_framework, step.features.any_uuid, step.tfs_ids, step.reads_join_result
+            )
             self.add_to_result_data_collection(cfw, step.features, step.uuid)
             self._drop_data_if_possible(cfw, step)
 
@@ -653,7 +655,9 @@ class ExecutionOrchestrator:
         class_name = step.compute_framework.get_class_name()
 
         # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain.
-        return self.cfw_register.resolve_cfw_uuid_by_tfs_ids(class_name, step.tfs_ids, step.features.any_uuid)
+        return self.cfw_register.resolve_cfw_uuid_by_tfs_ids(
+            class_name, step.tfs_ids, step.features.any_uuid, step.reads_join_result
+        )
 
     def _can_run_step(
         self,

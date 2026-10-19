@@ -29,7 +29,7 @@ Do not call `FeatureChainParser.match_configuration_feature_chain_parser` direct
 
 To report why a `match_guard` declined a value without overriding `match_feature_group_criteria`, declare `expected` on the spec instead; see [PROPERTY_MAPPING Configuration](property-mapping.md).
 
-Containment covers plugin raises only: a framework-owned raise (a two-readers conflict, a forwarded value contradicting the feature name, a rejected effective-options build) still aborts the whole resolution, because it reports a misconfiguration you have to fix.
+Containment covers plugin raises only: a framework-owned raise (a two-readers conflict, a forwarded value contradicting the feature name, a rejected effective-options build) still aborts the whole resolution, because it reports a misconfiguration you have to fix. To make a plugin raise behave like one, `escalate_match_abort(exc)` marks the raise and returns the same exception, and `is_match_abort(exc)` reports whether the mark is present (both from `mloda.provider`); this is the supported way to escalate a match-time misconfiguration.
 
 Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) tables the gates the two paths share and where filter policy differs.
 

@@ -37,6 +37,7 @@ def escalate_match_abort(exc: E) -> E:
     """Mark a framework-owned raise so the match seam re-raises it instead of containing it as a non-match.
 
     Mark-or-contain policy: see call_match_hook.
+    Public path: import from ``mloda.provider``.
     """
     # __dict__, not setattr: setattr raises on a frozen-dataclass exception, and failing to mark must not
     # replace the exception being marked.
@@ -48,7 +49,10 @@ def escalate_match_abort(exc: E) -> E:
 
 
 def is_match_abort(exc: BaseException) -> bool:
-    """Is this raise marked as framework-owned, so the match seam must not contain it."""
+    """Is this raise marked as framework-owned, so the match seam must not contain it.
+
+    Public path: import from ``mloda.provider``.
+    """
     # __dict__, not getattr: a custom __getattr__ could raise inside the seam's except block or fake the marker.
     return exc.__dict__.get(MATCH_ABORT_FLAG, False) is True
 

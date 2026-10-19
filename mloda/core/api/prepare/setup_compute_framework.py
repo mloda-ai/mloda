@@ -16,8 +16,11 @@ class SetupComputeFramework:
         parallelization_modes: set[ParallelizationMode] | None = None,
         output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
-        self.output_framework = self._resolve_output_framework(output_framework)
         available_compute_frameworks = get_all_subclasses(ComputeFramework)
+        if not available_compute_frameworks:
+            raise ValueError("No compute framework plugin is loaded; import one or call PluginLoader.all().")
+
+        self.output_framework = self._resolve_output_framework(output_framework)
 
         if user_compute_frameworks is not None and (
             not isinstance(user_compute_frameworks, Sequence) or isinstance(user_compute_frameworks, (str, bytes))

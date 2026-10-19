@@ -31,6 +31,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 # Aliased: a bare ``import mloda.user`` would bind the name ``mloda`` to the package and collide
@@ -40,6 +41,7 @@ from mloda.core.api.request import Engine
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, PropertySpec
 from mloda.user import Feature, Options, ParallelizationMode, PlanStep, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from tests.test_core.test_abstract_plugins.test_multi_column_auto_resolution import (
     MultiColumnProducer,
@@ -455,6 +457,30 @@ def _run_defaults_probe() -> Any:
     )
 
 
+def _run_defaults_probe_with(features: list[Feature | str]) -> Any:
+    return mlodaAPI.run_all(
+        features,
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=_DEFAULTS_PLUGINS,
+    )
+
+
+class RunResultAnyFrameworkProbe(FeatureGroup):
+    """Root source with no framework rule, so it runs on any requested framework."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"run_result_any_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"run_result_any_value": [1, 2, 3]}
+
+
+_ANY_PLUGINS = PluginCollector.enabled_feature_groups({RunResultAnyFrameworkProbe})
+
+
 class TestRunResultFrameFor:
     """frame_for finds the frame whose compute step requested the feature."""
 
@@ -515,7 +541,55 @@ class TestRunResultFrameFor:
         results = _run_defaults_probe()
 
         with pytest.raises(ValueError, match="run_result_defaults_value"):
-            results.frame_for(Feature("run_result_defaults_value", options={"run_result_mode": "slow"}))
+            results.frame_for(Feature("run_result_defaults_value", options={"run_result_absent": 1}))
+
+    def test_options_object_form_disambiguates(self) -> None:
+        results = _run_probe([Feature("run_result_probe_value", options={"source_table": t}) for t in ("A", "B")])
+
+        frame = results.frame_for(Feature("run_result_probe_value", options=Options(group={"source_table": "B"})))
+
+        assert frame["run_result_probe_value"].tolist() == _PROBE_VALUES["B"]
+
+    def test_fewest_extra_group_keys_wins_and_str_stays_ambiguous(self) -> None:
+        plain = Feature("run_result_defaults_value")
+        extra = Feature("run_result_defaults_value", options={"run_result_extra": 1})
+        results = _run_defaults_probe_with([plain, extra])
+        by_extra = {"run_result_extra" in step.feature_set_options.group: frame for step, frame in results.frames()}
+        assert len(by_extra) == 2
+
+        assert results.frame_for(plain) is by_extra[False]
+        assert results.frame_for(extra) is by_extra[True]
+        with pytest.raises(ValueError, match="ambiguous"):
+            results.frame_for("run_result_defaults_value")
+
+    def test_compute_framework_pin_matches_only_that_framework(self) -> None:
+        pandas_pin = Feature("run_result_any_value", compute_framework="PandasDataFrame")
+        arrow_pin = Feature("run_result_any_value", compute_framework="PyArrowTable")
+        results = mlodaAPI.run_all(
+            [pandas_pin, arrow_pin],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=_ANY_PLUGINS,
+        )
+
+        assert isinstance(results.frame_for(pandas_pin), pd.DataFrame)
+        assert isinstance(results.frame_for(arrow_pin), pa.Table)
+        with pytest.raises(ValueError, match="ambiguous"):
+            results.frame_for("run_result_any_value")
+
+    def test_credential_group_values_are_redacted_in_errors(self) -> None:
+        dsn = "postgres://user:s3cretpw@host/db"
+        results = _run_probe(
+            [Feature("run_result_probe_value", options={"source_table": t, "dsn": dsn}) for t in ("A", "B")]
+        )
+
+        with pytest.raises(ValueError, match="ambiguous") as ambiguous:
+            results.frame_for("run_result_probe_value")
+        with pytest.raises(ValueError, match="run_result_probe_value") as no_match:
+            results.frame_for(Feature("run_result_probe_value", options={"source_table": "C", "dsn": dsn}))
+
+        assert "s3cretpw" not in str(ambiguous.value)
+        assert "s3cretpw" not in str(no_match.value)
 
     def test_multi_output_feature_is_found_by_its_base_name(self) -> None:
         results = mlodaAPI.run_all(

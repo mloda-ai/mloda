@@ -152,7 +152,7 @@ for step in results.plan:
 
 `RunResult.frames()` pairs each result frame with the compute `PlanStep` that produced it, by `step_uuid`; the list itself is in plan order, one element per step that produced requested output.
 
-`RunResult.frame_for(feature)` returns the frame that holds a requested feature, matched by name or by a `Feature` with its group options. It raises `ValueError` if none or several match.
+`RunResult.frame_for(feature)` returns the frame that holds a requested feature, matched by name, or by a `Feature` whose group options (and pinned compute framework) are a subset of the step's; the closest step wins. It raises `ValueError` if none or several match.
 
 To pin a resolved plan, see [Plan Lock](plan-lock.md).
 

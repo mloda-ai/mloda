@@ -203,7 +203,7 @@ class TestWorkerProcessDoesNotOutliveASigkilledParent:
                     pass
 
 
-class TestForkedChildOfAProcessWithASharedManager:
+class TestForkedChildOfAProcessHoldingMlodaProcesses:
     @pytest.mark.parametrize("variant", ["single_manager", "replaced_manager_still_in_use"])
     @pytest.mark.timeout(40)
     def test_forked_child_exits_cleanly_and_the_parents_server_survives(self, variant: str, tmp_path: Path) -> None:
@@ -241,6 +241,57 @@ class TestForkedChildOfAProcessWithASharedManager:
         # The interpreter's own resource tracker may write to a forked child's stderr.
         assert "can only join a child process" not in result["stderr"]
         assert result["alive"] == "True"
+
+    @pytest.mark.parametrize(
+        "child_cleanup",
+        [
+            "",
+            "manager.stop_standbys()",
+            "manager.join_all()",
+            "manager.terminate_alive_processes()",
+            "server.end_flight_server_process()",
+        ],
+        ids=["nothing", "stop_standbys", "join_all", "terminate_alive_processes", "end_flight_server_process"],
+    )
+    @pytest.mark.timeout(40)
+    def test_forked_child_running_cleanup_does_not_terminate_workers_or_the_flight_server(
+        self, child_cleanup: str, tmp_path: Path
+    ) -> None:
+        cleanup_line = f"        {child_cleanup}\n" if child_cleanup else ""
+        probe = tmp_path / "probe.py"
+        probe.write_text(
+            "import json\n"
+            "import os\n"
+            "import sys\n"
+            "from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer\n"
+            "from mloda.core.runtime.worker.multiprocessing_worker import standby_worker\n"
+            "from mloda.core.runtime.worker_manager import WorkerManager\n"
+            "\n"
+            'if __name__ == "__main__":\n'
+            "    manager = WorkerManager()\n"
+            "    manager.prestart_workers(1, standby_worker)\n"
+            "    worker_process = manager.standby[0][0]\n"
+            "    server = ParallelRunnerFlightServer()\n"
+            "    server.start_flight_server_process()\n"
+            "    server_process = server.flight_server_process\n"
+            "    pid = os.fork()\n"
+            "    if pid == 0:\n" + cleanup_line + "        sys.exit(0)\n"
+            "    _, status = os.waitpid(pid, 0)\n"
+            "    worker_process.join(timeout=1.5)\n"
+            "    server_process.join(timeout=0)\n"
+            "    worker_code = str(worker_process.exitcode)\n"
+            "    server_code = str(server_process.exitcode)\n"
+            "    manager.stop_standbys()\n"
+            "    server.end_flight_server_process()\n"
+            '    print(json.dumps({"status": str(os.waitstatus_to_exitcode(status)),'
+            ' "worker": worker_code, "server": server_code}))\n'
+        )
+
+        result = run_probes(probe, 1)[0]
+
+        assert result["status"] == "0"
+        assert result["worker"] == "None"
+        assert result["server"] == "None"
 
 
 class TestSharedManagerServerDoesNotOutliveACleanParentExit:

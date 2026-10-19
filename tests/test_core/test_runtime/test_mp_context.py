@@ -4,12 +4,16 @@ import importlib.util
 import logging
 import multiprocessing
 import multiprocessing.context
+import os
 import sys
+import weakref
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
-from mloda.core.runtime.mp_context import mp_start_context
+from mloda.core.runtime import mp_context
+from mloda.core.runtime.mp_context import mp_start_context, start_daemon_process
 from tests.conftest import MP_PRELOAD_MODULES
 
 FORKSERVER_AVAILABLE = "forkserver" in multiprocessing.get_all_start_methods()
@@ -160,3 +164,43 @@ def test_preload_ignored_under_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.parametrize("module", MP_PRELOAD_MODULES)
 def test_conftest_preload_modules_resolve(module: str) -> None:
     assert importlib.util.find_spec(module) is not None
+
+
+def _noop_target() -> None:
+    return None
+
+
+def test_forgetting_daemon_processes_after_a_fork_leaves_foreign_children_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracked = [start_daemon_process(mp_start_context(), _noop_target) for _ in range(2)]
+    foreign = object()
+    children: Any = multiprocessing.process._children  # type: ignore[attr-defined]
+
+    assert all(process in mp_context._daemon_processes for process in tracked)
+    monkeypatch.setattr(
+        mp_context, "_daemon_processes", weakref.WeakKeyDictionary({process: os.getpid() for process in tracked})
+    )
+
+    children.update([*tracked, foreign])
+    try:
+        mp_context._forget_daemon_processes_after_fork()
+
+        assert not any(process in children for process in tracked)
+        assert foreign in children
+    finally:
+        children.difference_update([*tracked, foreign])
+
+
+def test_started_by_this_process_is_false_only_for_a_process_another_pid_started(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    process = start_daemon_process(mp_start_context(), _noop_target)
+    untracked = Mock(spec=multiprocessing.Process)
+
+    assert mp_context.started_by_this_process(process) is True
+    assert mp_context.started_by_this_process(untracked) is True
+
+    monkeypatch.setitem(mp_context._daemon_processes, process, os.getpid() + 1)
+
+    assert mp_context.started_by_this_process(process) is False

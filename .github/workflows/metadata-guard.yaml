@@ -1,7 +1,8 @@
 name: Metadata Guard
 
-# ci.yaml skips the matrix for root markdown, but README.md is packaging metadata (pyproject `readme`).
-# Always-on (no paths filters) so deleting or renaming it cannot merge green and break the sdist build.
+# ci.yaml skips the matrix for root markdown, but README.md (pyproject `readme`) and NOTICE.md
+# (pyproject `license-files`) are packaging metadata. Always-on (no paths filters) so deleting or
+# renaming either cannot merge green and break the sdist build.
 on:
   push:
     branches: [ "main", "feat/reader-feature-groups" ]
@@ -22,6 +23,11 @@ jobs:
       run: |
         test -f README.md || {
           echo "README.md is missing but pyproject.toml references it as packaging metadata (readme)."
+          echo "Restore it, or update pyproject.toml and this guard together."
+          exit 1
+        }
+        test -f NOTICE.md || {
+          echo "NOTICE.md is missing but pyproject.toml references it as packaging metadata (license-files)."
           echo "Restore it, or update pyproject.toml and this guard together."
           exit 1
         }

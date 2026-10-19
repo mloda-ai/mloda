@@ -1,14 +1,19 @@
 """Files that pyproject packaging metadata points at must be guarded by an always-on workflow.
 
-ci.yaml's docs-only fast path skips CI for markdown in paths-ignore. README.md is in that list, but
-pyproject's `readme` entry points at it, so a PR that deletes or renames it skips CI, merges green,
-and breaks the sdist/wheel build for everyone afterwards. An always-on workflow (no paths filters)
-must assert those files still exist.
+ci.yaml's docs-only fast path skips CI for markdown in paths-ignore. Files that pyproject's `readme`
+and license entries (`license-files`, `license.file`) point at can be in that list, so a PR that deletes
+or renames one skips CI, merges green, and breaks the sdist/wheel build for everyone afterwards. An
+always-on workflow (no paths filters) must assert those files still exist.
 """
 
-import re
+import sys
 from pathlib import Path
 from typing import Any
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 import yaml
 
@@ -18,13 +23,23 @@ from tests.test_ci_paths_ignore import PROJECT_ROOT, TRIGGERS, _matches, _trigge
 WORKFLOWS = PROJECT_ROOT / ".github" / "workflows"
 PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 
-# `readme = { file = "README.md", ... }` / `license = { file = "LICENSE" }` / `readme = "README.md"`.
-METADATA_FILE = re.compile(r"""^\s*(?:readme|license)\s*=\s*(?:\{[^}]*?\bfile\s*=\s*)?["']([^"']+)["']""", re.MULTILINE)
-README_KEY = re.compile(r"^\s*readme\s*=", re.MULTILINE)
+
+def _project_table() -> dict[str, Any]:
+    project: dict[str, Any] = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
+    return project
 
 
 def _packaging_metadata_files() -> set[str]:
-    return set(METADATA_FILE.findall(PYPROJECT.read_text(encoding="utf-8")))
+    project = _project_table()
+    files: set[str] = set()
+    for key in ("readme", "license"):
+        value = project.get(key)
+        if key == "readme" and isinstance(value, str):
+            files.add(value)
+        elif isinstance(value, dict) and "file" in value:
+            files.add(str(value["file"]))
+    files.update(str(entry) for entry in project.get("license-files", []))
+    return files
 
 
 def _workflow_triggers(config: dict[Any, Any]) -> dict[str, Any]:
@@ -56,7 +71,7 @@ def test_pyproject_metadata_files_are_discovered() -> None:
     assert metadata_files, "pyproject packaging metadata parse found no files: this guard has gone stale"
     for target in sorted(metadata_files):
         assert (PROJECT_ROOT / target).is_file(), f"pyproject packaging metadata points at missing file {target!r}"
-    assert README_KEY.search(PYPROJECT.read_text(encoding="utf-8")), (
+    assert "readme" in _project_table(), (
         "pyproject no longer declares a `readme` key: the parse target of this guard has disappeared"
     )
 

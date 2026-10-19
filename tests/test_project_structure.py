@@ -11,6 +11,7 @@ else:
 
 import yaml
 from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -223,6 +224,23 @@ class TestPackagingConfig:
         assert "build-system" in data, "pyproject.toml must have a [build-system] section"
         assert "requires" in data["build-system"], "pyproject.toml [build-system] must specify 'requires'"
         assert "build-backend" in data["build-system"], "pyproject.toml [build-system] must specify 'build-backend'"
+
+    def test_license_is_spdx_expression(self) -> None:
+        """License is an SPDX string and no License classifier is present."""
+        with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
+            project: dict[str, Any] = tomllib.load(f)["project"]
+        assert project["license"] == "Apache-2.0"
+        assert not [c for c in project.get("classifiers", []) if c.startswith("License ::")]
+
+    def test_python_classifiers_match_requires_python(self) -> None:
+        """Python 3.X classifiers equal the minors admitted by requires-python."""
+        with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
+            project: dict[str, Any] = tomllib.load(f)["project"]
+        spec = SpecifierSet(project["requires-python"])
+        prefix = "Programming Language :: Python :: 3."
+        expected = {f"{prefix}{m}" for m in range(31) if spec.contains(f"3.{m}")}
+        actual = {c for c in project.get("classifiers", []) if re.fullmatch(re.escape(prefix) + r"\d+", c)}
+        assert actual == expected
 
 
 class TestToxConfig:

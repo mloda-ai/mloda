@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=77.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,15 +7,30 @@ name = "mloda"
 version = "0.16.0"
 description = "mloda.ai: Open Data Access for ML and AI"
 readme = { file = "README.md", content-type = "text/markdown" }
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE.md"]
 authors = [
     { name = "Tom Kaltofen", email = "info@mloda.ai" }
 ]
 dependencies = []
 
 requires-python = ">=3.10,<3.15"
+keywords = ["ai-agents", "data-access", "feature-engineering", "data-pipeline", "mlops", "llmops", "rag", "lineage", "plugin-framework"]
 classifiers = [
-    "Programming Language :: Python :: 3"
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Framework :: Pytest",
+    "Typing :: Typed",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 [project.optional-dependencies]

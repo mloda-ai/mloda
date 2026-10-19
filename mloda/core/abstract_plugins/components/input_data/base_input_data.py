@@ -563,11 +563,11 @@ class BaseInputData(ABC):
         if len(pinned_paths) != 1:
             return
         pinned_path = next(iter(pinned_paths))
-        from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+        from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 
         if any(
             not inspect.isabstract(group) and pinned_path.endswith(group.suffixes())
-            for group in get_all_subclasses(ReadFileFG)
+            for group in get_all_subclasses(_FileSourceFG)
         ):
             return
         record_match_rejection(

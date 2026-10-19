@@ -5,13 +5,12 @@ A subclass declares ``suffixes()``. Third-party groups should run the contract m
 """
 
 import os
-from collections.abc import Collection
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -20,7 +19,7 @@ SOURCE_SUFFIX = "~source"
 FILE_TYPE_SUFFIX = "~file_type"
 
 
-class ReadDocumentFG(ReadFileFG):
+class ReadDocumentFG(_FileSourceFG):
     """Document format group; run tests/mixins/reader_feature_groups/document_format_feature_group_test_mixin.py."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
@@ -40,10 +39,6 @@ class ReadDocumentFG(ReadFileFG):
     @classmethod
     def file_type(cls, path: str) -> str:
         return os.path.splitext(path)[1].lstrip(".").lower()
-
-    @classmethod
-    def column_names(cls, path: str) -> Collection[str]:
-        return sorted(cls.declared_names())
 
     @classmethod
     def declared_names(cls) -> frozenset[str]:

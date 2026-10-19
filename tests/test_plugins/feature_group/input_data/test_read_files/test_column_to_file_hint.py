@@ -143,3 +143,30 @@ class TestColumnToFileHintTextFG:
         )
 
         assert result == [{"TextFG": ["second body"], "TextFG~source": [str(second)]}]
+
+
+class TestPointerAgainstPinOnADocumentGroup:
+    def _feature(self, pointer: Path) -> Feature:
+        return Feature("TextFG", Options({"TextFG": str(pointer)}))
+
+    def _dac(self, pinned: Path) -> DataAccessCollection:
+        return DataAccessCollection(files={str(pinned)}, column_to_file={"TextFG": str(pinned)})
+
+    def test_a_document_pointer_that_differs_from_the_pin_raises_naming_both(self, tmp_path: Path) -> None:
+        pinned = tmp_path / "pinned.txt"
+        other = tmp_path / "other.txt"
+        pinned.write_text("a", encoding="utf-8")
+        other.write_text("b", encoding="utf-8")
+        group = load_document_group("text_fg", "TextFG")
+        with pytest.raises(FormatPointerError) as excinfo:
+            resolve_or_raise(self._feature(other), {group: {PythonDictFramework}}, None, self._dac(pinned))
+
+        assert os.path.abspath(pinned) in str(excinfo.value)
+        assert os.path.abspath(other) in str(excinfo.value)
+
+    def test_a_document_pointer_at_the_pinned_file_is_fine(self, tmp_path: Path) -> None:
+        pinned = tmp_path / "pinned.txt"
+        pinned.write_text("a", encoding="utf-8")
+        group = load_document_group("text_fg", "TextFG")
+
+        resolve_or_raise(self._feature(pinned), {group: {PythonDictFramework}}, None, self._dac(pinned))

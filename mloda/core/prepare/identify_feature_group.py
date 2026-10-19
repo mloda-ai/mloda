@@ -142,7 +142,7 @@ def _pinned_path(feature: Feature, collection: DataAccessCollection | None) -> s
 def _pin_conflict(
     feature: Feature, collection: DataAccessCollection | None, loaded: dict[str, type[FormatFeatureGroup]]
 ) -> str | None:
-    from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+    from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 
     pinned = _pinned_path(feature, collection)
     if pinned is None:
@@ -153,7 +153,7 @@ def _pin_conflict(
         if group is None:
             continue
         value = feature.options[key]
-        if issubclass(group, ReadFileFG) and isinstance(value, (str, os.PathLike)):
+        if issubclass(group, _FileSourceFG) and isinstance(value, (str, os.PathLike)):
             pointer = os.path.abspath(value)
             if pointer == pinned_abs:
                 continue

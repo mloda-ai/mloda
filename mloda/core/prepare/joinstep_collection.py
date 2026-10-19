@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.step.join_step import JoinStep
@@ -59,3 +59,31 @@ class JoinStepCollection:
 
     def get_required_join_uuids(self, join_step: JoinStep) -> set[UUID]:
         return self.collection.get(join_step, set())
+
+    @staticmethod
+    def groups_sharing_consumers(
+        joins: Sequence[JoinStep], consumers_by_token: Mapping[UUID, frozenset[UUID]]
+    ) -> list[list[JoinStep]]:
+        """Joins linked through a common recorded consumer, in the order given; joins without consumers are left out."""
+        parent: dict[int, int] = {}
+
+        def find(i: int) -> int:
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        first_join_of: dict[UUID, int] = {}
+        for index, join in enumerate(joins):
+            parent[index] = index
+            for consumer in consumers_by_token.get(join.uuid, frozenset()):
+                if consumer in first_join_of:
+                    parent[find(index)] = find(first_join_of[consumer])
+                else:
+                    first_join_of[consumer] = index
+
+        groups: dict[int, list[JoinStep]] = defaultdict(list)
+        for index, join in enumerate(joins):
+            if consumers_by_token.get(join.uuid):
+                groups[find(index)].append(join)
+        return list(groups.values())

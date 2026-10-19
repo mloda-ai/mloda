@@ -15,6 +15,8 @@ from mloda.core.runtime.flight.flight_server import FlightServer
 class JoinStep(Step):
     destination_hop_uuid: UUID | None = None
     split_consumers: frozenset[UUID] | None = None  # set only for parts of a carrier-frame split
+    # Consumers of every join feeding the same frame; the merged frame is kept until all of them ran.
+    keep_alive: frozenset[UUID] = frozenset()
 
     def __init__(
         self,
@@ -127,6 +129,7 @@ class JoinStep(Step):
         from_cfw_data, from_cfw_uuid = self.get_data(from_cfw, cfw)
 
         self._merge_data(cfw, from_cfw_data)
+        cfw.keep_alive |= self.keep_alive
 
         if not self.shared_source:
             cfw_register.add_to_merge_relation(cfw.uuid, from_cfw_uuid, cls_name=cfw.get_class_name())

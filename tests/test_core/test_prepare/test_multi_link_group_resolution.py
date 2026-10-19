@@ -1624,6 +1624,7 @@ _REMEDY_SECOND_INPUTS = ("mlg_a", "mlg_a1", "mlg_bd")
 RemedySecondBConsumer = _remedy_sum_consumer("RemedySecondBConsumer", SecondCfw, _REMEDY_SECOND_INPUTS)
 
 
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
     "consumer, root_b, expected",
@@ -1636,12 +1637,17 @@ RemedySecondBConsumer = _remedy_sum_consumer("RemedySecondBConsumer", SecondCfw,
     ],
 )
 def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_side_shares_a_framework(
-    consumer: type[FeatureGroup], root_b: type[FeatureGroup], expected: list[list[int]], swap_link_sides: bool
+    consumer: type[FeatureGroup],
+    root_b: type[FeatureGroup],
+    expected: list[list[int]],
+    swap_link_sides: bool,
+    mode: ParallelizationMode,
 ) -> None:
     session = _side_path_prepare(
         SidePathArrowP,
         False,
         swap_link_sides,
+        mode,
         consumer=consumer,
         features=[consumer.get_class_name()],
         **{**_REMEDY_KWARGS, "root_b": root_b},
@@ -1651,11 +1657,12 @@ def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_s
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
     assert not any(step.carriers for step in join_steps)
 
-    results = session.run()
+    results = session.run(parallelization_modes={mode})
 
     assert _side_path_values(results, consumer) == expected
 
 
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
@@ -1691,11 +1698,13 @@ def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_togeth
     second_expected: list[list[int]],
     swap_link_sides: bool,
     link_factory: Any,
+    mode: ParallelizationMode,
 ) -> None:
     session = _side_path_prepare(
         SidePathArrowP,
         False,
         swap_link_sides,
+        mode,
         consumer=first,
         features=[first.get_class_name(), second.get_class_name()],
         link_factory=link_factory,
@@ -1706,10 +1715,37 @@ def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_togeth
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
     assert all(step.split_consumers is None for step in join_steps)
 
-    results = session.run()
+    results = session.run(parallelization_modes={mode})
 
     assert _side_path_values(results, first) == first_expected
     assert _side_path_values(results, second) == second_expected
+
+
+RemedyArrowPairConsumer = _remedy_sum_consumer("RemedyArrowPairConsumer", PyArrowTable, ("mlg_a1", "mlg_b"))
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_return_their_values_together(
+    swap_link_sides: bool, mode: ParallelizationMode
+) -> None:
+    first, second = RemedyArrowSameBConsumer, RemedyArrowPairConsumer
+    repeats = 4 if mode == ParallelizationMode.THREADING else 1
+    for _ in range(repeats):
+        session = _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            mode,
+            consumer=first,
+            features=[first.get_class_name(), second.get_class_name()],
+            **{**_REMEDY_KWARGS, "root_b": MultiLinkRootBSame, "extra_groups": {RemedyRootA1, second}},
+        )
+
+        results = session.run(parallelization_modes={mode})
+
+        assert _side_path_values(results, first) == [[18, 30, 42]]
+        assert _side_path_values(results, second) == [[17, 28, 39]]
 
 
 class RemedyRootBArrowX(RemedyRootBThird):

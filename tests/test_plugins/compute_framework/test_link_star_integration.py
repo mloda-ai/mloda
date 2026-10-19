@@ -10,10 +10,26 @@ cell values.
 
 from typing import Any
 
-from mloda.provider import FeatureGroup, FeatureSet, BaseInputData, DataCreator
-from mloda.user import Feature, FeatureName, Index, Link, JoinSpec, JoinType, Options, PluginCollector, mloda
+import pyarrow.compute as pc
+import pytest
 
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, BaseInputData, DataCreator
+from mloda.user import (
+    Feature,
+    FeatureName,
+    Index,
+    Link,
+    JoinSpec,
+    JoinType,
+    Options,
+    ParallelizationMode,
+    PluginCollector,
+    mloda,
+)
+
+import mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer  # noqa: F401
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 # === Fully-matching star topology (all FGs expose row_id [1, 2, 3]) ===
@@ -379,3 +395,148 @@ class TestLinkStarIntegration:
         inner_ids = {int(v) for v in inner_result[0][column].values}
         assert inner_ids == {2, 3}
         assert 4 not in inner_ids
+
+
+# === Hub on the right of both links: two joins share only their source side ===
+
+HUB_RIGHT_INDEX = Index(("idx",))
+_HR_A_ROWS = {"x": 1, "y": 2, "z": 3, "w": 4}
+_HR_C_ROWS = {"y": 7, "z": 8, "w": 9, "q": 10}
+_HR_B_ROWS = {"x": 10, "y": 20, "z": 30, "v": 50, "u": 60}
+
+
+def _hub_right_group(
+    name: str, column: str, rows: dict[str, int], framework: type[ComputeFramework]
+) -> type[FeatureGroup]:
+    def input_data(cls: Any) -> BaseInputData | None:
+        return DataCreator({column})
+
+    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        return {"idx": list(rows), column: list(rows.values())}
+
+    def compute_framework_rule(cls: Any) -> set[type[ComputeFramework]]:
+        return {framework}
+
+    namespace = {
+        "__module__": __name__,
+        "input_data": classmethod(input_data),
+        "calculate_feature": classmethod(calculate_feature),
+        "compute_framework_rule": classmethod(compute_framework_rule),
+    }
+    return type(name, (FeatureGroup,), namespace)
+
+
+HubRightA = _hub_right_group("HubRightA", "hr_a", _HR_A_ROWS, PyArrowTable)
+HubRightB = _hub_right_group("HubRightB", "hr_b", _HR_B_ROWS, PyArrowTable)
+HubRightCArrow = _hub_right_group("HubRightCArrow", "hr_c", _HR_C_ROWS, PyArrowTable)
+HubRightCPandas = _hub_right_group("HubRightCPandas", "hr_c", _HR_C_ROWS, PandasDataFrame)
+
+
+class HubRightConsumer(FeatureGroup):
+    """Sums a, c and b per row, treating a missing value as 0."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_a"), Feature("hr_c"), Feature("hr_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.fill_null(data["hr_a"], 0)
+        for column in ("hr_c", "hr_b"):
+            total = pc.add(total, pc.fill_null(data[column], 0))
+        return data.append_column(cls.get_class_name(), total)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+def _hub_right_run(
+    link_factory: Any, spoke_c: type[FeatureGroup], mode: ParallelizationMode, flight_server: Any = None
+) -> list[int]:
+    links = {
+        link_factory(JoinSpec(HubRightA, HUB_RIGHT_INDEX), JoinSpec(HubRightB, HUB_RIGHT_INDEX)),
+        link_factory(JoinSpec(spoke_c, HUB_RIGHT_INDEX), JoinSpec(HubRightB, HUB_RIGHT_INDEX)),
+    }
+    results = mloda.run_all(
+        [Feature(name=HubRightConsumer.get_class_name())],
+        links=links,
+        compute_frameworks=[PyArrowTable, PandasDataFrame],
+        parallelization_modes={mode},
+        plugin_collector=PluginCollector.enabled_feature_groups({HubRightA, HubRightB, spoke_c, HubRightConsumer}),
+        flight_server=flight_server,
+    )
+    column = HubRightConsumer.get_class_name()
+    return [sorted(r[column].to_pylist()) for r in results if column in r.column_names][0]
+
+
+_HUB_RIGHT_INNER_EXPECTED = [29, 41]
+_HUB_RIGHT_OUTER_EXPECTED = [10, 11, 13, 29, 41, 50, 60]
+# The failure is a race, so a single THREADING run can pass by luck.
+_THREADING_REPEATS = 4
+
+
+class TestHubOnTheRightOfBothLinks:
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
+    def test_two_inner_links_sharing_the_right_side_return_the_matched_rows(
+        self, spoke_c: type[FeatureGroup], mode: ParallelizationMode
+    ) -> None:
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            assert _hub_right_run(Link.inner, spoke_c, mode) == _HUB_RIGHT_INNER_EXPECTED
+
+    @pytest.mark.timeout(60)
+    def test_two_inner_links_sharing_the_right_side_return_the_matched_rows_with_multiprocessing(
+        self, flight_server: Any
+    ) -> None:
+        rows = _hub_right_run(Link.inner, HubRightCArrow, ParallelizationMode.MULTIPROCESSING, flight_server)
+
+        assert rows == _HUB_RIGHT_INNER_EXPECTED
+
+    def test_two_outer_links_sharing_the_right_side_return_every_row_with_threading(self) -> None:
+        for _ in range(_THREADING_REPEATS):
+            rows = _hub_right_run(Link.outer, HubRightCArrow, ParallelizationMode.THREADING)
+            assert rows == _HUB_RIGHT_OUTER_EXPECTED
+
+
+class HubRightPairConsumer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_a"), Feature("hr_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data["hr_a"], data["hr_b"]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class HubRightPairChild(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(HubRightPairConsumer.get_class_name())}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data[HubRightPairConsumer.get_class_name()], 1))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+def test_one_join_feeding_a_consumer_and_its_child_runs_with_threading() -> None:
+    child = HubRightPairChild.get_class_name()
+    for _ in range(_THREADING_REPEATS):
+        results = mloda.run_all(
+            [Feature(name=child), Feature(name=HubRightPairConsumer.get_class_name())],
+            links={Link.inner(JoinSpec(HubRightA, HUB_RIGHT_INDEX), JoinSpec(HubRightB, HUB_RIGHT_INDEX))},
+            compute_frameworks=[PyArrowTable],
+            parallelization_modes={ParallelizationMode.THREADING},
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {HubRightA, HubRightB, HubRightPairConsumer, HubRightPairChild}
+            ),
+        )
+
+        values = [sorted(r[child].to_pylist()) for r in results if child in r.column_names]
+        assert values == [[12, 23, 34]]

@@ -12,7 +12,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_NAME
 from mloda.core.api.plan_info import PlanStep
-from mloda.core.prepare.choose_compute_frameworks import stable_text
+from mloda.core.prepare.stable_text import stable_text
 
 _SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
 

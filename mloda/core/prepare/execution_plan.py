@@ -26,7 +26,7 @@ from mloda.core.prepare.declared_sides import (
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
-from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
+from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker, trekker_content_key
 from mloda.core.prepare.resolved_join import (
     DeclinedOrientation,
     JoinSide,
@@ -791,6 +791,72 @@ Available join types:
                     stack.append(owner)
         clear |= visited
         return False
+
+    @staticmethod
+    def _join_content_key(join: JoinStep, graph: Graph) -> tuple[str, ...]:
+        """Order key of a join from its link, frameworks and member classes, equal across interpreters."""
+        nodes = graph.get_nodes()
+
+        def members(uuids: set[UUID]) -> str:
+            return ",".join(
+                sorted(
+                    f"{nodes[u].feature_group_class.__module__}:{nodes[u].feature_group_class.__qualname__}:{nodes[u].feature.name}"
+                    for u in uuids
+                    if u in nodes
+                )
+            )
+
+        key = trekker_content_key((join.link, join.destination_framework, join.source_framework))
+        return key + (members(join.destination_framework_uuids), members(join.source_framework_uuids))
+
+    def _order_joins_sharing_consumers(self, plan: Sequence[Step], graph: Graph) -> set[UUID]:
+        """Chain joins that feed one consumer in a content based order, and make each consumer wait on all of them.
+
+        Returns the destinations of joins whose merged frame a later join sharing the source reads back.
+        """
+        steps_by_uuid = {step.uuid: step for step in plan}
+        producer_of = {token: step.uuid for step in plan for token in step.get_uuids()}
+        joins = [step for step in plan if isinstance(step, JoinStep)]
+        consumers_by_token = {r.token: r.consumers for r in self.planned_records}
+        groups = JoinStepCollection.groups_sharing_consumers(joins, consumers_by_token)
+
+        def waits(waiter: Step, awaited: Step) -> bool:
+            return self._step_waits_for(waiter.uuid, awaited.uuid, steps_by_uuid, producer_of)
+
+        destinations: set[UUID] = set()
+        for group in groups:
+            if len(group) > 1:
+                kept = frozenset().union(*(consumers_by_token[join.uuid] for join in group))
+                for join in group:
+                    join.keep_alive = kept
+            remaining = sorted(group, key=lambda join: self._join_content_key(join, graph))
+            ordered: list[JoinStep] = []
+            while remaining:
+                chosen = next(
+                    (j for j in remaining if not any(waits(j, other) for other in remaining if other is not j)),
+                    remaining[0],
+                )
+                remaining.remove(chosen)
+                ordered.append(chosen)
+            for earlier, later in zip(ordered, ordered[1:]):
+                if not waits(later, earlier) and not waits(earlier, later):
+                    later.required_uuids.add(earlier.uuid)
+                if earlier.source_framework_uuids & later.source_framework_uuids:
+                    destinations |= earlier.destination_framework_uuids
+
+        group_of_consumer: dict[UUID, int] = {}
+        for index, group in enumerate(groups):
+            for join in group:
+                for consumer in consumers_by_token[join.uuid]:
+                    group_of_consumer[consumer] = index
+        for step in plan:
+            if not isinstance(step, FeatureGroupStep):
+                continue
+            for index in sorted({group_of_consumer[u] for u in step.get_uuids() if u in group_of_consumer}):
+                for join in groups[index]:
+                    if join.uuid not in step.required_uuids and not waits(join, step):
+                        step.required_uuids.add(join.uuid)
+        return destinations
 
     def _order_hop_after_same_framework_parent(
         self,
@@ -1622,6 +1688,8 @@ Available join types:
                     new_execution_plan.remove(dropped)
                     self.tfs_collection.pop(dropped, None)
             redirect_consumer.required_uuids.add(mirror.uuid)
+
+        need_to_upload_collector |= self._order_joins_sharing_consumers(new_execution_plan, graph)
 
         # We define that every parent of a transform framework step needs to be uploaded.
         # This step is only relevant for multi processing.

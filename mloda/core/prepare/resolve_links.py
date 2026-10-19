@@ -5,6 +5,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.prepare.stable_text import stable_text
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
 
@@ -15,6 +16,23 @@ def inheritance_distance(child: type, parent: type) -> int:
     """Steps from child to parent in the MRO, or 9999 if parent is not in child's hierarchy."""
     mro: tuple[type, ...] = getattr(child, "__mro__", ())
     return mro.index(parent) if parent in mro else 9999
+
+
+def trekker_content_key(trekker: LinkFrameworkTrekker) -> tuple[str, ...]:
+    """Sort key built from what a link declares, so it is equal across interpreters."""
+    link, left_framework, right_framework = trekker
+    return (
+        link.jointype.value,
+        f"{link.left_feature_group.__module__}:{link.left_feature_group.__qualname__}",
+        f"{link.right_feature_group.__module__}:{link.right_feature_group.__qualname__}",
+        stable_text(link.left_index.index),
+        stable_text(link.right_index.index),
+        stable_text(link.asof_config),
+        stable_text(link.left_discriminator),
+        stable_text(link.right_discriminator),
+        left_framework.get_class_name(),
+        right_framework.get_class_name(),
+    )
 
 
 class LinkTrekker:
@@ -28,6 +46,9 @@ class LinkTrekker:
 
     def update(self, key: LinkFrameworkTrekker, value: UUID) -> None:
         self.data[key].add(value)
+
+    def _sorted_data(self) -> list[tuple[LinkFrameworkTrekker, set[UUID]]]:
+        return sorted(self.data.items(), key=lambda item: trekker_content_key(item[0]))
 
     def invert_link(
         self, link: Link, left_cfw: type[ComputeFramework], right_cfw: type[ComputeFramework], uuid: UUID
@@ -156,12 +177,12 @@ class LinkTrekker:
         self.order = OrderedDict((node, self.order[node]) for node in result)
 
     def order_links_by_frameworks(self) -> None:
-        for trekker, uuids in self.data.items():
+        for trekker, uuids in self._sorted_data():
             link = trekker[0]
             left_framework = trekker[1]
             right_framework = trekker[2]
 
-            for other_trekker, other_uuids in self.data.items():
+            for other_trekker, other_uuids in self._sorted_data():
                 other_link = other_trekker[0]
                 other_left_framework = other_trekker[1]
                 _ = other_trekker[2]
@@ -184,12 +205,12 @@ class LinkTrekker:
         # fill ordered dict by priority
 
         for o_id, oo_uuids in self.order.items():
-            for k, v in self.data.items():
+            for k, v in self._sorted_data():
                 if k[0].uuid == o_id:
                     self.data_ordered[k] = v
 
         # fill rest independent of order
-        for k, v in self.data.items():
+        for k, v in self._sorted_data():
             if k not in self.data_ordered:
                 self.data_ordered[k] = v
 
@@ -264,8 +285,9 @@ class ResolveLinks:
             direct_parents = self.graph.parents_by_direct_.get(child, set())
             closures = [{d} | self.graph.parent_to_children_mapping.get(d, set()) for d in direct_parents]
 
-            for parent_in in parents:
-                for parent_out in parents:
+            ordered_parents = sorted(parents, key=self._parent_sort_key)
+            for parent_in in ordered_parents:
+                for parent_out in ordered_parents:
                     if parent_in == parent_out:
                         continue
 
@@ -290,6 +312,11 @@ class ResolveLinks:
 
                     for matched_link in matched_links:
                         self.occurrences.append((matched_link, parent_in, parent_out, child))
+
+    def _parent_sort_key(self, parent: UUID) -> tuple[str, str, str]:
+        node = self.graph.get_nodes()[parent]
+        fg = node.feature_group_class
+        return (f"{fg.__module__}:{fg.__qualname__}", str(node.feature.name), stable_text(node.feature.options))
 
     def _find_matching_links(
         self,

@@ -80,6 +80,14 @@ class TestPolarsLazyDataFrameComputeFramework:
         expected = pl.DataFrame({"existing_column": [4, 5, 6], "new_column": [1, 2, 3]})
         assert collected.equals(expected)
 
+    def test_series_named_like_existing_column_on_unpinned_frame_reports_duplicate(self) -> None:
+        _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        _lazy_df.data = PolarsLazyDataFrame.pl_lazy_frame()({"existing_column": [4, 5, 6]})
+        data = PolarsLazyDataFrame.pl_series()([1, 2, 3])
+
+        with pytest.raises(ValueError, match="already exists"):
+            _lazy_df.transform(data=data, feature_names=["existing_column"])
+
     def test_transform_dataframe_to_lazy(self) -> None:
         """Test converting DataFrame to LazyFrame"""
         df = pl.DataFrame({"col": [1, 2, 3]})

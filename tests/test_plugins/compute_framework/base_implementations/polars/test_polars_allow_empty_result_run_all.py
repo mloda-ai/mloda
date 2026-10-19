@@ -29,8 +29,8 @@ from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base 
     records_from_frame,
 )
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import _EmptyResultMatchData
-from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import SiblingDictRoot
 from tests.test_plugins.compute_framework.test_tooling.sibling_dict_run_all_test_base import (
+    SiblingDictRoot,
     SiblingDictRunAllTestBase,
 )
 from tests.test_plugins.compute_framework.test_tooling.empty_result_run_all_test_base import (

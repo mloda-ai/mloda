@@ -120,7 +120,7 @@ class TransformFrameworkStep(Step):
         source = data
         data = self.transform(cfw, source)
 
-        if data is source:
+        if data is source and not (isinstance(from_cfw, ComputeFramework) and source is from_cfw._pinned_frame):
             cfw.set_data(data)
         else:
             cfw._set_pinned_data(data)

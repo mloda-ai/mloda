@@ -142,7 +142,18 @@ def test_converted_frame_is_pinned_on_the_target() -> None:
     assert target._pinned_frame is target.data
 
 
-def test_same_framework_pass_through_is_not_pinned_on_the_target() -> None:
+def test_same_framework_pass_through_of_a_pinned_source_is_pinned_on_the_target() -> None:
+    source = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
+    source.data = source._pinned_frame = pd.DataFrame({"flight_data_key": KEYS, "flight_data_payload": PAYLOADS})
+    target = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
+
+    _execute(_step(PandasDataFrame, PandasDataFrame), source, target)
+
+    assert target.data is source.data
+    assert target._pinned_frame is target.data
+
+
+def test_same_framework_pass_through_of_an_unpinned_source_stays_unpinned() -> None:
     source = _cfw(PandasDataFrame, ParallelizationMode.SYNC)
     source.data = pd.DataFrame({"flight_data_key": KEYS, "flight_data_payload": PAYLOADS})
     target = _cfw(PandasDataFrame, ParallelizationMode.SYNC)

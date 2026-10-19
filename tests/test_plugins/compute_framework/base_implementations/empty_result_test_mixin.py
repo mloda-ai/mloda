@@ -173,12 +173,19 @@ class AppendColumnsFrameworkTestMixin:
         out = framework_instance.transform(column, ["appended"])
         assert [(r[key], r["appended"]) for r in records_from_frame(out)] == list(zip(keys, values))
 
-    def test_single_column_on_pinned_joined_frame(self, framework_instance: Any, joined_data: Any) -> None:
+    def test_single_column_on_pinned_frame_appends_aligned(self, framework_instance: Any, joined_data: Any) -> None:
         key, keys, values = self._single_column_keys(joined_data)
         column = self.single_column(values)
         if column is None:
             return
-        framework_instance.data = framework_instance._pinned_frame = joined_data
+        connection = getattr(joined_data, "connection", None)
+        if connection is not None:
+            framework_instance.set_framework_connection_object(connection)
+        rows = records_from_frame(joined_data)
+        columns = {k: [r[k] for r in rows] for k in rows[0]}
+        framework_instance.data = framework_instance._pinned_frame = framework_instance.transform(
+            columns, list(columns)
+        )
 
         out = framework_instance.transform(column, ["appended"])
 

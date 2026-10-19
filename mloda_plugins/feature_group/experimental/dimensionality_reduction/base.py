@@ -207,18 +207,11 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
 
     @classmethod
     def output_parts(cls, feature_name: str, options: Options) -> tuple[str, ...] | None:
-        """Declare dim1..dimN from the name's dimension or the dimension option."""
+        """Declare dim1..dimN from the name's dimension."""
         parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
-        if parsed.matched:
-            dimension = int(cast(dict[str, str], parsed.named_captures)[cls.DIMENSION])
-        else:
-            raw = options.get(cls.DIMENSION)
-            if isinstance(raw, int) and not isinstance(raw, bool):
-                dimension = raw
-            elif isinstance(raw, str) and raw.isdigit():
-                dimension = int(raw)
-            else:
-                return None
+        if not parsed.matched:
+            return None
+        dimension = int(cast(dict[str, str], parsed.named_captures)[cls.DIMENSION])
         return tuple(f"dim{i + 1}" for i in range(dimension))
 
     @classmethod

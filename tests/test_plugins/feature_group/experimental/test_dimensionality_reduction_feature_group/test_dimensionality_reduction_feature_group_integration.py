@@ -248,24 +248,11 @@ class TestDimensionalityReductionOutputParts:
         assert group.output_parts(f"{self.SOURCE}__pca_2d", Options()) == ("dim1", "dim2")
         assert group.output_parts(f"{self.SOURCE}__pca_3d", Options()) == ("dim1", "dim2", "dim3")
 
-    def test_config_declares_one_part_per_dimension(self) -> None:
+    def test_config_style_name_declares_no_parts(self) -> None:
         options = Options(
             context={
                 DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
                 DimensionalityReductionFeatureGroup.DIMENSION: 3,
-                DefaultOptionKeys.in_features: self.SOURCE,
-            }
-        )
-
-        parts = DimensionalityReductionFeatureGroup.output_parts("my_reduction", options)
-
-        assert parts == ("dim1", "dim2", "dim3")
-
-    def test_config_non_integer_dimension_declares_nothing(self) -> None:
-        options = Options(
-            context={
-                DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
-                DimensionalityReductionFeatureGroup.DIMENSION: "abc",
                 DefaultOptionKeys.in_features: self.SOURCE,
             }
         )

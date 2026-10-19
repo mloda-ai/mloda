@@ -160,26 +160,6 @@ def test_load_creates_options_with_group_context() -> None:
     assert result[0].options.context == {"cache_enabled": True, "debug_mode": False}
 
 
-@pytest.mark.parametrize("value", ["session", 5, {"k": 1}, ["a", 1]])
-def test_propagate_context_keys_rejects_invalid_types(value: Any) -> None:
-    with pytest.raises(ValueError, match="propagate_context_keys"):
-        FeatureConfig(
-            name="f",
-            context_options={"session": "value"},
-            propagate_context_keys=value,
-        )
-
-
-@pytest.mark.parametrize("value", [None, [], ["session"]])
-def test_propagate_context_keys_accepts_valid_types(value):
-    config = FeatureConfig(
-        name="f",
-        context_options={"session": "value"},
-        propagate_context_keys=value,
-    )
-    assert config.propagate_context_keys == value
-
-
 def test_validate_options_mutual_exclusion() -> None:
     """Test that options and group_options/context_options are mutually exclusive.
 
@@ -217,6 +197,39 @@ def test_validate_options_mutual_exclusion() -> None:
 
 
 _KEY_FIELDS = ["propagate_context_keys", "cascade_context_keys"]
+
+
+@pytest.mark.parametrize("value", ["session", 5, {"k": 1}, ["a", 1], [""], ["  "]])
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_context_push_keys_reject_wrong_shape(field: str, value: Any) -> None:
+    """A non-list or a list with non-string or blank entries is rejected, naming the field."""
+    kwargs: dict[str, Any] = {field: value}
+    with pytest.raises(ValueError, match=field):
+        FeatureConfig(**kwargs, name="f", context_options={"session": "value", "k": 1, "a": 1})
+
+
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_context_push_keys_shape_checked_before_context_options(field: str) -> None:
+    """The shape error fires before the requires-context_options error."""
+    kwargs: dict[str, Any] = {field: "session"}
+    with pytest.raises(ValueError, match=field) as exc_info:
+        FeatureConfig(**kwargs, name="f")
+    assert "requires" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("value", [None, [], ["session"]])
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_context_push_keys_accept_valid_shape(field: str, value: Any) -> None:
+    kwargs: dict[str, Any] = {field: value}
+    config = FeatureConfig(**kwargs, name="f", context_options={"session": "value"})
+    assert getattr(config, field) == value
+
+
+@pytest.mark.parametrize("field", _KEY_FIELDS)
+def test_parse_context_push_keys_wrong_shape_raises(field: str) -> None:
+    config_str = '[{"name": "f", "context_options": {"session": "value"}, "' + field + '": "session"}]'
+    with pytest.raises(ValueError, match=field):
+        parse_json(config_str)
 
 
 @pytest.mark.parametrize("field", _KEY_FIELDS)

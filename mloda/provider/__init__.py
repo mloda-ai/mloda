@@ -113,6 +113,10 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     record_match_rejection,
 )
 
+# Match-time misconfiguration escalation
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort as escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import is_match_abort as is_match_abort
+
 # Subtype declaration
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 
@@ -218,6 +222,9 @@ __all__ = [
     "INPUT_DATA_STAGE",
     "NAME_STAGE",
     "record_match_rejection",
+    # Match-time misconfiguration escalation
+    "escalate_match_abort",
+    "is_match_abort",
     # Subtype declaration
     "SubtypeDeclaration",
     # Transformers

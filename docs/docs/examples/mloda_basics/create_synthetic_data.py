@@ -55,7 +55,7 @@ class PaymentSyntheticDataSet(OrderSyntheticDataSet):
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         num_samples = features.get_options_key("num_samples")
 
-        # Shuffle valid datetime informations
+        # Shuffle valid datetime information
         valid_datetime_dates = pd.date_range(start="2024-01-01", end="2024-02-01", periods=num_samples, tz="UTC")
         valid_datetime_dates = valid_datetime_dates.to_numpy(copy=True)
         np.random.shuffle(valid_datetime_dates)

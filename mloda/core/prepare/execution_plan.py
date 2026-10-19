@@ -19,6 +19,7 @@ from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.declared_sides import (
     DeclaredSideSplit,
+    narrow_by_right_index,
     one_framework_members_reason,
     several_consumers_members_reason,
     split_by_declared_side,
@@ -2022,9 +2023,11 @@ Available join types:
             split.left_uuids_any_distance - split.right_uuids_any_distance,
             split.right_uuids_any_distance - split.left_uuids_any_distance,
         )
-        for side in sides:
+        for position, side in enumerate(sides):
             for framework in sorted(frameworks, key=lambda fw: fw.get_class_name()):
                 bucket = {u for u in side & required_uuids if nodes[u].feature.get_compute_framework() == framework}
+                if position == 1:
+                    bucket = set(narrow_by_right_index(link, bucket, lambda u: [nodes[u].feature])) or bucket
                 classes = sorted({nodes[u].feature_group_class for u in bucket}, key=lambda cls: cls.__name__)
                 if len(classes) < 2:
                     continue
@@ -2786,7 +2789,16 @@ Available join types:
                 if len(filtered) == 1:
                     return filtered[0]
 
-        for side_sets in ([left for left, _ in valid_pairs], [right for _, right in valid_pairs]):
+        left_sets = [left for left, _ in valid_pairs]
+        right_sets = [right for _, right in valid_pairs]
+        if right_index is not None:
+            right_sets = (
+                narrow_by_right_index(
+                    link_fw[0], right_sets, lambda uuids: [graph.nodes[u].feature for u in uuids if u in graph.nodes]
+                )
+                or right_sets
+            )
+        for side_sets in (left_sets, right_sets):
             member_classes = sorted(
                 {graph.nodes[u].feature_group_class for uuids in side_sets for u in uuids if u in graph.nodes},
                 key=lambda cls: cls.__name__,

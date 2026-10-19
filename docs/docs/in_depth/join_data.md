@@ -326,7 +326,7 @@ The balanced inheritance rule ensures that joins only occur between "parallel" s
 
 Key injection follows the same subclass rule: a link declared on a base class injects its key column into subclass nodes on that side just as it would the declared class, so a subclass must provide that column even when a more specific link also applies. Discriminators narrow the side only when a class matches both sides. A node whose requested feature is itself one of its links' key columns receives no other key, which keeps batches named after their key column distinguishable.
 
-When multiple batches match (e.g. three batches of one subclass all matching a base-class link; batches of different subclasses on one framework are rejected, see below), the engine disambiguates using `right_index`: first by exact `feature.index` match, then by checking whether the feature name appears in the join key columns of `right_index`. Ensure each link's `right_index` contains the column name that uniquely identifies its right-side batch.
+When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using `right_index`: first by exact `feature.index` match, then by checking whether the feature name appears in the join key columns of `right_index`. Ensure each link's `right_index` contains the column name that uniquely identifies its right-side batch. Members that one link cannot tell apart this way are rejected, see below.
 
 **One consumer joining two members of one link side**
 
@@ -338,7 +338,7 @@ A base class and its subclass can both match one side of a link, for example a c
 | On different frameworks | On one member's framework | On another framework | Rejected: the consumer must run where that same-framework join runs |
 | On different frameworks | One feature group, on a framework no member uses | On the other side's framework, reading both members directly | Planned for inner and outer joins, and for a left or right join that keeps the other side |
 | On different frameworks | On a framework no member uses | On a member's framework, or reading a member through a feature in between | Rejected: read one member of the link side per consumer |
-| On one framework | Any | Any | Rejected at plan time: read one member of the link side per consumer, and declare one link per member |
+| On one framework | Any | Any | Rejected at plan time when one link joins both members: read one member of the link side per consumer, and declare one link per member (links whose `right_index` each name one member are fine) |
 
 Each member's join counts as a separate link into the consumer's frame, so the [known limits when several links feed one consumer](#star-joins-linkstar) apply to the planned layouts.
 

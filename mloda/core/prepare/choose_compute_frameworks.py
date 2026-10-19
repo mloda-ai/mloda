@@ -16,7 +16,11 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.declared_sides import one_framework_members_reason, star_keeping_two_groups_reason
+from mloda.core.prepare.declared_sides import (
+    narrow_by_right_index,
+    one_framework_members_reason,
+    star_keeping_two_groups_reason,
+)
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.stable_text import stable_text as stable_text
@@ -547,22 +551,27 @@ class ChooseComputeFrameworks:
                         )[1 - pos]
                     )
                     relaxed: bool | None = None
+                    link_of = next(k for k, _ in joinable if k.uuid == link_uuid)
+                    unresolved = (
+                        narrow_by_right_index(link_of, members, lambda m: blocks[m].features) if pos == 1 else []
+                    ) or members
                     for a, b in combinations(members, 2):
                         if blocks[a].fg is blocks[b].fg:
                             continue
-                        rules.setdefault(
-                            (a, b, consumer, "apart"),
-                            _Rule(
-                                (a, b),
-                                _members_apart,
-                                one_framework_members_reason(
-                                    blocks[consumer].fg.__name__,
-                                    next(k for k, _ in joinable if k.uuid == link_uuid),
-                                    blocks[a].fg,
-                                    blocks[b].fg,
+                        if a in unresolved and b in unresolved:
+                            rules.setdefault(
+                                (a, b, consumer, "apart"),
+                                _Rule(
+                                    (a, b),
+                                    _members_apart,
+                                    one_framework_members_reason(
+                                        blocks[consumer].fg.__name__,
+                                        link_of,
+                                        blocks[a].fg,
+                                        blocks[b].fg,
+                                    ),
                                 ),
-                            ),
-                        )
+                            )
                         if relaxed is None:
                             relaxed = (
                                 offers

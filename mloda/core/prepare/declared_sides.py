@@ -1,13 +1,15 @@
 """Splits a join's parents by the declared sides of its link, once, for run_link and the resolved join records."""
 
 from collections import defaultdict
-from collections.abc import Iterable
-from typing import NamedTuple
+from collections.abc import Callable, Iterable
+from typing import Any, NamedTuple, TypeVar
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_links import inheritance_distance
+
+_T = TypeVar("_T")
 
 
 class DeclaredSideSplit(NamedTuple):
@@ -17,6 +19,15 @@ class DeclaredSideSplit(NamedTuple):
     right_uuids: frozenset[UUID]
     left_uuids_any_distance: frozenset[UUID]
     right_uuids_any_distance: frozenset[UUID]
+
+
+def narrow_by_right_index(link: Link, candidates: Iterable[_T], features: Callable[[_T], Iterable[Any]]) -> list[_T]:
+    """Right-side candidates one link tells apart: by exact feature index, else by feature name in its key."""
+    pool = list(candidates)
+    exact = [c for c in pool if any(f.index is not None and f.index == link.right_index for f in features(c))]
+    if exact:
+        return exact
+    return [c for c in pool if any(f.name in link.right_index.index for f in features(c))]
 
 
 def _member_links(link: Link, first: type, second: type) -> str:

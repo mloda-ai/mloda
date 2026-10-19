@@ -1063,6 +1063,15 @@ class TestDeclaredOutputParts:
         with pytest.raises(ValueError):
             _run([name], MeasureProducer)
 
+    def test_part_data_type_mismatch_raises(self) -> None:
+        with pytest.raises(DataTypeMismatchError):
+            _run([Feature.int64_of("measure~unit")], MeasureProducer)
+
+    def test_matching_part_data_types_pass(self) -> None:
+        results = _run([Feature.int64_of("measure~value"), Feature.str_of("measure~unit")], MeasureProducer)
+
+        assert _columns(results) == {"measure~value", "measure~unit"}
+
 
 class TestSplitOutputPart:
     """FeatureGroup.split_output_part(name) -> (base, part) | None (assumed public name)."""
@@ -1207,6 +1216,40 @@ class LiteralTildeProducer(FeatureGroup):
         return {PandasDataFrame}
 
 
+class LiteralMeasureValueProducer(FeatureGroup):
+    """Provides the literal column `measure~value`."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"measure~value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"measure~value": [7, 7, 7, 7, 7]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class AnyVecProducer(FeatureGroup):
+    """Declares ANY parts and supports `cvec`."""
+
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cvec"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
 @pytest.fixture(autouse=True)
 def _reset_counting_state() -> None:
     CountingVecProducer.match_names = []
@@ -1231,6 +1274,16 @@ class TestFullNameAskedFirst:
         results = _run(["lit~value"], LiteralTildeProducer)
 
         assert _columns(results) == {"lit~value"}
+
+    def test_literal_column_group_wins_over_declared_part_reading(self) -> None:
+        results = _run(["measure~value"], MeasureProducer, LiteralMeasureValueProducer)
+
+        np.testing.assert_array_equal(results[0]["measure~value"].values, np.array([7, 7, 7, 7, 7]))
+        assert MeasureProducer.calls == 0
+
+    def test_non_declaring_numeric_match_does_not_count_as_whole(self) -> None:
+        with pytest.raises(FeatureResolutionError, match="Multiple"):
+            _run(["cvec~1"], CountingVecProducer, AnyVecProducer)
 
 
 class _GroupOptionGroup(FeatureGroup):
@@ -1317,83 +1370,6 @@ class TestPartProbeIsolation:
         assert outcome.matched is False
         assert outcome.rejection is not None
         assert outcome.rejection.reason == "base reason"
-
-
-class LiteralMeasureValueProducer(FeatureGroup):
-    """Provides the literal column `measure~value`."""
-
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"measure~value"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return pd.DataFrame({"measure~value": [7, 7, 7, 7, 7]})
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-
-class PlainVecProducer(FeatureGroup):
-    """Undeclared group supporting `vec`."""
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"vec"}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-
-class AnyVecProducer(FeatureGroup):
-    """Declares ANY parts and supports `vec`."""
-
-    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
-
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"vec"}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
-
-
-class TestWholeNameWinsAcrossGroups:
-    """A name some group matches whole beats another group's part reading."""
-
-    def test_literal_column_group_wins_over_declared_part_reading(self) -> None:
-        results = _run(["measure~value"], MeasureProducer, LiteralMeasureValueProducer)
-
-        np.testing.assert_array_equal(results[0]["measure~value"].values, np.array([7, 7, 7, 7, 7]))
-        assert MeasureProducer.calls == 0
-
-    def test_non_declaring_numeric_match_does_not_count_as_whole(self) -> None:
-        with pytest.raises(FeatureResolutionError, match="Multiple"):
-            _run(["vec~1"], PlainVecProducer, AnyVecProducer)
-
-
-class TestPartDataTypes:
-    """A part's declared data type is checked on its own column."""
-
-    def test_part_data_type_mismatch_raises(self) -> None:
-        with pytest.raises(DataTypeMismatchError):
-            _run([Feature.int64_of("measure~unit")], MeasureProducer)
-
-    def test_matching_part_data_types_pass(self) -> None:
-        results = _run([Feature.int64_of("measure~value"), Feature.str_of("measure~unit")], MeasureProducer)
-
-        assert _columns(results) == {"measure~value", "measure~unit"}
 
 
 class TestArtifactKeyedByBaseName:

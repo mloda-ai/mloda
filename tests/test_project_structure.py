@@ -110,11 +110,22 @@ class TestLicenseFile:
         content = _read_text(PROJECT_ROOT / "LICENSE")
         assert "Apache License, Version 2.0" in content
 
+    def test_license_is_spdx_expression(self) -> None:
+        """License is an SPDX string and no License classifier is present."""
+        project = _load_project()
+        assert project["license"] == "Apache-2.0"
+        assert not [c for c in project.get("classifiers", []) if c.startswith("License ::")]
 
-def _load_extras() -> dict[str, list[str]]:
+
+def _load_project() -> dict[str, Any]:
     with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
         data: dict[str, Any] = tomllib.load(f)
-    extras: dict[str, list[str]] = data["project"]["optional-dependencies"]
+    project: dict[str, Any] = data["project"]
+    return project
+
+
+def _load_extras() -> dict[str, list[str]]:
+    extras: dict[str, list[str]] = _load_project()["optional-dependencies"]
     return extras
 
 
@@ -225,17 +236,9 @@ class TestPackagingConfig:
         assert "requires" in data["build-system"], "pyproject.toml [build-system] must specify 'requires'"
         assert "build-backend" in data["build-system"], "pyproject.toml [build-system] must specify 'build-backend'"
 
-    def test_license_is_spdx_expression(self) -> None:
-        """License is an SPDX string and no License classifier is present."""
-        with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
-            project: dict[str, Any] = tomllib.load(f)["project"]
-        assert project["license"] == "Apache-2.0"
-        assert not [c for c in project.get("classifiers", []) if c.startswith("License ::")]
-
     def test_python_classifiers_match_requires_python(self) -> None:
         """Python 3.X classifiers equal the minors admitted by requires-python."""
-        with open(PROJECT_ROOT / "pyproject.toml", "rb") as f:
-            project: dict[str, Any] = tomllib.load(f)["project"]
+        project = _load_project()
         spec = SpecifierSet(project["requires-python"])
         prefix = "Programming Language :: Python :: 3."
         expected = {f"{prefix}{m}" for m in range(31) if spec.contains(f"3.{m}")}

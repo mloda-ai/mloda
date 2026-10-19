@@ -13,6 +13,8 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 
 
 class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
+    """Pandas implementation of the aggregated feature group. Aggregates source features with operations such as sum, average, minimum, or maximum."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""

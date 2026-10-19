@@ -16,6 +16,8 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 
 
 class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
+    """PyArrow implementation of the missing value feature group. Imputes missing values in the source features with the configured method."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}

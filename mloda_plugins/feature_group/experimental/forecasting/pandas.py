@@ -33,6 +33,8 @@ except ImportError:
 
 
 class PandasForecastingFeatureGroup(ForecastingFeatureGroup):
+    """Pandas implementation of the forecasting feature group. Generates forecasts for time series data from historical patterns."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""

@@ -21,6 +21,19 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import PluginLoader
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
+    PandasDimensionalityReductionFeatureGroup,
+)
+from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
+from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
+from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCentralityFeatureGroup
+from mloda_plugins.feature_group.experimental.node_centrality.pandas import PandasNodeCentralityFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
 from tests.helpers.plugin_stubs import make_raising_fg
 
 # Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
@@ -965,3 +978,36 @@ class TestFeatureGroupInfoClaimRoutes:
 
         assert infos
         assert all(tuple(info.claim_routes) == () for info in infos)
+
+
+class TestConcreteExperimentalFeatureGroupDescriptions:
+    """Concrete experimental feature groups must describe themselves, not just name themselves."""
+
+    @pytest.mark.parametrize(
+        "fg_cls",
+        [
+            PandasTimeWindowFeatureGroup,
+            PyArrowTimeWindowFeatureGroup,
+            PandasMissingValueFeatureGroup,
+            PyArrowMissingValueFeatureGroup,
+            PandasGeoDistanceFeatureGroup,
+            PandasForecastingFeatureGroup,
+            PandasDimensionalityReductionFeatureGroup,
+            PandasAggregatedFeatureGroup,
+            NodeCentralityFeatureGroup,
+            PandasNodeCentralityFeatureGroup,
+            PandasClusteringFeatureGroup,
+        ],
+    )
+    def test_description_is_not_the_bare_class_name(self, fg_cls: type[FeatureGroup]) -> None:
+        """A concrete feature group must carry its own class docstring.
+
+        The catalog's description() falls back to the class name when a class has no
+        docstring of its own; docstrings are not inherited from base classes, so each
+        concrete class needs one for the plugin catalog to show a real description
+        instead of the bare class name.
+        """
+        assert fg_cls.description() != fg_cls.__name__, (
+            f"{fg_cls.__name__} must carry its own class docstring so the plugin catalog "
+            "shows a real description instead of the bare class name"
+        )

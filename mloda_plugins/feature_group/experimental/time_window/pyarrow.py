@@ -21,6 +21,8 @@ _NUMPY_REASON = "multi-column time-window aggregation"
 
 
 class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
+    """PyArrow implementation of the time window feature group. Computes rolling window operations such as moving averages and cumulative sums over time series data."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PyArrowTable}

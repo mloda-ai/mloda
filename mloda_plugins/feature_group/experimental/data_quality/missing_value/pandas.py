@@ -19,6 +19,8 @@ except ImportError:
 
 
 class PandasMissingValueFeatureGroup(MissingValueFeatureGroup):
+    """Pandas implementation of the missing value feature group. Imputes missing values in the source features with the configured method."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}

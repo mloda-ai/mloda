@@ -33,6 +33,8 @@ from mloda_plugins.feature_group.experimental.clustering.base import ClusteringF
 
 
 class PandasClusteringFeatureGroup(ClusteringFeatureGroup):
+    """Pandas implementation of the clustering feature group. Groups similar data points with clustering algorithms to expose structure in the data."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""

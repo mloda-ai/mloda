@@ -20,6 +20,8 @@ from mloda_plugins.feature_group.experimental.node_centrality.base import NodeCe
 
 
 class PandasNodeCentralityFeatureGroup(NodeCentralityFeatureGroup):
+    """Pandas implementation of the node centrality feature group. Calculates centrality metrics that rank the importance of nodes in a graph."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""

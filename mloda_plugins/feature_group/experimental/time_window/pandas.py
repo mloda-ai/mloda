@@ -21,6 +21,8 @@ except ImportError:
 
 
 class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
+    """Pandas implementation of the time window feature group. Computes rolling window operations such as moving averages and cumulative sums over time series data."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         return {PandasDataFrame}

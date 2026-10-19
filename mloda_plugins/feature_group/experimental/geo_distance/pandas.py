@@ -15,6 +15,8 @@ from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistan
 
 
 class PandasGeoDistanceFeatureGroup(GeoDistanceFeatureGroup):
+    """Pandas implementation of the geo distance feature group. Calculates distances between geographic points, such as haversine or euclidean."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Specify that this feature group works with Pandas."""

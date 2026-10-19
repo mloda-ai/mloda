@@ -32,6 +32,8 @@ except ImportError:
 
 
 class PandasDimensionalityReductionFeatureGroup(DimensionalityReductionFeatureGroup):
+    """Pandas implementation of the dimensionality reduction feature group. Reduces the dimensionality of feature spaces with techniques such as PCA."""
+
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
         """Define the compute framework for this feature group."""

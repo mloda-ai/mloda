@@ -22,11 +22,6 @@ from mloda_plugins.feature_group.experimental.key_features import with_key_featu
 
 
 class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    # Option keys for centrality configuration
-    CENTRALITY_TYPE = "centrality_type"
-    GRAPH_TYPE = "graph_type"
-    WEIGHT_COLUMN = "weight_column"
-    EDGE_COLUMNS = ("source", "target")
     """
     Base class for all node centrality feature groups.
 
@@ -112,13 +107,19 @@ class NodeCentralityFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     ## Requirements
     - The input data must contain edge information (source and target columns)
     - For weighted centrality calculations, a weight column can be specified
-    
+
     ## Important Implementation Note
-    
+
     When using configuration-based creation with different options,
-    each feature will be processed separately and may result in multiple DataFrames in 
+    each feature will be processed separately and may result in multiple DataFrames in
     the output. This is because feature groups are currently split by different options.
     """
+
+    # Option keys for centrality configuration
+    CENTRALITY_TYPE = "centrality_type"
+    GRAPH_TYPE = "graph_type"
+    WEIGHT_COLUMN = "weight_column"
+    EDGE_COLUMNS = ("source", "target")
 
     # Define supported centrality types
     CENTRALITY_TYPES = {

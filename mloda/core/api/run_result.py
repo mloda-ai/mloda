@@ -2,10 +2,15 @@
 
 from collections.abc import Generator
 from types import TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.api.plan_info import PlanStep
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.feature import Feature
 
 
 class RunResult(list[Any]):
@@ -35,6 +40,52 @@ class RunResult(list[Any]):
         """Pair each frame with the compute PlanStep that produced it, by ``step_uuid``, regardless of order."""
         steps = {step.step_uuid: step for step in self._plan}
         return [(steps[step_uuid], frame) for step_uuid, frame in self._result_items]
+
+    def frame_for(self, feature: "Feature | str") -> Any:
+        """Return the frame whose step requested ``feature`` (a Feature also matches group options); else ValueError."""
+        name = feature if isinstance(feature, str) else str(feature.name)
+        group = None if isinstance(feature, str) else feature.options.group
+        pinned = None if isinstance(feature, str) else feature.compute_frameworks
+        frames = self.frames()
+        pairs = [(step, frame) for step, frame in frames if name in step.requested_feature_names]
+        if group is not None:
+            pairs = [
+                (step, frame)
+                for step, frame in pairs
+                if all(k in _group_of(step) and _deep_equal(_group_of(step)[k], v) for k, v in group.items())
+                and (not pinned or step.compute_framework in pinned)
+            ]
+            fewest = min((len(_group_of(step)) for step, _ in pairs), default=0)
+            pairs = [(step, frame) for step, frame in pairs if len(_group_of(step)) == fewest]
+        if len(pairs) == 1:
+            return pairs[0][1]
+        if not pairs:
+            available = sorted({n for step, _ in frames for n in step.requested_feature_names})
+            detail = f" with group options {_redacted(group)}" if group is not None else ""
+            hint = ""
+            if name not in available:
+                computed = sorted({str(step.feature_group_name) for step in self._plan if name in step.feature_names})
+                if computed:
+                    hint = f"; '{name}' was computed by {', '.join(computed)} but not requested; request it to get its frame"
+            raise ValueError(f"No frame requested feature '{name}'{detail}. Requested features: {available}{hint}")
+        matches = [
+            f"(group options {_redacted(_group_of(step))}, "
+            f"feature group {step.feature_group_name}, "
+            f"compute framework {step.compute_framework_name})"
+            for step, _ in pairs
+        ]
+        raise ValueError(
+            f"Feature name '{name}' is ambiguous, {len(pairs)} frames match: {'; '.join(matches)}. "
+            "Pass a Feature with the group options of the one you want."
+        )
+
+
+def _group_of(step: PlanStep) -> Any:
+    return {} if step.feature_set_options is None else step.feature_set_options.group
+
+
+def _redacted(group: Any) -> dict[Any, Any]:
+    return {k: redact_option_value(v) for k, v in group.items()}
 
 
 class ResultStream(Generator[Any, None, None]):

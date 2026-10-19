@@ -5,9 +5,9 @@ name: Metadata Guard
 # renaming either cannot merge green and break the sdist build.
 on:
   push:
-    branches: [ "main", "feat/reader-feature-groups" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "feat/reader-feature-groups" ]
+    branches: [ "main" ]
 
 permissions:
   contents: read

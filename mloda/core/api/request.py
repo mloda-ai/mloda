@@ -516,7 +516,8 @@ class mlodaAPI:
         column_ordering or an unknown compute framework name) yields only the message. Environment-build
         failures (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) and
         compute-framework pin misuse (ComputeFrameworkPinError) are likewise projected into the diagnosis
-        instead of raising; any other error propagates, including an exception a breaking extender raises unless
+        instead of raising (an environment failure found after planning, a missing connection, also carries
+        the resolved records); any other error propagates, including an exception a breaking extender raises unless
         it is one of the types above. Every parameter after features is keyword-only.
         """
         try:
@@ -546,11 +547,12 @@ class mlodaAPI:
             )
         except (
             ComputeFrameworkPinError,
-            EnvironmentPreconditionError,
             RedefinitionConflictError,
             FrameworkDeclarationError,
         ) as error:
             return ResolutionDiagnosis(records=[], complete=False, message=str(error))
+        except EnvironmentPreconditionError as error:
+            return ResolutionDiagnosis(records=list(error.partial_records), complete=False, message=str(error))
         except SetupConfigurationError as error:
             return ResolutionDiagnosis(records=[], complete=False, message=str(error))
         return ResolutionDiagnosis(records=session.resolution_report(), complete=True)

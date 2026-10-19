@@ -154,7 +154,8 @@ class Engine:
             steps = ", ".join(labels)
             raise EnvironmentPreconditionError(
                 f"The result of {steps} converts to output_framework {output.get_class_name()}, "
-                "which needs a connection, so add a matching connection to the DataAccessCollection."
+                "which needs a connection, so add a matching connection to the DataAccessCollection.",
+                partial_records=self.resolution_records,
             )
         return connection
 
@@ -179,7 +180,8 @@ class Engine:
                     f"The transform from {tfs.from_feature_group.get_class_name()} on "
                     f"{tfs.from_framework.get_class_name()} to {tfs.to_feature_group.get_class_name()} on "
                     f"{cfw_class.get_class_name()} needs a connection, so add a matching connection "
-                    "to the DataAccessCollection."
+                    "to the DataAccessCollection.",
+                    partial_records=self.resolution_records,
                 )
         return connection_map
 

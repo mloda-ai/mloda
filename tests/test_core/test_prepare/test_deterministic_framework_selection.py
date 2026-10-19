@@ -948,6 +948,7 @@ def test_a_required_connection_output_framework_without_a_connection_raises_at_p
 
     assert "RcRoot" in str(raised.value)
     assert "DataAccessCollection" in str(raised.value)
+    assert "rc_root" in [r.feature_name for r in raised.value.partial_records]
 
 
 @_TFS_DAC
@@ -969,6 +970,7 @@ def test_diagnose_reports_a_required_connection_output_framework_without_a_conne
     assert "SqliteFramework" in diagnosis.message
     assert "RcRoot" in diagnosis.message
     assert "DataAccessCollection" in diagnosis.message
+    assert "rc_root" in [r.feature_name for r in diagnosis.records]
 
 
 def test_a_required_connection_output_framework_with_a_connection_prepares(sqlite_conn: sqlite3.Connection) -> None:
@@ -1032,6 +1034,7 @@ def test_a_transform_into_a_required_connection_framework_without_a_connection_r
         getattr(mloda, entry)([feature], **kwargs)
 
     assert "DataAccessCollection" in str(raised.value)
+    assert feature in [r.feature_name for r in raised.value.partial_records]
 
 
 @_TFS_DAC
@@ -1047,6 +1050,9 @@ def test_diagnose_reports_a_transform_into_a_required_connection_framework_witho
     assert diagnosis.message is not None
     assert fw_name in diagnosis.message
     assert "DataAccessCollection" in diagnosis.message
+    names = [r.feature_name for r in diagnosis.records]
+    assert "tfsdb_root" in names
+    assert feature in names
 
 
 def test_a_same_type_hop_into_a_required_connection_framework_needs_no_connection() -> None:
@@ -1056,6 +1062,7 @@ def test_a_same_type_hop_into_a_required_connection_framework_needs_no_connectio
     engine = Engine.__new__(Engine)
     engine.execution_planner = type("_Planner", (), {"tfs_collection": {"k": tfs}})()
     engine.data_access_collection = None
+    engine.resolution_records = []
 
     assert engine._resolve_tfs_connection_map() == {}
 
@@ -1083,6 +1090,7 @@ def test_the_output_connection_error_names_only_converting_steps_once(case: str)
     engine.output_framework = sqlite_cls
     setattr(engine, "execution_planner", steps)
     engine.data_access_collection = None
+    engine.resolution_records = []
 
     if case == "native_only":
         assert engine._resolve_output_connection() is None

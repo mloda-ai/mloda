@@ -17,6 +17,7 @@ leak into another module's candidate universe in the parallel suite.
 """
 
 import dataclasses
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -35,6 +36,7 @@ from mloda.core.prepare.resolution_types import (
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +343,21 @@ class TestDiagnoseConfigurationError:
         assert isinstance(diagnosis.message, str)
         assert diagnosis.message
         assert diagnosis.message == str(caught)
+
+
+class TestDiagnoseFormatPointerError:
+    def test_an_unreachable_format_pointer_is_projected_not_raised(self, tmp_path: Path) -> None:
+        group = load_group("json_fg", "JsonFG")
+        diagnosis = mloda.diagnose(
+            [Feature("diagnose_fpg_x", Options({"JsonFG": str(tmp_path / "b.json")}))],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.disabled_feature_groups({group}),
+        )
+
+        assert diagnosis.complete is False
+        assert diagnosis.records == []
+        assert diagnosis.message is not None
+        assert "JsonFG is not accessible in this run" in diagnosis.message
 
 
 # ---------------------------------------------------------------------------

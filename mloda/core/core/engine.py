@@ -47,6 +47,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_featu
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
+from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -90,7 +91,10 @@ class Engine:
         self.feature_link_parents: dict[UUID, set[UUID]] = defaultdict(set)
 
         # get accessible feature groups and their compute platforms
-        self.accessible_plugins = PreFilterPlugins(compute_frameworks, plugin_collector).get_accessible_plugins()
+        pre_filter = PreFilterPlugins(compute_frameworks, plugin_collector)
+        self.accessible_plugins = pre_filter.get_accessible_plugins()
+        self.implementations = pre_filter.implementations
+        self.excluded_feature_groups = pre_filter.excluded_feature_groups
         # get links
         LinkValidator.validate_links(links)
         self.links = set(links) if links is not None else None
@@ -117,7 +121,8 @@ class Engine:
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        self.execution_planner = self.create_setup_execution_plan(features)
+        with run_match_cache():
+            self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
         self.tfs_connection_map = self._resolve_tfs_connection_map()
@@ -265,6 +270,7 @@ class Engine:
                 uuid: tuple(f"{c.__module__}.{c.__qualname__}" for c in classes)
                 for uuid, classes in self.specialized_from.items()
             },
+            self.implementations,
         )
         execution_planner.create_execution_plan(
             planned_queue,
@@ -399,6 +405,7 @@ class Engine:
                 self.links,
                 self.data_access_collection,
                 partial_records=self.resolution_records,
+                excluded=self.excluded_feature_groups,
             )
         else:
             result = self._resolve_with_match_hook(extender, feature, depth)
@@ -452,6 +459,7 @@ class Engine:
                     self.links,
                     self.data_access_collection,
                     partial_records=self.resolution_records,
+                    excluded=self.excluded_feature_groups,
                 ),
             )
 
@@ -813,7 +821,10 @@ class Engine:
         if not input_features:
             return None
 
-        features = Features(list(input_features), child_options=options, child_uuid=uuid, parent_domain=parent_domain)
+        ordered: list[Feature | str] = list(input_features)
+        if isinstance(input_features, (set, frozenset)):  # set order is hash-seed dependent
+            ordered.sort(key=lambda f: str(f.name) if isinstance(f, Feature) else str(f))
+        features = Features(ordered, child_options=options, child_uuid=uuid, parent_domain=parent_domain)
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)
         for input_feature in features.collection:

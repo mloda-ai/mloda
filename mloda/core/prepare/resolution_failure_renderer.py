@@ -111,10 +111,15 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
         for fg in sorted(result.identified, key=_candidate_sort_key)
     )
     scope_line = f"{callout}\n" if callout else ""
+    captured = sum(1 for fg in result.identified if fg in result.facts.sources)
+    source_fix = (
+        "To pick one source, use feature_group=, a data_access_handle, or column_to_file.\n" if captured >= 2 else ""
+    )
     return (
         f"Multiple feature groups found for feature '{str(feature.name)}'{_needed_by(feature)}:\n"
         f"{lines}\n"
         f"{scope_line}"
+        f"{source_fix}"
         f"For troubleshooting guide, see: {TROUBLESHOOTING_URL}"
     )
 

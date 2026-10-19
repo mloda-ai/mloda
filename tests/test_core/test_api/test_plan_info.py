@@ -31,11 +31,10 @@ Contract under test:
   * ``build_plan_steps`` raises ``ValueError`` on a step it does not know, instead of dropping it.
   * Compute steps carry ``feature_set_options`` (a deep-copied, group-only snapshot of the step's
     ``FeatureSet.options``) and ``step_uuid``; both stay out of equality.
-  * ``PlanStep.reader_data_access`` is a dataclass field (``compare=False``, default ``None``): the
-    ``(ReaderClass, data_access)`` pair a compute step resolved for reading its input file, or ``None``
-    for join/transform steps or a compute step with no reader.
-  * ``PlanStep.data_access_identity`` is a read-only ``str | None`` property: the reader's credential-free
-    projection of ``reader_data_access``, ``None`` when there is none.
+  * ``PlanStep`` has no ``reader_data_access``; the matched pair never leaves the plan.
+  * ``PlanStep.data_access_identity`` is a read-only ``str | None`` property, computed at plan build from
+    the step's reader match (a private ``compare=False`` field): the credential-free projection of the
+    access, ``None`` when there is none.
   * ``mlodaAPI.resolved_plan()`` returns ``list[PlanStep]`` on a prepared session, both before
     and after ``run()``, in dependency order (independent steps sorted by content), and matches the plan that actually executed.
   * ``mlodaAPI.explain(features, ...)`` mirrors the ``prepare`` parameter shape with keyword-only
@@ -76,7 +75,23 @@ import mloda.user as mloda_user
 from mloda.core.api.plan_info import _dependency_order, build_plan_steps
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import (
+    BaseFeatureGroupVersion,
+    BaseInputData,
+    ComputeFramework,
+    DataCreator,
+    FeatureGroup,
+    FeatureSet,
+    Implementation,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    neutral_csv_group,
+    toy_dac,
+)
 from mloda.steward import (
     Extender,
     ExtenderHook,
@@ -107,11 +122,8 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
-from mloda_plugins.feature_group.input_data.read_db import ReadDB
-from mloda_plugins.feature_group.input_data.read_db_feature import ReadDBFeature
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: F401
-from mloda_plugins.feature_group.input_data.read_files.parquet import ParquetReader
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 
 # ---------------------------------------------------------------------------
 # Test feature groups
@@ -551,7 +563,9 @@ class TestPlanStepDataclass:
             step.step_kind = "join"  # type: ignore[misc]
 
     def test_plan_step_exposes_documented_fields(self) -> None:
-        field_names = [field.name for field in dataclasses.fields(PlanStep)]
+        fields = dataclasses.fields(PlanStep)
+        field_names = [field.name for field in fields if not field.name.startswith("_")]
+        assert all(field.compare is False for field in fields if field.name.startswith("_"))
 
         assert field_names == [
             "step_kind",
@@ -572,10 +586,14 @@ class TestPlanStepDataclass:
             "step_uuid",
             "input_feature_edges",
             "specialized_from",
-            "reader_data_access",
             "compute_framework_reason",
             "result_framework",
             "join_keys",
+            "implementation",
+            "implementation_version",
+            "implementation_hash",
+            "implementation_specialized_from",
+            "feature_group_version",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:
@@ -785,6 +803,122 @@ class TestPlanStepSpecializedFromField:
         assert replaced == dataclasses.replace(base, specialized_from=(PlanInfoParentSource,))
 
 
+def _explain_toy_group(group: type[FeatureGroup]) -> PlanStep:
+    steps = mloda.explain(
+        ["toyfmt_ld"],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        data_access_collection=toy_dac(h1={"toyfmt_ld": [1, 2]}),
+    )
+    compute = [step for step in steps if step.step_kind == "compute"]
+    assert len(compute) == 1
+    return compute[0]
+
+
+class TestPlanStepImplementation:
+    """A compute step records the Implementation that serves it, its versions and the parents it replaced."""
+
+    def test_step_reports_the_implementation_its_path_version_and_hash(self) -> None:
+        impl = ToyWorkerPythonDict
+
+        step = _explain_toy_group(ToyWorkerFG)
+
+        assert step.implementation is impl
+        assert step.implementation_path == _class_path(impl)
+        assert step.implementation_path != step.compute_framework_name
+        assert step.implementation_version == impl.version()
+        assert step.implementation_hash == BaseFeatureGroupVersion.first_party_hash(impl)
+        assert step.implementation_hash != BaseFeatureGroupVersion.implementation_hash(impl)
+        assert step.implementation_specialized_from == ()
+        assert step.feature_group_version == ToyWorkerFG.version()
+
+    def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
+        step = _explain_toy_group(neutral_csv_group(tmp_path / "n.csv"))
+
+        assert step.implementation is None
+        assert step.implementation_path == "neutral"
+        assert step.implementation_version is None
+        assert step.implementation_hash is None
+
+    def test_plain_readers_and_non_compute_steps_have_no_implementation(self) -> None:
+        reader_step = next(
+            s for s in _prepare_chained_session().resolved_plan() if s.feature_group is PlanInfoPandasSource
+        )
+        others = [s for s in _prepare_cross_framework_join_session().resolved_plan() if s.step_kind != "compute"]
+        assert others
+
+        for step in [reader_step, *others]:
+            assert step.implementation is None
+            assert step.implementation_path is None
+            assert step.implementation_version is None
+            assert step.implementation_hash is None
+            assert step.implementation_specialized_from == ()
+        assert reader_step.feature_group_version == PlanInfoPandasSource.version()
+        assert all(step.feature_group_version is None for step in others)
+
+    def test_replaced_implementation_parents_are_sorted_by_path(self, tmp_path: Path, make_implementation: Any) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        first = make_implementation(group, PythonDictFramework, name="PlanInfoAImpl")
+        second = make_implementation(group, PythonDictFramework, base=first, name="PlanInfoBImpl")
+        winner = make_implementation(group, PythonDictFramework, base=second, name="PlanInfoCImpl")
+
+        step = _explain_toy_group(group)
+
+        assert step.implementation is winner
+        assert step.implementation_specialized_from == (first, second)
+
+    def test_implementation_is_compared_but_versions_and_hash_are_not(
+        self, tmp_path: Path, make_implementation: Any
+    ) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        parent = make_implementation(group, PythonDictFramework, name="PlanInfoEqualImpl")
+        make_implementation(group, PythonDictFramework, base=parent, name="PlanInfoOtherImpl")
+        step = _explain_toy_group(group)
+        other = parent
+
+        assert dataclasses.replace(step, implementation=other) != step
+        assert dataclasses.replace(step, implementation_specialized_from=()) != step
+        assert (
+            dataclasses.replace(step, implementation_version="v", implementation_hash="h", feature_group_version="g")
+            == step
+        )
+
+    def test_a_non_str_version_degrades_to_none_like_the_hook_context(
+        self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _IntVersion(Implementation):
+            @classmethod
+            def version(cls) -> Any:
+                return 7
+
+        group = neutral_csv_group(tmp_path / "n.csv")
+        impl = make_implementation(group, PythonDictFramework, base=_IntVersion, name="PlanInfoIntVersionImpl")
+        monkeypatch.setattr(group, "version", classmethod(lambda cls: 3))
+
+        step = _explain_toy_group(group)
+
+        assert step.implementation is impl
+        assert step.implementation_version is None
+        assert step.feature_group_version is None
+
+    def test_a_hash_failure_degrades_to_unavailable_and_planning_still_hashes(
+        self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        make_implementation(group, PythonDictFramework, name="PlanInfoUnhashableImpl")
+
+        def boom(cls: Any, target_class: Any) -> str:
+            raise OSError("no source")
+
+        monkeypatch.setattr(BaseFeatureGroupVersion, "implementation_hash", classmethod(boom))
+
+        step = _explain_toy_group(group)
+
+        assert step.implementation_hash == "unavailable"
+        assert step.implementation_version is None
+        assert len(plan_structure_hash([step])) == 64
+
+
 class TestPlanStepInputFeatureEdgesField:
     """input_feature_edges is an optional per-output-feature mapping appended after step_uuid."""
 
@@ -968,12 +1102,27 @@ class TestPlanStepFeatureSetOptions:
 
 
 # ---------------------------------------------------------------------------
-# reader_data_access
+# data_access_identity
 # ---------------------------------------------------------------------------
 
 
-class PlanInfoOverridingDBReader(ReadDB):
-    """Non-final reader storing the pinned plain dict itself, never calling wrap_feature_scoped_access."""
+class PlanInfoOverridingDBReader(BaseInputData):
+    """Reader storing a plain dict copy of the pin; only the core wrap can make it a RegisteredCredential."""
+
+    received_types: list[type] = []
+    received_options: list[str] = []
+
+    @classmethod
+    def wrap_feature_scoped_access(cls, data_access: Any) -> Any:
+        if isinstance(data_access, dict) and not isinstance(data_access, RegisteredCredential):
+            return RegisteredCredential(data_access)
+        return data_access
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        cls.received_types.append(type(data_access))
+        cls.received_options.append(str(features.options))
+        return {str(features.get_name_of_one_feature()): [1]}
 
     @classmethod
     def feature_scope_data_access(cls, options: Options, feature_name: str) -> bool:
@@ -993,7 +1142,7 @@ class PlanInfoOverridingDBReader(ReadDB):
         return False
 
 
-class PlanInfoNonIdempotentWrapReader(ReadDB):
+class PlanInfoNonIdempotentWrapReader(BaseInputData):
     """Non-final reader not overriding feature_scope_data_access; its wrap returns a fresh object per call."""
 
     wrap_calls = 0
@@ -1012,43 +1161,88 @@ class PlanInfoOverridingDBReaderFeature(FeatureGroup):
         return PlanInfoOverridingDBReader()
 
     @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_override_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        raise NotImplementedError
+        return cls.input_data().load(features)  # type: ignore[union-attr]
 
 
-class TestPlanStepReaderDataAccess:
-    """reader_data_access is a compare=False dataclass field snapshotted from the step's FeatureSet match."""
+class PlanInfoIntAccessReader(BaseInputData):
+    """Reader accepting only its unique integer access, so its identity falls back to the type name."""
 
-    def test_compute_step_reading_a_file_reports_reader_and_data_access(self, tmp_path: Path) -> None:
-        file_path = tmp_path / "plan_info_rows.parquet"
-        table = pa.table({"plan_info_rows_a": [1, 2, 3]})
-        pq.write_table(table, str(file_path))
-        dac = DataAccessCollection(files={str(file_path)})
+    @classmethod
+    def match_subclass_data_access(cls, data_access: Any, feature_names: list[str], options: Any = None) -> Any:
+        return data_access if data_access == 424242 else None
 
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return {"plan_info_int_access": [1]}
+
+
+class PlanInfoIntAccessFG(FeatureGroup):
+    """Root group returning PlanInfoIntAccessReader; claims only its unique name."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return PlanInfoIntAccessReader()
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"plan_info_int_access"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+
+class TestPlanStepDataAccessIdentity:
+    """The reader match stays inside the plan; data_access_identity is computed at plan build and never compared."""
+
+    @staticmethod
+    def _explain_parquet(tmp_path: Path, name: str, column: str) -> PlanStep:
+        file_path = tmp_path / name
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.table({column: [1, 2, 3]}), str(file_path))
         explained = mloda.explain(
-            ["plan_info_rows_a"],
+            [column],
             compute_frameworks=[PyArrowTable],
-            data_access_collection=dac,
+            data_access_collection=DataAccessCollection(files={str(file_path)}),
         )
-
         compute_steps = [step for step in explained if step.step_kind == "compute"]
         assert len(compute_steps) == 1
-        step = compute_steps[0]
+        return compute_steps[0]
 
-        assert step.reader_data_access == (ParquetReader, str(file_path))
+    def test_compute_step_reading_a_file_reports_identity_and_no_reader_pair(self, tmp_path: Path) -> None:
+        step = self._explain_parquet(tmp_path, "plan_info_rows.parquet", "plan_info_rows_a")
+
+        assert step.feature_group is ParquetFG
+        assert not hasattr(step, "reader_data_access")
+        assert "reader_data_access" not in {field.name for field in dataclasses.fields(PlanStep)}
         assert step.feature_set_options is not None
         assert "BaseInputData" not in step.feature_set_options.group
-        assert step.data_access_identity == str(file_path)
+        assert step.data_access_identity == str(tmp_path / "plan_info_rows.parquet")
         assert step.data_access_identity_is_fallback is False
 
-        reader, access = step.reader_data_access
-        assert step.compute_framework is not None
-        assert reader.count_rows(access, step.compute_framework) == 3
+    def test_identity_stays_out_of_equality_and_hash(self, tmp_path: Path) -> None:
+        first = self._explain_parquet(tmp_path / "a", "plan_info_same.parquet", "plan_info_same_col")
+        second = self._explain_parquet(tmp_path / "b", "plan_info_same.parquet", "plan_info_same_col")
 
-    def test_reader_data_access_is_a_non_comparing_defaulted_field(self) -> None:
-        by_name = {field.name: field for field in dataclasses.fields(PlanStep)}
-        assert by_name["reader_data_access"].compare is False
-        assert by_name["reader_data_access"].default is None
+        assert first.data_access_identity != second.data_access_identity
+        assert first == second
+        assert hash(first) == hash(second)
+
+    def test_identity_properties_are_not_public_dataclass_fields(self) -> None:
+        public = {field.name for field in dataclasses.fields(PlanStep) if not field.name.startswith("_")}
+        assert "data_access_identity" not in public
+        assert "data_access_identity_is_fallback" not in public
+
+    def test_a_bare_step_has_no_identity(self) -> None:
         step = PlanStep(
             step_kind="compute",
             feature_names=("plan_info_sales",),
@@ -1057,17 +1251,12 @@ class TestPlanStepReaderDataAccess:
             source_feature_group=None,
             source_compute_framework=None,
         )
-        assert step == dataclasses.replace(step, reader_data_access=(ParquetReader, "x"))
-        assert hash(step) == hash(dataclasses.replace(step, reader_data_access=(ParquetReader, "x")))
-
-    def test_identity_properties_are_not_dataclass_fields(self) -> None:
-        assert "data_access_identity" not in {field.name for field in dataclasses.fields(PlanStep)}
-        assert "data_access_identity_is_fallback" not in {field.name for field in dataclasses.fields(PlanStep)}
+        assert step.data_access_identity is None
+        assert step.data_access_identity_is_fallback is None
 
     def test_data_creator_backed_compute_step_reports_none(self) -> None:
         session = _prepare_chained_session()
         step = next(s for s in session.resolved_plan() if s.feature_group is PlanInfoPandasSource)
-        assert step.reader_data_access is None
         assert step.data_access_identity is None
         assert step.data_access_identity_is_fallback is None
 
@@ -1076,7 +1265,6 @@ class TestPlanStepReaderDataAccess:
         non_compute_steps = [step for step in prepared if step.step_kind in ("join", "transform")]
         assert non_compute_steps, "the fixture must plan a join or transform step"
         for step in non_compute_steps:
-            assert step.reader_data_access is None
             assert step.data_access_identity is None
             assert step.data_access_identity_is_fallback is None
 
@@ -1094,25 +1282,28 @@ class TestPlanStepReaderDataAccess:
             ["plan_info_db_col"],
             compute_frameworks=[PythonDictFramework],
             data_access_collection=dac,
-            plugin_collector=PluginCollector.enabled_feature_groups({ReadDBFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
         )
         return db, explained
 
     def test_sqlite_password_stays_out_of_the_safe_fields(self, tmp_path: Path) -> None:
         db, explained = self._explain_sqlite_plan(tmp_path)
 
-        step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
-        assert step.reader_data_access is not None
-        assert "hunter2" in json.dumps(dict(step.reader_data_access[1]))
+        step = next(s for s in explained if s.step_kind == "compute" and s.data_access_identity is not None)
+        assert step.feature_group is SqliteFG
+        assert "hunter2" not in repr(step)
         assert step.data_access_identity == f"{db}::t"
         assert step.data_access_identity_is_fallback is False
 
-        omitted = {"feature_set_options", "reader_data_access"}
-        safe = {f.name: getattr(step, f.name) for f in dataclasses.fields(step) if f.name not in omitted}
+        safe = {
+            f.name: getattr(step, f.name)
+            for f in dataclasses.fields(step)
+            if f.name != "feature_set_options" and not f.name.startswith("_")
+        }
         safe["data_access_identity"] = step.data_access_identity
         assert "hunter2" not in json.dumps(safe, default=str)
 
-    def test_sqlite_plan_lock_keeps_credentials_and_path_out_and_names_the_reader(self, tmp_path: Path) -> None:
+    def test_sqlite_plan_lock_keeps_credentials_and_path_out_and_has_no_reader_entry(self, tmp_path: Path) -> None:
         db, explained = self._explain_sqlite_plan(tmp_path)
 
         text = _lock_text(explained)
@@ -1120,48 +1311,66 @@ class TestPlanStepReaderDataAccess:
         assert "hunter2" not in text
         assert db not in text
         records = json.loads(text)["compute"]
-        assert [record["reader"] for record in records] == [f"{SQLITEReader.__module__}:{SQLITEReader.__qualname__}"]
+        assert [record["feature_group"] for record in records] == [f"{SqliteFG.__module__}:{SqliteFG.__qualname__}"]
+        assert all("reader" not in record for record in records)
 
-    @pytest.mark.parametrize(
-        "reader, feature_group, feature_name, in_context",
-        [
-            (SQLITEReader, ReadDBFeature, "plan_info_db_col", False),
-            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", False),
-            (PlanInfoOverridingDBReader, PlanInfoOverridingDBReaderFeature, "plan_info_override_col", True),
-        ],
-        ids=["core_sqlite_reader", "overriding_reader", "overriding_reader_context_pin"],
-    )
-    def test_pinned_dict_credential_is_redacted_in_plan_output(
-        self,
-        tmp_path: Path,
-        reader: type[BaseInputData],
-        feature_group: type[FeatureGroup],
-        feature_name: str,
-        in_context: bool,
-    ) -> None:
-        db = str(tmp_path / "plan_info_pinned.db")
+    def test_a_plain_dict_pointer_secret_stays_out_of_the_plan_step(self, tmp_path: Path) -> None:
+        db = str(tmp_path / "pointer.db")
         conn = sqlite3.connect(db)
-        conn.execute(f"CREATE TABLE t ({feature_name} INTEGER)")
+        conn.execute("CREATE TABLE t (plan_info_pointer_col INTEGER)")
         conn.commit()
         conn.close()
-        pinned = {"sqlite": db, "table_name": "t", "password": "hunter2"}  # nosec B105
-        options = Options(context={reader.__name__: pinned}) if in_context else {reader.__name__: pinned}
+        secret = "plan-info-pointer-secret"  # nosec B105
+        pointer = {"sqlite": db, "password": secret}
+        feature = Feature("plan_info_pointer_col", options={"SqliteFG": pointer})
+
+        explained = mloda.explain(
+            [feature],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        )
+
+        step = next(s for s in explained if s.step_kind == "compute")
+        assert step.feature_group is SqliteFG
+        for text in (str(step), repr(step), str(step.feature_set_options), repr(dataclasses.asdict(step))):
+            assert secret not in text
+        assert pointer == {"sqlite": db, "password": secret}
+
+    @pytest.mark.parametrize(
+        "in_context",
+        [False, True],
+        ids=["overriding_reader", "overriding_reader_context_pin"],
+    )
+    def test_pinned_dict_credential_is_redacted_in_plan_output(self, in_context: bool) -> None:
+        feature_name = "plan_info_override_col"
+        reader_name = PlanInfoOverridingDBReader.__name__
+        pinned = {"sqlite": "plan_info_pinned.db", "table_name": "t", "password": "hunter2"}  # nosec B105
+        options = Options(context={reader_name: pinned}) if in_context else {reader_name: pinned}
 
         explained = mloda.explain(
             [Feature(feature_name, options=options)],
             compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({feature_group}),
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoOverridingDBReaderFeature}),
         )
 
-        step = next(s for s in explained if s.step_kind == "compute" and s.reader_data_access is not None)
-        assert step.reader_data_access is not None
-        assert type(step.reader_data_access[1]) is RegisteredCredential
+        step = next(s for s in explained if s.step_kind == "compute")
         assert "hunter2" not in repr(step)
         assert type(pinned) is dict
         if not in_context:
             assert step.feature_set_options is not None
             assert "hunter2" not in str(step.feature_set_options)
-            assert type(step.feature_set_options.group[reader.__name__]) is RegisteredCredential
+
+        PlanInfoOverridingDBReader.received_types = []
+        PlanInfoOverridingDBReader.received_options = []
+        mloda.run_all(
+            [Feature(feature_name, options=options)],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoOverridingDBReaderFeature}),
+        )
+
+        assert PlanInfoOverridingDBReader.received_types == [RegisteredCredential]
+        assert len(PlanInfoOverridingDBReader.received_options) == 1
+        assert "hunter2" not in PlanInfoOverridingDBReader.received_options[0]
 
     def test_wrap_scoped_access_leaves_pairs_of_non_overriding_readers_untouched(self) -> None:
         PlanInfoNonIdempotentWrapReader.wrap_calls = 0
@@ -1176,15 +1385,12 @@ class TestPlanStepReaderDataAccess:
         assert reader.wrap_calls == 0
 
     def test_non_string_access_falls_back_to_the_type_name(self) -> None:
-        step = PlanStep(
-            step_kind="compute",
-            feature_names=("plan_info_sales",),
-            feature_group=PlanInfoPandasSource,
-            compute_framework=PandasDataFrame,
-            source_feature_group=None,
-            source_compute_framework=None,
-            reader_data_access=(BaseInputData, 42),
+        explained = mloda.explain(
+            [Feature("plan_info_int_access", options={PlanInfoIntAccessReader.__name__: 424242})],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoIntAccessFG}),
         )
+        step = next(s for s in explained if s.step_kind == "compute")
         assert step.data_access_identity == "int"
         assert step.data_access_identity_is_fallback is True
 

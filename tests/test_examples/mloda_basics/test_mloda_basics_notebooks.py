@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from mloda.user import DataAccessCollection, PluginCollector, PluginLoader
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 # Registers PandasDataFrame so test_create_synthetic_data resolves it when run in isolation.
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
@@ -136,7 +135,7 @@ class TestMlodaBasicsBaseDataSources:
         base_data = REPO_ROOT / "docs" / "docs" / "examples" / "mloda_basics" / "base_data"
         collection = DataAccessCollection()
         collection.add_folder(str(base_data))
-        collection.add_credentials({SQLITEReader.db_path(): str(base_data / "example.sqlite")})
+        collection.add_credentials({"sqlite": str(base_data / "example.sqlite")})
         return collection
 
     def test_bare_shared_column_is_ambiguous_between_file_and_db(self) -> None:
@@ -150,11 +149,11 @@ class TestMlodaBasicsBaseDataSources:
             )
 
         message = str(exc_info.value)
-        assert "ReadFileFeature" in message
-        assert "ReadDBFeature" in message
+        assert "JsonFG" in message
+        assert "SqliteFG" in message
         assert "BaseInputData already set" not in message
 
-    @pytest.mark.parametrize("scope", ["ReadFileFeature", "ReadDBFeature"])
+    @pytest.mark.parametrize("scope", ["JsonFG", "SqliteFG"])
     def test_scoped_shared_column_loads_from_its_own_source(self, scope: str) -> None:
         PluginLoader.all()
 

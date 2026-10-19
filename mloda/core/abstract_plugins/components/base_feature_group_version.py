@@ -43,6 +43,10 @@ _implementation_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakre
 _implementation_hash_failures: "weakref.WeakKeyDictionary[type[Any], tuple[type[Exception], str]]" = (
     weakref.WeakKeyDictionary()
 )
+_first_party_hash_cache: "weakref.WeakKeyDictionary[type[Any], str]" = weakref.WeakKeyDictionary()
+_first_party_hash_failures: "weakref.WeakKeyDictionary[type[Any], tuple[type[Exception], str]]" = (
+    weakref.WeakKeyDictionary()
+)
 
 
 class BaseFeatureGroupVersion(ABC):
@@ -69,11 +73,12 @@ class BaseFeatureGroupVersion(ABC):
         Both hashes and lookup failures are cached for the class object's lifetime.
         """
 
-        # Import FeatureGroup locally to avoid circular import.
+        # Import locally to avoid circular import.
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
+        from mloda.core.abstract_plugins.implementation import Implementation
 
-        if not issubclass(target_class, FeatureGroup):
-            raise ValueError(f"target_class must be a subclass of FeatureGroup: {target_class}")
+        if not issubclass(target_class, (FeatureGroup, Implementation)):
+            raise ValueError(f"target_class must be a subclass of FeatureGroup or Implementation: {target_class}")
 
         cached = _class_source_hash_cache.get(target_class)
         if cached is not None:
@@ -126,6 +131,28 @@ class BaseFeatureGroupVersion(ABC):
         return digest
 
     @classmethod
+    def first_party_hash(cls, target_class: type[Any]) -> str:
+        """SHA-256 over target_class's closure without third-party dependency versions. Cached per class."""
+        from mloda.core.abstract_plugins.components.code_closure import closure_parts
+
+        cached = _first_party_hash_cache.get(target_class)
+        if cached is not None:
+            return cached
+        failure = _first_party_hash_failures.get(target_class)
+        if failure is not None:
+            error_type, message = failure
+            raise error_type(message)
+
+        try:
+            parts = closure_parts(target_class, include_dependencies=False)
+        except SOURCE_INTROSPECTION_ERRORS as error:
+            _first_party_hash_failures[target_class] = (type(error), str(error))
+            raise
+        digest = hashlib.sha256("\n".join(sorted(parts)).encode("utf-8")).hexdigest()
+        _first_party_hash_cache[target_class] = digest
+        return digest
+
+    @classmethod
     def version(cls, target_class: type[Any]) -> str:
         """
         Returns a composite version string.
@@ -138,9 +165,10 @@ class BaseFeatureGroupVersion(ABC):
 
         # Import FeatureGroup locally to avoid circular import.
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
+        from mloda.core.abstract_plugins.implementation import Implementation
 
-        if not issubclass(target_class, FeatureGroup):
-            raise ValueError(f"target_class must be a subclass of FeatureGroup: {target_class}")
+        if not issubclass(target_class, (FeatureGroup, Implementation)):
+            raise ValueError(f"target_class must be a subclass of FeatureGroup or Implementation: {target_class}")
 
         return f"{cls.mloda_version()}-{cls.module_name(target_class)}-{cls.implementation_hash(target_class)}"
 

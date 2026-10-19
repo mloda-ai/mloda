@@ -40,6 +40,8 @@ class ClippedValue(FeatureGroup):
 
 Changing `LIMIT` or the body of `clip` changes `ClippedValue.version()`, even if `clip` lives in another module of the same package.
 
+`Implementation.version()` works the same way and is not folded into the group's version.
+
 ## Third-party dependencies
 
 The code of third-party packages is never hashed. By default, `ThirdPartyVersionMode.INCLUDE` adds the name and version of every third-party package the reachable code references, so upgrading pandas changes the version of every feature group that uses pandas. A package's version comes from its distribution metadata or its `__version__`. A package with neither is recorded by name only. To leave dependency versions out, override `version_third_party_mode()`. A shared base class sets it for all its subclasses:
@@ -59,7 +61,7 @@ class DependencyAgnostic(FeatureGroup):
 - mloda itself, beyond the version prefix. Edits to an editable mloda install do not change it.
 - Code reached only through runtime values:
     - registries filled elsewhere (`REGISTRY["k"] = f`, `REGISTRY.update(...)`),
-    - classes discovered by reflection, such as the file readers `ReadFileFeature` finds through `__subclasses__()` (see below),
+    - classes discovered by reflection, such as plugins found through `__subclasses__()` (see below),
     - imports by a computed name (`importlib.import_module(name)`),
     - attributes assigned outside the class body,
     - `getattr` on objects that are not modules,
@@ -94,7 +96,7 @@ class ScaledValue(FeatureGroup):
         return data
 ```
 
-Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version, and nothing under `ThirdPartyVersionMode.EXCLUDE`. `ReadFileFeature` and `ReadDocumentFeature` declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.
+Editing `Scaler.apply` now changes `ScaledValue.version()`. A third-party class referenced this way records only its package name and version, and nothing under `ThirdPartyVersionMode.EXCLUDE`. The format groups shipped with mloda (`CsvFG`, `TextFG`, ...) are covered by the version prefix. To version a custom format group, subclass it and reference it in your feature group.
 
 ## When it is computed
 

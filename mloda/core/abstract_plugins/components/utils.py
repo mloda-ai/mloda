@@ -22,6 +22,7 @@ E = TypeVar("E", bound=BaseException)
 
 # Provenance marker for a framework-owned raise. Not an exception type: the object must stay exactly as raised.
 MATCH_ABORT_FLAG = "_mloda_match_abort"
+DEFERRED_MATCH_ABORT_FLAG = "_mloda_deferred_match_abort"
 
 # Exception classes a user callable raises when it merely cannot judge a value.
 _EXPECTED_JUDGMENT_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError, AttributeError)
@@ -50,6 +51,18 @@ def is_match_abort(exc: BaseException) -> bool:
     """Is this raise marked as framework-owned, so the match seam must not contain it."""
     # __dict__, not getattr: a custom __getattr__ could raise inside the seam's except block or fake the marker.
     return exc.__dict__.get(MATCH_ABORT_FLAG, False) is True
+
+
+def defer_match_abort(exc: E) -> E:
+    """Mark a match abort the resolver may drop when another candidate computes the feature."""
+    escalate_match_abort(exc)
+    exc.__dict__[DEFERRED_MATCH_ABORT_FLAG] = True
+    return exc
+
+
+def is_deferred_match_abort(exc: BaseException) -> bool:
+    """Is this raise a match abort the resolver may defer."""
+    return exc.__dict__.get(DEFERRED_MATCH_ABORT_FLAG, False) is True
 
 
 def safe_exc_str(exc: BaseException) -> str:

@@ -38,11 +38,11 @@ mloda.run_all(
 )
 
 ValueError: Multiple feature groups
-{<class 'CsvReader'>: {<class 'PyArrowTable'>, <class 'PandasDataFrame'>}
+{<class 'CsvFG'>: {<class 'PyArrowTable'>, <class 'PandasDataFrame'>}
 .... found for feature name: id.
 ```
 
-In this case, the framework finds multiple compute frameworks (like **PyArrowTable** and **PandasDataFrame**) that can handle the same file through the **CsvReader** feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
+In this case, the framework finds multiple compute frameworks (like **PyArrowTable** and **PandasDataFrame**) that can handle the same file through the **CsvFG** feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
 
 This might seem counterintuitive, but it’s actually a **feature**, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:
 

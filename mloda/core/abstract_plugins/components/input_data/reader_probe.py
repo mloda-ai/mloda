@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -39,13 +39,16 @@ def reader_probe_scope(scope: ReaderProbeScope | None) -> Iterator[None]:
         _CURRENT.reset(token)
 
 
-def probe_reader(reader: Any, data_access: Any, feature_names: list[str], options: Any) -> Any:
-    """Run reader.match_subclass_data_access, through the INPUT_DATA_MATCH extender when one is in scope."""
-    scope = _CURRENT.get()
-    if scope is None:
-        return reader.match_subclass_data_access(data_access, feature_names, options=options)
+@dataclass(frozen=True)
+class FormatProbeOutcome:
+    """refused is the refusal reason, None when the probe ran and result holds its value."""
 
-    context = HookContext(
+    refused: str | None
+    result: Any
+
+
+def _match_context(scope: ReaderProbeScope, reader: Any, feature_names: list[str]) -> HookContext:
+    return HookContext(
         hook=ExtenderHook.INPUT_DATA_MATCH,
         feature_group_class=None,
         feature_group_version=None,
@@ -59,6 +62,68 @@ def probe_reader(reader: Any, data_access: Any, feature_names: list[str], option
         data_access_format=reader.data_access_name(),
         declared_attributes=safe_field(lambda: read_declared_attributes(reader, None), None),
     )
+
+
+def _log_refusal(scope: ReaderProbeScope, reader: Any, reason: str, label: str = "Reader") -> None:
+    logger.log(
+        logging.INFO if scope.extender.never_fall_back else logging.WARNING,
+        "%s %s refused at INPUT_DATA_MATCH by %s: %s",
+        label,
+        reader.get_class_name(),
+        type(scope.extender).__name__,
+        reason,
+    )
+
+
+def probe_format_group(
+    group: Any, probe: Callable[[], Any], data_access_collection: Any, base_name: str, options: Any
+) -> FormatProbeOutcome:
+    """Run a format group's source probe through the INPUT_DATA_MATCH extender when one is in scope."""
+    scope = _CURRENT.get()
+    if scope is None:
+        return FormatProbeOutcome(None, probe())
+
+    names = [base_name]
+    finished = False
+    result: Any = None
+    probe_raised = False
+
+    def func(access: Any, feature_names: list[str], options: Any) -> Any:
+        nonlocal finished, result, probe_raised
+        try:
+            value = probe()
+        except BaseException:
+            probe_raised = True
+            raise
+        if not finished:
+            finished = True
+            result = value
+        return None
+
+    with _match_context(scope, group, names).activate():
+        try:
+            _invoke_extender(scope.extender, func, data_access_collection, names, options=options)
+        # Contained: an extender refusing one candidate group declines it.
+        except Exception as exc:
+            if probe_raised or is_match_abort(exc):
+                raise
+            reason = contained_raise_reason(exc)
+            _log_refusal(scope, group, reason, "Format group")
+            return FormatProbeOutcome(reason, None)
+    if not finished:
+        reason = "the extender did not run the probe"
+        _log_refusal(scope, group, reason, "Format group")
+        return FormatProbeOutcome(reason, None)
+    return FormatProbeOutcome(None, result)
+
+
+def probe_reader(reader: Any, data_access: Any, feature_names: list[str], options: Any) -> Any:
+    """Run reader.match_subclass_data_access, through the INPUT_DATA_MATCH extender when one is in scope."""
+    scope = _CURRENT.get()
+    if scope is None:
+        return reader.match_subclass_data_access(data_access, feature_names, options=options)
+
+    context = _match_context(scope, reader, feature_names)
     probe_raised = False
 
     def probe(access: Any, names: list[str], options: Any) -> Any:
@@ -77,13 +142,7 @@ def probe_reader(reader: Any, data_access: Any, feature_names: list[str], option
             if probe_raised or is_match_abort(exc):
                 raise
             reason = contained_raise_reason(exc)
-            logger.log(
-                logging.INFO if scope.extender.never_fall_back else logging.WARNING,
-                "Reader %s refused at INPUT_DATA_MATCH by %s: %s",
-                reader.get_class_name(),
-                type(scope.extender).__name__,
-                reason,
-            )
+            _log_refusal(scope, reader, reason)
             record_match_rejection(
                 reader.get_class_name(),
                 f"refused at INPUT_DATA_MATCH: {reason}",

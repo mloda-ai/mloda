@@ -1326,6 +1326,76 @@ class TestVersionUsesImplementationHash:
         assert after != before, "editing a base-class helper method must change version()"
 
 
+_IMPL_HELPER_TMPL = "def load() -> int:\n    return {value}\n"
+
+_IMPL_LEAF_TMPL = """\
+from {top}.helper import load
+from mloda.provider import Implementation
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+
+
+class VersionImplFG(ToyFormatBase):
+    pass
+
+
+class Leaf(Implementation):
+    feature_group = VersionImplFG
+    compute_framework = PythonDictFramework
+
+    @classmethod
+    def calculate(cls, serving, match, features):
+        return load()
+"""
+
+
+class TestImplementationVersion:
+    """Implementation.version() mirrors FeatureGroup.version(): '{mloda_version}-{module}-{implementation_hash}'."""
+
+    def _write(self, fixture_pkg: _FixturePkgHelper, top: str, value: int) -> None:
+        fixture_pkg.write(
+            top,
+            {"helper.py": _IMPL_HELPER_TMPL.format(value=value), "sub.py": _IMPL_LEAF_TMPL.format(top=top)},
+        )
+
+    def test_version_has_the_group_format_and_ends_with_the_implementation_hash(
+        self, fixture_pkg: _FixturePkgHelper
+    ) -> None:
+        top = _unique_top("fgv_impl")
+        self._write(fixture_pkg, top, 1)
+        leaf = fixture_pkg.import_leaf(top)
+
+        digest = BaseFeatureGroupVersion.implementation_hash(leaf)
+        assert leaf.version() == f"{BaseFeatureGroupVersion.mloda_version()}-{leaf.__module__}-{digest}"
+
+    def test_version_changes_when_a_reachable_helper_body_changes(self, fixture_pkg: _FixturePkgHelper) -> None:
+        top = _unique_top("fgv_impl")
+        self._write(fixture_pkg, top, 1)
+        before = fixture_pkg.import_leaf(top).version()
+
+        fixture_pkg.rewrite(top, {"helper.py": _IMPL_HELPER_TMPL.format(value=2)})
+        after = fixture_pkg.import_leaf(top).version()
+
+        assert after != before
+
+    def test_third_party_mode_defaults_to_include(self, fixture_pkg: _FixturePkgHelper) -> None:
+        top = _unique_top("fgv_impl")
+        self._write(fixture_pkg, top, 1)
+
+        assert fixture_pkg.import_leaf(top).version_third_party_mode() is ThirdPartyVersionMode.INCLUDE
+
+    def test_version_accepts_an_implementation_but_still_rejects_other_classes(
+        self, fixture_pkg: _FixturePkgHelper
+    ) -> None:
+        top = _unique_top("fgv_impl")
+        self._write(fixture_pkg, top, 1)
+        leaf = fixture_pkg.import_leaf(top)
+
+        assert BaseFeatureGroupVersion.version(leaf) == leaf.version()
+        with pytest.raises(ValueError, match="Implementation"):
+            BaseFeatureGroupVersion.version(dict)
+
+
 # --------------------------------------------------------------------------
 # Pinned implementation_hash: fixed fixture package, fixed name, fixed content.
 # EXPECTED is pinned to prove the hash is identical across supported Pythons;

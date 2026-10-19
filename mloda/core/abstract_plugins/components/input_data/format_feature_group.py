@@ -210,12 +210,13 @@ class FormatFeatureGroup(FeatureGroup):
         if match is None:
             raise ValueError(f"{cls.__name__}.calculate_feature found no input_data_match on the feature set.")
         source = match[1]
-        framework = features.get_sorted_features()[0].get_compute_framework()
         implementation = features.implementation
         load: Callable[[SourceMatch, Any], Any] = (
             types.MethodType(implementation.calculate, cls) if implementation is not None else cls.load_neutral
         )
-        loader_name = framework.__name__ if implementation is not None else "neutral"
+        loader_name = (
+            f"{implementation.__module__}:{implementation.__qualname__}" if implementation is not None else "neutral"
+        )
         return dispatch_input_data_load(
             cls,
             cls,

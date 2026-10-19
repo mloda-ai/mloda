@@ -1737,8 +1737,10 @@ class TestInputDataLoadAuditForFormatGroups:
         assert context.reader_class is group
         assert context.data_access_identity == "h1:toy"
         assert context.data_access_loader == "neutral"
+        assert context.implementation == "neutral"
+        assert context.implementation_version is None
 
-    def test_implementation_load_names_the_framework_class(self, tmp_path: Path, make_implementation: Any) -> None:
+    def test_implementation_load_names_the_implementation_class(self, tmp_path: Path, make_implementation: Any) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
         impl = make_implementation(group, PythonDictFramework, lambda s, m, f: [{"toyfmt_audit": 1}])
         assert impl in loaded_implementations()
@@ -1748,11 +1750,15 @@ class TestInputDataLoadAuditForFormatGroups:
 
         assert context.reader_class is group
         assert context.data_access_identity == "h1:toy"
-        assert context.data_access_loader == "PythonDictFramework"
+        assert context.data_access_loader == f"{impl.__module__}:{impl.__qualname__}"
+        assert context.implementation == context.data_access_loader
         assert extender.func_owner == group.__name__
 
     def test_readers_leave_the_loader_field_none(self) -> None:
-        assert _direct_load_context(_DirectLoadReader).data_access_loader is None
+        context = _direct_load_context(_DirectLoadReader)
+        assert context.data_access_loader is None
+        assert context.implementation is None
+        assert context.implementation_version is None
 
     def test_stock_csv_group_audits_itself_with_the_neutral_loader(self, tmp_path: Path) -> None:
         column = f"{_MARKER}_col_csv_audit"
@@ -1774,3 +1780,5 @@ class TestInputDataLoadAuditForFormatGroups:
         assert context.data_access_format == "CsvFG"
         assert context.data_access_identity == os.path.abspath(path)
         assert context.data_access_loader == "neutral"
+        assert context.implementation == "neutral"
+        assert context.implementation_version is None

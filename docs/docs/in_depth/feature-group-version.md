@@ -40,6 +40,8 @@ class ClippedValue(FeatureGroup):
 
 Changing `LIMIT` or the body of `clip` changes `ClippedValue.version()`, even if `clip` lives in another module of the same package.
 
+`Implementation.version()` works the same way and is not folded into the group's version.
+
 ## Third-party dependencies
 
 The code of third-party packages is never hashed. By default, `ThirdPartyVersionMode.INCLUDE` adds the name and version of every third-party package the reachable code references, so upgrading pandas changes the version of every feature group that uses pandas. A package's version comes from its distribution metadata or its `__version__`. A package with neither is recorded by name only. To leave dependency versions out, override `version_third_party_mode()`. A shared base class sets it for all its subclasses:

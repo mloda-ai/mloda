@@ -14,6 +14,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
+from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import expected_implementation_version
 
 
 class FrameworkAdapterMixin:
@@ -139,6 +140,8 @@ class FileLoaderNameMixin(FileLoadsIntoFrameworkMixin):
         context = capture.contexts[0]
         assert context.reader_class is self.file_group
         assert context.data_access_loader == self.expected_loader
+        assert context.implementation == self.expected_loader
+        assert context.implementation_version == expected_implementation_version(self.expected_loader)
 
 
 class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
@@ -188,6 +191,8 @@ class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
         context = capture.contexts[0]
         assert context.reader_class is self.db_group
         assert context.data_access_loader == self.expected_loader
+        assert context.implementation == self.expected_loader
+        assert context.implementation_version == expected_implementation_version(self.expected_loader)
 
 
 class DocumentLoadsIntoFrameworkMixin(FrameworkAdapterMixin):

@@ -47,7 +47,7 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     expected_content: str | None = None
     handed_over: bool = False
     load_framework = PythonDictFramework
-    load_loader_names = ("neutral", "PythonDictFramework")
+    load_loader_names = ("neutral",)
     tmp_path: Path
 
     @pytest.fixture(autouse=True)

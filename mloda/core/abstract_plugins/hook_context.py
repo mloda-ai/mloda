@@ -84,6 +84,8 @@ class HookContext:
     data_access_format: str | None = None
     data_access_dataset_version: str | None = None
     data_access_loader: str | None = None
+    implementation: str | None = None
+    implementation_version: str | None = None
     join_type: str | None = None
     join_keys: tuple[str, ...] | None = None
     asof_config: "AsOfJoinConfig | None" = None

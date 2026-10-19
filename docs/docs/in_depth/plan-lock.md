@@ -26,13 +26,13 @@ write_plan_lock(mloda.explain(features, parallelization_modes={ParallelizationMo
 
 ## What the file holds
 
-Sorted JSON with a `format` number (there is no reader entry), the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Compute records also hold each output feature's input names (`input_feature_edges`), join records the link's `join_keys` (`left=right` column pairs, null for append/union). Duplicate steps keep one record each. A `format` bump makes a lock file written by an older mloda fail `check_plan_lock` until rewritten with `write_plan_lock`.
+Sorted JSON with a `format` number (there is no reader entry), the requested feature names, and one record per compute, join and transform step, as class paths (`module:QualName`). Compute records include the framework choice reason (for example `pinned`) and the `result_framework` the requested features come back in, which follows the `output_framework` option when set. Compute records also hold the serving `implementation` (`module:qualname`, `neutral` for a format group loaded without one, or null), its `implementation_hash` (the code-closure hash without the mloda version, null without an implementation) and `implementation_specialized_from` (the implementations it replaced), and each output feature's input names (`input_feature_edges`), join records the link's `join_keys` (`left=right` column pairs, null for append/union). Duplicate steps keep one record each. A `format` bump makes a lock file written by an older mloda fail `check_plan_lock` until rewritten with `write_plan_lock`.
 
-It never holds option values, `data_access_identity`, versions, per-run ids or the mloda version.
+It never holds option values, `data_access_identity`, feature group or implementation versions, per-run ids or the mloda version. An overridden `Implementation.version()` does not reach the lock, which reads the hash.
 
 ## What it does not cover
 
-- Code changes inside the same class. Use `FeatureGroup.version()` on `HookContext`, see [Feature Group Version](feature-group-version.md).
+- Code changes inside a feature group class. An implementation's code is covered by `implementation_hash`. For groups use `FeatureGroup.version()` on `HookContext`, see [Feature Group Version](feature-group-version.md).
 - Data.
 - Extenders.
 
@@ -47,7 +47,8 @@ It never holds option values, `data_access_identity`, versions, per-run ids or t
 - A reason can change without a framework change, for example `saves 1 conversion` to `saves 2 conversions`.
 - Moving a class to another module changes its path.
 - Classes created at runtime (for example via `DynamicFeatureGroupCreator`) get a module path that does not say where they came from (`abc:<ClassName>`), so two with the same class name share one path.
-- Classes defined in `__main__` are refused by `write_plan_lock`.
+- Classes defined in `__main__` are refused by `write_plan_lock`, as is an implementation whose `implementation_hash` is `unavailable` (its source cannot be read).
+- An mloda or third-party upgrade, or an edit to code an implementation reaches (its group included), changes `implementation_hash`.
 - A mapping option value other than a plain dict (for example `OrderedDict` or `MappingProxyType`) hashes as a plain dict in `plan_content_hash`, so its content hash changed once when masking started to walk it.
 
 A corrupt lock file raises `json.JSONDecodeError`.

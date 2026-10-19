@@ -10,6 +10,8 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
@@ -48,6 +50,22 @@ def _sentinel(serving: Any, match: SourceMatch, features: Any) -> Any:
 
 
 _MATCH = SourceMatch(source="toyfmt_src", access="toyfmt_src")
+
+
+class _LoadCapture(Extender):
+    def __init__(self) -> None:
+        self.priority = 100
+        self.contexts: list[HookContext] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_LOAD}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        if context is not None:
+            self.contexts.append(context)
+        return result
 
 
 class _BlindDeclaredFG(ToyDeclaredFG):
@@ -228,6 +246,27 @@ class TestFrameworkSubclassImplementation:
             pass
 
         assert group.select_implementation(_SubDictFramework, _MATCH, [impl]) is impl
+
+    def test_load_hook_names_the_implementation_not_the_subclass_framework(self) -> None:
+        class _SubDictFramework(PythonDictFramework):
+            pass
+
+        capture = _LoadCapture()
+        result = mloda.run_all(
+            [WORKER_COLUMN],
+            compute_frameworks=[_SubDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyWorkerFG}),
+            data_access_collection=toy_dac(h1={WORKER_COLUMN: [1, 2]}),
+            function_extender={capture},
+        )
+
+        assert column_values(result, WORKER_COLUMN) == WORKER_VALUES
+        assert len(capture.contexts) == 1
+        context = capture.contexts[0]
+        expected = f"{ToyWorkerPythonDict.__module__}:{ToyWorkerPythonDict.__qualname__}"
+        assert context.data_access_loader == expected
+        assert context.implementation == expected
+        assert context.implementation_version == ToyWorkerPythonDict.version()
 
 
 @pytest.mark.timeout(30)

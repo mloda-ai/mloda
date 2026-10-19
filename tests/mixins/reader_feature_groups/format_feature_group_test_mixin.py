@@ -6,6 +6,7 @@ own (no Test prefix).
 
 import copy
 import gc
+import importlib
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -71,6 +72,14 @@ class _MatchRefuseAll(Extender):
         raise PermissionError("no clearance")
 
 
+def expected_implementation_version(loader: str | None) -> str | None:
+    """The version() of the implementation class a ``module:qualname`` loader names; None for neutral."""
+    if loader is None or loader == "neutral":
+        return None
+    module_name, qualname = loader.split(":")
+    return cast(str, getattr(importlib.import_module(module_name), qualname).version())
+
+
 def _spy(name: str, original: Any, touched: list[str]) -> Any:
     def spy(klass: Any, *args: Any, **kwargs: Any) -> Any:
         touched.append(name)
@@ -87,7 +96,14 @@ class FormatFeatureGroupTestMixin:
     missing_column: str
     expected_source: str
     load_framework: type[ComputeFramework] = PyArrowTable
-    load_loader_names: tuple[str, ...] = ("neutral", "PyArrowTable")
+    load_loader_names: tuple[str, ...] = (
+        "neutral",
+        "mloda_plugins.feature_group.input_data.file_formats.csv_fg:CsvPyArrowTable",
+        "mloda_plugins.feature_group.input_data.file_formats.feather_fg:FeatherPyArrowTable",
+        "mloda_plugins.feature_group.input_data.file_formats.json_fg:JsonPyArrowTable",
+        "mloda_plugins.feature_group.input_data.file_formats.orc_fg:OrcPyArrowTable",
+        "mloda_plugins.feature_group.input_data.file_formats.parquet_fg:ParquetPyArrowTable",
+    )
     context_options: ClassVar[dict[str, Any]] = {}
 
     def own_dac(self) -> DataAccessCollection:
@@ -218,6 +234,8 @@ class FormatFeatureGroupTestMixin:
         assert context.reader_class is self.feature_group_class
         assert context.data_access_identity == self.expected_source
         assert context.data_access_loader in self.load_loader_names
+        assert context.implementation == context.data_access_loader
+        assert context.implementation_version == expected_implementation_version(context.data_access_loader)
 
     def test_a_refusing_input_data_match_gate_keeps_the_source_untouched_and_reports_the_reason(
         self, monkeypatch: pytest.MonkeyPatch

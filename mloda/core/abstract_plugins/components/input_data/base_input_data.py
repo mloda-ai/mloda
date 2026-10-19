@@ -163,6 +163,8 @@ def dispatch_input_data_load(
         data_access_format=data_access_format(),
         data_access_dataset_version=None,
         data_access_loader=loader_name,
+        implementation=calc_context.implementation,
+        implementation_version=calc_context.implementation_version,
         declared_attributes=safe_field(
             lambda: read_declared_attributes(owner, features),
             None,

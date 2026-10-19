@@ -38,6 +38,10 @@ class TestToyFileFormatFeatureGroup(FileFormatFeatureGroupTestMixin):
     feature_group_class = ToyFileFormatFG
     present_column = "toyfmt_filecol"
     missing_column = "toyfmt_filemissing"
+    load_loader_names = (
+        "neutral",
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_file_format_group:ToyFilePyArrowTable",
+    )
 
     def write_file(self, path: Path, columns: dict[str, list[Any]]) -> None:
         write_toy_file(path, columns)

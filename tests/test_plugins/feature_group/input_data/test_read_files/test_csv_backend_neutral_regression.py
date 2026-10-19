@@ -162,7 +162,7 @@ class TestDefaultNeutralParquetIntoPythonDict(
 
 
 class TestCsvIntoPyArrowTable(_CsvFiles, PyArrowTableAdapter, FileLoaderNameMixin):
-    expected_loader = "PyArrowTable"
+    expected_loader = "mloda_plugins.feature_group.input_data.file_formats.csv_fg:CsvPyArrowTable"
 
 
 class TestCsvIntoPandasDataFrame(_CsvFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
@@ -178,7 +178,7 @@ class TestCsvIntoPythonDict(_CsvFiles, PythonDictAdapter, FileLoadsIntoFramework
 
 
 class TestParquetIntoPyArrowTable(_ParquetFiles, PyArrowTableAdapter, FileLoaderNameMixin):
-    expected_loader = "PyArrowTable"
+    expected_loader = "mloda_plugins.feature_group.input_data.file_formats.parquet_fg:ParquetPyArrowTable"
 
 
 class TestParquetIntoPandasDataFrame(_ParquetFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
@@ -186,7 +186,7 @@ class TestParquetIntoPandasDataFrame(_ParquetFiles, PandasDataFrameAdapter, File
 
 
 class TestJsonIntoPyArrowTable(_JsonFiles, PyArrowTableAdapter, FileLoaderNameMixin):
-    expected_loader = "PyArrowTable"
+    expected_loader = "mloda_plugins.feature_group.input_data.file_formats.json_fg:JsonPyArrowTable"
 
 
 class TestJsonIntoPandasDataFrame(_JsonFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
@@ -194,7 +194,7 @@ class TestJsonIntoPandasDataFrame(_JsonFiles, PandasDataFrameAdapter, FileLoader
 
 
 class TestFeatherIntoPyArrowTable(_FeatherFiles, PyArrowTableAdapter, FileLoaderNameMixin):
-    expected_loader = "PyArrowTable"
+    expected_loader = "mloda_plugins.feature_group.input_data.file_formats.feather_fg:FeatherPyArrowTable"
 
 
 class TestFeatherIntoPandasDataFrame(_FeatherFiles, PandasDataFrameAdapter, FileLoaderNameMixin):
@@ -202,7 +202,7 @@ class TestFeatherIntoPandasDataFrame(_FeatherFiles, PandasDataFrameAdapter, File
 
 
 class TestOrcIntoPyArrowTable(_OrcFiles, PyArrowTableAdapter, FileLoaderNameMixin):
-    expected_loader = "PyArrowTable"
+    expected_loader = "mloda_plugins.feature_group.input_data.file_formats.orc_fg:OrcPyArrowTable"
 
 
 class TestOrcIntoPandasDataFrame(_OrcFiles, PandasDataFrameAdapter, FileLoaderNameMixin):

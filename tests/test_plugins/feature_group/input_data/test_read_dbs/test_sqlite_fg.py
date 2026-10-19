@@ -114,7 +114,7 @@ class TestSqliteLoadsIntoPyArrowTable(PyArrowTableAdapter, DatabaseLoadsIntoFram
 class TestSqliteLoadsIntoPythonDict(PythonDictAdapter, DatabaseLoadsIntoFrameworkMixin):
     db_group = SqliteFG
     credential_key = KEY
-    expected_loader = "PythonDictFramework"
+    expected_loader = "mloda_plugins.feature_group.input_data.db_formats.sqlite_fg:SqlitePythonDict"
 
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         write_sqlite(path, tables)

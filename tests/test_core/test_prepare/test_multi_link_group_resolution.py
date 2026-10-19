@@ -2413,15 +2413,24 @@ _ALL_FRAMEWORKS = [PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw]
 
 
 def _star_prepare(
-    link_factory: Callable[[JoinSpec, JoinSpec], Link], hub_first: bool, spoke_c: type[FeatureGroup] = StarSpokeCArrow
+    link_factory: Callable[[JoinSpec, JoinSpec], Link],
+    hub_first: bool,
+    spoke_c: type[FeatureGroup] = StarSpokeCArrow,
+    second: tuple[Callable[[JoinSpec, JoinSpec], Link], bool] | None = None,
 ) -> Any:
-    def link(spoke: type[FeatureGroup]) -> Link:
-        sides = (StarHubArrow, spoke) if hub_first else (spoke, StarHubArrow)
-        return link_factory(JoinSpec(sides[0], MLG_INDEX), JoinSpec(sides[1], MLG_INDEX))
+    """Both spokes join the hub with link_factory; second, if given, is the spoke C link's (factory, hub_first)."""
 
+    def link(spoke: type[FeatureGroup], factory: Callable[[JoinSpec, JoinSpec], Link], first: bool) -> Link:
+        sides = (StarHubArrow, spoke) if first else (spoke, StarHubArrow)
+        return factory(JoinSpec(sides[0], MLG_INDEX), JoinSpec(sides[1], MLG_INDEX))
+
+    second_factory, second_hub_first = second or (link_factory, hub_first)
     return mloda.prepare(
         [StarConsumerArrow.get_class_name()],
-        links={link(MultiLinkRootAPartial), link(spoke_c)},
+        links={
+            link(MultiLinkRootAPartial, link_factory, hub_first),
+            link(spoke_c, second_factory, second_hub_first),
+        },
         compute_frameworks=_ALL_FRAMEWORKS,
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=PluginCollector.enabled_feature_groups(
@@ -2465,6 +2474,31 @@ def test_two_right_joins_keeping_different_spokes_of_a_shared_group_still_raise(
         _star_prepare(Link.right, hub_first=True)
 
 
+_ORDER_DEPENDENT_STAR_ROWS = [
+    pytest.param(Link.left, False, (Link.inner, False), id="left_keeping_a_spoke_plus_inner"),
+    pytest.param(Link.left, False, (Link.outer, False), id="left_keeping_a_spoke_plus_outer"),
+    pytest.param(Link.left, True, (Link.outer, False), id="left_keeping_the_hub_plus_outer"),
+    pytest.param(Link.inner, False, (Link.outer, False), id="inner_plus_outer"),
+    pytest.param(Link.left, False, (Link.left, True), id="chain_through_the_hub"),
+    pytest.param(Link.right, False, (Link.left, False), id="right_keeping_the_hub_plus_left_dropping_it"),
+]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+@pytest.mark.parametrize("link_factory, hub_first, second", _ORDER_DEPENDENT_STAR_ROWS)
+def test_a_star_whose_rows_depend_on_which_join_runs_first_is_rejected_at_plan_time(
+    link_factory: Any, hub_first: bool, second: Any, spoke_c: type[FeatureGroup]
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _star_prepare(link_factory, hub_first, spoke_c, second)
+
+    message = str(exc_info.value)
+    for name in (StarConsumerArrow.get_class_name(), "MultiLinkRootAPartial", spoke_c.get_class_name(), "StarHubArrow"):
+        assert name in message, f"{name} must be named; got: {message}"
+    assert "runs first" in message
+    assert "separate consumers" in message
+
+
 _STAR_ROWS = [
     pytest.param(Link.left, True, [11, 29, 41, 50, 60], id="left_keeps_hub"),
     pytest.param(Link.inner, False, [29, 41], id="inner"),
@@ -2480,6 +2514,15 @@ def test_a_star_with_a_defined_result_returns_its_rows_when_the_spokes_hold_diff
     results = _star_prepare(link_factory, hub_first, spoke_c).run()
 
     assert _side_path_values(results, StarConsumerArrow) == [expected]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+def test_a_left_join_keeping_the_hub_beside_an_inner_join_returns_the_inner_rows_with_every_spoke_value(
+    spoke_c: type[FeatureGroup],
+) -> None:
+    results = _star_prepare(Link.left, True, spoke_c, (Link.inner, False)).run()
+
+    assert _side_path_values(results, StarConsumerArrow) == [[29, 41]]
 
 
 @pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])

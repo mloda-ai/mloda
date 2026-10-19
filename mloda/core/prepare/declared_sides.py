@@ -84,6 +84,20 @@ def star_keeping_two_groups_reason(
     )
 
 
+def star_mixed_joins_reason(
+    consumer: str, shared: str, first: str, second: str, roles: tuple[str, str], jointypes: Iterable[JoinType]
+) -> str:
+    """Reason for one consumer reading two joins that treat a shared group differently, without final period."""
+    kind = " and ".join(sorted({jointype.value for jointype in jointypes}))
+    return (
+        f"{consumer} reads two joins ({kind}) into {shared} with {first} and {second}, and {shared} is "
+        f"{roles[0]} in one and {roles[1]} in the other: the rows depend on which join runs first, so the result "
+        "is not defined.\n"
+        f"Resolution: keep {shared} in every left or right join (an inner join beside them is fine), "
+        f"use one join type for all links, or read {first} and {second} in separate consumers"
+    )
+
+
 def _nearest(uuids_by_distance: dict[int, set[UUID]]) -> frozenset[UUID]:
     """The minimum-distance bucket, or an empty side."""
     if not uuids_by_distance:

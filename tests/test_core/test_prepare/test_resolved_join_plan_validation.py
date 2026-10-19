@@ -353,6 +353,46 @@ def _chain(first: Any, second: Any, hub: Any) -> list[Link]:
     ]
 
 
+def _snowflake_chain(first: Any, second: Any, hub: Any) -> list[Link]:
+    """The hub joins first on STAR_INDEX and second on another index, so the joins are order independent."""
+    other_index = Index(("star_other_idx",))
+    return [
+        Link.left(JoinSpec(first, STAR_INDEX), JoinSpec(hub, STAR_INDEX)),
+        Link.left(JoinSpec(hub, other_index), JoinSpec(second, other_index)),
+    ]
+
+
+def _star_of(kind_first: str, first_hub_first: bool, kind_second: str, second_hub_first: bool) -> Any:
+    """Links of the given kinds into the hub, each with the hub declared first or second."""
+
+    def make_links(first: Any, second: Any, hub: Any) -> list[Link]:
+        links = []
+        for kind, spoke, hub_first in ((kind_first, first, first_hub_first), (kind_second, second, second_hub_first)):
+            sides = (hub, spoke) if hub_first else (spoke, hub)
+            links.append(getattr(Link, kind)(JoinSpec(sides[0], STAR_INDEX), JoinSpec(sides[1], STAR_INDEX)))
+        return links
+
+    return make_links
+
+
+def _asof_star(first_hub_first: bool, second_hub_first: bool) -> Any:
+    def make_links(first: Any, second: Any, hub: Any) -> list[Link]:
+        links = []
+        for spoke, hub_first in ((first, first_hub_first), (second, second_hub_first)):
+            sides = (hub, spoke) if hub_first else (spoke, hub)
+            links.append(
+                Link.asof(
+                    JoinSpec(sides[0], STAR_INDEX),
+                    JoinSpec(sides[1], STAR_INDEX),
+                    left_time_column="t",
+                    right_time_column="t",
+                )
+            )
+        return links
+
+    return make_links
+
+
 def test_raise_on_join_star_keeping_two_groups_names_the_consumer_the_kept_groups_and_the_dropped_group() -> None:
     plan, graph = _build_star_plan(_two_spokes_kept)
 
@@ -371,12 +411,54 @@ def test_raise_on_join_star_keeping_two_groups_names_the_consumer_the_kept_group
     assert "separate consumers" in message
 
 
+_ORDER_DEPENDENT_STARS = [
+    pytest.param(_star_of("left", False, "inner", False), id="left_keeping_a_spoke_plus_inner"),
+    pytest.param(_star_of("left", False, "outer", False), id="left_keeping_a_spoke_plus_outer"),
+    pytest.param(_star_of("left", True, "outer", False), id="left_keeping_the_hub_plus_outer"),
+    pytest.param(_star_of("inner", False, "outer", False), id="inner_plus_outer"),
+    pytest.param(_chain, id="chain_through_the_middle_group"),
+    pytest.param(_star_of("right", False, "left", False), id="right_keeping_the_hub_plus_left_dropping_it"),
+]
+
+
+@pytest.mark.parametrize("make_links", _ORDER_DEPENDENT_STARS)
+def test_raise_on_join_star_keeping_two_groups_rejects_joins_whose_rows_depend_on_which_runs_first(
+    make_links: Any,
+) -> None:
+    plan, graph = _build_star_plan(make_links)
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)
+
+    message = str(excinfo.value)
+    for name in ("StarConsumer", "StarFirstSpoke", "StarSecondSpoke", "StarHub"):
+        assert name in message, f"{name} must be named; got: {message}"
+    assert "runs first" in message
+    assert "separate consumers" in message
+
+
+def test_raise_on_join_star_keeping_two_groups_rejects_asofs_keeping_different_groups() -> None:
+    plan, graph = _build_star_plan(_asof_star(False, False))
+
+    with pytest.raises(ValueError, match="keep different groups") as excinfo:
+        raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)
+
+    message = str(excinfo.value)
+    for name in ("StarConsumer", "StarFirstSpoke", "StarSecondSpoke", "StarHub"):
+        assert name in message, f"{name} must be named; got: {message}"
+
+
 @pytest.mark.parametrize(
     "make_links, separate_consumers",
     [
         pytest.param(_hub_kept, False, id="hub_kept_star"),
-        pytest.param(_chain, False, id="chain_through_the_middle_group"),
         pytest.param(_two_spokes_kept, True, id="different_consumers"),
+        pytest.param(_star_of("inner", False, "inner", True), False, id="True"),
+        pytest.param(_star_of("outer", False, "outer", True), False, id="True"),
+        pytest.param(_star_of("left", True, "inner", False), False, id="False"),
+        pytest.param(_star_of("right", False, "left", True), False, id="True"),
+        pytest.param(_snowflake_chain, False, id="chain_on_different_index_columns"),
+        pytest.param(_asof_star(True, True), False, id="asof_keeping_the_hub_twice"),
     ],
 )
 def test_raise_on_join_star_keeping_two_groups_accepts_plans_with_a_defined_result(

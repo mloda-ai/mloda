@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.link import JoinType
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.declared_sides import star_keeping_two_groups_reason
+from mloda.core.prepare.declared_sides import star_keeping_two_groups_reason, star_mixed_joins_reason
 from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan, ResolvedJoinSide
 
 
@@ -63,7 +63,7 @@ def raise_on_orphaned_join_source(plan: ResolvedJoinPlan) -> None:
 
 def _kept_and_dropped(record: ResolvedJoin) -> tuple[ResolvedJoinSide, ResolvedJoinSide] | None:
     """The declared (kept, dropped) sides of a left or right join, else None."""
-    if record.jointype is JoinType.LEFT:
+    if record.jointype in (JoinType.LEFT, JoinType.ASOF):
         return record.left, record.right
     if record.jointype is JoinType.RIGHT:
         return record.right, record.left
@@ -75,33 +75,94 @@ def _class_names(uuids: Iterable[UUID], graph: Graph) -> str:
     return " and ".join(sorted({nodes[uuid].feature_group_class.get_class_name() for uuid in uuids}))
 
 
+def _role(record: ResolvedJoin, side: ResolvedJoinSide) -> str | None:
+    """How a record treats one of its sides: inner, outer, kept or dropped; None for append and union."""
+    if record.jointype is JoinType.INNER:
+        return "inner"
+    if record.jointype is JoinType.OUTER:
+        return "outer"
+    kept_and_dropped = _kept_and_dropped(record)
+    if kept_and_dropped is None:
+        return None
+    return "kept" if side is kept_and_dropped[0] else "dropped"
+
+
+_ALWAYS_REJECTED = (frozenset({"dropped", "inner"}), frozenset({"dropped", "outer"}), frozenset({"inner", "outer"}))
+_REJECTED_ON_SAME_INDEX = (frozenset({"dropped", "kept"}), frozenset({"kept", "outer"}))
+
+
+def _raise_on_two_dropped(first: ResolvedJoin, second: ResolvedJoin, graph: Graph) -> None:
+    first_sides = _kept_and_dropped(first)
+    second_sides = _kept_and_dropped(second)
+    if first_sides is None or second_sides is None:
+        return
+    kept_first, dropped_first = first_sides
+    kept_second, dropped_second = second_sides
+    shared_dropped = dropped_first.uuids & dropped_second.uuids
+    if not shared_dropped or kept_first.uuids & kept_second.uuids:
+        return
+    nodes = graph.get_nodes()
+    if {nodes[u].feature_group_class for u in kept_first.uuids} == {
+        nodes[u].feature_group_class for u in kept_second.uuids
+    }:
+        return
+    consumer = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in first.consumers & second.consumers)[
+        0
+    ]
+    kept_names = sorted((_class_names(kept_first.uuids, graph), _class_names(kept_second.uuids, graph)))
+    message = star_keeping_two_groups_reason(
+        consumer,
+        kept_names[0],
+        kept_names[1],
+        _class_names(shared_dropped, graph),
+        (first.jointype, second.jointype),
+    )
+    raise ValueError(f"{message}.")
+
+
+def _other_side(record: ResolvedJoin, side: ResolvedJoinSide) -> ResolvedJoinSide:
+    return record.right if side is record.left else record.left
+
+
+def _is_self_link(record: ResolvedJoin) -> bool:
+    return bool(record.left.uuids & record.right.uuids)
+
+
 def raise_on_join_star_keeping_two_groups(plan: ResolvedJoinPlan, graph: Graph) -> None:
-    """Raise when one consumer reads two left or right joins that keep different groups and drop the same one."""
-    sides = [(record, _kept_and_dropped(record)) for record in plan.records]
-    for (first, first_sides), (second, second_sides) in combinations(sides, 2):
-        if first_sides is None or second_sides is None:
-            continue
+    """Raise when one consumer reads two joins whose rows depend on which of them runs first."""
+    for first, second in combinations(plan.records, 2):
         shared_consumers = first.consumers & second.consumers
-        kept_first, dropped_first = first_sides
-        kept_second, dropped_second = second_sides
-        shared_dropped = dropped_first.uuids & dropped_second.uuids
-        if not shared_consumers or not shared_dropped or kept_first.uuids & kept_second.uuids:
+        if not shared_consumers or _is_self_link(first) or _is_self_link(second):
             continue
-        nodes = graph.get_nodes()
-        if {nodes[u].feature_group_class for u in kept_first.uuids} == {
-            nodes[u].feature_group_class for u in kept_second.uuids
-        }:
-            continue
-        consumer = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in shared_consumers)[0]
-        kept_names = sorted((_class_names(kept_first.uuids, graph), _class_names(kept_second.uuids, graph)))
-        message = star_keeping_two_groups_reason(
-            consumer,
-            kept_names[0],
-            kept_names[1],
-            _class_names(shared_dropped, graph),
-            (first.jointype, second.jointype),
-        )
-        raise ValueError(f"{message}.")
+        _raise_on_two_dropped(first, second, graph)
+        for first_side in (first.left, first.right):
+            for second_side in (second.left, second.right):
+                shared = first_side.uuids & second_side.uuids
+                first_role = _role(first, first_side)
+                second_role = _role(second, second_side)
+                if not shared or first_role is None or second_role is None:
+                    continue
+                roles = frozenset({first_role, second_role})
+                if roles in _ALWAYS_REJECTED or (
+                    roles in _REJECTED_ON_SAME_INDEX and first_side.index == second_side.index
+                ):
+                    nodes = graph.get_nodes()
+                    consumer = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in shared_consumers)[0]
+                    others = sorted(
+                        (
+                            _class_names(_other_side(first, first_side).uuids, graph),
+                            _class_names(_other_side(second, second_side).uuids, graph),
+                        )
+                    )
+                    message = star_mixed_joins_reason(
+                        consumer,
+                        _class_names(shared, graph),
+                        others[0],
+                        others[1],
+                        (first_role, second_role) if first_role <= second_role else (second_role, first_role),
+                        (first.jointype, second.jointype),
+                    )
+                    raise ValueError(f"{message}.")
 
 
 def _foreign_members(group: type[FeatureGroup], uuids: Iterable[UUID], graph: Graph) -> list[str]:

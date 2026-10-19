@@ -74,8 +74,11 @@ class PandasTextCleaningFeatureGroup(TextCleaningFeatureGroup):
         Returns:
             The source text as a pandas Series
         """
-        # Convert to string if not already
-        return data[feature_name].astype(str)
+        # astype(str) alone is not enough: on pandas 3 a missing value stays
+        # missing instead of becoming a string, so every string operation
+        # downstream would fail on a float. Filling first keeps missing text
+        # as the empty string on all supported pandas versions.
+        return data[feature_name].fillna("").astype(str)
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: pd.Series) -> pd.DataFrame:

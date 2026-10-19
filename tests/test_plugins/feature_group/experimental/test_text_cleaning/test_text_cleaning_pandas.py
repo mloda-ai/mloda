@@ -51,6 +51,38 @@ class TestPandasTextCleaningFeatureGroup:
         assert len(result) == len(self.df)
         assert result.iloc[0] == "Hello World!"
 
+        # Test with missing values
+        df_with_missing = pd.DataFrame({"text": ["Hello", None, "World"]})
+        result_with_missing = PandasTextCleaningFeatureGroup._get_source_text(df_with_missing, "text")
+        assert result_with_missing.tolist() == ["Hello", "", "World"]
+
+    def test_operations_tolerate_missing_values(self) -> None:
+        """Test that normalize and remove_punctuation run on a column holding a missing value."""
+        df_with_missing = pd.DataFrame({"text": ["Hello World!", None]})
+        text = PandasTextCleaningFeatureGroup._get_source_text(df_with_missing, "text")
+
+        normalized = PandasTextCleaningFeatureGroup._apply_operation(df_with_missing, text, "normalize")
+        assert normalized.tolist() == ["hello world!", ""]
+
+        without_punctuation = PandasTextCleaningFeatureGroup._apply_operation(
+            df_with_missing, text, "remove_punctuation"
+        )
+        assert without_punctuation.tolist() == ["Hello World", ""]
+
+        feature = Feature(
+            FeatureName("text__cleaned_text"),
+            Options(
+                {
+                    TextCleaningFeatureGroup.CLEANING_OPERATIONS: ("normalize", "remove_punctuation"),
+                }
+            ),
+        )
+        feature_set = FeatureSet()
+        feature_set.add(feature)
+
+        cleaned = PandasTextCleaningFeatureGroup.calculate_feature(df_with_missing.copy(), feature_set)
+        assert cleaned["text__cleaned_text"].tolist() == ["hello world", ""]
+
     def test_add_result_to_data(self) -> None:
         """Test that the result is correctly added to the data."""
         result = pd.Series(["test1", "test2", "test3", "test4", "test5"])

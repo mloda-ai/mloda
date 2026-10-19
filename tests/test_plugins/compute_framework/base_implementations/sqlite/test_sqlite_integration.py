@@ -10,6 +10,7 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda.user import FeatureName
+from mloda.user import GlobalFilter
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -91,6 +92,8 @@ class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
             return {Feature("value")}
         elif feature_name_str == "score_plus_ten":
             return {Feature("score")}
+        elif feature_name_str == "unbuildable_text":
+            return {Feature("value")}
 
         return set()
 
@@ -105,12 +108,16 @@ class SqliteSimpleTransformFeatureGroup(ATestSqliteFeatureGroup):
                 result_data = result_data.select(_raw_sql="*, value * 2 AS doubled_value")
             elif feature_name == "score_plus_ten":
                 result_data = result_data.select(_raw_sql="*, score + 10 AS score_plus_ten")
+            elif feature_name == "unbuildable_text":
+                result_data = result_data.select(
+                    _raw_sql="*, CASE WHEN value = 10 THEN 'a' ELSE X'FF' END AS unbuildable_text"
+                )
 
         return result_data
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return {"doubled_value", "score_plus_ten"}
+        return {"doubled_value", "score_plus_ten", "unbuildable_text"}
 
 
 class SqliteSecondTransformFeatureGroup(ATestSqliteFeatureGroup):
@@ -223,6 +230,22 @@ class TestSqliteIntegrationWithMlodaAPI:
         score_plus_ten = final_df["score_plus_ten"].tolist()
         assert score_plus_ten == [11.5, 12.5, 13.5, 14.5, 15.5]
 
+    def test_run_fails_naming_a_feature_whose_column_arrow_cannot_build(
+        self, flight_server: Any, sqlite_conn: Any
+    ) -> None:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
+        )
+
+        with pytest.raises(Exception, match="unbuildable_text"):
+            mloda.run_all(
+                [Feature(name="unbuildable_text", options={"SqliteTestDataCreator": sqlite_conn})],
+                flight_server=flight_server,
+                plugin_collector=plugin_collector,
+                data_access_collection=DataAccessCollection(connections={sqlite_conn}),
+                compute_frameworks=[SqliteFramework],
+            )
+
     def test_sqlite_aggregation_features(self, flight_server: Any, sqlite_conn: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
             {SqliteTestDataCreator, SqliteAggregationFeatureGroup}
@@ -297,6 +320,60 @@ class TestSqliteIntegrationWithMlodaAPI:
         assert [record["doubled_value"] for record in records] == [20, 40, 60, 80, 100]
         if output is SqliteFramework:
             assert result[0].connection is sqlite_conn
+
+    def test_output_framework_with_a_sqlite_run_on_a_step_connection(
+        self, flight_server: Any, sqlite_conn: Any
+    ) -> None:
+        collection_conn = sqlite3.connect(":memory:")
+        try:
+            result = mloda.run_all(
+                [Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn})],
+                flight_server=flight_server,
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
+                ),
+                data_access_collection=DataAccessCollection(connections={collection_conn}),
+                compute_frameworks=[SqliteFramework],
+                output_framework=SqliteFramework,
+            )
+
+            assert result[0].connection is sqlite_conn
+            assert result[0].connection is not collection_conn
+            records = records_from_frame(result[0])
+            assert [record["doubled_value"] for record in records] == [20, 40, 60, 80, 100]
+        finally:
+            collection_conn.close()
+
+    def test_zero_row_sqlite_run_has_the_schema_of_the_non_empty_run(
+        self, flight_server: Any, sqlite_conn: Any
+    ) -> None:
+        def run(minimum: int) -> pa.Table:
+            global_filter = GlobalFilter()
+            global_filter.add_filter("value", "min", {"value": minimum})
+            result = mloda.run_all(
+                [
+                    Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn}),
+                    Feature(name="score_plus_ten", options={"SqliteTestDataCreator": sqlite_conn}),
+                ],
+                flight_server=flight_server,
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
+                ),
+                data_access_collection=DataAccessCollection(connections={sqlite_conn}),
+                compute_frameworks=[SqliteFramework],
+                global_filter=global_filter,
+            )
+            assert isinstance(result[0], pa.Table)
+            return result[0]
+
+        full = run(0)
+        empty = run(1000)
+
+        assert (full.num_rows, empty.num_rows) == (5, 0)
+        assert empty.schema.field("doubled_value").type == full.schema.field("doubled_value").type == pa.int64()
+        assert empty.schema.field("score_plus_ten").type == full.schema.field("score_plus_ten").type == pa.float64()
 
     def test_transform_to_pyarrow(self, flight_server: Any, sqlite_conn: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(

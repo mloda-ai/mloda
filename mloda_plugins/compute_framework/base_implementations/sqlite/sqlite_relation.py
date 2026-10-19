@@ -121,6 +121,37 @@ def _values_for_arrow_type(values: list[Any], arrow_type: pa.DataType) -> list[A
     return values
 
 
+def _placeholder_values(arrow_type: pa.DataType | None) -> tuple[Any, Any]:
+    if arrow_type is None:
+        return (None, None)
+    if pa.types.is_boolean(arrow_type):
+        return (1, 0)
+    if pa.types.is_integer(arrow_type):
+        return (1, 2)
+    if pa.types.is_floating(arrow_type):
+        return (1.5, 2.5)
+    if pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
+        return ("", "a")
+    if pa.types.is_binary(arrow_type) or pa.types.is_large_binary(arrow_type):
+        return (b"", b"a")
+    if pa.types.is_timestamp(arrow_type):
+        return ("1970-01-01T00:00:00", "1970-01-02T00:00:00")
+    if pa.types.is_date(arrow_type):
+        return ("1970-01-01", "1970-01-02")
+    return (None, None)
+
+
+def _build_arrow_column(column: str, values: list[Any], arrow_type: pa.DataType) -> pa.Array:
+    try:
+        if pa.types.is_string(arrow_type) or pa.types.is_large_string(arrow_type):
+            values = [str(value) if isinstance(value, (int, float)) else value for value in values]
+        else:
+            values = _values_for_arrow_type(values, arrow_type)
+        return pa.array(values, type=arrow_type)
+    except (ValueError, pa.ArrowTypeError) as error:
+        raise ValueError(f"Column {column!r} cannot be built as {arrow_type}: {error}") from error
+
+
 def _compatible_arrow_type(left_type: pa.DataType | None, right_type: pa.DataType | None) -> pa.DataType | None:
     if left_type is None or right_type is None:
         return None
@@ -179,7 +210,9 @@ class SqliteRelation(SqlBaseRelation):
         table_name: str,
         _is_view: bool = False,
         _types: Sequence[pa.DataType | None] | None = None,
+        _probe: tuple[str, SqliteRelation] | None = None,
     ) -> None:
+        self._probe = _probe
         self._connection = connection
         self._table_name = table_name
         self._alias: str | None = None
@@ -246,11 +279,38 @@ class SqliteRelation(SqlBaseRelation):
             for idx in unknown_indexes:
                 values_by_index[idx].append(row[idx])
 
+        placeholder_rows: list[tuple[Any, ...]] | None = None
         resolved_hints = list(type_hints)
         for idx in unknown_indexes:
-            resolved_hints[idx] = _infer_arrow_type_from_values(values_by_index[idx])
+            if any(value is not None for value in values_by_index[idx]):
+                resolved_hints[idx] = _infer_arrow_type_from_values(values_by_index[idx])
+                continue
+            if placeholder_rows is None:
+                placeholder_rows = self._placeholder_rows()
+            resolved_hints[idx] = _infer_arrow_type_from_values([row[idx] for row in placeholder_rows])
         self._cached_types = resolved_hints
         return [arrow_type for arrow_type in resolved_hints if arrow_type is not None]
+
+    def _placeholder_rows(self) -> list[tuple[Any, ...]]:
+        """Two synthetic rows aligned with columns: the probe run over the source's rows, else built from types."""
+        if self._probe is None:
+            hints = self._type_hints_for_current_columns()
+            column_types = hints if hints is not None else self.types
+            pairs = [_placeholder_values(arrow_type) for arrow_type in column_types]
+            return [tuple(pair[0] for pair in pairs), tuple(pair[1] for pair in pairs)]
+        projection, source = self._probe
+        source_rows = source._placeholder_rows()
+        if not source_rows:
+            return []
+        width = len(source_rows[0])
+        first = ", ".join(f"? AS {quote_ident(column)}" for column in source.columns)
+        rest = " UNION ALL SELECT " + ", ".join("?" for _ in range(width))
+        sql = f"SELECT {projection} FROM ({'SELECT ' + first}{rest * (len(source_rows) - 1)})"  # nosec
+        params = [value for row in source_rows for value in row]
+        try:
+            return [tuple(row) for row in self._connection.execute(sql, params).fetchall()]
+        except sqlite3.OperationalError:
+            return []
 
     def _types_for_projection(self, columns: list[str]) -> list[pa.DataType | None] | None:
         current_type_hints = self._types_for_current_columns()
@@ -264,11 +324,11 @@ class SqliteRelation(SqlBaseRelation):
     def _types_for_raw_sql_projection(
         self, projection: str, output_columns: list[str]
     ) -> list[pa.DataType | None] | None:
-        if not _raw_sql_projection_starts_with_star(projection):
-            return None
         source_columns = self.columns
-        source_type_hints = self._types_for_current_columns()
-        if source_type_hints is None or len(output_columns) < len(source_columns):
+        source_type_hints = self._type_hints_for_current_columns()
+        if source_type_hints is None or not _raw_sql_projection_starts_with_star(projection):
+            return [None] * len(output_columns)
+        if len(output_columns) < len(source_columns):
             return None
         if output_columns[: len(source_columns)] != source_columns:
             return None
@@ -325,11 +385,13 @@ class SqliteRelation(SqlBaseRelation):
             types = self._types_for_projection(list(columns))
         sql = f"CREATE TEMP VIEW {quote_ident(new_name)} AS SELECT {projection} FROM {quote_ident(self._table_name)}"  # nosec
         self._connection.execute(sql)
+        probe: tuple[str, SqliteRelation] | None = None
         if _raw_sql is not None:
             cursor = self._connection.execute(f"SELECT * FROM {quote_ident(new_name)} LIMIT 0")  # nosec
             output_columns = [desc[0] for desc in cursor.description]
             types = self._types_for_raw_sql_projection(projection, output_columns)
-        return SqliteRelation(self._connection, new_name, _is_view=True, _types=types)
+            probe = (projection, self)
+        return SqliteRelation(self._connection, new_name, _is_view=True, _types=types, _probe=probe)
 
     def set_alias(self, alias: str) -> "SqliteRelation":
         rel = SqliteRelation(self._connection, self._table_name, self._is_view, self._types_for_current_columns())
@@ -363,7 +425,13 @@ class SqliteRelation(SqlBaseRelation):
             f"SELECT * FROM {quote_ident(self._table_name)} ORDER BY {order_clause}"
         )
         self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_name, _is_view=True)
+        return SqliteRelation(
+            self._connection,
+            new_name,
+            _is_view=True,
+            _types=self._type_hints_for_current_columns(),
+            _probe=self._probe,
+        )
 
     def drop(self) -> None:
         """Drop the underlying temp table or view."""
@@ -514,13 +582,7 @@ class SqliteRelation(SqlBaseRelation):
         return ", ".join(select_parts)
 
     def _project_raw(self, projection: str) -> "SqliteRelation":
-        new_name = _next_table_name()
-        sql = (
-            f"CREATE TEMP VIEW {quote_ident(new_name)} AS "  # nosec
-            f"SELECT {projection} FROM {quote_ident(self._table_name)}"
-        )
-        self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_name, _is_view=True)
+        return self.select(_raw_sql=projection)
 
     def _assert_window_supported(self) -> None:
         _assert_window_supported()
@@ -583,12 +645,10 @@ class SqliteRelation(SqlBaseRelation):
                 col_data[c].append(val)
 
         type_hints = self._types_for_current_columns()
-        if type_hints is None:
-            return pa.table(col_data)
-
         arrays = []
-        for column, arrow_type in zip(cols, type_hints, strict=True):
-            arrays.append(pa.array(_values_for_arrow_type(col_data[column], arrow_type), type=arrow_type))
+        for idx, column in enumerate(cols):
+            arrow_type = type_hints[idx] if type_hints is not None else _infer_arrow_type_from_values(col_data[column])
+            arrays.append(_build_arrow_column(column, col_data[column], arrow_type))
         return pa.table(dict(zip(cols, arrays, strict=True)))
 
     def df(self) -> Any:

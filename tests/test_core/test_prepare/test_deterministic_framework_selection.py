@@ -275,6 +275,24 @@ def test_connection_requirement_per_shipped_framework(module: str, name: str, ex
     assert framework.connection_requirement() is ConnectionRequirement[expected]
 
 
+_RESULT_FRAMEWORK_OVERRIDES = {
+    "DuckDBFramework": "PyArrowTable",
+    "SqliteFramework": "PyArrowTable",
+    "IcebergFramework": "PyArrowTable",
+    "PolarsLazyDataFrame": "PolarsDataFrame",
+}
+
+
+@pytest.mark.parametrize(("module", "name", "_requirement"), _REQUIREMENTS)
+def test_result_framework_per_shipped_framework(module: str, name: str, _requirement: str) -> None:
+    framework = _load_framework(module, name)
+    expected = _load_framework(
+        _MODULE_OF[_RESULT_FRAMEWORK_OVERRIDES.get(name, name)], _RESULT_FRAMEWORK_OVERRIDES.get(name, name)
+    )
+
+    assert framework.result_framework() is expected
+
+
 def test_connection_requirement_members() -> None:
     from mloda.provider import ConnectionRequirement
 
@@ -1735,3 +1753,6 @@ def test_a_run_of_a_sqlite_native_consumer_returns_a_materialized_table() -> Non
 
     assert isinstance(result[0], pa.Table)
     assert _bd_values(result[0]) == {"bd_sq_out": [1, 2, 3]}
+    (step, frame), *_ = result.frames()
+    assert frame is result[0]
+    assert step.result_framework_name == "PyArrowTable"

@@ -154,6 +154,171 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
             "arrow_next_id_type": pa.int64(),
         }
 
+    @pytest.mark.parametrize(
+        "case, expected",
+        [
+            ("star", pa.int64()),
+            ("non_star", pa.int64()),
+            ("filtered_star", pa.int64()),
+            ("float_expr", pa.float64()),
+            ("text_expr", pa.string()),
+            ("row_number", pa.int64()),
+            ("raw_then_order", pa.int64()),
+        ],
+    )
+    def test_computed_column_type_is_the_same_without_rows(
+        self, connection: sqlite3.Connection, case: str, expected: pa.DataType
+    ) -> None:
+        def source(rows: bool) -> SqliteRelation:
+            data = {
+                "value": pa.array([1, 2] if rows else [], pa.int64()),
+                "score": pa.array([1.5, 2.5] if rows else [], pa.float64()),
+                "name": pa.array(["a", "b"] if rows else [], pa.string()),
+            }
+            return SqliteRelation.from_arrow(connection, pa.table(data))
+
+        def build(rel: SqliteRelation) -> tuple[SqliteRelation, str]:
+            if case == "star":
+                return rel.select(_raw_sql="*, value * 2 AS doubled"), "doubled"
+            if case == "non_star":
+                return rel.select(_raw_sql="value * 2 AS doubled"), "doubled"
+            if case == "filtered_star":
+                return rel.filter("value > ?", (10,)).select(_raw_sql="*, value * 2 AS doubled"), "doubled"
+            if case == "float_expr":
+                return rel.select(_raw_sql="*, score + 10 AS plus"), "plus"
+            if case == "text_expr":
+                return rel.select(_raw_sql="*, name || 'x' AS tagged"), "tagged"
+            if case == "row_number":
+                return rel.with_row_number("rn", order_by=[OrderBy("value")]), "rn"
+            return rel.select(_raw_sql="*, value * 2 AS doubled").order("value"), "doubled"
+
+        for rel in (source(rows=False), source(rows=True)):
+            built, column = build(rel)
+            arrow = built.to_arrow_table()
+            relation_type = dict(zip(built.columns, built.types, strict=True))[column]
+            assert arrow.schema.field(column).type == expected
+            assert relation_type == expected
+
+    def test_mixed_storage_classes_become_string(self, connection: sqlite3.Connection) -> None:
+        connection.execute("CREATE TABLE loose (a)")
+        connection.executemany("INSERT INTO loose VALUES (?)", [(1,), ("y",)])
+        loose = SqliteRelation(connection, "loose").select("a").to_arrow_table()
+        full = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([1, 2], pa.int64())}))
+        case = full.select(_raw_sql="*, CASE WHEN value = 1 THEN 'n/a' ELSE value END AS mixed").to_arrow_table()
+
+        assert (loose.schema.field("a").type, loose.column("a").to_pylist()) == (pa.string(), ["1", "y"])
+        assert (case.schema.field("mixed").type, case.column("mixed").to_pylist()) == (pa.string(), ["n/a", "2"])
+
+    def test_int_and_float_mix_stays_float64(self, connection: sqlite3.Connection) -> None:
+        connection.execute("CREATE TABLE nums (a)")
+        connection.executemany("INSERT INTO nums VALUES (?)", [(1,), (2.5,)])
+        arrow = SqliteRelation(connection, "nums").select("a").to_arrow_table()
+        assert (arrow.schema.field("a").type, arrow.column("a").to_pylist()) == (pa.float64(), [1.0, 2.5])
+
+    def test_column_arrow_cannot_build_raises_value_error_naming_it(self, connection: sqlite3.Connection) -> None:
+        rel = SqliteRelation.from_arrow(connection, pa.table({"bad_int": pa.array([1], pa.int64())}))
+        connection.execute(f"INSERT INTO {quote_ident(rel.table_name)} VALUES ('text')")  # nosec
+        with pytest.raises(ValueError, match="bad_int"):
+            rel.to_arrow_table()
+
+        connection.execute("CREATE TABLE texty (bad_mix)")
+        connection.executemany("INSERT INTO texty VALUES (?)", [("y",), (b"\xff",)])
+        with pytest.raises(ValueError, match="bad_mix"):
+            SqliteRelation(connection, "texty").select("bad_mix").to_arrow_table()
+
+    @pytest.mark.parametrize("rows", [False, True])
+    def test_relation_without_hints_types_raw_projection(self, connection: sqlite3.Connection, rows: bool) -> None:
+        connection.execute("CREATE TABLE plain (value INTEGER, score REAL)")
+        if rows:
+            connection.executemany("INSERT INTO plain VALUES (?, ?)", [(1, 1.5), (2, 2.5)])
+        built = SqliteRelation(connection, "plain").select(_raw_sql="*, value * 2 AS doubled")
+        schema = built.to_arrow_table().schema
+        types = dict(zip(built.columns, built.types, strict=True))
+        expected = {"value": pa.int64(), "score": pa.float64(), "doubled": pa.int64()}
+
+        assert {name: schema.field(name).type for name in expected} == expected
+        assert types == expected
+
+    @pytest.mark.parametrize("rows", [0, 1, 2])
+    def test_lag_window_type_is_int64_for_any_row_count(self, connection: sqlite3.Connection, rows: int) -> None:
+        source = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([1, 2][:rows], pa.int64())}))
+        built = source.window("LAG(value)", "prev", order_by=[OrderBy("value")])
+        types = dict(zip(built.columns, built.types, strict=True))
+
+        assert built.to_arrow_table().schema.field("prev").type == pa.int64()
+        assert types["prev"] == pa.int64()
+
+    @pytest.mark.parametrize(
+        "raw_sql, column, expected",
+        [
+            ("*, NULLIF(value, 1) AS n", "n", pa.int64()),
+            ("*, CASE WHEN value > 1 THEN value * 1.5 ELSE value END AS c", "c", pa.float64()),
+        ],
+    )
+    def test_value_dependent_expression_type_without_rows(
+        self, connection: sqlite3.Connection, raw_sql: str, column: str, expected: pa.DataType
+    ) -> None:
+        source = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([], pa.int64())}))
+        built = source.select(_raw_sql=raw_sql)
+
+        assert built.to_arrow_table().schema.field(column).type == expected
+        assert dict(zip(built.columns, built.types, strict=True))[column] == expected
+
+    def test_chained_projections_and_windows_do_not_scan_while_building(self, connection: sqlite3.Connection) -> None:
+        source = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([], pa.int64())}))
+        statements: list[str] = []
+        connection.set_trace_callback(statements.append)
+
+        built = (
+            source.select(_raw_sql="*, value * 2 AS doubled")
+            .select(_raw_sql="*, doubled * 2 AS quad")
+            .with_row_number("rn", order_by=[OrderBy("value")])
+            .order("value")
+        )
+
+        assert not [s for s in statements if s.startswith("SELECT *") and "LIMIT 0" not in s]
+        types = dict(zip(built.columns, built.types, strict=True))
+        assert (types["quad"], types["rn"]) == (pa.int64(), pa.int64())
+
+    def test_passthrough_types_survive_row_number_and_order(self, connection: sqlite3.Connection) -> None:
+        arrow = pa.table(
+            {
+                "flag": pa.array([True], pa.bool_()),
+                "ts": pa.array([datetime.datetime(2024, 1, 1)], pa.timestamp("us")),
+            }
+        )
+        source = SqliteRelation.from_arrow(connection, arrow)
+        numbered = source.with_row_number("rn", order_by=[OrderBy("flag")])
+        ordered = numbered.order("flag")
+
+        for rel in (numbered, ordered):
+            types = dict(zip(rel.columns, rel.types, strict=True))
+            assert (types["flag"], types["ts"]) == (pa.bool_(), pa.timestamp("us"))
+
+    def test_invalid_timestamp_text_raises_value_error_naming_column(self, connection: sqlite3.Connection) -> None:
+        rel = SqliteRelation.from_arrow(connection, pa.table({"when_ts": pa.array([], pa.timestamp("us"))}))
+        connection.execute(f"INSERT INTO {quote_ident(rel.table_name)} VALUES ('not a date')")  # nosec
+        with pytest.raises(ValueError, match="when_ts"):
+            rel.to_arrow_table()
+
+    def test_utf8_bytes_in_text_column_decode(self, connection: sqlite3.Connection) -> None:
+        rel = SqliteRelation.from_arrow(connection, pa.table({"txt": pa.array(["x"], pa.string())}))
+        connection.execute(f"INSERT INTO {quote_ident(rel.table_name)} VALUES (?)", (b"abc",))  # nosec
+        arrow = rel.to_arrow_table()
+
+        assert (arrow.schema.field("txt").type, arrow.column("txt").to_pylist()) == (pa.string(), ["x", "abc"])
+
+    def test_all_null_column_without_hints_is_string(self, connection: sqlite3.Connection) -> None:
+        connection.execute("CREATE TABLE nulls (a)")
+        connection.executemany("INSERT INTO nulls VALUES (?)", [(None,), (None,)])
+        arrow = SqliteRelation(connection, "nulls").select("a").to_arrow_table()
+        assert (arrow.schema.field("a").type, arrow.column("a").to_pylist()) == (pa.string(), [None, None])
+
+    def test_placeholder_row_failure_falls_back_to_string(self, connection: sqlite3.Connection) -> None:
+        rel = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([], pa.int64())}))
+        arrow = rel.select(_raw_sql="*, rowid + 1 AS r").to_arrow_table()
+        assert (arrow.num_rows, arrow.schema.field("r").type) == (0, pa.string())
+
     def test_append_column_preserves_bool_arrow_type(self, connection: sqlite3.Connection) -> None:
         base = SqliteRelation.from_arrow(connection, pa.table({"id": pa.array([1, 2], type=pa.int32())}))
 
@@ -383,6 +548,10 @@ class TestTypeHints:
 
         assert derived.type_hints == [pa.string(), pa.int64(), None]
         assert not [s for s in statements if s.startswith("SELECT *") and "LIMIT 0" not in s]
+
+    def test_non_star_raw_projection_reports_none_for_computed_column(self, connection: sqlite3.Connection) -> None:
+        relation = SqliteRelation.from_arrow(connection, pa.table({"a": [1]}))
+        assert relation.select(_raw_sql="a * 2 AS c").type_hints == [None]
 
     def test_relation_without_cached_hints_returns_none(self, connection: sqlite3.Connection) -> None:
         relation = SqliteRelation.from_arrow(connection, pa.table({"b": ["x"], "a": [1]}))

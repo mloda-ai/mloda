@@ -322,7 +322,9 @@ The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `Sq
 
 ### Result type
 
-A requested feature computed on DuckDB or SQLite comes back as a `pa.Table`: the relation is fetched in full when the result is selected, so the result does not depend on the connection. `output_framework=DuckDBFramework` or `output_framework=SqliteFramework` returns a relation instead: a new one, loaded from that table onto the matching connection in the DataAccessCollection, not the relation the run computed on.
+A requested feature computed on DuckDB or SQLite comes back as a `pa.Table`, fetched in full when the result is selected. With `output_framework=DuckDBFramework` or `output_framework=SqliteFramework`, a step that ran on that framework returns the relation it computed, on the connection the step used. The relation is lazy: every read runs the query again, the connection must stay open, and SQLite leaves one temporary view on it. A result converted from another framework is loaded as a new relation onto the matching connection in the DataAccessCollection.
+
+Framework authors: `select_native_data_by_column_names` returns the selection in the framework's own type (the default delegates to `select_data_by_column_names`). A framework whose `select_data_by_column_names` returns another framework's data type must also override `result_framework()` to name that framework. With that framework as `output_framework`, a run calls `select_native_data_by_column_names` instead of `select_data_by_column_names`, so a subclass that customizes one should customize the other.
 
 ### Reading column types
 
@@ -335,6 +337,11 @@ The `.types` property returns column types aligned with `.columns`. The element 
 relation.columns   # ["user_id", "amount"]
 relation.types     # backend-specific dtype objects, same order as columns
 ```
+
+`SqliteRelation.to_arrow_table()` types a column by its propagated hint, else by its non-null values (int and float mixed gives float64, any other mix gives string, with numbers as text).
+A computed column without a non-null value takes the type its SQL expression yields for two placeholder rows, so its type is the same with and without rows unless the expression's type depends on the values; a projection reading `rowid` cannot be probed and is string.
+A relation mloda did not build falls back to the declared column affinity when it has no rows.
+A column Arrow cannot build (for example bytes that are not UTF-8 in a text column, or text that is not a date in a date column) raises a `ValueError` naming it.
 
 ### Window functions
 

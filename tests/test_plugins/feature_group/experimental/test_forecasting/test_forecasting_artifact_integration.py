@@ -160,6 +160,14 @@ class TestForecastingArtifactIntegration:
         _, columns2 = self._run(f"{self.BASE}~1", ForecastingCategoryTestDataCreator, options2)
         assert columns2 == {f"{self.BASE}~1"}
 
+        options3 = self._options()
+        options3.add_to_group(self.BASE, artifact)
+        with pytest.raises(ValueError) as excinfo:
+            self._run(self.BASE, ForecastingCategoryTestDataCreator, options3)
+        message = str(excinfo.value)
+        assert "['1']" in message
+        assert "part request" in message
+
     def test_part_not_in_the_source_raises(self) -> None:
         with pytest.raises(ValueError) as excinfo:
             self._run(f"{self.BASE}~7", ForecastingCategoryTestDataCreator, self._options())

@@ -26,6 +26,12 @@ def _is_bool(value: Any) -> bool:
     return isinstance(value, bool)
 
 
+def _part_suffix(part: str) -> str | None:
+    """Map a part's first level to its source suffix (lower/upper belong to the literal source)."""
+    level = part.split("~")[0]
+    return None if level in ("lower", "upper") else level
+
+
 class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
     """
     Base class for all forecasting feature groups.
@@ -304,7 +310,9 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             ]
             wanted = cls._requested_suffixes(feature)
             if wanted is not None:
-                resolved_columns, suffixes = cls._narrow_to_parts(feature, in_features, resolved_columns, suffixes)
+                resolved_columns, suffixes = cls._narrow_to_parts(
+                    feature, in_features, resolved_columns, suffixes, wanted
+                )
             expanded = any(suffix is not None for suffix in suffixes)
             column_artifacts = cls._column_artifacts(model_artifact, suffixes, expanded, wanted is not None)
 
@@ -356,19 +364,21 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         """Source suffixes named by the parts the feature was asked for (None: the literal source), or None if whole."""
         if not feature.parts_only:
             return None
-        first_levels = {part.split("~")[0] for part in feature.requested_parts}
-        return {None if level in ("lower", "upper") else level for level in first_levels}
+        return {_part_suffix(part) for part in feature.requested_parts}
 
     @classmethod
     def _narrow_to_parts(
-        cls, feature: Feature, in_features: str, columns: list[str], suffixes: list[str | None]
+        cls,
+        feature: Feature,
+        in_features: str,
+        columns: list[str],
+        suffixes: list[str | None],
+        wanted: set[str | None],
     ) -> tuple[list[str], list[str | None]]:
         """Keep only the source columns the requested parts name, raising ValueError for a part naming none."""
-        wanted = cls._requested_suffixes(feature) or set()
         known = set(suffixes)
         for part in sorted(feature.requested_parts):
-            level = part.split("~")[0]
-            if (None if level in ("lower", "upper") else level) not in known:
+            if _part_suffix(part) not in known:
                 available = sorted(str(s) for s in suffixes if s is not None)
                 raise ValueError(
                     f"Part '{feature.name}~{part}' names no column of source '{in_features}'. "
@@ -396,7 +406,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         if (partial and not needed <= set(columns)) or (not partial and set(columns) != needed):
             raise ValueError(
                 f"The loaded artifact columns {sorted(columns)} do not match the source columns "
-                f"{sorted(str(suffix) for suffix in suffixes)}."
+                f"{sorted(str(suffix) for suffix in suffixes)}. "
+                "An artifact saved by a part request covers only the requested parts."
             )
         return {suffix: artifact for suffix, artifact in columns.items()}
 

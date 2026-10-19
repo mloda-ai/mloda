@@ -1,6 +1,7 @@
 """Groups whose trekked links resolve to different compute frameworks: a link with equal
 frameworks and no child on that framework is rejected, the distinct-framework shape here still runs."""
 
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 import pandas as pd
@@ -2424,7 +2425,9 @@ StarConsumerArrow = _remedy_null_safe_consumer("StarConsumerArrow", PyArrowTable
 _ALL_FRAMEWORKS = [PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw]
 
 
-def _star_prepare(link_factory: Any, hub_first: bool, spoke_c: type[FeatureGroup] = StarSpokeCArrow) -> Any:
+def _star_prepare(
+    link_factory: Callable[[JoinSpec, JoinSpec], Link], hub_first: bool, spoke_c: type[FeatureGroup] = StarSpokeCArrow
+) -> Any:
     def link(spoke: type[FeatureGroup]) -> Link:
         sides = (StarHubArrow, spoke) if hub_first else (spoke, StarHubArrow)
         return link_factory(JoinSpec(sides[0], MLG_INDEX), JoinSpec(sides[1], MLG_INDEX))

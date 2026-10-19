@@ -42,12 +42,15 @@ def validate_feature_group_not_in_options(options: dict[str, Any] | None, contai
             "move it next to 'name' as a feature config field"
         )
 
+
 def validate_context_keys(value: Any, field_name: str) -> None:
+    """A context push key field is None or a list of non-blank strings."""
     if value is None:
         return
-    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-        raise ValueError(f"'{field_name}' must be an array of strings")
-    
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
+        raise ValueError(f"'{field_name}' must be an array of non-empty strings")
+
+
 @dataclass
 class FeatureConfig:
     """Model for a feature configuration with name and options."""
@@ -71,6 +74,7 @@ class FeatureConfig:
         if self.options and (self.group_options or self.context_options):
             raise ValueError("Cannot use both 'options' and 'group_options'/'context_options'")
         for key_field in ("propagate_context_keys", "cascade_context_keys"):
+            validate_context_keys(getattr(self, key_field), key_field)
             if getattr(self, key_field) and not self.context_options:
                 raise ValueError(
                     f"'{key_field}' requires 'context_options'; "
@@ -80,7 +84,6 @@ class FeatureConfig:
         validate_feature_group_not_in_options(self.options, "options")
         validate_feature_group_not_in_options(self.group_options, "group_options")
         validate_feature_group_not_in_options(self.context_options, "context_options")
-        validate_context_keys(self.propagate_context_keys, "propagate_context_keys")
 
 
 FEATURE_CONFIG_FIELDS = frozenset(f.name for f in fields(FeatureConfig))

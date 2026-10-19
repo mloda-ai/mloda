@@ -75,6 +75,8 @@ my-pkg = "my_pkg.manifest:FEATURE_GROUPS"
 my-pkg = "my_pkg.manifest:COMPUTE_FRAMEWORKS"
 ```
 
+A manifest of an existing group may also list `Implementation` classes.
+
 The manifest module lists the concrete classes explicitly:
 
 ```py

@@ -1,4 +1,4 @@
-"""SQLite database format group: read-only connections, quoted queries, a pyarrow neutral and a stdlib dict loader."""
+"""SQLite database format group: read-only connections, quoted queries, a pyarrow neutral and a stdlib dict implementation."""
 
 import os
 import sqlite3
@@ -10,7 +10,7 @@ from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.core.optional_dependency import require
-from mloda.provider import ReadDBFG
+from mloda.provider import Implementation, ReadDBFG
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -110,4 +110,10 @@ def _load_dict(group: type[SqliteFG], match: SourceMatch, features: Any) -> dict
     return {name: [row[index] for row in rows] for index, name in enumerate(column_names)}
 
 
-SqliteFG.register_loader(PythonDictFramework, _load_dict)
+class SqlitePythonDict(Implementation):
+    feature_group = SqliteFG
+    compute_framework = PythonDictFramework
+
+    @classmethod
+    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
+        return _load_dict(group, match, features)

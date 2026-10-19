@@ -28,9 +28,11 @@ import pytest
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins, RedefinitionConflictError
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
 
 ENV_VAR = "MLODA_PLUGIN_REGISTRY_STRICT"
 
@@ -368,6 +370,40 @@ class TestEngineStrictModeWarn:
         assert "warn_dedup_fake_module_b:WarnDedupSameNameFG" in message, (
             "warn mode must report BOTH same-name classes from different modules, not collapse them on bare __name__"
         )
+
+
+class TestWarnLabelsNameTheUnregisteredKinds:
+    def _warning_for(self, caplog: pytest.LogCaptureFixture, registry: PluginRegistry, needle: str) -> list[str]:
+        collector = PluginCollector().set_strict_mode("warn").set_registry(registry)
+        with caplog.at_level(logging.WARNING):
+            PreFilterPlugins(_cfws(), collector)
+        return [r.getMessage() for r in caplog.records if needle in r.getMessage()]
+
+    def test_only_feature_groups_unregistered_labels_the_warning_feature_groups(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        registry = PluginRegistry()
+        for index, implementation in enumerate(loaded_implementations()):
+            registry.register(implementation, name=f"warn_label_impl_{index}")
+
+        messages = self._warning_for(caplog, registry, _StrictUnregisteredFG.__name__)
+
+        assert len(messages) == 1
+        assert messages[0].startswith("FeatureGroups not registered")
+
+    def test_unregistered_implementations_are_named_under_an_implementations_label(
+        self, caplog: pytest.LogCaptureFixture, make_implementation: Any
+    ) -> None:
+        class _WarnLabelGroup(ToyFormatFG):
+            pass
+
+        implementation = make_implementation(_WarnLabelGroup, PythonDictFramework, name="WarnLabelImpl")
+        assert implementation in loaded_implementations()
+
+        messages = self._warning_for(caplog, PluginRegistry(), "WarnLabelImpl")
+
+        assert len(messages) == 1
+        assert "Implementations" in messages[0].split(" not registered")[0]
 
 
 class TestEngineStrictModeAbstractClasses:

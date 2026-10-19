@@ -7,7 +7,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.optional_dependency import require
-from mloda.provider import ReadFileFG
+from mloda.provider import Implementation, ReadFileFG
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
@@ -63,4 +63,10 @@ class JsonFG(ReadFileFG):
         return _read(cls, match, features)
 
 
-JsonFG.register_loader(PyArrowTable, _read)
+class JsonPyArrowTable(Implementation):
+    feature_group = JsonFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
+        return _read(group, match, features)

@@ -16,7 +16,7 @@ def unsupported_format_error(transformer: str, file_format: str) -> ValueError:
     return ValueError(
         f"{transformer} cannot read format {file_format!r}; supported: {', '.join(SUPPORTED_FORMATS)}. "
         "Fix: override file_format() if the suffix is a supported format under another name, "
-        "register a loader for the framework with register_loader, or override load_neutral."
+        "add an Implementation for the framework, or override load_neutral."
     )
 
 

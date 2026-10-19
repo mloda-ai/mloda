@@ -93,6 +93,7 @@ class Engine:
         # get accessible feature groups and their compute platforms
         pre_filter = PreFilterPlugins(compute_frameworks, plugin_collector)
         self.accessible_plugins = pre_filter.get_accessible_plugins()
+        self.implementations = pre_filter.implementations
         self.excluded_feature_groups = pre_filter.excluded_feature_groups
         # get links
         LinkValidator.validate_links(links)
@@ -250,6 +251,7 @@ class Engine:
                 uuid: tuple(f"{c.__module__}.{c.__qualname__}" for c in classes)
                 for uuid, classes in self.specialized_from.items()
             },
+            self.implementations,
         )
         execution_planner.create_execution_plan(
             planned_queue,

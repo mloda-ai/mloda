@@ -13,6 +13,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     FileSourcePyArrowTransformer,
 )
@@ -131,10 +132,11 @@ class TestFormatGroupsReadLikePyArrow:
         path = tmp_path / f"loader{suffix}"
         writer(path, _DATA)
 
-        loader = group._loader_for(PyArrowTable)
+        match = SourceMatch(source=str(path), access=str(path))
+        impl = group.select_implementation(PyArrowTable, match, loaded_implementations())
 
-        assert loader is not None
-        result = loader(group, SourceMatch(source=str(path), access=str(path)), _Features(_WANTED))
+        assert impl is not None
+        result = impl.calculate(group, match, _Features(_WANTED))
         whole_file = class_name in ("CsvFG", "JsonFG")
         assert result.to_pydict() == self._expected(reader, path, whole_file)
 
@@ -158,9 +160,10 @@ class TestFormatGroupsReadLikePyArrow:
         path = tmp_path / f"renamed{suffix}"
         writer(path, _DATA)
         match = SourceMatch(source=str(path), access=str(path))
-        loader = Renamed._loader_for(PyArrowTable)
+        impl = Renamed.select_implementation(PyArrowTable, match, loaded_implementations())
 
-        assert loader is not None
+        assert impl is not None
+        assert impl.feature_group is parent
         expected = self._expected(reader, path, class_name == "JsonFG")
         assert Renamed.load_neutral(match, _Features(_WANTED)).to_pydict() == expected
-        assert loader(Renamed, match, _Features(_WANTED)).to_pydict() == expected
+        assert impl.calculate(Renamed, match, _Features(_WANTED)).to_pydict() == expected

@@ -24,6 +24,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import Ba
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
@@ -1737,9 +1738,10 @@ class TestInputDataLoadAuditForFormatGroups:
         assert context.data_access_identity == "h1:toy"
         assert context.data_access_loader == "neutral"
 
-    def test_loader_load_names_the_framework_class(self, tmp_path: Path) -> None:
+    def test_implementation_load_names_the_framework_class(self, tmp_path: Path, make_implementation: Any) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        group.register_loader(PythonDictFramework, lambda group, match, features: [{"toyfmt_audit": 1}])
+        impl = make_implementation(group, PythonDictFramework, lambda s, m, f: [{"toyfmt_audit": 1}])
+        assert impl in loaded_implementations()
 
         extender = _InputDataLoadCapturingExtender()
         context = self._fire(group, PythonDictFramework, extender)

@@ -8,6 +8,7 @@ register_plugin() convenience.
 
 import threading
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 
@@ -15,11 +16,14 @@ import mloda.core.abstract_plugins.plugin_registry.plugin_registry as plugin_reg
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
     PluginRegistryCollisionError,
     register_plugin,
 )
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
 
 
 class _RegistryTestFGA(FeatureGroup):
@@ -36,6 +40,19 @@ class _RegistryTestCF(ComputeFramework):
 
 class _RegistryTestExtender(Extender):
     pass
+
+
+class _RegistryTestImplGroup(ToyFormatFG):
+    pass
+
+
+class _RegistryTestImplementation(Implementation):
+    feature_group = _RegistryTestImplGroup
+    compute_framework = PythonDictFramework
+
+    @classmethod
+    def calculate(cls, *args: Any) -> Any:
+        return None
 
 
 class _RegistryTestNotAPlugin:
@@ -248,6 +265,11 @@ class TestPluginRegistryEntry:
         key = reg.register(_RegistryTestExtender)
         assert reg.get_entry(key).plugin_type is Extender
 
+    def test_get_entry_plugin_type_implementation(self) -> None:
+        reg = PluginRegistry()
+        key = reg.register(_RegistryTestImplementation)
+        assert reg.get_entry(key).plugin_type is Implementation
+
 
 class TestPluginRegistryListRegistered:
     def test_list_registered_filters_by_plugin_type(self) -> None:
@@ -255,9 +277,11 @@ class TestPluginRegistryListRegistered:
         reg.register(_RegistryTestFGA)
         reg.register(_RegistryTestCF)
         reg.register(_RegistryTestExtender)
+        reg.register(_RegistryTestImplementation)
         assert reg.list_registered(FeatureGroup) == [_RegistryTestFGA]
         assert reg.list_registered(ComputeFramework) == [_RegistryTestCF]
         assert reg.list_registered(Extender) == [_RegistryTestExtender]
+        assert reg.list_registered(Implementation) == [_RegistryTestImplementation]
 
     def test_list_registered_returns_list_sorted_by_key(self) -> None:
         reg = PluginRegistry()
@@ -294,6 +318,7 @@ class TestPluginRegistryListRegistered:
         assert "FeatureGroup" in message
         assert "ComputeFramework" in message
         assert "Extender" in message
+        assert "Implementation" in message
 
     def test_list_registered_rejects_non_plugin_type(self) -> None:
         reg = PluginRegistry()
@@ -303,6 +328,7 @@ class TestPluginRegistryListRegistered:
         assert "FeatureGroup" in message
         assert "ComputeFramework" in message
         assert "Extender" in message
+        assert "Implementation" in message
 
     def test_list_registered_accepts_exact_base_types(self) -> None:
         """The three exact plugin base types must keep working, even on an empty registry."""
@@ -310,6 +336,7 @@ class TestPluginRegistryListRegistered:
         assert reg.list_registered(FeatureGroup) == []
         assert reg.list_registered(ComputeFramework) == []
         assert reg.list_registered(Extender) == []
+        assert reg.list_registered(Implementation) == []
 
     def test_module_level_list_registered_wrapper_rejects_non_plugin_type(self) -> None:
         from mloda.core.api.plugin_docs import list_registered

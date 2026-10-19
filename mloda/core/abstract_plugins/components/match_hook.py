@@ -107,9 +107,9 @@ def call_match_hook(
             lambda: _ask_hook(feature_group, feature_name, options, data_access_collection), windows
         )
         full = MatchHookOutcome(matched, returned, None)
-        if matched and feature_group.get_column_base_feature(str(feature_name)) != base:
+        if matched and feature_group.matches_whole_name(str(feature_name)):
             return full
-        declared = feature_group.output_parts(base, options)
+        declared = feature_group.output_parts(base, base_options)
         if declared is None:
             return full
         if not matched:

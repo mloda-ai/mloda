@@ -445,3 +445,25 @@ def test_the_drop_pin_flags_a_suppress_spliced_into_a_real_seam(module: str, fun
     assert silent_drops(_definition_in(mutated, module, function)) == [lineno], (
         f"a suppress block spliced into {function}() itself was not flagged"
     )
+
+
+def test_ask_hook_is_referenced_only_inside_call_match_hook() -> None:
+    """Guard: a call or bare name load of the helper outside call_match_hook bypasses its containment."""
+    strays: list[str] = []
+    for path in sorted(_CORE_ROOT.rglob("*.py")):
+        module = path.relative_to(_REPO_ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=module)
+        allowed: set[int] = set()
+        if module == HELPER_MODULE:
+            contained = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == CONTAINMENT_FUNCTION]
+            allowed = {id(node) for fn in contained for node in ast.walk(fn)}
+        for node in ast.walk(tree):
+            named = (
+                (isinstance(node, ast.Name) and node.id == HELPER_FUNCTION)
+                or (isinstance(node, ast.Attribute) and node.attr == HELPER_FUNCTION)
+                or (isinstance(node, ast.alias) and node.name == HELPER_FUNCTION)
+            )
+            if named and id(node) not in allowed:
+                strays.append(f"{module}:{getattr(node, 'lineno', 0)}")
+
+    assert strays == [], f"{HELPER_FUNCTION} is referenced outside {CONTAINMENT_FUNCTION}(): {strays}"

@@ -1067,6 +1067,11 @@ class TestDeclaredOutputParts:
         with pytest.raises(DataTypeMismatchError):
             _run([Feature.int64_of("measure~unit")], MeasureProducer)
 
+    def test_part_request_does_not_type_check_the_base_column(self) -> None:
+        results = _run([Feature.str_of("price~currency")], _CurrencyGroup)
+
+        assert _columns(results) == {"price~currency"}
+
     def test_matching_part_data_types_pass(self) -> None:
         results = _run([Feature.int64_of("measure~value"), Feature.str_of("measure~unit")], MeasureProducer)
 
@@ -1285,6 +1290,135 @@ class TestFullNameAskedFirst:
         with pytest.raises(FeatureResolutionError, match="Multiple"):
             _run(["cvec~1"], CountingVecProducer, AnyVecProducer)
 
+    def test_subclass_declaring_the_part_outranks_the_whole_name_parent(self) -> None:
+        results = _run(["m2~value"], _ParentWholeName, _ChildDeclaringValue)
+
+        assert _columns(results) == {"m2~value"}
+        np.testing.assert_array_equal(results[0]["m2~value"].values, np.array([2, 2, 2]))
+
+    def test_non_declaring_whole_strip_wins_over_part_group(self) -> None:
+        results = _run(["cd~b~1"], _WholeStrip, _PartGroup)
+
+        np.testing.assert_array_equal(results[0]["cd~b~1"].values, _SOURCE * 3)
+
+
+class _ParentWholeName(FeatureGroup):
+    """Matches the literal whole name `m2~value` and writes 1."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"m2~value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"m2~value": [1, 1, 1]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class _ChildDeclaringValue(_ParentWholeName):
+    """Subclass declaring part `value` on base `m2`; writes 2."""
+
+    OUTPUT_PARTS = ("value",)
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"m2"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"m2~value": [2, 2, 2]})
+
+
+class _WholeStrip(FeatureGroup):
+    """Non-declaring group supporting `cd~b`; the numeric strip makes it match `cd~b~1`."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cd~b"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["cd~b~1"] = data["source_data"].values * 3
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class _PartGroup(FeatureGroup):
+    """Supports `cd` and declares part `b`."""
+
+    OUTPUT_PARTS = ("b",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cd"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["cd~b~1"] = data["source_data"].values * 5
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class _CurrencyGroup(FeatureGroup):
+    """Declares part `currency`; writes an int64 `price` and a str `price~currency`."""
+
+    OUTPUT_PARTS = ("currency",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"price"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["price"] = data["source_data"].values.astype("int64")
+        data["price~currency"] = "EUR"
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class _OptionSensitiveParts(FeatureGroup):
+    """Full name writes an option and declines; output_parts is None when that option is visible."""
+
+    OUTPUT_PARTS = ("value",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"gd"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        if str(feature_name) == "gd~value":
+            options.add_to_group("full_flag", 1)
+            return False
+        return str(feature_name) == "gd"
+
+    @classmethod
+    def output_parts(cls, feature_name: str, options: Options) -> tuple[str, ...] | None:
+        return None if "full_flag" in options.group else ("value",)
+
 
 class _GroupOptionGroup(FeatureGroup):
     """Full name writes a group option and records an owned-stage rejection; the base needs both absent."""
@@ -1351,10 +1485,18 @@ class TestPartProbeIsolation:
     """The full-name and base-name calls are isolated from each other and their reasons merged in order."""
 
     def test_full_name_option_write_and_rejection_do_not_leak_into_base_call(self) -> None:
-        outcome = probe_match_criteria(_GroupOptionGroup, "ga~value", Options({}), None, resolve_parts=True)
+        options = Options({})
+        outcome = probe_match_criteria(_GroupOptionGroup, "ga~value", options, None, resolve_parts=True)
 
         assert outcome.matched is True
         assert outcome.part == ("ga", "value")
+        assert "owned_flag" not in options.group
+
+    def test_output_parts_does_not_see_the_full_call_option_write(self) -> None:
+        outcome = probe_match_criteria(_OptionSensitiveParts, "gd~value", Options({}), None, resolve_parts=True)
+
+        assert outcome.matched is True
+        assert outcome.part == ("gd", "value")
 
     def test_undeclared_part_reason_comes_before_the_full_call_reason(self) -> None:
         outcome = probe_match_criteria(_OwnReasonGroup, "gb~bogus", Options({}), None, resolve_parts=True)

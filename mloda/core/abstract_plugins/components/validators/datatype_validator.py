@@ -77,7 +77,8 @@ class DataTypeValidator:
             if feature.data_type is None:
                 continue
 
-            names = [feature.name, *(f"{feature.name}~{part}" for part in feature.requested_parts)]
+            part_names = [f"{feature.name}~{part}" for part in feature.requested_parts]
+            names = part_names if feature.parts_only else [feature.name, *part_names]
 
             strict_mode = False
             if feature.options:

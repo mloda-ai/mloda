@@ -407,7 +407,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             raise ValueError(
                 f"The loaded artifact columns {sorted(columns)} do not match the source columns "
                 f"{sorted(str(suffix) for suffix in suffixes)}. "
-                "An artifact saved by a part request covers only the requested parts."
+                "If it was saved by a part request, it covers only the requested parts."
             )
         return {suffix: artifact for suffix, artifact in columns.items()}
 

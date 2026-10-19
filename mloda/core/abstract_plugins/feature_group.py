@@ -478,6 +478,12 @@ class FeatureGroup(ABC):
             return None
         return base, part
 
+    @classmethod
+    def matches_whole_name(cls, name: str) -> bool:
+        """True when a match of `name` is the whole name, not a `<base>~<part>` read of a base."""
+        split = cls.split_output_part(name)
+        return split is None or cls.get_column_base_feature(name) != split[0]
+
     @staticmethod
     def apply_naming_convention(
         result: Any, feature_name: str, suffix_generator: Callable[[int], str] | None = None

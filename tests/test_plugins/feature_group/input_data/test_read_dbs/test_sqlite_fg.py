@@ -433,14 +433,11 @@ class TestSqliteDescribeColumns:
         with pytest.raises(ValueError, match="does_not_exist"):
             SqliteFG.describe_columns(_match(people_db, "does_not_exist"))
 
-    def test_a_missing_database_is_not_created(self, tmp_path: Path) -> None:
+    def test_a_missing_database_is_not_created_and_reports_that_it_does_not_exist(self, tmp_path: Path) -> None:
         missing = tmp_path / "missing.db"
         with pytest.raises((OSError, ValueError, sqlite3.Error)):
             SqliteFG.describe_columns(_match(str(missing), "t"))
         assert not missing.exists()
-
-    def test_a_missing_database_reports_that_it_does_not_exist_and_is_not_created(self, tmp_path: Path) -> None:
-        missing = tmp_path / "missing.db"
         assert SqliteFG.unknown_columns_reason(_match(str(missing), "t")) == "it does not exist"
         assert not missing.exists()
 

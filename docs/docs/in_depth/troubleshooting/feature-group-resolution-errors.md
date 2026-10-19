@@ -243,7 +243,7 @@ The group owns sources but none has the column. Unpointed, this is a decline rec
 ValueError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; did you mean 'id'?; request a column a source has or point at another source.
 ```
 
-Check the spelling, request a column a source has, or point at the source that has it. Columns are shown, with a close-match suggestion, only when the group was pointed or a `data_access_handle` narrows the search; otherwise only the sources are named. At most 5 sources are described, then "and N more". A source whose columns cannot be read reads `<source>: <reason>`, for example `it does not exist` or `could not read its columns: ...`. If no source can list its columns, the message starts "CsvFG could not list the columns of any of its sources for column ...". A folder entry that links outside its folder is skipped; add it as a files handle or point at it.
+Check the spelling, request a column a source has, or point at the source that has it. Columns and a close-match suggestion appear only when the group was pointed or a `data_access_handle` narrows the search; otherwise only the sources are named. At most five sources are described, then "and N more". A source whose columns cannot be read shows `<source>: <reason>`. If no source can list its columns, the message says so. A folder entry that links outside its folder is skipped; add it as a files handle or point at it.
 
 ### Pointers on derived features
 

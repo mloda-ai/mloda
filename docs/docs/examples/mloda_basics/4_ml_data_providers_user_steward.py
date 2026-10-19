@@ -354,7 +354,7 @@ def _(mo):
 
     - POC notebooks
     - Production code scenarios (model training or realtime prediction)
-    - Micro service endpont
+    - Micro service endpoint
     - KPI or QA test data ingestion
 
     With this, the whole ml lifecycle is represented and plugins can be reused in a testable and repeatable way along this cycle.

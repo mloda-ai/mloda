@@ -38,7 +38,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Data should be reuseable
+    ## Data should be reusable
 
     In most organizations, data pipelines are often built with a single-purpose focus. This tight coupling of data and data transformation within the same process limits reusability. For example:
 

@@ -226,7 +226,7 @@ def _(mo):
 
     1. mloda unifies the interfaces for data for various sources, formats and technologies for the definition of the processes and applying the processes on the data. We used the FeatureGroup, the ComputeFramework and mlodaAPI as interfaces.
 
-    2. It integrates with any techologies, e.g. PyArrow and Pandas, enabling flexible tool choices for data processing.
+    2. It integrates with any technologies, e.g. PyArrow and Pandas, enabling flexible tool choices for data processing.
 
     3. mloda combines data access and computation, reducing complexity and providing a reusable approach to ML workflows. Data Access can be controlled centrally for different sources of data. Here, we showed folders and a database access.
 

@@ -119,8 +119,8 @@ class TestValidateCanAddToGroup:
     )
     def test_different_value_conflict_masks_value(self, value: object, group_value: object, marker: str) -> None:
         """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
-        key = "SQLITEReader"
-        group = {"SQLITEReader": group_value}
+        key = "credential_option_key"
+        group = {"credential_option_key": group_value}
         context: dict[str, Any] = {}
 
         with pytest.raises(ValueError, match="different value") as exc_info:
@@ -204,9 +204,9 @@ class TestValidateCanAddToContext:
     )
     def test_different_value_conflict_masks_value(self, value: object, context_value: object, marker: str) -> None:
         """The 'already exists ... with a different value' message must not echo the raw Mapping value."""
-        key = "SQLITEReader"
+        key = "credential_option_key"
         group: dict[str, Any] = {}
-        context = {"SQLITEReader": context_value}
+        context = {"credential_option_key": context_value}
 
         with pytest.raises(ValueError, match="different value") as exc_info:
             OptionsValidator.validate_can_add_to_context(key=key, value=value, group=group, context=context)

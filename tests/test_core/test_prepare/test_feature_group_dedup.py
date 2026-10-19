@@ -30,7 +30,9 @@ from mloda.core.api.plugin_docs import get_feature_group_docs, resolve_feature
 from mloda.core.api.plugin_info import FeatureGroupInfo, ResolvedFeature
 from mloda.core.api.request import mlodaAPI
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.prepare.accessible_plugins import (
+    EnvironmentPreconditionError,
     PreFilterPlugins,
     RedefinitionConflictError,
     dedup_feature_group_subclasses,
@@ -38,6 +40,8 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.prepare.resolution_types import ResolutionDiagnosis
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
 
 # Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
@@ -1361,3 +1365,131 @@ def test_resolve_feature_matching_scope_projects_no_candidates_and_error_keeps_c
     assert result.error is not None
     assert "set_allow_redefinition" in result.error, f"error must report the conflict; got: {result.error!r}"
     assert f"Scoped to feature group: '{qualname}'." in result.error
+
+
+# Implementation conflicts and redefinition dedup, on a fresh toy group so no stock pair is touched.
+
+
+def _toy_pair() -> tuple[Any, Any]:
+    class _ImplConflictFG(ToyFormatFG):
+        pass
+
+    return _ImplConflictFG, PythonDictFramework
+
+
+def _implementations(plugin_collector: PluginCollector | None = None) -> frozenset[Any]:
+    return PreFilterPlugins({PythonDictFramework}, plugin_collector).implementations
+
+
+@pytest.mark.parametrize("shape", ["unrelated", "siblings"])
+def test_implementations_of_one_pair_that_do_not_subclass_each_other_conflict(
+    shape: str, make_implementation: Any
+) -> None:
+    group, framework = _toy_pair()
+    if shape == "unrelated":
+        first = make_implementation(group, framework, name="ConflictImplA")
+        second = make_implementation(group, framework, name="ConflictImplB")
+    else:
+        parent = make_implementation(group, framework, name="ConflictImplA")
+        first = make_implementation(group, framework, base=parent, name="ConflictImplB")
+        second = make_implementation(group, framework, base=parent, name="ConflictImplC")
+
+    with pytest.raises(EnvironmentPreconditionError) as exc_info:
+        _implementations()
+
+    message = str(exc_info.value)
+    assert f"{first.__module__}:{first.__qualname__}" in message
+    assert f"{second.__module__}:{second.__qualname__}" in message
+    assert "add_disabled_implementation_classes" in message
+
+
+def test_a_subclass_implementation_of_the_same_pair_does_not_conflict_and_wins(make_implementation: Any) -> None:
+    group, framework = _toy_pair()
+    parent = make_implementation(group, framework, name="ConflictImplA")
+    child = make_implementation(group, framework, base=parent, name="ConflictImplB")
+
+    implementations = _implementations()
+
+    assert {parent, child} <= implementations
+    assert group.select_implementation(framework, SourceMatch(source="s", access="s"), implementations) is child
+
+
+def test_disabling_one_of_two_conflicting_implementations_removes_the_conflict(make_implementation: Any) -> None:
+    group, framework = _toy_pair()
+    kept = make_implementation(group, framework, name="ConflictImplA")
+    disabled = make_implementation(group, framework, name="ConflictImplB")
+    collector = PluginCollector()
+    collector.add_disabled_implementation_classes({disabled})
+
+    implementations = _implementations(collector)
+
+    assert kept in implementations
+    assert disabled not in implementations
+
+
+def test_a_redefined_implementation_collapses_to_the_live_class_and_does_not_conflict(
+    make_implementation: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    group, framework = _toy_pair()
+    old = make_implementation(group, framework)
+    new = make_implementation(group, framework)
+    assert (old.__module__, old.__qualname__) == (new.__module__, new.__qualname__)
+    monkeypatch.setattr(sys.modules[new.__module__], new.__name__, new, raising=False)
+
+    implementations = _implementations()
+
+    assert new in implementations
+    assert old not in implementations
+
+
+_REDEF_IMPL_SOURCE = """
+from mloda.core.abstract_plugins.implementation import Implementation
+
+
+class RedefImpl(Implementation):
+    feature_group = _GROUP_
+    compute_framework = _FRAMEWORK_
+
+    @classmethod
+    def calculate(cls, group, match, features):
+        return {version!r}
+"""
+
+
+def _stale_and_live_implementation(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any]:
+    """Two same-name implementations of one pair with different source; only the second is bound in its module."""
+    name = "impl_redef_dedup_mod"
+    module = types.ModuleType(name)
+    group, framework = _toy_pair()
+    module.__dict__.update(_GROUP_=group, _FRAMEWORK_=framework)
+    monkeypatch.setitem(sys.modules, name, module)
+    stale = _exec_fg_in_module("RedefImpl", _REDEF_IMPL_SOURCE.format(version="v1"), "impl-redef-v1", module)
+    live = _exec_fg_in_module("RedefImpl", _REDEF_IMPL_SOURCE.format(version="v2"), "impl-redef-v2", module)
+    return stale, live
+
+
+def test_a_redefined_implementation_with_different_source_conflicts_naming_implementation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale, live = _stale_and_live_implementation(monkeypatch)
+
+    with pytest.raises(RedefinitionConflictError) as exc_info:
+        _implementations()
+
+    assert "Implementation" in str(exc_info.value)
+    assert "FeatureGroup" not in str(exc_info.value)
+    del stale, live
+    gc.collect()
+
+
+def test_a_disabled_stale_implementation_redefinition_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    stale, live = _stale_and_live_implementation(monkeypatch)
+    collector = PluginCollector()
+    collector.add_disabled_implementation_classes({stale})
+
+    implementations = _implementations(collector)
+
+    assert live in implementations
+    assert stale not in implementations
+    del stale, live, implementations
+    gc.collect()

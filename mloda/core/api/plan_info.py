@@ -4,11 +4,15 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
+from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
 )
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import implementation_path
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
+from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.choose_compute_frameworks import _refine, stable_text
@@ -16,9 +20,9 @@ from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 if TYPE_CHECKING:
-    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
     from mloda.core.abstract_plugins.compute_framework import ComputeFramework
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
+    from mloda.core.abstract_plugins.implementation import Implementation
     from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
 
 
@@ -75,12 +79,18 @@ class PlanStep:
     ``result_framework`` is the framework whose data type a step's requested features come back in: the
     ``output_framework`` option if set, else the step framework's ``result_framework()``; None otherwise.
 
-    ``reader_data_access`` is the (reader class, data access) pair of ``FeatureSet.input_data_match``, excluded from equality.
-    ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for that
-    pair, computed on access.
+    ``data_access_identity`` and ``data_access_identity_is_fallback`` mirror the ``HookContext`` fields for the
+    ``FeatureSet.input_data_match`` pair; they are credential-free, computed at plan build and excluded from equality.
 
     ``join_keys`` is a join step's ``left=right`` index column pairs, as ``HookContext.join_keys``; None for
     APPEND/UNION and non-join steps.
+
+    ``implementation``: the Implementation class serving a compute step, else None.
+    ``implementation_path``: its ``module:qualname``, "neutral" for a format group step without one, else None.
+    ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
+    ``implementation_hash`` is the first-party code closure hash, never dependency versions ("unavailable" when
+    hashing fails). ``implementation_version``, ``implementation_hash``, ``feature_group_version``: excluded from
+    equality.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -101,10 +111,23 @@ class PlanStep:
     step_uuid: UUID | None = field(default=None, compare=False)
     input_feature_edges: Mapping[str, tuple[str, ...]] = field(default_factory=dict, hash=False)
     specialized_from: tuple[type["FeatureGroup"], ...] = ()
-    reader_data_access: tuple[type["BaseInputData"], Any] | None = field(default=None, compare=False)
     compute_framework_reason: str | None = None
     result_framework: type["ComputeFramework"] | None = None
     join_keys: tuple[str, ...] | None = None
+    implementation: type["Implementation"] | None = None
+    implementation_version: str | None = field(default=None, compare=False)
+    implementation_hash: str | None = field(default=None, compare=False)
+    implementation_specialized_from: tuple[type["Implementation"], ...] = ()
+    feature_group_version: str | None = field(default=None, compare=False)
+    _data_access_identity: str | None = field(default=None, compare=False)
+    _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
+    _neutral: bool = field(default=False, compare=False)
+
+    @property
+    def implementation_path(self) -> str | None:
+        if self.implementation is not None:
+            return _class_path(self.implementation)
+        return "neutral" if self._neutral else None
 
     @property
     def result_framework_name(self) -> str | None:
@@ -140,13 +163,11 @@ class PlanStep:
 
     @property
     def data_access_identity(self) -> str | None:
-        pair = self.reader_data_access
-        return None if pair is None else pair[0].data_access_identity(pair[1])
+        return self._data_access_identity
 
     @property
     def data_access_identity_is_fallback(self) -> bool | None:
-        pair = self.reader_data_access
-        return None if pair is None else _is_fallback_identity(pair[1], pair[0].data_access_identity(pair[1]))
+        return self._data_access_identity_is_fallback
 
 
 def build_plan_steps(
@@ -190,6 +211,11 @@ def build_plan_steps(
                 if feature.chosen_compute_framework is step.compute_framework
                 and feature.chosen_compute_framework_reason is not None
             }
+            match = step.features.input_data_match
+            identity = None if match is None else match[0].data_access_identity(match[1])
+            is_fallback = None if match is None or identity is None else _is_fallback_identity(match[1], identity)
+            impl = step.features.implementation
+            path = implementation_path(step.feature_group, impl, match)
             plan.append(
                 PlanStep(
                     step_kind="compute",
@@ -203,7 +229,12 @@ def build_plan_steps(
                     input_feature_names=input_feature_names,
                     feature_set_options=(
                         Options(
-                            group={key: _safe_deepcopy(value, {}) for key, value in step.features.options.group.items()}
+                            group={
+                                key: redact_option_value(value)
+                                if isinstance(value, Mapping)
+                                else _safe_deepcopy(value, {})
+                                for key, value in step.features.options.group.items()
+                            }
                         )
                         if step.features.options is not None
                         else None
@@ -214,11 +245,20 @@ def build_plan_steps(
                         for name, inputs in (step.features.declared_input_feature_edges or {}).items()
                     },
                     specialized_from=tuple(sorted(replaced, key=_candidate_sort_key)),
-                    reader_data_access=_safe_deepcopy(step.features.input_data_match, {}),
                     compute_framework_reason="; ".join(sorted(reasons)) or None,
                     result_framework=(output_framework or step.compute_framework.result_framework())
                     if requested
                     else None,
+                    implementation=impl,
+                    implementation_version=None if impl is None else safe_field(lambda: as_str(impl.version()), None),
+                    implementation_hash=None
+                    if impl is None
+                    else safe_field(lambda: BaseFeatureGroupVersion.first_party_hash(impl), "unavailable"),
+                    implementation_specialized_from=_replaced_implementations(impl, step),
+                    feature_group_version=safe_field(lambda: as_str(step.feature_group.version()), None),
+                    _data_access_identity=identity,
+                    _data_access_identity_is_fallback=is_fallback,
+                    _neutral=path == "neutral",
                 )
             )
         elif isinstance(step, TransformFrameworkStep):
@@ -270,6 +310,25 @@ def build_plan_steps(
     return _dependency_order(raw_steps, plan)
 
 
+def _replaced_implementations(
+    impl: "type[Implementation] | None", step: FeatureGroupStep
+) -> tuple[type["Implementation"], ...]:
+    """The concrete Implementation bases of impl that serve the step's group and framework."""
+    from mloda.core.abstract_plugins.implementation import Implementation, _is_concrete
+
+    if impl is None:
+        return ()
+    parents = [
+        base
+        for base in impl.__mro__[1:]
+        if issubclass(base, Implementation)
+        and _is_concrete(base)
+        and issubclass(step.feature_group, base.feature_group)
+        and issubclass(step.compute_framework, base.compute_framework)
+    ]
+    return tuple(sorted(parents, key=_class_path))
+
+
 def _class_path(cls: type | None) -> str:
     return "" if cls is None else f"{cls.__module__}:{cls.__qualname__}"
 
@@ -294,6 +353,8 @@ def _content_key(record: PlanStep) -> tuple[str, ...]:
         record.compute_framework_reason or "",
         _class_path(record.result_framework),
         ",".join(record.join_keys or ()),
+        record.implementation_path or "",
+        ",".join(_class_path(impl) for impl in record.implementation_specialized_from),
     )
 
 

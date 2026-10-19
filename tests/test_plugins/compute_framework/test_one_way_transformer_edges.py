@@ -8,8 +8,7 @@ crash mid-chain with a bare ``NotImplementedError`` from ``transform_other_fw_to
 Contract:
 
   * ``add()`` detects STRUCTURALLY that a transformer does not override
-    ``transform_other_fw_to_fw`` relative to ``BaseTransformer`` (function identity via the
-    ``_underlying`` idiom of ``BaseInputData._is_overridden``) and then registers ONLY the
+    ``transform_other_fw_to_fw`` relative to ``BaseTransformer`` (function identity of the unwrapped classmethod) and then registers ONLY the
     forward edge ``(framework(), other_framework())``, never the reverse pair.
   * The two FileSource transformers do not override ``transform_other_fw_to_fw``, so the
     default registry contains ``(FileSource, dict)`` and ``(FileSource, pa.Table)`` but NOT

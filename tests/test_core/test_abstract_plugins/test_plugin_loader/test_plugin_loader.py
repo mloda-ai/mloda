@@ -1,5 +1,7 @@
 import importlib
 import logging
+import subprocess  # nosec B404
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,10 +10,6 @@ import pytest
 from conftest import _write_broken_optional_root_package
 
 import mloda.core.abstract_plugins.plugin_loader.plugin_loader as plugin_loader_module
-from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    _collect_filtered_subclasses,  # noqa: F401
-    get_all_filtered_subclasses,
-)
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import OPTIONAL_PLUGIN_DEPENDENCIES
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.user import PluginLoader
@@ -70,8 +68,8 @@ class TestPluginLoader:
     def test_load_group(self) -> None:
         plugin_loader = PluginLoader()
         plugin_loader.load_group("feature_group")
-        assert "mloda_plugins.feature_group.input_data.read_files.parquet" in plugin_loader.plugins
-        assert "mloda_plugins.feature_group.input_data.read_files.csv" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.parquet_fg" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" in plugin_loader.plugins
 
     def test_load_all_groups(self) -> None:
         plugin_loader = PluginLoader()
@@ -89,32 +87,47 @@ class TestPluginLoader:
         for res in result:
             assert "feature_group" not in res
 
-    def test_auto_load_triggers_when_subclasses_empty(self) -> None:
-        """Auto-load fires load_group when _collect_filtered_subclasses returns empty."""
-        from unittest.mock import MagicMock
-
-        from mloda_plugins.feature_group.input_data.read_file import ReadFile
-
-        mock_load = MagicMock()
-
-        with patch(
-            "mloda.core.abstract_plugins.components.input_data.base_input_data._collect_filtered_subclasses",
-            return_value=[],
-        ):
-            with patch(
-                "mloda.core.abstract_plugins.plugin_loader.plugin_loader.PluginLoader.load_group",
-                mock_load,
-            ):
-                get_all_filtered_subclasses(ReadFile, ReadFile)
-
-        mock_load.assert_called_once_with("feature_group/input_data/read_files")
-
     def test_load_nested_group_builds_correct_module_path(self) -> None:
-        """Nested group paths like 'feature_group/input_data/read_files' produce correct module names."""
+        """Nested group paths like 'feature_group/input_data/file_formats' produce correct module names."""
         plugin_loader = PluginLoader()
-        plugin_loader.load_group("feature_group/input_data/read_files")
-        assert "mloda_plugins.feature_group.input_data.read_files.csv" in plugin_loader.plugins
-        assert "mloda_plugins.feature_group.input_data.read_files.parquet" in plugin_loader.plugins
+        plugin_loader.load_group("feature_group/input_data/file_formats")
+        assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.parquet_fg" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.stock_formats" in plugin_loader.plugins
+
+    def test_the_document_formats_group_holds_the_document_groups(self) -> None:
+        plugin_loader = PluginLoader()
+        plugin_loader.load_group("feature_group/input_data/document_formats")
+        base = "mloda_plugins.feature_group.input_data.document_formats"
+        for module in ("text_fg", "markdown_fg", "yaml_fg", "json_document_fg"):
+            assert f"{base}.{module}" in plugin_loader.plugins
+        assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" not in plugin_loader.plugins
+
+    @pytest.mark.timeout(60)
+    def test_a_plain_csv_run_all_works_after_plugin_loader_all_without_importing_the_groups(
+        self, tmp_path: Path
+    ) -> None:
+        """A fresh interpreter that only calls PluginLoader.all() finds CsvFG from a file handle alone."""
+        csv_path = tmp_path / "loader_a16.csv"
+        csv_path.write_text("a16_loader_col,a16_other_col\n1,2\n3,4\n")
+        body = (
+            "import sys\n"
+            "from mloda.user import DataAccessCollection, PluginLoader, mloda\n"
+            "PluginLoader.all()\n"
+            "result = mloda.run_all(\n"
+            "    ['a16_loader_col'],\n"
+            "    compute_frameworks=['PyArrowTable'],\n"
+            "    data_access_collection=DataAccessCollection(files={sys.argv[1]}),\n"
+            ")\n"
+            "print('COLUMN:' + ','.join(sorted(result[0].column_names)))\n"
+        )
+
+        completed = subprocess.run(  # nosec B603
+            [sys.executable, "-c", body, str(csv_path)], capture_output=True, text=True, timeout=55
+        )
+
+        assert completed.returncode == 0, f"stderr:\n{completed.stderr}"
+        assert "COLUMN:a16_loader_col" in completed.stdout.splitlines()
 
     def test_load_matching_only_loads_transformer_files(self) -> None:
         """load_matching with '*transformer*' loads only transformer files, not dataframe/filter/merge."""

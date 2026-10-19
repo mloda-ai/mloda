@@ -4,7 +4,7 @@
 The plugin system is a fundamental part of the mloda framework, providing extensibility and flexibility. Plugins allow for customization of feature definitions, computation technologies, and metadata extraction processes, enabling the framework to adapt to various use cases and environments.
 
 ## Plugin Types
-mloda supports three main types of plugins, each serving a specific purpose in the data and feature engineering workflow:
+mloda supports four main types of plugins, each serving a specific purpose in the data and feature engineering workflow:
 
 ### Feature Groups
 Feature Groups define feature dependencies and calculations. They specify how features are derived from source data or other features, allowing for complex feature engineering with automatic dependency resolution.
@@ -32,6 +32,9 @@ Function Extenders enable:
 - Usage tracking and analytics
 - Data lineage and provenance tracking
 - Custom extensions for specific use cases
+
+### Implementations
+An Implementation serves one (format Feature Group, Compute Framework) pair with its own `calculate`, for example loading a CSV file into a PyArrow table.
 
 ## Plugin Development
 When developing new plugins for mloda, consider the following steps:

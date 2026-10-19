@@ -13,6 +13,7 @@ from typing import Any, ClassVar
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPolicyViolationError
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
@@ -264,9 +265,9 @@ class PluginLoader:
         for cls in manifest:
             if not _is_class(cls):
                 raise TypeError(f"Entry point '{label}' manifest contains a non-class item: {cls!r}.")
-            if not issubclass(cls, base_type):
+            if not issubclass(cls, (base_type, Implementation)):
                 raise TypeError(
-                    f"Entry-point group '{group_name}' requires subclasses of {base_type.__name__}; "
+                    f"Entry-point group '{group_name}' requires subclasses of {base_type.__name__} or Implementation; "
                     f"got {cls.__qualname__}."
                 )
             if inspect.isabstract(cls):

@@ -298,4 +298,4 @@ entry), because the catalog's job is to list a degraded class, not hide it.
 - [Plugin Loader](plugin-loader.md)
 - [Feature Group Matching](feature-group-matching.md)
 - [Feature Group Resolution Errors](troubleshooting/feature-group-resolution-errors.md)
-- [Column discovery on a reader](data-access-patterns.md#column-discovery)
+- [Column discovery on a format group](data-access-patterns.md#column-discovery-and-row-counts)

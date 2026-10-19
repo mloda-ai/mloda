@@ -31,7 +31,7 @@ _DISCRIMINATOR_CASES = [
     pytest.param(
         {"key": "value"}, "left", "Internal error.*left_discriminator is None", id="left_side_none_is_actionable"
     ),
-    pytest.param({"CsvReader": "file_a.csv"}, "right", "CsvReader.*file_a.csv", id="contains_actual_values"),
+    pytest.param({"CsvFG": "file_a.csv"}, "right", "CsvFG.*file_a.csv", id="contains_actual_values"),
     pytest.param({"key": "value"}, "right", "mloda-ai/mloda/issues", id="contains_report_url"),
     pytest.param({"key": "value"}, "right", "both.*left_discriminator and right_discriminator", id="contains_guidance"),
 ]

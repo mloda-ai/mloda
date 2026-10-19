@@ -21,7 +21,7 @@ loader.load_group("feature_group")
 Creates a loader, loads all bundled plugins, then folds in installed [entry points](#entry-points).
 
 ### `load_group(group_name: str)`
-Loads all plugins from a specific group folder, including nested subdirectories. Supports slash-separated paths for subdirectories (e.g. `"feature_group/input_data/read_files"`).
+Loads all plugins from a specific group folder, including nested subdirectories. Supports slash-separated paths for subdirectories (e.g. `"feature_group/input_data/document_formats"`).
 
 ### `load_matching(group_name: str, pattern: str)`
 Loads only files within a group whose filename matches a glob pattern (e.g. `"*transformer*"`). Useful when only a subset of files in a group is needed.
@@ -74,6 +74,8 @@ my-pkg = "my_pkg.manifest:FEATURE_GROUPS"
 [project.entry-points."mloda.compute_frameworks"]
 my-pkg = "my_pkg.manifest:COMPUTE_FRAMEWORKS"
 ```
+
+A manifest of an existing group may also list `Implementation` classes.
 
 The manifest module lists the concrete classes explicitly:
 

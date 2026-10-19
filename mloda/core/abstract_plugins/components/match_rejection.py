@@ -18,7 +18,7 @@ class MatchRejection:
     stage: str = "value_rejection"
 
 
-# The owned stage marks a veto recorded while the user explicitly addressed the reader family.
+# The owned stage marks a veto recorded while the user explicitly addressed the reader.
 INPUT_DATA_STAGE = "input_data"
 INPUT_DATA_OWNED_STAGE = "input_data_owned"
 

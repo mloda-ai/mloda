@@ -13,8 +13,7 @@ from mloda.user import Link, JoinSpec
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 import logging
 
@@ -42,7 +41,7 @@ class TestMixComputeFramework:
             compute_framework = "PyArrowTable" if feature == "Amount" else "PandasDataFrame"
             _f = Feature(
                 name=feature,
-                options={CsvReader.__name__: path},
+                options={CsvFG.get_class_name(): path},
                 compute_framework=compute_framework,
             )
             _feature_list.append(_f)
@@ -89,8 +88,8 @@ class TestMixComputeFramework:
             ("id",),
         )
 
-        left = JoinSpec(ReadFileFeature, idx)
-        right = JoinSpec(ReadFileFeature, idx)
+        left = JoinSpec(CsvFG, idx)
+        right = JoinSpec(CsvFG, idx)
         links = {Link("inner", left, right)}
 
         result_data = mloda.run_all(
@@ -99,7 +98,7 @@ class TestMixComputeFramework:
             data_access_collection=DataAccessCollection(files={self.file_path}),
             parallelization_modes=modes,
             flight_server=flight_server,
-            plugin_collector=PluginCollector.enabled_feature_groups({MixedCfwFeature, ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({MixedCfwFeature, CsvFG}),
         )
 
         assert len(result_data[0]["MixedCfwFeature"]) == 9
@@ -131,8 +130,8 @@ class TestMixComputeFramework:
             ("id",),
         )
 
-        left = JoinSpec(ReadFileFeature, idx)
-        right = JoinSpec(ReadFileFeature, idx)
+        left = JoinSpec(CsvFG, idx)
+        right = JoinSpec(CsvFG, idx)
         links = {
             Link(
                 "inner",
@@ -149,7 +148,7 @@ class TestMixComputeFramework:
             data_access_collection=DataAccessCollection(files={self.file_path}),
             parallelization_modes=modes,
             flight_server=flight_server,
-            plugin_collector=PluginCollector.enabled_feature_groups({DuplicateFeatureSetup, ReadFileFeature}),
+            plugin_collector=PluginCollector.enabled_feature_groups({DuplicateFeatureSetup, CsvFG}),
         )
 
         assert len(result_data[0]["DuplicateFeatureSetup"]) == 9

@@ -40,6 +40,7 @@ import mloda.core.abstract_plugins.plugin_loader.plugin_loader as plugin_loader_
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     PluginRegistry,
     PluginRegistryCollisionError,
@@ -435,6 +436,51 @@ class TestLoadEntryPointsDiscovery:
         assert entry.cls is _manifest_class(pkg, "EpFeatureGroup")
         assert entry.source == PluginSource.ENTRY_POINT
         assert entry.plugin_type is FeatureGroup
+
+    def test_feature_group_manifest_may_list_an_implementation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pkg = "eptest_implementation_pkg"
+        _build_distribution(
+            tmp_path,
+            pkg,
+            """
+            from mloda.core.abstract_plugins.implementation import Implementation
+            from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+                PythonDictFramework,
+            )
+            from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+
+
+            class EpImplGroup(ToyFormatFG):
+                pass
+
+
+            class EpImplementation(Implementation):
+                feature_group = EpImplGroup
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args):
+                    return None
+
+
+            FEATURE_GROUPS = [EpImplementation]
+            """,
+            f"""
+            [mloda.feature_groups]
+            demo = {pkg}.manifest:FEATURE_GROUPS
+            """,
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        keys = PluginLoader().load_entry_points()
+
+        expected_key = f"{pkg}.manifest:EpImplementation"
+        assert expected_key in keys
+        entry = PluginRegistry.default().get_entry(expected_key)
+        assert entry.cls is _manifest_class(pkg, "EpImplementation")
+        assert entry.plugin_type is Implementation
 
     def test_returns_sorted_list_of_registered_keys(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         pkg = "eptest_sortedkeys_pkg"

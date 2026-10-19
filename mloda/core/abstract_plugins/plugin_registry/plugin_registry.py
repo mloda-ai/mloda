@@ -1,4 +1,4 @@
-"""Explicit plugin registry for FeatureGroup, ComputeFramework, and Extender classes."""
+"""Explicit plugin registry for FeatureGroup, ComputeFramework, Extender, and Implementation classes."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from typing import Any
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
     ApprovalStatus,
     PluginPolicy,
@@ -23,7 +24,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
 
 logger = logging.getLogger(__name__)
 
-_PLUGIN_BASE_TYPES: tuple[type[Any], ...] = (FeatureGroup, ComputeFramework, Extender)
+_PLUGIN_BASE_TYPES: tuple[type[Any], ...] = (FeatureGroup, ComputeFramework, Extender, Implementation)
 
 
 class _Unset:
@@ -88,7 +89,7 @@ def _resolve_plugin_type(cls: type[Any]) -> type[Any]:
     for base in _PLUGIN_BASE_TYPES:
         if _is_class(cls) and issubclass(cls, base):
             return base
-    raise ValueError(f"{cls!r} is not a subclass of FeatureGroup, ComputeFramework, or Extender.")
+    raise ValueError(f"{cls!r} is not a subclass of FeatureGroup, ComputeFramework, Extender, or Implementation.")
 
 
 class PluginRegistry:
@@ -204,7 +205,7 @@ class PluginRegistry:
         if plugin_type not in _PLUGIN_BASE_TYPES:
             raise ValueError(
                 f"{plugin_type!r} is not a valid plugin base type. "
-                "Valid types are: FeatureGroup, ComputeFramework, Extender."
+                "Valid types are: FeatureGroup, ComputeFramework, Extender, Implementation."
             )
         result: list[type[Any]] = []
         seen: set[type[Any]] = set()

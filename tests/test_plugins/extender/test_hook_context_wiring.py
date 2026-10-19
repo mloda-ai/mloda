@@ -8,6 +8,7 @@ run_context/worker_index surfacing on the captured HookContext.
 import functools
 import gc
 import logging
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -19,6 +20,18 @@ from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    neutral_csv_group,
+    toy_dac,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import (
+    WORKER_COLUMN,
+    ToyWorkerFG,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
+)
 
 SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"
 
@@ -903,3 +916,44 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
         second_uuid = extender.captured[ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE].step_uuid
         assert first_uuid is not None
         assert second_uuid == first_uuid
+
+
+class TestImplementationIdentityOnCalculateFeature:
+    """A format group step's calculate hook names its implementation and version; other steps leave both None."""
+
+    def _calculate_context(self, column: str, group: type, dac: Any) -> HookContext:
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        mloda.run_all(
+            [column],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            data_access_collection=dac,
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        assert extender.captured is not None
+        return extender.captured
+
+    def test_implementation_step_carries_path_and_version(self) -> None:
+        context = self._calculate_context(WORKER_COLUMN, ToyWorkerFG, toy_dac(h1={WORKER_COLUMN: [1, 2]}))
+
+        assert context.implementation == f"{ToyWorkerPythonDict.__module__}:{ToyWorkerPythonDict.__qualname__}"
+        assert context.implementation_version == ToyWorkerPythonDict.version()
+
+    def test_neutral_step_is_marked_neutral_without_a_version(self, tmp_path: Path) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+
+        context = self._calculate_context("toyfmt_audit", group, toy_dac(h1={"toyfmt_audit": [1, 2]}))
+
+        assert context.implementation == "neutral"
+        assert context.implementation_version is None
+
+    def test_plain_group_step_has_neither(self) -> None:
+        extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)
+        cfw = _build_framework({extender})
+
+        cfw.run_calculate_feature(_CalcFeatureGroup, _build_feature_set())
+
+        assert extender.captured is not None
+        assert extender.captured.implementation is None
+        assert extender.captured.implementation_version is None

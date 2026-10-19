@@ -13,6 +13,9 @@ Contract under test:
   * Both classes are exported from ``mloda.user``.
   * ``RunResult.frames()`` pairs each frame with the compute ``PlanStep`` that produced it, by
     ``step_uuid``, not by list position.
+  * ``RunResult.frame_for(feature)`` returns the frame whose compute step requested the feature: a
+    ``str`` matches by name, a ``Feature`` also by a subset of its group options; no match or an
+    ambiguous name raises ``ValueError``.
 
 The chained ``plan_info_sales__mean_aggr`` request reuses the feature groups registered by
 ``tests/test_core/test_api/test_plan_info.py`` so no new registry-wide DataCreator claim is made.
@@ -34,10 +37,14 @@ import pytest
 # with the ``mloda`` mlodaAPI alias imported below.
 import mloda.user as mloda_user
 from mloda.core.api.request import Engine
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet, PropertySpec
 from mloda.user import Feature, Options, ParallelizationMode, PlanStep, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from tests.test_core.test_abstract_plugins.test_multi_column_auto_resolution import (
+    MultiColumnProducer,
+    MultiColumnTestDataCreator,
+)
 from tests.test_core.test_api.test_plan_info import PlanInfoPandasSource
 
 _PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, PandasAggregatedFeatureGroup})
@@ -416,6 +423,111 @@ class TestRunResultFrames:
         [(step, frame)] = loaded.frames()
         assert step.feature_set_options == Options(group={"source_table": "A"})
         assert frame["run_result_probe_value"].tolist() == _PROBE_VALUES["A"]
+
+
+class RunResultDefaultsProbe(FeatureGroup):
+    """Root source whose step options gain a declared group default."""
+
+    PROPERTY_MAPPING = {"run_result_mode": PropertySpec("Engine-filled group default", context=False, default="fast")}
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"run_result_defaults_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"run_result_defaults_value": [7]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+_DEFAULTS_PLUGINS = PluginCollector.enabled_feature_groups({RunResultDefaultsProbe})
+
+
+def _run_defaults_probe() -> Any:
+    return mlodaAPI.run_all(
+        ["run_result_defaults_value"],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=_DEFAULTS_PLUGINS,
+    )
+
+
+class TestRunResultFrameFor:
+    """frame_for finds the frame whose compute step requested the feature."""
+
+    def test_each_name_in_two_groups_returns_its_own_frame(self) -> None:
+        results = _run_all(_TWO_GROUP_FEATURES)
+
+        source = results.frame_for("plan_info_sales")
+        aggregated = results.frame_for("plan_info_sales__mean_aggr")
+
+        assert source is not aggregated
+        assert "plan_info_sales" in source.columns
+        assert "plan_info_sales__mean_aggr" in aggregated.columns
+
+    def test_two_features_of_one_feature_set_return_the_same_frame(self) -> None:
+        results = _run_all(["plan_info_sales", "plan_info_price"])
+
+        assert results.frame_for("plan_info_sales") is results.frame_for("plan_info_price")
+
+    def test_same_name_with_two_option_sets_is_ambiguous_for_a_str(self) -> None:
+        results = _run_probe([Feature("run_result_probe_value", options={"source_table": t}) for t in ("A", "B")])
+
+        with pytest.raises(ValueError, match="ambiguous") as excinfo:
+            results.frame_for("run_result_probe_value")
+
+        assert "'A'" in str(excinfo.value)
+        assert "'B'" in str(excinfo.value)
+
+    def test_feature_with_options_disambiguates(self) -> None:
+        results = _run_probe([Feature("run_result_probe_value", options={"source_table": t}) for t in ("A", "B")])
+
+        frame = results.frame_for(Feature("run_result_probe_value", options={"source_table": "B"}))
+
+        assert frame["run_result_probe_value"].tolist() == _PROBE_VALUES["B"]
+
+    def test_unknown_name_raises_and_lists_available_names(self) -> None:
+        results = _run_probe([Feature("run_result_probe_value", options={"source_table": "A"})])
+
+        with pytest.raises(ValueError, match="does_not_exist") as excinfo:
+            results.frame_for("does_not_exist")
+
+        assert "run_result_probe_value" in str(excinfo.value)
+
+    def test_feature_with_unmatched_group_options_raises(self) -> None:
+        results = _run_probe([Feature("run_result_probe_value", options={"source_table": t}) for t in ("A", "B")])
+
+        with pytest.raises(ValueError, match="run_result_probe_value"):
+            results.frame_for(Feature("run_result_probe_value", options={"source_table": "C"}))
+
+    def test_engine_added_group_keys_are_ignored_by_the_subset_rule(self) -> None:
+        results = _run_defaults_probe()
+        [(step, expected)] = results.frames()
+        assert step.feature_set_options.group.get("run_result_mode") == "fast"
+
+        assert results.frame_for(Feature("run_result_defaults_value")) is expected
+        assert results.frame_for(Feature("run_result_defaults_value", options={"run_result_mode": "fast"})) is expected
+
+    def test_group_option_not_on_the_step_does_not_match(self) -> None:
+        results = _run_defaults_probe()
+
+        with pytest.raises(ValueError, match="run_result_defaults_value"):
+            results.frame_for(Feature("run_result_defaults_value", options={"run_result_mode": "slow"}))
+
+    def test_multi_output_feature_is_found_by_its_base_name(self) -> None:
+        results = mlodaAPI.run_all(
+            ["base_feature"],
+            compute_frameworks=[PandasDataFrame],
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups({MultiColumnTestDataCreator, MultiColumnProducer}),
+        )
+
+        frame = results.frame_for("base_feature")
+
+        assert "base_feature~0" in frame.columns
 
 
 class TestResultStreamFrames:

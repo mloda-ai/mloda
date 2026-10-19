@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import RE
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -96,14 +97,6 @@ class FormatFeatureGroupTestMixin:
     missing_column: str
     expected_source: str
     load_framework: type[ComputeFramework] = PyArrowTable
-    load_loader_names: tuple[str, ...] = (
-        "neutral",
-        "mloda_plugins.feature_group.input_data.file_formats.csv_fg:CsvPyArrowTable",
-        "mloda_plugins.feature_group.input_data.file_formats.feather_fg:FeatherPyArrowTable",
-        "mloda_plugins.feature_group.input_data.file_formats.json_fg:JsonPyArrowTable",
-        "mloda_plugins.feature_group.input_data.file_formats.orc_fg:OrcPyArrowTable",
-        "mloda_plugins.feature_group.input_data.file_formats.parquet_fg:ParquetPyArrowTable",
-    )
     context_options: ClassVar[dict[str, Any]] = {}
 
     def own_dac(self) -> DataAccessCollection:
@@ -216,6 +209,18 @@ class FormatFeatureGroupTestMixin:
         assert not self._claims(Feature(name), None)
         assert not self._claims(Feature(name), self.foreign_dac())
 
+    def _expected_loader(self) -> str:
+        """The loader the group itself selects for its own source: the implementation path, else neutral."""
+        feature = self._with_context(Feature(self.present_column))
+        IdentifyFeatureGroupClass.evaluate(feature, self._plugins(), None, self.own_dac())
+        impl = self.feature_group_class.select_implementation(
+            self.load_framework, self._claimed_match(feature), loaded_implementations()
+        )
+        if impl is None:
+            return "neutral"
+        assert issubclass(self.feature_group_class, impl.feature_group)
+        return f"{impl.__module__}:{impl.__qualname__}"
+
     def test_fires_input_data_load_naming_group_source_format_and_loader(self) -> None:
         capture = _LoadCapture()
 
@@ -233,7 +238,7 @@ class FormatFeatureGroupTestMixin:
         assert context.data_access_format == group_name
         assert context.reader_class is self.feature_group_class
         assert context.data_access_identity == self.expected_source
-        assert context.data_access_loader in self.load_loader_names
+        assert context.data_access_loader == self._expected_loader()
         assert context.implementation == context.data_access_loader
         assert context.implementation_version == expected_implementation_version(context.data_access_loader)
 

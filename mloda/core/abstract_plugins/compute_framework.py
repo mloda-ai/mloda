@@ -933,7 +933,7 @@ class ComputeFramework(ABC):
     @final
     def _build_hook_context(self, hook: ExtenderHook, feature_group: Any, features: Any) -> HookContext:
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-        from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+        from mloda.core.abstract_plugins.components.input_data.format_feature_group import implementation_path
 
         # feature_group is a class in production; normalize since test doubles may pass an instance.
         feature_group_cls: Any = feature_group if isinstance(feature_group, type) else type(feature_group)
@@ -949,13 +949,11 @@ class ComputeFramework(ABC):
         implementation_version: str | None = None
         if isinstance(features, FeatureSet):
             impl = features.implementation
+            implementation = implementation_path(feature_group_cls, impl, features.input_data_match)
             if impl is not None:
-                implementation = f"{impl.__module__}:{impl.__qualname__}"
                 implementation_version = safe_field(
                     lambda: as_str(impl.version()), None, field=f"{implementation}.version", warn_once_for=impl
                 )
-            elif features.input_data_match is not None and issubclass(feature_group_cls, FormatFeatureGroup):
-                implementation = "neutral"
             step_uuid = features.step_uuid
             feature_names = tuple(str(name) for name in features.get_all_names())
             input_features = self._declared_input_feature_names(feature_group_cls, features)

@@ -60,6 +60,15 @@ def _listed(columns: Collection[str] | None) -> str:
     return f"[{text}]"
 
 
+def implementation_path(feature_group: type, implementation: Any, match: Any) -> str | None:
+    """module:qualname of the implementation, "neutral" for a format group with a match and none, else None."""
+    if implementation is not None:
+        return f"{implementation.__module__}:{implementation.__qualname__}"
+    if match is not None and issubclass(feature_group, FormatFeatureGroup):
+        return "neutral"
+    return None
+
+
 class FormatPointerError(ValueError):
     """A class-name pointer or feature_group= scope that cannot be served; validated before matching."""
 
@@ -214,9 +223,7 @@ class FormatFeatureGroup(FeatureGroup):
         load: Callable[[SourceMatch, Any], Any] = (
             types.MethodType(implementation.calculate, cls) if implementation is not None else cls.load_neutral
         )
-        loader_name = (
-            f"{implementation.__module__}:{implementation.__qualname__}" if implementation is not None else "neutral"
-        )
+        loader_name = implementation_path(cls, implementation, match)
         return dispatch_input_data_load(
             cls,
             cls,

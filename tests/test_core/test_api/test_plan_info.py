@@ -82,6 +82,7 @@ from mloda.provider import (
     DataCreator,
     FeatureGroup,
     FeatureSet,
+    Implementation,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
@@ -826,8 +827,8 @@ class TestPlanStepImplementation:
         assert step.implementation_path == _class_path(impl)
         assert step.implementation_path != step.compute_framework_name
         assert step.implementation_version == impl.version()
-        assert step.implementation_hash == BaseFeatureGroupVersion.implementation_hash(impl)
-        assert step.implementation_hash != "unavailable"
+        assert step.implementation_hash == BaseFeatureGroupVersion.first_party_hash(impl)
+        assert step.implementation_hash != BaseFeatureGroupVersion.implementation_hash(impl)
         assert step.implementation_specialized_from == ()
         assert step.feature_group_version == ToyWorkerFG.version()
 
@@ -881,6 +882,24 @@ class TestPlanStepImplementation:
             dataclasses.replace(step, implementation_version="v", implementation_hash="h", feature_group_version="g")
             == step
         )
+
+    def test_a_non_str_version_degrades_to_none_like_the_hook_context(
+        self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class _IntVersion(Implementation):
+            @classmethod
+            def version(cls) -> Any:
+                return 7
+
+        group = neutral_csv_group(tmp_path / "n.csv")
+        impl = make_implementation(group, PythonDictFramework, base=_IntVersion, name="PlanInfoIntVersionImpl")
+        monkeypatch.setattr(group, "version", classmethod(lambda cls: 3))
+
+        step = _explain_toy_group(group)
+
+        assert step.implementation is impl
+        assert step.implementation_version is None
+        assert step.feature_group_version is None
 
     def test_a_hash_failure_degrades_to_unavailable_and_planning_still_hashes(
         self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch

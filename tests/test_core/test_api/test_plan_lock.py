@@ -25,7 +25,20 @@ from mloda.steward import (
 )
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
-from mloda.user import Options
+import importlib.metadata
+from collections.abc import Iterator
+
+from mloda.core.abstract_plugins.components import base_feature_group_version
+from mloda.core.abstract_plugins.components.code_closure import closure_parts, dependency_entry
+from mloda.user import Options, PluginCollector, mloda
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    neutral_csv_group,
+    toy_dac,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
+)
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -213,6 +226,80 @@ def test_a_step_without_an_implementation_records_nulls(tmp_path: Path) -> None:
     assert record["implementation"] is None
     assert record["implementation_hash"] is None
     assert record["implementation_specialized_from"] == []
+
+
+def _explain_compute_step(group: type[FeatureGroup]) -> PlanStep:
+    steps = mloda.explain(
+        ["toyfmt_ld"],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        data_access_collection=toy_dac(h1={"toyfmt_ld": [1, 2]}),
+    )
+    compute = [step for step in steps if step.step_kind == "compute"]
+    assert len(compute) == 1
+    return compute[0]
+
+
+def _dependency_free_hash(impl: type[Implementation]) -> str:
+    parts = closure_parts(impl, include_dependencies=False)
+    return hashlib.sha256("\n".join(sorted(parts)).encode("utf-8")).hexdigest()
+
+
+@pytest.mark.parametrize("served", [True, False])
+def test_explain_writes_the_serving_implementation_and_its_dependency_free_hash_or_neutral(
+    tmp_path: Path, served: bool
+) -> None:
+    group = ToyWorkerFG if served else neutral_csv_group(tmp_path / "n.csv")
+    lock = tmp_path / "plan.lock"
+    steps = [_explain_compute_step(group)]
+
+    write_plan_lock(steps, lock)
+
+    record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
+    if served:
+        assert record["implementation"] == _impl_path(ToyWorkerPythonDict)
+        assert record["implementation_hash"] == _dependency_free_hash(ToyWorkerPythonDict)
+    else:
+        assert record["implementation"] == "neutral"
+        assert record["implementation_hash"] is None
+    check_plan_lock(steps, lock)
+
+
+@pytest.fixture
+def pyarrow_version_bump(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[str], None]]:
+    """Returns bump(version): report that version for pyarrow and drop every cached dependency and hash entry."""
+    real_version = importlib.metadata.version
+
+    def reset() -> None:
+        dependency_entry.cache_clear()
+        base_feature_group_version._implementation_hash_cache.clear()
+
+    def bump(version: str) -> None:
+        monkeypatch.setattr(
+            importlib.metadata,
+            "version",
+            lambda name: version if name == "pyarrow" else real_version(name),
+        )
+        reset()
+
+    yield bump
+    monkeypatch.undo()
+    reset()
+
+
+def test_a_dependency_version_change_moves_the_implementation_version_but_not_the_lock_hash(
+    tmp_path: Path, pyarrow_version_bump: Callable[[str], None]
+) -> None:
+    lock = tmp_path / "plan.lock"
+    before = _explain_compute_step(ToyWorkerFG)
+    write_plan_lock([before], lock)
+
+    pyarrow_version_bump("0.0.1-bumped")
+    after = _explain_compute_step(ToyWorkerFG)
+
+    assert before.implementation_version != after.implementation_version
+    assert before.implementation_hash == after.implementation_hash == _dependency_free_hash(ToyWorkerPythonDict)
+    check_plan_lock([after], lock)
 
 
 _IMPL_MODULE = "lock_edit_impl_module"
@@ -473,7 +560,8 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     assert all(char in "0123456789abcdef" for char in digest)
     assert digest != plan_structure_hash(plan)
     assert digest == plan_content_hash(_content_plan())
-    # Pinned: moving wiring and join keys into the lock must not shift the content hash.
+    # Pinned: the content hash includes the implementation fields, so adding them re-pinned this value; any later
+    # change to the hashed content must re-pin it deliberately.
     assert digest == "c81c29c74911d4f9706e87f1fc81c27cd5a65eaa08b5f90ebe9234d6f986df15"
 
 

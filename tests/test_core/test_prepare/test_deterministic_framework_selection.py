@@ -10,6 +10,7 @@ import sqlite3
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, ClassVar
+from unittest.mock import MagicMock, create_autospec
 
 import pandas as pd
 import pyarrow as pa
@@ -1057,6 +1058,42 @@ def test_a_same_type_hop_into_a_required_connection_framework_needs_no_connectio
     engine.data_access_collection = None
 
     assert engine._resolve_tfs_connection_map() == {}
+
+
+def _requested_step(feature_group: type[FeatureGroup], framework: type[ComputeFramework]) -> Any:
+    step = create_autospec(FeatureGroupStep, instance=True)
+    step.feature_group = feature_group
+    step.compute_framework = framework
+    step.features = MagicMock()
+    step.features.get_initial_requested_features.return_value = ("requested",)
+    return step
+
+
+@pytest.mark.parametrize("case", ["native_only", "mixed", "repeated"])
+def test_the_output_connection_error_names_only_converting_steps_once(case: str) -> None:
+    sqlite_cls = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
+    native = _requested_step(TfsSqliteConsumer, sqlite_cls)
+    converting = _requested_step(RcRoot, PandasDataFrame)
+    steps = {
+        "native_only": [native, _requested_step(TfsSqliteConsumer, sqlite_cls)],
+        "mixed": [native, converting],
+        "repeated": [converting, _requested_step(RcRoot, PandasDataFrame)],
+    }[case]
+    engine = Engine.__new__(Engine)
+    engine.output_framework = sqlite_cls
+    setattr(engine, "execution_planner", steps)
+    engine.data_access_collection = None
+
+    if case == "native_only":
+        assert engine._resolve_output_connection() is None
+        return
+
+    with pytest.raises(EnvironmentPreconditionError) as raised:
+        engine._resolve_output_connection()
+
+    message = str(raised.value)
+    assert message.count("RcRoot on PandasDataFrame") == 1
+    assert "TfsSqliteConsumer" not in message
 
 
 def test_an_output_framework_outside_the_run_list_still_converts() -> None:

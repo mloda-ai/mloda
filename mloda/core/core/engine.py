@@ -148,9 +148,10 @@ class Engine:
             return None
         connection = output.pick_connection_from_dac(self.data_access_collection)
         if connection is None and output.connection_requirement() is ConnectionRequirement.REQUIRED:
-            steps = ", ".join(
+            labels = dict.fromkeys(
                 f"{s.feature_group.get_class_name()} on {s.compute_framework.get_class_name()}" for s in converting
             )
+            steps = ", ".join(labels)
             raise EnvironmentPreconditionError(
                 f"The result of {steps} converts to output_framework {output.get_class_name()}, "
                 "which needs a connection, so add a matching connection to the DataAccessCollection."

@@ -1,6 +1,6 @@
 # Plugin Registry
 
-The plugin registry is an explicit catalog of FeatureGroup, ComputeFramework, and Extender classes, keyed by a string name (default: `"module:qualname"`). The [PluginLoader](plugin-loader.md) feeds it automatically: every concrete plugin class defined in a loaded module is registered with provenance `source="loader"`, manual registrations carry `source="manual"`, and classes discovered from installed [entry-point manifests](plugin-loader.md#entry-points) carry `source="entry_point"`. Provenance is the `PluginSource` enum on each entry (`get_entry(key).source`); `register()` accepts the enum or its string value and rejects anything else with a `ValueError`. Abstract classes (`inspect.isabstract`) are infrastructure, never plugins: the loader skips them, and strict and warn modes ignore them. Registries are plain instances, and the engine and catalog APIs use the process-global default, `PluginRegistry.default()`.
+The plugin registry is an explicit catalog of FeatureGroup, ComputeFramework, Extender, and Implementation classes, keyed by a string name (default: `"module:qualname"`). The [PluginLoader](plugin-loader.md) feeds it automatically: every concrete plugin class defined in a loaded module is registered with provenance `source="loader"`, manual registrations carry `source="manual"`, and classes discovered from installed [entry-point manifests](plugin-loader.md#entry-points) carry `source="entry_point"`. Provenance is the `PluginSource` enum on each entry (`get_entry(key).source`); `register()` accepts the enum or its string value and rejects anything else with a `ValueError`. Abstract classes (`inspect.isabstract`) are infrastructure, never plugins: the loader skips them, and strict and warn modes ignore them. Registries are plain instances, and the engine and catalog APIs use the process-global default, `PluginRegistry.default()`.
 
 ## Registered vs Ad-Hoc Classes
 
@@ -111,17 +111,18 @@ Three behavioral notes:
 - In `"warn"` mode, each unregistered class is reported once per process, not once per run, so long-running services do not repeat identical warnings forever.
 - In `"strict"` mode, FeatureGroups explicitly enabled on the `PluginCollector` but missing from the registry are dropped with a warning naming them; if strict filtering removes every FeatureGroup, the run fails with an error that points to `register_plugin()` and the environment variable.
 
-Strict mode covers all three plugin kinds:
+Strict mode covers all four plugin kinds:
 
 - **FeatureGroups**: resolution filtering as described above; this behavior is unchanged.
 - **ComputeFrameworks**: requested frameworks must be registered; under `"strict"` unregistered ones are dropped (the run fails if none survive). Frameworks that ship in the mloda wheel (package root `mloda` or `mloda_plugins`, both ship together) are exempt as infrastructure, like abstract classes; third-party packages installed into the shared `mloda.*` namespace (`mloda.community`, `mloda.enterprise`, `mloda.registry`, `mloda.testing`) are not in the wheel, so they get no exemption and stay registry-gated.
 - **Extenders**: the registration filter is evaluated once, when the session is planned (the `mlodaAPI(...)` constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, `diagnose()`); registering a class or changing strict mode after that has no effect on the snapshot, so later `run()` calls keep using it. Under `"strict"` unregistered extenders are dropped with a warning naming them, except an unregistered gate (`never_fall_back = True` or `raise_on_run_complete = True`), which raises `EnvironmentPreconditionError`; under `"warn"` they are logged once per process.
+- **Implementations**: under `"strict"` unregistered ones are dropped and logged; losing them all falls back to the neutral path. Under `"warn"` they are reported once.
 
 Recommended rollout for deployments: stay on `"off"`, switch CI or staging to `"warn"` and watch the logs for "not registered" warnings, then move to `"strict"` once they are gone. Packages that declare [entry points](plugin-loader.md#entry-points) register automatically, so the usual path is: add entry-point manifests to your installed plugin packages, watch the warn logs go quiet, then ramp to strict. This repository's own CI (tox) runs with `MLODA_PLUGIN_REGISTRY_STRICT=warn`.
 
 ## Governance
 
-Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`. Readers are format FeatureGroups, so plugin policy enforcement for readers holds under strict mode with an allowlist policy; outside strict mode a policy-denied group can still serve.
+Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`. Readers are format FeatureGroups, so plugin policy enforcement for readers holds under strict mode with an allowlist policy; outside strict mode a policy-denied group can still serve. Implementations are governed by module like other plugins. Under strict mode with a policy, a denied plugin never serves data; importing a denied package still runs its module code, because the loader imports before the policy check.
 
 ### Plugin Policy
 

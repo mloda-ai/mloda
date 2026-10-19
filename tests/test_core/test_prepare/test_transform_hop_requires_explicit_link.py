@@ -609,7 +609,8 @@ _TWO_JOINS_PROBE = Path(__file__).with_name("two_joins_one_consumer_probe.py")
 _TWO_JOINS_SEEDS = list(range(8))
 
 
-def _two_joins_plans() -> list[dict[str, str]]:
+@pytest.fixture(scope="module")
+def two_joins_plans() -> list[dict[str, str]]:
     # The join order comes from uuid4 iteration, so it varies per process whatever the hash seed.
     return run_probes(_TWO_JOINS_PROBE, len(_TWO_JOINS_SEEDS), seeds=_TWO_JOINS_SEEDS) + run_probes(
         _TWO_JOINS_PROBE, len(_TWO_JOINS_SEEDS), seeds=[seed + 100 for seed in _TWO_JOINS_SEEDS]
@@ -617,16 +618,20 @@ def _two_joins_plans() -> list[dict[str, str]]:
 
 
 @pytest.mark.timeout(60)
-def test_two_joins_feeding_one_consumer_are_planned_in_the_same_order_in_every_process() -> None:
-    outputs = _two_joins_plans()
+def test_two_joins_feeding_one_consumer_are_planned_in_the_same_order_in_every_process(
+    two_joins_plans: list[dict[str, str]],
+) -> None:
+    outputs = two_joins_plans
 
     orders = {output["order"] for output in outputs}
     assert len(orders) == 1, f"join order differs across processes: {orders}"
 
 
 @pytest.mark.timeout(60)
-def test_two_joins_feeding_one_consumer_have_the_same_ordering_edge_in_every_process() -> None:
-    outputs = _two_joins_plans()
+def test_two_joins_feeding_one_consumer_have_the_same_ordering_edge_in_every_process(
+    two_joins_plans: list[dict[str, str]],
+) -> None:
+    outputs = two_joins_plans
 
     edges = {output["edges"] for output in outputs}
     assert len(edges) == 1, f"join ordering edges differ across processes: {edges}"

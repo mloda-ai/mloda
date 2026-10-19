@@ -476,14 +476,31 @@ _THREADING_REPEATS = 4
 
 
 class TestHubOnTheRightOfBothLinks:
-    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
-    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
-    def test_two_inner_links_sharing_the_right_side_return_the_matched_rows(
-        self, spoke_c: type[FeatureGroup], mode: ParallelizationMode
+    @pytest.mark.parametrize(
+        "link_factory, expected, spoke_c, mode",
+        [
+            pytest.param(
+                Link.inner, _HUB_RIGHT_INNER_EXPECTED, spoke_c, mode, id=f"inner-{spoke_id}-{mode.name.lower()}"
+            )
+            for spoke_c, spoke_id in ((HubRightCArrow, "one_framework"), (HubRightCPandas, "spokes_differ"))
+            for mode in (ParallelizationMode.SYNC, ParallelizationMode.THREADING)
+        ]
+        + [
+            pytest.param(
+                Link.outer,
+                _HUB_RIGHT_OUTER_EXPECTED,
+                HubRightCArrow,
+                ParallelizationMode.THREADING,
+                id="outer-one_framework-threading",
+            )
+        ],
+    )
+    def test_two_links_sharing_the_right_side_return_their_rows(
+        self, link_factory: Any, expected: list[int], spoke_c: type[FeatureGroup], mode: ParallelizationMode
     ) -> None:
         repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
         for _ in range(repeats):
-            assert _hub_right_run(Link.inner, spoke_c, mode) == _HUB_RIGHT_INNER_EXPECTED
+            assert _hub_right_run(link_factory, spoke_c, mode) == expected
 
     @pytest.mark.timeout(60)
     def test_two_inner_links_sharing_the_right_side_return_the_matched_rows_with_multiprocessing(
@@ -492,11 +509,6 @@ class TestHubOnTheRightOfBothLinks:
         rows = _hub_right_run(Link.inner, HubRightCArrow, ParallelizationMode.MULTIPROCESSING, flight_server)
 
         assert rows == _HUB_RIGHT_INNER_EXPECTED
-
-    def test_two_outer_links_sharing_the_right_side_return_every_row_with_threading(self) -> None:
-        for _ in range(_THREADING_REPEATS):
-            rows = _hub_right_run(Link.outer, HubRightCArrow, ParallelizationMode.THREADING)
-            assert rows == _HUB_RIGHT_OUTER_EXPECTED
 
 
 class HubRightPairConsumer(FeatureGroup):

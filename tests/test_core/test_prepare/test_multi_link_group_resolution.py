@@ -2010,14 +2010,9 @@ def test_a_join_keeping_the_member_side_of_two_members_on_different_frameworks_i
         )
 
     message = str(exc_info.value)
-    assert RemedySecondBConsumer.get_class_name() in message
-    assert "MultiLinkRootA" in message
-    assert "RemedyRootA1" in message
-    assert "MultiLinkRootBDistinct" in message
-    assert "not defined" in message
-    assert "Link.star(" in message
-    assert "inner joins for both or outer joins for both" in message
-    assert "separate consumers" in message
+    _assert_star_keeping_two_groups_reason(
+        message, RemedySecondBConsumer.get_class_name(), ("MultiLinkRootA", "RemedyRootA1"), "MultiLinkRootBDistinct"
+    )
     assert "reads both members directly" not in message
 
 
@@ -2256,45 +2251,21 @@ _SAME_FRAMEWORK_MEMBER_LAYOUTS = [
 ]
 
 
+@pytest.mark.parametrize("empty_chooser_rules", [False, True], ids=["chooser", "planner_backstop"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize("consumer, root_b, extra_group, members", _SAME_FRAMEWORK_MEMBER_LAYOUTS)
 def test_one_consumer_reading_two_members_of_one_link_side_on_one_framework_over_one_base_link_is_rejected(
-    consumer: type[FeatureGroup],
-    root_b: type[FeatureGroup],
-    extra_group: type[FeatureGroup],
-    members: tuple[type[FeatureGroup], type[FeatureGroup]],
-    swap_link_sides: bool,
-) -> None:
-    with pytest.raises(ValueError) as exc_info:
-        _side_path_prepare(
-            SidePathArrowP,
-            False,
-            swap_link_sides,
-            consumer=consumer,
-            features=[consumer.get_class_name()],
-            **{**_REMEDY_KWARGS, "root_b": root_b, "extra_groups": {extra_group}},
-        )
-
-    message = str(exc_info.value)
-    assert consumer.get_class_name() in message
-    for member in members:
-        assert member.get_class_name() in message
-    for reason in _ONE_FRAMEWORK_REASONS:
-        assert reason in message
-
-
-@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-@pytest.mark.parametrize("consumer, root_b, extra_group, members", _SAME_FRAMEWORK_MEMBER_LAYOUTS)
-def test_the_planner_backstops_reject_two_members_of_one_link_side_on_one_framework(
     monkeypatch: pytest.MonkeyPatch,
     consumer: type[FeatureGroup],
     root_b: type[FeatureGroup],
     extra_group: type[FeatureGroup],
     members: tuple[type[FeatureGroup], type[FeatureGroup]],
     swap_link_sides: bool,
+    empty_chooser_rules: bool,
 ) -> None:
-    # Empty chooser rules reach the planner's backstops.
-    monkeypatch.setattr(ChooseComputeFrameworks, "_side_member_rules", lambda self, *args, **kwargs: [])
+    if empty_chooser_rules:
+        # Empty chooser rules reach the planner's backstops.
+        monkeypatch.setattr(ChooseComputeFrameworks, "_side_member_rules", lambda self, *args, **kwargs: [])
 
     with pytest.raises(ValueError) as exc_info:
         _side_path_prepare(
@@ -2413,7 +2384,16 @@ def _star_group(name: str, column: str, rows: dict[str, int], framework: type[Co
         "calculate_feature": classmethod(calculate_feature),
         "compute_framework_rule": classmethod(compute_framework_rule),
     }
-    return type(name, (FeatureGroup,), namespace)
+    created = type(name, (FeatureGroup,), namespace)
+    globals()[name] = created  # module level, so multiprocessing can pickle the link back
+    return created
+
+
+_XYZ_KEYS = ("x", "y", "z")
+
+
+def _xyz(values: list[int]) -> dict[str, int]:
+    return dict(zip(_XYZ_KEYS, values))
 
 
 _STAR_C_ROWS = {"y": 7, "z": 8, "w": 9, "q": 10}
@@ -2553,27 +2533,6 @@ def test_a_left_or_right_join_keeping_two_members_of_one_link_side_with_differen
     )
 
 
-def _below_root(name: str, column: str, values: list[int], framework: type[ComputeFramework]) -> type[FeatureGroup]:
-    def input_data(cls: Any) -> BaseInputData | None:
-        return DataCreator({column})
-
-    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
-        return {column: values, "mlg_idx": ["x", "y", "z"]}
-
-    def compute_framework_rule(cls: Any) -> set[type[ComputeFramework]]:
-        return {framework}
-
-    namespace = {
-        "__module__": __name__,
-        "input_data": classmethod(input_data),
-        "calculate_feature": classmethod(calculate_feature),
-        "compute_framework_rule": classmethod(compute_framework_rule),
-    }
-    created = type(name, (FeatureGroup,), namespace)
-    globals()[name] = created  # module level, so multiprocessing can pickle the link back
-    return created
-
-
 def _below_list(column: Any) -> list[Any]:
     return list(column.to_pylist() if hasattr(column, "to_pylist") else column.tolist())
 
@@ -2610,9 +2569,9 @@ def _below_consumer(
 
 def _below_layout(tag: str, source: type[ComputeFramework], other: type[ComputeFramework]) -> dict[str, Any]:
     """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework."""
-    root_a = _below_root(f"BelowRootA{tag}", f"below_a_{tag}", [1, 2, 3], source)
-    root_b = _below_root(f"BelowRootB{tag}", f"below_b_{tag}", [10, 20, 30], other)
-    root_d = _below_root(f"BelowRootD{tag}", f"below_d_{tag}", [7, 8, 9], PandasDataFrame)
+    root_a = _star_group(f"BelowRootA{tag}", f"below_a_{tag}", _xyz([1, 2, 3]), source)
+    root_b = _star_group(f"BelowRootB{tag}", f"below_b_{tag}", _xyz([10, 20, 30]), other)
+    root_d = _star_group(f"BelowRootD{tag}", f"below_d_{tag}", _xyz([7, 8, 9]), PandasDataFrame)
     joined_inputs = (f"below_a_{tag}", f"below_b_{tag}")
     joined = _below_consumer(f"BelowJoined{tag}", source, joined_inputs)
     return {
@@ -2660,36 +2619,43 @@ def _below_run(
     return {key: _column_values(results, layout[key].get_class_name()) for key in requested}
 
 
-_BELOW_MULTIPROCESSING = pytest.param(
-    "arrow_source",
-    False,
-    ParallelizationMode.MULTIPROCESSING,
-    # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-    marks=pytest.mark.timeout(60),
-    id="arrow_source-a_b-multiprocessing",
+_BELOW_ALONE = (("below",), (("a", "b"),), {"below": [[22, 44, 66]]})
+_BELOW_NEXT_TO_SECOND_LINK = (
+    ("below", "bd"),
+    (("a", "b"), ("b", "d")),
+    {"below": [[22, 44, 66]], "bd": [[17, 28, 39]]},
 )
 _BELOW_CASES = [
-    pytest.param(layout, swap, mode, id=f"{layout}-{'b_a' if swap else 'a_b'}-{mode.name.lower()}")
+    pytest.param(layout, swap, mode, *variant, id=f"{name}-{layout}-{'b_a' if swap else 'a_b'}-{mode.name.lower()}")
+    for name, variant in (("alone", _BELOW_ALONE), ("second_link", _BELOW_NEXT_TO_SECOND_LINK))
     for layout in _BELOW_LAYOUTS
     for swap in (False, True)
     for mode in (ParallelizationMode.SYNC, ParallelizationMode.THREADING)
 ]
+_BELOW_MULTIPROCESSING = pytest.param(
+    "arrow_source",
+    False,
+    ParallelizationMode.MULTIPROCESSING,
+    *_BELOW_ALONE,
+    # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+    marks=pytest.mark.timeout(60),
+    id="alone-arrow_source-a_b-multiprocessing",
+)
 
 
-@pytest.mark.parametrize("layout, swap_link_sides, mode", [*_BELOW_CASES, _BELOW_MULTIPROCESSING])
-def test_a_feature_below_a_join_consumer_on_the_non_consumer_side_framework_reads_the_joined_frame(
-    request: pytest.FixtureRequest, layout: str, swap_link_sides: bool, mode: ParallelizationMode
+@pytest.mark.parametrize(
+    "layout, swap_link_sides, mode, requested, links, expected", [*_BELOW_CASES, _BELOW_MULTIPROCESSING]
+)
+def test_a_feature_below_a_join_consumer_reads_the_joined_frame(
+    request: pytest.FixtureRequest,
+    layout: str,
+    swap_link_sides: bool,
+    mode: ParallelizationMode,
+    requested: tuple[str, ...],
+    links: tuple[tuple[str, str], ...],
+    expected: dict[str, list[list[int]]],
 ) -> None:
     server = request.getfixturevalue("flight_server") if mode == ParallelizationMode.MULTIPROCESSING else None
-    values = _below_run(layout, swap_link_sides, mode, ("below",), flight_server=server)
+    values = _below_run(layout, swap_link_sides, mode, requested, links=links, flight_server=server)
 
-    assert values == {"below": [[22, 44, 66]]}
-
-
-@pytest.mark.parametrize("layout, swap_link_sides, mode", _BELOW_CASES)
-def test_a_feature_below_a_join_consumer_is_correct_next_to_a_second_link_and_its_consumer(
-    layout: str, swap_link_sides: bool, mode: ParallelizationMode
-) -> None:
-    values = _below_run(layout, swap_link_sides, mode, ("below", "bd"), links=(("a", "b"), ("b", "d")))
-
-    assert values == {"below": [[22, 44, 66]], "bd": [[17, 28, 39]]}
+    assert values == expected

@@ -4,7 +4,7 @@ import pytest
 from mloda.core.api.prepare.setup_compute_framework import SetupComputeFramework
 from mloda.core.api.request import SetupConfigurationError
 from mloda.user import Feature
-from mloda.user import Features, mloda
+from mloda.user import Features, ParallelizationMode, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.provider import ComputeFramework
@@ -18,6 +18,27 @@ class TestSetupComputeFramework:
 
     def get_list_compute_frameworks_as_class_name(self) -> list[str]:
         return [subclass.get_class_name() for subclass in get_all_subclasses(ComputeFramework)]
+
+    @pytest.mark.parametrize(
+        "user_compute_frameworks, parallelization_modes",
+        [
+            (None, {ParallelizationMode.SYNC}),
+            (["PandasDataFrame"], {ParallelizationMode.SYNC}),
+            (["PandasDataFrame"], None),
+        ],
+        ids=["default_sync", "user_list_sync", "user_list_no_modes"],
+    )
+    def test_no_compute_framework_loaded_raises_clear_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        features: Features,
+        user_compute_frameworks: list[str] | None,
+        parallelization_modes: set[ParallelizationMode] | None,
+    ) -> None:
+        monkeypatch.setattr("mloda.core.api.prepare.setup_compute_framework.get_all_subclasses", lambda cls: set())
+        with pytest.raises(ValueError) as exc_info:
+            SetupComputeFramework(user_compute_frameworks, features, parallelization_modes)
+        assert str(exc_info.value) == "No compute framework plugin is loaded; import one or call PluginLoader.all()."
 
     def test_init_with_user_compute_frameworks(self, features: Features) -> None:
         user_compute_frameworks = ["PyArrowTable", "PandasDataFrame"]
@@ -63,19 +84,6 @@ class TestSetupComputeFramework:
         )
         assert len({fw.get_class_name() for fw in filtered_compute_frameworks}) == len(
             set(api_request_compute_frameworks)
-        )
-
-    def test_filter_user_set_in_available_sub_classes_empty_available_classes_suggests_loading_plugins(
-        self, features: Features
-    ) -> None:
-        setup_compute_framework = SetupComputeFramework(None, features)
-
-        with pytest.raises(ValueError) as exc_info:
-            setup_compute_framework.filter_user_set_in_available_sub_classes(["missing_compute_framework"], set())
-
-        assert str(exc_info.value) == (
-            "No given compute frameworks ['missing_compute_framework'] found in "
-            "available compute frameworks: []. Did you call PluginLoader.all()?"
         )
 
     def test_filter_user_set_in_available_sub_classes_non_empty_available_classes_keeps_existing_message(
@@ -160,6 +168,14 @@ class TestSetupComputeFramework:
     def test_set_through_mloda_api_raises_setup_configuration_error(self) -> None:
         with pytest.raises(SetupConfigurationError, match="ordered list"):
             mloda.prepare(["some_feature"], compute_frameworks={"PandasDataFrame"})  # type: ignore[arg-type]
+
+    def test_no_compute_framework_loaded_through_run_all_raises_setup_configuration_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("mloda.core.api.prepare.setup_compute_framework.get_all_subclasses", lambda cls: set())
+
+        with pytest.raises(SetupConfigurationError, match="No compute framework plugin is loaded"):
+            mloda.run_all(["some_feature"], output_framework="PandasDataFrame")
 
     @pytest.mark.parametrize(
         ("output", "expected"),

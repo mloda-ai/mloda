@@ -16,8 +16,11 @@ class SetupComputeFramework:
         parallelization_modes: set[ParallelizationMode] | None = None,
         output_framework: str | type[ComputeFramework] | None = None,
     ) -> None:
-        self.output_framework = self._resolve_output_framework(output_framework)
         available_compute_frameworks = get_all_subclasses(ComputeFramework)
+        if not available_compute_frameworks:
+            raise ValueError("No compute framework plugin is loaded; import one or call PluginLoader.all().")
+
+        self.output_framework = self._resolve_output_framework(output_framework)
 
         if user_compute_frameworks is not None and (
             not isinstance(user_compute_frameworks, Sequence) or isinstance(user_compute_frameworks, (str, bytes))
@@ -100,10 +103,8 @@ class SetupComputeFramework:
         ]
         if unmatched:
             available_names = sorted(cls.get_class_name() for cls in sub_classes)
-            plugin_loader_hint = " Did you call PluginLoader.all()?" if not sub_classes else ""
             raise ValueError(
-                f"No given compute frameworks {unmatched} found in "
-                f"available compute frameworks: {available_names}.{plugin_loader_hint}"
+                f"No given compute frameworks {unmatched} found in available compute frameworks: {available_names}."
             )
         count = len(api_request_compute_frameworks)
         return {sub for sub in sub_classes if self._position(sub, api_request_compute_frameworks) < count}

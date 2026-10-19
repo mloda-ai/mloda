@@ -76,7 +76,7 @@ def test_parse_json_invalid_item_type() -> None:
     """Test that ValueError is raised when array contains invalid types."""
     config_str = "[123, 456]"
 
-    with pytest.raises(ValueError, match="Invalid configuration item"):
+    with pytest.raises(ValueError, match="must be a feature name string or an object"):
         parse_json(config_str)
 
 
@@ -436,7 +436,7 @@ BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
 def _assert_offender_named_without_payload(message: str, offender: Any) -> None:
     """A dict offender is named by its keys: its repr would dump an options payload that may hold credentials.
 
-    Every other offender carries no payload and is still named by its repr.
+    Every other offender is named by its type name; a repr of the value itself is never echoed.
     """
     if isinstance(offender, dict):
         for key in offender:
@@ -444,7 +444,7 @@ def _assert_offender_named_without_payload(message: str, offender: Any) -> None:
         for value in offender.values():
             assert repr(value) not in message
         return
-    assert repr(offender) in message
+    assert type(offender).__name__ in message
 
 
 @pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)

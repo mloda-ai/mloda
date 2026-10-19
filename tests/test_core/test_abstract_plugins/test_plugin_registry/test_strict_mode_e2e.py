@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPolicy
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
@@ -74,17 +74,13 @@ ALLOWLIST = PluginPolicy(allowed_module_prefixes=("mloda", "mloda_plugins"))
 class TestForgedImplementationIsGoverned:
     """An Implementation on (CsvFG, PythonDictFramework), a pair with no stock implementation, is governed."""
 
-    @pytest.fixture
-    def forged(
-        self, make_implementation: Callable[..., type[Implementation]]
-    ) -> tuple[type[Implementation], list[int]]:
-        calls: list[int] = []
-
+    @staticmethod
+    def _forge(make: Callable[..., type[Implementation]], calls: list[int]) -> type[Implementation]:
         def forge(group: Any, match: Any, features: Any) -> Any:
             calls.append(1)
             return {GOV_COLUMN: ["FORGED"]}
 
-        return make_implementation(CsvFG, PythonDictFramework, forge, name=FORGED_NAME), calls
+        return make(CsvFG, PythonDictFramework, forge, name=FORGED_NAME)
 
     def _run(self, tmp_path: Path, collector: PluginCollector) -> list[Any]:
         path = tmp_path / "gov.csv"
@@ -99,26 +95,35 @@ class TestForgedImplementationIsGoverned:
         return list(next(iter(result[0].values())))
 
     def test_strict_mode_with_an_allowlist_policy_serves_the_real_values(
-        self, tmp_path: Path, isolated_plugin_registry: PluginRegistry, forged: Any
+        self,
+        tmp_path: Path,
+        make_implementation: Callable[..., type[Implementation]],
+        isolated_plugin_registry: PluginRegistry,
     ) -> None:
         isolated_plugin_registry.set_policy(ALLOWLIST)
-        _, calls = forged
+        calls: list[int] = []
+        forged = self._forge(make_implementation, calls)
+        assert forged in loaded_implementations()
 
         assert self._run(tmp_path, PluginCollector().set_strict_mode("strict")) == [1, 2]
         assert calls == []
 
-    def test_a_collector_disabled_implementation_is_not_used(self, tmp_path: Path, forged: Any) -> None:
-        implementation, calls = forged
+    def test_a_collector_disabled_implementation_is_not_used(
+        self, tmp_path: Path, make_implementation: Callable[..., type[Implementation]]
+    ) -> None:
+        calls: list[int] = []
         collector = PluginCollector()
-        collector.add_disabled_implementation_classes({implementation})
+        collector.add_disabled_implementation_classes({self._forge(make_implementation, calls)})
 
         assert self._run(tmp_path, collector) == [1, 2]
         assert calls == []
 
     def test_warn_mode_uses_it_and_warns_once_naming_the_class(
-        self, tmp_path: Path, forged: Any, caplog: pytest.LogCaptureFixture
+        self, tmp_path: Path, make_implementation: Callable[..., type[Implementation]], caplog: pytest.LogCaptureFixture
     ) -> None:
         caplog.set_level(logging.WARNING)
+        forged = self._forge(make_implementation, [])
+        assert forged in loaded_implementations()
 
         assert self._run(tmp_path, PluginCollector().set_strict_mode("warn")) == ["FORGED"]
         assert len([r for r in caplog.records if FORGED_NAME in r.getMessage()]) == 1

@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.input_data.api.base_api_data import 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.declared_sides import DeclaredSideSplit, split_by_declared_side
@@ -133,7 +133,7 @@ class ExecutionPlan:
         specialized_from: dict[UUID, tuple[str, ...]] | None = None,
         implementations: Collection[type[Implementation]] | None = None,
     ) -> None:
-        self.implementations = loaded_implementations() if implementations is None else implementations
+        self.implementations = () if implementations is None else implementations
         # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.
         self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
         self.joinstep_collection = JoinStepCollection()

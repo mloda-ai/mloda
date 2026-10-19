@@ -69,11 +69,12 @@ class BaseFeatureGroupVersion(ABC):
         Both hashes and lookup failures are cached for the class object's lifetime.
         """
 
-        # Import FeatureGroup locally to avoid circular import.
+        # Import locally to avoid circular import.
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
+        from mloda.core.abstract_plugins.implementation import Implementation
 
-        if not issubclass(target_class, FeatureGroup):
-            raise ValueError(f"target_class must be a subclass of FeatureGroup: {target_class}")
+        if not issubclass(target_class, (FeatureGroup, Implementation)):
+            raise ValueError(f"target_class must be a subclass of FeatureGroup or Implementation: {target_class}")
 
         cached = _class_source_hash_cache.get(target_class)
         if cached is not None:

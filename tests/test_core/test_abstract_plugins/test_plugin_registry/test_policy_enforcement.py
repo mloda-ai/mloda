@@ -382,7 +382,9 @@ class TestImplementationPolicyDenial:
 
         assert register_module_plugins(module) == []
         assert register_module_plugins(allowed_module) == [_key(allowed)]
-        assert isolated_plugin_registry.list_registered(Implementation) == [allowed]
+        registered = isolated_plugin_registry.list_registered(Implementation)
+        assert allowed in registered
+        assert denied not in registered
 
 
 _POLICY_EP_MANIFEST = """

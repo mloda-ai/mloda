@@ -230,6 +230,7 @@ class ExecutionPlan:
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
+        self._anchor_join_consumers_on_destination(self.execution_plan)
         self.raise_on_step_cycle(self.execution_plan)
 
         # Only read during add_joinstep above; ExecutionPlan gets deepcopy'd on every Engine.compute()
@@ -242,6 +243,38 @@ class ExecutionPlan:
         self._feature_set_index_cache = {}
         self._feature_set_index_source = None
         self._feature_set_index_length = 0
+
+    def _anchor_join_consumers_on_destination(
+        self, plan: Sequence[TransformFrameworkStep | JoinStep | FeatureGroupStep]
+    ) -> None:
+        """A join consumer without a hop of its own reads the join result in the destination's frame, but other
+        frames on that framework can list it too: anchor its frame lookup on the destination step's frame."""
+        fg_steps = [step for step in plan if isinstance(step, FeatureGroupStep)]
+        for step in fg_steps:
+            if step.tfs_ids:
+                continue
+            # A single lister is unambiguous; re-anchoring it would only change the pinned plan shape.
+            listers = [
+                other
+                for other in fg_steps
+                if other is not step
+                and other.compute_framework == step.compute_framework
+                and step.features.any_uuid in other.children_if_root
+            ]
+            if len(listers) < 2:
+                continue
+            step_uuids = step.get_uuids()
+            anchors = {
+                min(dest.get_uuids() & record.destination_uuids)
+                for record in self.planned_records
+                if record.destination_framework == step.compute_framework and step_uuids & record.consumers
+                for dest in fg_steps
+                if dest is not step
+                and dest.compute_framework == step.compute_framework
+                and dest.get_uuids() & record.destination_uuids
+            }
+            if len(anchors) == 1:
+                step.features.any_uuid = next(iter(anchors))
 
     def add_feature_group_step(
         self,

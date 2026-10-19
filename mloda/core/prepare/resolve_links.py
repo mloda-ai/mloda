@@ -44,6 +44,13 @@ class LinkTrekker:
 
         self.order: OrderedDict[UUID, set[UUID]] = OrderedDict()
 
+        # Child uuid -> all its ancestor uuids (the graph's parent_to_children_mapping), when known.
+        self.ancestors_of: dict[UUID, set[UUID]] = {}
+
+    def _feeds(self, uuids: set[UUID], other_uuids: set[UUID]) -> bool:
+        """Whether a consumer in `uuids` is an ancestor of one in `other_uuids`, so the other link reads its result."""
+        return any(uuids & self.ancestors_of.get(other, set()) for other in other_uuids)
+
     def update(self, key: LinkFrameworkTrekker, value: UUID) -> None:
         self.data[key].add(value)
 
@@ -191,6 +198,11 @@ class LinkTrekker:
                 if link.uuid == other_link.uuid:
                     continue
 
+                # A link whose consumers the other link reads goes first: the other join would wait on itself.
+                if self._feeds(uuids, other_uuids):
+                    self.order.setdefault(link.uuid, set()).add(other_link.uuid)
+                    continue
+
                 if right_framework == other_left_framework == left_framework:
                     continue
 
@@ -251,6 +263,7 @@ class ResolveLinks:
         self.graph.set_direct_parents_for_each_child()
         self.graph.set_all_parents_for_each_child()
         self.graph.set_root_parents_by_direct_()
+        self.link_trekker.ancestors_of = self.graph.parent_to_children_mapping
 
         self.go_through_each_child_and_its_parents_and_look_for_links()
 

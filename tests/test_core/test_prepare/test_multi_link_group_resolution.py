@@ -2593,14 +2593,22 @@ def _below_consumer(
     return created
 
 
-def _below_layout(tag: str, source: type[ComputeFramework], other: type[ComputeFramework]) -> dict[str, Any]:
-    """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework."""
+def _below_layout(
+    tag: str,
+    source: type[ComputeFramework],
+    other: type[ComputeFramework],
+    joined_and_d_framework: type[ComputeFramework] | None = None,
+) -> dict[str, Any]:
+    """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework.
+
+    With `joined_and_d_framework`, a "below_jd" feature on that framework reads the consumer and root D.
+    """
     root_a = _star_group(f"BelowRootA{tag}", f"below_a_{tag}", _xyz([1, 2, 3]), source)
     root_b = _star_group(f"BelowRootB{tag}", f"below_b_{tag}", _xyz([10, 20, 30]), other)
     root_d = _star_group(f"BelowRootD{tag}", f"below_d_{tag}", _xyz([7, 8, 9]), PandasDataFrame)
     joined_inputs = (f"below_a_{tag}", f"below_b_{tag}")
     joined = _below_consumer(f"BelowJoined{tag}", source, joined_inputs)
-    return {
+    layout = {
         "a": root_a,
         "b": root_b,
         "d": root_d,
@@ -2608,12 +2616,37 @@ def _below_layout(tag: str, source: type[ComputeFramework], other: type[ComputeF
         "below": _below_consumer(f"BelowChild{tag}", other, (joined.get_class_name(),), scale=2),
         "bd": _below_consumer(f"BelowBD{tag}", PandasDataFrame, (f"below_b_{tag}", f"below_d_{tag}")),
     }
+    if joined_and_d_framework is not None:
+        inputs = (joined.get_class_name(), f"below_d_{tag}")
+        layout["below_jd"] = _below_consumer(f"BelowJD{tag}", joined_and_d_framework, inputs, scale=2)
+    return layout
 
 
 _BELOW_LAYOUTS = {
     "arrow_source": _below_layout("Pa", PyArrowTable, PandasDataFrame),
     "pandas_source": _below_layout("Pd", PandasDataFrame, PyArrowTable),
+    "jd_arrow_pandas": _below_layout("PaJd", PyArrowTable, PandasDataFrame, PandasDataFrame),
+    "jd_pandas_arrow": _below_layout("PdJd", PandasDataFrame, PyArrowTable, PandasDataFrame),
+    "jd_joined_framework": _below_layout("PaJf", PyArrowTable, PandasDataFrame, PyArrowTable),
 }
+_BELOW_PLAIN_LAYOUTS = ("arrow_source", "pandas_source")
+_BELOW_JD_LAYOUTS = ("jd_arrow_pandas", "jd_pandas_arrow", "jd_joined_framework")
+
+
+def _below_link_set(
+    layout: dict[str, Any],
+    swap_link_sides: bool,
+    links: tuple[tuple[str, str], ...],
+    swap_second_link: bool = False,
+) -> set[Link]:
+    """The first link flips with `swap_link_sides`, the second with `swap_second_link`."""
+    flips = (swap_link_sides, swap_second_link)
+    link_set = set()
+    for position, (left, right) in enumerate(links):
+        flip = flips[position] if position < len(flips) else False
+        first, second = (right, left) if flip else (left, right)
+        link_set.add(Link.inner(JoinSpec(layout[first], MLG_INDEX), JoinSpec(layout[second], MLG_INDEX)))
+    return link_set
 
 
 def _below_run(
@@ -2623,16 +2656,10 @@ def _below_run(
     requested: tuple[str, ...],
     links: tuple[tuple[str, str], ...] = (("a", "b"),),
     flight_server: Any = None,
+    swap_second_link: bool = False,
 ) -> dict[str, list[list[int]]]:
     layout = _BELOW_LAYOUTS[layout_name]
-    # Only the first link flips; the extra link keeps its orientation.
-    link_set = {
-        Link.inner(
-            JoinSpec(layout[right if swap_link_sides and position == 0 else left], MLG_INDEX),
-            JoinSpec(layout[left if swap_link_sides and position == 0 else right], MLG_INDEX),
-        )
-        for position, (left, right) in enumerate(links)
-    }
+    link_set = _below_link_set(layout, swap_link_sides, links, swap_second_link)
     names = [layout[key].get_class_name() for key in requested]
     results = mloda.run_all(
         names,
@@ -2654,7 +2681,7 @@ _BELOW_NEXT_TO_SECOND_LINK = (
 _BELOW_CASES = [
     pytest.param(layout, swap, mode, *variant, id=f"{name}-{layout}-{'b_a' if swap else 'a_b'}-{mode.name.lower()}")
     for name, variant in (("alone", _BELOW_ALONE), ("second_link", _BELOW_NEXT_TO_SECOND_LINK))
-    for layout in _BELOW_LAYOUTS
+    for layout in _BELOW_PLAIN_LAYOUTS
     for swap in (False, True)
     for mode in (ParallelizationMode.SYNC, ParallelizationMode.THREADING)
 ]
@@ -2685,3 +2712,42 @@ def test_a_feature_below_a_join_consumer_reads_the_joined_frame(
     values = _below_run(layout, swap_link_sides, mode, requested, links=links, flight_server=server)
 
     assert values == expected
+
+
+_BELOW_JOINED_AND_D = (("a", "b"), ("joined", "d"))
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING], ids=["sync", "threading"])
+@pytest.mark.parametrize("swap_second_link", [False, True], ids=["joined_d", "d_joined"])
+@pytest.mark.parametrize("layout", _BELOW_JD_LAYOUTS)
+def test_a_feature_reading_a_join_consumer_and_a_root_joined_to_it_returns_its_values(
+    layout: str, swap_second_link: bool, mode: ParallelizationMode
+) -> None:
+    values = _below_run(
+        layout, False, mode, ("below_jd",), links=_BELOW_JOINED_AND_D, swap_second_link=swap_second_link
+    )
+
+    assert values == {"below_jd": [[29, 52, 75]]}
+
+
+@pytest.mark.parametrize("swap_second_link", [False, True], ids=["joined_d", "d_joined"])
+@pytest.mark.parametrize("layout", _BELOW_JD_LAYOUTS)
+def test_a_feature_reading_a_join_consumer_and_a_root_anchors_its_frame_on_the_join_destination(
+    layout: str, swap_second_link: bool
+) -> None:
+    fixture = _BELOW_LAYOUTS[layout]
+    link_set = _below_link_set(fixture, False, _BELOW_JOINED_AND_D, swap_second_link)
+    session = mloda.prepare(
+        [fixture["below_jd"].get_class_name()],
+        links=link_set,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=PluginCollector.enabled_feature_groups(set(fixture.values())),
+    )
+
+    planner = session.engine.execution_planner
+    steps = [s for s in planner if isinstance(s, FeatureGroupStep) and s.feature_group is fixture["below_jd"]]
+    assert len(steps) == 1
+    records = [r for r in planner.resolved_join_plan.records if r.consumers & steps[0].get_uuids()]
+    assert records
+    assert steps[0].features.any_uuid in set().union(*(r.destination_uuids for r in records))

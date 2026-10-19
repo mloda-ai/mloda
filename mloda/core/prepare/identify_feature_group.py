@@ -885,10 +885,10 @@ class IdentifyFeatureGroupClass:
         with feature_group_scope(feature.feature_group_scope):
             probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
         # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.
-        written = options.group.pop(RESERVED_READER_OPTION_KEY, None)
+        written = probe.written
         if probe.matched:
             self._matched_options[feature_group] = options
-            if isinstance(written, tuple) and len(written) == 2:
+            if written is not None:
                 if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
                     # A pair the candidate inherited rather than wrote.
                     self._input_data_matches[feature_group] = cast(tuple[DataAccessReader, Any], written)

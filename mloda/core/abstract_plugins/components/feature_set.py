@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.mask.base_mask_engine import BaseMas
 from mloda.core.filter.single_filter import SingleFilter
 
 if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.implementation import Implementation
     from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -57,6 +58,7 @@ class FeatureSet:
         self.declared_input_features_resolved: bool = False
         self.declared_input_feature_edges: dict[str, tuple[str, ...]] | None = None
         self.specialized_from: tuple[str, ...] = ()
+        self.implementation: type[Implementation] | None = None
         self.option_split_hint: tuple[str, frozenset[Any]] | None = None
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()

@@ -32,6 +32,7 @@ from mloda.core.abstract_plugins.plugin_version import resolve_plugin_version
 from mloda.core.abstract_plugins.plan_context import PlanContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
@@ -93,6 +94,7 @@ class Engine:
         # get accessible feature groups and their compute platforms
         pre_filter = PreFilterPlugins(compute_frameworks, plugin_collector)
         self.accessible_plugins = pre_filter.get_accessible_plugins()
+        self.implementations = loaded_implementations()
         self.excluded_feature_groups = pre_filter.excluded_feature_groups
         # get links
         LinkValidator.validate_links(links)
@@ -250,6 +252,7 @@ class Engine:
                 uuid: tuple(f"{c.__module__}.{c.__qualname__}" for c in classes)
                 for uuid, classes in self.specialized_from.items()
             },
+            self.implementations,
         )
         execution_planner.create_execution_plan(
             planned_queue,

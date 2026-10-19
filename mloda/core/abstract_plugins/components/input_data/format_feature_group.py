@@ -3,8 +3,8 @@
 import inspect
 import types
 from abc import abstractmethod
-from collections.abc import Callable, Collection
-from typing import Any, ClassVar
+from collections.abc import Callable, Collection, Iterable
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -32,6 +32,9 @@ from mloda.core.abstract_plugins.components.utils import defer_match_abort, esca
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.data_types import DataType
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.implementation import Implementation
 
 _MAX_LISTED_COLUMNS = 20
 
@@ -77,7 +80,6 @@ class FormatFeatureGroup(FeatureGroup):
     """A FeatureGroup that claims features of one source format through its CLAIM_ROUTES."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = ()
-    _LOADERS: ClassVar[dict[type[ComputeFramework], Callable[[Any, SourceMatch, Any], Any]]]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -180,51 +182,40 @@ class FormatFeatureGroup(FeatureGroup):
         return False
 
     @classmethod
-    def register_loader(cls, framework: type[ComputeFramework], loader: Callable[[Any, SourceMatch, Any], Any]) -> None:
-        """Register loader(group, match, features) for framework on this class only; group is the serving class."""
-        loaders = cls.__dict__.get("_LOADERS")
-        if loaders is None:
-            loaders = {}
-            cls._LOADERS = loaders
-        if framework in loaders:
-            raise ValueError(f"{cls.__name__} already has a loader registered for {framework.__name__}.")
-        loaders[framework] = loader
-
-    @classmethod
-    def _loader_for(cls, framework: type[ComputeFramework]) -> Callable[[Any, SourceMatch, Any], Any] | None:
-        if not framework.is_available():
+    def select_implementation(
+        cls,
+        compute_framework: type[ComputeFramework],
+        match: SourceMatch,
+        implementations: Iterable[type["Implementation"]],
+    ) -> "type[Implementation] | None":
+        """The implementation serving this group and framework: group MRO outer, framework MRO inner."""
+        if not compute_framework.is_available():
             return None
+        by_pair: dict[tuple[type, type], list[type[Implementation]]] = {}
+        for impl in implementations:
+            by_pair.setdefault((impl.feature_group, impl.compute_framework), []).append(impl)
         for klass in cls.__mro__:
-            for framework_class in framework.__mro__:
-                loader: Callable[[Any, SourceMatch, Any], Any] | None = klass.__dict__.get("_LOADERS", {}).get(
-                    framework_class
-                )
-                if loader is not None:
-                    return loader
+            for framework_class in compute_framework.__mro__:
+                candidates = by_pair.get((klass, framework_class))
+                if candidates:
+                    return next(c for c in candidates if not any(o is not c and issubclass(o, c) for o in candidates))
             if "load_neutral" in klass.__dict__:
                 return None
         return None
 
     @classmethod
-    def _loader_for_match(
-        cls, framework: type[ComputeFramework], match: SourceMatch
-    ) -> Callable[[Any, SourceMatch, Any], Any] | None:
-        """The loader for this match; a subclass returns None to force the neutral path."""
-        return cls._loader_for(framework)
-
-    @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> Any:
-        """Load the matched source with the current framework's loader, else its neutral form, via the hook."""
+        """Load the matched source with the plan's implementation, else its neutral form, via the hook."""
         match = features.input_data_match
         if match is None:
             raise ValueError(f"{cls.__name__}.calculate_feature found no input_data_match on the feature set.")
         source = match[1]
         framework = features.get_sorted_features()[0].get_compute_framework()
-        loader = cls._loader_for_match(framework, source)
+        implementation = features.implementation
         load: Callable[[SourceMatch, Any], Any] = (
-            types.MethodType(loader, cls) if loader is not None else cls.load_neutral
+            types.MethodType(implementation.calculate, cls) if implementation is not None else cls.load_neutral
         )
-        loader_name = framework.__name__ if loader is not None else "neutral"
+        loader_name = framework.__name__ if implementation is not None else "neutral"
         return dispatch_input_data_load(
             cls,
             cls,

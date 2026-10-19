@@ -5,7 +5,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.optional_dependency import require
-from mloda.provider import ComputeFramework, ReadFileFG
+from mloda.provider import ComputeFramework, Implementation, ReadFileFG
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
@@ -48,4 +48,10 @@ class OrcFG(ReadFileFG):
         return nrows
 
 
-OrcFG.register_loader(PyArrowTable, _read)
+class OrcPyArrowTable(Implementation):
+    feature_group = OrcFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
+        return _read(group, match, features)

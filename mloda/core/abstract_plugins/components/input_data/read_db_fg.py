@@ -5,10 +5,10 @@ and ``produce_rows``; the opt-in ``QUERY_ROUTE`` adds ``produce_query_rows``.
 """
 
 from abc import abstractmethod
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from hashlib import sha256
-from typing import Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
@@ -24,6 +24,10 @@ from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_ST
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_match_abort
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.implementation import Implementation
 
 _MAX_DESCRIBED = 5
 QUERY_OPTION = "query_text"
@@ -275,11 +279,16 @@ class ReadDBFG(FormatFeatureGroup):
         )
 
     @classmethod
-    def _loader_for_match(cls, framework: Any, match: SourceMatch) -> Any:
-        """No registered loader for a query match: it loads through the neutral path."""
+    def select_implementation(
+        cls,
+        compute_framework: type[ComputeFramework],
+        match: SourceMatch,
+        implementations: Iterable[type["Implementation"]],
+    ) -> "type[Implementation] | None":
+        """No implementation for a query match: it loads through the neutral path."""
         if isinstance(match.access, DBQuery):
             return None
-        return super()._loader_for_match(framework, match)
+        return super().select_implementation(compute_framework, match, implementations)
 
     @classmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:

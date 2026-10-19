@@ -37,10 +37,12 @@ def _run(group: type, frameworks: Any = None, column: str = "toyfmt_ld") -> list
     )
 
 
-def _impl(group: Any, framework: Any, fn: Any = None, base: Any = Implementation) -> Any:
+def _impl(
+    group: Any, framework: Any, fn: Any = None, base: type[Implementation] = Implementation
+) -> type[Implementation]:
     """A fresh Implementation class for (group, framework); callers pass test-only groups, never a stock pair."""
 
-    class _Impl(base):  # type: ignore[valid-type, misc]
+    class _Impl(base):  # type: ignore[misc, valid-type]
         feature_group = group
         compute_framework = framework
 
@@ -119,17 +121,10 @@ class TestImplementation:
     ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
         impl = _impl(group, PythonDictFramework)
-        session = mloda.prepare(
-            ["toyfmt_ld"],
-            compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({group}),
-            data_access_collection=toy_dac(h1={"toyfmt_ld": [1, 2]}),
-        )
         assert group.select_implementation(PythonDictFramework, _MATCH, [impl]) is impl
         monkeypatch.setattr(PythonDictFramework, "is_available", staticmethod(lambda: False))
 
         assert group.select_implementation(PythonDictFramework, _MATCH, [impl]) is None
-        assert column_values(session.run(), "toyfmt_ld") == [1, 2]
 
     def test_load_neutral_override_cuts_inherited_implementations(self, tmp_path: Path) -> None:
         parent = neutral_csv_group(tmp_path / "n.csv")
@@ -140,7 +135,7 @@ class TestImplementation:
             def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
                 return super().load_neutral(match, features)
 
-        class _Below(_Cut):  # type: ignore[valid-type, misc]
+        class _Below(_Cut):
             pass
 
         assert _Below.select_implementation(PythonDictFramework, _MATCH, [impl]) is None

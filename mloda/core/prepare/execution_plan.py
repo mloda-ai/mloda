@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from copy import copy, deepcopy
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
@@ -13,6 +13,8 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.declared_sides import DeclaredSideSplit, split_by_declared_side
@@ -129,7 +131,9 @@ class ExecutionPlan:
         api_input_data_collection: ApiInputDataCollection | None = None,
         resolved_input_feature_names: dict[UUID, frozenset[str] | None] | None = None,
         specialized_from: dict[UUID, tuple[str, ...]] | None = None,
+        implementations: Collection[type[Implementation]] | None = None,
     ) -> None:
+        self.implementations = loaded_implementations() if implementations is None else implementations
         # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.
         self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
         self.joinstep_collection = JoinStepCollection()
@@ -2996,6 +3000,12 @@ Available join types:
 
                 self.add_artifact_to_feature_set(feature_group, feature_set)
                 self.add_single_filters_to_feature_set(feature_group, feature_set)
+
+                input_data_match = feature_set.input_data_match
+                if issubclass(feature_group, FormatFeatureGroup) and input_data_match is not None:
+                    feature_set.implementation = feature_group.select_implementation(
+                        cf, input_data_match[1], self.implementations
+                    )
 
                 feature_group_step = FeatureGroupStep(
                     feature_group,

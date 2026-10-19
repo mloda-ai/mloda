@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ma
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.provider import CHAIN_SEPARATOR
 from mloda.user import Credential, Feature, Options, PluginCollector, mloda
@@ -539,7 +540,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             ),
             key=lambda f: f.__name__,
         )
-        frameworks = [PyArrowTable, *extra]
+        frameworks: list[type[ComputeFramework]] = [PyArrowTable, *extra]
         for framework in frameworks:
             name = framework.__name__
             opened_before = len(spy.opened)

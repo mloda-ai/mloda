@@ -2,10 +2,12 @@
 
 import csv
 from collections.abc import Collection
+from typing import Any
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.utils import is_match_abort
-from mloda.provider import ComputeFramework, ReadFileFG
+from mloda.core.abstract_plugins.implementation import loaded_implementations
+from mloda.provider import ComputeFramework, Implementation, ReadFileFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
 )
@@ -35,7 +37,7 @@ class CsvFG(ReadFileFG):
         # Other frameworks read CSV through pyarrow, whose row split can differ.
         if compute_framework.expected_data_framework() is not dict:
             return None
-        if cls._loader_for(compute_framework) is not None:
+        if cls.select_implementation(compute_framework, match, loaded_implementations()) is not None:
             return None
         if cls._overrides_load_neutral(CsvFG):
             return None
@@ -57,4 +59,11 @@ class CsvFG(ReadFileFG):
 
 _read = pyarrow_file_loader("csv")
 
-CsvFG.register_loader(PyArrowTable, _read)
+
+class CsvPyArrowTable(Implementation):
+    feature_group = CsvFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
+        return _read(group, match, features)

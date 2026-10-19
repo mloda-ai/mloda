@@ -25,13 +25,14 @@ import importlib
 import logging
 import textwrap
 import types
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
     ApprovalStatus,
     PluginPolicy,
@@ -44,6 +45,8 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
     register_plugin,
 )
 from mloda.user import PluginLoader
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
 
 
 class _PolicyEnfFGA(FeatureGroup):
@@ -338,6 +341,48 @@ class TestRegisterModulePluginsSkipsDenied:
             delattr(module, "_ModDeniedFG")
             del _ModAllowedFG, _ModDeniedFG, module
             gc.collect()
+
+
+class TestImplementationPolicyDenial:
+    """Implementation is a plugin kind: the module allowlist denies it like a FeatureGroup."""
+
+    @staticmethod
+    def _implementation(make: Callable[..., type[Implementation]], module: str, name: str) -> type[Implementation]:
+        class _PolicyGroup(ToyFormatFG):
+            pass
+
+        implementation = make(_PolicyGroup, PythonDictFramework, name=name)
+        implementation.__module__ = module
+        return implementation
+
+    def test_register_plugin_refuses_an_implementation_outside_the_allowlist(
+        self, make_implementation: Callable[..., type[Implementation]], isolated_plugin_registry: PluginRegistry
+    ) -> None:
+        isolated_plugin_registry.set_policy(PluginPolicy(allowed_module_prefixes=("mloda", "mloda_plugins")))
+        denied = self._implementation(make_implementation, "forged_vendor.impl", "DeniedPolicyImpl")
+        allowed = self._implementation(make_implementation, "mloda_plugins.policy_fake", "AllowedPolicyImpl")
+
+        with pytest.raises(PluginPolicyViolationError) as exc_info:
+            register_plugin(denied)
+
+        assert _key(denied) in str(exc_info.value)
+        assert not isolated_plugin_registry.is_registered(denied)
+        assert register_plugin(allowed) == _key(allowed)
+
+    def test_register_module_plugins_registers_allowed_and_skips_denied_implementations(
+        self, make_implementation: Callable[..., type[Implementation]], isolated_plugin_registry: PluginRegistry
+    ) -> None:
+        isolated_plugin_registry.set_policy(PluginPolicy(denied_module_prefixes=("policy_denied_impl_mod",)))
+        module = types.ModuleType("policy_denied_impl_mod")
+        allowed_module = types.ModuleType("policy_allowed_impl_mod")
+        denied = self._implementation(make_implementation, module.__name__, "DeniedModuleImpl")
+        allowed = self._implementation(make_implementation, allowed_module.__name__, "AllowedModuleImpl")
+        setattr(module, "DeniedModuleImpl", denied)
+        setattr(allowed_module, "AllowedModuleImpl", allowed)
+
+        assert register_module_plugins(module) == []
+        assert register_module_plugins(allowed_module) == [_key(allowed)]
+        assert isolated_plugin_registry.list_registered(Implementation) == [allowed]
 
 
 _POLICY_EP_MANIFEST = """

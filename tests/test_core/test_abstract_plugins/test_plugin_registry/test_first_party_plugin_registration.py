@@ -51,6 +51,7 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, CompositeExtender
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import (
     CORE_PLUGIN_MODULES,
     OPTIONAL_PLUGIN_DEPENDENCIES,
@@ -294,6 +295,12 @@ class TestEveryWheelOwnedPluginIsRegistered:
         assert PythonDictFramework in _wheel_owned_plugin_classes(ComputeFramework), (
             "the sweep must reach dependency-free ComputeFrameworks under mloda_plugins"
         )
+        from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqlitePythonDict
+        from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvPyArrowTable
+
+        assert {CsvPyArrowTable, SqlitePythonDict} <= _wheel_owned_plugin_classes(Implementation), (
+            "the sweep must reach the stock Implementations"
+        )
         assert TimingExtender in _wheel_owned_plugin_classes(Extender), (
             "the sweep must reach a concrete bundled Extender; an empty non-waived Extender candidate set "
             "would make the guard vacuous"
@@ -310,6 +317,10 @@ class TestEveryWheelOwnedPluginIsRegistered:
     def test_every_wheel_owned_extender_is_registered(self) -> None:
         unregistered = _unregistered_wheel_owned(Extender)
         assert unregistered == [], _fix_hint(Extender, unregistered)
+
+    def test_every_wheel_owned_implementation_is_registered(self) -> None:
+        unregistered = _unregistered_wheel_owned(Implementation)
+        assert unregistered == [], _fix_hint(Implementation, unregistered)
 
 
 @pytest.mark.timeout(30)

@@ -22,8 +22,8 @@ from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
+    _PLUGIN_BASE_TYPES,
     PluginRegistry,
     register_module_plugins,
     register_plugin,
@@ -31,8 +31,6 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import (
 from mloda.user import PluginLoader
 
 PYTHON_DICT_FRAMEWORK_MODULE = "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework"
-
-_PLUGIN_BASE_TYPES: tuple[type[Any], ...] = (FeatureGroup, ComputeFramework, Extender)
 
 
 def _default_key(cls: type[Any]) -> str:
@@ -82,6 +80,16 @@ class TestLoaderRegistersLoadedPlugins:
         assert defined_plugin_classes, "sanity: the loaded module defines at least one plugin class"
         for cls in defined_plugin_classes:
             assert registry.is_registered(cls), f"{cls!r} is defined in a loaded module but is not registered"
+
+    def test_loader_registers_implementations_defined_in_loaded_modules(self) -> None:
+        from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvPyArrowTable
+
+        registry = PluginRegistry.default()
+        registry.clear()
+
+        PluginLoader().load_matching("feature_group", "*csv_fg*")
+
+        assert registry.is_registered(CsvPyArrowTable)
 
     def test_loader_entries_carry_loader_provenance(self) -> None:
         registry = PluginRegistry.default()

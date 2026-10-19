@@ -27,6 +27,7 @@ from mloda.core.prepare.declared_sides import (
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
+from mloda.core.prepare.stable_text import stable_text
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker, trekker_content_key
 from mloda.core.prepare.resolved_join import (
     DeclinedOrientation,
@@ -805,7 +806,7 @@ Available join types:
         def members(uuids: set[UUID]) -> str:
             return ",".join(
                 sorted(
-                    f"{nodes[u].feature_group_class.__module__}:{nodes[u].feature_group_class.__qualname__}:{nodes[u].feature.name}"
+                    f"{nodes[u].feature_group_class.__module__}:{nodes[u].feature_group_class.__qualname__}:{nodes[u].feature.name}:{stable_text(nodes[u].feature.options)}"
                     for u in uuids
                     if u in nodes
                 )
@@ -2042,7 +2043,7 @@ Available join types:
                         name = nodes[consumer].feature_group_class.__name__
                         raise ValueError(one_framework_members_reason(name, link, first, second) + ".")
                 consumers = ", ".join(sorted({nodes[c].feature_group_class.__name__ for c in children_uuids}))
-                raise ValueError(several_consumers_members_reason(consumers, link, first, second))
+                raise ValueError(several_consumers_members_reason(consumers, link, first, second) + ".")
 
     @staticmethod
     def _validate_join_step_uuids(

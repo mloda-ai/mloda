@@ -2205,6 +2205,9 @@ _ONE_FRAMEWORK_REASONS = (
     "members of one link side",
     "one member of the link side per consumer",
     "declare one link per member",
+    "each read by its own consumer",
+    "Link.inner(JoinSpec(",
+    ") and Link.inner(JoinSpec(",
 )
 
 RemedySecondSiblingConsumer = _remedy_sum_consumer(
@@ -2320,6 +2323,10 @@ def test_two_consumers_each_reading_one_member_over_one_base_link_are_told_to_de
 
     message = str(exc_info.value)
     assert "declare one link per member" in message
+    assert "each read by its own consumer" in message
+    assert "Link.inner(JoinSpec(MultiLinkRootA," in message
+    assert "Link.inner(JoinSpec(RemedyRootASibling," in message
+    assert "Link(MultiLinkRootA" not in message
     assert "MultiLinkRootA" in message
     assert "RemedyRootASibling" in message
     assert "one member of the link side per consumer" not in message
@@ -2429,6 +2436,8 @@ def _assert_star_keeping_two_groups_reason(message: str, consumer: str, kept: tu
         assert name in message
     assert "not defined" in message
     assert "Link.star(" in message
+    assert 'index_column=..., jointype="left")' in message
+    assert "right or left" not in message
     assert "inner joins for both or outer joins for both" in message
     assert "separate consumers" in message
 
@@ -2452,7 +2461,7 @@ def test_two_left_joins_keeping_different_spokes_of_a_shared_group_are_rejected_
 
 
 def test_two_right_joins_keeping_different_spokes_of_a_shared_group_still_raise() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="have multiple right joins for the same feature group on the left side"):
         _star_prepare(Link.right, hub_first=True)
 
 
@@ -2471,6 +2480,23 @@ def test_a_star_with_a_defined_result_returns_its_rows_when_the_spokes_hold_diff
     results = _star_prepare(link_factory, hub_first, spoke_c).run()
 
     assert _side_path_values(results, StarConsumerArrow) == [expected]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+@pytest.mark.parametrize("link_factory, hub_first", [pytest.param(Link.inner, False), pytest.param(Link.left, True)])
+def test_a_join_group_consumer_is_never_left_stranded_in_a_frames_keep_alive_after_a_star_run(
+    link_factory: Any, hub_first: bool, spoke_c: type[FeatureGroup]
+) -> None:
+    session = _star_prepare(link_factory, hub_first, spoke_c)
+    session.run()
+
+    assert session.runner is not None
+    stranded = {
+        type(cfw).__name__: cfw.keep_alive - cfw.already_calculated_children_tracker
+        for cfw in session.runner.executor.cfw_collection.values()
+        if cfw.data is not None and cfw.keep_alive - cfw.already_calculated_children_tracker
+    }
+    assert stranded == {}
 
 
 RemedyRootBFourKeysArrow = type(

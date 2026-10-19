@@ -132,6 +132,9 @@ class JoinStep(Step):
         cfw.keep_alive |= self.keep_alive
 
         if not self.shared_source:
+            # a frame merged away is never read by the group's consumers, only the frame it merged into
+            if isinstance(from_cfw, ComputeFramework):
+                from_cfw.keep_alive = set()
             cfw_register.add_to_merge_relation(cfw.uuid, from_cfw_uuid, cls_name=cfw.get_class_name())
 
         self._upload_data_if_needed(cfw, cfw_register)

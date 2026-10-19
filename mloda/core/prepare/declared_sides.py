@@ -31,11 +31,19 @@ def narrow_by_right_index(link: Link, candidates: Iterable[_T], features: Callab
 
 
 def _member_links(link: Link, first: type, second: type) -> str:
-    """The per-member links that replace one base-class link."""
+    """The per-member links that replace one base-class link, built with the link's own factory."""
     left, right = link.left_feature_group.__name__, link.right_feature_group.__name__
+    factory = f"Link.{link.jointype.value}"
+
+    def one(left_name: str, right_name: str) -> str:
+        return f"{factory}(JoinSpec({left_name}, ...), JoinSpec({right_name}, ...))"
+
     if issubclass(first, link.left_feature_group):
-        return f"Link({first.__name__}, {right}) and Link({second.__name__}, {right})"
-    return f"Link({left}, {first.__name__}) and Link({left}, {second.__name__})"
+        return f"{one(first.__name__, right)} and {one(second.__name__, right)}"
+    if link.jointype in (JoinType.INNER, JoinType.OUTER):
+        # symmetric joins: members lead, so the remedy reads the same for either link orientation
+        return f"{one(first.__name__, left)} and {one(second.__name__, left)}"
+    return f"{one(left, first.__name__)} and {one(left, second.__name__)}"
 
 
 def one_framework_members_reason(consumer: str, link: Link, first: type, second: type) -> str:
@@ -43,25 +51,26 @@ def one_framework_members_reason(consumer: str, link: Link, first: type, second:
     return (
         f"{consumer} joins {first.__name__} and {second.__name__}, members of one link side, on one compute "
         "framework over one link: one join would keep only one member's columns. Read one member of the link side "
-        f"per consumer, and declare one link per member: {_member_links(link, first, second)}"
+        f"per consumer, and declare one link per member, each read by its own consumer: "
+        f"{_member_links(link, first, second)}"
     )
 
 
 def several_consumers_members_reason(consumers: str, link: Link, first: type, second: type) -> str:
-    """Reason for several consumers each reading one member of one link side over one link."""
+    """Reason for several consumers each reading one member of one link side over one link, without final period."""
     return (
         f"The consumers {consumers} each join one of {first.__name__} and {second.__name__}, members of one link "
-        "side, on one compute framework over one link, which merges both into one join: declare one link per "
-        f"member: {_member_links(link, first, second)}."
+        "side, on one compute framework over one link, which merges both into one "
+        f"join: declare one link per member, each read by its own consumer: {_member_links(link, first, second)}"
     )
 
 
 def star_keeping_two_groups_reason(
     consumer: str, first: str, second: str, dropped: str, jointypes: Iterable[JoinType]
 ) -> str:
-    """Reason for one consumer reading left or right joins that keep different groups and drop the same one."""
+    """Reason for one consumer reading left or right joins that keep different groups, without final period."""
     kinds = {jointype.value for jointype in jointypes}
-    kind = " or ".join(sorted(kinds, reverse=True))
+    kind = " or ".join(sorted(kinds))
     if kinds == {"right"}:
         keep_links = f"Link.right({first}, {dropped}) and Link.right({second}, {dropped})"
     else:
@@ -69,7 +78,8 @@ def star_keeping_two_groups_reason(
     return (
         f"{consumer} reads two {kind} joins that keep different groups, {first} and {second}, and drop the same "
         f"group {dropped}: the rows depend on which join runs first, so the result is not defined.\n"
-        f'Resolution: keep {dropped} in both joins ({keep_links}, or Link.star({dropped}, {first}, {second}, jointype="left")), '
+        f"Resolution: keep {dropped} in both joins ({keep_links}, or "
+        f'Link.star({dropped}, {first}, {second}, index_column=..., jointype="left")), '
         f"use inner joins for both or outer joins for both, or read {first} and {second} in separate consumers"
     )
 

@@ -177,12 +177,13 @@ class LinkTrekker:
         self.order = OrderedDict((node, self.order[node]) for node in result)
 
     def order_links_by_frameworks(self) -> None:
-        for trekker, uuids in self._sorted_data():
+        sorted_data = self._sorted_data()
+        for trekker, uuids in sorted_data:
             link = trekker[0]
             left_framework = trekker[1]
             right_framework = trekker[2]
 
-            for other_trekker, other_uuids in self._sorted_data():
+            for other_trekker, other_uuids in sorted_data:
                 other_link = other_trekker[0]
                 other_left_framework = other_trekker[1]
                 _ = other_trekker[2]

@@ -88,6 +88,10 @@ def raise_on_join_star_keeping_two_groups(plan: ResolvedJoinPlan, graph: Graph) 
         if not shared_consumers or not shared_dropped or kept_first.uuids & kept_second.uuids:
             continue
         nodes = graph.get_nodes()
+        if {nodes[u].feature_group_class for u in kept_first.uuids} == {
+            nodes[u].feature_group_class for u in kept_second.uuids
+        }:
+            continue
         consumer = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in shared_consumers)[0]
         kept_names = sorted((_class_names(kept_first.uuids, graph), _class_names(kept_second.uuids, graph)))
         message = star_keeping_two_groups_reason(

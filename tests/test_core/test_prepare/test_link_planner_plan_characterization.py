@@ -311,8 +311,8 @@ def _pair_scenario(
     )
 
 
-def _self_join_scenario(left_side: str, right_side: str) -> Planned:
-    link = Link.left(
+def _self_join_scenario(left_side: str, right_side: str, link_factory: Callable[..., Link] = Link.left) -> Planned:
+    link = link_factory(
         JoinSpec(LinkPlanSelfSource, Index((SELF_LEFT_KEY,))),
         JoinSpec(LinkPlanSelfSource, Index((SELF_RIGHT_KEY,))),
         left_discriminator={SELF_SIDE: left_side},
@@ -448,6 +448,14 @@ def test_planner_binds_the_left_discriminator_node_as_the_join_destination() -> 
     assert isinstance(join_step, JoinStep)
     assert join_step.destination_framework_uuids == {planned.left_uuid}
     assert join_step.source_framework_uuids == {planned.right_uuid}
+
+
+def test_planner_rejects_a_right_self_join_of_equal_feature_groups() -> None:
+    planned = _self_join_scenario("left", "right", Link.right)
+    _trek(planned, PyArrowTable, PyArrowTable)
+
+    with pytest.raises(Exception, match="Right joins are not supported for equal or polymorphic feature groups"):
+        _run(planned, PyArrowTable, PyArrowTable)
 
 
 def test_planner_follows_swapped_discriminators_without_complaint() -> None:

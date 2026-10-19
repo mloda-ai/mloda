@@ -364,6 +364,9 @@ def test_raise_on_join_star_keeping_two_groups_names_the_consumer_the_kept_group
         assert name in message, f"{name} must be named; got: {message}"
     assert "not defined" in message
     assert "Link.star(" in message
+    assert 'index_column=..., jointype="left")' in message
+    assert "two left joins" in message
+    assert "right or left" not in message
     assert "inner joins for both or outer joins for both" in message
     assert "separate consumers" in message
 
@@ -380,6 +383,43 @@ def test_raise_on_join_star_keeping_two_groups_accepts_plans_with_a_defined_resu
     make_links: Any, separate_consumers: bool
 ) -> None:
     plan, graph = _build_star_plan(make_links, separate_consumers=separate_consumers)
+
+    assert len(plan.resolved_join_plan.records) == 2
+    raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)
+
+
+def test_raise_on_join_star_keeping_two_groups_accepts_two_steps_of_one_kept_group_class() -> None:
+    other_index = Index(("star_other_idx",))
+    first_arrow = feature("star_first", STAR_FIRST_CFW, STAR_INDEX)
+    first_pandas = feature("star_first", STAR_SECOND_CFW, other_index)
+    hub = feature("star_hub", STAR_HUB_CFW, STAR_INDEX)
+    consumer = feature("star_consumer", STAR_SECOND_CFW)
+
+    graph = Graph()
+    graph.add_node(first_arrow.uuid, NodeProperties(first_arrow, StarFirstSpoke))
+    graph.add_node(first_pandas.uuid, NodeProperties(first_pandas, StarFirstSpoke))
+    graph.add_node(hub.uuid, NodeProperties(hub, StarHub))
+    graph.add_node(consumer.uuid, NodeProperties(consumer, StarConsumer))
+    parents = (first_arrow, first_pandas, hub)
+    for parent in parents:
+        graph.adjacency_list[parent.uuid].append(consumer.uuid)
+    graph.adjacency_list[consumer.uuid] = []
+    graph.parent_to_children_mapping[consumer.uuid] = {parent.uuid for parent in parents}
+
+    links = [
+        Link.left(JoinSpec(StarFirstSpoke, STAR_INDEX), JoinSpec(StarHub, STAR_INDEX)),
+        Link.left(JoinSpec(StarFirstSpoke, other_index), JoinSpec(StarHub, other_index)),
+    ]
+    orientations = [(STAR_FIRST_CFW, STAR_HUB_CFW), (STAR_SECOND_CFW, STAR_HUB_CFW)]
+    link_trekker = LinkTrekker()
+    queue: list[Any] = [(StarFirstSpoke, {first_arrow, first_pandas}), (StarHub, {hub})]
+    for link, orientation in zip(links, orientations):
+        trek(link_trekker, link, orientation, consumer.uuid)
+        queue.append((link, *orientation))
+    queue.append((StarConsumer, {consumer}))
+
+    plan = ExecutionPlan()
+    plan.create_execution_plan(queue, graph, link_trekker, validate=False)
 
     assert len(plan.resolved_join_plan.records) == 2
     raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)

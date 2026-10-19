@@ -173,6 +173,10 @@ If the parts depend on the feature name or options, override the classmethod `ou
 - Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`; a missing index fails after the computation.
 - `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution, not in global filters.
 - Artifacts are keyed by the base feature name, not a part column.
+- A group that declares parts reads a trailing `~N` against them too: `measure~0` fails at resolution unless `0` is declared.
+- A name any group matches whole wins over another group's part reading of it.
+- A part's declared data type is checked on its own column (`measure~value`).
+- "Computed once" holds for parts requested with the same options and data type.
 
 ## How It Works
 

@@ -717,6 +717,17 @@ class IdentifyFeatureGroupClass:
 
             _identified_feature_groups[feature_group] = supported_frameworks
 
+        whole = [
+            fg
+            for fg in _identified_feature_groups
+            if fg not in self._output_parts and fg.get_column_base_feature(feature.name) == feature.name
+        ]
+        if whole:
+            for fg in [fg for fg in _identified_feature_groups if fg in self._output_parts]:
+                del _identified_feature_groups[fg]
+                self._record_elimination(
+                    fg, "name", "matched only as an output part; another group matches the whole name"
+                )
         candidates = set(_identified_feature_groups)
         _identified_feature_groups = self.filter_subclasses(_identified_feature_groups)
         self._replaced = candidates - set(_identified_feature_groups)

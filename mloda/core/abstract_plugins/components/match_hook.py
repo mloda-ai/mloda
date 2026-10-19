@@ -1,14 +1,14 @@
 """One home for the match-hook call and the shared criteria probe: the containment, the marked-abort
 re-raise and the return coercion.
 
-Both match seams held their own try around ``match_feature_group_criteria`` and drifted apart twice (#991).
+Both match seams held their own try around the plugin match hook and drifted apart twice (#991).
 Each keeps only its own recording and option isolation now, driven by the outcome this helper hands back.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -41,22 +41,38 @@ class MatchHookOutcome:
     part: tuple[str, str] | None = None
 
 
-def _declared_part_verdict(
-    feature_group: type[FeatureGroup], split: tuple[str, str], base_options: Options, options: Options
-) -> tuple[bool, tuple[str, str] | None] | None:
-    """Verdict once the base name matched on a fork; None when the group declares no parts."""
-    base, part = split
-    declared = feature_group.output_parts(base, base_options)
-    if declared is None:
-        return None
-    if ANY_OUTPUT_PART in declared or part.split(COLUMN_SEPARATOR)[0] in declared:
-        options._adopt(base_options)
-        return True, split
-    record_match_rejection(
-        feature_group.get_class_name(),
-        f"'{part}' is not an output part of '{base}'; declared parts: {list(declared)}",
-    )
-    return False, None
+def _in_window(call: Callable[[], Any], sink: list[dict[str, MatchRejection]]) -> Any:
+    """Run one call under its own rejection window and hand the window back through sink, a raise included."""
+    window: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(window)
+    try:
+        return call()
+    finally:
+        MATCH_REJECTION_REASONS.reset(token)
+        sink.append(window)
+
+
+def _merge_windows(priority: list[dict[str, MatchRejection]], windows: list[dict[str, MatchRejection]]) -> None:
+    """Rebuild the outer window: the verdict reason, then what was there, then the latest call's reasons first."""
+    outer = MATCH_REJECTION_REASONS.get()
+    if outer is None:
+        return
+    prior = dict(outer)
+    outer.clear()
+    for window in [*priority, prior, *reversed(windows)]:
+        for owner, rejection in window.items():
+            outer.setdefault(owner, rejection)
+
+
+def _ask_hook(
+    feature_group: type[FeatureGroup],
+    feature_name: FeatureName | str,
+    options: Options,
+    data_access_collection: DataAccessCollection | None,
+) -> tuple[bool, Any]:
+    """One call of the plugin's match hook and its bool() coercion (#927)."""
+    returned = feature_group.match_feature_group_criteria(feature_name, options, data_access_collection)
+    return bool(returned), returned
 
 
 def call_match_hook(
@@ -78,32 +94,45 @@ def call_match_hook(
     The contained exception is handed back rather than judged here: each seam records and isolates options its own way.
     resolve_parts (feature resolution only) reads `<base>~<part>` against the declared parts.
     """
+    windows: list[dict[str, MatchRejection]] = []
+    priority: list[dict[str, MatchRejection]] = []
     try:
         split = feature_group.split_output_part(str(feature_name)) if resolve_parts else None
-        # Full name first on the real options; the base name on a fork only after a full-name non-match.
-        name: FeatureName | str = feature_name
-        scoped = options
-        full = MatchHookOutcome(False, None, None)
-        while True:
-            returned = feature_group.match_feature_group_criteria(name, scoped, data_access_collection)
-            if scoped is options:
-                # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
-                full = MatchHookOutcome(bool(returned), returned, None)
-                if full.matched or split is None or feature_group.output_parts(split[0], options) is None:
-                    return full
-                name, scoped = split[0], options._fork()
-                continue
-            if returned and split:
-                decided = _declared_part_verdict(feature_group, split, scoped, options)
-                if decided is not None:
-                    return MatchHookOutcome(decided[0], decided[0], None, decided[1])
+        if split is None:
+            matched, returned = _ask_hook(feature_group, feature_name, options, data_access_collection)
+            return MatchHookOutcome(matched, returned, None)
+        base, part = split
+        base_options = options._fork()
+        matched, returned = _in_window(
+            lambda: _ask_hook(feature_group, feature_name, options, data_access_collection), windows
+        )
+        full = MatchHookOutcome(matched, returned, None)
+        if matched and feature_group.get_column_base_feature(str(feature_name)) != base:
             return full
+        declared = feature_group.output_parts(base, options)
+        if declared is None:
+            return full
+        if not matched:
+            base_matched, _ = _in_window(
+                lambda: _ask_hook(feature_group, base, base_options, data_access_collection), windows
+            )
+            if not base_matched:
+                return full
+        if ANY_OUTPUT_PART in declared or part.split(COLUMN_SEPARATOR)[0] in declared:
+            if not matched:
+                options._adopt(base_options)
+            return MatchHookOutcome(True, True, None, split)
+        reason = f"'{part}' is not an output part of '{base}'; declared parts: {list(declared)}"
+        priority.append({feature_group.get_class_name(): MatchRejection(reason)})
+        return MatchHookOutcome(False, False, None)
     except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison the whole run)
         if is_match_abort(exc):
             raise
         # The outcome outlives this except block, and the traceback's frames pin the plugin class and its raw
         # return. with_traceback, not the attribute: a frozen-dataclass exception rejects the assignment.
         return MatchHookOutcome(False, None, exc.with_traceback(None))
+    finally:
+        _merge_windows(priority, windows)
 
 
 @dataclass(frozen=True)

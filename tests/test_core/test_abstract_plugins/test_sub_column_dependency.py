@@ -28,6 +28,14 @@ from mloda.provider import DataCreator
 from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.user import FeatureName
+from mloda.user import FeatureResolutionError
+from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_OWNED_STAGE,
+    has_match_rejection,
+    record_match_rejection,
+)
+from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeMismatchError
 from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginLoader
@@ -985,13 +993,15 @@ class TestDeclaredOutputParts:
 
         np.testing.assert_array_equal(results[0]["measure_consumer_output"].values, _SOURCE * 2)
 
-    def test_undeclared_part_fails_at_resolution_and_lists_declared(self) -> None:
+    @pytest.mark.parametrize("name, part", [("measure~bogus", "bogus"), ("measure~0", "0")])
+    def test_undeclared_part_fails_at_resolution_and_lists_declared(self, name: str, part: str) -> None:
         with pytest.raises(ValueError) as exc_info:
-            _run(["measure~bogus"], MeasureProducer)
+            _run([name], MeasureProducer)
 
         message = str(exc_info.value)
-        assert "bogus" in message
+        assert part in message
         assert "value" in message and "unit" in message
+        assert MeasureProducer.calls == 0
 
     def test_undeclared_numbered_part_returns_only_that_column(self) -> None:
         results = _run(["base_feature~1"], MultiColumnProducerForSubColumnTest)
@@ -1221,6 +1231,169 @@ class TestFullNameAskedFirst:
         results = _run(["lit~value"], LiteralTildeProducer)
 
         assert _columns(results) == {"lit~value"}
+
+
+class _GroupOptionGroup(FeatureGroup):
+    """Full name writes a group option and records an owned-stage rejection; the base needs both absent."""
+
+    OUTPUT_PARTS = ("value",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"ga"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        if str(feature_name) == "ga~value":
+            options.add_to_group("owned_flag", 1)
+            record_match_rejection(cls.get_class_name(), "owned veto", INPUT_DATA_OWNED_STAGE)
+            return False
+        return (
+            str(feature_name) == "ga"
+            and "owned_flag" not in options.group
+            and not has_match_rejection(INPUT_DATA_OWNED_STAGE)
+        )
+
+
+class _OwnReasonGroup(FeatureGroup):
+    """Full name records its own reason; the base matches, so the undeclared part must be reported."""
+
+    OUTPUT_PARTS = ("value",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"gb"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        if str(feature_name) == "gb~bogus":
+            record_match_rejection(cls.get_class_name(), "own full reason")
+            return False
+        return str(feature_name) == "gb"
+
+
+class _BaseReasonGroup(FeatureGroup):
+    """Full name records nothing; the base records a reason and declines."""
+
+    OUTPUT_PARTS = ("value",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"gc"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        if str(feature_name) == "gc":
+            record_match_rejection(cls.get_class_name(), "base reason")
+        return False
+
+
+class TestPartProbeIsolation:
+    """The full-name and base-name calls are isolated from each other and their reasons merged in order."""
+
+    def test_full_name_option_write_and_rejection_do_not_leak_into_base_call(self) -> None:
+        outcome = probe_match_criteria(_GroupOptionGroup, "ga~value", Options({}), None, resolve_parts=True)
+
+        assert outcome.matched is True
+        assert outcome.part == ("ga", "value")
+
+    def test_undeclared_part_reason_comes_before_the_full_call_reason(self) -> None:
+        outcome = probe_match_criteria(_OwnReasonGroup, "gb~bogus", Options({}), None, resolve_parts=True)
+
+        assert outcome.matched is False
+        assert outcome.rejection is not None
+        assert "not an output part" in outcome.rejection.reason
+        assert "value" in outcome.rejection.reason
+
+    def test_base_call_reason_is_harvested_when_full_call_records_nothing(self) -> None:
+        outcome = probe_match_criteria(_BaseReasonGroup, "gc~value", Options({}), None, resolve_parts=True)
+
+        assert outcome.matched is False
+        assert outcome.rejection is not None
+        assert outcome.rejection.reason == "base reason"
+
+
+class LiteralMeasureValueProducer(FeatureGroup):
+    """Provides the literal column `measure~value`."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"measure~value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"measure~value": [7, 7, 7, 7, 7]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class PlainVecProducer(FeatureGroup):
+    """Undeclared group supporting `vec`."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"vec"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class AnyVecProducer(FeatureGroup):
+    """Declares ANY parts and supports `vec`."""
+
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"vec"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class TestWholeNameWinsAcrossGroups:
+    """A name some group matches whole beats another group's part reading."""
+
+    def test_literal_column_group_wins_over_declared_part_reading(self) -> None:
+        results = _run(["measure~value"], MeasureProducer, LiteralMeasureValueProducer)
+
+        np.testing.assert_array_equal(results[0]["measure~value"].values, np.array([7, 7, 7, 7, 7]))
+        assert MeasureProducer.calls == 0
+
+    def test_non_declaring_numeric_match_does_not_count_as_whole(self) -> None:
+        with pytest.raises(FeatureResolutionError, match="Multiple"):
+            _run(["vec~1"], PlainVecProducer, AnyVecProducer)
+
+
+class TestPartDataTypes:
+    """A part's declared data type is checked on its own column."""
+
+    def test_part_data_type_mismatch_raises(self) -> None:
+        with pytest.raises(DataTypeMismatchError):
+            _run([Feature.int64_of("measure~unit")], MeasureProducer)
+
+    def test_matching_part_data_types_pass(self) -> None:
+        results = _run([Feature.int64_of("measure~value"), Feature.str_of("measure~unit")], MeasureProducer)
+
+        assert _columns(results) == {"measure~value", "measure~unit"}
 
 
 class TestArtifactKeyedByBaseName:

@@ -77,18 +77,15 @@ class DataTypeValidator:
             if feature.data_type is None:
                 continue
 
-            actual_type = get_column_data_type(feature.name)
-            if actual_type is None:
-                continue
+            names = [feature.name, *(f"{feature.name}~{part}" for part in feature.requested_parts)]
 
             strict_mode = False
             if feature.options:
                 strict_value = feature.options.get(DefaultOptionKeys.strict_type_enforcement)
                 strict_mode = strict_value if strict_value is not None else False
 
-            if strict_mode:
-                if not cls._types_compatible(feature.data_type, actual_type):
-                    raise DataTypeMismatchError(feature.name, feature.data_type, actual_type)
-            else:
-                if not cls._types_loosely_compatible(feature.data_type, actual_type):
-                    raise DataTypeMismatchError(feature.name, feature.data_type, actual_type)
+            compatible = cls._types_compatible if strict_mode else cls._types_loosely_compatible
+            for name in names:
+                actual_type = get_column_data_type(name)
+                if actual_type is not None and not compatible(feature.data_type, actual_type):
+                    raise DataTypeMismatchError(name, feature.data_type, actual_type)

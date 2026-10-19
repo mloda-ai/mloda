@@ -10,7 +10,10 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_links import LinkTrekker
-from mloda.core.prepare.validate_resolved_join import raise_on_orphaned_join_source
+from mloda.core.prepare.validate_resolved_join import (
+    raise_on_join_star_keeping_two_groups,
+    raise_on_orphaned_join_source,
+)
 from mloda.provider import FeatureGroup
 from mloda.user import Index, JoinSpec, Link
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -253,3 +256,174 @@ def test_raise_on_orphaned_join_source_still_raises_despite_an_unrelated_writeba
 def test_raise_on_orphaned_join_source_accepts_a_plan_with_no_records() -> None:
     """An empty plan has no source to lose."""
     raise_on_orphaned_join_source(ExecutionPlan().resolved_join_plan)
+
+
+class StarFirstSpoke(FeatureGroup):
+    """One spoke of a join star."""
+
+
+class StarSecondSpoke(FeatureGroup):
+    """The other spoke of a join star."""
+
+
+class StarHub(FeatureGroup):
+    """The group both spokes join with."""
+
+
+class StarConsumer(FeatureGroup):
+    """Reads the spokes and the hub."""
+
+
+class StarOtherConsumer(FeatureGroup):
+    """A second consumer, reading the hub through the second link only."""
+
+
+STAR_INDEX = Index(("star_idx",))
+STAR_FIRST_CFW = PyArrowTable
+STAR_SECOND_CFW = PandasDataFrame
+STAR_HUB_CFW = PythonDictFramework
+
+
+def _build_star_plan(make_links: Any, *, separate_consumers: bool = False) -> tuple[ExecutionPlan, Graph]:
+    """Two joins over StarFirstSpoke, StarSecondSpoke and StarHub, built by make_links(first, second, hub)."""
+    first = feature("star_first", STAR_FIRST_CFW, STAR_INDEX)
+    second = feature("star_second", STAR_SECOND_CFW, STAR_INDEX)
+    hub = feature("star_hub", STAR_HUB_CFW, STAR_INDEX)
+    consumer = feature("star_consumer", STAR_SECOND_CFW)
+    other_consumer = feature("star_other_consumer", STAR_SECOND_CFW)
+
+    graph = Graph()
+    graph.add_node(first.uuid, NodeProperties(first, StarFirstSpoke))
+    graph.add_node(second.uuid, NodeProperties(second, StarSecondSpoke))
+    graph.add_node(hub.uuid, NodeProperties(hub, StarHub))
+    graph.add_node(consumer.uuid, NodeProperties(consumer, StarConsumer))
+    graph.add_node(other_consumer.uuid, NodeProperties(other_consumer, StarOtherConsumer))
+    consumer_parents = (first, hub) if separate_consumers else (first, second, hub)
+    for parent in consumer_parents:
+        graph.adjacency_list[parent.uuid].append(consumer.uuid)
+    other_parents = (second, hub) if separate_consumers else ()
+    for parent in other_parents:
+        graph.adjacency_list[parent.uuid].append(other_consumer.uuid)
+    graph.adjacency_list[consumer.uuid] = []
+    graph.adjacency_list[other_consumer.uuid] = []
+    graph.parent_to_children_mapping[consumer.uuid] = {parent.uuid for parent in consumer_parents}
+    if separate_consumers:
+        graph.parent_to_children_mapping[other_consumer.uuid] = {parent.uuid for parent in other_parents}
+
+    cfws = {StarFirstSpoke: STAR_FIRST_CFW, StarSecondSpoke: STAR_SECOND_CFW, StarHub: STAR_HUB_CFW}
+    links: list[Link] = make_links(StarFirstSpoke, StarSecondSpoke, StarHub)
+    link_trekker = LinkTrekker()
+    queue: list[Any] = [
+        (StarFirstSpoke, {first}),
+        (StarSecondSpoke, {second}),
+        (StarHub, {hub}),
+    ]
+    for position, link in enumerate(links):
+        owner = other_consumer if separate_consumers and position == 1 else consumer
+        left_cfw, right_cfw = cfws[link.left_feature_group], cfws[link.right_feature_group]
+        trek(link_trekker, link, (left_cfw, right_cfw), owner.uuid)
+        queue.append((link, left_cfw, right_cfw))
+    queue.append((StarConsumer, {consumer}))
+    if separate_consumers:
+        queue.append((StarOtherConsumer, {other_consumer}))
+
+    plan = ExecutionPlan()
+    plan.create_execution_plan(queue, graph, link_trekker, validate=False)
+    return plan, graph
+
+
+def _two_spokes_kept(first: Any, second: Any, hub: Any) -> list[Link]:
+    return [
+        Link.left(JoinSpec(first, STAR_INDEX), JoinSpec(hub, STAR_INDEX)),
+        Link.left(JoinSpec(second, STAR_INDEX), JoinSpec(hub, STAR_INDEX)),
+    ]
+
+
+def _hub_kept(first: Any, second: Any, hub: Any) -> list[Link]:
+    return [
+        Link.left(JoinSpec(hub, STAR_INDEX), JoinSpec(first, STAR_INDEX)),
+        Link.left(JoinSpec(hub, STAR_INDEX), JoinSpec(second, STAR_INDEX)),
+    ]
+
+
+def _chain(first: Any, second: Any, hub: Any) -> list[Link]:
+    return [
+        Link.left(JoinSpec(first, STAR_INDEX), JoinSpec(hub, STAR_INDEX)),
+        Link.left(JoinSpec(hub, STAR_INDEX), JoinSpec(second, STAR_INDEX)),
+    ]
+
+
+def test_raise_on_join_star_keeping_two_groups_names_the_consumer_the_kept_groups_and_the_dropped_group() -> None:
+    plan, graph = _build_star_plan(_two_spokes_kept)
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)
+
+    message = str(excinfo.value)
+    for name in ("StarConsumer", "StarFirstSpoke", "StarSecondSpoke", "StarHub"):
+        assert name in message, f"{name} must be named; got: {message}"
+    assert "not defined" in message
+    assert "Link.star(" in message
+    assert 'index_column=..., jointype="left")' in message
+    assert "two left joins" in message
+    assert "right or left" not in message
+    assert "inner joins for both or outer joins for both" in message
+    assert "separate consumers" in message
+
+
+@pytest.mark.parametrize(
+    "make_links, separate_consumers",
+    [
+        pytest.param(_hub_kept, False, id="hub_kept_star"),
+        pytest.param(_chain, False, id="chain_through_the_middle_group"),
+        pytest.param(_two_spokes_kept, True, id="different_consumers"),
+    ],
+)
+def test_raise_on_join_star_keeping_two_groups_accepts_plans_with_a_defined_result(
+    make_links: Any, separate_consumers: bool
+) -> None:
+    plan, graph = _build_star_plan(make_links, separate_consumers=separate_consumers)
+
+    assert len(plan.resolved_join_plan.records) == 2
+    raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)
+
+
+def test_raise_on_join_star_keeping_two_groups_accepts_two_steps_of_one_kept_group_class() -> None:
+    other_index = Index(("star_other_idx",))
+    first_arrow = feature("star_first", STAR_FIRST_CFW, STAR_INDEX)
+    first_pandas = feature("star_first", STAR_SECOND_CFW, other_index)
+    hub = feature("star_hub", STAR_HUB_CFW, STAR_INDEX)
+    consumer = feature("star_consumer", STAR_SECOND_CFW)
+
+    graph = Graph()
+    graph.add_node(first_arrow.uuid, NodeProperties(first_arrow, StarFirstSpoke))
+    graph.add_node(first_pandas.uuid, NodeProperties(first_pandas, StarFirstSpoke))
+    graph.add_node(hub.uuid, NodeProperties(hub, StarHub))
+    graph.add_node(consumer.uuid, NodeProperties(consumer, StarConsumer))
+    parents = (first_arrow, first_pandas, hub)
+    for parent in parents:
+        graph.adjacency_list[parent.uuid].append(consumer.uuid)
+    graph.adjacency_list[consumer.uuid] = []
+    graph.parent_to_children_mapping[consumer.uuid] = {parent.uuid for parent in parents}
+
+    links = [
+        Link.left(JoinSpec(StarFirstSpoke, STAR_INDEX), JoinSpec(StarHub, STAR_INDEX)),
+        Link.left(JoinSpec(StarFirstSpoke, other_index), JoinSpec(StarHub, other_index)),
+    ]
+    orientations = [(STAR_FIRST_CFW, STAR_HUB_CFW), (STAR_SECOND_CFW, STAR_HUB_CFW)]
+    link_trekker = LinkTrekker()
+    queue: list[Any] = [(StarFirstSpoke, {first_arrow, first_pandas}), (StarHub, {hub})]
+    for link, orientation in zip(links, orientations):
+        trek(link_trekker, link, orientation, consumer.uuid)
+        queue.append((link, *orientation))
+    queue.append((StarConsumer, {consumer}))
+
+    plan = ExecutionPlan()
+    plan.create_execution_plan(queue, graph, link_trekker, validate=False)
+
+    assert len(plan.resolved_join_plan.records) == 2
+    raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)
+
+
+def test_raise_on_join_star_keeping_two_groups_accepts_a_plan_with_no_records() -> None:
+    raise_on_join_star_keeping_two_groups(ExecutionPlan().resolved_join_plan, Graph())

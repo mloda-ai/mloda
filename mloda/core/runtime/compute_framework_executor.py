@@ -143,7 +143,11 @@ class ComputeFrameworkExecutor:
             return cfw_uuid
 
     def get_cfw(
-        self, compute_framework: type[ComputeFramework], feature_uuid: UUID, tfs_ids: set[UUID] | None = None
+        self,
+        compute_framework: type[ComputeFramework],
+        feature_uuid: UUID,
+        tfs_ids: set[UUID] | None = None,
+        reads_join_result: bool = True,
     ) -> ComputeFramework:
         """
         Retrieves a compute framework based on its type and a feature UUID.
@@ -162,7 +166,7 @@ class ComputeFrameworkExecutor:
         cls_name = compute_framework.get_class_name()
         if tfs_ids:
             # See CfwManager.resolve_cfw_uuid_by_tfs_ids for the shared fallback chain.
-            cfw_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, tfs_ids, feature_uuid)
+            cfw_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, tfs_ids, feature_uuid, reads_join_result)
 
         if cfw_uuid is None:
             cfw_uuid = self.cfw_register.get_cfw_uuid(cls_name, feature_uuid)
@@ -200,7 +204,7 @@ class ComputeFrameworkExecutor:
             # join's final destination) wins over creating a brand new, empty cfw for a step that
             # really has an existing home.
             resolved_uuid = self.cfw_register.resolve_cfw_uuid_by_tfs_ids(
-                cls_name, step.tfs_ids, step.features.any_uuid
+                cls_name, step.tfs_ids, step.features.any_uuid, step.reads_join_result
             )
 
             if resolved_uuid is not None:

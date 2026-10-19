@@ -1,6 +1,7 @@
 """Groups whose trekked links resolve to different compute frameworks: a link with equal
 frameworks and no child on that framework is rejected, the distinct-framework shape here still runs."""
 
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 import pandas as pd
@@ -1624,6 +1625,7 @@ _REMEDY_SECOND_INPUTS = ("mlg_a", "mlg_a1", "mlg_bd")
 RemedySecondBConsumer = _remedy_sum_consumer("RemedySecondBConsumer", SecondCfw, _REMEDY_SECOND_INPUTS)
 
 
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
     "consumer, root_b, expected",
@@ -1636,12 +1638,17 @@ RemedySecondBConsumer = _remedy_sum_consumer("RemedySecondBConsumer", SecondCfw,
     ],
 )
 def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_side_shares_a_framework(
-    consumer: type[FeatureGroup], root_b: type[FeatureGroup], expected: list[list[int]], swap_link_sides: bool
+    consumer: type[FeatureGroup],
+    root_b: type[FeatureGroup],
+    expected: list[list[int]],
+    swap_link_sides: bool,
+    mode: ParallelizationMode,
 ) -> None:
     session = _side_path_prepare(
         SidePathArrowP,
         False,
         swap_link_sides,
+        mode,
         consumer=consumer,
         features=[consumer.get_class_name()],
         **{**_REMEDY_KWARGS, "root_b": root_b},
@@ -1651,11 +1658,12 @@ def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_s
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
     assert not any(step.carriers for step in join_steps)
 
-    results = session.run()
+    results = session.run(parallelization_modes={mode})
 
     assert _side_path_values(results, consumer) == expected
 
 
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
@@ -1691,11 +1699,13 @@ def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_togeth
     second_expected: list[list[int]],
     swap_link_sides: bool,
     link_factory: Any,
+    mode: ParallelizationMode,
 ) -> None:
     session = _side_path_prepare(
         SidePathArrowP,
         False,
         swap_link_sides,
+        mode,
         consumer=first,
         features=[first.get_class_name(), second.get_class_name()],
         link_factory=link_factory,
@@ -1706,10 +1716,46 @@ def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_togeth
     join_steps = [step for step in session.engine.execution_planner if isinstance(step, JoinStep)]
     assert all(step.split_consumers is None for step in join_steps)
 
-    results = session.run()
+    results = session.run(parallelization_modes={mode})
 
     assert _side_path_values(results, first) == first_expected
     assert _side_path_values(results, second) == second_expected
+
+
+RemedyArrowPairConsumer = _remedy_sum_consumer("RemedyArrowPairConsumer", PyArrowTable, ("mlg_a1", "mlg_b"))
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        ParallelizationMode.SYNC,
+        ParallelizationMode.THREADING,
+        # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+        pytest.param(ParallelizationMode.MULTIPROCESSING, marks=pytest.mark.timeout(60)),
+    ],
+)
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_return_their_values_together(
+    flight_server: Any, swap_link_sides: bool, mode: ParallelizationMode
+) -> None:
+    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+    first, second = RemedyArrowSameBConsumer, RemedyArrowPairConsumer
+    repeats = 4 if mode == ParallelizationMode.THREADING else 1
+    for _ in range(repeats):
+        session = _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            mode,
+            consumer=first,
+            features=[first.get_class_name(), second.get_class_name()],
+            **{**_REMEDY_KWARGS, "root_b": MultiLinkRootBSame, "extra_groups": {RemedyRootA1, second}},
+        )
+
+        results = session.run(parallelization_modes={mode}, flight_server=server)
+
+        assert _side_path_values(results, first) == [[18, 30, 42]]
+        assert _side_path_values(results, second) == [[17, 28, 39]]
 
 
 class RemedyRootBArrowX(RemedyRootBThird):
@@ -1964,10 +2010,9 @@ def test_a_join_keeping_the_member_side_of_two_members_on_different_frameworks_i
         )
 
     message = str(exc_info.value)
-    assert "members of one link side" in message
-    assert "MultiLinkRootA" in message
-    assert "RemedyRootA1" in message
-    assert "one member of the link side per consumer" in message
+    _assert_star_keeping_two_groups_reason(
+        message, RemedySecondBConsumer.get_class_name(), ("MultiLinkRootA", "RemedyRootA1"), "MultiLinkRootBDistinct"
+    )
     assert "reads both members directly" not in message
 
 
@@ -2081,9 +2126,7 @@ def test_members_on_both_link_sides_are_rejected_at_plan_time(swap_link_sides: b
             extra_groups={RemedyRootA1, RemedyRootBSubclass},
         )
 
-    # b_a already fails today with the planner's ambiguity error; only a_b is guaranteed the side member reason.
-    if not swap_link_sides:
-        assert "members of one link side" in str(exc_info.value)
+    assert "members of one link side" in str(exc_info.value)
 
 
 class RemedyTwoNameConsumer(FeatureGroup):
@@ -2158,12 +2201,487 @@ RemedyArrowSiblingConsumer = _remedy_sum_consumer(
 )
 
 
-def test_two_members_of_one_link_side_on_one_framework_over_one_base_link_are_ambiguous() -> None:
-    with pytest.raises(ValueError, match="There are more than one solution for the join"):
+_ONE_FRAMEWORK_REASONS = (
+    "members of one link side",
+    "one member of the link side per consumer",
+    "declare one link per member",
+    "each read by its own consumer",
+    "Link.inner(JoinSpec(",
+    ") and Link.inner(JoinSpec(",
+)
+
+RemedySecondSiblingConsumer = _remedy_sum_consumer(
+    "RemedySecondSiblingConsumer", SecondCfw, ("mlg_a", "mlg_a2", "mlg_bd")
+)
+RemedyArrowSiblingSameBConsumer = _remedy_sum_consumer(
+    "RemedyArrowSiblingSameBConsumer", PyArrowTable, ("mlg_a", "mlg_a2", "mlg_b")
+)
+RemedyArrowBMembersConsumer = _remedy_sum_consumer(
+    "RemedyArrowBMembersConsumer", PyArrowTable, ("mlg_a", "mlg_bd", "mlg_bd2")
+)
+RemedySecondBMembersConsumer = _remedy_sum_consumer(
+    "RemedySecondBMembersConsumer", SecondCfw, ("mlg_a", "mlg_bd", "mlg_bd2")
+)
+
+_A_MEMBERS = (MultiLinkRootA, RemedyRootASibling)
+_B_MEMBERS = (MultiLinkRootBDistinct, RemedyRootBSubclass)
+
+# (consumer, root_b, extra member group, the two members named by the reason)
+_SAME_FRAMEWORK_MEMBER_LAYOUTS = [
+    pytest.param(
+        RemedyArrowSiblingConsumer,
+        MultiLinkRootBDistinct,
+        RemedyRootASibling,
+        _A_MEMBERS,
+        id="a_members_arrow_b_second",
+    ),
+    pytest.param(
+        RemedySecondSiblingConsumer,
+        MultiLinkRootBDistinct,
+        RemedyRootASibling,
+        _A_MEMBERS,
+        id="a_members_second_consumer_b_second",
+    ),
+    pytest.param(
+        RemedyArrowSiblingSameBConsumer, MultiLinkRootBSame, RemedyRootASibling, _A_MEMBERS, id="a_members_all_arrow"
+    ),
+    pytest.param(
+        RemedyArrowBMembersConsumer, MultiLinkRootBDistinct, RemedyRootBSubclass, _B_MEMBERS, id="b_members_arrow"
+    ),
+    pytest.param(
+        RemedySecondBMembersConsumer, MultiLinkRootBDistinct, RemedyRootBSubclass, _B_MEMBERS, id="b_members_second"
+    ),
+]
+
+
+@pytest.mark.parametrize("empty_chooser_rules", [False, True], ids=["chooser", "planner_backstop"])
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("consumer, root_b, extra_group, members", _SAME_FRAMEWORK_MEMBER_LAYOUTS)
+def test_one_consumer_reading_two_members_of_one_link_side_on_one_framework_over_one_base_link_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    consumer: type[FeatureGroup],
+    root_b: type[FeatureGroup],
+    extra_group: type[FeatureGroup],
+    members: tuple[type[FeatureGroup], type[FeatureGroup]],
+    swap_link_sides: bool,
+    empty_chooser_rules: bool,
+) -> None:
+    if empty_chooser_rules:
+        # Empty chooser rules reach the planner's backstops.
+        monkeypatch.setattr(ChooseComputeFrameworks, "_side_member_rules", lambda self, *args, **kwargs: [])
+
+    with pytest.raises(ValueError) as exc_info:
         _side_path_prepare(
             SidePathArrowP,
             False,
-            consumer=RemedyArrowSiblingConsumer,
-            features=[RemedyArrowSiblingConsumer.get_class_name()],
-            **{**_REMEDY_KWARGS, "extra_groups": {RemedyRootASibling}},
+            swap_link_sides,
+            consumer=consumer,
+            features=[consumer.get_class_name()],
+            **{**_REMEDY_KWARGS, "root_b": root_b, "extra_groups": {extra_group}},
         )
+
+    message = str(exc_info.value)
+    assert consumer.get_class_name() in message
+    for member in members:
+        assert member.get_class_name() in message
+    for reason in _ONE_FRAMEWORK_REASONS:
+        assert reason in message
+
+
+RemedySecondFirstMemberConsumer = _remedy_sum_consumer(
+    "RemedySecondFirstMemberConsumer", SecondCfw, ("mlg_a", "mlg_bd")
+)
+RemedySecondSecondMemberConsumer = _remedy_sum_consumer(
+    "RemedySecondSecondMemberConsumer", SecondCfw, ("mlg_a2", "mlg_bd")
+)
+
+
+def _two_consumers_one_member_each_prepare(links: set[Link] | None, swap_link_sides: bool = False) -> Any:
+    consumers = (RemedySecondFirstMemberConsumer, RemedySecondSecondMemberConsumer)
+    if links is None:
+        left, right = (
+            (MultiLinkRootBDistinct, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBDistinct)
+        )
+        links = {Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))}
+    return mloda.prepare(
+        [consumer.get_class_name() for consumer in consumers],
+        links=links,
+        compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {MultiLinkRootA, RemedyRootASibling, MultiLinkRootBDistinct, *consumers}
+        ),
+    )
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_two_consumers_each_reading_one_member_over_one_base_link_are_told_to_declare_one_link_per_member(
+    swap_link_sides: bool,
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _two_consumers_one_member_each_prepare(None, swap_link_sides)
+
+    message = str(exc_info.value)
+    assert "declare one link per member" in message
+    assert "each read by its own consumer" in message
+    assert "Link.inner(JoinSpec(MultiLinkRootA," in message
+    assert "Link.inner(JoinSpec(RemedyRootASibling," in message
+    assert "Link(MultiLinkRootA" not in message
+    assert "MultiLinkRootA" in message
+    assert "RemedyRootASibling" in message
+    assert "one member of the link side per consumer" not in message
+
+
+def test_two_consumers_each_reading_one_member_get_their_values_over_one_link_per_member() -> None:
+    links = {
+        Link.inner(JoinSpec(member, MLG_INDEX), JoinSpec(MultiLinkRootBDistinct, MLG_INDEX))
+        for member in (MultiLinkRootA, RemedyRootASibling)
+    }
+
+    results = _two_consumers_one_member_each_prepare(links).run()
+
+    assert _side_path_values(results, RemedySecondFirstMemberConsumer) == [[11, 22, 33]]
+    assert _side_path_values(results, RemedySecondSecondMemberConsumer) == [[14, 25, 36]]
+
+
+class RemedyRootAFree(RemedyRootASibling):
+    """Second member of the A link side that may run on PyArrow or Pandas."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable, PandasDataFrame}
+
+
+RemedyArrowFreeMemberConsumer = _remedy_sum_consumer(
+    "RemedyArrowFreeMemberConsumer", PyArrowTable, ("mlg_a", "mlg_a2", "mlg_b")
+)
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_member_allowed_on_two_frameworks_is_pushed_apart_from_its_sibling_and_both_columns_return(
+    swap_link_sides: bool,
+) -> None:
+    session = _side_path_prepare(
+        SidePathArrowP,
+        False,
+        swap_link_sides,
+        consumer=RemedyArrowFreeMemberConsumer,
+        features=[RemedyArrowFreeMemberConsumer.get_class_name()],
+        **{**_REMEDY_KWARGS, "root_b": MultiLinkRootBSame, "extra_groups": {RemedyRootAFree}},
+    )
+
+    results = session.run()
+
+    assert _side_path_values(results, RemedyArrowFreeMemberConsumer) == [[15, 27, 39]]
+
+
+def _star_group(name: str, column: str, rows: dict[str, int], framework: type[ComputeFramework]) -> type[FeatureGroup]:
+    def input_data(cls: Any) -> BaseInputData | None:
+        return DataCreator({column})
+
+    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        return {column: list(rows.values()), "mlg_idx": list(rows)}
+
+    def compute_framework_rule(cls: Any) -> set[type[ComputeFramework]]:
+        return {framework}
+
+    namespace = {
+        "__module__": __name__,
+        "input_data": classmethod(input_data),
+        "calculate_feature": classmethod(calculate_feature),
+        "compute_framework_rule": classmethod(compute_framework_rule),
+    }
+    created = type(name, (FeatureGroup,), namespace)
+    globals()[name] = created  # module level, so multiprocessing can pickle the link back
+    return created
+
+
+_XYZ_KEYS = ("x", "y", "z")
+
+
+def _xyz(values: list[int]) -> dict[str, int]:
+    return dict(zip(_XYZ_KEYS, values))
+
+
+_STAR_C_ROWS = {"y": 7, "z": 8, "w": 9, "q": 10}
+_STAR_B_ROWS = {"x": 10, "y": 20, "z": 30, "v": 50, "u": 60}
+StarSpokeCArrow = _star_group("StarSpokeCArrow", "star_c", _STAR_C_ROWS, PyArrowTable)
+StarSpokeCSecond = _star_group("StarSpokeCSecond", "star_c", _STAR_C_ROWS, SecondCfw)
+StarHubArrow = _star_group("StarHubArrow", "star_b", _STAR_B_ROWS, PyArrowTable)
+StarConsumerArrow = _remedy_null_safe_consumer("StarConsumerArrow", PyArrowTable, ("mlg_a", "star_c", "star_b"))
+_ALL_FRAMEWORKS = [PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw]
+
+
+def _star_prepare(
+    link_factory: Callable[[JoinSpec, JoinSpec], Link], hub_first: bool, spoke_c: type[FeatureGroup] = StarSpokeCArrow
+) -> Any:
+    def link(spoke: type[FeatureGroup]) -> Link:
+        sides = (StarHubArrow, spoke) if hub_first else (spoke, StarHubArrow)
+        return link_factory(JoinSpec(sides[0], MLG_INDEX), JoinSpec(sides[1], MLG_INDEX))
+
+    return mloda.prepare(
+        [StarConsumerArrow.get_class_name()],
+        links={link(MultiLinkRootAPartial), link(spoke_c)},
+        compute_frameworks=_ALL_FRAMEWORKS,
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {MultiLinkRootAPartial, spoke_c, StarHubArrow, StarConsumerArrow}
+        ),
+    )
+
+
+def _assert_star_keeping_two_groups_reason(message: str, consumer: str, kept: tuple[str, str], dropped: str) -> None:
+    assert consumer in message
+    for name in (*kept, dropped):
+        assert name in message
+    assert "not defined" in message
+    assert "Link.star(" in message
+    assert 'index_column=..., jointype="left")' in message
+    assert "right or left" not in message
+    assert "inner joins for both or outer joins for both" in message
+    assert "separate consumers" in message
+
+
+@pytest.mark.parametrize(
+    "spoke_c",
+    [pytest.param(StarSpokeCArrow, id="all_on_one_framework"), pytest.param(StarSpokeCSecond, id="spokes_differ")],
+)
+def test_two_left_joins_keeping_different_spokes_of_a_shared_group_are_rejected_at_plan_time(
+    spoke_c: type[FeatureGroup],
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _star_prepare(Link.left, hub_first=False, spoke_c=spoke_c)
+
+    _assert_star_keeping_two_groups_reason(
+        str(exc_info.value),
+        StarConsumerArrow.get_class_name(),
+        ("MultiLinkRootAPartial", spoke_c.get_class_name()),
+        "StarHubArrow",
+    )
+
+
+def test_two_right_joins_keeping_different_spokes_of_a_shared_group_still_raise() -> None:
+    with pytest.raises(ValueError, match="have multiple right joins for the same feature group on the left side"):
+        _star_prepare(Link.right, hub_first=True)
+
+
+_STAR_ROWS = [
+    pytest.param(Link.left, True, [11, 29, 41, 50, 60], id="left_keeps_hub"),
+    pytest.param(Link.inner, False, [29, 41], id="inner"),
+    pytest.param(Link.outer, False, [10, 11, 13, 29, 41, 50, 60], id="outer"),
+]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+@pytest.mark.parametrize("link_factory, hub_first, expected", _STAR_ROWS)
+def test_a_star_with_a_defined_result_returns_its_rows_when_the_spokes_hold_different_keys(
+    link_factory: Any, hub_first: bool, expected: list[int], spoke_c: type[FeatureGroup]
+) -> None:
+    results = _star_prepare(link_factory, hub_first, spoke_c).run()
+
+    assert _side_path_values(results, StarConsumerArrow) == [expected]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+@pytest.mark.parametrize("link_factory, hub_first", [pytest.param(Link.inner, False), pytest.param(Link.left, True)])
+def test_a_join_group_consumer_is_never_left_stranded_in_a_frames_keep_alive_after_a_star_run(
+    link_factory: Any, hub_first: bool, spoke_c: type[FeatureGroup]
+) -> None:
+    session = _star_prepare(link_factory, hub_first, spoke_c)
+    session.run()
+
+    assert session.runner is not None
+    stranded = {
+        type(cfw).__name__: cfw.keep_alive - cfw.already_calculated_children_tracker
+        for cfw in session.runner.executor.cfw_collection.values()
+        if cfw.data is not None and cfw.keep_alive - cfw.already_calculated_children_tracker
+    }
+    assert stranded == {}
+
+
+RemedyRootBFourKeysArrow = type(
+    "RemedyRootBFourKeysArrow",
+    (RemedyRootBFourKeys,),
+    {"__module__": __name__, "compute_framework_rule": classmethod(lambda cls: {PyArrowTable})},
+)
+RemedyRootBFourKeysThird = type(
+    "RemedyRootBFourKeysThird",
+    (RemedyRootBFourKeys,),
+    {"__module__": __name__, "compute_framework_rule": classmethod(lambda cls: {ThirdCfw})},
+)
+_POLY_INPUTS = ("mlg_a", "mlg_a1", "mlg_bd")
+_POLY_B_LAYOUTS = [
+    pytest.param(
+        RemedyRootBFourKeysThird,
+        _remedy_null_safe_consumer("StarPolyThirdConsumer", ThirdCfw, _POLY_INPUTS),
+        id="b_on_a1_framework",
+    ),
+    pytest.param(
+        RemedyRootBFourKeysArrow,
+        _remedy_null_safe_consumer("StarPolyArrowConsumer", PyArrowTable, _POLY_INPUTS),
+        id="b_on_a_framework",
+    ),
+    pytest.param(
+        RemedyRootBFourKeys,
+        _remedy_null_safe_consumer("StarPolySecondConsumer", SecondCfw, _POLY_INPUTS),
+        id="b_on_third_framework",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "link_factory, swap_link_sides",
+    [pytest.param(Link.left, False, id="left_a_b"), pytest.param(Link.right, True, id="right_b_a")],
+)
+@pytest.mark.parametrize("root_b, consumer", _POLY_B_LAYOUTS)
+def test_a_left_or_right_join_keeping_two_members_of_one_link_side_with_different_keys_is_rejected(
+    root_b: type[FeatureGroup], consumer: type[FeatureGroup], link_factory: Any, swap_link_sides: bool
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=consumer,
+            features=[consumer.get_class_name()],
+            link_factory=link_factory,
+            root_a=MultiLinkRootAPartial,
+            root_b=root_b,
+            extra_groups={RemedyRootA1Partial},
+            compute_frameworks=_ALL_FRAMEWORKS,
+        )
+
+    _assert_star_keeping_two_groups_reason(
+        str(exc_info.value),
+        consumer.get_class_name(),
+        ("MultiLinkRootAPartial", "RemedyRootA1Partial"),
+        root_b.get_class_name(),
+    )
+
+
+def _below_list(column: Any) -> list[Any]:
+    return list(column.to_pylist() if hasattr(column, "to_pylist") else column.tolist())
+
+
+def _below_values(column: Any) -> list[int]:
+    return [int(v) for v in _below_list(column)]
+
+
+def _below_consumer(
+    name: str, framework: type[ComputeFramework], inputs: tuple[str, ...], scale: int = 1
+) -> type[FeatureGroup]:
+    def input_features(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(column) for column in inputs}
+
+    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        columns = [_below_values(data[column]) for column in inputs]
+        total = [scale * columns[0][i] + sum(c[i] for c in columns[1:]) for i in range(len(columns[0]))]
+        # Keep the key so a later link can join this consumer's frame.
+        return {name: total, "mlg_idx": [str(v) for v in _below_list(data["mlg_idx"])]}
+
+    def compute_framework_rule(cls: Any) -> set[type[ComputeFramework]]:
+        return {framework}
+
+    namespace = {
+        "__module__": __name__,
+        "input_features": input_features,
+        "calculate_feature": classmethod(calculate_feature),
+        "compute_framework_rule": classmethod(compute_framework_rule),
+    }
+    created = type(name, (FeatureGroup,), namespace)
+    globals()[name] = created  # module level, so multiprocessing can pickle the link back
+    return created
+
+
+def _below_layout(tag: str, source: type[ComputeFramework], other: type[ComputeFramework]) -> dict[str, Any]:
+    """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework."""
+    root_a = _star_group(f"BelowRootA{tag}", f"below_a_{tag}", _xyz([1, 2, 3]), source)
+    root_b = _star_group(f"BelowRootB{tag}", f"below_b_{tag}", _xyz([10, 20, 30]), other)
+    root_d = _star_group(f"BelowRootD{tag}", f"below_d_{tag}", _xyz([7, 8, 9]), PandasDataFrame)
+    joined_inputs = (f"below_a_{tag}", f"below_b_{tag}")
+    joined = _below_consumer(f"BelowJoined{tag}", source, joined_inputs)
+    return {
+        "a": root_a,
+        "b": root_b,
+        "d": root_d,
+        "joined": joined,
+        "below": _below_consumer(f"BelowChild{tag}", other, (joined.get_class_name(),), scale=2),
+        "bd": _below_consumer(f"BelowBD{tag}", PandasDataFrame, (f"below_b_{tag}", f"below_d_{tag}")),
+    }
+
+
+_BELOW_LAYOUTS = {
+    "arrow_source": _below_layout("Pa", PyArrowTable, PandasDataFrame),
+    "pandas_source": _below_layout("Pd", PandasDataFrame, PyArrowTable),
+}
+
+
+def _below_run(
+    layout_name: str,
+    swap_link_sides: bool,
+    mode: ParallelizationMode,
+    requested: tuple[str, ...],
+    links: tuple[tuple[str, str], ...] = (("a", "b"),),
+    flight_server: Any = None,
+) -> dict[str, list[list[int]]]:
+    layout = _BELOW_LAYOUTS[layout_name]
+    # Only the first link flips; the extra link keeps its orientation.
+    link_set = {
+        Link.inner(
+            JoinSpec(layout[right if swap_link_sides and position == 0 else left], MLG_INDEX),
+            JoinSpec(layout[left if swap_link_sides and position == 0 else right], MLG_INDEX),
+        )
+        for position, (left, right) in enumerate(links)
+    }
+    names = [layout[key].get_class_name() for key in requested]
+    results = mloda.run_all(
+        names,
+        links=link_set,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={mode},
+        flight_server=flight_server,
+        plugin_collector=PluginCollector.enabled_feature_groups(set(layout.values())),
+    )
+    return {key: _column_values(results, layout[key].get_class_name()) for key in requested}
+
+
+_BELOW_ALONE = (("below",), (("a", "b"),), {"below": [[22, 44, 66]]})
+_BELOW_NEXT_TO_SECOND_LINK = (
+    ("below", "bd"),
+    (("a", "b"), ("b", "d")),
+    {"below": [[22, 44, 66]], "bd": [[17, 28, 39]]},
+)
+_BELOW_CASES = [
+    pytest.param(layout, swap, mode, *variant, id=f"{name}-{layout}-{'b_a' if swap else 'a_b'}-{mode.name.lower()}")
+    for name, variant in (("alone", _BELOW_ALONE), ("second_link", _BELOW_NEXT_TO_SECOND_LINK))
+    for layout in _BELOW_LAYOUTS
+    for swap in (False, True)
+    for mode in (ParallelizationMode.SYNC, ParallelizationMode.THREADING)
+]
+_BELOW_MULTIPROCESSING = pytest.param(
+    "arrow_source",
+    False,
+    ParallelizationMode.MULTIPROCESSING,
+    *_BELOW_ALONE,
+    # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
+    marks=pytest.mark.timeout(60),
+    id="alone-arrow_source-a_b-multiprocessing",
+)
+
+
+@pytest.mark.parametrize(
+    "layout, swap_link_sides, mode, requested, links, expected", [*_BELOW_CASES, _BELOW_MULTIPROCESSING]
+)
+def test_a_feature_below_a_join_consumer_reads_the_joined_frame(
+    request: pytest.FixtureRequest,
+    layout: str,
+    swap_link_sides: bool,
+    mode: ParallelizationMode,
+    requested: tuple[str, ...],
+    links: tuple[tuple[str, str], ...],
+    expected: dict[str, list[list[int]]],
+) -> None:
+    server = request.getfixturevalue("flight_server") if mode == ParallelizationMode.MULTIPROCESSING else None
+    values = _below_run(layout, swap_link_sides, mode, requested, links=links, flight_server=server)
+
+    assert values == expected

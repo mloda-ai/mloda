@@ -3,7 +3,6 @@ Arc consistency prunes the domains, then branch and bound with forward checking 
 splitting into independent parts once assigned blocks separate them.
 """
 
-import re
 from itertools import combinations
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -13,13 +12,18 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
-from mloda.core.abstract_plugins.components.options import Options, _str_option_dict
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.prepare.declared_sides import (
+    narrow_by_right_index,
+    one_framework_members_reason,
+    star_keeping_two_groups_reason,
+)
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
+from mloda.core.prepare.stable_text import stable_text as stable_text
 
 Framework = type[ComputeFramework]
 Values = tuple[Framework, ...]
@@ -74,32 +78,8 @@ def conversion_cost(from_framework: Framework, to_framework: Framework) -> int:
     return 1
 
 
-_ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
-
-
 def _names(features: tuple[Feature, ...]) -> list[str]:
     return sorted(str(feature.name) for feature in features)
-
-
-def stable_text(value: object) -> str:
-    """Text of a value with addresses removed and set elements sorted, so it is equal across interpreters."""
-    if isinstance(value, Options):
-        parts = f"group={stable_text(_str_option_dict(value.group))}, context={stable_text(_str_option_dict(value.context))}"
-        if value.propagate_context_keys:
-            parts += f", propagate_context_keys={stable_text(value.propagate_context_keys)}"
-        if value.cascade_context_keys:
-            parts += f", cascade_context_keys={stable_text(value.cascade_context_keys)}"
-        return f"Options({parts})"
-    if type(value) is dict:
-        items = sorted((stable_text(k), stable_text(v)) for k, v in value.items())
-        return "{" + ", ".join(f"{k}: {v}" for k, v in items) + "}"
-    if type(value) is list:
-        return "[" + ", ".join(stable_text(v) for v in value) + "]"
-    if type(value) is tuple:
-        return "(" + ", ".join(stable_text(v) for v in value) + ("," if len(value) == 1 else "") + ")"
-    if type(value) is set or type(value) is frozenset:
-        return "{" + ", ".join(sorted(stable_text(v) for v in value)) + "}"
-    return _ADDRESS.sub("", repr(value))
 
 
 def _block_key(fg: type[FeatureGroup], features: tuple[Feature, ...]) -> tuple[object, ...]:
@@ -152,6 +132,10 @@ def _side_member_allows(relaxed: bool, values: Values) -> bool:
     if first is second or any(o is first or o is second for o in others):
         return True
     return relaxed and all(o is consumer for o in others)
+
+
+def _members_apart(values: Values) -> bool:
+    return values[0] is not values[1]
 
 
 def _swapped_pairs_differ(values: Values) -> bool:
@@ -567,9 +551,27 @@ class ChooseComputeFrameworks:
                         )[1 - pos]
                     )
                     relaxed: bool | None = None
+                    link_of = next(k for k, _ in joinable if k.uuid == link_uuid)
+                    unresolved = (
+                        narrow_by_right_index(link_of, members, lambda m: blocks[m].features) if pos == 1 else []
+                    ) or members
                     for a, b in combinations(members, 2):
                         if blocks[a].fg is blocks[b].fg:
                             continue
+                        if a in unresolved and b in unresolved:
+                            rules.setdefault(
+                                (a, b, consumer, "apart"),
+                                _Rule(
+                                    (a, b),
+                                    _members_apart,
+                                    one_framework_members_reason(
+                                        blocks[consumer].fg.__name__,
+                                        link_of,
+                                        blocks[a].fg,
+                                        blocks[b].fg,
+                                    ),
+                                ),
+                            )
                         if relaxed is None:
                             relaxed = (
                                 offers
@@ -582,11 +584,21 @@ class ChooseComputeFrameworks:
                             "side, which can run on different frameworks only when both joins merge into the other "
                             "link side's frame: the other link side runs on one member's framework"
                         )
-                        if offers:
-                            why += (
-                                f", or {name} reads both members directly and runs on the other link side's framework"
+                        if not offers and jointype in (JoinType.LEFT, JoinType.RIGHT):
+                            why = star_keeping_two_groups_reason(
+                                name,
+                                blocks[a].fg.__name__,
+                                blocks[b].fg.__name__,
+                                " and ".join(sorted({blocks[o].fg.__name__ for o in others})),
+                                (jointype,),
                             )
-                        why += ". Otherwise read one member of the link side per consumer"
+                        else:
+                            if offers:
+                                why += (
+                                    f", or {name} reads both members directly and runs on the other link side's "
+                                    "framework"
+                                )
+                            why += ". Otherwise read one member of the link side per consumer"
                         blocks_of = (a, b, consumer, *others)
                         rules.setdefault(
                             (*blocks_of, relaxed), _Rule(blocks_of, partial(_side_member_allows, relaxed), why)

@@ -1377,7 +1377,10 @@ def test_a_right_join_plans_when_the_consumer_shares_link_fw1_and_the_groups_are
 
 
 def test_a_right_join_still_rejects_genuine_polymorphic_left_ambiguity() -> None:
-    with pytest.raises(Exception, match="Right joins are not supported for equal or polymorphic feature groups"):
+    with pytest.raises(
+        Exception,
+        match=r"(?s)members of one link side.*one member of the link side per consumer.*declare one link per member",
+    ):
         _right_join_ambiguous_polymorphic_left_candidates()
 
 

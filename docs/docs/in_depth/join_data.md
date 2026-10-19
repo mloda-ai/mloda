@@ -234,6 +234,10 @@ links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id", jointype=Joi
 
 The returned set is passed straight to `mlodaAPI` like any other link set.
 
+**Known limits when several links feed one consumer**
+
+Joins feeding one consumer run in sequence, each on the previous join's frame, so the result must not depend on their order. When the links share a group, as in `Link.left(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.left(JoinSpec(C, ...), JoinSpec(B, ...))`, a left or right join star that keeps both `A` and `C` is rejected at plan time. Keep `B` in every join (`Link.star(B, A, C, index_column=..., jointype="left")`), or use inner joins for all links or outer joins for all links. Other mixes of join types in one star, such as a left join that keeps `A` next to an inner join, are not checked yet: they run in one fixed order, which may not give the rows you expect. Two members of one link side (see below) count as two such links.
+
 #### Same-Class Joins with Discriminators
 
 When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using **discriminators**.
@@ -320,7 +324,7 @@ The balanced inheritance rule ensures that joins only occur between "parallel" s
 
 Key injection follows the same subclass rule: a link declared on a base class injects its key column into subclass nodes on that side just as it would the declared class, so a subclass must provide that column even when a more specific link also applies. Discriminators narrow the side only when a class matches both sides. A node whose requested feature is itself one of its links' key columns receives no other key, which keeps batches named after their key column distinguishable.
 
-When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using `right_index`: first by exact `feature.index` match, then by checking whether the feature name appears in the join key columns of `right_index`. Ensure each link's `right_index` contains the column name that uniquely identifies its right-side batch.
+When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using `right_index`: first by exact `feature.index` match, then by checking whether the feature name appears in the join key columns of `right_index`. Ensure each link's `right_index` contains the column name that uniquely identifies its right-side batch. Members that one link cannot tell apart this way are rejected, see below.
 
 **One consumer joining two members of one link side**
 
@@ -328,13 +332,13 @@ A base class and its subclass can both match one side of a link, for example a c
 
 | Members | Other side | Consumer | Result |
 | --- | --- | --- | --- |
-| On different frameworks | On one member's framework | On that framework | Planned |
+| On different frameworks | On one member's framework | On that framework | Planned; a left or right join that keeps the member side is rejected |
 | On different frameworks | On one member's framework | On another framework | Rejected: the consumer must run where that same-framework join runs |
 | On different frameworks | One feature group, on a framework no member uses | On the other side's framework, reading both members directly | Planned for inner and outer joins, and for a left or right join that keeps the other side |
 | On different frameworks | On a framework no member uses | On a member's framework, or reading a member through a feature in between | Rejected: read one member of the link side per consumer |
-| On one framework | Any | Any | Not supported over one base-class link: the join is ambiguous, and some layouts lose one member's column instead of raising |
+| On one framework | Any | Any | Rejected at plan time when one link joins both members: read one member of the link side per consumer, and declare one link per member (links whose `right_index` each name one member are fine) |
 
-Known limits of the layouts that are planned: in the first row, a left or right join that keeps the member side can return wrong rows when the members hold different keys. In `THREADING` mode the first row, and several consumers of one such link in either planned row, can fail intermittently with a missing column.
+Each member's join counts as a separate link into the consumer's frame, so the [known limits when several links feed one consumer](#star-joins-linkstar) apply to the planned layouts.
 
 #### mlodaAPI
 

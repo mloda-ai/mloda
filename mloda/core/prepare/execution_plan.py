@@ -17,11 +17,18 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.core.prepare.declared_sides import DeclaredSideSplit, split_by_declared_side
+from mloda.core.prepare.declared_sides import (
+    DeclaredSideSplit,
+    narrow_by_right_index,
+    one_framework_members_reason,
+    several_consumers_members_reason,
+    split_by_declared_side,
+)
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
-from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker
+from mloda.core.prepare.stable_text import stable_text
+from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker, trekker_content_key
 from mloda.core.prepare.resolved_join import (
     DeclinedOrientation,
     JoinSide,
@@ -36,7 +43,11 @@ from mloda.core.prepare.resolved_join_builder import (
     raise_on_join_plan_divergence,
     wire_join_dependencies,
 )
-from mloda.core.prepare.validate_resolved_join import raise_on_dishonest_join_record, raise_on_orphaned_join_source
+from mloda.core.prepare.validate_resolved_join import (
+    raise_on_dishonest_join_record,
+    raise_on_join_star_keeping_two_groups,
+    raise_on_orphaned_join_source,
+)
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -201,6 +212,10 @@ class ExecutionPlan:
         # split already bridged by a Link must not be blamed (see _stamp_option_split_hints).
         self._stamp_option_split_hints(fw_execution_plan, graph.parent_to_children_mapping)
         self._stamp_link_index_columns(fw_execution_plan, graph.parent_to_children_mapping)
+        all_consumers = frozenset().union(*(r.consumers for r in self.planned_records))
+        for planned_step in fw_execution_plan:
+            if isinstance(planned_step, FeatureGroupStep):
+                planned_step.reads_join_result = bool(planned_step.get_uuids() & all_consumers)
 
         # Built before add_tfs, whose write serialization edges are not part of the join decision.
         join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
@@ -211,6 +226,7 @@ class ExecutionPlan:
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
         raise_on_dishonest_join_record(self.resolved_join_plan, join_steps, graph)
         if validate:
+            raise_on_join_star_keeping_two_groups(self.resolved_join_plan, graph)
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
@@ -781,6 +797,72 @@ Available join types:
                     stack.append(owner)
         clear |= visited
         return False
+
+    @staticmethod
+    def _join_content_key(join: JoinStep, graph: Graph) -> tuple[str, ...]:
+        """Order key of a join from its link, frameworks and member classes, equal across interpreters."""
+        nodes = graph.get_nodes()
+
+        def members(uuids: set[UUID]) -> str:
+            return ",".join(
+                sorted(
+                    f"{nodes[u].feature_group_class.__module__}:{nodes[u].feature_group_class.__qualname__}:{nodes[u].feature.name}:{stable_text(nodes[u].feature.options)}"
+                    for u in uuids
+                    if u in nodes
+                )
+            )
+
+        key = trekker_content_key((join.link, join.destination_framework, join.source_framework))
+        return key + (members(join.destination_framework_uuids), members(join.source_framework_uuids))
+
+    def _order_joins_sharing_consumers(self, plan: Sequence[Step], graph: Graph) -> set[UUID]:
+        """Chain joins that feed one consumer in a content based order, and make each consumer wait on all of them.
+
+        Returns the destinations of joins whose merged frame a later join sharing the source reads back.
+        """
+        steps_by_uuid = {step.uuid: step for step in plan}
+        producer_of = {token: step.uuid for step in plan for token in step.get_uuids()}
+        joins = [step for step in plan if isinstance(step, JoinStep)]
+        consumers_by_token = {r.token: r.consumers for r in self.planned_records}
+        groups = JoinStepCollection.groups_sharing_consumers(joins, consumers_by_token)
+
+        def waits(waiter: Step, awaited: Step) -> bool:
+            return self._step_waits_for(waiter.uuid, awaited.uuid, steps_by_uuid, producer_of)
+
+        destinations: set[UUID] = set()
+        for group in groups:
+            if len(group) > 1:
+                kept = frozenset().union(*(consumers_by_token[join.uuid] for join in group))
+                for join in group:
+                    join.keep_alive = kept
+            remaining = sorted(group, key=lambda join: self._join_content_key(join, graph))
+            ordered: list[JoinStep] = []
+            while remaining:
+                chosen = next(
+                    (j for j in remaining if not any(waits(j, other) for other in remaining if other is not j)),
+                    remaining[0],
+                )
+                remaining.remove(chosen)
+                ordered.append(chosen)
+            for earlier, later in zip(ordered, ordered[1:]):
+                if not waits(later, earlier) and not waits(earlier, later):
+                    later.required_uuids.add(earlier.uuid)
+                if earlier.source_framework_uuids & later.source_framework_uuids:
+                    destinations |= earlier.destination_framework_uuids
+
+        group_of_consumer: dict[UUID, int] = {}
+        for index, group in enumerate(groups):
+            for join in group:
+                for consumer in consumers_by_token[join.uuid]:
+                    group_of_consumer[consumer] = index
+        for step in plan:
+            if not isinstance(step, FeatureGroupStep):
+                continue
+            for index in sorted({group_of_consumer[u] for u in step.get_uuids() if u in group_of_consumer}):
+                for join in groups[index]:
+                    if join.uuid not in step.required_uuids and not waits(join, step):
+                        step.required_uuids.add(join.uuid)
+        return destinations
 
     def _order_hop_after_same_framework_parent(
         self,
@@ -1613,6 +1695,8 @@ Available join types:
                     self.tfs_collection.pop(dropped, None)
             redirect_consumer.required_uuids.add(mirror.uuid)
 
+        need_to_upload_collector |= self._order_joins_sharing_consumers(new_execution_plan, graph)
+
         # We define that every parent of a transform framework step needs to be uploaded.
         # This step is only relevant for multi processing.
         #
@@ -1926,6 +2010,40 @@ Available join types:
             if len(parent_parent) > 0:
                 parent_parents.update(parent_parent)
         return parent_parents
+
+    @staticmethod
+    def _reject_mixed_member_bucket(
+        link: Link,
+        children_uuids: set[UUID],
+        required_uuids: set[UUID],
+        split: DeclaredSideSplit,
+        frameworks: set[type[ComputeFramework]],
+        graph: Graph,
+    ) -> None:
+        """One link side must not hold two members on one join framework."""
+        if link.jointype in (JoinType.APPEND, JoinType.UNION):
+            return
+        nodes = graph.get_nodes()
+        sides = (
+            split.left_uuids_any_distance - split.right_uuids_any_distance,
+            split.right_uuids_any_distance - split.left_uuids_any_distance,
+        )
+        for position, side in enumerate(sides):
+            for framework in sorted(frameworks, key=lambda fw: fw.get_class_name()):
+                bucket = {u for u in side & required_uuids if nodes[u].feature.get_compute_framework() == framework}
+                if position == 1:
+                    bucket = set(narrow_by_right_index(link, bucket, lambda u: [nodes[u].feature])) or bucket
+                classes = sorted({nodes[u].feature_group_class for u in bucket}, key=lambda cls: cls.__name__)
+                if len(classes) < 2:
+                    continue
+                first, second = classes[0], classes[1]
+                for consumer in sorted(children_uuids):
+                    read = graph.parent_to_children_mapping.get(consumer, set())
+                    if len({nodes[u].feature_group_class for u in bucket & read}) > 1:
+                        name = nodes[consumer].feature_group_class.__name__
+                        raise ValueError(one_framework_members_reason(name, link, first, second) + ".")
+                consumers = ", ".join(sorted({nodes[c].feature_group_class.__name__ for c in children_uuids}))
+                raise ValueError(several_consumers_members_reason(consumers, link, first, second) + ".")
 
     @staticmethod
     def _validate_join_step_uuids(
@@ -2367,6 +2485,9 @@ Available join types:
         destination_uuids, source_uuids = (
             (join_uuids_right, join_uuids_left) if side is JoinSide.RIGHT else (join_uuids_left, join_uuids_right)
         )
+        self._reject_mixed_member_bucket(
+            link, children_uuids, required_uuids, split, {destination_framework, source_framework}, graph
+        )
         self._validate_join_step_uuids(link, set(destination_uuids), set(source_uuids))
 
         record = ResolvedJoin(
@@ -2672,6 +2793,31 @@ Available join types:
                 ]
                 if len(filtered) == 1:
                     return filtered[0]
+
+        left_sets = [left for left, _ in valid_pairs]
+        right_sets = [right for _, right in valid_pairs]
+        if right_index is not None:
+            right_sets = (
+                narrow_by_right_index(
+                    link_fw[0], right_sets, lambda uuids: [graph.nodes[u].feature for u in uuids if u in graph.nodes]
+                )
+                or right_sets
+            )
+        for side_sets in (left_sets, right_sets):
+            member_classes = sorted(
+                {graph.nodes[u].feature_group_class for uuids in side_sets for u in uuids if u in graph.nodes},
+                key=lambda cls: cls.__name__,
+            )
+            if len(member_classes) > 1:
+                raise ValueError(
+                    one_framework_members_reason(
+                        graph.nodes[children_uuid].feature_group_class.__name__,
+                        link_fw[0],
+                        member_classes[0],
+                        member_classes[1],
+                    )
+                    + "."
+                )
 
         # check that we only support non-right joins for equal/polymorphic feature groups
         if link_fw[0].jointype == JoinType.RIGHT:

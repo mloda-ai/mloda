@@ -137,6 +137,7 @@ class ComputeFramework(ABC):
         self._pinned_frame = None
         self.children_if_root = children_if_root
         self.already_calculated_children_tracker: set[UUID] = set()
+        self.keep_alive: set[UUID] = set()
         self.column_names: set[str] = set()
         self.function_extender: AbstractSet[Extender] = function_extender if function_extender is not None else set()
         # Raw pickled payload attached by the worker dispatch path; materialized into
@@ -452,6 +453,11 @@ class ComputeFramework(ABC):
 
         # worker-resident: return data to be used in next step of this framework in this process
         if len(self.children_if_root) > len(self.already_calculated_children_tracker) + len(features.features):
+            return self.data
+
+        # a consumer kept alive by a join sharing its frame may still read it in this process
+        computed = {feature.uuid for feature in features.features}
+        if self.keep_alive - self.already_calculated_children_tracker - computed:
             return self.data
 
         # upload finished dataset to flight server
@@ -932,7 +938,8 @@ class ComputeFramework(ABC):
     ) -> bool | frozenset[UUID]:
         self.already_calculated_children_tracker.update(children)
 
-        if self.children_if_root.issubset(self.already_calculated_children_tracker):
+        outstanding = (self.children_if_root | self.keep_alive) - self.already_calculated_children_tracker
+        if not outstanding:
             self.drop_last_data(location)
             return True
 
@@ -941,7 +948,7 @@ class ComputeFramework(ABC):
             # a set of step uuids that will eventually all complete) must not be handed a member
             # that already-arrived children can never re-supply, such as a link uuid that is not
             # itself any step's own completion token.
-            return self.children_if_root - self.already_calculated_children_tracker
+            return frozenset(outstanding)
 
         return False
 

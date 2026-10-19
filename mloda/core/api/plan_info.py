@@ -15,7 +15,8 @@ from mloda.core.abstract_plugins.components.options import Options, _safe_deepco
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
-from mloda.core.prepare.choose_compute_frameworks import _refine, stable_text
+from mloda.core.prepare.choose_compute_frameworks import _refine
+from mloda.core.prepare.stable_text import stable_text
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 

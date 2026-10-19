@@ -642,3 +642,36 @@ class TestCfwManagerRelease:
         register.release()
 
         assert vars(register) == vars(CfwManager(modes))
+
+
+class TestCfwManagerResolveByTfsIdsReadsJoinResult:
+    """The own-feature override replaces a hop's own frame only for a step that reads a join result."""
+
+    @staticmethod
+    def _register_root_and_hop() -> tuple[CfwManager, str, Any, Any, Any]:
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        cls_name = "PythonDictFramework"
+        root_cfw, hop_cfw, feature_uuid = uuid4(), uuid4(), uuid4()
+        # Both children sets hold the feature but neither contains the other.
+        cfw_register.add_cfw_to_compute_frameworks(root_cfw, cls_name, {feature_uuid, uuid4()})
+        cfw_register.add_cfw_to_compute_frameworks(hop_cfw, cls_name, {feature_uuid, uuid4()})
+        return cfw_register, cls_name, root_cfw, hop_cfw, feature_uuid
+
+    def test_a_step_not_reading_a_join_result_keeps_the_hop_frame(self) -> None:
+        cfw_register, cls_name, _, hop_cfw, feature_uuid = self._register_root_and_hop()
+
+        resolved = cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, {hop_cfw}, feature_uuid, reads_join_result=False)
+
+        assert resolved == hop_cfw
+
+    def test_a_step_reading_a_join_result_still_gets_the_override(self) -> None:
+        cfw_register, cls_name, root_cfw, hop_cfw, feature_uuid = self._register_root_and_hop()
+
+        resolved = cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, {hop_cfw}, feature_uuid, reads_join_result=True)
+
+        assert resolved == root_cfw
+
+    def test_the_override_applies_when_the_argument_is_omitted(self) -> None:
+        cfw_register, cls_name, root_cfw, hop_cfw, feature_uuid = self._register_root_and_hop()
+
+        assert cfw_register.resolve_cfw_uuid_by_tfs_ids(cls_name, {hop_cfw}, feature_uuid) == root_cfw

@@ -99,10 +99,15 @@ class HookContext:
     result_attributes: dict[str, str | int | float | bool] | None = None
 
     def __post_init__(self) -> None:
+        # Hand-built contexts get the same portable-scalar guarantee publish_result_attributes gives the dispatch path.
         if self.result_attributes is not None:
-            self.result_attributes = _frozen_dict(self.result_attributes)
+            self.result_attributes = _frozen_dict(
+                scalar_attributes(self.result_attributes, "result_attributes", "must be a Mapping")
+            )
         if self.declared_attributes is not None:
-            self.declared_attributes = _frozen_dict(self.declared_attributes)
+            self.declared_attributes = _frozen_dict(
+                scalar_attributes(self.declared_attributes, "declared_attributes", "must be a Mapping")
+            )
         # Copy on ingest so a hook mutating the carrier or input_feature_edges never reaches the caller's dict.
         if self.carrier is not None:
             self.carrier = _frozen_dict(self.carrier)

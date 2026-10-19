@@ -236,9 +236,7 @@ The returned set is passed straight to `mlodaAPI` like any other link set.
 
 **Known limits when several links feed one consumer**
 
-Each join that feeds a consumer runs on the frame the previous join built. When the links share their right side, as in `Link.inner(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.inner(JoinSpec(C, ...), JoinSpec(B, ...))`, a left or right join star that keeps both `A` and `C` is rejected at plan time, because its rows would depend on join order. Keep `B`, or use inner joins for both or outer joins for both.
-
-Declaring the shared group as the left side of every link avoids this, which is what `Link.star(B, A, C, index_column=...)` does; for the left join, keep `B` (`jointype="left"`) or use inner or outer joins. Two members of one link side (see below) count as two such links.
+Each join that feeds a consumer runs on the frame the previous join built, so the result must not depend on their order. When the links share a group, as in `Link.left(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.left(JoinSpec(C, ...), JoinSpec(B, ...))`, a left or right join star that keeps both `A` and `C` is rejected at plan time. Keep `B` in every join (`Link.star(B, A, C, index_column=..., jointype="left")`), or use inner joins for all links or outer joins for all links. Other mixes of join types in one star, such as a left join that keeps `A` next to an inner join, are not checked yet and can depend on join order. Two members of one link side (see below) count as two such links.
 
 #### Same-Class Joins with Discriminators
 

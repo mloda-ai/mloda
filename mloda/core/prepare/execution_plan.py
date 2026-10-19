@@ -17,7 +17,12 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
-from mloda.core.prepare.declared_sides import DeclaredSideSplit, split_by_declared_side
+from mloda.core.prepare.declared_sides import (
+    DeclaredSideSplit,
+    one_framework_members_reason,
+    several_consumers_members_reason,
+    split_by_declared_side,
+)
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
@@ -1928,6 +1933,38 @@ Available join types:
         return parent_parents
 
     @staticmethod
+    def _reject_mixed_member_bucket(
+        link: Link,
+        children_uuids: set[UUID],
+        required_uuids: set[UUID],
+        split: DeclaredSideSplit,
+        frameworks: set[type[ComputeFramework]],
+        graph: Graph,
+    ) -> None:
+        """One link side must not hold two members on one join framework."""
+        if link.jointype in (JoinType.APPEND, JoinType.UNION):
+            return
+        nodes = graph.get_nodes()
+        sides = (
+            split.left_uuids_any_distance - split.right_uuids_any_distance,
+            split.right_uuids_any_distance - split.left_uuids_any_distance,
+        )
+        for side in sides:
+            for framework in sorted(frameworks, key=lambda fw: fw.get_class_name()):
+                bucket = {u for u in side & required_uuids if nodes[u].feature.get_compute_framework() == framework}
+                classes = sorted({nodes[u].feature_group_class for u in bucket}, key=lambda cls: cls.__name__)
+                if len(classes) < 2:
+                    continue
+                first, second = classes[0], classes[1]
+                for consumer in sorted(children_uuids):
+                    read = graph.parent_to_children_mapping.get(consumer, set())
+                    if len({nodes[u].feature_group_class for u in bucket & read}) > 1:
+                        name = nodes[consumer].feature_group_class.__name__
+                        raise ValueError(one_framework_members_reason(name, link, first, second) + ".")
+                consumers = ", ".join(sorted({nodes[c].feature_group_class.__name__ for c in children_uuids}))
+                raise ValueError(several_consumers_members_reason(consumers, link, first, second))
+
+    @staticmethod
     def _validate_join_step_uuids(
         link: Link,
         destination_framework_uuids: set[UUID],
@@ -2367,6 +2404,9 @@ Available join types:
         destination_uuids, source_uuids = (
             (join_uuids_right, join_uuids_left) if side is JoinSide.RIGHT else (join_uuids_left, join_uuids_right)
         )
+        self._reject_mixed_member_bucket(
+            link, children_uuids, required_uuids, split, {destination_framework, source_framework}, graph
+        )
         self._validate_join_step_uuids(link, set(destination_uuids), set(source_uuids))
 
         record = ResolvedJoin(
@@ -2672,6 +2712,22 @@ Available join types:
                 ]
                 if len(filtered) == 1:
                     return filtered[0]
+
+        for side_sets in ([left for left, _ in valid_pairs], [right for _, right in valid_pairs]):
+            member_classes = sorted(
+                {graph.nodes[u].feature_group_class for uuids in side_sets for u in uuids if u in graph.nodes},
+                key=lambda cls: cls.__name__,
+            )
+            if len(member_classes) > 1:
+                raise ValueError(
+                    one_framework_members_reason(
+                        graph.nodes[children_uuid].feature_group_class.__name__,
+                        link_fw[0],
+                        member_classes[0],
+                        member_classes[1],
+                    )
+                    + "."
+                )
 
         # check that we only support non-right joins for equal/polymorphic feature groups
         if link_fw[0].jointype == JoinType.RIGHT:

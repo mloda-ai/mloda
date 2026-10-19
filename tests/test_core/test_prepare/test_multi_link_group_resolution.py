@@ -2081,9 +2081,7 @@ def test_members_on_both_link_sides_are_rejected_at_plan_time(swap_link_sides: b
             extra_groups={RemedyRootA1, RemedyRootBSubclass},
         )
 
-    # b_a already fails today with the planner's ambiguity error; only a_b is guaranteed the side member reason.
-    if not swap_link_sides:
-        assert "members of one link side" in str(exc_info.value)
+    assert "members of one link side" in str(exc_info.value)
 
 
 class RemedyTwoNameConsumer(FeatureGroup):
@@ -2158,12 +2156,192 @@ RemedyArrowSiblingConsumer = _remedy_sum_consumer(
 )
 
 
-def test_two_members_of_one_link_side_on_one_framework_over_one_base_link_are_ambiguous() -> None:
-    with pytest.raises(ValueError, match="There are more than one solution for the join"):
+_ONE_FRAMEWORK_REASONS = (
+    "members of one link side",
+    "one member of the link side per consumer",
+    "declare one link per member",
+)
+
+RemedySecondSiblingConsumer = _remedy_sum_consumer(
+    "RemedySecondSiblingConsumer", SecondCfw, ("mlg_a", "mlg_a2", "mlg_bd")
+)
+RemedyArrowSiblingSameBConsumer = _remedy_sum_consumer(
+    "RemedyArrowSiblingSameBConsumer", PyArrowTable, ("mlg_a", "mlg_a2", "mlg_b")
+)
+RemedyArrowBMembersConsumer = _remedy_sum_consumer(
+    "RemedyArrowBMembersConsumer", PyArrowTable, ("mlg_a", "mlg_bd", "mlg_bd2")
+)
+RemedySecondBMembersConsumer = _remedy_sum_consumer(
+    "RemedySecondBMembersConsumer", SecondCfw, ("mlg_a", "mlg_bd", "mlg_bd2")
+)
+
+_A_MEMBERS = (MultiLinkRootA, RemedyRootASibling)
+_B_MEMBERS = (MultiLinkRootBDistinct, RemedyRootBSubclass)
+
+# (consumer, root_b, extra member group, the two members named by the reason)
+_SAME_FRAMEWORK_MEMBER_LAYOUTS = [
+    pytest.param(
+        RemedyArrowSiblingConsumer,
+        MultiLinkRootBDistinct,
+        RemedyRootASibling,
+        _A_MEMBERS,
+        id="a_members_arrow_b_second",
+    ),
+    pytest.param(
+        RemedySecondSiblingConsumer,
+        MultiLinkRootBDistinct,
+        RemedyRootASibling,
+        _A_MEMBERS,
+        id="a_members_second_consumer_b_second",
+    ),
+    pytest.param(
+        RemedyArrowSiblingSameBConsumer, MultiLinkRootBSame, RemedyRootASibling, _A_MEMBERS, id="a_members_all_arrow"
+    ),
+    pytest.param(
+        RemedyArrowBMembersConsumer, MultiLinkRootBDistinct, RemedyRootBSubclass, _B_MEMBERS, id="b_members_arrow"
+    ),
+    pytest.param(
+        RemedySecondBMembersConsumer, MultiLinkRootBDistinct, RemedyRootBSubclass, _B_MEMBERS, id="b_members_second"
+    ),
+]
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("consumer, root_b, extra_group, members", _SAME_FRAMEWORK_MEMBER_LAYOUTS)
+def test_one_consumer_reading_two_members_of_one_link_side_on_one_framework_over_one_base_link_is_rejected(
+    consumer: type[FeatureGroup],
+    root_b: type[FeatureGroup],
+    extra_group: type[FeatureGroup],
+    members: tuple[type[FeatureGroup], type[FeatureGroup]],
+    swap_link_sides: bool,
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
         _side_path_prepare(
             SidePathArrowP,
             False,
-            consumer=RemedyArrowSiblingConsumer,
-            features=[RemedyArrowSiblingConsumer.get_class_name()],
-            **{**_REMEDY_KWARGS, "extra_groups": {RemedyRootASibling}},
+            swap_link_sides,
+            consumer=consumer,
+            features=[consumer.get_class_name()],
+            **{**_REMEDY_KWARGS, "root_b": root_b, "extra_groups": {extra_group}},
         )
+
+    message = str(exc_info.value)
+    assert consumer.get_class_name() in message
+    for member in members:
+        assert member.get_class_name() in message
+    for reason in _ONE_FRAMEWORK_REASONS:
+        assert reason in message
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("consumer, root_b, extra_group, members", _SAME_FRAMEWORK_MEMBER_LAYOUTS)
+def test_the_planner_backstops_reject_two_members_of_one_link_side_on_one_framework(
+    monkeypatch: pytest.MonkeyPatch,
+    consumer: type[FeatureGroup],
+    root_b: type[FeatureGroup],
+    extra_group: type[FeatureGroup],
+    members: tuple[type[FeatureGroup], type[FeatureGroup]],
+    swap_link_sides: bool,
+) -> None:
+    # Empty chooser rules reach the planner's backstops.
+    monkeypatch.setattr(ChooseComputeFrameworks, "_side_member_rules", lambda self, *args, **kwargs: [])
+
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=consumer,
+            features=[consumer.get_class_name()],
+            **{**_REMEDY_KWARGS, "root_b": root_b, "extra_groups": {extra_group}},
+        )
+
+    message = str(exc_info.value)
+    assert consumer.get_class_name() in message
+    for member in members:
+        assert member.get_class_name() in message
+    for reason in _ONE_FRAMEWORK_REASONS:
+        assert reason in message
+
+
+RemedySecondFirstMemberConsumer = _remedy_sum_consumer(
+    "RemedySecondFirstMemberConsumer", SecondCfw, ("mlg_a", "mlg_bd")
+)
+RemedySecondSecondMemberConsumer = _remedy_sum_consumer(
+    "RemedySecondSecondMemberConsumer", SecondCfw, ("mlg_a2", "mlg_bd")
+)
+
+
+def _two_consumers_one_member_each_prepare(links: set[Link] | None, swap_link_sides: bool = False) -> Any:
+    consumers = (RemedySecondFirstMemberConsumer, RemedySecondSecondMemberConsumer)
+    if links is None:
+        left, right = (
+            (MultiLinkRootBDistinct, MultiLinkRootA) if swap_link_sides else (MultiLinkRootA, MultiLinkRootBDistinct)
+        )
+        links = {Link.inner(JoinSpec(left, MLG_INDEX), JoinSpec(right, MLG_INDEX))}
+    return mloda.prepare(
+        [consumer.get_class_name() for consumer in consumers],
+        links=links,
+        compute_frameworks=[PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {MultiLinkRootA, RemedyRootASibling, MultiLinkRootBDistinct, *consumers}
+        ),
+    )
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_two_consumers_each_reading_one_member_over_one_base_link_are_told_to_declare_one_link_per_member(
+    swap_link_sides: bool,
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _two_consumers_one_member_each_prepare(None, swap_link_sides)
+
+    message = str(exc_info.value)
+    assert "declare one link per member" in message
+    assert "MultiLinkRootA" in message
+    assert "RemedyRootASibling" in message
+    assert "one member of the link side per consumer" not in message
+
+
+def test_two_consumers_each_reading_one_member_get_their_values_over_one_link_per_member() -> None:
+    links = {
+        Link.inner(JoinSpec(member, MLG_INDEX), JoinSpec(MultiLinkRootBDistinct, MLG_INDEX))
+        for member in (MultiLinkRootA, RemedyRootASibling)
+    }
+
+    results = _two_consumers_one_member_each_prepare(links).run()
+
+    assert _side_path_values(results, RemedySecondFirstMemberConsumer) == [[11, 22, 33]]
+    assert _side_path_values(results, RemedySecondSecondMemberConsumer) == [[14, 25, 36]]
+
+
+class RemedyRootAFree(RemedyRootASibling):
+    """Second member of the A link side that may run on PyArrow or Pandas."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable, PandasDataFrame}
+
+
+RemedyArrowFreeMemberConsumer = _remedy_sum_consumer(
+    "RemedyArrowFreeMemberConsumer", PyArrowTable, ("mlg_a", "mlg_a2", "mlg_b")
+)
+
+
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_member_allowed_on_two_frameworks_is_pushed_apart_from_its_sibling_and_both_columns_return(
+    swap_link_sides: bool,
+) -> None:
+    session = _side_path_prepare(
+        SidePathArrowP,
+        False,
+        swap_link_sides,
+        consumer=RemedyArrowFreeMemberConsumer,
+        features=[RemedyArrowFreeMemberConsumer.get_class_name()],
+        **{**_REMEDY_KWARGS, "root_b": MultiLinkRootBSame, "extra_groups": {RemedyRootAFree}},
+    )
+
+    results = session.run()
+
+    assert _side_path_values(results, RemedyArrowFreeMemberConsumer) == [[15, 27, 39]]

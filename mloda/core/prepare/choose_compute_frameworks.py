@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.prepare.declared_sides import one_framework_members_reason
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 
@@ -152,6 +153,10 @@ def _side_member_allows(relaxed: bool, values: Values) -> bool:
     if first is second or any(o is first or o is second for o in others):
         return True
     return relaxed and all(o is consumer for o in others)
+
+
+def _members_apart(values: Values) -> bool:
+    return values[0] is not values[1]
 
 
 def _swapped_pairs_differ(values: Values) -> bool:
@@ -570,6 +575,19 @@ class ChooseComputeFrameworks:
                     for a, b in combinations(members, 2):
                         if blocks[a].fg is blocks[b].fg:
                             continue
+                        rules.setdefault(
+                            (a, b, consumer, "apart"),
+                            _Rule(
+                                (a, b),
+                                _members_apart,
+                                one_framework_members_reason(
+                                    blocks[consumer].fg.__name__,
+                                    next(k for k, _ in joinable if k.uuid == link_uuid),
+                                    blocks[a].fg,
+                                    blocks[b].fg,
+                                ),
+                            ),
+                        )
                         if relaxed is None:
                             relaxed = (
                                 offers

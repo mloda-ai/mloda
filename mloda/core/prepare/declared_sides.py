@@ -18,6 +18,32 @@ class DeclaredSideSplit(NamedTuple):
     right_uuids_any_distance: frozenset[UUID]
 
 
+def _member_links(link: Link, first: type, second: type) -> str:
+    """The per-member links that replace one base-class link."""
+    left, right = link.left_feature_group.__name__, link.right_feature_group.__name__
+    if issubclass(first, link.left_feature_group):
+        return f"Link({first.__name__}, {right}) and Link({second.__name__}, {right})"
+    return f"Link({left}, {first.__name__}) and Link({left}, {second.__name__})"
+
+
+def one_framework_members_reason(consumer: str, link: Link, first: type, second: type) -> str:
+    """Reason for one consumer reading two members of one link side on one framework, without final period."""
+    return (
+        f"{consumer} joins {first.__name__} and {second.__name__}, members of one link side, on one compute "
+        "framework over one link: one join would keep only one member's columns. Read one member of the link side "
+        f"per consumer, and declare one link per member: {_member_links(link, first, second)}"
+    )
+
+
+def several_consumers_members_reason(consumers: str, link: Link, first: type, second: type) -> str:
+    """Reason for several consumers each reading one member of one link side over one link."""
+    return (
+        f"The consumers {consumers} each join one of {first.__name__} and {second.__name__}, members of one link "
+        "side, on one compute framework over one link, which merges both into one join: declare one link per "
+        f"member: {_member_links(link, first, second)}."
+    )
+
+
 def _nearest(uuids_by_distance: dict[int, set[UUID]]) -> frozenset[UUID]:
     """The minimum-distance bucket, or an empty side."""
     if not uuids_by_distance:

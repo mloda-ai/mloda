@@ -824,6 +824,8 @@ class Engine:
         ordered: list[Feature | str] = list(input_features)
         if isinstance(input_features, (set, frozenset)):  # set order is hash-seed dependent
             ordered.sort(key=lambda f: str(f.name) if isinstance(f, Feature) else str(f))
+        # Captured before recursion renames digit-only ~N part requests to their base (issue #2031).
+        declared_names = {str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered}
         features = Features(ordered, child_options=options, child_uuid=uuid, parent_domain=parent_domain)
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)
@@ -836,7 +838,9 @@ class Engine:
         self.setup_features_recursion(
             features, requested=False, depth=depth + 1, consumer=consumer_name, path=(*path, str(feature_name))
         )
-        return frozenset(str(f.name) for f in features.collection)
+        resolved_names = {str(f.name) for f in features.collection}
+        evicted = {FeatureGroup.get_column_base_feature(name) for name in declared_names} - declared_names
+        return frozenset((resolved_names - evicted) | declared_names)
 
     def set_compute_framework(
         self,

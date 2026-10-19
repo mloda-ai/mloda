@@ -111,6 +111,51 @@ class SubColumnConsumer(FeatureGroup):
         return {PandasDataFrame}
 
 
+class NamedPartProducerForSubColumnTest(FeatureGroup):
+    """Producer that writes measure~value1..3 columns using named (non-digit) suffixes."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"measure", "measure~value1", "measure~value2"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        source_values = data["source_data"].values
+        result = np.column_stack([source_values, source_values * 2, source_values * 3])
+        named_columns = cls.apply_naming_convention(result, "measure", suffix_generator=lambda i: f"value{i + 1}")
+        for col_name, col_data in named_columns.items():
+            data[col_name] = col_data
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class NamedPartConsumerForSubColumnTest(FeatureGroup):
+    """Consumer that depends on the named part measure~value1."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"named_part_consumer_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("measure~value1")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        feature_name = next(iter(features.get_all_names()))
+        data[feature_name] = data["measure~value1"].values * 10
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
 class TestSubColumnFeatureMatching:
     """Tests for match_feature_group_criteria() with sub-column names."""
 
@@ -711,4 +756,88 @@ class TestSubColumnIntegration:
                 "Second consumer should receive first_consumer_output (base_feature~1 * 2) "
                 "and double it to get [80, 160, 240, 320, 400]"
             ),
+        )
+
+
+class TestSubColumnInputsInPlan:
+    """Tests that PlanStep.input_feature_names keeps the part-ful input names (issue #2031)."""
+
+    @staticmethod
+    def _compute_step_for(session: Any, feature_name: str) -> Any:
+        """Return the single compute step whose feature_names contain the given feature."""
+        matching = [s for s in session.resolved_plan() if s.step_kind == "compute" and feature_name in s.feature_names]
+        assert len(matching) == 1, f"Expected exactly one compute step for {feature_name}, got {len(matching)}"
+        return matching[0]
+
+    def test_numbered_part_input_reports_part_ful_name_in_plan(self) -> None:
+        """
+        A consumer declaring Feature("base_feature~1") must report the part-ful input
+        name in the execution plan (issue #2031).
+
+        SubColumnConsumer reads the numbered part base_feature~1, so the consumer step
+        must expose input_feature_names == ("base_feature~1",) and the matching
+        input_feature_edges entry; before the fix the plan loses the part and reports
+        only the base name ("base_feature",), which breaks lineage/explain.
+        """
+        PluginLoader().all()
+
+        session = mloda.prepare(
+            [Feature("sub_column_consumer_output")],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {
+                    SubColumnTestDataCreator,
+                    MultiColumnProducerForSubColumnTest,
+                    SubColumnConsumer,
+                }
+            ),
+        )
+
+        step = self._compute_step_for(session, "sub_column_consumer_output")
+
+        assert step.input_feature_names == ("base_feature~1",), (
+            "The consumer reads base_feature~1, so the plan must keep the part-ful input name; "
+            f"got {step.input_feature_names}"
+        )
+        assert step.input_feature_edges == {"sub_column_consumer_output": ("base_feature~1",)}, (
+            f"The consumer step's input edge must point at base_feature~1; got {dict(step.input_feature_edges)}"
+        )
+
+    def test_named_part_input_reports_part_ful_name_in_plan(self) -> None:
+        """
+        A consumer declaring Feature("measure~value1") (non-digit suffix) must report the
+        part-ful input name in the execution plan (issue #2031).
+
+        This is a regression guard: named parts resolve through the producer declaring the
+        literal part name in feature_names_supported(), and the plan already records
+        measure~value1 correctly today; the fix must keep it that way.
+        """
+        PluginLoader().all()
+
+        session = mloda.prepare(
+            [Feature("named_part_consumer_output")],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {
+                    SubColumnTestDataCreator,
+                    NamedPartProducerForSubColumnTest,
+                    NamedPartConsumerForSubColumnTest,
+                }
+            ),
+        )
+
+        consumer_step = self._compute_step_for(session, "named_part_consumer_output")
+
+        assert consumer_step.input_feature_names == ("measure~value1",), (
+            f"The named part input name must be kept verbatim in the plan; got {consumer_step.input_feature_names}"
+        )
+        assert consumer_step.input_feature_edges == {"named_part_consumer_output": ("measure~value1",)}, (
+            "The consumer step's input edge must point at measure~value1; "
+            f"got {dict(consumer_step.input_feature_edges)}"
+        )
+
+        producer_steps = [s for s in session.resolved_plan() if s.feature_group is NamedPartProducerForSubColumnTest]
+        assert len(producer_steps) == 1, f"Expected exactly one producer step, got {len(producer_steps)}"
+        assert producer_steps[0].input_feature_names == ("source_data",), (
+            f"The producer step reads source_data; got {producer_steps[0].input_feature_names}"
         )

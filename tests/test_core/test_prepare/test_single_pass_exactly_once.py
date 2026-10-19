@@ -1219,6 +1219,7 @@ class TestMalformedHookValuesDegradeLikeARaise:
             f"Multiple feature groups found for feature '{BAD_DOMAIN_FEATURE_782}':\n"
             f"  - {malformed.__name__} ({malformed.__module__})\n"
             f"  - {healthy.__name__} ({healthy.__module__}) [domain: {HEALTHY_DOMAIN_782}]\n"
+            "A steward can keep one with PluginCollector or a PluginPolicy.\n"
             f"{TROUBLESHOOTING_LINE_782}"
         )
 

@@ -46,6 +46,19 @@ def record_match_rejection(
     reasons.setdefault(owner_name, MatchRejection(reason, stage, candidates))
 
 
+def replace_probe_match_rejection(
+    owner_name: str, reason: str, known_owners: frozenset[str], stage: str = "value_rejection"
+) -> None:
+    """Record, replacing the owner's rejection only when it was recorded after the known_owners snapshot."""
+    reasons = MATCH_REJECTION_REASONS.get()
+    if reasons is None:
+        return
+    if owner_name in known_owners:
+        reasons.setdefault(owner_name, MatchRejection(reason, stage))
+    else:
+        reasons[owner_name] = MatchRejection(reason, stage)
+
+
 def match_rejection_owners() -> frozenset[str]:
     """Owner names already recorded in the active window; empty outside one."""
     reasons = MATCH_REJECTION_REASONS.get()

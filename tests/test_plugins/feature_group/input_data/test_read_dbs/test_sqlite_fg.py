@@ -439,6 +439,11 @@ class TestSqliteDescribeColumns:
             SqliteFG.describe_columns(_match(str(missing), "t"))
         assert not missing.exists()
 
+    def test_a_missing_database_reports_that_it_does_not_exist_and_is_not_created(self, tmp_path: Path) -> None:
+        missing = tmp_path / "missing.db"
+        assert SqliteFG.unknown_columns_reason(_match(str(missing), "t")) == "it does not exist"
+        assert not missing.exists()
+
     def test_a_crafted_preset_table_name_declines_and_leaves_the_table_intact(self, people_db: str) -> None:
         credential = {KEY: people_db, "table_name": "test_table); DROP TABLE test_table; --"}
         result = IdentifyFeatureGroupClass.evaluate(

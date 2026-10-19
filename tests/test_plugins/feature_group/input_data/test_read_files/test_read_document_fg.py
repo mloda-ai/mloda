@@ -13,7 +13,8 @@ import pytest
 import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.provider import FormatFeatureGroup, ReadDocumentFG, ReadFileFG
 from mloda.user import DataAccessCollection, DataType, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -168,6 +169,28 @@ class TestProviderHooks:
 
         assert not _claims(ToyHandoverDocFG, pointed, None)
         assert not _claims(ToyHandoverDocFG, Feature("ToyHandoverDocFG"), folder)
+
+    @pytest.mark.parametrize("source_kind", ["file_handle", "folder_entry"])
+    def test_a_collection_file_with_only_a_handed_over_suffix_names_document_suffixes_and_drops_the_prefix_hint(
+        self, tmp_path: Path, source_kind: str
+    ) -> None:
+        path = _write(tmp_path, "a.toyhandover")
+        dac = (
+            DataAccessCollection(files={"toy": str(path)})
+            if source_kind == "file_handle"
+            else DataAccessCollection(folders={"toy_dir": str(tmp_path)})
+        )
+        feature = Feature("ToyHandoverDocFG")
+        plugins: FeatureGroupEnvironmentMapping = {ToyHandoverDocFG: {PythonDictFramework}}
+
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None, dac)
+        assert "document_suffixes" in result.eliminations[ToyHandoverDocFG].reason
+
+        with pytest.raises(ValueError) as exc_info:
+            resolve_or_raise(feature, plugins, None, dac)
+        message = str(exc_info.value)
+        assert "document_suffixes" in message
+        assert "ToyHandoverDocFG_" not in message
 
     def test_a_marked_abort_from_suffixes_escapes_matching(self) -> None:
         """Function-local group: a module-level one raising from suffixes() would break every other test's discovery."""

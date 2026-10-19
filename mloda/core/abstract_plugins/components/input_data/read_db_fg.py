@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
     HANDLE_OPTION,
     HANDLE_SPEC,
     FormatFeatureGroup,
+    _capped,
 )
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
@@ -29,7 +30,6 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
 
-_MAX_DESCRIBED = 5
 QUERY_OPTION = "query_text"
 
 
@@ -47,11 +47,6 @@ class DBQuery:
 
     credentials: Any = field(repr=False)
     query_text: str
-
-
-def _capped(names: list[str]) -> str:
-    text = ", ".join(repr(name) for name in names[:_MAX_DESCRIBED])
-    return text if len(names) <= _MAX_DESCRIBED else f"{text}, and {len(names) - _MAX_DESCRIBED} more"
 
 
 class ReadDBFG(FormatFeatureGroup):

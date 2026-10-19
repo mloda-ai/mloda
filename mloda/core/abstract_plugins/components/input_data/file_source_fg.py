@@ -25,6 +25,10 @@ def _is_suffix_value(value: Any) -> bool:
     return isinstance(value, (list, tuple, set, frozenset)) and all(isinstance(item, str) for item in value)
 
 
+def not_a_file_reason(path: str) -> str:
+    return "it is not a regular file" if os.path.exists(path) else "it does not exist"
+
+
 class _FileSourceFG(FormatFeatureGroup):
     """Abstract plumbing for groups whose sources are files and folders of files."""
 
@@ -89,6 +93,12 @@ class _FileSourceFG(FormatFeatureGroup):
         if pointer is not None:
             if os.path.isdir(pointer):
                 return [] if is_file_route else cls._folder_entries(pointer, excluded)
+            if is_file_route and not pointer.endswith(cls.suffixes()):
+                record_match_rejection(
+                    cls.get_class_name(),
+                    f"{pointer} does not end in a {cls.get_class_name()} suffix ({', '.join(cls.suffixes())})",
+                    stage=INPUT_DATA_STAGE,
+                )
             return [cls._source(pointer)] if is_file_route and cls._owns(pointer, excluded) else []
         pinned = cls._pinned_path(feature_name, data_access_collection)
         if pinned is not None:
@@ -153,5 +163,19 @@ class _FileSourceFG(FormatFeatureGroup):
     def _folder_entries(cls, folder: str, document_suffixes: tuple[str, ...]) -> list[SourceMatch]:
         if not os.path.isdir(folder):
             return []
+        root = os.path.realpath(folder)
         paths = (os.path.join(folder, name) for name in sorted(os.listdir(folder)))
-        return [cls._source(p) for p in paths if cls._owns(p, document_suffixes) and os.path.isfile(p)]
+        kept: list[SourceMatch] = []
+        for path in paths:
+            if not (cls._owns(path, document_suffixes) and os.path.isfile(path)):
+                continue
+            if os.path.commonpath([root, os.path.realpath(path)]) != root:
+                record_match_rejection(
+                    cls.get_class_name(),
+                    f"folder entry {os.path.abspath(path)} links outside its folder, so it is skipped; "
+                    "add it as a files handle or point at it",
+                    stage=INPUT_DATA_STAGE,
+                )
+                continue
+            kept.append(cls._source(path))
+        return kept

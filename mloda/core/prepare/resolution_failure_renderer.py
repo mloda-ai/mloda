@@ -120,6 +120,7 @@ def _render_multiple(result: EvaluationResult, feature: Feature, callout: str | 
         f"{lines}\n"
         f"{scope_line}"
         f"{source_fix}"
+        "A steward can keep one with PluginCollector or a PluginPolicy.\n"
         f"For troubleshooting guide, see: {TROUBLESHOOTING_URL}"
     )
 

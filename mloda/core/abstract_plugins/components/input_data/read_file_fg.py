@@ -14,7 +14,7 @@ from typing import Any, ClassVar
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
-from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.utils import is_match_abort
@@ -98,7 +98,7 @@ class ReadFileFG(_FileSourceFG):
     def _listing_result(cls, kind: str, match: SourceMatch) -> tuple[Collection[str] | None, str | None]:
         path = os.path.abspath(match.access)
         if not os.path.isfile(path):
-            return None, "it is not a regular file"
+            return None, not_a_file_reason(path)
         stat_result = os.stat(path)
         key = (cls, kind, path, stat_result.st_mtime_ns, stat_result.st_size)
         return run_cached(key, lambda: cls._read_listing(kind, match.access))

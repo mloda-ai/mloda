@@ -1,7 +1,8 @@
 """Abstract base of one-FeatureGroup-per-document-format: one file in, three outputs (text, source, file_type).
 
 A subclass declares ``suffixes()``. Third-party groups should run the contract mixins in mloda's
-``tests/mixins/reader_feature_groups/`` (``document_format_feature_group_test_mixin``).
+``tests/mixins/reader_feature_groups/`` (``document_format_feature_group_test_mixin``); the mixins need the ``rejection_window`` fixture from mloda's
+``tests/conftest.py``.
 """
 
 import os
@@ -20,7 +21,10 @@ FILE_TYPE_SUFFIX = "~file_type"
 
 
 class ReadDocumentFG(_FileSourceFG):
-    """Document format group; run tests/mixins/reader_feature_groups/document_format_feature_group_test_mixin.py."""
+    """Document format group; run tests/mixins/reader_feature_groups/document_format_feature_group_test_mixin.py.
+
+    The mixin needs the rejection_window fixture from mloda's tests/conftest.py.
+    """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
         ClaimRoute("file", NamePolicy.DECLARED, True),

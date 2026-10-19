@@ -515,8 +515,8 @@ class mlodaAPI:
         huge requests) plus that feature's EvaluationResult and rendered message. A SetupConfigurationError
         (any invalid request argument caught during session setup, before planning, for example an invalid
         column_ordering or an unknown compute framework name) yields only the message. Environment-build
-        failures (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError) and
-        compute-framework pin misuse (ComputeFrameworkPinError) are likewise projected into the diagnosis
+        failures (EnvironmentPreconditionError, RedefinitionConflictError, FrameworkDeclarationError),
+        compute-framework pin misuse (ComputeFrameworkPinError) and FormatPointerError are likewise projected into the diagnosis
         instead of raising (an environment failure found after planning, a missing connection, also carries
         the resolved records); any other error propagates, including an exception a breaking extender raises unless
         it is one of the types above. Every parameter after features is keyword-only.

@@ -29,22 +29,15 @@ data_access_collection = DataAccessCollection(files={file_path})
 feature_list = ["id","V1","V2","V3"]
 ```
 
-Expected Error when running.
+Running this without `compute_frameworks` does not fail: several compute frameworks (like **PyArrowTable** and **PandasDataFrame**) can handle the same file through the **CsvFG** feature group, and mloda picks one (Pandas in this example). Specify the compute framework to control which one runs.
+
+The only error here is when no compute framework plugin is loaded at all:
 
 ```text
-mloda.run_all(
-    feature_list,
-    data_access_collection=data_access_collection
-)
-
-ValueError: Multiple feature groups
-{<class 'CsvFG'>: {<class 'PyArrowTable'>, <class 'PandasDataFrame'>}
-.... found for feature name: id.
+ValueError: No compute framework plugin is loaded; import one or call PluginLoader.all().
 ```
 
-In this case, the framework finds multiple compute frameworks (like **PyArrowTable** and **PandasDataFrame**) that can handle the same file through the **CsvFG** feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.
-
-This might seem counterintuitive, but it’s actually a **feature**, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:
+Choosing the compute framework per run is a **feature**, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:
 
 -   **Migrations**: Moving from one environment to another.
 -   **Scaling Projects**: Upleveling a project from MVP to production.

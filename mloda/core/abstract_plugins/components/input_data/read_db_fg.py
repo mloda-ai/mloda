@@ -58,7 +58,8 @@ class ReadDBFG(FormatFeatureGroup):
     """Abstract database format group: claims features found as columns of tables in matching credentials.
 
     The base serves table catalogs; QUERY_ROUTE opts in to query text. Third-party groups should reuse the contract
-    mixin database_format_feature_group_test_mixin from tests/mixins/reader_feature_groups in mloda's repository.
+    mixin database_format_feature_group_test_mixin from tests/mixins/reader_feature_groups in mloda's repository; it
+    needs the rejection_window fixture from mloda's tests/conftest.py.
     """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)

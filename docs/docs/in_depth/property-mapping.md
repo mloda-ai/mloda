@@ -143,8 +143,9 @@ consequences keep the shared type honest on this surface:
   canonicalization, downstream visibility); a reader default is only returned by
   `reader_option(key, options)` and never enters `Options`. Presence follows the
   [#768 matrix](#applying-declared-defaults); a `NO_DEFAULT` key is required at selection, and
-  `reader_option` raises for it. The declaration is load-bearing: `ReadFileFG` and the
-  document groups resolve `document_suffixes` this way.
+  `reader_option` raises for it. `document_suffixes` is not an
+  example: it is declared in the file-source `PROPERTY_MAPPING` on `_FileSourceFG` and read with `options.get`,
+  not through `reader_option`.
 - **Fields with no reader meaning are rejected where they are written.** `match_guard`,
   `deferred_binding=True` and `context=False` describe name matching and value placement, which a
   reader does not have, so `BaseInputData.__init_subclass__` rejects them instead of leaving them

@@ -9,14 +9,14 @@ This document clarifies the differences between these concepts and their respect
 ## BaseInputData Pattern
 
 ### Purpose
-BaseInputData is an **abstract base class** that defines how feature groups **load and access data**. It's the foundation for data loading mechanisms in mloda.
+BaseInputData is the **legacy reader base** for feature groups that are not format FeatureGroups. Files, documents and databases are read by format FeatureGroups (see below), not through BaseInputData.
 
 ### Key Characteristics
 - **Data Loading Focus**: Primarily concerned with how to load data from various sources
 - **Feature Group Integration**: Used by feature groups through the `input_data()` method
 - **Inheritance-Based**: Concrete implementations inherit from BaseInputData
 - **Scope Management**: Supports both global and feature-specific data access scopes
-- **Universal Usage**: Used by all feature groups that need to load data
+- **Non-format Usage**: Used by groups such as `DataCreator` and `ApiInputData` that are not format FeatureGroups
 
 ### Use Cases
 - Reading files, documents and databases (through format FeatureGroups)
@@ -157,7 +157,7 @@ Rules for format group authors:
 - Recording outside an engine-opened window is a no-op, so groups stay usable standalone.
 - Recorded reasons are discarded at the enclosing candidate level: when the group ultimately matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
 - Name the group and the concrete source in the reason, as the example does. The first recording per owner wins, so a later reason under a name already used in the same window is dropped.
-- A `ReadFileFG` subclass that cannot enumerate columns (a `column_names` raising `NotImplementedError` or `ImportError`) declines a chain- or column-separated feature name while matching. A `ReadDocumentFG` subclass declines any name other than its three declared names. An explicit `column_to_file` pin is exempt.
+- A `ReadFileFG` subclass whose `column_names` raises `NotImplementedError` is eliminated for every feature name. One that raises `ImportError` declines any name, with a recorded reason. A file pinned with `column_to_file` aborts with "column ... is in none of the sources". A `ReadDocumentFG` subclass declines any name other than its three declared names.
 - In `ReadFileFG` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file group needs the file to be readable when features resolve. A pinned or pointed file that cannot be read aborts with the missing-column error instead of falling back to another file.
 
 `ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically; a custom group only needs this for its own decline points.
@@ -221,9 +221,9 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 
 | Aspect | BaseInputData | MatchData |
 |--------|---------------|-----------|
-| **Primary Purpose** | Data loading and access | Connection object matching for stateful frameworks |
-| **When Used** | All feature groups that load data | Only feature groups requiring framework connection objects |
-| **Scope** | Universal data access pattern | Specialized for stateful compute frameworks |
+| **Primary Purpose** | Legacy data loading for non-format groups | Connection object matching for stateful frameworks |
+| **When Used** | Non-format feature groups that load data | Only feature groups requiring framework connection objects |
+| **Scope** | Legacy reader base (format FeatureGroups read files, documents, databases) | Specialized for stateful compute frameworks |
 | **Usage Pattern** | `input_data()` method in feature groups | Multiple inheritance: `FeatureGroup, MatchData` |
 | **Connection Dependency** | Works with or without connections | Specifically designed for connection objects |
 | **Framework Support** | All compute frameworks | Only stateful frameworks (DuckDB, database connections) |
@@ -350,11 +350,11 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 BaseInputData and MatchData serve **different and specialized roles** in mloda's data access architecture:
 
-- **BaseInputData** is the **universal pattern** for data loading - used by all feature groups that need to load data
+- **BaseInputData** is the **legacy reader base** for non-format feature groups; format FeatureGroups are the reader path
 - **MatchData** is a **specialized pattern** for connection object matching - only used by feature groups that require framework connection objects
 
 **Key Understanding:**
-- **Most feature groups** only use BaseInputData
+- **Non-format feature groups** that load data use BaseInputData
 - **MatchData is only needed** when working with stateful compute frameworks like DuckDB
 - **They are not alternatives** - they solve different problems in different contexts
 
@@ -364,4 +364,4 @@ Understanding this distinction is crucial for:
 - Working with stateful vs stateless compute frameworks
 - Leveraging mloda's connection management capabilities
 
-This separation allows mloda to provide both universal data access (BaseInputData) and specialized connection management (MatchData) while keeping the complexity contained to only those scenarios that actually need it.
+This separation allows mloda to provide both data loading (BaseInputData) and specialized connection management (MatchData) while keeping the complexity contained to only those scenarios that actually need it.

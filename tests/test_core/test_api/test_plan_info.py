@@ -75,7 +75,22 @@ import mloda.user as mloda_user
 from mloda.core.api.plan_info import _dependency_order, build_plan_steps
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
-from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import (
+    BaseFeatureGroupVersion,
+    BaseInputData,
+    ComputeFramework,
+    DataCreator,
+    FeatureGroup,
+    FeatureSet,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    neutral_csv_group,
+    toy_dac,
+)
 from mloda.steward import (
     Extender,
     ExtenderHook,
@@ -573,6 +588,11 @@ class TestPlanStepDataclass:
             "compute_framework_reason",
             "result_framework",
             "join_keys",
+            "implementation",
+            "implementation_version",
+            "implementation_hash",
+            "implementation_specialized_from",
+            "feature_group_version",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:
@@ -780,6 +800,104 @@ class TestPlanStepSpecializedFromField:
 
         assert base != replaced
         assert replaced == dataclasses.replace(base, specialized_from=(PlanInfoParentSource,))
+
+
+def _explain_toy_group(group: type[FeatureGroup]) -> PlanStep:
+    steps = mloda.explain(
+        ["toyfmt_ld"],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        data_access_collection=toy_dac(h1={"toyfmt_ld": [1, 2]}),
+    )
+    compute = [step for step in steps if step.step_kind == "compute"]
+    assert len(compute) == 1
+    return compute[0]
+
+
+class TestPlanStepImplementation:
+    """A compute step records the Implementation that serves it, its versions and the parents it replaced."""
+
+    def test_step_reports_the_implementation_its_path_version_and_hash(self) -> None:
+        impl = ToyWorkerPythonDict
+
+        step = _explain_toy_group(ToyWorkerFG)
+
+        assert step.implementation is impl
+        assert step.implementation_path == _class_path(impl)
+        assert step.implementation_path != step.compute_framework_name
+        assert step.implementation_version == impl.version()
+        assert step.implementation_hash == BaseFeatureGroupVersion.implementation_hash(impl)
+        assert step.implementation_hash != "unavailable"
+        assert step.implementation_specialized_from == ()
+        assert step.feature_group_version == ToyWorkerFG.version()
+
+    def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
+        step = _explain_toy_group(neutral_csv_group(tmp_path / "n.csv"))
+
+        assert step.implementation is None
+        assert step.implementation_path == "neutral"
+        assert step.implementation_version is None
+        assert step.implementation_hash is None
+
+    def test_plain_readers_and_non_compute_steps_have_no_implementation(self) -> None:
+        reader_step = next(
+            s for s in _prepare_chained_session().resolved_plan() if s.feature_group is PlanInfoPandasSource
+        )
+        others = [s for s in _prepare_cross_framework_join_session().resolved_plan() if s.step_kind != "compute"]
+        assert others
+
+        for step in [reader_step, *others]:
+            assert step.implementation is None
+            assert step.implementation_path is None
+            assert step.implementation_version is None
+            assert step.implementation_hash is None
+            assert step.implementation_specialized_from == ()
+        assert reader_step.feature_group_version == PlanInfoPandasSource.version()
+        assert all(step.feature_group_version is None for step in others)
+
+    def test_replaced_implementation_parents_are_sorted_by_path(self, tmp_path: Path, make_implementation: Any) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        first = make_implementation(group, PythonDictFramework, name="PlanInfoAImpl")
+        second = make_implementation(group, PythonDictFramework, base=first, name="PlanInfoBImpl")
+        winner = make_implementation(group, PythonDictFramework, base=second, name="PlanInfoCImpl")
+
+        step = _explain_toy_group(group)
+
+        assert step.implementation is winner
+        assert step.implementation_specialized_from == (first, second)
+
+    def test_implementation_is_compared_but_versions_and_hash_are_not(
+        self, tmp_path: Path, make_implementation: Any
+    ) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        parent = make_implementation(group, PythonDictFramework, name="PlanInfoEqualImpl")
+        make_implementation(group, PythonDictFramework, base=parent, name="PlanInfoOtherImpl")
+        step = _explain_toy_group(group)
+        other = parent
+
+        assert dataclasses.replace(step, implementation=other) != step
+        assert dataclasses.replace(step, implementation_specialized_from=()) != step
+        assert (
+            dataclasses.replace(step, implementation_version="v", implementation_hash="h", feature_group_version="g")
+            == step
+        )
+
+    def test_a_hash_failure_degrades_to_unavailable_and_planning_still_hashes(
+        self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        make_implementation(group, PythonDictFramework, name="PlanInfoUnhashableImpl")
+
+        def boom(cls: Any, target_class: Any) -> str:
+            raise OSError("no source")
+
+        monkeypatch.setattr(BaseFeatureGroupVersion, "implementation_hash", classmethod(boom))
+
+        step = _explain_toy_group(group)
+
+        assert step.implementation_hash == "unavailable"
+        assert step.implementation_version is None
+        assert len(plan_structure_hash([step])) == 64
 
 
 class TestPlanStepInputFeatureEdgesField:

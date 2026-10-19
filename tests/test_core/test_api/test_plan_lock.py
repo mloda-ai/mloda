@@ -3,7 +3,9 @@
 import collections
 import dataclasses
 import hashlib
+import importlib.util
 import json
+import sys
 import types
 import uuid
 from pathlib import Path
@@ -22,10 +24,12 @@ from mloda.steward import (
     write_plan_lock,
 )
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
-from mloda.provider import ComputeFramework, FeatureGroup
+from mloda.provider import BaseFeatureGroupVersion, ComputeFramework, FeatureGroup, Implementation
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
 
@@ -34,6 +38,17 @@ class _MainLike:
 
 
 _MainLike.__module__ = "__main__"
+
+
+def _inert_group() -> type[ToyFormatBase]:
+    """A fresh format group with no claim routes; one per test, so a leaked implementation cannot clash."""
+
+    class _LockInertFG(ToyFormatBase):
+        pass
+
+    return _LockInertFG
+
+
 _MAIN_GROUP = cast("type[FeatureGroup]", _MainLike)
 
 
@@ -103,7 +118,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 6
+    assert content["format"] == PLAN_LOCK_FORMAT == 7
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
@@ -114,6 +129,9 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "specialized_from",
         "result_framework",
         "input_feature_edges",
+        "implementation",
+        "implementation_hash",
+        "implementation_specialized_from",
     }
     assert set(content["joins"][0]) == {
         "left_feature_group",
@@ -157,6 +175,153 @@ def test_the_compute_reason_is_recorded_and_a_changed_reason_fails_check(tmp_pat
         check_plan_lock([_compute_step(compute_framework_reason="default order")], lock)
 
 
+def _impl_path(impl: type[Implementation]) -> str:
+    return f"{impl.__module__}:{impl.__qualname__}"
+
+
+def _impl_step(impl: type[Implementation], implementation_hash: str | None = "h1", **overrides: object) -> PlanStep:
+    return _compute_step(implementation=impl, implementation_hash=implementation_hash, **overrides)
+
+
+def test_the_implementation_fields_are_recorded_and_each_change_fails_check(
+    tmp_path: Path, make_implementation: Callable[..., type[Implementation]]
+) -> None:
+    group = _inert_group()
+    first = make_implementation(group, PythonDictFramework, name="LockImplB")
+    second = make_implementation(group, PythonDictFramework, base=first, name="LockImplA")
+    lock = tmp_path / "plan.lock"
+    write_plan_lock([_impl_step(second, implementation_specialized_from=(first, second))], lock)
+
+    record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
+    assert record["implementation"] == _impl_path(second)
+    assert record["implementation_hash"] == "h1"
+    assert record["implementation_specialized_from"] == sorted([_impl_path(first), _impl_path(second)])
+    for changed in (
+        _impl_step(first, implementation_specialized_from=(first, second)),
+        _impl_step(second, "h2", implementation_specialized_from=(first, second)),
+        _impl_step(second, implementation_specialized_from=(first,)),
+    ):
+        with pytest.raises(PlanLockMismatchError):
+            check_plan_lock([changed], lock)
+
+
+def test_a_step_without_an_implementation_records_nulls(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    write_plan_lock([_compute_step(implementation_hash="ignored")], lock)
+
+    record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
+    assert record["implementation"] is None
+    assert record["implementation_hash"] is None
+    assert record["implementation_specialized_from"] == []
+
+
+_IMPL_MODULE = "lock_edit_impl_module"
+_IMPL_SRC = """\
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+
+
+class LockEditGroup(ToyFormatBase):
+    pass
+
+
+def helper() -> int:
+    return {value}
+
+
+class LockEditImpl(Implementation):
+    feature_group = LockEditGroup
+    compute_framework = PythonDictFramework
+
+    @classmethod
+    def calculate(cls, serving, match, features):
+        return helper()
+"""
+
+
+def _load_impl(directory: Path, value: int, monkeypatch: pytest.MonkeyPatch) -> type[Implementation]:
+    """Load LockEditImpl from a file in directory under one fixed module name, so only the body differs."""
+    directory.mkdir(parents=True, exist_ok=True)
+    source = directory / f"{_IMPL_MODULE}.py"
+    source.write_text(_IMPL_SRC.format(value=value), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(_IMPL_MODULE, source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, _IMPL_MODULE, module)
+    spec.loader.exec_module(module)
+    return cast("type[Implementation]", module.LockEditImpl)
+
+
+def test_an_edited_implementation_body_fails_check_while_the_class_path_is_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = _load_impl(tmp_path / "before", 1, monkeypatch)
+    before_hash = BaseFeatureGroupVersion.implementation_hash(before)
+    before_path = _impl_path(before)
+    lock = tmp_path / "plan.lock"
+    write_plan_lock([_impl_step(before, before_hash)], lock)
+    check_plan_lock([_impl_step(before, before_hash)], lock)
+    assert json.loads(lock.read_text(encoding="utf-8"))["compute"][0]["implementation_hash"] == before_hash
+
+    after = _load_impl(tmp_path / "after", 2, monkeypatch)
+    after_hash = BaseFeatureGroupVersion.implementation_hash(after)
+
+    assert _impl_path(after) == before_path
+    assert after_hash != before_hash
+    with pytest.raises(PlanLockMismatchError, match="implementation_hash"):
+        check_plan_lock([_impl_step(after, after_hash)], lock)
+
+
+@pytest.mark.parametrize("where", ["implementation", "implementation_specialized_from"])
+def test_write_refuses_a_main_module_implementation_and_writes_nothing(
+    tmp_path: Path, where: str, make_implementation: Callable[..., type[Implementation]]
+) -> None:
+    lock = tmp_path / "plan.lock"
+    main_impl = cast("type[Implementation]", _MainLike)
+    impl = make_implementation(_inert_group(), PythonDictFramework, name="LockMainImpl")
+    step = (
+        _impl_step(main_impl)
+        if where == "implementation"
+        else _impl_step(impl, implementation_specialized_from=(main_impl,))
+    )
+
+    with pytest.raises(ValueError, match="__main__"):
+        write_plan_lock([step], lock)
+
+    assert not lock.exists()
+
+
+def test_write_refuses_an_unavailable_implementation_hash_naming_the_class(
+    tmp_path: Path, make_implementation: Callable[..., type[Implementation]]
+) -> None:
+    lock = tmp_path / "plan.lock"
+    impl = make_implementation(_inert_group(), PythonDictFramework, name="LockUnhashableImpl")
+
+    with pytest.raises(ValueError, match="unavailable") as excinfo:
+        write_plan_lock([_impl_step(impl, "unavailable")], lock)
+
+    assert "LockUnhashableImpl" in str(excinfo.value)
+    assert not lock.exists()
+
+
+def test_plan_hashes_change_with_the_implementation_fields(
+    make_implementation: Callable[..., type[Implementation]],
+) -> None:
+    group = _inert_group()
+    first = make_implementation(group, PythonDictFramework, name="LockHashImplA")
+    second = make_implementation(group, PythonDictFramework, base=first, name="LockHashImplB")
+    base = [_impl_step(first)]
+
+    for changed in (
+        [_impl_step(second)],
+        [_impl_step(first, "h2")],
+        [_impl_step(first, implementation_specialized_from=(second,))],
+    ):
+        assert plan_structure_hash(changed) != plan_structure_hash(base)
+        assert plan_content_hash(changed) != plan_content_hash(base)
+
+
 def test_a_lock_with_an_edited_format_version_fails_check(tmp_path: Path) -> None:
     lock = tmp_path / "plan.lock"
     plan = _plan()
@@ -175,6 +340,7 @@ def test_a_lock_written_in_the_previous_format_with_a_reader_entry_fails_check(t
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
     content["format"] = PLAN_LOCK_FORMAT - 1
+    assert content["format"] == 6
     for record in content["compute"]:
         record["reader"] = None
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -258,7 +424,13 @@ def test_plan_structure_hash_is_the_sha256_of_the_lock_text() -> None:
 def test_plan_structure_hash_ignores_non_lock_fields() -> None:
     base = [_compute_step(), _join_step()]
     varied = [
-        dataclasses.replace(base[0], feature_set_options=Options({"k": "v"}), step_uuid=uuid.uuid4()),
+        dataclasses.replace(
+            base[0],
+            feature_set_options=Options({"k": "v"}),
+            step_uuid=uuid.uuid4(),
+            implementation_version="v1",
+            feature_group_version="g1",
+        ),
         dataclasses.replace(base[1], join_token=uuid.uuid4()),
     ]
     assert varied[0].feature_set_options is not None
@@ -302,7 +474,7 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     assert digest != plan_structure_hash(plan)
     assert digest == plan_content_hash(_content_plan())
     # Pinned: moving wiring and join keys into the lock must not shift the content hash.
-    assert digest == "c025307c9c997682f1cbb6f4c891dc8c2a590acaf04f52047bbec7349d230b7a"
+    assert digest == "c81c29c74911d4f9706e87f1fc81c27cd5a65eaa08b5f90ebe9234d6f986df15"
 
 
 def test_plan_content_hash_ignores_run_ids_and_reason_text() -> None:

@@ -139,9 +139,10 @@ class BaseFeatureGroupVersion(ABC):
 
         # Import FeatureGroup locally to avoid circular import.
         from mloda.core.abstract_plugins.feature_group import FeatureGroup
+        from mloda.core.abstract_plugins.implementation import Implementation
 
-        if not issubclass(target_class, FeatureGroup):
-            raise ValueError(f"target_class must be a subclass of FeatureGroup: {target_class}")
+        if not issubclass(target_class, (FeatureGroup, Implementation)):
+            raise ValueError(f"target_class must be a subclass of FeatureGroup or Implementation: {target_class}")
 
         return f"{cls.mloda_version()}-{cls.module_name(target_class)}-{cls.implementation_hash(target_class)}"
 

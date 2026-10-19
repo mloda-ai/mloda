@@ -16,7 +16,7 @@ from mloda.core.prepare.choose_compute_frameworks import stable_text
 
 _SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
 
-PLAN_LOCK_FORMAT = 6
+PLAN_LOCK_FORMAT = 7
 
 
 class PlanLockMismatchError(Exception):
@@ -63,6 +63,11 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
                 "result_framework": _class_path(step.result_framework),
                 "input_feature_edges": {name: sorted(inputs) for name, inputs in step.input_feature_edges.items()},
+                "implementation": step.implementation_path,
+                "implementation_hash": None if step.implementation is None else step.implementation_hash,
+                "implementation_specialized_from": sorted(
+                    _class_path(parent) or "" for parent in step.implementation_specialized_from
+                ),
             }
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
@@ -131,7 +136,7 @@ def plan_content_hash(plan: Sequence[PlanStep]) -> str:
 
 
 _PATH_FIELDS = {
-    "compute": ("feature_group", "compute_framework", "result_framework"),
+    "compute": ("feature_group", "compute_framework", "result_framework", "implementation"),
     "joins": ("left_feature_group", "right_feature_group", "compute_framework", "source_compute_framework"),
     "transforms": ("feature_group", "from_compute_framework", "to_compute_framework"),
 }
@@ -143,6 +148,7 @@ def _main_paths(content: dict[str, Any]) -> set[str]:
         for record in content[section]:
             paths.update(record[field] for field in fields)
             paths.update(record.get("specialized_from", []))
+            paths.update(record.get("implementation_specialized_from", []))
     return {path for path in paths if path and path.startswith("__main__:")}
 
 
@@ -152,6 +158,9 @@ def write_plan_lock(plan: Sequence[PlanStep], path: str | os.PathLike[str]) -> N
     mains = _main_paths(content)
     if mains:
         raise ValueError(f"Cannot lock classes defined in __main__, move them into a module: {sorted(mains)}")
+    unhashed = sorted(r["implementation"] for r in content["compute"] if r["implementation_hash"] == "unavailable")
+    if unhashed:
+        raise ValueError(f"Cannot lock implementations whose hash is unavailable (source not readable): {unhashed}")
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     with open(target, "w", encoding="utf-8", newline="\n") as handle:

@@ -3,6 +3,10 @@
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
+from mloda.core.abstract_plugins.components.base_feature_group_version import (
+    BaseFeatureGroupVersion,
+    ThirdPartyVersionMode,
+)
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -40,6 +44,16 @@ class Implementation(ABC):
             raise TypeError(f"{cls.__name__} must set feature_group to a FormatFeatureGroup subclass.")
         if not (isinstance(framework, type) and issubclass(framework, ComputeFramework)):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
+
+    @classmethod
+    def version(cls) -> str:
+        """Version: mloda version, module name and the implementation hash of the code this class runs."""
+        return BaseFeatureGroupVersion.version(cls)
+
+    @classmethod
+    def version_third_party_mode(cls) -> ThirdPartyVersionMode:
+        """Whether version()'s hash reacts to reachable third-party dependency versions; INCLUDE by default."""
+        return ThirdPartyVersionMode.INCLUDE
 
     @classmethod
     @abstractmethod

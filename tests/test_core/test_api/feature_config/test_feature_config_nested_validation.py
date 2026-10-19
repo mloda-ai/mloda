@@ -692,12 +692,12 @@ def test_loader_nested_sibling_in_features_rejects_invalid_value(in_features: An
 # ---------------------------------------------------------------------------
 # An in_features error names an offending DICT by its keys, never by its repr
 #
-# A rejected feature dict is reported with {element!r} today, which dumps its whole
+# A rejected feature dict reported with {element!r} would dump its whole
 # 'options' payload into the error: a credential written there lands in logs and in
-# an agent's context. The missing-'name' error already sets the norm by listing the
+# a reader's context. The missing-'name' error already sets the norm by listing the
 # keys present. Every in_features error follows it: a dict offender is named by its
-# KEYS, a non-dict offender (string, int, None) is still repr'd, which is
-# informative and carries no payload.
+# KEYS, a non-dict offender (string, int, None) is named by its type name, so no
+# rejected value is ever echoed into the message.
 # ---------------------------------------------------------------------------
 
 SENSITIVE_OPTION_VALUE = "hunter2-do-not-log"
@@ -734,8 +734,8 @@ def test_nested_in_features_list_element_error_names_keys_not_payload(container:
     _assert_names_keys_not_payload(str(exc_info.value))
 
 
-def test_nested_in_features_list_element_error_keeps_repr_for_non_dict_offender() -> None:
-    """A non-dict offender carries no payload, so it is still reported by its repr."""
+def test_nested_in_features_list_element_error_names_type_for_non_dict_offender() -> None:
+    """A non-dict offender is named by its type name: no rejected value is echoed into the message."""
     config: dict[str, Any] = {
         "name": "outer",
         "options": {"in_features": {"name": "outer_token", "in_features": ["age", 7]}},
@@ -744,7 +744,7 @@ def test_nested_in_features_list_element_error_keeps_repr_for_non_dict_offender(
     with pytest.raises(ValueError, match="in_features") as exc_info:
         load_features_from_config(json.dumps([config]), format="json")
 
-    assert "7" in str(exc_info.value)
+    assert "int" in str(exc_info.value)
 
 
 def test_top_level_in_features_array_element_error_names_keys_not_payload() -> None:

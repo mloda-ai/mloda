@@ -69,8 +69,16 @@ class FeatureConfig:
 
     def __post_init__(self) -> None:
         """Validate the invariants shared by the top-level and the nested feature dict."""
+        # A container must be an object: group/context also accept None (their default, i.e. absent),
+        # while options defaults to {}, so an explicit null there is a rejected config value.
+        for container_field in ("options", "group_options", "context_options"):
+            container_value = getattr(self, container_field)
+            if container_field != "options" and container_value is None:
+                continue
+            if not isinstance(container_value, dict):
+                raise ValueError(f"'{container_field}' must be an object, got {type(container_value).__name__}")
         if not isinstance(self.name, str) or not self.name.strip():
-            raise ValueError(f"'name' must be a non-empty string, got: {self.name!r}")
+            raise ValueError(f"'name' must be a non-empty string, got {type(self.name).__name__}")
         if self.options and (self.group_options or self.context_options):
             raise ValueError("Cannot use both 'options' and 'group_options'/'context_options'")
         for key_field in ("propagate_context_keys", "cascade_context_keys"):
@@ -90,11 +98,27 @@ FEATURE_CONFIG_FIELDS = frozenset(f.name for f in fields(FeatureConfig))
 NESTED_FIELDS = frozenset(f.name for f in fields(FeatureConfig) if f.metadata.get("nested"))
 
 
+def feature_config_error_prefix(position: int, name: Any) -> str:
+    """The 1-based position of a config item, plus its name when that name is a usable non-empty string.
+
+    A name that is not a usable string is itself often the rejected field, so it never appears
+    in the prefix; the prefix must not turn into another echo of a bad value.
+    """
+    prefix = f"feature config item {position}"
+    if isinstance(name, str) and name.strip():
+        prefix += f' ("{name}")'
+    return prefix
+
+
 def describe_offender(value: Any) -> str:
-    """Name a rejected dict by its keys: its repr would dump an options payload that may hold credentials."""
+    """Name a rejected dict by its keys, and any other value by its type.
+
+    A repr could dump an options payload that may hold credentials, so only dict
+    keys and type names ever reach an error message.
+    """
     if isinstance(value, dict):
         return f"a dict with keys {sorted(value)}"
-    return repr(value)
+    return type(value).__name__
 
 
 def validate_top_level_in_features(value: Any) -> None:
@@ -125,7 +149,7 @@ def validate_nested_in_features(value: Any) -> None:
         return
     if isinstance(value, str):
         if not value.strip():
-            raise ValueError(f"'in_features' must be a non-empty source feature name, got: {value!r}")
+            raise ValueError(f"'in_features' must be a non-empty source feature name, got: {type(value).__name__}")
         return
     if isinstance(value, list):
         if not value:

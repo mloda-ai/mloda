@@ -15,25 +15,32 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
 from mloda.core.api.feature_config.models import (
     FeatureConfig,
+    feature_config_error_prefix,
     parse_nested_feature_config,
     validate_nested_in_features,
 )
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
-def build_nested_feature(value: dict[str, Any]) -> Feature:
+def build_nested_feature(value: dict[str, Any], path: str = "") -> Feature:
     """Build a Feature from a nested in_features dict, validated through FeatureConfig.
 
     Args:
         value: Nested feature definition under an "in_features" key
+        path: Dotted field path of this dict within the config, naming errors (empty for none)
 
     Returns:
         Feature object for the nested definition
     """
-    config = parse_nested_feature_config(value)
-    validate_nested_in_features(config.in_features)
+    try:
+        config = parse_nested_feature_config(value)
+        validate_nested_in_features(config.in_features)
+    except (ValueError, TypeError) as exc:
+        if not path:
+            raise
+        raise type(exc)(f"{path}: {exc}") from exc
 
-    processed_nested_options = process_nested_features(config.options)
+    processed_nested_options = process_nested_features(config.options, f"{path}.options" if path else "options")
 
     # Sibling in_features: a list of more than one source name stays a list, a 1-element list collapses to its
     # element, a dict recurses into another nested Feature, a string is a single source name stored as-is.
@@ -42,18 +49,21 @@ def build_nested_feature(value: dict[str, Any]) -> Feature:
         if isinstance(in_features, list):
             processed_nested_options["in_features"] = in_features if len(in_features) > 1 else in_features[0]
         elif isinstance(in_features, dict):
-            processed_nested_options["in_features"] = build_nested_feature(in_features)
+            processed_nested_options["in_features"] = build_nested_feature(
+                in_features, f"{path}.in_features" if path else "in_features"
+            )
         else:
             processed_nested_options["in_features"] = in_features
 
     return Feature(name=config.name, options=processed_nested_options, feature_group=config.feature_group)
 
 
-def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
+def process_nested_features(options: dict[str, Any], path: str = "") -> dict[str, Any]:
     """Recursively convert nested in_features dicts to Feature objects.
 
     Args:
         options: Dictionary of options that may contain nested feature definitions
+        path: Dotted field path of this dict within the config, naming errors (empty for none)
 
     Returns:
         Dictionary with nested dicts converted to Feature objects
@@ -65,10 +75,10 @@ def process_nested_features(options: dict[str, Any]) -> dict[str, Any]:
         # value is renamed. Not `key == DefaultOptionKeys.in_features`, which
         # holds only while DefaultOptionKeys mixes in str (see #1063).
         if str(key) == str(DefaultOptionKeys.in_features) and isinstance(value, dict):
-            processed[key] = build_nested_feature(value)
+            processed[key] = build_nested_feature(value, f"{path}.{key}" if path else str(key))
         elif isinstance(value, dict):
             # Recursively process nested dicts
-            processed[key] = process_nested_features(value)
+            processed[key] = process_nested_features(value, f"{path}.{key}" if path else str(key))
         else:
             processed[key] = value
 
@@ -117,54 +127,59 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
 
     features: list[Feature | str] = []
 
-    for item in config_items:
+    for position, item in enumerate(config_items, start=1):
         if isinstance(item, str):
             features.append(item)
         elif isinstance(item, FeatureConfig):
-            # Build feature name with column index suffix if present
-            feature_name = item.name
-            if item.column_index is not None:
-                feature_name = f"{item.name}~{item.column_index}"
+            try:
+                # Build feature name with column index suffix if present
+                feature_name = item.name
+                if item.column_index is not None:
+                    feature_name = f"{item.name}~{item.column_index}"
 
-            # One in_features declaration per feature: the top-level field is written into context, so an
-            # in_features key in any container collides, and so does the same key in both modern containers.
-            if item.in_features:
-                validate_no_in_features_collision(item.options, "options")
-                validate_no_in_features_collision(item.group_options, "group_options")
-                validate_no_in_features_collision(item.context_options, "context_options")
-            validate_single_in_features_container(item.group_options, item.context_options)
-
-            # Check if group_options or context_options exist
-            if item.group_options is not None or item.context_options is not None:
-                # Use new Options architecture with group/context separation
-                # Nested features are processed in both containers, as they are under the legacy 'options' key.
-                group = process_nested_features(item.group_options or {})
-                context = process_nested_features(item.context_options or {})
+                # One in_features declaration per feature: the top-level field is written into context, so an
+                # in_features key in any container collides, and so does the same key in both modern containers.
                 if item.in_features:
-                    context[DefaultOptionKeys.in_features] = tuple(item.in_features)
-                options = Options(
-                    group=group,
-                    context=context,
-                    propagate_context_keys=frozenset(item.propagate_context_keys)
-                    if item.propagate_context_keys
-                    else None,
-                    cascade_context_keys=frozenset(item.cascade_context_keys) if item.cascade_context_keys else None,
-                )
-                feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
-                features.append(feature)
-            # Check if in_features exists and create Options accordingly
-            elif item.in_features:
-                # Process nested features in options before creating Feature
-                processed_options = process_nested_features(item.options)
-                source_value = tuple(item.in_features)
-                options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
-                feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
-                features.append(feature)
-            else:
-                # Process nested features in options before creating Feature
-                processed_options = process_nested_features(item.options)
-                feature = Feature(name=feature_name, options=processed_options, feature_group=item.feature_group)
-                features.append(feature)
+                    validate_no_in_features_collision(item.options, "options")
+                    validate_no_in_features_collision(item.group_options, "group_options")
+                    validate_no_in_features_collision(item.context_options, "context_options")
+                validate_single_in_features_container(item.group_options, item.context_options)
+
+                # Check if group_options or context_options exist
+                if item.group_options is not None or item.context_options is not None:
+                    # Use new Options architecture with group/context separation
+                    # Nested features are processed in both containers, as they are under the legacy 'options' key.
+                    group = process_nested_features(item.group_options or {}, "group_options")
+                    context = process_nested_features(item.context_options or {}, "context_options")
+                    if item.in_features:
+                        context[DefaultOptionKeys.in_features] = tuple(item.in_features)
+                    options = Options(
+                        group=group,
+                        context=context,
+                        propagate_context_keys=frozenset(item.propagate_context_keys)
+                        if item.propagate_context_keys
+                        else None,
+                        cascade_context_keys=frozenset(item.cascade_context_keys)
+                        if item.cascade_context_keys
+                        else None,
+                    )
+                    feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
+                    features.append(feature)
+                # Check if in_features exists and create Options accordingly
+                elif item.in_features:
+                    # Process nested features in options before creating Feature
+                    processed_options = process_nested_features(item.options, "options")
+                    source_value = tuple(item.in_features)
+                    options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
+                    feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
+                    features.append(feature)
+                else:
+                    # Process nested features in options before creating Feature
+                    processed_options = process_nested_features(item.options, "options")
+                    feature = Feature(name=feature_name, options=processed_options, feature_group=item.feature_group)
+                    features.append(feature)
+            except (ValueError, TypeError) as exc:
+                raise type(exc)(f"{feature_config_error_prefix(position, item.name)}: {exc}") from exc
         else:
             raise ValueError(f"Unexpected config item type: {type(item)}")
 

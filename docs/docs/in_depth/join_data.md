@@ -322,6 +322,20 @@ Key injection follows the same subclass rule: a link declared on a base class in
 
 When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using `right_index`: first by exact `feature.index` match, then by checking whether the feature name appears in the join key columns of `right_index`. Ensure each link's `right_index` contains the column name that uniquely identifies its right-side batch.
 
+**One consumer joining two members of one link side**
+
+A base class and its subclass can both match one side of a link, for example a consumer reading `A`, `A1(A)` and `B` over one link between `A` and `B`. The members are never joined to each other: each is joined to the other side, and the consumer must read the one frame both joins merge into. Whether that plans depends on the compute frameworks:
+
+| Members | Other side | Consumer | Result |
+| --- | --- | --- | --- |
+| On different frameworks | On one member's framework | On that framework | Planned |
+| On different frameworks | On one member's framework | On another framework | Rejected: the consumer must run where that same-framework join runs |
+| On different frameworks | One feature group, on a framework no member uses | On the other side's framework, reading both members directly | Planned for inner and outer joins, and for a left or right join that keeps the other side |
+| On different frameworks | On a framework no member uses | On a member's framework, or reading a member through a feature in between | Rejected: read one member of the link side per consumer |
+| On one framework | Any | Any | Not supported over one base-class link: the join is ambiguous, and some layouts lose one member's column instead of raising |
+
+Known limits of the layouts that are planned: in the first row, a left or right join that keeps the member side can return wrong rows when the members hold different keys. In `THREADING` mode the first row, and several consumers of one such link in either planned row, can fail intermittently with a missing column.
+
 #### mlodaAPI
 
 ```py

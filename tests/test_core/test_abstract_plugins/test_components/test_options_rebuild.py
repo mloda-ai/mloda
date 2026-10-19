@@ -27,7 +27,10 @@ BINDING_PATTERN = rf".*__(?P<{BINDING_KEY}>alpha|beta)_rebuild1408$"
 
 def _source_options() -> Options:
     options = Options(
-        group=dict(SOURCE_GROUP), context=dict(SOURCE_CONTEXT), propagate_context_keys=frozenset({CONTEXT_KEY})
+        group=dict(SOURCE_GROUP),
+        context=dict(SOURCE_CONTEXT),
+        propagate_context_keys=frozenset({CONTEXT_KEY}),
+        cascade_context_keys=frozenset({CONTEXT_KEY}),
     )
     for name, value in list(vars(options).items()):
         if isinstance(value, frozenset) and not value:

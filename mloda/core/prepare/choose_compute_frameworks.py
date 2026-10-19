@@ -87,6 +87,8 @@ def stable_text(value: object) -> str:
         parts = f"group={stable_text(_str_option_dict(value.group))}, context={stable_text(_str_option_dict(value.context))}"
         if value.propagate_context_keys:
             parts += f", propagate_context_keys={stable_text(value.propagate_context_keys)}"
+        if value.cascade_context_keys:
+            parts += f", cascade_context_keys={stable_text(value.cascade_context_keys)}"
         return f"Options({parts})"
     if type(value) is dict:
         items = sorted((stable_text(k), stable_text(v)) for k, v in value.items())
@@ -144,9 +146,12 @@ def _any_join_allows(occurrences: list[tuple[JoinType, bool, bool]], values: Val
     return any(satisfied)
 
 
-def _side_member_allows(values: Values) -> bool:
-    """Members share a framework, or the other link side runs on one of theirs."""
-    return values[0] is values[1] or any(o is values[0] or o is values[1] for o in values[2:])
+def _side_member_allows(relaxed: bool, values: Values) -> bool:
+    """Members share a framework, the other side runs on one of theirs, or (relaxed) on the consumer's."""
+    first, second, consumer, *others = values
+    if first is second or any(o is first or o is second for o in others):
+        return True
+    return relaxed and all(o is consumer for o in others)
 
 
 def _swapped_pairs_differ(values: Values) -> bool:
@@ -461,7 +466,8 @@ class ChooseComputeFrameworks:
         for host, tied in self.ties:
             if host in owner and tied in owner:
                 rules.append(_Rule((owner[host], owner[tied]), lambda v: v[0] is v[1], "filter tied to its host"))
-        rules += self._side_path_rules(blocks, owner)
+        parents, children = self._edge_maps()
+        rules += self._side_path_rules(blocks, owner, parents, children)
         by_link: dict[UUID, list[tuple[int, int, int]]] = {}
         right_by_link: dict[UUID, list[tuple[UUID, tuple[int, int, int], bool]]] = {}
         by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]] = {}
@@ -518,30 +524,73 @@ class ChooseComputeFrameworks:
                 for _, second, _ in entries[i + 1 :]:
                     if first[2] != second[2]:
                         rules.append(_Rule(first + second, _no_side_mix, _RIGHT_ONE_SIDE))
-        rules += self._side_member_rules(blocks, by_child)
+        rules += self._side_member_rules(blocks, by_child, parents, children)
         return rules
 
     def _side_member_rules(
-        self, blocks: list[_Block], by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]]
+        self,
+        blocks: list[_Block],
+        by_child: dict[UUID, list[tuple[Link, tuple[int, int, int]]]],
+        parents: Mapping[UUID, set[UUID]],
+        children: Mapping[UUID, set[UUID]],
     ) -> list[_Rule]:
-        """Members of one link side differ in framework only if the other side runs on one of theirs."""
-        rules: dict[tuple[int, ...], _Rule] = {}
+        """Members of one link side differ in framework only if both joins merge into the other side's frame."""
+        direct: dict[tuple[UUID, UUID, int], bool] = {}
+
+        def reads_directly(child_uuid: UUID, link_uuid: UUID, pos: int) -> bool:
+            key = (child_uuid, link_uuid, pos)
+            if key not in direct:
+                direct[key] = True
+                for link, left_uuid, right_uuid, occ_child in self.occurrences:
+                    if occ_child == child_uuid and link.uuid == link_uuid:
+                        side = (left_uuid, right_uuid)[pos]
+                        if self._reach(side, children) & self._reach(child_uuid, parents):
+                            direct[key] = False
+            return direct[key]
+
+        rules: dict[tuple[object, ...], _Rule] = {}
         for occurrences in by_child.values():
             joinable = [(k, j) for k, j in occurrences if k.jointype not in (JoinType.APPEND, JoinType.UNION)]
             for link_uuid in {k.uuid for k, _ in joinable}:
                 found = [j for k, j in joinable if k.uuid == link_uuid]
+                jointype = next(k.jointype for k, _ in joinable if k.uuid == link_uuid)
                 for pos in (0, 1):
                     members = sorted({j[pos] for j in found}, key=lambda b: (blocks[b].fg.__name__, b))
                     others = tuple(sorted({j[1 - pos] for j in found}))
+                    consumer = found[0][2]
+                    offers = (
+                        jointype in (JoinType.INNER, JoinType.OUTER)
+                        or jointype
+                        is (
+                            JoinType.LEFT,
+                            JoinType.RIGHT,
+                        )[1 - pos]
+                    )
+                    relaxed: bool | None = None
                     for a, b in combinations(members, 2):
                         if blocks[a].fg is blocks[b].fg:
                             continue
+                        if relaxed is None:
+                            relaxed = (
+                                offers
+                                and len(others) == 1
+                                and all(reads_directly(f.uuid, link_uuid, pos) for f in blocks[consumer].features)
+                            )
+                        name = blocks[consumer].fg.__name__
                         why = (
-                            f"{blocks[found[0][2]].fg.__name__} joins {blocks[a].fg.__name__} and "
-                            f"{blocks[b].fg.__name__}, members of one link side, on different frameworks while "
-                            "the other link side runs on neither. Read one member of the link side per consumer"
+                            f"{name} joins {blocks[a].fg.__name__} and {blocks[b].fg.__name__}, members of one link "
+                            "side, which can run on different frameworks only when both joins merge into the other "
+                            "link side's frame: the other link side runs on one member's framework"
                         )
-                        rules.setdefault((a, b, *others), _Rule((a, b, *others), _side_member_allows, why))
+                        if offers:
+                            why += (
+                                f", or {name} reads both members directly and runs on the other link side's framework"
+                            )
+                        why += ". Otherwise read one member of the link side per consumer"
+                        blocks_of = (a, b, consumer, *others)
+                        rules.setdefault(
+                            (*blocks_of, relaxed), _Rule(blocks_of, partial(_side_member_allows, relaxed), why)
+                        )
         return list(rules.values())
 
     def _reach(self, start: UUID, neighbours: Mapping[UUID, set[UUID]]) -> set[UUID]:
@@ -555,15 +604,24 @@ class ChooseComputeFrameworks:
                     stack.append(node)
         return found
 
-    def _side_path_rules(self, blocks: list[_Block], owner: dict[UUID, int]) -> list[_Rule]:
-        """A feature between a link side and its consumer shares the side's framework, unless it is a hoppable carrier."""
-        if not self.occurrences:
-            return []
+    def _edge_maps(self) -> tuple[dict[UUID, set[UUID]], dict[UUID, set[UUID]]]:
         parents: dict[UUID, set[UUID]] = {}
         children: dict[UUID, set[UUID]] = {}
         for parent, child in self.graph.edges:
             parents.setdefault(child, set()).add(parent)
             children.setdefault(parent, set()).add(child)
+        return parents, children
+
+    def _side_path_rules(
+        self,
+        blocks: list[_Block],
+        owner: dict[UUID, int],
+        parents: Mapping[UUID, set[UUID]],
+        children: Mapping[UUID, set[UUID]],
+    ) -> list[_Rule]:
+        """A feature between a link side and its consumer shares the side's framework, unless it is a hoppable carrier."""
+        if not self.occurrences:
+            return []
         consumers = Counter(child for _, _, _, child in self.occurrences)
         pairs: set[tuple[int, int]] = set()
         peer_pairs: set[tuple[int, int]] = set()
@@ -917,7 +975,15 @@ class ChooseComputeFrameworks:
             for i in order
             for feature in blocks[i].features
         ]
+        involved = [
+            r
+            for r in rules
+            if not (
+                all(len(blocks[b].domain) == 1 for b in r.blocks)
+                and r.allows(tuple(blocks[b].domain[0] for b in r.blocks))
+            )
+        ]
         return (
             "No compute framework assignment satisfies the hard rules for features "
-            f"{', '.join(features)}. Rules involved: {sorted({r.why for r in rules})}."
+            f"{', '.join(features)}. Rules involved: {sorted({r.why for r in involved})}."
         )

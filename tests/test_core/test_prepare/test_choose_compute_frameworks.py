@@ -1278,6 +1278,33 @@ def test_a_fully_infeasible_split_plan_names_its_features() -> None:
         assert name in str(raised.value)
 
 
+def _infeasible_join_message(tail_allowed: set[type[ComputeFramework]]) -> str:
+    net = _Net()
+    left = net.add(ChooserLeftFG, "listed_left", {P})
+    right = net.add(ChooserRightFG, "listed_right", {A})
+    child = net.add(ChooserChildFG, "listed_child", {D})
+    tail = net.add(ChooserSinkFG, "listed_tail", tail_allowed)
+    net.join(_link(Link.inner, ChooserLeftFG, ChooserRightFG), left, right, child)
+    net.edge(child, tail)
+    with pytest.raises(ValueError, match="^No compute framework assignment satisfies the hard rules") as raised:
+        net.choose(chooser_class=_AllConvertibleChooser)
+    return str(raised.value)
+
+
+def test_a_satisfied_rule_over_single_framework_blocks_is_not_listed_as_involved() -> None:
+    message = _infeasible_join_message({D})
+
+    assert "join inner" in message
+    assert "transform path ChooserChildFG -> ChooserSinkFG" not in message
+
+
+def test_a_satisfied_looking_rule_over_a_block_with_two_frameworks_is_still_listed() -> None:
+    message = _infeasible_join_message({D, P})
+
+    assert "join inner" in message
+    assert "transform path ChooserChildFG -> ChooserSinkFG" in message
+
+
 _Expected = list[tuple[list[Feature], str, type[ComputeFramework]]]
 
 
@@ -1414,16 +1441,22 @@ def test_stable_text_of_a_set_option_value_ignores_insertion_order(build: Callab
     assert one == other
 
 
-def test_stable_text_of_propagate_context_keys_ignores_insertion_order() -> None:
+@pytest.mark.parametrize("argument", ["propagate_context_keys", "cascade_context_keys"])
+def test_stable_text_of_propagate_context_keys_ignores_insertion_order(argument: str) -> None:
     names = [f"key_{i}" for i in range(200)]
     first, second = next((a, b) for a in names for b in names if a < b and list({a, b}) != list({b, a}))
 
     def build(pair: tuple[str, str]) -> Options:
+        if argument == "cascade_context_keys":
+            return Options(context={first: 1, second: 2}, cascade_context_keys=frozenset(pair))
         return Options(context={first: 1, second: 2}, propagate_context_keys=frozenset(pair))
 
     one, other = _text_in_both_orders(build, first, second)
 
     assert one == other
+    assert f"{argument}=" in one
+    assert first in one
+    assert second in one
 
 
 def test_stable_text_keeps_a_reader_tuple_option_redacted() -> None:

@@ -2,13 +2,36 @@
 
 from typing import Any
 
+import pytest
+
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import PropagateContextFeatureGroupTest
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import (
+    CASCADE_ENV_ROOT,
+    CASCADE_FOLD_CASCADE_CONSUMER,
+    CASCADE_FOLD_PINNED_CONSUMER,
+    CASCADE_GUARD_CASCADE_CONSUMER,
+    CASCADE_GUARD_HOP_CONSUMER,
+    CASCADE_GUARD_PULL_CONSUMER,
+    CASCADE_GUARD_ROOT,
+    CASCADE_GUARD_SHARED,
+    CascadeEnvRootGroupTest,
+    CascadeFoldConsumerGroupTest,
+    CascadeFoldSharedGroupTest,
+    CascadeGuardConsumerGroupTest,
+    CascadeGuardRootGroupTest,
+    CascadeGuardSharedGroupTest,
+    NameChainedCascadeGroupTest,
+    PropagateContextFeatureGroupTest,
+)
 from tests.test_plugins.integration_plugins.chainer.context.test_chained_optional_features import (
     ChainerContextParserTestDataCreator,
 )
+
+
+NAME_CHAINED_TOP = "Sales__scale_ncc9x__scale_ncc9x__scale_ncc9x"
 
 
 def find_column(results: list[Any], column_name: str) -> list[Any]:
@@ -16,6 +39,60 @@ def find_column(results: list[Any], column_name: str) -> list[Any]:
         if column_name in df.columns:
             return list(df[column_name].values)
     raise ValueError(f"Column '{column_name}' not found in any result dataframe")
+
+
+def _cascade_chain(
+    prefix: str, blocked: str | None = None, deepest_env: str | None = None, root: str = "Sales"
+) -> tuple[Feature, Feature, Feature]:
+    """Build the x -> y -> z chain cascading env=prod from z; blocked is the level with forward_group=False."""
+    x_context: dict[str, Any] = {DefaultOptionKeys.in_features: root, "ident": "identifier1"}
+    if deepest_env is not None:
+        x_context["env"] = deepest_env
+    feat_x = Feature(
+        name=f"{prefix}_x",
+        options=Options(context=x_context),
+        forward_group=False if blocked == "x" else None,
+    )
+    feat_y = Feature(
+        name=f"{prefix}_y",
+        options=Options(context={DefaultOptionKeys.in_features: feat_x, "ident": "identifier2"}),
+        forward_group=False if blocked == "y" else None,
+    )
+    feat_z = Feature(
+        name=f"{prefix}_z",
+        options=Options(
+            context={DefaultOptionKeys.in_features: feat_y, "ident": "identifier1", "env": "prod"},
+            cascade_context_keys=frozenset({"env"}),
+        ),
+    )
+    return feat_x, feat_y, feat_z
+
+
+def _guard_requests(target: str, other: str) -> list[Feature]:
+    """The cascading consumer and a consumer delivering the same k=v to the shared target another way."""
+    return [
+        Feature(
+            CASCADE_GUARD_CASCADE_CONSUMER,
+            options=Options(context={"k": "v", "target": target}, cascade_context_keys=frozenset({"k"})),
+        ),
+        Feature(
+            other,
+            options=Options(
+                context={"k": "v", "target": target},
+                propagate_context_keys=frozenset({"k"}) if other == CASCADE_GUARD_HOP_CONSUMER else None,
+            ),
+        ),
+    ]
+
+
+def _run_guard(requests: list[Feature]) -> list[Any]:
+    return mloda.run_all(
+        list[Feature | str](requests),
+        compute_frameworks=[PandasDataFrame],
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {CascadeGuardRootGroupTest, CascadeGuardSharedGroupTest, CascadeGuardConsumerGroupTest}
+        ),
+    )
 
 
 class TestPropagateContextKeysE2E:
@@ -226,3 +303,156 @@ class TestPropagateContextKeysE2E:
         assert find_column(result, "feat_x") == [200, 400, 600, 800, 1000]
         assert find_column(result, "feat_y") == [1600, 2200, 2800, 3400, 4000]
         assert find_column(result, "feat_z") == [4200, 5400, 6600, 7800, 9000]
+
+    def _run_name_chained(self, options: Options) -> list[Any]:
+        return mloda.run_all(
+            [Feature(name=NAME_CHAINED_TOP, options=options)],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {NameChainedCascadeGroupTest, ChainerContextParserTestDataCreator}
+            ),
+        )
+
+    def test_cascade_through_name_chained_features(self) -> None:
+        result = self._run_name_chained(
+            Options(context={"env": "prod"}, cascade_context_keys=frozenset({"env"})),
+        )
+        assert find_column(result, NAME_CHAINED_TOP) == [7800, 8600, 9400, 10200, 11000]
+
+    def test_one_hop_propagation_fails_in_name_chained_features(self) -> None:
+        with pytest.raises(Exception, match="needs env=prod"):
+            self._run_name_chained(Options(context={"env": "prod"}, propagate_context_keys=frozenset({"env"})))
+
+    @pytest.mark.parametrize(
+        "blocked, expected_x, expected_y, expected_z",
+        [
+            ("x", [200, 400, 600, 800, 1000], [1600, 2200, 2800, 3400, 4000], [4200, 5400, 6600, 7800, 9000]),
+            ("y", [200, 400, 600, 800, 1000], [600, 1200, 1800, 2400, 3000], [2200, 3400, 4600, 5800, 7000]),
+            (None, [1200, 1400, 1600, 1800, 2000], [4600, 5200, 5800, 6400, 7000], [10200, 11400, 12600, 13800, 15000]),
+        ],
+    )
+    def test_cascade_reaches_or_stops_at_forward_group_false(
+        self, blocked: str | None, expected_x: list[int], expected_y: list[int], expected_z: list[int]
+    ) -> None:
+        prefix = f"casc_stop_{blocked}"
+        stop_x, stop_y, stop_z = _cascade_chain(prefix, blocked=blocked)
+        result = mloda.run_all(
+            [stop_z, stop_y, stop_x, "Sales"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+        )
+        assert find_column(result, f"{prefix}_x") == expected_x
+        assert find_column(result, f"{prefix}_y") == expected_y
+        assert find_column(result, f"{prefix}_z") == expected_z
+
+    def test_cascade_conflict_at_deepest_feature_raises(self) -> None:
+        deep_x, deep_y, deep_z = _cascade_chain("casc_conflict", deepest_env="staging")
+        with pytest.raises(ValueError, match="cascade_context_keys") as excinfo:
+            mloda.run_all(
+                [deep_z, deep_y, deep_x, "Sales"],
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=self.plugin_collector,
+            )
+        assert "casc_conflict_x" in str(excinfo.value)
+
+    @pytest.mark.parametrize("other", [CASCADE_GUARD_PULL_CONSUMER, CASCADE_GUARD_HOP_CONSUMER])
+    @pytest.mark.parametrize("cascade_first", [True, False])
+    def test_shared_input_with_differing_cascade_raises(self, other: str, cascade_first: bool) -> None:
+        requests = _guard_requests(CASCADE_GUARD_SHARED, other)
+        with pytest.raises(ValueError) as excinfo:
+            _run_guard(requests if cascade_first else requests[::-1])
+        assert CASCADE_GUARD_SHARED in str(excinfo.value)
+        assert "cascade_context_keys" in str(excinfo.value)
+
+    @pytest.mark.parametrize("cascade_first", [True, False])
+    def test_inputs_differing_in_compute_framework_fail_at_plan_time(self, cascade_first: bool) -> None:
+        requests = [
+            Feature(
+                CASCADE_FOLD_CASCADE_CONSUMER,
+                options=Options(context={"k": "v"}, cascade_context_keys=frozenset({"k"})),
+            ),
+            Feature(CASCADE_FOLD_PINNED_CONSUMER, options=Options(context={"k": "v"})),
+        ]
+        with pytest.raises(ValueError) as excinfo:
+            mloda.run_all(
+                list[Feature | str](requests if cascade_first else requests[::-1]),
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {CascadeGuardRootGroupTest, CascadeFoldSharedGroupTest, CascadeFoldConsumerGroupTest}
+                ),
+            )
+        assert "from two steps" in str(excinfo.value)
+        assert "differ in options" in str(excinfo.value)
+
+    @pytest.mark.parametrize("other", [CASCADE_GUARD_PULL_CONSUMER, CASCADE_GUARD_HOP_CONSUMER])
+    @pytest.mark.parametrize("cascade_first", [True, False])
+    def test_shared_root_with_differing_cascade_does_not_raise(self, other: str, cascade_first: bool) -> None:
+        requests = _guard_requests(CASCADE_GUARD_ROOT, other)
+        result = _run_guard(requests if cascade_first else requests[::-1])
+        assert find_column(result, CASCADE_GUARD_CASCADE_CONSUMER) == [2, 3, 4]
+        assert find_column(result, other) == [2, 3, 4]
+
+    _ENV_ROOT_COLLECTOR = PluginCollector.enabled_feature_groups(
+        {PropagateContextFeatureGroupTest, CascadeEnvRootGroupTest}
+    )
+    _CHAIN_ORDERS_OK = ["zyx", "zxy", "z", "zy", "zx", "xzy", "xz"]
+    _CHAIN_ORDERS_RAISE = ["yzx", "yxz", "xyz", "yz"]
+    _CHAIN_EXPECTED = {
+        "x": [1020, 1040, 1060],
+        "y": [4060, 4120, 4180],
+        "z": [9120, 9240, 9360],
+    }
+
+    def _run_env_root(self, requests: list[Feature]) -> list[Any]:
+        return mloda.run_all(
+            list[Feature | str](requests),
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self._ENV_ROOT_COLLECTOR,
+        )
+
+    @pytest.mark.parametrize("order", _CHAIN_ORDERS_OK)
+    def test_shared_chain_cascade_reaches_root_for_any_successful_order(self, order: str) -> None:
+        prefix = f"cer_ok_{order}"
+        chain = dict(zip("xyz", _cascade_chain(prefix, root=CASCADE_ENV_ROOT)))
+        result = self._run_env_root([chain[level] for level in order])
+        for level in order:
+            assert find_column(result, f"{prefix}_{level}") == self._CHAIN_EXPECTED[level]
+
+    @pytest.mark.parametrize("order", _CHAIN_ORDERS_RAISE)
+    def test_shared_chain_gaining_cascade_after_inputs_resolved_raises(self, order: str) -> None:
+        prefix = f"cer_raise_{order}"
+        chain = dict(zip("xyz", _cascade_chain(prefix, root=CASCADE_ENV_ROOT)))
+        with pytest.raises(ValueError) as excinfo:
+            self._run_env_root([chain[level] for level in order])
+        assert "cascade_context_keys" in str(excinfo.value)
+        assert any(f"{prefix}_{level}" in str(excinfo.value) for level in "xy")
+
+    @pytest.mark.parametrize("order", ["ab", "ba"])
+    def test_shared_mid_gaining_cascade_from_second_consumer(self, order: str) -> None:
+        mid = Feature(
+            name=f"cer_mid_{order}",
+            options=Options(context={DefaultOptionKeys.in_features: CASCADE_ENV_ROOT, "ident": "identifier1"}),
+        )
+        consumers = {
+            "a": Feature(
+                name=f"cer_a_{order}",
+                options=Options(context={DefaultOptionKeys.in_features: mid, "ident": "identifier1"}),
+            ),
+            "b": Feature(
+                name=f"cer_b_{order}",
+                options=Options(
+                    context={DefaultOptionKeys.in_features: mid, "ident": "identifier1", "env": "prod"},
+                    cascade_context_keys=frozenset({"env"}),
+                ),
+            ),
+        }
+        requests = [consumers[name] for name in order]
+        if order == "ab":
+            with pytest.raises(ValueError) as excinfo:
+                self._run_env_root(requests)
+            assert f"cer_mid_{order}" in str(excinfo.value)
+            assert "cascade_context_keys" in str(excinfo.value)
+        else:
+            result = self._run_env_root(requests)
+            assert find_column(result, f"cer_a_{order}") == [2040, 2080, 2120]
+            assert find_column(result, f"cer_b_{order}") == [3040, 3080, 3120]

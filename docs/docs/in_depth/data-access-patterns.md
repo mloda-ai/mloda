@@ -60,7 +60,7 @@ A format group can also describe its data through `declared_attributes`, see [De
 - **FormatFeatureGroup** (any source): declare `CLAIM_ROUTES`, implement `find_sources` and `load_neutral`; optionally `columns`, `has_column`, `ambiguity_fix`, `describe_columns`, `count_rows`.
 - **ReadFileFG**: implement `suffixes()` and `column_names(path)`. It inherits file and folder discovery, the pinned-file rule, and a default `load_neutral` that hands a `FileSource` to the compute framework; the stock `FileSource` transformers read csv, parquet, json, feather and orc.
 - **ReadDocumentFG**: implement `suffixes()`; optionally `read_text` and `handover_suffixes`. It inherits the three names `<Group>`, `<Group>~source` and `<Group>~file_type`.
-- **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns` and `produce_rows`. `is_valid_credentials` must never raise. `database_identity` must not contain credential values. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
+- **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns` and `produce_rows`. `is_valid_credentials` must never raise. `database_identity` must not contain credential values. The table catalog is cached per run and per credential content, so credentials that differ only in a secret each read their own catalog; with a preset `table_name`, only that table's columns are read. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
 
     ```python
     from typing import Any

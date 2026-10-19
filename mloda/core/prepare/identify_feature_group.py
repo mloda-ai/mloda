@@ -360,7 +360,7 @@ class IdentifyFeatureGroupClass:
                 continue
             reader, access = pair
             sources[feature_group] = safe_field(
-                lambda: f"{reader.data_access_name()}: {reader.data_access_identity(access)}",
+                lambda: scrub_credentials(f"{reader.data_access_name()}: {reader.data_access_identity(access)}"),
                 "",
                 field=f"{getattr(reader, '__name__', 'reader')}.data_access_identity",
             )

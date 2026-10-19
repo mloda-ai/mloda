@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     HANDLE_OPTION,
@@ -72,7 +73,7 @@ class ReadDBFG(FormatFeatureGroup):
     @classmethod
     @abstractmethod
     def database_identity(cls, credentials: Any) -> str:
-        """A credential-free name of the database, used as source prefix and cache key."""
+        """A credential-free name of the database, used as source prefix; catalogs are cached per credential."""
 
     @classmethod
     @abstractmethod
@@ -211,14 +212,19 @@ class ReadDBFG(FormatFeatureGroup):
     @classmethod
     def _catalog(cls, credentials: Any) -> tuple[dict[str, tuple[str, ...]] | None, str | None]:
         identity = cls.database_identity(credentials)
-        return run_cached((cls, "catalog", identity), lambda: cls._read_catalog(credentials))
+        fingerprint = sha256(repr(_deep_hashable(credentials)).encode()).hexdigest()
+        return run_cached((cls, "catalog", identity, fingerprint), lambda: cls._read_catalog(credentials))
 
     @classmethod
     def _read_catalog(cls, credentials: Any) -> tuple[dict[str, tuple[str, ...]] | None, str | None]:
         try:
             connection = cls.get_connection(credentials)
             try:
-                catalog = {table: tuple(cls.table_columns(connection, table)) for table in cls.list_tables(connection)}
+                tables = list(cls.list_tables(connection))
+                preset = credentials.get(cls.TABLE_KEY) if isinstance(credentials, Mapping) else None
+                if isinstance(preset, str) and preset:
+                    tables = [preset] if preset in tables else []
+                catalog = {table: tuple(cls.table_columns(connection, table)) for table in tables}
             finally:
                 cls.close_connection(connection)
         except cls.CATALOG_ERRORS as exc:

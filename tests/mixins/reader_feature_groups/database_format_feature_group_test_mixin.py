@@ -236,12 +236,18 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert "db_b" in message
         assert SECRET not in message
 
-    def test_db_a_preset_table_name_restricts_the_lookup_to_that_table(self) -> None:
+    def test_db_a_preset_table_name_restricts_the_lookup_to_that_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
         path = self._make("preset", {"table_a": {self.present_column: [1]}, "table_b": {self.present_column: [2]}})
         dac = DataAccessCollection(credentials={"preset_handle": self.make_credential(path, table_name="table_b")})
         feature = Feature(self.present_column)
-        assert self._claims(feature, dac)
-        assert self._claimed_match(feature).source == self._source_of(path, "table_b")
+        spy = self._spy(monkeypatch)
+        with run_match_cache():
+            assert self._claims(feature, dac)
+            match = self._claimed_match(feature)
+            assert match.source == self._source_of(path, "table_b")
+            assert self.feature_group_class.columns(match) is not None
+            assert self.feature_group_class.unknown_columns_reason(match) is None
+        assert spy.table_columns == ["table_b"]
 
     def test_db_a_preset_table_name_without_the_column_declines_and_aborts_when_pointed(self) -> None:
         path = self._make("preset_lacks", {"table_a": {"toyfmt_other_a": [1]}, "table_b": {self.present_column: [2]}})
@@ -254,14 +260,19 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             self._resolve(self._pointed(self.present_column, credential), None)
         assert self._source_of(path, "table_a") in str(exc_info.value)
 
-    def test_db_a_preset_table_name_missing_from_the_catalog_declines_and_aborts_when_pointed(self) -> None:
+    def test_db_a_preset_table_name_missing_from_the_catalog_declines_and_aborts_when_pointed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         credential = self.make_credential(self.own_path, table_name="toyfmt_no_such_table")
         dac = DataAccessCollection(credentials={"preset_handle": credential})
+        spy = self._spy(monkeypatch)
         result = self._evaluate(Feature(self.present_column), dac)
         assert self.feature_group_class not in result.identified
         assert "toyfmt_no_such_table" in result.eliminations[self.feature_group_class].reason
         with pytest.raises(ValueError, match="toyfmt_no_such_table"):
             self._resolve(self._pointed(self.present_column, credential), None)
+        assert spy.list_tables >= 1
+        assert spy.table_columns == []
 
     def test_db_the_same_database_under_two_handles_is_one_source(self) -> None:
         dac = DataAccessCollection(

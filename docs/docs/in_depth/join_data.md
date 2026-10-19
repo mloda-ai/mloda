@@ -234,6 +234,15 @@ links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id", jointype=Joi
 
 The returned set is passed straight to `mlodaAPI` like any other link set.
 
+**Known limits when several links feed one consumer**
+
+Each join that feeds a consumer runs on the frame the previous join built. Two shapes are not reliable yet when the links share their right side, as in `Link.inner(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.inner(JoinSpec(C, ...), JoinSpec(B, ...))`:
+
+- In `THREADING` mode the consumer can fail intermittently with a missing column, most often when all groups run on one compute framework.
+- A left or right join that keeps both `A` and `C` has no defined result and can return different rows between runs.
+
+Declaring the shared group as the left side of every link avoids both, which is what `Link.star(B, A, C, index_column=...)` does; for the left join, keep `B` (`jointype="left"`) or use inner or outer joins. Two members of one link side (see below) count as two such links.
+
 #### Same-Class Joins with Discriminators
 
 When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using **discriminators**.
@@ -334,7 +343,7 @@ A base class and its subclass can both match one side of a link, for example a c
 | On different frameworks | On a framework no member uses | On a member's framework, or reading a member through a feature in between | Rejected: read one member of the link side per consumer |
 | On one framework | Any | Any | Not supported over one base-class link: the join is ambiguous, and some layouts lose one member's column instead of raising |
 
-Known limits of the layouts that are planned: in the first row, a left or right join that keeps the member side can return wrong rows when the members hold different keys. In `THREADING` mode the first row, and several consumers of one such link in either planned row, can fail intermittently with a missing column.
+Each member's join counts as a separate link into the consumer's frame, so the [known limits when several links feed one consumer](#star-joins-linkstar) apply to the planned layouts: in the first row, a left or right join that keeps the member side can return wrong rows when the members hold different keys. In `THREADING` mode the first row, and several consumers of one such link in either planned row, can fail intermittently with a missing column.
 
 #### mlodaAPI
 

@@ -28,6 +28,11 @@ def _regexp(pattern: str, string: str | None) -> bool:
 
 
 class SqliteFramework(ComputeFramework):
+    """SQLite framework implementation for ComputeFramework.
+
+    Works on rows read through a caller-supplied sqlite3.Connection, which must be set before use and cannot be swapped for a different one.
+    """
+
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         if framework_connection_object is None:
             raise ValueError("A sqlite3.Connection object is required.")

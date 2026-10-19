@@ -17,6 +17,11 @@ except ImportError:
 
 
 class PolarsDataFrame(ComputeFramework):
+    """Polars framework implementation for ComputeFramework.
+
+    Works on polars DataFrames, evaluating operations eagerly; PolarsLazyDataFrame is the deferred, optimizing variant.
+    """
+
     @staticmethod
     def is_available() -> bool:
         """Check if Polars is installed and available."""

@@ -21,6 +21,10 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import PluginLoader
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from tests.helpers.plugin_stubs import make_raising_fg
 
 # Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
@@ -965,3 +969,33 @@ class TestFeatureGroupInfoClaimRoutes:
 
         assert infos
         assert all(tuple(info.claim_routes) == () for info in infos)
+
+
+class TestFirstPartyComputeFrameworkDescriptions:
+    """Built-in compute frameworks must describe themselves, not just name themselves."""
+
+    @pytest.mark.parametrize(
+        "fg_cls",
+        [
+            PandasDataFrame,
+            PolarsDataFrame,
+            PyArrowTable,
+            SqliteFramework,
+        ],
+    )
+    def test_catalog_description_is_not_the_bare_class_name(self, fg_cls: type[ComputeFramework]) -> None:
+        """A built-in compute framework must carry its own class docstring.
+
+        get_compute_framework_docs() takes each class's own docstring as the catalog
+        description and falls back to the bare class name when the class has none;
+        these four first-party frameworks have no docstring of their own, so the
+        catalog describes them only by name and a search for what they actually do
+        cannot find them.
+        """
+        results = get_compute_framework_docs()
+        entry = next((info for info in results if info.name == fg_cls.__name__), None)
+        assert entry is not None, f"{fg_cls.__name__} is missing from the compute framework catalog"
+        assert entry.description != fg_cls.__name__, (
+            f"{fg_cls.__name__} must carry its own class docstring so the plugin catalog "
+            "shows a real description instead of the bare class name"
+        )

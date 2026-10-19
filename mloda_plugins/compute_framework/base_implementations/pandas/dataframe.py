@@ -15,6 +15,11 @@ except ImportError:
 
 
 class PandasDataFrame(ComputeFramework):
+    """Pandas framework implementation for ComputeFramework.
+
+    Works on pandas DataFrames, evaluating every operation eagerly in memory.
+    """
+
     @staticmethod
     def is_available() -> bool:
         """Check if Pandas is installed and available."""

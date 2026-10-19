@@ -55,6 +55,11 @@ def arrow_append_columns(data: Any, columns: dict[str, Any]) -> Any | None:
 
 
 class PyArrowTable(ComputeFramework):
+    """PyArrow framework implementation for ComputeFramework.
+
+    Works on Apache Arrow tables, keeping feature data in Arrow's columnar format.
+    """
+
     @staticmethod
     def is_available() -> bool:
         """Check if PyArrow is installed and available."""

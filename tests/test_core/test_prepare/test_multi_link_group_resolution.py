@@ -2642,10 +2642,7 @@ def _below_layout(
     other: type[ComputeFramework],
     joined_and_d_framework: type[ComputeFramework] | None = None,
 ) -> dict[str, Any]:
-    """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework.
-
-    With `joined_and_d_framework`, a "below_jd" feature on that framework reads the consumer and root D.
-    """
+    """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework."""
     root_a = _star_group(f"BelowRootA{tag}", f"below_a_{tag}", _xyz([1, 2, 3]), source)
     root_b = _star_group(f"BelowRootB{tag}", f"below_b_{tag}", _xyz([10, 20, 30]), other)
     root_d = _star_group(f"BelowRootD{tag}", f"below_d_{tag}", _xyz([7, 8, 9]), PandasDataFrame)

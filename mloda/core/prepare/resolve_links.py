@@ -47,7 +47,6 @@ class LinkTrekker:
 
         self.order: OrderedDict[UUID, set[UUID]] = OrderedDict()
 
-        # Child uuid -> all its ancestor uuids (the graph's parent_to_children_mapping), when known.
         self.ancestors_of: dict[UUID, set[UUID]] = {}
 
     def _feeds(self, uuids: set[UUID], other_uuids: set[UUID]) -> bool:

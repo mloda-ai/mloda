@@ -247,8 +247,7 @@ class ExecutionPlan:
     def _anchor_join_consumers_on_destination(
         self, plan: Sequence[TransformFrameworkStep | JoinStep | FeatureGroupStep]
     ) -> None:
-        """A join consumer without a hop of its own reads the join result in the destination's frame, but other
-        frames on that framework can list it too: anchor its frame lookup on the destination step's frame."""
+        """Anchor a hop-less join consumer's frame lookup on the destination step's frame."""
         fg_steps = [step for step in plan if isinstance(step, FeatureGroupStep)]
         for step in fg_steps:
             if step.tfs_ids:

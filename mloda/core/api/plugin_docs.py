@@ -18,6 +18,7 @@ Example:
 from typing import Any
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
@@ -88,6 +89,13 @@ def _resolved_subtype_fields(
     if canonical != raw_subtype:
         return subtype, canonical
     return subtype, None
+
+
+def _owned_suffixes(fg_class: type[FeatureGroup]) -> tuple[str, ...]:
+    """Return the sorted default-owned suffixes of a file source group, () for other groups or a raising read."""
+    if not issubclass(fg_class, _FileSourceFG):
+        return ()
+    return safe_field(lambda: tuple(sorted(set(fg_class.default_owned_suffixes()))), ())
 
 
 def _dedup_degrading_on_conflict(
@@ -202,6 +210,7 @@ def get_feature_group_docs(
                 subtype_support=subtype_support,
                 subtype_error=subtype_error,
                 claim_routes=list(getattr(fg_class, "CLAIM_ROUTES", ())),
+                suffixes=_owned_suffixes(fg_class),
             )
         )
 

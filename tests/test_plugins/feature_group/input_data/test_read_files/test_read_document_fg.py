@@ -192,3 +192,27 @@ class TestStockFormats:
         for name in ("TextFG", "PyFG", "MarkdownFG", "YamlFG", "JsonDocumentFG"):
             assert name in stock.__all__
             assert getattr(stock, name).get_class_name() == name
+
+
+class TestSiblingsUnderASharedFileSourceBase:
+    def test_a_document_group_is_not_a_file_group(self) -> None:
+        assert not issubclass(ReadDocumentFG, ReadFileFG)
+
+    def test_both_share_an_abstract_format_base_that_is_neither_of_them(self) -> None:
+        common = [
+            base
+            for base in ReadDocumentFG.__mro__
+            if base in ReadFileFG.__mro__ and base not in (object, FormatFeatureGroup)
+        ]
+        assert common
+        shared = common[0]
+        assert issubclass(shared, FormatFeatureGroup)
+        assert shared not in (FormatFeatureGroup, ReadFileFG, ReadDocumentFG)
+        assert inspect.isabstract(shared)
+
+    def test_a_document_group_has_no_column_names_listing(self) -> None:
+        assert not hasattr(ReadDocumentFG, "column_names")
+
+    def test_a_document_group_does_not_inherit_the_file_format_ambiguity_fix(self) -> None:
+        definer = next(base for base in ReadDocumentFG.__mro__ if "ambiguity_fix" in vars(base))
+        assert definer is not ReadFileFG

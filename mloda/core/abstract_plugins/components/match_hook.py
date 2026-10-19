@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     MatchRejection,
@@ -73,6 +74,22 @@ class CriteriaProbeOutcome:
     matcher_error: Exception | None
     value_rejection: PropertyValueRejection | None
     rejection: MatchRejection | None
+    # The (group, access) pair a matching probe wrote under the reserved key; None otherwise.
+    written: tuple[Any, Any] | None
+
+
+def _call_and_take_reader_pair(
+    feature_group: type[FeatureGroup],
+    feature_name: FeatureName | str,
+    options: Options,
+    data_access_collection: DataAccessCollection | None,
+) -> tuple[MatchHookOutcome, Any]:
+    """Call the hook, then pop the reserved reader key whatever the outcome, a marked abort included."""
+    try:
+        outcome = call_match_hook(feature_group, feature_name, options, data_access_collection)
+    finally:
+        popped = options.group.pop(RESERVED_READER_OPTION_KEY, None)
+    return outcome, popped
 
 
 def probe_match_criteria(
@@ -84,7 +101,7 @@ def probe_match_criteria(
     """Ask one candidate under its own rejection window; a marked abort propagates, the finally only resets."""
     token = MATCH_REJECTION_REASONS.set({})
     try:
-        outcome = call_match_hook(feature_group, feature_name, options, data_access_collection)
+        outcome, popped = _call_and_take_reader_pair(feature_group, feature_name, options, data_access_collection)
         value_rejection = outcome.error if isinstance(outcome.error, PropertyValueRejection) else None
         matcher_error = outcome.error if value_rejection is None else None
         if value_rejection is not None:
@@ -96,6 +113,9 @@ def probe_match_criteria(
         recorded = MATCH_REJECTION_REASONS.get() or {}
         # Harvest only on a non-match; the first recorded reason wins (insertion order).
         rejection = next(iter(recorded.values())) if not outcome.matched and recorded else None
-        return CriteriaProbeOutcome(outcome.matched, outcome.returned, matcher_error, value_rejection, rejection)
+        written = popped if outcome.matched and isinstance(popped, tuple) and len(popped) == 2 else None
+        return CriteriaProbeOutcome(
+            outcome.matched, outcome.returned, matcher_error, value_rejection, rejection, written
+        )
     finally:
         MATCH_REJECTION_REASONS.reset(token)

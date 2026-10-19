@@ -237,7 +237,7 @@ class TestIdentifyNamingConventionForSubColumns:
 
         result = framework.identify_naming_convention(selected_feature_names, column_names)
 
-        assert result == {"base~1"}, (
+        assert result == ["base~1"], (
             f"When requesting 'base~1', only 'base~1' should be selected, not all base~* columns. Got: {result}"
         )
 
@@ -262,7 +262,7 @@ class TestIdentifyNamingConventionForSubColumns:
 
         result = framework.identify_naming_convention(selected_feature_names, column_names)
 
-        assert result == {"base~0", "base~1", "base~2"}, "Requesting 'base' should return all 'base~*' columns"
+        assert result == ["base~0", "base~1", "base~2"], "Requesting 'base' should return all 'base~*' columns"
 
 
 class TestChainingWithSubColumns:

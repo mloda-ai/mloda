@@ -28,6 +28,8 @@ class FeatureGroupInfo:
     subtype_error: str | None = None
     # ClaimRoutes of a FormatFeatureGroup; empty for every other group.
     claim_routes: list[ClaimRoute] = field(default_factory=list)
+    # Sorted, deduplicated suffixes a file or document group owns by default; empty for every other group.
+    suffixes: tuple[str, ...] = ()
 
 
 @dataclass

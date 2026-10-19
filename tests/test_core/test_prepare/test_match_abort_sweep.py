@@ -2621,6 +2621,7 @@ _FILE_FORMAT_MODULES = [
 ] + [
     pytest.param("mloda_plugins/feature_group/input_data/db_formats/sqlite_fg.py", id="sqlite_fg"),
     pytest.param("mloda/core/abstract_plugins/components/input_data/read_document_fg.py", id="read_document_fg"),
+    pytest.param("mloda/core/abstract_plugins/components/input_data/file_source_fg.py", id="file_source_fg"),
     *(
         pytest.param(f"mloda_plugins/feature_group/input_data/document_formats/{name}.py", id=name)
         for name in ("text_fg", "markdown_fg", "yaml_fg", "json_document_fg")

@@ -1,17 +1,17 @@
 """Abstract base of one-FeatureGroup-per-document-format: one file in, three outputs (text, source, file_type).
 
 A subclass declares ``suffixes()``. Third-party groups should run the contract mixins in mloda's
-``tests/mixins/reader_feature_groups/`` (``document_format_feature_group_test_mixin``).
+``tests/mixins/reader_feature_groups/`` (``document_format_feature_group_test_mixin``); the mixins need the ``rejection_window`` fixture from mloda's
+``tests/conftest.py``.
 """
 
 import os
-from collections.abc import Collection
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -20,8 +20,11 @@ SOURCE_SUFFIX = "~source"
 FILE_TYPE_SUFFIX = "~file_type"
 
 
-class ReadDocumentFG(ReadFileFG):
-    """Document format group; run tests/mixins/reader_feature_groups/document_format_feature_group_test_mixin.py."""
+class ReadDocumentFG(_FileSourceFG):
+    """Document format group; run tests/mixins/reader_feature_groups/document_format_feature_group_test_mixin.py.
+
+    The mixin needs the rejection_window fixture from tests/conftest.py.
+    """
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
         ClaimRoute("file", NamePolicy.DECLARED, True),
@@ -33,6 +36,11 @@ class ReadDocumentFG(ReadFileFG):
         return ()
 
     @classmethod
+    def default_owned_suffixes(cls) -> tuple[str, ...]:
+        handed_over = cls.handover_suffixes()
+        return tuple(suffix for suffix in cls.suffixes() if suffix not in handed_over)
+
+    @classmethod
     def read_text(cls, path: str) -> str:
         with open(path, encoding="utf-8") as handle:
             return handle.read()
@@ -40,10 +48,6 @@ class ReadDocumentFG(ReadFileFG):
     @classmethod
     def file_type(cls, path: str) -> str:
         return os.path.splitext(path)[1].lstrip(".").lower()
-
-    @classmethod
-    def column_names(cls, path: str) -> Collection[str]:
-        return sorted(cls.declared_names())
 
     @classmethod
     def declared_names(cls) -> frozenset[str]:

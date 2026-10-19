@@ -7,11 +7,28 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.orc as pyarrow_orc
 import pyarrow.parquet as pyarrow_parquet
+import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.user import DataType
+from tests.helpers.probe_runner import run_probes
 from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+
+
+_PROBE = Path(__file__).with_name("column_order_probe.py")
+_PROBE_SEEDS = [0, 1, 2]
+
+
+@pytest.mark.timeout(60)
+def test_run_all_csv_column_order_is_sorted_and_seed_independent() -> None:
+    outputs = run_probes(_PROBE, count=len(_PROBE_SEEDS), seeds=_PROBE_SEEDS)
+
+    columns = [output["columns"].split(",") for output in outputs]
+    assert len(columns) == len(_PROBE_SEEDS)
+    for seed, names in zip(_PROBE_SEEDS, columns):
+        assert names == sorted(names), f"seed {seed} returned unsorted columns {names}"
+    assert columns[0] == columns[1] == columns[2], f"column order differs across seeds: {columns}"
 
 
 def _loaded_column_names(result: Any) -> list[str]:

@@ -14,8 +14,9 @@
 #         PROPERTY_MAPPING = { ... }
 #         def calculate_feature(cls, data, features): ...
 #
-# Primary-source feature groups (no input features) subclass FeatureGroup
-# directly and implement input_features and match_feature_group_criteria.
+# Primary-source feature groups (no input features) read files, documents and
+# databases by subclassing a format group base: ReadFileFG, ReadDocumentFG,
+# ReadDBFG, or FormatFeatureGroup for any other source.
 #
 # This module is core-only. Concrete compute frameworks come from mloda.user.<backend>.
 #

@@ -965,3 +965,47 @@ class TestFeatureGroupInfoClaimRoutes:
 
         assert infos
         assert all(tuple(info.claim_routes) == () for info in infos)
+
+
+class TestFeatureGroupInfoSuffixes:
+    @staticmethod
+    def _suffixes(name: str) -> tuple[str, ...]:
+        infos = [info for info in get_feature_group_docs(name=name) if info.name == name]
+        assert len(infos) == 1
+        return infos[0].suffixes
+
+    def test_suffixes_defaults_to_empty_tuple(self) -> None:
+        info = FeatureGroupInfo(
+            name="g",
+            description="d",
+            version="1",
+            module="m",
+            compute_frameworks=[],
+            supported_feature_names=set(),
+            prefix="p",
+        )
+        assert info.suffixes == ()
+
+    def test_file_group_reports_its_declared_suffixes(self) -> None:
+        assert self._suffixes("CsvFG") == (".CSV", ".csv")
+
+    def test_json_default_owner_is_json_fg_not_json_document_fg(self) -> None:
+        from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
+
+        assert self._suffixes("JsonFG") == tuple(sorted(set(JsonFG.suffixes())))
+        assert self._suffixes("JsonDocumentFG") == ()
+
+    def test_document_group_reports_its_suffixes(self) -> None:
+        from mloda_plugins.feature_group.input_data.document_formats.text_fg import TextFG
+
+        assert self._suffixes("TextFG") == tuple(sorted(set(TextFG.suffixes())))
+        assert self._suffixes("TextFG") != ()
+
+    def test_db_group_has_no_suffixes(self) -> None:
+        assert self._suffixes("SqliteFG") == ()
+
+    def test_plain_feature_group_has_no_suffixes(self) -> None:
+        infos = get_feature_group_docs(name="PandasAggregatedFeatureGroup")
+
+        assert infos
+        assert all(info.suffixes == () for info in infos)

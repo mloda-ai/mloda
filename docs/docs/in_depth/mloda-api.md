@@ -53,7 +53,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 -   flight_server (optional): Specify a flight server for multiprocessing only.
 -   **column_ordering** (optional): Control the ordering of result columns.
     Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`
-    (preserve the order features were requested). Default: `None` (no guaranteed order).
+    (preserve the order features were requested). Default: `None` (sorted by name, the same in every process).
 
 ```python
 from mloda.user import mloda
@@ -220,7 +220,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 
 `diagnose` and `resolution_report()` are the non-raising counterparts to `explain` and `resolved_plan()`: where the plan-based pair returns `PlanStep` records, these return the resolution facts a failing request would otherwise raise.
 
-`mlodaAPI.diagnose(features, ...)` runs the whole-request preflight without raising and returns a single `ResolutionDiagnosis`. It takes the same arguments as `explain` (every parameter after `features` is keyword-only). On success its `records` equal `session.resolution_report()` and `complete` is `True`; on a resolution failure it carries the records resolved before the failing feature plus `feature_name`, `failed_result`, and `message`; on an environment failure found after planning (a missing connection) it carries the resolved records with only `message` set; on other environment or config failures (redefinition conflict, framework-declaration error, compute-framework pin) it returns `records=[]`, `complete=False`, and only `message`. Any other error, including an exception a breaking extender raises (unless it is one of the projected types), still propagates.
+`mlodaAPI.diagnose(features, ...)` runs the whole-request preflight without raising and returns a single `ResolutionDiagnosis`. It takes the same arguments as `explain` (every parameter after `features` is keyword-only). On success its `records` equal `session.resolution_report()` and `complete` is `True`; on a resolution failure it carries the records resolved before the failing feature plus `feature_name`, `failed_result`, and `message`; on an environment failure found after planning (a missing connection) it carries the resolved records with only `message` set; on other environment or config failures (redefinition conflict, framework-declaration error, compute-framework pin, format pointer error) it returns `records=[]`, `complete=False`, and only `message`. Any other error, including an exception a breaking extender raises (unless it is one of the projected types), still propagates.
 
 `session.resolution_report()` returns the `list[ResolutionRecord]` captured while `prepare()` planned the request, one per feature, available before or after `run()`.
 

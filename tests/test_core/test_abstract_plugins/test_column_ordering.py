@@ -92,11 +92,21 @@ class SimpleTestFeature(FeatureGroup):
 class TestIdentifyNamingConvention:
     """Test identify_naming_convention() ordering functionality."""
 
-    def test_default_returns_set(self) -> None:
+    def test_default_returns_sorted_list(self) -> None:
         cfw = create_compute_framework()
         result = cfw.identify_naming_convention([FeatureName("A"), FeatureName("B")], {"A", "B", "C"})
-        assert isinstance(result, set)
-        assert result == {"A", "B"}
+        assert isinstance(result, list)
+        assert result == ["A", "B"]
+
+    def test_default_returns_sorted_list_for_names_a_set_would_scramble(self) -> None:
+        names = [f"col_{i:02d}" for i in range(40)] + ["Temp~min", "Temp~max", "Temp~mean"]
+        cfw = create_compute_framework()
+        result = cfw.identify_naming_convention(
+            [FeatureName(n) for n in names[:40]] + [FeatureName("Temp")], set(names) | {"unrequested"}
+        )
+        assert isinstance(result, list)
+        assert result == sorted(names)
+        assert result != list(set(names)), "fixture must differ from this process's set order"
 
     def test_alphabetical_returns_sorted_list(self) -> None:
         cfw = create_compute_framework()

@@ -66,7 +66,7 @@ class SqliteFG(ReadDBFG):
             if data_type:
                 arrow_type = DataType.to_arrow_type(data_type)
             else:
-                arrow_type = DataType.infer_arrow_type(rows[0][index]) if rows else pa.null()
+                arrow_type = pa.array([row[index] for row in rows]).type if rows else pa.null()
             fields.append((name, arrow_type))
         data = [dict(zip(column_names, row)) for row in rows]
         return pa.Table.from_pylist(data, schema=pa.schema(fields))

@@ -1,11 +1,15 @@
+import logging
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
+import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.user import DataAccessCollection, FeatureName, PluginCollector, mloda
+from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG  # noqa: F401
 from mloda.provider import BaseInputData, SourceMatch
 from mloda.provider import DataCreator
 from mloda.user import Options
@@ -17,6 +21,7 @@ from mloda.user import Feature
 from mloda.user import Features
 from mloda.provider import FeatureSet
 from mloda.provider import ComputeFramework
+from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.test_core.test_tooling import MlodaTestRunner, PARALLELIZATION_MODES_ALL
 
 
@@ -327,3 +332,167 @@ class TestGlobalFilterOnFormatGroupColumn:
         assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
             "input_data"
         ]
+
+
+class TestGlobalFilterOnColumnInSeveralFiles:
+    """A filter column held by several sources resolves against the host's source, else the filter is dropped with a warning."""
+
+    @staticmethod
+    def _write(tmp_path: Path, name: str, text: str) -> str:
+        path = tmp_path / name
+        path.write_text(text)
+        return str(path)
+
+    @staticmethod
+    def _run(tmp_path: Path, feature: str) -> list[Any]:
+        global_filter = GlobalFilter()
+        global_filter.add_filter("sevfilt_id", "equal", {"value": 1})
+        return list(
+            mloda.run_all(
+                [Feature(feature)],
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=DataAccessCollection(folders={"gf_folder": str(tmp_path)}),
+                global_filter=global_filter,
+            )
+        )
+
+    def test_filter_resolves_against_the_host_source(self, tmp_path: Path) -> None:
+        self._write(tmp_path, "gf_sev_a.csv", "sevfilt_id,sevfilt_amount\n1,10\n2,20\n3,30\n")
+        self._write(tmp_path, "gf_sev_b.csv", "sevfilt_id,sevfilt_other\n1,5\n2,6\n")
+
+        results = self._run(tmp_path, "sevfilt_amount")
+
+        assert results[0].to_pydict() == {"sevfilt_amount": [10]}
+
+    def test_filter_is_evaluated_on_the_host_file_not_on_another_file_holding_the_column(self, tmp_path: Path) -> None:
+        """Both files hold the filter column, with disjoint ids: only a.csv has id 1, so [10] proves a.csv was used."""
+        self._write(tmp_path, "gf_disc_a.csv", "sevfilt_id,sevfilt_amount\n1,10\n2,20\n3,30\n")
+        self._write(tmp_path, "gf_disc_b.csv", "sevfilt_id,sevfilt_other\n7,5\n8,6\n")
+
+        results = self._run(tmp_path, "sevfilt_amount")
+
+        assert results[0].to_pydict() == {"sevfilt_amount": [10]}
+
+    def test_filter_column_only_in_other_sources_keeps_the_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        self._write(tmp_path, "gf_unres_a.csv", "sevfilt_id,sevfilt_other_a\n1,5\n2,6\n")
+        self._write(tmp_path, "gf_unres_b.csv", "sevfilt_id,sevfilt_other_b\n1,7\n2,8\n")
+        self._write(tmp_path, "gf_unres_c.csv", "sevfilt_amount\n10\n20\n")
+
+        with caplog.at_level(logging.WARNING):
+            results = self._run(tmp_path, "sevfilt_amount")
+
+        assert results[0].to_pydict() == {"sevfilt_amount": [10, 20]}
+        assert any(
+            r.levelno == logging.WARNING and "matched no feature group" in r.getMessage() for r in caplog.records
+        )
+
+    def test_one_group_filters_on_the_host_source_while_another_group_still_filters(self, tmp_path: Path) -> None:
+        self._write(tmp_path, "gf_mix_a.csv", "sevfilt_id,sevfilt_amount\n1,10\n2,20\n")
+        self._write(tmp_path, "gf_mix_b.csv", "sevfilt_id,sevfilt_other\n1,5\n2,6\n")
+        (tmp_path / "gf_mix_c.json").write_text(
+            '{"sevfilt_id": 1, "sevfilt_val": 7}\n{"sevfilt_id": 2, "sevfilt_val": 8}\n'
+        )
+        global_filter = GlobalFilter()
+        global_filter.add_filter("sevfilt_id", "equal", {"value": 1})
+
+        results = mloda.run_all(
+            [Feature("sevfilt_amount"), Feature("sevfilt_val")],
+            compute_frameworks=["PyArrowTable"],
+            data_access_collection=DataAccessCollection(folders={"gf_folder": str(tmp_path)}),
+            global_filter=global_filter,
+        )
+
+        merged: dict[str, Any] = {}
+        for result in results:
+            merged.update(result.to_pydict())
+        assert merged == {"sevfilt_amount": [10], "sevfilt_val": [7]}
+
+    def test_filter_matching_no_group_for_another_reason_warns_and_stays_unfiltered(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        self._write(tmp_path, "gf_nomatch.csv", "sevfilt_nm_key,sevfilt_amount\n1,10\n2,20\n")
+
+        with caplog.at_level(logging.WARNING):
+            results = self._run(tmp_path, "sevfilt_amount")
+
+        assert results[0].to_pydict() == {"sevfilt_amount": [10, 20]}
+        assert any(
+            r.levelno == logging.WARNING and "matched no feature group" in r.getMessage() for r in caplog.records
+        )
+
+    @staticmethod
+    def _folder_with_two_files(tmp_path: Path) -> Path:
+        folder = tmp_path / "sevfilt_data"
+        folder.mkdir()
+        (folder / "gf_ptr_a.csv").write_text("sevfilt_id,sevfilt_amount\n1,10\n2,20\n3,30\n")
+        (folder / "gf_ptr_b.csv").write_text("sevfilt_id,sevfilt_other\n1,5\n2,6\n")
+        return folder
+
+    def test_host_pointed_at_a_folder_filters_the_host_file(self, tmp_path: Path) -> None:
+        folder = self._folder_with_two_files(tmp_path)
+        global_filter = GlobalFilter()
+        global_filter.add_filter("sevfilt_id", "equal", {"value": 1})
+
+        results = mloda.run_all(
+            [Feature("sevfilt_amount", options={"CsvFG": str(folder)})],
+            compute_frameworks=["PyArrowTable"],
+            global_filter=global_filter,
+        )
+
+        assert results[0].to_pydict() == {"sevfilt_amount": [10]}
+
+    @staticmethod
+    def _run_with_pointed_filter(folder: Path) -> list[Any]:
+        global_filter = GlobalFilter()
+        global_filter.add_filter(Feature("sevfilt_id", options={"CsvFG": str(folder)}), "equal", {"value": 1})
+        return list(
+            mloda.run_all(
+                [Feature("sevfilt_amount")],
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=DataAccessCollection(folders={"gf_folder": str(folder)}),
+                global_filter=global_filter,
+            )
+        )
+
+    def test_filter_feature_pointed_at_a_folder_does_not_raise(self, tmp_path: Path) -> None:
+        """The result equals the single-file counterpart, so the ambiguity changes nothing here."""
+        two_files = self._folder_with_two_files(tmp_path)
+        single = tmp_path / "sevfilt_single"
+        single.mkdir()
+        (single / "gf_ptr_a.csv").write_text((two_files / "gf_ptr_a.csv").read_text())
+
+        results = self._run_with_pointed_filter(two_files)
+
+        expected = self._run_with_pointed_filter(single)
+        assert [r.to_pydict() for r in results] == [r.to_pydict() for r in expected]
+
+    def test_database_column_in_two_tables_drops_the_filter_naming_the_ambiguity(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        path = tmp_path / "sevfilt.db"
+        write_sqlite(
+            path,
+            {
+                "sevfilt_t1": {"sevfilt_dbpid": [1, 2], "sevfilt_dbamount": [10, 20]},
+                "sevfilt_t2": {"sevfilt_dbpid": [1], "sevfilt_dbother": [5]},
+            },
+        )
+        global_filter = GlobalFilter()
+        global_filter.add_filter("sevfilt_dbpid", "equal", {"value": 1})
+
+        with caplog.at_level(logging.WARNING):
+            results = mloda.run_all(
+                [Feature("sevfilt_dbamount")],
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=DataAccessCollection(credentials={"sevfilt_h": {"sqlite": str(path)}}),
+                global_filter=global_filter,
+            )
+
+        assert results[0].to_pydict() == {"sevfilt_dbamount": [10, 20]}
+        assert any(r.levelno == logging.WARNING for r in caplog.records)
+        reasons = [e.reason for (fg, _, _), e in global_filter.dropped_filters.items() if fg is SqliteFG]
+        assert len(reasons) == 1
+        assert "several sources" in reasons[0]
+        assert "credential mapping" not in reasons[0]

@@ -1227,7 +1227,7 @@ Available join types:
         column_names: set[str],
         ordering: str | None = None,
         request_feature_order: list[str] | None = None,
-    ) -> set[str] | list[str]:
+    ) -> list[str]:
         """
         Identifies columns that match feature names or follow the naming convention pattern.
 
@@ -1237,11 +1237,11 @@ Available join types:
         Args:
             selected_feature_names: A sequence of FeatureName objects representing the requested features
             column_names: A set of strings representing the available column names in the data
-            ordering: Optional ordering mode - None for Set, "alphabetical" or "request_order" for List
+            ordering: Optional ordering mode - None for sorted, "alphabetical" or "request_order" for List
             request_feature_order: Optional ordered feature names driving 'request_order' output sequence
 
         Returns:
-            A set of column names (default) or list if ordering is specified
+            A list of column names, sorted by name when ordering is None
 
         Raises:
             ValueError: If no matching columns are found or invalid ordering value
@@ -1271,10 +1271,7 @@ Available join types:
                 f"No columns found that match feature names {feature_name_strings} or follow the naming convention 'feature_name~column_name'"
             )
 
-        if ordering is None:
-            return _selected_feature_names
-
-        if ordering == "alphabetical":
+        if ordering is None or ordering == "alphabetical":
             return sorted(_selected_feature_names)
 
         # ordering == "request_order"

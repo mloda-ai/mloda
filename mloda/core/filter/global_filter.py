@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from copy import copy, deepcopy
 from datetime import datetime, timezone
 from itertools import chain
@@ -15,8 +16,8 @@ from mloda.core.abstract_plugins.components.options import Options, _isolate_for
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import feature_group_scope
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
@@ -31,6 +32,8 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 import logging
 
 logger = logging.getLogger(__name__)
+
+_PROBE_HOST_KEY: ContextVar[tuple[Any, str] | None] = ContextVar("_PROBE_HOST_KEY", default=None)
 
 # How far down the gate chain each stage sits, so the nearest miss is the drop that got furthest. A matcher
 # defect ranks lowest on purpose: a crash says nothing about how far the filter got.
@@ -190,7 +193,12 @@ class GlobalFilter:
             if self.feature_group_scope(_filter, feature_group) is False:
                 continue
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
-            if not self.criteria(feature_group, _filter, data_access_collection):
+            token = _PROBE_HOST_KEY.set(feat._input_data_match_key())
+            try:
+                criteria_matched = self.criteria(feature_group, _filter, data_access_collection)
+            finally:
+                _PROBE_HOST_KEY.reset(token)
+            if not criteria_matched:
                 continue
             host_key = feat._input_data_match_key()
             filter_key = _filter.filter_feature._input_data_match_key()
@@ -352,10 +360,24 @@ class GlobalFilter:
                 filter.filter_feature.options,
                 data_access_collection,
             )
+        probe_options = filter.filter_feature.options
+        host_match_key = _PROBE_HOST_KEY.get()
+        if (
+            host_match_key is not None
+            and issubclass(feature_group, _FileSourceFG)
+            and probe.rejection is not None
+            and host_match_key[1] in probe.rejection.candidates
+        ):
+            # The column is ambiguous across sources: re-probe pinned to the host's own source.
+            probe_options = copy(probe_options)
+            probe_options.set(feature_group.pointer_keys()[0], host_match_key[1])
+            with feature_group_scope(None, contain_aborts=True):
+                probe = probe_match_criteria(
+                    feature_group, filter.filter_feature.name, probe_options, data_access_collection
+                )
         # The pair carries credentials: it moves off the options onto the filter feature.
-        written = filter.filter_feature.options.group.pop(RESERVED_READER_OPTION_KEY, None)
-        if probe.matched and isinstance(written, tuple) and len(written) == 2:
-            filter.filter_feature.input_data_match = written
+        if probe.written is not None:
+            filter.filter_feature.input_data_match = probe.written
         if probe.matcher_error is not None:
             reason = contained_raise_reason(probe.matcher_error)
             self._record_dropped_filter(feature_group, filter, reason)

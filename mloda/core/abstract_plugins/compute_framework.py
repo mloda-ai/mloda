@@ -699,11 +699,10 @@ class ComputeFramework(ABC):
     def _require_pinned_frame_for_column(self, feature_name: str) -> None:
         if self._positional_append_needs_pinned_frame() and self.data is not self._pinned_frame:
             raise ValueError(
-                f"Feature '{feature_name}' returned a single column, but the {self.__class__.__name__} frame it "
-                "holds is a plan mloda did not build, so its row order can change between executions and the "
-                "column could land on the wrong rows. Return the column inside the frame the feature group "
-                "received, in the framework's own data type (lazy Polars with_columns, a DuckDB relation "
-                "projection, Spark withColumn)."
+                f"Feature '{feature_name}' returned a single column, but the {self.__class__.__name__} frame is a "
+                "plan mloda did not build, so its row order can change and the column could land on the wrong "
+                "rows. Return the column inside the frame the feature group received, in the framework's own "
+                "data type (lazy Polars with_columns, a DuckDB relation projection, Spark withColumn)."
             )
 
     def _append_dict_to_frame(self, feature_group: Any, result: Any) -> Any:

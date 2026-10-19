@@ -1,11 +1,14 @@
 from collections.abc import Sequence
 from typing import Any
-from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pandas as pd
+import pyarrow as pa
 import pytest
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet
+from mloda.user import Feature
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 
 
@@ -66,65 +69,36 @@ class _PlanListFramework(_ListFramework):
         return True
 
 
-class _ListFeatureGroup:
-    result: Any = None
+class _ForeignResultFeatureGroup(FeatureGroup):
+    """Returns a pyarrow table, a type pandas does not hold natively."""
 
     @classmethod
-    def input_data(cls) -> None:
-        return None
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"my_feature": [1, 2, 3]})
+
+
+class _NativeResultFeatureGroup(FeatureGroup):
+    """Returns the framework's own native frame."""
 
     @classmethod
-    def get_class_name(cls) -> str:
-        return "_ListFeatureGroup"
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: Any) -> Any:
-        return cls.result
-
-    @classmethod
-    def validate_input_features(cls, data: Any, features: Any) -> None:
-        return None
-
-    @classmethod
-    def validate_output_features(cls, data: Any, features: Any) -> None:
-        return None
-
-    @classmethod
-    def final_filters(cls) -> bool | None:
-        return None
-
-
-def _list_features() -> Any:
-    features = MagicMock()
-    features.filter_engine = None
-    features.get_all_names.return_value = ("a",)
-    features.get_options_key.return_value = None
-    features.get_initial_requested_features.return_value = ()
-    features.features = set()
-    return features
-
-
-def _run(framework: ComputeFramework, result: Any) -> None:
-    _ListFeatureGroup.result = result
-    with patch.object(ComputeFramework, "set_filter_engine", lambda self, features: features):
-        with patch.object(ComputeFramework, "set_mask_engine", lambda self, features: features):
-            framework.run_calculation(_ListFeatureGroup, _list_features(), None)
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"my_feature": [1, 2, 3]})
 
 
 class TestRunCalculationPinsConvertedResult:
-    def _framework(self) -> _ListFramework:
-        return _ListFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), uuid=uuid4())
+    def _run(self, feature_group: type[FeatureGroup]) -> PandasDataFrame:
+        framework = PandasDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset(), uuid=uuid4())
+        framework.run_calculation(feature_group, FeatureSet([Feature("my_feature")]), location=None)
+        return framework
 
     def test_foreign_result_converted_by_transform_is_pinned(self) -> None:
-        framework = self._framework()
-        _run(framework, (1, 2, 3))
-        assert framework.data == [1, 2, 3]
+        framework = self._run(_ForeignResultFeatureGroup)
+        assert isinstance(framework.data, pd.DataFrame)
         assert framework._pinned_frame is framework.data
 
     def test_already_native_result_is_not_pinned(self) -> None:
-        framework = self._framework()
-        _run(framework, [1, 2, 3])
-        assert framework.data == [1, 2, 3]
+        framework = self._run(_NativeResultFeatureGroup)
+        assert isinstance(framework.data, pd.DataFrame)
         assert framework._pinned_frame is None
 
 

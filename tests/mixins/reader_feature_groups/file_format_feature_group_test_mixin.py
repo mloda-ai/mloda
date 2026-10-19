@@ -20,7 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -49,8 +49,9 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         path.write_bytes(b"\xff\xfe\x00\x81" * 64)
 
     @pytest.fixture(autouse=True)
-    def _file_format_setup(self, tmp_path: Path) -> None:
+    def _file_format_setup(self, tmp_path: Path, make_implementation: Any) -> None:
         self.tmp_path = tmp_path
+        self.make_implementation = make_implementation
         self.own_path = self._make("own_file", {self.present_column: [1, 2]})
         self.foreign_path = tmp_path / "foreign_file{}".format(FOREIGN_SUFFIX)
         self.foreign_path.write_text(f"{self.present_column}\n1\n2\n")
@@ -472,15 +473,14 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             (parent,),
             {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
         )
+        impl = None
         if loader_value is not None:
-
-            class _ProbeImpl(Implementation):
-                feature_group = cast(type[FormatFeatureGroup], sub)
-                compute_framework = PyArrowTable
-
-                @classmethod
-                def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
-                    return pa.table({column: [loader_value]})
+            impl = self.make_implementation(
+                cast(type[FormatFeatureGroup], sub),
+                PyArrowTable,
+                lambda g, m, f: pa.table({column: [loader_value]}),
+            )
+            assert impl in loaded_implementations()
 
         result = mloda.run_all(
             [Feature(column, Options({sub_name: str(self.own_path)}))],
@@ -488,11 +488,8 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             plugin_collector=PluginCollector.enabled_feature_groups({cast(type[FormatFeatureGroup], sub)}),
         )
         values = result[0].column(column).to_pylist()
-        del sub, result, gated, load_neutral
-        if loader_value is not None:
-            del _ProbeImpl
+        del sub, result, gated, load_neutral, impl
         gc.collect()
-        assert all(i.__name__ != "_ProbeImpl" for i in loaded_implementations())
         return values
 
     def test_file_a_load_neutral_override_is_used_under_pyarrow_table(self) -> None:

@@ -37,7 +37,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.input_data_descriptor import InputDataDescriptor
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.provider import FeatureSet
 from mloda.user import DataAccessCollection, Feature, Options
@@ -286,7 +286,7 @@ class TestCsvFGCountRows:
         gc.collect()
 
     def test_count_rows_reports_none_for_a_subclass_with_a_dict_loader(
-        self, csv_path_with_blanks_and_embedded_newline: str
+        self, csv_path_with_blanks_and_embedded_newline: str, make_implementation: Any
     ) -> None:
         base = _csv_fg()
 
@@ -295,23 +295,13 @@ class TestCsvFGCountRows:
             def match_feature_group_criteria(cls, *args: Any, **kwargs: Any) -> bool:
                 return False
 
-        class _CsvCountRowsProbeImpl(Implementation):
-            feature_group = _CsvCountRowsLoaderProbeFG
-            compute_framework = PythonDictFramework
+        probe_impl = make_implementation(_CsvCountRowsLoaderProbeFG, PythonDictFramework, lambda g, m, f: {})
 
-            @classmethod
-            def calculate(cls, group: Any, match: Any, features: Any) -> Any:
-                return {}
-
-        assert _CsvCountRowsProbeImpl in loaded_implementations()
+        assert probe_impl in loaded_implementations()
 
         match = _match(csv_path_with_blanks_and_embedded_newline)
         assert _CsvCountRowsLoaderProbeFG.count_rows(match, PythonDictFramework) is None
         assert base.count_rows(match, PythonDictFramework) is not None
-        del _CsvCountRowsLoaderProbeFG
-        del _CsvCountRowsProbeImpl
-        gc.collect()
-        assert all(i.__name__ != "_CsvCountRowsProbeImpl" for i in loaded_implementations())
 
 
 class TestCsvHeaderParseError:

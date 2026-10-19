@@ -1,7 +1,8 @@
 import gc
 import importlib.util
 import os
-from collections.abc import Iterator
+import weakref
+from collections.abc import Callable, Iterator
 from typing import Any
 import pytest
 
@@ -10,6 +11,7 @@ from mloda.core.abstract_plugins.components import utils
 from mloda.core.abstract_plugins.components.match_rejection import MATCH_REJECTION_REASONS, MatchRejection
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -193,3 +195,35 @@ if os.getenv(CHECK_SKIP_COUNT_ENV_VAR) == "1":
                     If this just during development, you can adjust CHECK_SKIP_COUNT to something else than 1.
                     """
             )
+
+
+@pytest.fixture
+def make_implementation() -> Iterator[Callable[..., type[Implementation]]]:
+    """make(group, framework, fn=None, base=Implementation, name=None); teardown asserts every class is collected."""
+    created: list[weakref.ref[type[Implementation]]] = []
+
+    def make(
+        group: Any,
+        framework: Any,
+        fn: Callable[[Any, Any, Any], Any] | None = None,
+        base: type[Implementation] = Implementation,
+        name: str | None = None,
+    ) -> type[Implementation]:
+        class _Impl(base):  # type: ignore[misc, valid-type]
+            feature_group = group
+            compute_framework = framework
+
+            @classmethod
+            def calculate(cls, serving: Any, match: Any, features: Any) -> Any:
+                return None if fn is None else fn(serving, match, features)
+
+        if name is not None:
+            _Impl.__name__ = name
+            _Impl.__qualname__ = name
+        created.append(weakref.ref(_Impl))
+        return _Impl
+
+    yield make
+    gc.collect()
+    leaked = [ref() for ref in created if ref() is not None]
+    assert not [impl for impl in loaded_implementations() if impl in leaked], f"leaked implementations: {leaked}"

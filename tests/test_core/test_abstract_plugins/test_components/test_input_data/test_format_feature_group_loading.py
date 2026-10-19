@@ -37,20 +37,8 @@ def _run(group: type, frameworks: Any = None, column: str = "toyfmt_ld") -> list
     )
 
 
-def _impl(
-    group: Any, framework: Any, fn: Any = None, base: type[Implementation] = Implementation
-) -> type[Implementation]:
-    """A fresh Implementation class for (group, framework); callers pass test-only groups, never a stock pair."""
-
-    class _Impl(base):  # type: ignore[misc, valid-type]
-        feature_group = group
-        compute_framework = framework
-
-        @classmethod
-        def calculate(cls, serving: Any, match: SourceMatch, features: Any) -> Any:
-            return SENTINEL if fn is None else fn(serving, match, features)
-
-    return _Impl
+def _sentinel(serving: Any, match: SourceMatch, features: Any) -> Any:
+    return SENTINEL
 
 
 _MATCH = SourceMatch(source="toyfmt_src", access="toyfmt_src")
@@ -63,43 +51,44 @@ class _BlindDeclaredFG(ToyDeclaredFG):
 
 
 class TestImplementation:
-    def test_implementation_result_is_the_data(self, tmp_path: Path) -> None:
+    def test_implementation_result_is_the_data(self, tmp_path: Path, make_implementation: Any) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        _impl(group, PythonDictFramework)
+        impl = make_implementation(group, PythonDictFramework, _sentinel)
 
+        assert impl in loaded_implementations()
         assert column_values(_run(group), "toyfmt_ld") == [111, 222]
 
-    def test_implementation_only_applies_to_its_framework(self, tmp_path: Path) -> None:
+    def test_implementation_only_applies_to_its_framework(self, tmp_path: Path, make_implementation: Any) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        impl = _impl(group, PyArrowTable)
+        impl = make_implementation(group, PyArrowTable, _sentinel)
 
         assert column_values(_run(group), "toyfmt_ld") == [1, 2]
         assert group.select_implementation(PythonDictFramework, _MATCH, [impl]) is None
         assert group.select_implementation(PyArrowTable, _MATCH, [impl]) is impl
 
-    def test_implementation_on_a_subclass_group_wins(self, tmp_path: Path) -> None:
+    def test_implementation_on_a_subclass_group_wins(self, tmp_path: Path, make_implementation: Any) -> None:
         parent = neutral_csv_group(tmp_path / "n.csv")
-        parent_impl = _impl(parent, PythonDictFramework, lambda g, m, f: [{"toyfmt_ld": 1}])
+        parent_impl = make_implementation(parent, PythonDictFramework, lambda g, m, f: [{"toyfmt_ld": 1}])
 
         class _Child(parent):  # type: ignore[valid-type, misc]
             pass
 
-        child_impl = _impl(_Child, PythonDictFramework)
+        child_impl = make_implementation(_Child, PythonDictFramework, _sentinel)
 
         picked = _Child.select_implementation(PythonDictFramework, _MATCH, [parent_impl, child_impl])
         assert picked is child_impl
         assert column_values(_run(_Child), "toyfmt_ld") == [111, 222]
 
-    def test_subclass_of_an_implementation_replaces_it(self, tmp_path: Path) -> None:
+    def test_subclass_of_an_implementation_replaces_it(self, tmp_path: Path, make_implementation: Any) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        parent_impl = _impl(group, PythonDictFramework, lambda g, m, f: [{"toyfmt_ld": 1}])
-        child_impl = _impl(group, PythonDictFramework, base=parent_impl)
+        parent_impl = make_implementation(group, PythonDictFramework, lambda g, m, f: [{"toyfmt_ld": 1}])
+        child_impl: type[Implementation] = make_implementation(group, PythonDictFramework, _sentinel, base=parent_impl)
 
         assert group.select_implementation(PythonDictFramework, _MATCH, [parent_impl, child_impl]) is child_impl
         assert group.select_implementation(PythonDictFramework, _MATCH, [child_impl, parent_impl]) is child_impl
         assert column_values(_run(group), "toyfmt_ld") == [111, 222]
 
-    def test_inherited_implementation_is_found_through_the_mro(self, tmp_path: Path) -> None:
+    def test_inherited_implementation_is_found_through_the_mro(self, tmp_path: Path, make_implementation: Any) -> None:
         parent = neutral_csv_group(tmp_path / "n.csv")
         groups: list[Any] = []
 
@@ -107,7 +96,7 @@ class TestImplementation:
             groups.append(group)
             return SENTINEL
 
-        impl = _impl(parent, PythonDictFramework, recording)
+        impl = make_implementation(parent, PythonDictFramework, recording)
 
         class _Child(parent):  # type: ignore[valid-type, misc]
             pass
@@ -117,18 +106,20 @@ class TestImplementation:
         assert groups == [_Child]
 
     def test_implementation_of_an_unavailable_framework_is_not_counted(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_implementation: Any
     ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        impl = _impl(group, PythonDictFramework)
+        impl: type[Implementation] = make_implementation(group, PythonDictFramework, _sentinel)
         assert group.select_implementation(PythonDictFramework, _MATCH, [impl]) is impl
         monkeypatch.setattr(PythonDictFramework, "is_available", staticmethod(lambda: False))
 
         assert group.select_implementation(PythonDictFramework, _MATCH, [impl]) is None
 
-    def test_load_neutral_override_cuts_inherited_implementations(self, tmp_path: Path) -> None:
+    def test_load_neutral_override_cuts_inherited_implementations(
+        self, tmp_path: Path, make_implementation: Any
+    ) -> None:
         parent = neutral_csv_group(tmp_path / "n.csv")
-        impl = _impl(parent, PythonDictFramework)
+        impl = make_implementation(parent, PythonDictFramework, _sentinel)
 
         class _Cut(parent):  # type: ignore[valid-type, misc]
             @classmethod
@@ -141,7 +132,9 @@ class TestImplementation:
         assert _Below.select_implementation(PythonDictFramework, _MATCH, [impl]) is None
         assert parent.select_implementation(PythonDictFramework, _MATCH, [impl]) is impl
 
-    def test_implementation_is_stored_on_the_feature_set_at_plan_time(self, tmp_path: Path) -> None:
+    def test_implementation_is_stored_on_the_feature_set_at_plan_time(
+        self, tmp_path: Path, make_implementation: Any
+    ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
         seen: list[Any] = []
 
@@ -151,42 +144,25 @@ class TestImplementation:
                 seen.append(features.implementation)
                 return super().calculate_feature(data, features)
 
-        spy_impl = _impl(_Spy, PythonDictFramework)
+        spy_impl = make_implementation(_Spy, PythonDictFramework, _sentinel)
         assert column_values(_run(_Spy), "toyfmt_ld") == [111, 222]
         assert seen == [spy_impl]
 
 
 class TestImplementationDefinition:
-    def test_concrete_subclass_without_attributes_raises(self) -> None:
-        with pytest.raises(TypeError):
+    @pytest.mark.parametrize("missing", ["feature_group", "compute_framework", "both"])
+    def test_concrete_subclass_missing_an_attribute_raises(self, missing: str) -> None:
+        attributes: dict[str, Any] = {"calculate": classmethod(lambda cls, *args: None)}
+        if missing == "compute_framework":
+            attributes["feature_group"] = ToyFormatFG
+        if missing == "feature_group":
+            attributes["compute_framework"] = PythonDictFramework
 
-            class _NoAttrs(Implementation):
-                @classmethod
-                def calculate(cls, *args: Any) -> Any:
-                    return None
-
-    def test_concrete_subclass_without_compute_framework_raises(self) -> None:
-        with pytest.raises(TypeError):
-
-            class _NoFramework(Implementation):
-                feature_group = ToyFormatFG
-
-                @classmethod
-                def calculate(cls, *args: Any) -> Any:
-                    return None
-
-    def test_concrete_subclass_without_feature_group_raises(self) -> None:
-        with pytest.raises(TypeError):
-
-            class _NoGroup(Implementation):
-                compute_framework = PythonDictFramework
-
-                @classmethod
-                def calculate(cls, *args: Any) -> Any:
-                    return None
+        with pytest.raises(TypeError, match="feature_group" if missing != "compute_framework" else "compute_framework"):
+            type("_Missing", (Implementation,), attributes)
 
     def test_feature_group_must_be_a_format_feature_group(self) -> None:
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="feature_group"):
 
             class _PlainGroup(Implementation):
                 feature_group = FeatureGroup
@@ -197,7 +173,7 @@ class TestImplementationDefinition:
                     return None
 
     def test_compute_framework_must_be_a_compute_framework(self) -> None:
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError, match="compute_framework"):
 
             class _NotAFramework(Implementation):
                 feature_group = ToyFormatFG
@@ -207,17 +183,20 @@ class TestImplementationDefinition:
                 def calculate(cls, *args: Any) -> Any:
                     return None
 
-    def test_subclass_leaving_calculate_abstract_is_not_validated(self) -> None:
+    def test_subclass_leaving_calculate_abstract_is_not_validated(self, make_implementation: Any) -> None:
         class _IntermediateBase(Implementation):
             pass
 
+        sibling = make_implementation(ToyFormatFG, PythonDictFramework, _sentinel)
+
+        assert sibling in loaded_implementations()
         assert _IntermediateBase not in loaded_implementations()
 
 
 class TestFrameworkSubclassImplementation:
-    def test_implementation_for_a_framework_serves_its_subclass(self, tmp_path: Path) -> None:
+    def test_implementation_for_a_framework_serves_its_subclass(self, tmp_path: Path, make_implementation: Any) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        impl = _impl(group, PythonDictFramework)
+        impl = make_implementation(group, PythonDictFramework, _sentinel)
 
         class _SubDictFramework(PythonDictFramework):
             pass

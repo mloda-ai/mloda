@@ -88,6 +88,7 @@ class GlobalFilter:
         self._reported_falsy_matches: set[str] = set()
         # A WARNING dedupe only. The ledger writes per declaration and never derives its write from this set.
         self._warned_drops: set[str] = set()
+        self._probe_host_key: tuple[Any, str] | None = None
 
     def reset_match_tracking(self) -> None:
         """Every match report is scoped to one engine setup, so a later setup names only what it consulted.
@@ -190,7 +191,10 @@ class GlobalFilter:
             if self.feature_group_scope(_filter, feature_group) is False:
                 continue
             # criteria records its own drops: only it can tell a defect from a decline from a plain non-match.
-            if not self.criteria(feature_group, _filter, data_access_collection):
+            self._probe_host_key = feat._input_data_match_key()
+            criteria_matched = self.criteria(feature_group, _filter, data_access_collection)
+            self._probe_host_key = None
+            if not criteria_matched:
                 continue
             host_key = feat._input_data_match_key()
             filter_key = _filter.filter_feature._input_data_match_key()
@@ -352,8 +356,23 @@ class GlobalFilter:
                 filter.filter_feature.options,
                 data_access_collection,
             )
+        probe_options = filter.filter_feature.options
+        host_match_key = self._probe_host_key
+        if (
+            host_match_key is not None
+            and probe.rejection is not None
+            and host_match_key[1] in probe.rejection.candidates
+        ):
+            # The column is ambiguous across sources: re-probe pinned to the host's own source.
+            probe_options = copy(probe_options)
+            probe_options.add_to_group(feature_group.__name__, host_match_key[1])
+            with feature_group_scope(None, contain_aborts=True):
+                probe = probe_match_criteria(
+                    feature_group, filter.filter_feature.name, probe_options, data_access_collection
+                )
         # The pair carries credentials: it moves off the options onto the filter feature.
-        written = filter.filter_feature.options.group.pop(RESERVED_READER_OPTION_KEY, None)
+        written = probe_options.group.pop(RESERVED_READER_OPTION_KEY, None)
+        filter.filter_feature.options.group.pop(RESERVED_READER_OPTION_KEY, None)
         if probe.matched and isinstance(written, tuple) and len(written) == 2:
             filter.filter_feature.input_data_match = written
         if probe.matcher_error is not None:

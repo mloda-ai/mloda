@@ -1,11 +1,14 @@
+import logging
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
+import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.user import DataAccessCollection, FeatureName, PluginCollector, mloda
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG  # noqa: F401
 from mloda.provider import BaseInputData, SourceMatch
 from mloda.provider import DataCreator
 from mloda.user import Options
@@ -327,3 +330,84 @@ class TestGlobalFilterOnFormatGroupColumn:
         assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
             "input_data"
         ]
+
+
+class TestGlobalFilterOnColumnInSeveralFiles:
+    """A filter column held by several csv files resolves against the host's file, else planning raises."""
+
+    @staticmethod
+    def _write(tmp_path: Path, name: str, text: str) -> str:
+        path = tmp_path / name
+        path.write_text(text)
+        return str(path)
+
+    @staticmethod
+    def _run(tmp_path: Path, feature: str) -> list[Any]:
+        global_filter = GlobalFilter()
+        global_filter.add_filter("id", "equal", {"value": 1})
+        return list(
+            mloda.run_all(
+                [Feature(feature)],
+                compute_frameworks=["PyArrowTable"],
+                data_access_collection=DataAccessCollection(folders={"gf_folder": str(tmp_path)}),
+                global_filter=global_filter,
+            )
+        )
+
+    def test_filter_resolves_against_the_host_source(self, tmp_path: Path) -> None:
+        self._write(tmp_path, "gf_sev_a.csv", "id,amount\n1,10\n2,20\n3,30\n")
+        self._write(tmp_path, "gf_sev_b.csv", "id,other\n1,5\n2,6\n")
+
+        results = self._run(tmp_path, "amount")
+
+        assert results[0].to_pydict() == {"amount": [10]}
+
+    def test_filter_column_only_in_other_sources_keeps_the_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        self._write(tmp_path, "gf_unres_a.csv", "id,other_a\n1,5\n2,6\n")
+        self._write(tmp_path, "gf_unres_b.csv", "id,other_b\n1,7\n2,8\n")
+        self._write(tmp_path, "gf_unres_c.csv", "amount\n10\n20\n")
+
+        with caplog.at_level(logging.WARNING):
+            results = self._run(tmp_path, "amount")
+
+        assert results[0].to_pydict() == {"amount": [10, 20]}
+        assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+    def test_matching_group_filters_while_another_aborts_on_ambiguity(self, tmp_path: Path) -> None:
+        self._write(tmp_path, "gf_mix_a.csv", "id,amount\n1,10\n2,20\n")
+        self._write(tmp_path, "gf_mix_b.csv", "id,other\n1,5\n2,6\n")
+        (tmp_path / "gf_mix_c.json").write_text('{"id": 1, "val": 7}\n{"id": 2, "val": 8}\n')
+        global_filter = GlobalFilter()
+        global_filter.add_filter("id", "equal", {"value": 1})
+
+        results = mloda.run_all(
+            [Feature("amount"), Feature("val")],
+            compute_frameworks=["PyArrowTable"],
+            data_access_collection=DataAccessCollection(folders={"gf_folder": str(tmp_path)}),
+            global_filter=global_filter,
+        )
+
+        merged: dict[str, Any] = {}
+        for result in results:
+            merged.update(result.to_pydict())
+        assert merged == {"amount": [10], "val": [7]}
+
+    def test_single_file_filter_still_filters(self, tmp_path: Path) -> None:
+        self._write(tmp_path, "gf_single.csv", "id,amount\n1,10\n2,20\n3,30\n")
+
+        results = self._run(tmp_path, "amount")
+
+        assert results[0].to_pydict() == {"amount": [10]}
+
+    def test_filter_matching_no_group_for_another_reason_warns_and_stays_unfiltered(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        self._write(tmp_path, "gf_nomatch.csv", "gf_nm_key,amount\n1,10\n2,20\n")
+
+        with caplog.at_level(logging.WARNING):
+            results = self._run(tmp_path, "amount")
+
+        assert results[0].to_pydict() == {"amount": [10, 20]}
+        assert any(r.levelno == logging.WARNING for r in caplog.records)

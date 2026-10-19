@@ -275,10 +275,10 @@ class FormatFeatureGroup(FeatureGroup):
         return "unknown" if reason is None else f"unknown ({reason})"
 
     @classmethod
-    def _abort(cls, error: ValueError, deferrable: bool = False) -> bool:
+    def _abort(cls, error: ValueError, deferrable: bool = False, candidates: tuple[str, ...] = ()) -> bool:
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
         if aborts_are_contained():
-            record_match_rejection(cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE)
+            record_match_rejection(cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE, candidates=candidates)
             return False
         raise defer_match_abort(error) if deferrable else escalate_match_abort(error)
 
@@ -362,7 +362,8 @@ class FormatFeatureGroup(FeatureGroup):
                     f"{cls.get_class_name()} found feature '{name}' in several sources: "
                     f"{', '.join(sorted(fitting))}; "
                     f"{cls.ambiguity_fix(name, list(fitting.values()), data_access_collection)}"
-                )
+                ),
+                candidates=tuple(sorted(fitting)),
             )
         if len(fitting) == 1:
             options.add_to_group(RESERVED_READER_OPTION_KEY, (cls, next(iter(fitting.values()))))

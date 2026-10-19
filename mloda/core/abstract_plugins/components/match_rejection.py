@@ -10,12 +10,14 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class MatchRejection:
     """One recorded rejection: the reason plus a free-form stage hint the engine maps at the harvest.
+    `candidates` names the sources an ambiguity abort found, else empty.
 
     Unknown stage values fall back to value_rejection there; this neutral module does not validate them.
     """
 
     reason: str
     stage: str = "value_rejection"
+    candidates: tuple[str, ...] = ()
 
 
 # The owned stage marks a veto recorded while the user explicitly addressed the reader.
@@ -34,12 +36,14 @@ MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, MatchRejection] | None
 )
 
 
-def record_match_rejection(owner_name: str, reason: str, stage: str = "value_rejection") -> None:
+def record_match_rejection(
+    owner_name: str, reason: str, stage: str = "value_rejection", candidates: tuple[str, ...] = ()
+) -> None:
     """Record a match rejection; the first per owner wins, and outside an active evaluation it is a no-op."""
     reasons = MATCH_REJECTION_REASONS.get()
     if reasons is None:
         return
-    reasons.setdefault(owner_name, MatchRejection(reason, stage))
+    reasons.setdefault(owner_name, MatchRejection(reason, stage, candidates))
 
 
 def match_rejection_owners() -> frozenset[str]:
@@ -59,7 +63,7 @@ def restamp_match_rejections_since(known_owners: frozenset[str], from_stage: str
     for owner_name, rejection in list(reasons.items()):
         if owner_name in known_owners or rejection.stage != from_stage:
             continue
-        reasons[owner_name] = MatchRejection(rejection.reason, to_stage)
+        reasons[owner_name] = MatchRejection(rejection.reason, to_stage, rejection.candidates)
 
 
 def drop_match_rejections_since(known_owners: frozenset[str]) -> None:

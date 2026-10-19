@@ -552,3 +552,143 @@ def test_one_join_feeding_a_consumer_and_its_child_runs_with_threading() -> None
 
         values = [sorted(r[child].to_pylist()) for r in results if child in r.column_names]
         assert values == [[12, 23, 34]]
+
+
+# === Two consumers each reading one spoke of the same star ===
+
+
+class HubRightCPairConsumer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_c"), Feature("hr_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data["hr_c"], data["hr_b"]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class HubRightB2(FeatureGroup):
+    """Feature derived from hr_b on PyArrow."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.multiply(data["hr_b"], 100))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class HubRightCDerivedConsumer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_c"), Feature(HubRightB2.get_class_name())}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        total = pc.add(data["hr_c"], data[HubRightB2.get_class_name()])
+        return data.append_column(cls.get_class_name(), total)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+def _two_consumers_run(
+    links: set[Link],
+    spoke_c: type[FeatureGroup],
+    y_consumer: type[FeatureGroup],
+    mode: ParallelizationMode,
+    flight_server: Any = None,
+    extra: set[type[FeatureGroup]] | None = None,
+) -> dict[str, list[int]]:
+    x_consumer = HubRightPairConsumer
+    results = mloda.run_all(
+        [Feature(name=x_consumer.get_class_name()), Feature(name=y_consumer.get_class_name())],
+        links=links,
+        compute_frameworks=[PyArrowTable, PandasDataFrame],
+        parallelization_modes={mode},
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {HubRightA, HubRightB, spoke_c, x_consumer, y_consumer} | (extra or set())
+        ),
+        flight_server=flight_server,
+    )
+    names = (x_consumer.get_class_name(), y_consumer.get_class_name())
+    return {n: [sorted(r[n].to_pylist()) for r in results if n in r.column_names][0] for n in names}
+
+
+def _star_links(spoke_c: type[FeatureGroup], hub_right: bool, hub_c: type[FeatureGroup] = HubRightB) -> set[Link]:
+    a, b, c = (
+        JoinSpec(HubRightA, HUB_RIGHT_INDEX),
+        JoinSpec(HubRightB, HUB_RIGHT_INDEX),
+        JoinSpec(spoke_c, HUB_RIGHT_INDEX),
+    )
+    c_hub = JoinSpec(hub_c, HUB_RIGHT_INDEX)
+    if hub_right:
+        return {Link.inner(a, b), Link.inner(c, c_hub)}
+    return {Link.inner(b, a), Link.inner(c_hub, c)}
+
+
+_X_EXPECTED = [11, 22, 33]
+_Y_EXPECTED = [27, 38]
+
+
+class TestTwoConsumersReadingDifferentSpokes:
+    @pytest.mark.parametrize(
+        "spoke_c, hub_right, mode",
+        [
+            pytest.param(
+                spoke_c,
+                hub_right,
+                mode,
+                id=f"{spoke_id}-{'spokes_left' if hub_right else 'hub_left'}-{mode.name.lower()}",
+            )
+            for spoke_c, spoke_id in ((HubRightCArrow, "one_framework"), (HubRightCPandas, "spokes_differ"))
+            for hub_right in (True, False)
+            for mode in (ParallelizationMode.SYNC, ParallelizationMode.THREADING)
+        ],
+    )
+    def test_each_consumer_gets_only_its_own_join_rows(
+        self, spoke_c: type[FeatureGroup], hub_right: bool, mode: ParallelizationMode
+    ) -> None:
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            got = _two_consumers_run(_star_links(spoke_c, hub_right), spoke_c, HubRightCPairConsumer, mode)
+
+            assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
+            assert got[HubRightCPairConsumer.get_class_name()] == _Y_EXPECTED
+
+    @pytest.mark.timeout(60)
+    def test_each_consumer_gets_only_its_own_join_rows_with_multiprocessing(self, flight_server: Any) -> None:
+        got = _two_consumers_run(
+            _star_links(HubRightCArrow, True),
+            HubRightCArrow,
+            HubRightCPairConsumer,
+            ParallelizationMode.MULTIPROCESSING,
+            flight_server,
+        )
+
+        assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
+        assert got[HubRightCPairConsumer.get_class_name()] == _Y_EXPECTED
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_a_consumer_joining_a_derived_frame_leaves_the_other_consumer_rows_intact(
+        self, mode: ParallelizationMode
+    ) -> None:
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            got = _two_consumers_run(
+                _star_links(HubRightCArrow, True, HubRightB2),
+                HubRightCArrow,
+                HubRightCDerivedConsumer,
+                mode,
+                extra={HubRightB2},
+            )
+
+            assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
+            assert got[HubRightCDerivedConsumer.get_class_name()] == [2007, 3008]

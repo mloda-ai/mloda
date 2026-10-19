@@ -556,7 +556,7 @@ def _plan_chained_three_framework_join() -> ChainPlanned:
 
 def _plan_join_hop_whose_source_framework_is_also_another_joins_framework() -> GuardPlanned:
     """A cross-framework join hop whose PythonDict source is ALSO the same-framework partner of an
-    unrelated JoinStep elsewhere in the plan (mirrors a same-framework join re-pointing a shared cfw).
+    unrelated JoinStep elsewhere in the plan (mirrors a same-framework join reading a shared cfw).
     Also plans an unrelated plain PythonDict->Pandas hop off that same source, read by no one else,
     so the plain-hop guard can be pinned without the multi-route rule masking it."""
     planned = _planned()
@@ -674,6 +674,7 @@ def test_plain_hop_whose_source_framework_is_also_another_joins_framework_gets_e
         if isinstance(step, TransformFrameworkStep)
         and step.link_id is None
         and step.from_framework is PythonDictFramework
+        and step.to_framework is PandasDataFrame
     )
 
     # Guard: the consumer must reach only this one PythonDict hop, directly or via a JoinStep it

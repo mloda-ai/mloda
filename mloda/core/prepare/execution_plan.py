@@ -1274,6 +1274,62 @@ Available join types:
         # (consumer step, its hop, same-framework parent) triples, resolved once the plan list is complete.
         hop_same_framework_pairs: list[tuple[FeatureGroupStep, TransformFrameworkStep, UUID]] = []
         destination_index = self.joinstep_collection.joins_by_destination_owner(owning_step_of)
+
+        # Joins of unrelated consumer groups touching one frame must not redirect or merge into it in place.
+        consumers_by_token = {r.token: r.consumers for r in self.planned_records}
+        planned_joins = [ep for ep in execution_plan if isinstance(ep, JoinStep) and ep.uuid in consumers_by_token]
+        group_of = {
+            j.uuid: index
+            for index, group in enumerate(
+                JoinStepCollection.groups_sharing_consumers(planned_joins, consumers_by_token)
+            )
+            for j in group
+        }
+
+        def frames_of(uuids: set[UUID]) -> set[UUID]:
+            found: set[UUID] = set()
+            for uuid in uuids:
+                lineage = {owning_step_of.get(u, u) for u in self._same_framework_lineage(uuid, graph, memo)}
+                found |= (lineage & root_steps) or {owning_step_of.get(uuid, uuid)}
+            return found
+
+        side_frames = {
+            j.uuid: frames_of(j.destination_framework_uuids | j.source_framework_uuids) for j in planned_joins
+        }
+        side_ancestors = {
+            j.uuid: set().union(
+                *(
+                    {u} | graph.parent_to_children_mapping.get(u, set())
+                    for u in j.destination_framework_uuids | j.source_framework_uuids
+                )
+            )
+            for j in planned_joins
+        }
+        joins_on_frame: dict[UUID, list[JoinStep]] = defaultdict(list)
+        for j in planned_joins:
+            for frame in side_frames[j.uuid]:
+                joins_on_frame[frame].append(j)
+
+        for js in planned_joins:
+            if js.uuid not in group_of or js.link.jointype in (JoinType.APPEND, JoinType.UNION):
+                continue
+            touched: set[UUID] = set()
+            for frame in side_frames[js.uuid]:
+                for rival in joins_on_frame[frame]:
+                    if rival.uuid not in group_of or group_of[rival.uuid] == group_of[js.uuid]:
+                        continue
+                    # A join reading another join's consumer works on its result, so it shares the frame on purpose.
+                    if side_ancestors[rival.uuid] & consumers_by_token[js.uuid]:
+                        continue
+                    if side_ancestors[js.uuid] & consumers_by_token[rival.uuid]:
+                        continue
+                    touched.add(frame)
+            if frames_of(js.source_framework_uuids) & touched:
+                js.shared_source = True
+            destination_frames = frames_of(js.destination_framework_uuids)
+            if len(destination_frames) == 1 and destination_frames & touched:
+                js.shared_destination = True
+
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
@@ -1379,6 +1435,12 @@ Available join types:
             elif isinstance(ep, FeatureGroupStep):
                 if ep.features.any_uuid is None:
                     raise ValueError(f"Feature group {format_feature_group_class(ep.feature_group)} has no uuid.")
+
+                # A parentless member (an index column) is not in the parent frame's children, so it cannot locate it.
+                if not ep.tfs_ids and not graph.parent_to_children_mapping.get(ep.features.any_uuid):
+                    derived = sorted(u for u in ep.get_uuids() if graph.parent_to_children_mapping.get(u))
+                    if derived:
+                        ep.features.any_uuid = derived[0]
 
                 parents: set[UUID] = set()
                 for member_uuid in ep.get_uuids():

@@ -127,11 +127,12 @@ PARTIAL_RECORDS_CAP = 1000
 class ResolutionDiagnosis:
     """Non-raising outcome of mlodaAPI.diagnose, a whole-request resolution preflight.
 
-    complete is True iff the whole request resolved; then records equals session.resolution_report() and
+    complete is True iff the whole preflight passed; then records equals session.resolution_report() and
     feature_name/failed_result/message are None. On a resolution failure records holds the features resolved
     before the failing one (capped at PARTIAL_RECORDS_CAP on huge requests), feature_name/failed_result carry
     that feature's failed evaluation, and message is its rendered text. On a configuration error records is
-    empty and only message is set.
+    empty and only message is set; an environment failure found after planning keeps every resolved record with
+    only message set.
     """
 
     records: list[ResolutionRecord]

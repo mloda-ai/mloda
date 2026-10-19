@@ -3,8 +3,9 @@ from __future__ import annotations
 import inspect
 import logging
 import sys
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
     SOURCE_INTROSPECTION_ERRORS,
@@ -21,6 +22,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 
+if TYPE_CHECKING:
+    from mloda.core.prepare.resolution_types import ResolutionRecord
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +121,13 @@ class EnvironmentPreconditionError(ValueError):
     Marks mloda's policy failing (nothing loaded, strict mode filtering everything out) as opposed to a
     plugin failing, which propagates raw so callers can attribute it to that plugin. Each message is
     already a complete user-facing sentence naming its own fix, so callers project it as-is. Subclasses
-    ``ValueError`` so existing ``except ValueError:`` callers stay compatible.
+    ``ValueError`` so existing ``except ValueError:`` callers stay compatible. An error raised after planning
+    carries the resolved records in ``partial_records``.
     """
+
+    def __init__(self, message: str, partial_records: Sequence[ResolutionRecord] = ()) -> None:
+        super().__init__(message)
+        self.partial_records: tuple[ResolutionRecord, ...] = tuple(deepcopy(record) for record in partial_records)
 
 
 class RedefinitionConflictError(ValueError):

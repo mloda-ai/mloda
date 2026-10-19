@@ -23,6 +23,7 @@ import pytest
 
 from mloda.core.api.request import SetupConfigurationError
 from mloda.core.core.engine import Engine
+from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import (
     EvaluationResult,
@@ -174,6 +175,19 @@ class TestFeatureResolutionErrorPickleRoundTrip:
         assert str(restored) == "pickle boom 836pr"
         assert restored.feature_name == UNKNOWN_FEATURE_836PR
         assert len(restored.partial_records) == 2
+
+    def test_environment_precondition_error_round_trips_partial_records(self) -> None:
+        result = _empty_result()
+        records = [_record("env_pickled_a", result), _record("env_pickled_b", result)]
+        error = EnvironmentPreconditionError("env boom", partial_records=records)
+
+        restored = pickle.loads(pickle.dumps(error))  # nosec B301
+
+        assert str(restored) == "env boom"
+        assert [r.feature_name for r in restored.partial_records] == ["env_pickled_a", "env_pickled_b"]
+
+    def test_environment_precondition_error_defaults_to_no_partial_records(self) -> None:
+        assert EnvironmentPreconditionError("msg").partial_records == ()
 
 
 # ---------------------------------------------------------------------------

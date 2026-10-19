@@ -77,6 +77,7 @@ SEEDS: dict[str, str] = {
     "_filter_feature_group_by_criteria": "the seam that contains a raising hook",
     "check_required_when": "runs inside the wrapper install_required_when_guard installs",
     "guarded": "the installed closure IS a guarded class's matcher; the setattr is no call edge",
+    "probe_format_group": "the format group's extender-wrapped probe, called from outside the declared modules",
 }
 
 # Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
@@ -110,7 +111,8 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "real edge, collided verdict: the format group override of the default rules; its raises are marked aborts"
     ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
-        "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate reader in probe_reader"
+        "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_reader or "
+        "probe_format_group"
     ),
     ("mloda/core/abstract_plugins/hook_context.py", "__post_init__"): (
         "validates the framework-built HookContext fields; raises only on a framework bug"
@@ -152,7 +154,8 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
 # here. The closure is transitive and resolves by name, so an entry can be a name COLLISION, not a call edge.
 SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
-        "real edge, collided verdict: the format group override of the default rules swallows nothing"
+        "real edge: the format group override of the default rules reaches probe_format_group's contained "
+        "extender raise, which declines one candidate and re-raises probe and match aborts"
     ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
         "a warning-only extender's own failure falls back to the probe; the probe's raise always propagates"

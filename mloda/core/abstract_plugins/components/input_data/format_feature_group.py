@@ -19,7 +19,13 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     aborts_are_contained,
     current_feature_group_scope,
 )
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_format_group
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    drop_match_rejections_since,
+    match_rejection_owners,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
@@ -278,6 +284,30 @@ class FormatFeatureGroup(FeatureGroup):
         raise defer_match_abort(error) if deferrable else escalate_match_abort(error)
 
     @classmethod
+    def _probe_routes(
+        cls,
+        routes: list[ClaimRoute],
+        name: str,
+        base_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> tuple[dict[str, SourceMatch], dict[str, SourceMatch], bool]:
+        fitting: dict[str, SourceMatch] = {}
+        seen: dict[str, SourceMatch] = {}
+        undeclared = False
+        for route in routes:
+            for match in cls.find_sources(route, name, options, data_access_collection):
+                if route.names is NamePolicy.CHECKED:
+                    seen[match.source] = match
+                    if cls.has_column(match, base_name):
+                        fitting[match.source] = match
+                elif route.names is NamePolicy.OPEN or cls._declared_name(base_name):
+                    fitting[match.source] = match
+                else:
+                    undeclared = True
+        return fitting, seen, undeclared
+
+    @classmethod
     def _matches_by_default_rules(
         cls,
         feature_name: FeatureName | str,
@@ -294,9 +324,7 @@ class FormatFeatureGroup(FeatureGroup):
         pointed = cls.is_pointed(name, options, data_access_collection)
         foreign = None if pointed else cls.foreign_pointer(options)
         skipped = False
-        fitting: dict[str, SourceMatch] = {}
-        seen: dict[str, SourceMatch] = {}
-        undeclared = False
+        selected: list[ClaimRoute] = []
         for route in cls.CLAIM_ROUTES:
             if not all(key in options for key in route.required_options):
                 continue
@@ -306,15 +334,27 @@ class FormatFeatureGroup(FeatureGroup):
             if foreign is not None:
                 skipped = True
                 continue
-            for match in cls.find_sources(route, name, options, data_access_collection):
-                if route.names is NamePolicy.CHECKED:
-                    seen[match.source] = match
-                    if cls.has_column(match, base_name):
-                        fitting[match.source] = match
-                elif route.names is NamePolicy.OPEN or cls._declared_name(base_name):
-                    fitting[match.source] = match
-                else:
-                    undeclared = True
+            selected.append(route)
+        fitting: dict[str, SourceMatch] = {}
+        seen: dict[str, SourceMatch] = {}
+        undeclared = False
+        if selected:
+            known_owners = match_rejection_owners()
+            outcome = probe_format_group(
+                cls,
+                lambda: cls._probe_routes(selected, name, base_name, options, data_access_collection),
+                data_access_collection,
+                base_name,
+                options,
+            )
+            if outcome.refused is not None:
+                drop_match_rejections_since(known_owners)
+                message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
+                if pointed:
+                    return cls._abort(ValueError(f"{cls.get_class_name()} {message}"), deferrable=True)
+                record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE)
+                return False
+            fitting, seen, undeclared = outcome.result
         if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls.passes_option_declarations(options):
             return False
         if len(fitting) > 1:

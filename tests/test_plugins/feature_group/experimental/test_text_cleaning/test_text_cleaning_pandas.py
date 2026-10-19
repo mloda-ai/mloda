@@ -51,6 +51,23 @@ class TestPandasTextCleaningFeatureGroup:
         assert len(result) == len(self.df)
         assert result.iloc[0] == "Hello World!"
 
+    def test_get_source_text_treats_missing_values_as_empty(self) -> None:
+        """Missing values become empty strings, like in the PythonDict feature group."""
+        df = pd.DataFrame({"text": ["Hello", None, "World"]})
+        result = PandasTextCleaningFeatureGroup._get_source_text(df, "text")
+
+        assert result.tolist() == ["Hello", "", "World"]
+
+    @pytest.mark.parametrize("operation", ["normalize", "remove_punctuation"])
+    def test_operations_handle_missing_values(self, operation: str) -> None:
+        """Operations run on a column with a missing value instead of raising."""
+        df = pd.DataFrame({"text": ["Hello, World!", None]})
+        text = PandasTextCleaningFeatureGroup._get_source_text(df, "text")
+        result = PandasTextCleaningFeatureGroup._apply_operation(df, text, operation)
+
+        assert len(result) == 2
+        assert result.iloc[1] == ""
+
     def test_add_result_to_data(self) -> None:
         """Test that the result is correctly added to the data."""
         result = pd.Series(["test1", "test2", "test3", "test4", "test5"])

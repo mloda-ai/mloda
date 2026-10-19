@@ -369,25 +369,11 @@ def _star_of(kind_first: str, first_hub_first: bool, kind_second: str, second_hu
         links = []
         for kind, spoke, hub_first in ((kind_first, first, first_hub_first), (kind_second, second, second_hub_first)):
             sides = (hub, spoke) if hub_first else (spoke, hub)
-            links.append(getattr(Link, kind)(JoinSpec(sides[0], STAR_INDEX), JoinSpec(sides[1], STAR_INDEX)))
-        return links
-
-    return make_links
-
-
-def _asof_star(first_hub_first: bool, second_hub_first: bool) -> Any:
-    def make_links(first: Any, second: Any, hub: Any) -> list[Link]:
-        links = []
-        for spoke, hub_first in ((first, first_hub_first), (second, second_hub_first)):
-            sides = (hub, spoke) if hub_first else (spoke, hub)
-            links.append(
-                Link.asof(
-                    JoinSpec(sides[0], STAR_INDEX),
-                    JoinSpec(sides[1], STAR_INDEX),
-                    left_time_column="t",
-                    right_time_column="t",
-                )
-            )
+            left_spec, right_spec = JoinSpec(sides[0], STAR_INDEX), JoinSpec(sides[1], STAR_INDEX)
+            if kind == "asof":
+                links.append(Link.asof(left_spec, right_spec, left_time_column="t", right_time_column="t"))
+            else:
+                links.append(getattr(Link, kind)(left_spec, right_spec))
         return links
 
     return make_links
@@ -438,7 +424,7 @@ def test_raise_on_join_star_keeping_two_groups_rejects_joins_whose_rows_depend_o
 
 
 def test_raise_on_join_star_keeping_two_groups_rejects_asofs_keeping_different_groups() -> None:
-    plan, graph = _build_star_plan(_asof_star(False, False))
+    plan, graph = _build_star_plan(_star_of("asof", False, "asof", False))
 
     with pytest.raises(ValueError, match="keep different groups") as excinfo:
         raise_on_join_star_keeping_two_groups(plan.resolved_join_plan, graph)
@@ -453,12 +439,12 @@ def test_raise_on_join_star_keeping_two_groups_rejects_asofs_keeping_different_g
     [
         pytest.param(_hub_kept, False, id="hub_kept_star"),
         pytest.param(_two_spokes_kept, True, id="different_consumers"),
-        pytest.param(_star_of("inner", False, "inner", True), False, id="True"),
-        pytest.param(_star_of("outer", False, "outer", True), False, id="True"),
-        pytest.param(_star_of("left", True, "inner", False), False, id="False"),
-        pytest.param(_star_of("right", False, "left", True), False, id="True"),
+        pytest.param(_star_of("inner", False, "inner", True), False, id="inner_with_inner"),
+        pytest.param(_star_of("outer", False, "outer", True), False, id="outer_with_outer"),
+        pytest.param(_star_of("left", True, "inner", False), False, id="kept_hub_with_inner"),
+        pytest.param(_star_of("right", False, "left", True), False, id="kept_with_kept"),
         pytest.param(_snowflake_chain, False, id="chain_on_different_index_columns"),
-        pytest.param(_asof_star(True, True), False, id="asof_keeping_the_hub_twice"),
+        pytest.param(_star_of("asof", True, "asof", True), False, id="asof_keeping_the_hub_twice"),
     ],
 )
 def test_raise_on_join_star_keeping_two_groups_accepts_plans_with_a_defined_result(

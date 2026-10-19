@@ -166,12 +166,12 @@ assert list(result[0].columns) == ["measure~value"]
 
 If the parts depend on the feature name or options, override the classmethod `output_parts(feature_name, options)` instead.
 
-- `measure` is computed once, even if several parts are requested. Only the requested part columns are returned.
-- An undeclared part (`measure~bogus`) fails at resolution and lists the declared parts. With `ANY_OUTPUT_PART`, a part that was not produced fails after the computation and lists the produced columns.
-- The part is the text after the first `~` of the last `__` segment. A nested part such as `f~0~lower` is declared by its first level (`0`); requesting `f~0` returns `f~0` and its nested columns.
-- Groups that declare nothing keep the numbered behavior: `vec~1` returns only `vec~1`, and a missing index fails after the computation.
-- `match_feature_group_criteria` still matches the base name only; the part rule applies when features are resolved, not in global filters.
-- Artifacts are keyed by the base feature name. Keying one by a part column raises an error.
+- `measure` is computed once, even if several parts are requested; only the requested part columns are returned.
+- An undeclared part (`measure~bogus`) fails at resolution and lists the declared parts. With `ANY_OUTPUT_PART`, a part that was not produced fails after the computation.
+- A nested part such as `f~0~lower` is declared by its first level (`0`).
+- Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`; a missing index fails after the computation.
+- `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution, not in global filters.
+- Artifacts are keyed by the base feature name, not a part column.
 
 ## How It Works
 

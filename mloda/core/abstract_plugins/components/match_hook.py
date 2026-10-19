@@ -37,7 +37,7 @@ class MatchHookOutcome:
     matched: bool
     returned: Any
     error: Exception | None
-    # (base, part) when the candidate matched the name as a declared output part of the base feature.
+    # (base, part) when matched as a declared output part.
     part: tuple[str, str] | None = None
 
 
@@ -76,11 +76,11 @@ def call_match_hook(
     raise.
 
     The contained exception is handed back rather than judged here: each seam records and isolates options its own way.
-    resolve_parts is set by feature resolution only: it reads `<base>~<part>` against the group's declared parts.
+    resolve_parts (feature resolution only) reads `<base>~<part>` against the declared parts.
     """
     try:
         split = feature_group.split_output_part(str(feature_name)) if resolve_parts else None
-        # The base name is asked first, on a fork whose writes are adopted only when the part verdict matches.
+        # Base name first, on a fork adopted only if the part matches.
         attempts = ((split[0], options._fork()), (feature_name, options)) if split else ((feature_name, options),)
         for name, scoped in attempts:
             returned = feature_group.match_feature_group_criteria(name, scoped, data_access_collection)
@@ -91,7 +91,7 @@ def call_match_hook(
                 decided = _declared_part_verdict(feature_group, split, scoped, options)
                 if decided is not None:
                     return MatchHookOutcome(decided[0], decided[0], None, decided[1])
-        return MatchHookOutcome(False, None, None)  # unreachable: the last attempt always returns
+        return MatchHookOutcome(False, None, None)
     except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison the whole run)
         if is_match_abort(exc):
             raise

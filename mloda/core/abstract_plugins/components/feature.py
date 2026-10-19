@@ -191,9 +191,7 @@ class Feature:
         # resolution, before intake merges twins.
         self.required_declarations = self._normalize_required_declarations(required_declarations)
 
-        # Output parts asked of this feature by any intake, and the parts an initial request selects
-        # (None: the whole feature), and whether every intake asked for parts only; engine-stamped,
-        # excluded from equality and hash.
+        # Engine-stamped output parts (requested, selected by the initial request, parts-only); not in eq/hash.
         self.requested_parts: frozenset[str] = frozenset()
         self.result_parts: frozenset[str] | None = None
         self.parts_only: bool = False

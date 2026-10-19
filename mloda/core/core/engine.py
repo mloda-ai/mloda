@@ -351,10 +351,7 @@ class Engine:
     def _set_feature_name(
         self, feature: Feature, feature_group: FeatureGroup, output_part: tuple[str, str] | None
     ) -> None:
-        """Renames the feature to its base name and records the requested output part.
-
-        A declared part renames up front; an undeclared group keeps its own set_feature_name rule (a trailing ~N).
-        """
+        """Rename the feature to its base name and record the requested output part."""
         requested = feature.name
         if output_part is not None:
             feature.name = FeatureName(output_part[0])

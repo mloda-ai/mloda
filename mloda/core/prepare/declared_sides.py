@@ -1,10 +1,11 @@
 """Splits a join's parents by the declared sides of its link, once, for run_link and the resolved join records."""
 
 from collections import defaultdict
+from collections.abc import Iterable
 from typing import NamedTuple
 from uuid import UUID
 
-from mloda.core.abstract_plugins.components.link import Link
+from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.resolve_links import inheritance_distance
 
@@ -41,6 +42,24 @@ def several_consumers_members_reason(consumers: str, link: Link, first: type, se
         f"The consumers {consumers} each join one of {first.__name__} and {second.__name__}, members of one link "
         "side, on one compute framework over one link, which merges both into one join: declare one link per "
         f"member: {_member_links(link, first, second)}."
+    )
+
+
+def star_keeping_two_groups_reason(
+    consumer: str, first: str, second: str, dropped: str, jointypes: Iterable[JoinType]
+) -> str:
+    """Reason for one consumer reading left or right joins that keep different groups and drop the same one."""
+    kinds = {jointype.value for jointype in jointypes}
+    kind = " or ".join(sorted(kinds, reverse=True))
+    if kinds == {"right"}:
+        keep_links = f"Link.right({first}, {dropped}) and Link.right({second}, {dropped})"
+    else:
+        keep_links = f"Link.left({dropped}, {first}) and Link.left({dropped}, {second})"
+    return (
+        f"{consumer} reads two {kind} joins that keep different groups, {first} and {second}, and drop the same "
+        f"group {dropped}: the rows depend on which join runs first, so the result is not defined.\n"
+        f'Resolution: keep {dropped} in both joins ({keep_links}, or Link.star({dropped}, {first}, {second}, jointype="left")), '
+        f"use inner joins for both or outer joins for both, or read {first} and {second} in separate consumers"
     )
 
 

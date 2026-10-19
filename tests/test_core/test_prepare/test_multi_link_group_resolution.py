@@ -1964,10 +1964,14 @@ def test_a_join_keeping_the_member_side_of_two_members_on_different_frameworks_i
         )
 
     message = str(exc_info.value)
-    assert "members of one link side" in message
+    assert RemedySecondBConsumer.get_class_name() in message
     assert "MultiLinkRootA" in message
     assert "RemedyRootA1" in message
-    assert "one member of the link side per consumer" in message
+    assert "MultiLinkRootBDistinct" in message
+    assert "not defined" in message
+    assert "Link.star(" in message
+    assert "inner joins for both or outer joins for both" in message
+    assert "separate consumers" in message
     assert "reads both members directly" not in message
 
 
@@ -2345,3 +2349,157 @@ def test_a_member_allowed_on_two_frameworks_is_pushed_apart_from_its_sibling_and
     results = session.run()
 
     assert _side_path_values(results, RemedyArrowFreeMemberConsumer) == [[15, 27, 39]]
+
+
+def _star_group(name: str, column: str, rows: dict[str, int], framework: type[ComputeFramework]) -> type[FeatureGroup]:
+    def input_data(cls: Any) -> BaseInputData | None:
+        return DataCreator({column})
+
+    def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
+        return {column: list(rows.values()), "mlg_idx": list(rows)}
+
+    def compute_framework_rule(cls: Any) -> set[type[ComputeFramework]]:
+        return {framework}
+
+    namespace = {
+        "__module__": __name__,
+        "input_data": classmethod(input_data),
+        "calculate_feature": classmethod(calculate_feature),
+        "compute_framework_rule": classmethod(compute_framework_rule),
+    }
+    return type(name, (FeatureGroup,), namespace)
+
+
+_STAR_C_ROWS = {"y": 7, "z": 8, "w": 9, "q": 10}
+_STAR_B_ROWS = {"x": 10, "y": 20, "z": 30, "v": 50, "u": 60}
+StarSpokeCArrow = _star_group("StarSpokeCArrow", "star_c", _STAR_C_ROWS, PyArrowTable)
+StarSpokeCSecond = _star_group("StarSpokeCSecond", "star_c", _STAR_C_ROWS, SecondCfw)
+StarHubArrow = _star_group("StarHubArrow", "star_b", _STAR_B_ROWS, PyArrowTable)
+StarConsumerArrow = _remedy_null_safe_consumer("StarConsumerArrow", PyArrowTable, ("mlg_a", "star_c", "star_b"))
+_ALL_FRAMEWORKS = [PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw]
+
+
+def _star_prepare(link_factory: Any, hub_first: bool, spoke_c: type[FeatureGroup] = StarSpokeCArrow) -> Any:
+    def link(spoke: type[FeatureGroup]) -> Link:
+        sides = (StarHubArrow, spoke) if hub_first else (spoke, StarHubArrow)
+        return link_factory(JoinSpec(sides[0], MLG_INDEX), JoinSpec(sides[1], MLG_INDEX))
+
+    return mloda.prepare(
+        [StarConsumerArrow.get_class_name()],
+        links={link(MultiLinkRootAPartial), link(spoke_c)},
+        compute_frameworks=_ALL_FRAMEWORKS,
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {MultiLinkRootAPartial, spoke_c, StarHubArrow, StarConsumerArrow}
+        ),
+    )
+
+
+def _assert_star_keeping_two_groups_reason(message: str, consumer: str, kept: tuple[str, str], dropped: str) -> None:
+    assert consumer in message
+    for name in (*kept, dropped):
+        assert name in message
+    assert "not defined" in message
+    assert "Link.star(" in message
+    assert "inner joins for both or outer joins for both" in message
+    assert "separate consumers" in message
+
+
+@pytest.mark.parametrize(
+    "spoke_c",
+    [pytest.param(StarSpokeCArrow, id="all_on_one_framework"), pytest.param(StarSpokeCSecond, id="spokes_differ")],
+)
+def test_two_left_joins_keeping_different_spokes_of_a_shared_group_are_rejected_at_plan_time(
+    spoke_c: type[FeatureGroup],
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _star_prepare(Link.left, hub_first=False, spoke_c=spoke_c)
+
+    _assert_star_keeping_two_groups_reason(
+        str(exc_info.value),
+        StarConsumerArrow.get_class_name(),
+        ("MultiLinkRootAPartial", spoke_c.get_class_name()),
+        "StarHubArrow",
+    )
+
+
+def test_two_right_joins_keeping_different_spokes_of_a_shared_group_still_raise() -> None:
+    with pytest.raises(ValueError):
+        _star_prepare(Link.right, hub_first=True)
+
+
+_STAR_ROWS = [
+    pytest.param(Link.left, True, [11, 29, 41, 50, 60], id="left_keeps_hub"),
+    pytest.param(Link.inner, False, [29, 41], id="inner"),
+    pytest.param(Link.outer, False, [10, 11, 13, 29, 41, 50, 60], id="outer"),
+]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+@pytest.mark.parametrize("link_factory, hub_first, expected", _STAR_ROWS)
+def test_a_star_with_a_defined_result_returns_its_rows_when_the_spokes_hold_different_keys(
+    link_factory: Any, hub_first: bool, expected: list[int], spoke_c: type[FeatureGroup]
+) -> None:
+    results = _star_prepare(link_factory, hub_first, spoke_c).run()
+
+    assert _side_path_values(results, StarConsumerArrow) == [expected]
+
+
+RemedyRootBFourKeysArrow = type(
+    "RemedyRootBFourKeysArrow",
+    (RemedyRootBFourKeys,),
+    {"__module__": __name__, "compute_framework_rule": classmethod(lambda cls: {PyArrowTable})},
+)
+RemedyRootBFourKeysThird = type(
+    "RemedyRootBFourKeysThird",
+    (RemedyRootBFourKeys,),
+    {"__module__": __name__, "compute_framework_rule": classmethod(lambda cls: {ThirdCfw})},
+)
+_POLY_INPUTS = ("mlg_a", "mlg_a1", "mlg_bd")
+_POLY_B_LAYOUTS = [
+    pytest.param(
+        RemedyRootBFourKeysThird,
+        _remedy_null_safe_consumer("StarPolyThirdConsumer", ThirdCfw, _POLY_INPUTS),
+        id="b_on_a1_framework",
+    ),
+    pytest.param(
+        RemedyRootBFourKeysArrow,
+        _remedy_null_safe_consumer("StarPolyArrowConsumer", PyArrowTable, _POLY_INPUTS),
+        id="b_on_a_framework",
+    ),
+    pytest.param(
+        RemedyRootBFourKeys,
+        _remedy_null_safe_consumer("StarPolySecondConsumer", SecondCfw, _POLY_INPUTS),
+        id="b_on_third_framework",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "link_factory, swap_link_sides",
+    [pytest.param(Link.left, False, id="left_a_b"), pytest.param(Link.right, True, id="right_b_a")],
+)
+@pytest.mark.parametrize("root_b, consumer", _POLY_B_LAYOUTS)
+def test_a_left_or_right_join_keeping_two_members_of_one_link_side_with_different_keys_is_rejected(
+    root_b: type[FeatureGroup], consumer: type[FeatureGroup], link_factory: Any, swap_link_sides: bool
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            consumer=consumer,
+            features=[consumer.get_class_name()],
+            link_factory=link_factory,
+            root_a=MultiLinkRootAPartial,
+            root_b=root_b,
+            extra_groups={RemedyRootA1Partial},
+            compute_frameworks=_ALL_FRAMEWORKS,
+        )
+
+    _assert_star_keeping_two_groups_reason(
+        str(exc_info.value),
+        consumer.get_class_name(),
+        ("MultiLinkRootAPartial", "RemedyRootA1Partial"),
+        root_b.get_class_name(),
+    )

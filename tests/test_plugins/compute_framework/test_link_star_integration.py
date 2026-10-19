@@ -306,6 +306,36 @@ class TestLinkStarIntegration:
         assert len(inner_res) == 2
         assert set(inner_res[column].values) == {"h1|10", "h2|20"}
 
+    def test_manual_left_links_keeping_the_hub_match_a_left_star(self, flight_server: Any) -> None:
+        """Hand-built hub-kept left links return what the LEFT ``Link.star`` returns."""
+        index = Index(("row_id",))
+        star_links = Link.star(
+            StarLeftHubFG, StarLeftSpokeAFG, StarLeftSpokeBFG, index_column="row_id", jointype=JoinType.LEFT
+        )
+        manual_links = {
+            Link.left(JoinSpec(StarLeftHubFG, index), JoinSpec(StarLeftSpokeAFG, index)),
+            Link.left(JoinSpec(StarLeftHubFG, index), JoinSpec(StarLeftSpokeBFG, index)),
+        }
+        collector = PluginCollector.enabled_feature_groups(
+            {StarLeftHubFG, StarLeftSpokeAFG, StarLeftSpokeBFG, StarLeftConsumerFG}
+        )
+        column = StarLeftConsumerFG.get_class_name()
+
+        results = [
+            mloda.run_all(
+                [Feature(name=column)],
+                links=links,
+                compute_frameworks=["PandasDataFrame"],
+                plugin_collector=collector,
+                flight_server=flight_server,
+            )
+            for links in (star_links, manual_links)
+        ]
+
+        assert [len(result) for result in results] == [1, 1]
+        star_values, manual_values = (sorted(result[0][column].values) for result in results)
+        assert manual_values == star_values == ["h1|10", "h2|20", "h3|30"]
+
     def test_outer_star_keeps_unmatched_spoke_row(self, flight_server: Any) -> None:
         """An OUTER ``Link.star`` keeps the spoke row_id the hub lacks; an inner star drops it."""
         outer_links = Link.star(

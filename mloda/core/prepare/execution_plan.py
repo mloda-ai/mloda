@@ -41,7 +41,11 @@ from mloda.core.prepare.resolved_join_builder import (
     raise_on_join_plan_divergence,
     wire_join_dependencies,
 )
-from mloda.core.prepare.validate_resolved_join import raise_on_dishonest_join_record, raise_on_orphaned_join_source
+from mloda.core.prepare.validate_resolved_join import (
+    raise_on_dishonest_join_record,
+    raise_on_join_star_keeping_two_groups,
+    raise_on_orphaned_join_source,
+)
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -216,6 +220,7 @@ class ExecutionPlan:
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
         raise_on_dishonest_join_record(self.resolved_join_plan, join_steps, graph)
         if validate:
+            raise_on_join_star_keeping_two_groups(self.resolved_join_plan, graph)
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)

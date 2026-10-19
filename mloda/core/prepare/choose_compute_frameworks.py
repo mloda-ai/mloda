@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.declared_sides import one_framework_members_reason
+from mloda.core.prepare.declared_sides import one_framework_members_reason, star_keeping_two_groups_reason
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 
@@ -600,11 +600,21 @@ class ChooseComputeFrameworks:
                             "side, which can run on different frameworks only when both joins merge into the other "
                             "link side's frame: the other link side runs on one member's framework"
                         )
-                        if offers:
-                            why += (
-                                f", or {name} reads both members directly and runs on the other link side's framework"
+                        if not offers and jointype in (JoinType.LEFT, JoinType.RIGHT):
+                            why = star_keeping_two_groups_reason(
+                                name,
+                                blocks[a].fg.__name__,
+                                blocks[b].fg.__name__,
+                                " and ".join(sorted({blocks[o].fg.__name__ for o in others})),
+                                (jointype,),
                             )
-                        why += ". Otherwise read one member of the link side per consumer"
+                        else:
+                            if offers:
+                                why += (
+                                    f", or {name} reads both members directly and runs on the other link side's "
+                                    "framework"
+                                )
+                            why += ". Otherwise read one member of the link side per consumer"
                         blocks_of = (a, b, consumer, *others)
                         rules.setdefault(
                             (*blocks_of, relaxed), _Rule(blocks_of, partial(_side_member_allows, relaxed), why)

@@ -236,10 +236,10 @@ The returned set is passed straight to `mlodaAPI` like any other link set.
 
 **Known limits when several links feed one consumer**
 
-Each join that feeds a consumer runs on the frame the previous join built. Two shapes are not reliable yet when the links share their right side, as in `Link.inner(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.inner(JoinSpec(C, ...), JoinSpec(B, ...))`:
+Each join that feeds a consumer runs on the frame the previous join built. Two shapes are limited when the links share their right side, as in `Link.inner(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.inner(JoinSpec(C, ...), JoinSpec(B, ...))`:
 
 - In `THREADING` mode the consumer can fail intermittently with a missing column, most often when all groups run on one compute framework.
-- A left or right join that keeps both `A` and `C` has no defined result and can return different rows between runs.
+- A left or right join star that keeps both `A` and `C` is rejected at plan time, because its rows would depend on join order. Keep `B`, or use inner joins for both or outer joins for both.
 
 Declaring the shared group as the left side of every link avoids both, which is what `Link.star(B, A, C, index_column=...)` does; for the left join, keep `B` (`jointype="left"`) or use inner or outer joins. Two members of one link side (see below) count as two such links.
 
@@ -337,13 +337,13 @@ A base class and its subclass can both match one side of a link, for example a c
 
 | Members | Other side | Consumer | Result |
 | --- | --- | --- | --- |
-| On different frameworks | On one member's framework | On that framework | Planned |
+| On different frameworks | On one member's framework | On that framework | Planned; a left or right join that keeps the member side is rejected |
 | On different frameworks | On one member's framework | On another framework | Rejected: the consumer must run where that same-framework join runs |
 | On different frameworks | One feature group, on a framework no member uses | On the other side's framework, reading both members directly | Planned for inner and outer joins, and for a left or right join that keeps the other side |
 | On different frameworks | On a framework no member uses | On a member's framework, or reading a member through a feature in between | Rejected: read one member of the link side per consumer |
 | On one framework | Any | Any | Rejected at plan time: read one member of the link side per consumer, and declare one link per member |
 
-Each member's join counts as a separate link into the consumer's frame, so the [known limits when several links feed one consumer](#star-joins-linkstar) apply to the planned layouts: in the first row, a left or right join that keeps the member side can return wrong rows when the members hold different keys. In `THREADING` mode the first row, and several consumers of one such link in either planned row, can fail intermittently with a missing column.
+Each member's join counts as a separate link into the consumer's frame, so the [known limits when several links feed one consumer](#star-joins-linkstar) apply to the planned layouts. In `THREADING` mode the first row, and several consumers of one such link in either planned row, can fail intermittently with a missing column.
 
 #### mlodaAPI
 

@@ -11,7 +11,8 @@ from mloda.core.abstract_plugins.components.link import JoinType
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
+from mloda.core.prepare.declared_sides import star_keeping_two_groups_reason
+from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan, ResolvedJoinSide
 
 
 def _stays_in_source_framework(record: ResolvedJoin) -> bool:
@@ -58,6 +59,45 @@ def raise_on_orphaned_join_source(plan: ResolvedJoinPlan) -> None:
             if _shared_consumer_writes_back(plan.records, uuid, shared_consumers):
                 continue
             raise ValueError(_orphaned_join_source_error(first, second))
+
+
+def _kept_and_dropped(record: ResolvedJoin) -> tuple[ResolvedJoinSide, ResolvedJoinSide] | None:
+    """The declared (kept, dropped) sides of a left or right join, else None."""
+    if record.jointype is JoinType.LEFT:
+        return record.left, record.right
+    if record.jointype is JoinType.RIGHT:
+        return record.right, record.left
+    return None
+
+
+def _class_names(uuids: Iterable[UUID], graph: Graph) -> str:
+    nodes = graph.get_nodes()
+    return " and ".join(sorted({nodes[uuid].feature_group_class.get_class_name() for uuid in uuids}))
+
+
+def raise_on_join_star_keeping_two_groups(plan: ResolvedJoinPlan, graph: Graph) -> None:
+    """Raise when one consumer reads two left or right joins that keep different groups and drop the same one."""
+    sides = [(record, _kept_and_dropped(record)) for record in plan.records]
+    for (first, first_sides), (second, second_sides) in combinations(sides, 2):
+        if first_sides is None or second_sides is None:
+            continue
+        shared_consumers = first.consumers & second.consumers
+        kept_first, dropped_first = first_sides
+        kept_second, dropped_second = second_sides
+        shared_dropped = dropped_first.uuids & dropped_second.uuids
+        if not shared_consumers or not shared_dropped or kept_first.uuids & kept_second.uuids:
+            continue
+        nodes = graph.get_nodes()
+        consumer = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in shared_consumers)[0]
+        kept_names = sorted((_class_names(kept_first.uuids, graph), _class_names(kept_second.uuids, graph)))
+        message = star_keeping_two_groups_reason(
+            consumer,
+            kept_names[0],
+            kept_names[1],
+            _class_names(shared_dropped, graph),
+            (first.jointype, second.jointype),
+        )
+        raise ValueError(f"{message}.")
 
 
 def _foreign_members(group: type[FeatureGroup], uuids: Iterable[UUID], graph: Graph) -> list[str]:

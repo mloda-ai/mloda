@@ -85,11 +85,11 @@ class PlanStep:
     ``join_keys`` is a join step's ``left=right`` index column pairs, as ``HookContext.join_keys``; None for
     APPEND/UNION and non-join steps.
 
-    ``implementation`` is the Implementation class serving a compute step (None otherwise); ``implementation_path`` is its
-    ``module:qualname``, "neutral" for a format group step with no implementation, else None.
-    ``implementation_specialized_from`` lists the Implementation parents the winner replaced, sorted by path.
-    ``implementation_version``, ``implementation_hash`` ("unavailable" when hashing fails) and ``feature_group_version``
-    are excluded from equality.
+    ``implementation``: the Implementation class serving a compute step, else None.
+    ``implementation_path``: its ``module:qualname``, "neutral" for a format group step without one, else None.
+    ``implementation_specialized_from``: the Implementation parents the winner replaced, sorted by path.
+    ``implementation_version``, ``implementation_hash`` ("unavailable" when hashing fails), ``feature_group_version``:
+    excluded from equality.
     """
 
     step_kind: Literal["compute", "join", "transform"]

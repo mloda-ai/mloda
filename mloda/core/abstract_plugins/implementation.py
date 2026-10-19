@@ -13,6 +13,17 @@ def _is_concrete(cls: Any) -> bool:
     return not getattr(cls.__dict__.get("calculate", cls.calculate), "__isabstractmethod__", False)
 
 
+def _names_a_pair(cls: Any) -> bool:
+    group = getattr(cls, "feature_group", None)
+    framework = getattr(cls, "compute_framework", None)
+    return (
+        isinstance(group, type)
+        and issubclass(group, FormatFeatureGroup)
+        and isinstance(framework, type)
+        and issubclass(framework, ComputeFramework)
+    )
+
+
 class Implementation(ABC):
     """Names its pair with feature_group and compute_framework; a format group calls calculate(group, match, features)."""
 
@@ -37,5 +48,5 @@ class Implementation(ABC):
 
 
 def loaded_implementations() -> list[type[Implementation]]:
-    """Concrete loaded Implementation classes."""
-    return [impl for impl in get_all_subclasses(Implementation) if _is_concrete(impl)]
+    """Concrete loaded Implementation classes naming a valid pair (a rejected subclass lingers until collected)."""
+    return [impl for impl in get_all_subclasses(Implementation) if _is_concrete(impl) and _names_a_pair(impl)]

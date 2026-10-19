@@ -104,7 +104,7 @@ class FormatFeatureGroup(FeatureGroup):
     @classmethod
     @abstractmethod
     def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
-        """The neutral form of the source, used when the current framework has no loader."""
+        """The neutral form of the source, used when no Implementation serves the current framework."""
 
     @classmethod
     def columns(cls, match: SourceMatch) -> Collection[str] | None:

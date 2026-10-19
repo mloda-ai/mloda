@@ -1,4 +1,4 @@
-"""CSV file format group: stdlib header discovery, a FileSource neutral form and a PyArrowTable loader."""
+"""CSV file format group: stdlib header discovery, a FileSource neutral form and a PyArrowTable implementation."""
 
 import csv
 from collections.abc import Collection
@@ -34,6 +34,7 @@ class CsvFG(ReadFileFG):
 
     @classmethod
     def count_rows(cls, match: SourceMatch, compute_framework: type[ComputeFramework]) -> int | None:
+        # Runs without an engine: consults every loaded implementation, not the governed set.
         # Other frameworks read CSV through pyarrow, whose row split can differ.
         if compute_framework.expected_data_framework() is not dict:
             return None

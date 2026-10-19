@@ -183,6 +183,7 @@ def _safe_class_source_hash(cls: type[Any]) -> str | None:
 def dedup_feature_group_subclasses(
     classes: set[_PluginClassT],
     allow_redefinition: bool = False,
+    kind: str = "FeatureGroup",
 ) -> set[_PluginClassT]:
     """Deduplicate FeatureGroup or Implementation subclasses sharing the same ``(module, qualname)``.
 
@@ -254,7 +255,7 @@ def dedup_feature_group_subclasses(
         conflicts.append((key, list(zip(members, hashes_str))))
 
     if conflicts:
-        raise RedefinitionConflictError(_build_conflict_error(conflicts))
+        raise RedefinitionConflictError(_build_conflict_error(conflicts, kind))
 
     return survivors
 
@@ -314,8 +315,9 @@ def _cell_label(cls: type[Any]) -> str | None:
 
 def _build_conflict_error(
     conflicts: list[tuple[tuple[str, str], list[tuple[type[Any], str]]]],
+    kind: str = "FeatureGroup",
 ) -> str:
-    lines = ["FeatureGroup redefined with different source code:"]
+    lines = [f"{kind} redefined with different source code:"]
     for (module, qualname), hashed in conflicts:
         for _cls, source_hash in hashed:
             cell = _cell_label(_cls)
@@ -409,9 +411,15 @@ class PreFilterPlugins:
                 for fg in accessible_feature_groups
                 if fg not in registered and not inspect.isabstract(fg)
             )
-            _warn_once_unregistered(
-                unregistered + self._unregistered_implementation_names, "FeatureGroups and Implementations"
-            )
+            kinds = [
+                kind
+                for kind, names in (
+                    ("FeatureGroups", unregistered),
+                    ("Implementations", self._unregistered_implementation_names),
+                )
+                if names
+            ]
+            _warn_once_unregistered(unregistered + self._unregistered_implementation_names, " and ".join(kinds))
 
         if len(accessible_feature_groups) == 0:
             if collector_filtered_everything:
@@ -427,9 +435,7 @@ class PreFilterPlugins:
         allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
         strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
 
-        implementations = dedup_feature_group_subclasses(
-            set(loaded_implementations()), allow_redefinition=allow_redefinition
-        )
+        implementations = set(loaded_implementations())
         if plugin_collector is not None:
             implementations = {i for i in implementations if plugin_collector.applicable_implementation_class(i)}
 
@@ -445,6 +451,9 @@ class PreFilterPlugins:
                 )
                 implementations -= unregistered
 
+        implementations = dedup_feature_group_subclasses(
+            implementations, allow_redefinition=allow_redefinition, kind="Implementation"
+        )
         self._raise_on_conflicting_implementations(implementations)
         return frozenset(implementations)
 

@@ -1,4 +1,4 @@
-"""SQLite database format group: read-only connections, quoted queries, a pyarrow neutral and a stdlib dict loader."""
+"""SQLite database format group: read-only connections, quoted queries, a pyarrow neutral and a stdlib dict implementation."""
 
 import os
 import sqlite3

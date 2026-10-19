@@ -193,7 +193,7 @@ def _(PyArrowTable):
             print("We used CsvFG2 to load the data.")
             return result.select(list(features.get_all_names()))
 
-    return (CsvFG2,)
+    return CsvFG2, CsvFG2PyArrowTable
 
 
 @app.cell
@@ -201,6 +201,7 @@ def _(
     PluginCollector,
     PyArrowTable,
     CsvFG2,
+    CsvFG2PyArrowTable,
     data_access_collection,
     mloda,
     order_features: "list[str | Feature]",

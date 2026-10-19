@@ -42,7 +42,7 @@ class MatchHookOutcome:
 
 
 def _in_window(call: Callable[[], Any], sink: list[dict[str, MatchRejection]]) -> Any:
-    """Run one call under its own rejection window and hand the window back through sink, a raise included."""
+    """Run a call under its own rejection window, appended to sink even on a raise."""
     window: dict[str, MatchRejection] = {}
     token = MATCH_REJECTION_REASONS.set(window)
     try:
@@ -53,7 +53,7 @@ def _in_window(call: Callable[[], Any], sink: list[dict[str, MatchRejection]]) -
 
 
 def _merge_windows(priority: list[dict[str, MatchRejection]], windows: list[dict[str, MatchRejection]]) -> None:
-    """Rebuild the outer window: the verdict reason, then what was there, then the latest call's reasons first."""
+    """Rebuild the outer window: priority reasons, prior ones, then the latest calls first."""
     outer = MATCH_REJECTION_REASONS.get()
     if outer is None:
         return

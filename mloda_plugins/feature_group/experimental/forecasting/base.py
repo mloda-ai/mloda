@@ -27,7 +27,7 @@ def _is_bool(value: Any) -> bool:
 
 
 def _part_suffix(part: str) -> str | None:
-    """Map a part's first level to its source suffix (lower/upper belong to the literal source)."""
+    """Source suffix for a part (lower/upper belong to the literal source)."""
     level = part.split("~")[0]
     return None if level in ("lower", "upper") else level
 

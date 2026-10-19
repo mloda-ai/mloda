@@ -166,18 +166,16 @@ assert list(result[0].columns) == ["measure~value"]
 
 If the parts depend on the feature name or options, override the classmethod `output_parts(feature_name, options)` instead.
 
-- `measure` is computed once, even if several parts are requested; only the requested part columns are returned.
+- `measure` is computed once, even if several parts are requested with the same options and data type; only the requested part columns are returned.
 - An undeclared part (`measure~bogus`) fails at resolution and lists the declared parts. With `ANY_OUTPUT_PART`, a part that was not produced fails after the computation.
-- A name the group matches as a whole (a literal `a~b` column or a config-based feature) is kept whole; a base name that itself contains `~` cannot have parts.
+- A name any group matches as a whole (a literal `a~b` column or a config-based feature) is kept whole and wins over another group's part reading; a base name that itself contains `~` cannot have parts.
 - An artifact saved by a part request covers only the requested parts; a later whole-feature request cannot reuse it.
 - A nested part such as `f~0~lower` is declared by its first level (`0`).
 - Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`; a missing index fails after the computation.
 - `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution, not in global filters.
 - Artifacts are keyed by the base feature name, not a part column.
-- A group that declares parts reads a trailing `~N` against them too: `measure~0` fails at resolution unless `0` is declared.
-- A name any group matches whole wins over another group's part reading of it.
+- A trailing `~N` is also read against the declared parts: `measure~0` fails at resolution unless `0` is declared.
 - A part's declared data type is checked on its own column (`measure~value`).
-- "Computed once" holds for parts requested with the same options and data type.
 
 ## How It Works
 

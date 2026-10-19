@@ -5,6 +5,7 @@ This module handles the conversion from validated configuration data
 to mloda Feature instances.
 """
 
+import json
 from typing import Any
 
 # Import from the component modules, NOT the `mloda.user` facade: that facade
@@ -169,3 +170,72 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
             raise ValueError(f"Unexpected config item type: {type(item)}")
 
     return features
+
+
+def load_run_definition(config_str: str, format: str = "json") -> tuple[list[Feature | str], list[Any]]:
+    """Load a run definition (features plus links) from a configuration string.
+
+    The top level is an object with a ``format`` version, a ``features`` array
+    (same item shape as ``load_features_from_config``) and an optional ``links``
+    array. A bare array is still accepted and yields no links.
+
+    Args:
+        config_str: Configuration string in the specified format
+        format: Configuration format (currently only "json" is supported)
+
+    Returns:
+        Tuple of (features, links). Links are returned as raw dicts; building
+        ``Link`` objects needs feature group classes and is left to the caller.
+    """
+    if format != "json":
+        raise ValueError(f"Unsupported format: '{format}'. Only 'json' is currently supported.")
+
+    data = json.loads(config_str)
+    if isinstance(data, list):
+        return load_features_from_config(config_str, format=format), []
+    if not isinstance(data, dict):
+        raise ValueError("Run definition must be a JSON object or array")
+
+    version = data.get("format", 1)
+    if version != 1:
+        raise ValueError(f"Unsupported run definition format version: {version!r}")
+
+    features_data = data.get("features", [])
+    if not isinstance(features_data, list):
+        raise ValueError("'features' must be a JSON array")
+    features = load_features_from_config(json.dumps(features_data), format=format)
+
+    links = data.get("links", [])
+    if not isinstance(links, list):
+        raise ValueError("'links' must be a JSON array")
+    return features, links
+
+
+def dump_run_definition(features: list[Feature | str], links: list[Any] | None = None) -> str:
+    """Dump features and links to a run definition JSON string.
+
+    Feature names are written as bare strings; features with options are
+    written as objects with ``name`` and ``context_options``. Links are
+    expected to already be JSON-safe dicts.
+
+    Args:
+        features: Feature objects and/or feature name strings
+        links: Optional list of JSON-safe link dicts
+
+    Returns:
+        JSON string in the run definition format
+    """
+    items: list[Any] = []
+    for feature in features:
+        if isinstance(feature, str):
+            items.append(feature)
+            continue
+        item: dict[str, Any] = {"name": feature.name}
+        context = dict(feature.options.context) if feature.options.context else {}
+        if context:
+            item["context_options"] = {str(k): v for k, v in context.items()}
+        if feature.feature_group is not None:
+            item["feature_group"] = feature.feature_group
+        items.append(item)
+
+    return json.dumps({"format": 1, "features": items, "links": links or []}, indent=2)

@@ -16,7 +16,11 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRe
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 
-from tests.registry_isolation import reclaim_leaked_feature_groups, reclaim_leaked_transformers
+from tests.registry_isolation import (
+    reclaim_leaked_feature_groups,
+    reclaim_leaked_subclasses,
+    reclaim_leaked_transformers,
+)
 
 _ALL_MP_PRELOAD_MODULES = [
     "mloda.user",
@@ -53,14 +57,16 @@ def _no_feature_group_registry_pollution(request: pytest.FixtureRequest) -> Any:
     """Fail a test that leaves one of its own FeatureGroup or BaseTransformer subclasses registered (#845)."""
     before_feature_groups = get_all_subclasses(FeatureGroup)
     before_transformers = get_all_subclasses(BaseTransformer)
+    before_implementations = get_all_subclasses(Implementation)
     yield
     module_name = request.module.__name__
     leaked = [
         *reclaim_leaked_feature_groups(before_feature_groups, module_name),
         *reclaim_leaked_transformers(before_transformers, module_name),
+        *reclaim_leaked_subclasses(Implementation, before_implementations, module_name),
     ]
     assert not leaked, (
-        f"Leaked FeatureGroup/BaseTransformer subclasses from {module_name}: {[c.__name__ for c in leaked]}"
+        f"Leaked FeatureGroup/BaseTransformer/Implementation subclasses from {module_name}: {[c.__name__ for c in leaked]}"
     )
 
 

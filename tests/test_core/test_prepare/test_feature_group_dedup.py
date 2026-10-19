@@ -1440,3 +1440,56 @@ def test_a_redefined_implementation_collapses_to_the_live_class_and_does_not_con
 
     assert new in implementations
     assert old not in implementations
+
+
+_REDEF_IMPL_SOURCE = """
+from mloda.core.abstract_plugins.implementation import Implementation
+
+
+class RedefImpl(Implementation):
+    feature_group = _GROUP_
+    compute_framework = _FRAMEWORK_
+
+    @classmethod
+    def calculate(cls, group, match, features):
+        return {version!r}
+"""
+
+
+def _stale_and_live_implementation(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any]:
+    """Two same-name implementations of one pair with different source; only the second is bound in its module."""
+    name = "impl_redef_dedup_mod"
+    module = types.ModuleType(name)
+    group, framework = _toy_pair()
+    module.__dict__.update(_GROUP_=group, _FRAMEWORK_=framework)
+    monkeypatch.setitem(sys.modules, name, module)
+    stale = _exec_fg_in_module("RedefImpl", _REDEF_IMPL_SOURCE.format(version="v1"), "impl-redef-v1", module)
+    live = _exec_fg_in_module("RedefImpl", _REDEF_IMPL_SOURCE.format(version="v2"), "impl-redef-v2", module)
+    return stale, live
+
+
+def test_a_redefined_implementation_with_different_source_conflicts_naming_implementation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale, live = _stale_and_live_implementation(monkeypatch)
+
+    with pytest.raises(RedefinitionConflictError) as exc_info:
+        _implementations()
+
+    assert "Implementation" in str(exc_info.value)
+    assert "FeatureGroup" not in str(exc_info.value)
+    del stale, live
+    gc.collect()
+
+
+def test_a_disabled_stale_implementation_redefinition_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    stale, live = _stale_and_live_implementation(monkeypatch)
+    collector = PluginCollector()
+    collector.add_disabled_implementation_classes({stale})
+
+    implementations = _implementations(collector)
+
+    assert live in implementations
+    assert stale not in implementations
+    del stale, live, implementations
+    gc.collect()

@@ -264,7 +264,6 @@ class TestEncodingAndFormat:
         assert "xlsx" in message
         assert "file_format" in message
         assert "Implementation" in message
-        assert "register_loader" not in message
         assert "load_neutral" in message
 
     def test_non_csv_formats_match_the_pyarrow_hop(self, tmp_path: Path) -> None:

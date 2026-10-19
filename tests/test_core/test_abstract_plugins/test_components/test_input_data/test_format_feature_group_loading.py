@@ -1,5 +1,7 @@
 """FormatFeatureGroup loaders, neutral fallback and the describe_columns/count_rows tools."""
 
+import gc
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +10,7 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -16,6 +19,9 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
     WORKER_COLUMN,
     WORKER_VALUES,
     ToyWorkerFG,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
+    ToyWorkerPythonDict,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     ToyDeclaredFG,
@@ -149,7 +155,27 @@ class TestImplementation:
         assert seen == [spy_impl]
 
 
+@pytest.fixture
+def gc_disabled() -> Iterator[None]:
+    gc.disable()
+    yield
+    gc.enable()
+
+
 class TestImplementationDefinition:
+    def test_a_rejected_subclass_is_not_a_loaded_implementation_before_it_is_collected(self, gc_disabled: None) -> None:
+        with pytest.raises(TypeError, match="feature_group"):
+
+            class _RejectedImpl(Implementation):
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+        assert all(impl.__name__ != "_RejectedImpl" for impl in loaded_implementations())
+        assert PreFilterPlugins({PythonDictFramework}).implementations is not None
+
     @pytest.mark.parametrize("missing", ["feature_group", "compute_framework", "both"])
     def test_concrete_subclass_missing_an_attribute_raises(self, missing: str) -> None:
         attributes: dict[str, Any] = {"calculate": classmethod(lambda cls, *args: None)}
@@ -219,6 +245,7 @@ class TestImplementationInASpawnWorker:
                 flight_server=flight_server,
             )
 
+        assert ToyWorkerPythonDict in loaded_implementations()
         sync = column_values(run(ParallelizationMode.SYNC), WORKER_COLUMN)
         multiprocessing = column_values(run(ParallelizationMode.MULTIPROCESSING), WORKER_COLUMN)
 

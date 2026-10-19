@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
-from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPolicy
+from mloda.core.abstract_plugins.plugin_registry.plugin_policy import PluginPolicy, PluginPolicyViolationError
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, Options, PluginCollector, PluginLoader, mloda, register_plugin
@@ -104,6 +104,9 @@ class TestForgedImplementationIsGoverned:
         calls: list[int] = []
         forged = self._forge(make_implementation, calls)
         assert forged in loaded_implementations()
+        with pytest.raises(PluginPolicyViolationError):
+            register_plugin(forged)
+        assert not isolated_plugin_registry.is_registered(forged)
 
         assert self._run(tmp_path, PluginCollector().set_strict_mode("strict")) == [1, 2]
         assert calls == []

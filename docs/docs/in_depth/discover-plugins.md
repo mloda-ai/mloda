@@ -153,6 +153,7 @@ Each `FeatureGroupInfo` also carries the subtype declaration: `subtype_key`
 subtypes per framework; empty for abstract bases) and `subtype_error` (set
 when the declaration is invalid). See
 [Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).
+A file or document group also reports `suffixes`, the sorted suffixes it owns by default (empty for other groups).
 
 ## Inspecting Compute Frameworks
 

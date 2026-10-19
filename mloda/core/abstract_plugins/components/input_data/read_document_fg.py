@@ -32,6 +32,11 @@ class ReadDocumentFG(_FileSourceFG):
         return ()
 
     @classmethod
+    def default_owned_suffixes(cls) -> tuple[str, ...]:
+        handed_over = cls.handover_suffixes()
+        return tuple(suffix for suffix in cls.suffixes() if suffix not in handed_over)
+
+    @classmethod
     def read_text(cls, path: str) -> str:
         with open(path, encoding="utf-8") as handle:
             return handle.read()

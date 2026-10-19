@@ -49,6 +49,11 @@ class _FileSourceFG(FormatFeatureGroup):
         """File suffixes (with dot) this format owns."""
 
     @classmethod
+    def default_owned_suffixes(cls) -> tuple[str, ...]:
+        """Suffixes this group claims when no document_suffixes option is set."""
+        return cls.suffixes()
+
+    @classmethod
     def file_format(cls) -> str:
         return cls.suffixes()[0].lstrip(".").lower()
 

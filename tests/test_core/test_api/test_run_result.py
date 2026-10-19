@@ -522,6 +522,16 @@ class TestRunResultFrameFor:
             results.frame_for("does_not_exist")
 
         assert "run_result_probe_value" in str(excinfo.value)
+        assert "computed by" not in str(excinfo.value)
+
+    def test_computed_but_unrequested_name_names_its_feature_group(self) -> None:
+        """The chained source was computed, not requested: the error says who computed it."""
+        results = _run_all()
+
+        with pytest.raises(ValueError, match="computed by PlanInfoPandasSource") as excinfo:
+            results.frame_for("plan_info_sales")
+
+        assert "not requested; request it to get its frame" in str(excinfo.value)
 
     def test_feature_with_unmatched_group_options_raises(self) -> None:
         results = _run_probe([Feature("run_result_probe_value", options={"source_table": t}) for t in ("A", "B")])

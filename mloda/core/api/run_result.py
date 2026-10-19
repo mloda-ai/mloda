@@ -62,7 +62,12 @@ class RunResult(list[Any]):
         if not pairs:
             available = sorted({n for step, _ in frames for n in step.requested_feature_names})
             detail = f" with group options {_redacted(group)}" if group is not None else ""
-            raise ValueError(f"No frame requested feature '{name}'{detail}. Requested features: {available}")
+            hint = ""
+            if name not in available:
+                computed = sorted({str(step.feature_group_name) for step in self._plan if name in step.feature_names})
+                if computed:
+                    hint = f"; '{name}' was computed by {', '.join(computed)} but not requested; request it to get its frame"
+            raise ValueError(f"No frame requested feature '{name}'{detail}. Requested features: {available}{hint}")
         matches = [
             f"(group options {_redacted(_group_of(step))}, "
             f"feature group {step.feature_group_name}, "

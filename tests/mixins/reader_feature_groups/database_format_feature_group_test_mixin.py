@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ma
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.provider import CHAIN_SEPARATOR
 from mloda.user import Credential, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -527,9 +528,15 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         path = self._make("load_db", {"load_table": {"toyfmt_a": [1, 2], "toyfmt_b": [3, 4], "toyfmt_c": [5, 6]}})
         spy = self._spy(monkeypatch)
         group = self.feature_group_class
-        registered = {f for klass in group.__mro__ for f in klass.__dict__.get("_LOADERS", {})}
+        implementations = loaded_implementations()
+        probe = SourceMatch(source="toyfmt_probe", access="toyfmt_probe")
+        registered = {i.compute_framework for i in implementations}
         extra = sorted(
-            (f for f in registered if f is not PyArrowTable and group._loader_for(f) is not None),
+            (
+                f
+                for f in registered
+                if f is not PyArrowTable and group.select_implementation(f, probe, implementations) is not None
+            ),
             key=lambda f: f.__name__,
         )
         frameworks = [PyArrowTable, *extra]

@@ -40,3 +40,10 @@ def test_provider_exports_read_file_fg() -> None:
 
     assert provider.ReadFileFG is ReadFileFG
     assert "ReadFileFG" in provider.__all__
+
+
+def test_provider_exports_implementation() -> None:
+    from mloda.core.abstract_plugins.implementation import Implementation
+
+    assert provider.Implementation is Implementation
+    assert "Implementation" in provider.__all__

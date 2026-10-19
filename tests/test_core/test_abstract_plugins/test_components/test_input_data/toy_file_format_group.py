@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 import pyarrow as pa
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import ReadFileFG, SourceMatch
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
@@ -48,7 +49,7 @@ def toy_match(path: str | Path) -> SourceMatch:
 
 
 class ToyFileFormatFG(ReadFileFG):
-    """Stdlib header format; the default FileSource neutral form, plus pyarrow and python-dict loaders."""
+    """Stdlib header format; the default FileSource neutral form, plus pyarrow and python-dict Implementations."""
 
     SAMPLE_SIZE_BYTES: ClassVar[int] = SAMPLE_SIZE
     COLUMN_NAMES_CALLS: ClassVar[list[str]] = []
@@ -79,16 +80,22 @@ class ToyFileFormatFG(ReadFileFG):
         return [n for n in names if n]
 
 
-def _load_pyarrow(group: Any, match: SourceMatch, features: Any) -> pa.Table:
-    return pa.table(read_toy_file(match.access, tuple(sorted(features.get_all_names()))))
+class ToyFilePyArrowTable(Implementation):
+    feature_group = ToyFileFormatFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> pa.Table:
+        return pa.table(read_toy_file(match.access, tuple(sorted(features.get_all_names()))))
 
 
-def _load_dict(group: Any, match: SourceMatch, features: Any) -> dict[str, list[Any]]:
-    return read_toy_file(match.access, tuple(sorted(features.get_all_names())))
+class ToyFilePythonDict(Implementation):
+    feature_group = ToyFileFormatFG
+    compute_framework = PythonDictFramework
 
-
-ToyFileFormatFG.register_loader(PyArrowTable, _load_pyarrow)
-ToyFileFormatFG.register_loader(PythonDictFramework, _load_dict)
+    @classmethod
+    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> dict[str, list[Any]]:
+        return read_toy_file(match.access, tuple(sorted(features.get_all_names())))
 
 
 def toy_file_dac(path: str | Path, handle: str = "toyfmt_handle") -> DataAccessCollection:

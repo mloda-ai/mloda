@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -451,7 +452,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     # loader versus a load_neutral override
 
     def _load_through_gated_subclass(self, loader_value: int | None, neutral_value: int) -> Any:
-        """Run a gated subclass overriding load_neutral (and optionally registering its own loader) under PyArrowTable."""
+        """Run a gated subclass overriding load_neutral (and optionally with its own Implementation) under PyArrowTable."""
         parent = self.feature_group_class
         column = self.present_column
         sub_name = f"{parent.__name__}ToyfmtLoaderProbe{neutral_value}"
@@ -472,9 +473,15 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             {"match_feature_group_criteria": classmethod(gated), "load_neutral": classmethod(load_neutral)},
         )
         if loader_value is not None:
-            getattr(sub, "register_loader")(
-                PyArrowTable, lambda group, match, features: pa.table({column: [loader_value]})
-            )
+
+            class _ProbeImpl(Implementation):
+                feature_group = cast(type[FormatFeatureGroup], sub)
+                compute_framework = PyArrowTable
+
+                @classmethod
+                def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
+                    return pa.table({column: [loader_value]})
+
         result = mloda.run_all(
             [Feature(column, Options({sub_name: str(self.own_path)}))],
             compute_frameworks=[PyArrowTable],
@@ -482,13 +489,16 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         )
         values = result[0].column(column).to_pylist()
         del sub, result, gated, load_neutral
+        if loader_value is not None:
+            del _ProbeImpl
         gc.collect()
+        assert all(i.__name__ != "_ProbeImpl" for i in loaded_implementations())
         return values
 
     def test_file_a_load_neutral_override_is_used_under_pyarrow_table(self) -> None:
         assert self._load_through_gated_subclass(None, 7101) == [7101]
 
-    def test_file_a_subclass_registering_its_own_loader_keeps_that_loader_over_its_load_neutral(self) -> None:
+    def test_file_a_subclass_with_its_own_implementation_keeps_it_over_its_load_neutral(self) -> None:
         assert self._load_through_gated_subclass(7202, 7201) == [7202]
 
     # names

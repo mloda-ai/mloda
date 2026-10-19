@@ -148,7 +148,7 @@ def _(mo):
                 return next(csv.reader(f), [])
     ```
 
-    Its neutral form is a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. A loader registered with `register_loader` for a compute framework, called as `loader(group, match, features)`, replaces that for the framework.
+    Its neutral form is a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. An `Implementation` class for a compute framework, whose `calculate(group, match, features)` returns the data, replaces that for the framework.
 
     As you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion.
     """)
@@ -158,13 +158,13 @@ def _(mo):
 @app.cell
 def _(PyArrowTable):
     # In the following, we will just adjust a bit the CsvFG to handle a different delimiter.
-    # CsvFG2 registers its own PyArrowTable loader, returning a concrete table instead of a FileSource.
+    # CsvFG2 gets its own PyArrowTable Implementation, returning a concrete table instead of a FileSource.
 
     from typing import Any
 
     from pyarrow import csv as pyarrow_csv
 
-    from mloda.provider import FeatureSet, SourceMatch
+    from mloda.provider import FeatureSet, Implementation, SourceMatch
     from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
     class CsvFG2(CsvFG):
@@ -183,12 +183,15 @@ def _(PyArrowTable):
                     if column.null_count == column.length:
                         raise ValueError(f"Column '{column_name}' contains only null values.")
 
-    def _load_csv_with_parse_options(group: Any, match: SourceMatch, features: FeatureSet) -> Any:
-        result = pyarrow_csv.read_csv(match.access, parse_options=group._parse_options)
-        print("We used CsvFG2 to load the data.")
-        return result.select(list(features.get_all_names()))
+    class CsvFG2PyArrowTable(Implementation):
+        feature_group = CsvFG2
+        compute_framework = PyArrowTable
 
-    CsvFG2.register_loader(PyArrowTable, _load_csv_with_parse_options)
+        @classmethod
+        def calculate(cls, group: Any, match: SourceMatch, features: FeatureSet) -> Any:
+            result = pyarrow_csv.read_csv(match.access, parse_options=group._parse_options)
+            print("We used CsvFG2 to load the data.")
+            return result.select(list(features.get_all_names()))
 
     return (CsvFG2,)
 
@@ -257,9 +260,8 @@ def _(mo):
                 ignore_empty_lines=True
             )
 
-            # The custom read lives in the loader registered for PyArrowTable
-            loader = CsvFG2._loader_for(PyArrowTable)
-            loader(CsvFG2, SourceMatch(source="data.csv", access="data.csv"), Mock(spec=FeatureSet))
+            # The custom read lives in the Implementation for PyArrowTable
+            CsvFG2PyArrowTable.calculate(CsvFG2, SourceMatch(source="data.csv", access="data.csv"), Mock(spec=FeatureSet))
 
             # Verify that the read used the customized parse options
             self.assertEqual(mock_read_csv.call_args.kwargs["parse_options"], expected_parse_options)

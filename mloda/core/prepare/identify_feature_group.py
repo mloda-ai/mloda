@@ -42,6 +42,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
     is_match_abort,
     contained_raise_reason,
+    get_all_subclasses,
     safe_exc_str,
     safe_field,
 )
@@ -580,11 +581,13 @@ class IdentifyFeatureGroupClass:
                         feature_group, "capability", f"supports_compute_framework rejected {rejected_names}"
                     )
                 else:
-                    self._record_elimination(
-                        feature_group,
-                        "frameworks_not_enabled",
-                        "none of its compute frameworks are enabled for this run",
-                    )
+                    if get_all_subclasses(ComputeFramework):
+                        not_enabled_reason = "none of its compute frameworks are enabled for this run"
+                    else:
+                        not_enabled_reason = (
+                            "no compute framework plugin is loaded; import one or call PluginLoader.all()"
+                        )
+                    self._record_elimination(feature_group, "frameworks_not_enabled", not_enabled_reason)
                 continue
 
             if not self._filter_feature_group_by_framework(supported_frameworks, feature):

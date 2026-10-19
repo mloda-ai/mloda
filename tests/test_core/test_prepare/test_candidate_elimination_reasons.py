@@ -625,6 +625,21 @@ class TestEliminationStages:
         )
         assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
 
+    def test_frameworks_not_enabled_stage_when_no_compute_framework_is_loaded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("mloda.core.prepare.identify_feature_group.get_all_subclasses", lambda cls: set())
+        feature = Feature(NOT_ENABLED_FEATURE)
+        plugins: FeatureGroupEnvironmentMapping = {ElimNotEnabledFG011: set()}
+
+        err = _fail(feature, plugins)
+
+        reason = "no compute framework plugin is loaded; import one or call PluginLoader.all()"
+        assert err.result.eliminations[ElimNotEnabledFG011] == Elimination(
+            stage="frameworks_not_enabled", reason=reason
+        )
+        assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
+
     def test_framework_pin_stage(self) -> None:
         feature = Feature(PIN_FEATURE, compute_framework="ElimFwThree011")
         plugins: FeatureGroupEnvironmentMapping = {ElimPinFG011: {ElimFwOne011}}

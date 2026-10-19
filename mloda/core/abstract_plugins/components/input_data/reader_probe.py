@@ -28,6 +28,15 @@ class ReaderProbeScope:
 
 _CURRENT: ContextVar[ReaderProbeScope | None] = ContextVar("reader_probe_scope", default=None)
 
+INPUT_DATA_REFUSALS: ContextVar[list[BaseException] | None] = ContextVar("mloda_input_data_refusals", default=None)
+
+
+def record_input_data_refusal(exc: BaseException) -> None:
+    """Remember a contained INPUT_DATA_MATCH refusal for the resolution in progress; no-op outside one."""
+    refusals = INPUT_DATA_REFUSALS.get()
+    if refusals is not None:
+        refusals.append(exc)
+
 
 @contextmanager
 def reader_probe_scope(scope: ReaderProbeScope | None) -> Iterator[None]:
@@ -148,4 +157,5 @@ def probe_reader(reader: Any, data_access: Any, feature_names: list[str], option
                 f"refused at INPUT_DATA_MATCH: {reason}",
                 stage=INPUT_DATA_STAGE,
             )
+            record_input_data_refusal(exc)
             return None

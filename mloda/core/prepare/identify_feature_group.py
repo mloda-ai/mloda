@@ -42,6 +42,7 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
     FormatPointerError,
     concrete_format_groups,
 )
+from mloda.core.abstract_plugins.components.input_data.reader_probe import INPUT_DATA_REFUSALS
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
@@ -72,7 +73,9 @@ logger = logging.getLogger(__name__)
 
 class FeatureResolutionError(ValueError):
     """Typed resolution failure carrying the feature name, the EvaluationResult of its single pass,
-    and the records resolved before the failure, capped at PARTIAL_RECORDS_CAP."""
+    the records resolved before the failure, capped at PARTIAL_RECORDS_CAP, and `refusals`: the live
+    INPUT_DATA_MATCH refusal exceptions of candidate readers raised during this failed pass, in probe
+    order; empty for any failure without reader refusals."""
 
     def __init__(
         self,
@@ -80,6 +83,7 @@ class FeatureResolutionError(ValueError):
         feature_name: str,
         result: EvaluationResult,
         partial_records: Sequence[ResolutionRecord] = (),
+        refusals: Sequence[BaseException] = (),
     ) -> None:
         super().__init__(message)
         self.feature_name = feature_name
@@ -88,6 +92,8 @@ class FeatureResolutionError(ValueError):
         self.partial_records: tuple[ResolutionRecord, ...] = tuple(
             deepcopy(record) for record in partial_records[-PARTIAL_RECORDS_CAP:]
         )
+        # Not deepcopied: refusals are the live exception instances the extender raised, kept for identity.
+        self.refusals: tuple[BaseException, ...] = tuple(refusals)
 
     def __reduce__(
         self,
@@ -992,8 +998,19 @@ def resolve_or_raise(
     excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
-    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection, excluded=excluded)
+    token = INPUT_DATA_REFUSALS.set([])
+    try:
+        result, message = evaluate_and_render(
+            feature, accessible_plugins, links, data_access_collection, excluded=excluded
+        )
+    finally:
+        # Read before reset so the value survives; the finally resets even when evaluate_and_render
+        # itself raises — a raise-escape discards the collected list, as there is no error object for it.
+        refusals = tuple(INPUT_DATA_REFUSALS.get() or ())
+        INPUT_DATA_REFUSALS.reset(token)
     if message is not None:
         # The constructor does the cap-then-deepcopy snapshot, so the records are forwarded as they are.
-        raise FeatureResolutionError(message, str(feature.name), result, partial_records=partial_records)
+        raise FeatureResolutionError(
+            message, str(feature.name), result, partial_records=partial_records, refusals=refusals
+        )
     return result

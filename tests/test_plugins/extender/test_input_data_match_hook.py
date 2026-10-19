@@ -706,3 +706,77 @@ class TestFormatGroupHook:
 
         assert _REFUSED in str(excinfo.value)
         assert _PROBE_TEXT not in str(excinfo.value)
+
+
+_COL_UNKNOWN = "imdmatch_col_unknown"
+_REFUSAL_REASON = "imdmatch gate refusal"
+
+
+class AccessRefusedByGate(RuntimeError):
+    """Marker refusal raised by the every-reader gate extender; issue #2028 pins its instances onto the planning error."""
+
+
+class _ImdEveryReaderRefusingExtender(Extender):
+    """INPUT_DATA_MATCH gate raising AccessRefusedByGate for the target reader (or every reader) and recording each instance it raised."""
+
+    never_fall_back = True
+
+    def __init__(self, target: type | None = None) -> None:
+        self.priority = 100
+        self.name = "imdmatch_refuse_every_reader"
+        self._target = target
+        self.raised: list[AccessRefusedByGate] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_MATCH}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        if self._target is not None and (context is None or context.reader_class is not self._target):
+            return func(*args, **kwargs)
+        refusal = AccessRefusedByGate(_REFUSAL_REASON)
+        self.raised.append(refusal)
+        raise refusal
+
+
+class TestRefusalObjectsOnThePlanningError:
+    """A resolution failure that ran out of candidates behind reader refusals carries the refusal exception objects (issue #2028)."""
+
+    def test_every_reader_refused_carries_the_refused_exception_objects(self) -> None:
+        """A gate refusing every reader probe yields FeatureResolutionError.refusals holding exactly the instances raised (issue #2028)."""
+        extender = _ImdEveryReaderRefusingExtender()
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _plan("global", _COL_A, ImdMatchGateReader, extender)
+
+        assert type(excinfo.value) is FeatureResolutionError
+        assert _REFUSED in str(excinfo.value)
+        assert _REFUSAL_REASON in str(excinfo.value)
+        assert extender.raised
+        refusals = excinfo.value.refusals
+        assert isinstance(refusals, tuple)
+        assert refusals
+        assert all(isinstance(refusal, AccessRefusedByGate) for refusal in refusals)
+        assert refusals == tuple(extender.raised)
+
+    def test_a_failure_without_reader_refusals_carries_no_refusals(self) -> None:
+        """A plain resolution failure keeps refusals empty even with a pass-through extender in scope (issue #2028)."""
+        recorder = _ImdRecordingExtender()
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _plan("global", _COL_UNKNOWN, ImdMatchGateReader, recorder)
+
+        assert type(excinfo.value) is FeatureResolutionError
+        assert "No feature groups found" in str(excinfo.value)
+        assert excinfo.value.refusals == ()
+
+    def test_a_partial_refusal_still_resolves_the_feature(self) -> None:
+        """A gate refusing only some readers leaves the feature resolvable and raises nothing (issue #2028)."""
+        extender = _ImdEveryReaderRefusingExtender(target=ImdMatchGateReader)
+
+        session = _plan("global", _COL_B, ImdMatchGateReader, extender)
+        result = session.run(parallelization_modes={ParallelizationMode.SYNC})
+
+        assert result[0].column_names == [_COL_B]
+        assert len(extender.raised) == 1
+        assert isinstance(extender.raised[0], AccessRefusedByGate)

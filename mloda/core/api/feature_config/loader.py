@@ -211,12 +211,43 @@ def load_run_definition(config_str: str, format: str = "json") -> tuple[list[Fea
     return features, links
 
 
+def _run_definition_item(feature: Feature | str) -> Any:
+    """One run definition item: a bare string for a feature name, an object otherwise."""
+    if isinstance(feature, str):
+        return feature
+
+    item: dict[str, Any] = {"name": str(feature.name)}
+    options = feature.options
+    in_features_key = str(DefaultOptionKeys.in_features)
+    in_features = next((value for key, value in options.context.items() if str(key) == in_features_key), None)
+    context = {str(key): value for key, value in options.context.items() if str(key) != in_features_key}
+    if in_features is not None:
+        # The loader keeps the sources as a tuple in context; the file format writes an array.
+        item["in_features"] = list(in_features) if isinstance(in_features, (list, tuple)) else in_features
+    if context:
+        item["context_options"] = context
+    if options.group:
+        item["group_options"] = {str(key): value for key, value in options.group.items()}
+    if options.propagate_context_keys:
+        item["propagate_context_keys"] = sorted(options.propagate_context_keys)
+    if options.cascade_context_keys:
+        item["cascade_context_keys"] = sorted(options.cascade_context_keys)
+    scope = feature.feature_group_scope
+    if scope is not None:
+        # A class object cannot live in JSON; the class name is the config form the loader accepts.
+        item["feature_group"] = scope if isinstance(scope, str) else scope.__name__
+    return item
+
+
 def dump_run_definition(features: list[Feature | str], links: list[Any] | None = None) -> str:
     """Dump features and links to a run definition JSON string.
 
     Feature names are written as bare strings; features with options are
-    written as objects with ``name`` and ``context_options``. Links are
-    expected to already be JSON-safe dicts.
+    written as objects carrying ``name`` plus the config fields the loader
+    accepts (``in_features``, ``group_options``, ``context_options``,
+    ``propagate_context_keys``, ``cascade_context_keys``, ``feature_group``),
+    so a load of the dump rebuilds the same feature. Links are expected to
+    already be JSON-safe dicts.
 
     Args:
         features: Feature objects and/or feature name strings
@@ -224,18 +255,16 @@ def dump_run_definition(features: list[Feature | str], links: list[Any] | None =
 
     Returns:
         JSON string in the run definition format
-    """
-    items: list[Any] = []
-    for feature in features:
-        if isinstance(feature, str):
-            items.append(feature)
-            continue
-        item: dict[str, Any] = {"name": feature.name}
-        context = dict(feature.options.context) if feature.options.context else {}
-        if context:
-            item["context_options"] = {str(k): v for k, v in context.items()}
-        if feature.feature_group is not None:
-            item["feature_group"] = feature.feature_group
-        items.append(item)
 
-    return json.dumps({"format": 1, "features": items, "links": links or []}, indent=2)
+    Raises:
+        ValueError: If an option value cannot be represented in JSON.
+    """
+    items = [_run_definition_item(feature) for feature in features]
+    try:
+        return json.dumps({"format": 1, "features": items, "links": links or []}, indent=2)
+    except TypeError as error:
+        # Loud, not silent: a skipped option would dump a run that loads back different.
+        raise ValueError(
+            f"Run definition is not JSON-serialisable: {error}. "
+            "Options must be JSON-safe values; tuples are written as arrays, class objects cannot be written."
+        ) from error

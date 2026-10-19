@@ -152,7 +152,7 @@ def identify_naming_convention(
 ) -> set[str] | list[str]: ...
 ```
 
-It collects every column that equals a requested feature name or starts with `feature_name~`, and raises a `ValueError` if no column matches. By default it returns a set; with `ordering="alphabetical"` it returns a sorted list, and with `ordering="request_order"` it returns a list ordered by `request_feature_order` (falling back to `selected_feature_names`). Any other `ordering` value raises a `ValueError`.
+It collects every column that equals a requested feature name or starts with `feature_name~`, and raises a `ValueError` if no column matches. By default it returns a list sorted by name; with `ordering="alphabetical"` it returns a sorted list, and with `ordering="request_order"` it returns a list ordered by `request_feature_order` (falling back to `selected_feature_names`). Any other `ordering` value raises a `ValueError`.
 
 ## Best Practices
 

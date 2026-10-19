@@ -987,9 +987,7 @@ class TestFeatureGroupInfoSuffixes:
         assert info.suffixes == ()
 
     def test_file_group_reports_its_declared_suffixes(self) -> None:
-        from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-
-        assert self._suffixes("CsvFG") == tuple(sorted(set(CsvFG.suffixes())))
+        assert self._suffixes("CsvFG") == (".CSV", ".csv")
 
     def test_json_default_owner_is_json_fg_not_json_document_fg(self) -> None:
         from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG

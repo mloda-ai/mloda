@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -13,6 +15,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import (
 )
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -20,6 +23,7 @@ WRITER_FEATURE = "probe_written_writer_feat_1001"
 DECLINER_FEATURE = "probe_written_decliner_feat_1001"
 RAISER_FEATURE = "probe_written_raiser_feat_1001"
 READER_FEATURE = "probe_written_reader_feat_1001"
+ABORTER_FEATURE = "probe_written_aborter_feat_1001"
 ACCESS = "probe_written_access_1001"
 
 
@@ -94,6 +98,26 @@ class ProbeWrittenRaiserFG1001(ProbeWrittenWriterFG1001):
         raise RuntimeError("contained defect after the write")
 
 
+class ProbeWrittenAborterFG1001(ProbeWrittenWriterFG1001):
+    """Writes the pair, then raises a marked abort."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {ABORTER_FEATURE}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if str(feature_name) not in cls.feature_names_supported():
+            return False
+        options.add_to_group(RESERVED_READER_OPTION_KEY, (cls, ACCESS))
+        raise escalate_match_abort(RuntimeError("marked abort after the write"))
+
+
 class ProbeWrittenReader1001(BaseInputData):
     """Matches only its own marker access, so process-wide discovery cannot collide."""
 
@@ -166,6 +190,15 @@ def test_contained_abort_leaves_no_key_and_no_written_pair() -> None:
     assert outcome.matched is False
     assert outcome.matcher_error is not None
     assert outcome.written is None
+    assert RESERVED_READER_OPTION_KEY not in options
+
+
+def test_marked_abort_propagates_and_leaves_no_key_on_the_options() -> None:
+    options = Options()
+
+    with pytest.raises(RuntimeError, match="marked abort after the write"):
+        probe_match_criteria(ProbeWrittenAborterFG1001, ABORTER_FEATURE, options)
+
     assert RESERVED_READER_OPTION_KEY not in options
 
 

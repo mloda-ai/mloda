@@ -44,7 +44,7 @@ Choosing the compute framework per run is a **feature**, allowing you to compare
 -   **ML Lifecycle**: Using the same KPIs (feature groups) across training, real-time inference, and model evaluation.
 
 #### 4. Design options
-There are several ways to resolve this ambiguity by explicitly defining the compute framework:
+There are several ways to choose the compute framework explicitly:
 
 -   **Using specific feature configuration** to define compute frameworks for individual features.
 -   **Within the feature group definition**, by enforcing a specific compute framework rule.

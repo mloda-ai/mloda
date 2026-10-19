@@ -145,6 +145,9 @@ jobs:
       - name: Build the package
         run: uv build --out-dir dist --wheel
 
+      - name: Check the package metadata
+        run: twine check dist/*
+
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__

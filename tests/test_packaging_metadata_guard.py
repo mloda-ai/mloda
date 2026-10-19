@@ -6,31 +6,20 @@ or renames one skips CI, merges green, and breaks the sdist/wheel build for ever
 always-on workflow (no paths filters) must assert those files still exist.
 """
 
-import sys
 from pathlib import Path
 from typing import Any
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 import yaml
 
 from tests.test_ci_paths_ignore import PROJECT_ROOT, TRIGGERS, _matches, _trigger_config
+from tests.test_project_structure import _load_project
 
 
 WORKFLOWS = PROJECT_ROOT / ".github" / "workflows"
-PYPROJECT = PROJECT_ROOT / "pyproject.toml"
-
-
-def _project_table() -> dict[str, Any]:
-    project: dict[str, Any] = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
-    return project
 
 
 def _packaging_metadata_files() -> set[str]:
-    project = _project_table()
+    project = _load_project()
     files: set[str] = set()
     for key in ("readme", "license"):
         value = project.get(key)
@@ -71,7 +60,7 @@ def test_pyproject_metadata_files_are_discovered() -> None:
     assert metadata_files, "pyproject packaging metadata parse found no files: this guard has gone stale"
     for target in sorted(metadata_files):
         assert (PROJECT_ROOT / target).is_file(), f"pyproject packaging metadata points at missing file {target!r}"
-    assert "readme" in _project_table(), (
+    assert "readme" in _load_project(), (
         "pyproject no longer declares a `readme` key: the parse target of this guard has disappeared"
     )
 
@@ -84,12 +73,12 @@ def test_metadata_files_in_paths_ignore_are_guarded_by_an_always_on_workflow() -
             for target in sorted(metadata_files):
                 if not _matches(str(pattern), target):
                     continue
-                assert any(target in body for body in guards.values()), (
+                assert any(f"test -f {target}" in body for body in guards.values()), (
                     f"{target!r} is referenced by pyproject packaging metadata but CI trigger '{event}' "
                     f"paths-ignore pattern {pattern!r} skips the gate when it changes. Deleting or renaming "
                     f"it would merge green and break the sdist/wheel build. Add an always-on workflow in "
-                    f".github/workflows/ (push + pull_request, no paths/paths-ignore filters) that asserts "
-                    f"{target!r} exists. Always-on workflows found: {sorted(p.name for p in guards)}"
+                    f".github/workflows/ (push + pull_request, no paths/paths-ignore filters) that runs "
+                    f"`test -f {target}`. Always-on workflows found: {sorted(p.name for p in guards)}"
                 )
 
 

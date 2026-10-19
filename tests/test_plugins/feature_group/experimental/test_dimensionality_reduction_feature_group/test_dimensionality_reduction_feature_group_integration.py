@@ -261,6 +261,17 @@ class TestDimensionalityReductionOutputParts:
 
         assert parts == ("dim1", "dim2", "dim3")
 
+    def test_config_non_integer_dimension_declares_nothing(self) -> None:
+        options = Options(
+            context={
+                DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
+                DimensionalityReductionFeatureGroup.DIMENSION: "abc",
+                DefaultOptionKeys.in_features: self.SOURCE,
+            }
+        )
+
+        assert DimensionalityReductionFeatureGroup.output_parts("my_reduction", options) is None
+
     def test_part_request_returns_only_that_column(self) -> None:
         name = f"{self.SOURCE}__pca_2d"
         full = self._run(name)[0]

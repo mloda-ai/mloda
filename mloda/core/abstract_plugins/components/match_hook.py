@@ -80,18 +80,24 @@ def call_match_hook(
     """
     try:
         split = feature_group.split_output_part(str(feature_name)) if resolve_parts else None
-        # Base name first, on a fork adopted only if the part matches.
-        attempts = ((split[0], options._fork()), (feature_name, options)) if split else ((feature_name, options),)
-        for name, scoped in attempts:
+        # Full name first on the real options; the base name on a fork only after a full-name non-match.
+        name: FeatureName | str = feature_name
+        scoped = options
+        full = MatchHookOutcome(False, None, None)
+        while True:
             returned = feature_group.match_feature_group_criteria(name, scoped, data_access_collection)
             if scoped is options:
                 # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
-                return MatchHookOutcome(bool(returned), returned, None)
+                full = MatchHookOutcome(bool(returned), returned, None)
+                if full.matched or split is None or feature_group.output_parts(split[0], options) is None:
+                    return full
+                name, scoped = split[0], options._fork()
+                continue
             if returned and split:
                 decided = _declared_part_verdict(feature_group, split, scoped, options)
                 if decided is not None:
                     return MatchHookOutcome(decided[0], decided[0], None, decided[1])
-        return MatchHookOutcome(False, None, None)
+            return full
     except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison the whole run)
         if is_match_abort(exc):
             raise

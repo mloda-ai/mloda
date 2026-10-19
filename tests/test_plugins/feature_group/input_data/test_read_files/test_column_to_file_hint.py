@@ -170,3 +170,16 @@ class TestPointerAgainstPinOnADocumentGroup:
         group = load_document_group("text_fg", "TextFG")
 
         resolve_or_raise(self._feature(pinned), {group: {PythonDictFramework}}, None, self._dac(pinned))
+
+
+class TestPointedCsvWithTildeColumn:
+    def test_pointed_csv_returns_a_literal_tilde_column_whole(self, tmp_path: Path) -> None:
+        path = _csv(tmp_path, "tilde", {"temp~raw": [1, 2], "other": [3, 4]})
+
+        result = mloda.run_all(
+            [Feature("temp~raw", Options({"CsvFG": path}))],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({_csv_group()}),
+        )
+
+        assert result[0].to_pydict() == {"temp~raw": [1, 2]}

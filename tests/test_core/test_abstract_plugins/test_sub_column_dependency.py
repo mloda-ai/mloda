@@ -1136,6 +1136,92 @@ class TestFrameForDeclaredPart:
 
         assert "measure~value" in results.frame_for("measure~value").columns
 
+    def test_plan_step_requests_the_part_and_injects_nothing_for_the_base(self) -> None:
+        steps = mloda.explain(
+            ["measure~value"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_collector(MeasureProducer),
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        [step] = [s for s in steps if s.feature_group is MeasureProducer]
+        assert "measure~value" in step.requested_feature_names
+        assert "measure" not in step.injected_feature_names
+
+
+class CountingVecProducer(FeatureGroup):
+    """Undeclared group supporting `cvec`; counts matcher calls per name."""
+
+    match_names: list[str] = []
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"cvec"}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls, feature_name: Any, options: Options, data_access_collection: Any = None
+    ) -> bool:
+        cls.match_names.append(str(feature_name))
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for i in range(3):
+            data[f"cvec~{i}"] = data["source_data"].values * (i + 1)
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class LiteralTildeProducer(FeatureGroup):
+    """Declares parts (value, unit) and also supports the literal names `lit` and `lit~extra`."""
+
+    OUTPUT_PARTS = ("value", "unit")
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"lit", "lit~extra"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({"lit~extra": [1, 2], "lit~value": [3, 4], "lit~unit": ["m", "m"]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+@pytest.fixture(autouse=True)
+def _reset_counting_state() -> None:
+    CountingVecProducer.match_names = []
+
+
+class TestFullNameAskedFirst:
+    """Each candidate is asked about the full name first; the base only when a declared part applies."""
+
+    def test_undeclared_group_sees_only_the_full_name(self) -> None:
+        results = _run(["cvec~1"], CountingVecProducer)
+
+        assert _columns(results) == {"cvec~1"}
+        assert "cvec~1" in CountingVecProducer.match_names
+        assert "cvec" not in CountingVecProducer.match_names
+
+    def test_literal_tilde_name_wins_over_part_reading(self) -> None:
+        results = _run(["lit~extra"], LiteralTildeProducer)
+
+        assert _columns(results) == {"lit~extra"}
+
+    def test_declared_part_still_works_beside_literal_tilde_names(self) -> None:
+        results = _run(["lit~value"], LiteralTildeProducer)
+
+        assert _columns(results) == {"lit~value"}
+
 
 class TestArtifactKeyedByBaseName:
     """An artifact keyed by a part column name is rejected, pointing to the base name."""

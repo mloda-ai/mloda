@@ -30,12 +30,19 @@ abstract; ``input_features`` itself is defined on the bases under test.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from mloda.provider import DefaultOptionKeys, FeatureChainParserMixin
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
+from mloda.user import PluginCollector
+from mloda.user import mloda
+
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
@@ -165,6 +172,40 @@ class TestSklearnEncodingInputFeatureDefaults:
         by_name = _by_name(group.input_features(options, FeatureName("placeholder")))
 
         assert by_name["category"].forward_group == frozenset({"keep_me"})
+
+
+class _CategoryCreator(ATestDataCreator):
+    """Supplies the `category` source column."""
+
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {"category": ["a", "b", "c", "a", "b"]}
+
+
+class TestSklearnEncodingPartRequestEndToEnd:
+    """Converted from the string-parsed `~1` unit test: a part request reaches input_features by its base name."""
+
+    def test_string_parsed_multi_column_child_has_forward_group_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        pytest.importorskip("sklearn")
+        seen: list[dict[str, Feature]] = []
+        original = PandasEncodingFeatureGroup.input_features
+
+        def spy(self: Any, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            result = original(self, options, feature_name)
+            seen.append(_by_name(result))
+            return result
+
+        monkeypatch.setattr(PandasEncodingFeatureGroup, "input_features", spy)
+        collector = PluginCollector.enabled_feature_groups({_CategoryCreator, PandasEncodingFeatureGroup})
+
+        mloda(["category__onehot_encoded~1"], [PandasDataFrame], plugin_collector=collector).run()
+
+        assert seen
+        for by_name in seen:
+            assert set(by_name) == {"category"}
+            assert by_name["category"].forward_group is None
 
 
 class TestSklearnPipelineInputFeatureDefaults:

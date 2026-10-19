@@ -213,9 +213,12 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
             dimension = int(cast(dict[str, str], parsed.named_captures)[cls.DIMENSION])
         else:
             raw = options.get(cls.DIMENSION)
-            if raw is None:
+            if isinstance(raw, int) and not isinstance(raw, bool):
+                dimension = raw
+            elif isinstance(raw, str) and raw.isdigit():
+                dimension = int(raw)
+            else:
                 return None
-            dimension = int(raw)
         return tuple(f"dim{i + 1}" for i in range(dimension))
 
     @classmethod

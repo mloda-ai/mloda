@@ -344,6 +344,28 @@ class TestEncodingOutputParts:
             self._run("category__label_encoded~0")
         assert "category__label_encoded~0" in str(excinfo.value)
 
+    def test_config_based_tilde_user_name_stays_whole(self) -> None:
+        pytest.importorskip("sklearn")
+        PluginLoader().all()
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+        )
+        feature = Feature(
+            "enc~v2",
+            Options(
+                context={
+                    EncodingFeatureGroup.ENCODER_TYPE: "onehot",
+                    DefaultOptionKeys.in_features: "category",
+                }
+            ),
+        )
+
+        results = mloda([feature], [PandasDataFrame], plugin_collector=plugin_collector).run()
+
+        columns = set(results[0].columns)
+        assert {"enc~v2~0", "enc~v2~1"} <= columns
+        assert all(c.startswith("enc~v2~") for c in columns)
+
     def test_trailing_newline_is_not_a_part(self) -> None:
         """Converted from the writer's newline test: the name fails resolution instead of selecting a column."""
         with pytest.raises(ValueError) as excinfo:

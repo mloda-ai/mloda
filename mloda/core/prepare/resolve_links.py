@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict, defaultdict
 from typing import Any
 from uuid import UUID
@@ -8,6 +9,8 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.prepare.stable_text import stable_text
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
+
+logger = logging.getLogger(__name__)
 
 LinkFrameworkTrekker = tuple[Link, type[ComputeFramework], type[ComputeFramework]]
 
@@ -281,6 +284,43 @@ class ResolveLinks:
 
     def get_link_trekker(self) -> LinkTrekker:
         return self.link_trekker
+
+    def _side_nodes(self, feature_group: type, discriminator: dict[str, Any] | None) -> set[UUID]:
+        return {
+            uuid
+            for uuid, node in self.graph.get_nodes().items()
+            if issubclass(node.feature_group_class, feature_group)
+            and (discriminator is None or Link.matches_discriminator(discriminator, node.feature.options))
+        }
+
+    def warn_on_unjoined_links(self) -> None:
+        """Warn once per declared link whose two sides are both planned but never joined."""
+        if not self.links:
+            return
+
+        joined = {(left, right) for _, left, right, _ in self.occurrences}
+        messages: set[str] = set()
+        for link in self.links:
+            is_self_link = link.left_feature_group is link.right_feature_group
+            if is_self_link and link.left_discriminator is None and link.right_discriminator is None:
+                continue
+
+            lefts = self._side_nodes(link.left_feature_group, link.left_discriminator)
+            rights = self._side_nodes(link.right_feature_group, link.right_discriminator)
+            pairs = {(left, right) for left in lefts for right in rights if left != right}
+            if not pairs or any((left, right) in joined or (right, left) in joined for left, right in pairs):
+                continue
+
+            left_name = link.left_feature_group.__name__
+            right_name = link.right_feature_group.__name__
+            messages.add(
+                f"Link between {left_name} and {right_name} planned no join: no requested feature reads both "
+                f"sides. A join needs a feature group whose input_features() read both {left_name} and "
+                f"{right_name}; otherwise their features come back as separate frames."
+            )
+
+        for message in sorted(messages):
+            logger.warning(message)
 
     def go_through_each_child_and_its_parents_and_look_for_links(self) -> None:
         if not self.links:

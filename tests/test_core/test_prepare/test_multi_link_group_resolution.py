@@ -2788,6 +2788,7 @@ def test_a_feature_reading_a_join_consumer_and_a_root_anchors_its_frame_on_the_j
         plugin_collector=PluginCollector.enabled_feature_groups(set(fixture.values())),
     )
 
+    assert session.engine is not None
     planner = session.engine.execution_planner
     steps = [s for s in planner if isinstance(s, FeatureGroupStep) and s.feature_group is fixture["below_jd"]]
     assert len(steps) == 1

@@ -348,12 +348,12 @@ from mloda.user import mloda
 set_of_links = {link}
 
 mloda.run_all(
-    features=["Feature_of_FeatureGroupA", "Feature_of_FeatureGroupB"],
+    features=["Consumer_of_FeatureGroupA_and_FeatureGroupB"],
     links=set_of_links
     )
 ```
 
-mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed.
+mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed. A join happens only for a feature group whose `input_features()` read both linked groups. Requested features of two linked groups come back as separate frames unless a feature reads both; planning logs a warning then.
 
 A feature between a join side and the feature consuming the join runs on that side's compute framework. The one exception is a direct input of the consumer that is pinned to another framework: the join then reads that side through the input's hop. Still rejected at plan time are an off-framework feature below another input of the consumer, one side reaching the consumer through two different frameworks, inputs off the sides' framework when the two sides differ in framework, and any such input for APPEND or UNION links. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join, also when the variants differ on one side only, and each consumer waits only on its own join. Consumers of one RIGHT link never split across its two sides; when one consumer cannot run on the right side's framework, siblings on the same side frameworks join on the left with it.
 

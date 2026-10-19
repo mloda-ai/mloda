@@ -148,6 +148,42 @@ class AppendColumnsFrameworkTestMixin:
 
         assert [(r[key], r["appended"]) for r in records_from_frame(out)] == list(zip(keys, values))
 
+    def single_column(self, values: list[Any]) -> Any | None:
+        """Return the framework's single-column type holding ``values``; None when it has no such branch."""
+        return None
+
+    def _single_column_keys(self, joined_data: Any) -> tuple[str, list[Any], list[str]]:
+        rows = records_from_frame(joined_data)
+        key = next(iter(rows[0]))
+        keys = [row[key] for row in rows]
+        return key, keys, [f"v{k}" for k in keys]
+
+    def test_single_column_on_unpinned_joined_frame(self, framework_instance: Any, joined_data: Any) -> None:
+        key, keys, values = self._single_column_keys(joined_data)
+        column = self.single_column(values)
+        if column is None:
+            return
+        framework_instance.data = joined_data
+
+        if self.needs_pinned_frame:
+            with pytest.raises(ValueError, match="appended"):
+                framework_instance.transform(column, ["appended"])
+            return
+
+        out = framework_instance.transform(column, ["appended"])
+        assert [(r[key], r["appended"]) for r in records_from_frame(out)] == list(zip(keys, values))
+
+    def test_single_column_on_pinned_joined_frame(self, framework_instance: Any, joined_data: Any) -> None:
+        key, keys, values = self._single_column_keys(joined_data)
+        column = self.single_column(values)
+        if column is None:
+            return
+        framework_instance.data = framework_instance._pinned_frame = joined_data
+
+        out = framework_instance.transform(column, ["appended"])
+
+        assert [(r[key], r["appended"]) for r in records_from_frame(out)] == list(zip(keys, values))
+
     def test_set_data_to_other_frame_clears_pin(
         self, framework_instance: Any, appendable_data: Any, joined_data: Any
     ) -> None:

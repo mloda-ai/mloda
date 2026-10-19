@@ -124,7 +124,7 @@ class TestDuckDBFrameworkComputeFramework:
     def test_transform_add_column_preserves_existing(self, duckdb_framework: DuckDBFramework, connection: Any) -> None:
         duckdb_framework.set_framework_connection_object(connection)
         dict_data = {"col_a": [1, 2, 3], "col_b": [4, 5, 6]}
-        duckdb_framework.data = duckdb_framework.transform(dict_data, [])
+        duckdb_framework.data = duckdb_framework._pinned_frame = duckdb_framework.transform(dict_data, [])
         result = duckdb_framework.transform(data=[7, 8, 9], feature_names=["col_c"])
         assert set(result.columns) == {"col_a", "col_b", "col_c"}
         assert len(result) == 3
@@ -356,6 +356,9 @@ class TestDuckDBEmptyResult(
         return DuckdbRelation.from_arrow(connection, pa.table({"a": [1]}))
 
     needs_pinned_frame = True
+
+    def single_column(self, values: list[Any]) -> Any | None:
+        return values
 
     @pytest.fixture
     def joined_data(self, connection: Any) -> Any:

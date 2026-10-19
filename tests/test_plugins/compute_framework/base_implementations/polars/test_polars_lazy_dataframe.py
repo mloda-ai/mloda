@@ -66,7 +66,7 @@ class TestPolarsLazyDataFrameComputeFramework:
     def test_transform_arrays(self) -> None:
         data = PolarsLazyDataFrame.pl_series()([1, 2, 3])
         _lazy_df = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        _lazy_df.set_data(PolarsLazyDataFrame.pl_lazy_frame()({"existing_column": [4, 5, 6]}))
+        _lazy_df.data = _lazy_df._pinned_frame = PolarsLazyDataFrame.pl_lazy_frame()({"existing_column": [4, 5, 6]})
 
         result = _lazy_df.transform(data=data, feature_names=["new_column"])
         assert isinstance(result, pl.LazyFrame)
@@ -252,6 +252,9 @@ class TestPolarsLazyEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFram
         return pl.DataFrame({"a": [1]}).lazy()
 
     needs_pinned_frame = True
+
+    def single_column(self, values: list[Any]) -> Any | None:
+        return pl.Series(values)
 
     @pytest.fixture
     def joined_data(self) -> Any:

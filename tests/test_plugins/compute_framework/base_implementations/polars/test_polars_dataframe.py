@@ -164,6 +164,9 @@ class TestPolarsEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFramewor
     def empty_data(self) -> Any:
         return pl.DataFrame({"a": []})
 
+    def single_column(self, values: list[Any]) -> Any | None:
+        return pl.Series(values)
+
     @pytest.fixture
     def non_empty_data(self) -> Any:
         return pl.DataFrame({"a": [1]})

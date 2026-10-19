@@ -236,6 +236,7 @@ class DuckDBFramework(ComputeFramework):
         if hasattr(data, "__iter__") and not isinstance(data, (str, bytes)):
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
+                self._require_pinned_frame_for_column(feature_name)
                 return self.data.append_column(feature_name, list(data))
             raise ValueError(f"Only one feature can be added at a time: {feature_names}")
 

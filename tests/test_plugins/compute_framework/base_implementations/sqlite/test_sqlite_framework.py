@@ -341,6 +341,9 @@ class TestSqliteEmptyResult(
     def empty_data(self, connection: sqlite3.Connection) -> Any:
         return SqliteRelation.from_arrow(connection, pa.table({"a": pa.array([], pa.int64())}))
 
+    def single_column(self, values: list[Any]) -> Any | None:
+        return values
+
     @pytest.fixture
     def non_empty_data(self, connection: sqlite3.Connection) -> Any:
         return SqliteRelation.from_arrow(connection, pa.table({"a": [1]}))

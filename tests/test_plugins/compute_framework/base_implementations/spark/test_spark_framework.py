@@ -296,7 +296,7 @@ class TestSparkFrameworkComputeFramework:
                 {"__row_num": 300, "other": "c"},
             ]
         )
-        spark_framework.data = existing
+        spark_framework.data = spark_framework._pinned_frame = existing
 
         result = spark_framework.transform([10, 20, 30], ["new_feature"])
         rows = result.collect()
@@ -315,7 +315,7 @@ class TestSparkFrameworkComputeFramework:
     def test_add_column_case_variant_of_existing_raises(self, spark_session: Any) -> None:
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
-        spark_framework.data = spark_session.createDataFrame([{"Foo": 1}, {"Foo": 2}])
+        spark_framework.data = spark_framework._pinned_frame = spark_session.createDataFrame([{"Foo": 1}, {"Foo": 2}])
 
         with pytest.raises(ValueError, match="Foo"):
             spark_framework.transform([10, 20], ["foo"])
@@ -323,7 +323,9 @@ class TestSparkFrameworkComputeFramework:
     def test_add_column_case_variant_allowed_when_case_sensitive(self, spark_case_sensitive: Any) -> None:
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_case_sensitive)
-        spark_framework.data = spark_case_sensitive.createDataFrame([{"Foo": 1}, {"Foo": 2}])
+        spark_framework.data = spark_framework._pinned_frame = spark_case_sensitive.createDataFrame(
+            [{"Foo": 1}, {"Foo": 2}]
+        )
 
         result = spark_framework.transform([10, 20], ["foo"])
 
@@ -334,7 +336,9 @@ class TestSparkFrameworkComputeFramework:
     def test_add_column_named_like_row_number_helper_keeps_values(self, spark_session: Any, feature: str) -> None:
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         spark_framework.set_framework_connection_object(spark_session)
-        spark_framework.data = spark_session.createDataFrame([{"other": "a"}, {"other": "b"}, {"other": "c"}])
+        spark_framework.data = spark_framework._pinned_frame = spark_session.createDataFrame(
+            [{"other": "a"}, {"other": "b"}, {"other": "c"}]
+        )
 
         result = spark_framework.transform([10, 20, 30], [feature])
 
@@ -435,6 +439,9 @@ class TestSparkEmptyResult(
         return spark_session.createDataFrame([{"a": 1}])
 
     needs_pinned_frame = True
+
+    def single_column(self, values: list[Any]) -> Any | None:
+        return values
 
     @pytest.fixture
     def joined_data(self, spark_session: Any) -> Any:

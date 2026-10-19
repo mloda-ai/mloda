@@ -219,6 +219,9 @@ class TestPandasEmptyResult(AppendColumnsFrameworkTestMixin, EmptyResultFramewor
     def empty_data(self) -> Any:
         return pd.DataFrame({"a": pd.Series([], dtype="int64")})
 
+    def single_column(self, values: list[Any]) -> Any | None:
+        return pd.Series(values)
+
     @pytest.fixture
     def non_empty_data(self) -> Any:
         return pd.DataFrame({"a": [1]})

@@ -132,6 +132,7 @@ class PolarsLazyDataFrame(PolarsDataFrame):
             """Added data: Add column to lazy frame"""
             if len(feature_names) == 1:
                 feature_name = next(iter(feature_names))
+                self._require_pinned_frame_for_column(feature_name)
 
                 # Check if feature already exists by examining schema
                 existing_columns = set(self.data.collect_schema().names())

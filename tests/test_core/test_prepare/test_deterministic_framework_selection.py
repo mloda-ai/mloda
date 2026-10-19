@@ -926,14 +926,21 @@ def test_stream_all_honors_output_framework() -> None:
     assert all(isinstance(frame, pd.DataFrame) for frame in frames)
 
 
+_TFS_DAC = pytest.mark.parametrize("with_dac", [False, True], ids=["no_dac", "dac_without_connection"])
+
+
+@_TFS_DAC
 @pytest.mark.parametrize("entry", ["prepare", "run_all"])
-def test_a_required_connection_output_framework_without_a_connection_raises_at_planning(entry: str) -> None:
+def test_a_required_connection_output_framework_without_a_connection_raises_at_planning(
+    entry: str, with_dac: bool, tmp_path: Path
+) -> None:
     sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
 
     with pytest.raises(EnvironmentPreconditionError, match="SqliteFramework") as raised:
         getattr(mloda, entry)(
             ["rc_root"],
             compute_frameworks=_RC_FRAMEWORKS,
+            data_access_collection=DataAccessCollection(folders={str(tmp_path)}) if with_dac else None,
             plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
             output_framework=sqlite_fw,
         )
@@ -942,12 +949,16 @@ def test_a_required_connection_output_framework_without_a_connection_raises_at_p
     assert "DataAccessCollection" in str(raised.value)
 
 
-def test_diagnose_reports_a_required_connection_output_framework_without_a_connection() -> None:
+@_TFS_DAC
+def test_diagnose_reports_a_required_connection_output_framework_without_a_connection(
+    with_dac: bool, tmp_path: Path
+) -> None:
     sqlite_fw = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
 
     diagnosis = mloda.diagnose(
         ["rc_root"],
         compute_frameworks=_RC_FRAMEWORKS,
+        data_access_collection=DataAccessCollection(folders={str(tmp_path)}) if with_dac else None,
         plugin_collector=PluginCollector.enabled_feature_groups(_RC_GROUPS),
         output_framework=sqlite_fw,
     )
@@ -996,7 +1007,6 @@ _TFS_DB_CASES = [
     pytest.param("SqliteFramework", TfsSqliteConsumer, "tfsdb_sqlite_out", id="sqlite"),
     pytest.param("DuckDBFramework", TfsDuckDBConsumer, "tfsdb_duckdb_out", id="duckdb"),
 ]
-_TFS_DAC = pytest.mark.parametrize("with_dac", [False, True], ids=["no_dac", "dac_without_connection"])
 
 
 def _tfs_request(fw_name: str, consumer: type[FeatureGroup], with_dac: bool, tmp_path: Path) -> dict[str, Any]:

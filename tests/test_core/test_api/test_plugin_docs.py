@@ -997,9 +997,6 @@ class TestFeatureGroupInfoSuffixes:
         assert self._suffixes("JsonFG") == tuple(sorted(set(JsonFG.suffixes())))
         assert self._suffixes("JsonDocumentFG") == ()
 
-    def test_json_and_json_document_suffixes_do_not_overlap(self) -> None:
-        assert not set(self._suffixes("JsonFG")) & set(self._suffixes("JsonDocumentFG"))
-
     def test_document_group_reports_its_suffixes(self) -> None:
         from mloda_plugins.feature_group.input_data.document_formats.text_fg import TextFG
 

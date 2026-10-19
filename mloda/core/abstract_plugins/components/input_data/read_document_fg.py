@@ -21,10 +21,7 @@ FILE_TYPE_SUFFIX = "~file_type"
 
 
 class ReadDocumentFG(_FileSourceFG):
-    """Document format group; run tests/mixins/reader_feature_groups/document_format_feature_group_test_mixin.py.
-
-    The mixin needs the rejection_window fixture from mloda's tests/conftest.py.
-    """
+    """Document format group; test it with document_format_feature_group_test_mixin (needs the rejection_window fixture)."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (
         ClaimRoute("file", NamePolicy.DECLARED, True),

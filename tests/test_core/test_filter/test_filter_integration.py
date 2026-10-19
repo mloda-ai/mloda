@@ -344,7 +344,7 @@ class TestGlobalFilterOnColumnInSeveralFiles:
     @staticmethod
     def _run(tmp_path: Path, feature: str) -> list[Any]:
         global_filter = GlobalFilter()
-        global_filter.add_filter("id", "equal", {"value": 1})
+        global_filter.add_filter("sevfilt_id", "equal", {"value": 1})
         return list(
             mloda.run_all(
                 [Feature(feature)],
@@ -355,35 +355,37 @@ class TestGlobalFilterOnColumnInSeveralFiles:
         )
 
     def test_filter_resolves_against_the_host_source(self, tmp_path: Path) -> None:
-        self._write(tmp_path, "gf_sev_a.csv", "id,amount\n1,10\n2,20\n3,30\n")
-        self._write(tmp_path, "gf_sev_b.csv", "id,other\n1,5\n2,6\n")
+        self._write(tmp_path, "gf_sev_a.csv", "sevfilt_id,sevfilt_amount\n1,10\n2,20\n3,30\n")
+        self._write(tmp_path, "gf_sev_b.csv", "sevfilt_id,sevfilt_other\n1,5\n2,6\n")
 
-        results = self._run(tmp_path, "amount")
+        results = self._run(tmp_path, "sevfilt_amount")
 
-        assert results[0].to_pydict() == {"amount": [10]}
+        assert results[0].to_pydict() == {"sevfilt_amount": [10]}
 
     def test_filter_column_only_in_other_sources_keeps_the_warning(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        self._write(tmp_path, "gf_unres_a.csv", "id,other_a\n1,5\n2,6\n")
-        self._write(tmp_path, "gf_unres_b.csv", "id,other_b\n1,7\n2,8\n")
-        self._write(tmp_path, "gf_unres_c.csv", "amount\n10\n20\n")
+        self._write(tmp_path, "gf_unres_a.csv", "sevfilt_id,sevfilt_other_a\n1,5\n2,6\n")
+        self._write(tmp_path, "gf_unres_b.csv", "sevfilt_id,sevfilt_other_b\n1,7\n2,8\n")
+        self._write(tmp_path, "gf_unres_c.csv", "sevfilt_amount\n10\n20\n")
 
         with caplog.at_level(logging.WARNING):
-            results = self._run(tmp_path, "amount")
+            results = self._run(tmp_path, "sevfilt_amount")
 
-        assert results[0].to_pydict() == {"amount": [10, 20]}
+        assert results[0].to_pydict() == {"sevfilt_amount": [10, 20]}
         assert any(r.levelno == logging.WARNING for r in caplog.records)
 
     def test_matching_group_filters_while_another_aborts_on_ambiguity(self, tmp_path: Path) -> None:
-        self._write(tmp_path, "gf_mix_a.csv", "id,amount\n1,10\n2,20\n")
-        self._write(tmp_path, "gf_mix_b.csv", "id,other\n1,5\n2,6\n")
-        (tmp_path / "gf_mix_c.json").write_text('{"id": 1, "val": 7}\n{"id": 2, "val": 8}\n')
+        self._write(tmp_path, "gf_mix_a.csv", "sevfilt_id,sevfilt_amount\n1,10\n2,20\n")
+        self._write(tmp_path, "gf_mix_b.csv", "sevfilt_id,sevfilt_other\n1,5\n2,6\n")
+        (tmp_path / "gf_mix_c.json").write_text(
+            '{"sevfilt_id": 1, "sevfilt_val": 7}\n{"sevfilt_id": 2, "sevfilt_val": 8}\n'
+        )
         global_filter = GlobalFilter()
-        global_filter.add_filter("id", "equal", {"value": 1})
+        global_filter.add_filter("sevfilt_id", "equal", {"value": 1})
 
         results = mloda.run_all(
-            [Feature("amount"), Feature("val")],
+            [Feature("sevfilt_amount"), Feature("sevfilt_val")],
             compute_frameworks=["PyArrowTable"],
             data_access_collection=DataAccessCollection(folders={"gf_folder": str(tmp_path)}),
             global_filter=global_filter,
@@ -392,22 +394,22 @@ class TestGlobalFilterOnColumnInSeveralFiles:
         merged: dict[str, Any] = {}
         for result in results:
             merged.update(result.to_pydict())
-        assert merged == {"amount": [10], "val": [7]}
+        assert merged == {"sevfilt_amount": [10], "sevfilt_val": [7]}
 
     def test_single_file_filter_still_filters(self, tmp_path: Path) -> None:
-        self._write(tmp_path, "gf_single.csv", "id,amount\n1,10\n2,20\n3,30\n")
+        self._write(tmp_path, "gf_single.csv", "sevfilt_id,sevfilt_amount\n1,10\n2,20\n3,30\n")
 
-        results = self._run(tmp_path, "amount")
+        results = self._run(tmp_path, "sevfilt_amount")
 
-        assert results[0].to_pydict() == {"amount": [10]}
+        assert results[0].to_pydict() == {"sevfilt_amount": [10]}
 
     def test_filter_matching_no_group_for_another_reason_warns_and_stays_unfiltered(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
-        self._write(tmp_path, "gf_nomatch.csv", "gf_nm_key,amount\n1,10\n2,20\n")
+        self._write(tmp_path, "gf_nomatch.csv", "sevfilt_nm_key,sevfilt_amount\n1,10\n2,20\n")
 
         with caplog.at_level(logging.WARNING):
-            results = self._run(tmp_path, "amount")
+            results = self._run(tmp_path, "sevfilt_amount")
 
-        assert results[0].to_pydict() == {"amount": [10, 20]}
+        assert results[0].to_pydict() == {"sevfilt_amount": [10, 20]}
         assert any(r.levelno == logging.WARNING for r in caplog.records)

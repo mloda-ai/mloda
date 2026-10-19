@@ -53,7 +53,7 @@ This means, depending on your needs, you can run them all at once (**batch run**
 -   flight_server (optional): Specify a flight server for multiprocessing only.
 -   **column_ordering** (optional): Control the ordering of result columns.
     Accepts `"alphabetical"` (sort columns A-Z) or `"request_order"`
-    (preserve the order features were requested). Default: `None` (no guaranteed order).
+    (preserve the order features were requested). Default: `None` (sorted by name, the same in every process).
 
 ```python
 from mloda.user import mloda

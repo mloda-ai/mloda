@@ -209,38 +209,15 @@ class TestPandasEncodingFeatureGroup:
         assert "category__onehot_encoded~1" in updated_data.columns
         assert "category__onehot_encoded~2" in updated_data.columns
 
-    def test_add_result_to_data_specific_column_request(self) -> None:
-        """Test adding results when a specific column is requested via ~N suffix."""
+    def test_add_result_to_data_does_not_parse_a_part_suffix(self) -> None:
+        """The writer no longer selects a column from `~N`; core selects the part. See TestEncodingOutputParts."""
         data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
         result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
         updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded~1", result)
 
-        # Should only add the specific requested column
-        assert "category__onehot_encoded~1" in updated_data.columns
-        assert list(updated_data["category__onehot_encoded~1"]) == [0, 1, 0]
-        # Should NOT add other columns
-        assert "category__onehot_encoded~0" not in updated_data.columns
-        assert "category__onehot_encoded~2" not in updated_data.columns
-
-    def test_add_result_to_data_rejects_trailing_newline_in_column_request(self) -> None:
-        """A requested name with a trailing newline is not a ~N specific-column request."""
-        data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
-        result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-
-        updated_data = PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded~1\n", result)
-
-        assert "category__onehot_encoded~1\n" not in updated_data.columns
-
-    def test_add_result_to_data_column_index_out_of_range(self) -> None:
-        """Test that requesting a column index out of range raises ValueError."""
-        data = pd.DataFrame({"category": ["A", "B", "C"], "value": [1, 2, 3]})
-        result = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
-
-        import pytest
-
-        with pytest.raises(ValueError, match="out of range"):
-            PandasEncodingFeatureGroup._add_result_to_data(data, "category__onehot_encoded~5", result)
+        assert "category__onehot_encoded~1~0" in updated_data.columns
+        assert "category__onehot_encoded~1~2" in updated_data.columns
 
     @patch(
         "mloda_plugins.feature_group.experimental.sklearn.encoding.pandas.PandasEncodingFeatureGroup._import_sklearn_components"

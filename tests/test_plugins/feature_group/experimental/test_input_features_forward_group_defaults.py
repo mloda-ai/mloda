@@ -140,18 +140,10 @@ class TestSklearnEncodingInputFeatureDefaults:
     """EncodingFeatureGroup.input_features must leave its source child at the default None sentinel."""
 
     def test_string_parsed_child_has_forward_group_none(self) -> None:
+        """Core hands plugins the base name (a ~part request resolves through it), so the child stays at None."""
         group = PandasEncodingFeatureGroup()
 
         by_name = _by_name(group.input_features(Options(), FeatureName("category__onehot_encoded")))
-
-        assert set(by_name) == {"category"}
-        assert by_name["category"].forward_group is None
-
-    def test_string_parsed_multi_column_child_has_forward_group_none(self) -> None:
-        """The ~N multi-column pattern resolves to the base child, also left at None."""
-        group = PandasEncodingFeatureGroup()
-
-        by_name = _by_name(group.input_features(Options(), FeatureName("category__onehot_encoded~1")))
 
         assert set(by_name) == {"category"}
         assert by_name["category"].forward_group is None

@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, cast
 
-from mloda.provider import FeatureGroup
+from mloda.provider import ANY_OUTPUT_PART, FeatureGroup
 from mloda.provider import BaseArtifact
 from mloda.user import Feature
 from mloda.provider import FeatureChainParser, FeatureChainParserMixin, FeatureSet
@@ -24,10 +24,6 @@ from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeRe
 def _is_bool(value: Any) -> bool:
     """Accept only a real bool, so 1 or "true" is rejected rather than silently coerced."""
     return isinstance(value, bool)
-
-
-# Selector tail of PREFIX_PATTERN: excludes the reserved names lower/upper and `_`.
-_SELECTOR_TAIL = r"(?!(?:lower|upper)\Z)[^~_\n]+"
 
 
 class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
@@ -133,7 +129,9 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
     }
 
     # Define the prefix pattern for this feature group
-    PREFIX_PATTERN = rf".*__(?P<algorithm>[\w]+)_forecast_(?P<horizon>\d+)(?P<time_unit>[\w]+)(?:~{_SELECTOR_TAIL})?$"
+    PREFIX_PATTERN = r".*__(?P<algorithm>[\w]+)_forecast_(?P<horizon>\d+)(?P<time_unit>[\w]+)$"
+
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
@@ -304,19 +302,11 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
             suffixes: list[str | None] = [
                 None if column == in_features else column.removeprefix(expanded_prefix) for column in resolved_columns
             ]
-            selector = cls._extract_selector(feature.name)
-            if selector is not None:
-                if all(suffix is None for suffix in suffixes):
-                    raise ValueError(f"Source '{in_features}' is a single column and takes no selector '~{selector}'.")
-                if selector not in suffixes:
-                    available = sorted(str(s) for s in suffixes if s is not None)
-                    raise ValueError(
-                        f"Unknown selector '~{selector}' for source '{in_features}'. Available suffixes: {available}"
-                    )
-                resolved_columns = [f"{in_features}~{selector}"]
-                suffixes = [None]
+            wanted = cls._requested_suffixes(feature)
+            if wanted is not None:
+                resolved_columns, suffixes = cls._narrow_to_parts(feature, in_features, resolved_columns, suffixes)
             expanded = any(suffix is not None for suffix in suffixes)
-            column_artifacts = cls._column_artifacts(model_artifact, suffixes, expanded, selector)
+            column_artifacts = cls._column_artifacts(model_artifact, suffixes, expanded, wanted is not None)
 
             new_artifacts: dict[str, Any] = {}
             for column, suffix in zip(resolved_columns, suffixes):
@@ -361,29 +351,40 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
 
         return data
 
-    @classmethod
-    def _extract_selector(cls, feature_name: str) -> str | None:
-        """Return the trailing `~<selector>` of a string-based forecast name, else None."""
-        if not cls._has_valid_forecast_suffix(feature_name):
+    @staticmethod
+    def _requested_suffixes(feature: Feature) -> set[str | None] | None:
+        """Source suffixes named by the parts the feature was asked for (None: the literal source), or None if whole."""
+        if not feature.parts_only:
             return None
-        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
-        return cast(str, parsed.operation_part).partition("~")[2] or None
+        first_levels = {part.split("~")[0] for part in feature.requested_parts}
+        return {None if level in ("lower", "upper") else level for level in first_levels}
+
+    @classmethod
+    def _narrow_to_parts(
+        cls, feature: Feature, in_features: str, columns: list[str], suffixes: list[str | None]
+    ) -> tuple[list[str], list[str | None]]:
+        """Keep only the source columns the requested parts name, raising ValueError for a part naming none."""
+        wanted = cls._requested_suffixes(feature) or set()
+        known = set(suffixes)
+        for part in sorted(feature.requested_parts):
+            level = part.split("~")[0]
+            if (None if level in ("lower", "upper") else level) not in known:
+                available = sorted(str(s) for s in suffixes if s is not None)
+                raise ValueError(
+                    f"Part '{feature.name}~{part}' names no column of source '{in_features}'. "
+                    f"Available suffixes: {available}"
+                )
+        kept = [(c, s) for c, s in zip(columns, suffixes) if s in wanted]
+        return [c for c, _ in kept], [s for _, s in kept]
 
     @classmethod
     def _column_artifacts(
-        cls, model_artifact: Any | None, suffixes: list[str | None], expanded: bool, selector: str | None = None
+        cls, model_artifact: Any | None, suffixes: list[str | None], expanded: bool, partial: bool = False
     ) -> dict[str | None, Any] | None:
         """Split a loaded artifact per column suffix, raising ValueError when its shape does not match the source."""
         if model_artifact is None:
             return None
         nested = "columns" in model_artifact
-        if selector is not None and nested:
-            if selector not in model_artifact["columns"]:
-                raise ValueError(
-                    f"The loaded artifact has no model for selector '~{selector}'. "
-                    f"Artifact columns: {sorted(model_artifact['columns'])}"
-                )
-            return {None: model_artifact["columns"][selector]}
         if not expanded:
             if nested:
                 raise ValueError("The loaded artifact holds per-column models but the source is a single column.")
@@ -391,7 +392,8 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featu
         if not nested:
             raise ValueError("The loaded artifact is for a single column but the source expands to multiple columns.")
         columns: dict[str, Any] = model_artifact["columns"]
-        if set(columns) != {suffix for suffix in suffixes if suffix is not None}:
+        needed = {suffix for suffix in suffixes if suffix is not None}
+        if (partial and not needed <= set(columns)) or (not partial and set(columns) != needed):
             raise ValueError(
                 f"The loaded artifact columns {sorted(columns)} do not match the source columns "
                 f"{sorted(str(suffix) for suffix in suffixes)}."

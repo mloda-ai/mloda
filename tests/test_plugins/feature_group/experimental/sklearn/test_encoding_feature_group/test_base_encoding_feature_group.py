@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import ANY_OUTPUT_PART, DefaultOptionKeys, FeatureGroup
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
@@ -149,11 +149,27 @@ class TestEncodingFeatureGroup:
 
     def test_prefix_pattern(self) -> None:
         """Test that prefix pattern is properly defined."""
-        expected_pattern = r".*__(?P<encoder_type>onehot|label|ordinal)_encoded(?:~\d+)?$"
+        expected_pattern = r".*__(?P<encoder_type>onehot|label|ordinal)_encoded$"
         assert EncodingFeatureGroup.PREFIX_PATTERN == expected_pattern
+
+    def test_declares_any_output_part(self) -> None:
+        assert EncodingFeatureGroup.OUTPUT_PARTS == (ANY_OUTPUT_PART,)
+
+    @pytest.mark.parametrize("name", ["x__onehot_encoded~1", "x__label_encoded~0", "x__onehot_encoded~1\n"])
+    def test_match_criteria_is_name_only_for_a_part_name(self, name: str) -> None:
+        """A part name is resolved by core (split, then base); the matcher itself no longer accepts `~N`."""
+        assert not EncodingFeatureGroup.match_feature_group_criteria(FeatureName(name), Options({}))
+
+    def test_part_name_resolves_through_its_base(self) -> None:
+        split = FeatureGroup.split_output_part("x__onehot_encoded~1")
+        assert split == ("x__onehot_encoded", "1")
+        assert EncodingFeatureGroup.match_feature_group_criteria(FeatureName(split[0]), Options({}))
 
     @pytest.mark.parametrize("name", ["x__onehot_encoded~1", "x__onehot_encoded"])
     def test_input_features_read_the_source_through_the_column_base(self, name: str) -> None:
+        """Core hands input_features the base name; a part name is split first."""
+        split = FeatureGroup.split_output_part(name)
+        name = split[0] if split else name
         input_features = PandasEncodingFeatureGroup().input_features(Options({}), FeatureName(name))
         assert input_features is not None
         assert {f.name for f in input_features} == {"x"}

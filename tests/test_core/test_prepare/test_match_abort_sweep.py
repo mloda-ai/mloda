@@ -94,6 +94,10 @@ _FORK_COLLISION = (
     "real edge, collided verdict: Options._fork is a raise-free, swallow-free copy; its dict.update name collides with a "
     "raising, swallowing update() elsewhere"
 )
+_ADOPT_COLLISION = (
+    "real edge, collided verdict: Options._adopt copies a successful part-match fork back; its dict.update and "
+    "dict.clear names collide with a raising, swallowing update() elsewhere"
+)
 _MERGED_DECLARATION_RAISES = (
     "real edge: own_declaration's ValueError for a malformed declaration; __init_subclass__ already "
     "validates every class in the MRO at definition time, so this walk cannot raise for a class that "
@@ -123,6 +127,7 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/options.py", "add_to_group"): _DECIDED_ABOVE_BY_READER_SELECTION,
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
+    ("mloda/core/abstract_plugins/components/options.py", "_adopt"): _ADOPT_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _BUILTIN_ALL_COLLISION,
@@ -164,6 +169,7 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "guards the framework-built context's field coercion; not a match decision"
     ),
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
+    ("mloda/core/abstract_plugins/components/options.py", "_adopt"): _ADOPT_COLLISION,
     ("mloda/core/abstract_plugins/components/utils.py", "safe_field"): (
         "it degrades one field in a rendering path, so swallowing a marked exception is its contract"
     ),

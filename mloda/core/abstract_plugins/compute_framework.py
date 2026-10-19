@@ -862,6 +862,18 @@ class ComputeFramework(ABC):
             ExtenderHook.VALIDATE_INPUT_FEATURE, feature_group, feature_group.validate_input_features, features
         )
 
+    def _validate_requested_parts(self, features: Any) -> None:
+        """Every asked `<base>~<part>` column must exist in the result."""
+        for feature in sorted(features.features, key=lambda f: str(f.name)):
+            for part in sorted(feature.requested_parts):
+                column = f"{feature.name}~{part}"
+                if column not in self.column_names:
+                    produced = sorted(c for c in self.column_names if c.startswith(f"{feature.name}~"))
+                    raise ValueError(
+                        f"Requested output part column '{column}' was not produced by the feature group; "
+                        f"produced columns: {produced}."
+                    )
+
     @final
     def run_validate_output_features(self, feature_group: Any, features: Any) -> None:
         if self.data is None:
@@ -876,6 +888,8 @@ class ComputeFramework(ABC):
                 f"Return your feature names with empty lists (e.g. {{{example}}}) "
                 "to express an empty result."
             )
+
+        self._validate_requested_parts(features)
 
         from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeValidator
 

@@ -2,6 +2,7 @@
 Integration tests for the EncodingFeatureGroup classes.
 """
 
+import pandas as pd
 import pytest
 from typing import Any
 
@@ -308,3 +309,43 @@ class TestEncodingFeatureGroupIntegration:
         col_0_values = df["onehot1~1"].tolist()
         col_1_values = df["onehot2~2"].tolist()
         assert sum(col_0_values) > 0 or sum(col_1_values) > 0
+
+
+class TestEncodingOutputParts:
+    """Encoding declares any output part; core selects and checks `<feature>~<part>`."""
+
+    def _run(self, *names: str) -> pd.DataFrame:
+        pytest.importorskip("sklearn")
+        PluginLoader().all()
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {EncodingIntegrationTestDataCreator, PandasEncodingFeatureGroup}
+        )
+        results = mloda(list(names), [PandasDataFrame], plugin_collector=plugin_collector).run()
+        assert len(results) == 1
+        frame: pd.DataFrame = results[0]
+        return frame
+
+    def test_part_request_returns_only_that_column(self) -> None:
+        full = self._run("category__onehot_encoded")
+        part = self._run("category__onehot_encoded~1")
+
+        assert list(part.columns) == ["category__onehot_encoded~1"]
+        assert part["category__onehot_encoded~1"].tolist() == full["category__onehot_encoded~1"].tolist()
+
+    def test_out_of_range_part_raises_the_core_error(self) -> None:
+        """Converted from the writer's out-of-range check."""
+        with pytest.raises(ValueError, match="was not produced") as excinfo:
+            self._run("category__onehot_encoded~5")
+        assert "category__onehot_encoded~5" in str(excinfo.value)
+        assert "category__onehot_encoded~0" in str(excinfo.value)
+
+    def test_part_of_a_single_column_encoding_raises_the_core_error(self) -> None:
+        with pytest.raises(ValueError, match="was not produced") as excinfo:
+            self._run("category__label_encoded~0")
+        assert "category__label_encoded~0" in str(excinfo.value)
+
+    def test_trailing_newline_is_not_a_part(self) -> None:
+        """Converted from the writer's newline test: the name fails resolution instead of selecting a column."""
+        with pytest.raises(ValueError) as excinfo:
+            self._run("category__onehot_encoded~1\n")
+        assert "was not produced" not in str(excinfo.value)

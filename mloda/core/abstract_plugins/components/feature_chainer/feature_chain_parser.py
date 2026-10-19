@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 CHAIN_SEPARATOR = "__"  # Separates chained transformations (source→suffix)
 COLUMN_SEPARATOR = "~"  # Separates multi-column output index
 INPUT_SEPARATOR = "&"  # Separates multiple input features
+ANY_OUTPUT_PART = "*"  # In OUTPUT_PARTS: parts are named at run time
 
 
 def option_key_is_present(spec: PropertySpec, key: str, options: Options) -> bool:

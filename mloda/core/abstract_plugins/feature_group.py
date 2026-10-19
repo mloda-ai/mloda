@@ -95,6 +95,9 @@ class FeatureGroup(ABC):
     for the full PROPERTY_MAPPING reference.
     """
 
+    OUTPUT_PARTS: ClassVar[tuple[str, ...] | None] = None
+    """Parts of `<feature>~<part>` this group returns; ANY_OUTPUT_PART names them at run time. None declares none."""
+
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec] | None] = None
     """Override in subclasses to declare configurable parameters.
 
@@ -457,6 +460,23 @@ class FeatureGroup(ABC):
         if base_name != str(feature_name) and base_name in self.feature_names_supported():
             return FeatureName(base_name)
         return feature_name
+
+    @classmethod
+    def output_parts(cls, feature_name: str, options: Options) -> tuple[str, ...] | None:
+        """The declared output parts for this feature; override when they depend on the name or options."""
+        return cls.OUTPUT_PARTS
+
+    @staticmethod
+    def split_output_part(name: str) -> tuple[str, str] | None:
+        """Split `<base>~<part>` on the first `~` of the last chain segment; None when there is no well-formed part."""
+        prefix, chain_separator, segment = name.rpartition(CHAIN_SEPARATOR)
+        base_tail, separator, part = segment.partition(COLUMN_SEPARATOR)
+        base = prefix + chain_separator + base_tail
+        if not separator or not base_tail:
+            return None
+        if not part.split(COLUMN_SEPARATOR)[0] or any(char.isspace() for char in part):
+            return None
+        return base, part
 
     @staticmethod
     def apply_naming_convention(

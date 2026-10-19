@@ -95,6 +95,8 @@ class EvaluationResult:
     facts: RenderFacts = field(default_factory=RenderFacts)
     # The classes the single winner replaced (subclass preference), empty without a single winner.
     specialized_from: tuple[type[FeatureGroup], ...] = ()
+    # (base, part) of each identified candidate that matched the name as a declared output part.
+    output_parts: dict[type[FeatureGroup], tuple[str, str]] = field(default_factory=dict)
 
     @property
     def failure_kind(self) -> Literal["multiple", "abstract_only", "none"] | None:

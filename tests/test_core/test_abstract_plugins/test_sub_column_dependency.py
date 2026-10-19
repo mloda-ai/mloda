@@ -13,12 +13,14 @@ Expected Behavior:
 - Feature("base~0") returns ONLY base~0 column (new capability)
 """
 
+import copy
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import pytest
 
+from mloda.provider import ANY_OUTPUT_PART
 from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
@@ -27,6 +29,7 @@ from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
+from mloda.user import ParallelizationMode
 from mloda.user import PluginLoader
 from mloda.user import PluginCollector
 from mloda.user import mloda
@@ -841,3 +844,311 @@ class TestSubColumnInputsInPlan:
         assert producer_steps[0].input_feature_names == ("source_data",), (
             f"The producer step reads source_data; got {producer_steps[0].input_feature_names}"
         )
+
+
+# Declared output parts (<feature>~<part>).
+
+_SOURCE = np.array([10, 20, 30, 40, 50])
+
+
+class MeasureProducer(FeatureGroup):
+    """Declares parts value and unit; counts calculate_feature calls."""
+
+    OUTPUT_PARTS = ("value", "unit")
+    calls = 0
+    seen_parts: list[Any] = []
+    captured: list[Any] = []
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"measure"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.calls += 1
+        cls.captured.extend(features.features)
+        cls.seen_parts.extend(getattr(f, "requested_parts", None) for f in features.features)
+        data["measure~value"] = data["source_data"].values
+        data["measure~unit"] = "m"
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class WildcardProducer(FeatureGroup):
+    """Parts are named at run time; produces wild~a and wild~b."""
+
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"wild"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["wild~a"] = data["source_data"].values
+        data["wild~b"] = data["source_data"].values * 2
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class NestedProducer(FeatureGroup):
+    """Wildcard producer emitting nested_f~0, nested_f~0~lower, nested_f~0~upper."""
+
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"nested_f"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("source_data")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["nested_f~0"] = data["source_data"].values
+        data["nested_f~0~lower"] = data["source_data"].values - 1
+        data["nested_f~0~upper"] = data["source_data"].values + 1
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class MeasureConsumer(FeatureGroup):
+    """Depends on Feature("measure~value")."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"measure_consumer_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("measure~value")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["measure_consumer_output"] = data["measure~value"].values * 2
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+@pytest.fixture(autouse=True)
+def _reset_measure_state() -> None:
+    MeasureProducer.calls = 0
+    MeasureProducer.seen_parts = []
+    MeasureProducer.captured = []
+
+
+def _collector(*groups: type[FeatureGroup]) -> PluginCollector:
+    return PluginCollector.enabled_feature_groups({SubColumnTestDataCreator, *groups})
+
+
+def _run(features: list[Feature | str], *groups: type[FeatureGroup]) -> Any:
+    return mloda.run_all(
+        features,
+        compute_frameworks=[PandasDataFrame],
+        plugin_collector=_collector(*groups),
+        parallelization_modes={ParallelizationMode.SYNC},
+    )
+
+
+def _columns(results: Any) -> set[str]:
+    return {c for frame in results for c in frame.columns}
+
+
+class TestDeclaredOutputParts:
+    """A group declares OUTPUT_PARTS; core resolves, selects and checks `<feature>~<part>`."""
+
+    def test_top_level_declared_part_returns_only_that_column(self) -> None:
+        results = _run(["measure~value"], MeasureProducer)
+
+        assert _columns(results) == {"measure~value"}
+        np.testing.assert_array_equal(results[0]["measure~value"].values, _SOURCE)
+
+    def test_declared_part_as_dependency(self) -> None:
+        results = _run(["measure_consumer_output"], MeasureProducer, MeasureConsumer)
+
+        np.testing.assert_array_equal(results[0]["measure_consumer_output"].values, _SOURCE * 2)
+
+    def test_undeclared_part_fails_at_resolution_and_lists_declared(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _run(["measure~bogus"], MeasureProducer)
+
+        message = str(exc_info.value)
+        assert "bogus" in message
+        assert "value" in message and "unit" in message
+
+    def test_undeclared_numbered_part_returns_only_that_column(self) -> None:
+        results = _run(["base_feature~1"], MultiColumnProducerForSubColumnTest)
+
+        assert _columns(results) == {"base_feature~1"}
+        np.testing.assert_array_equal(results[0]["base_feature~1"].values, _SOURCE * 2)
+
+    def test_missing_numbered_part_raises_naming_column_and_produced(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _run(["base_feature~7"], MultiColumnProducerForSubColumnTest)
+
+        message = str(exc_info.value)
+        assert "base_feature~7" in message
+        assert "base_feature~0" in message and "base_feature~2" in message
+
+    def test_two_parts_co_requested_compute_once(self) -> None:
+        results = _run(["measure~value", "measure~unit"], MeasureProducer)
+
+        assert _columns(results) == {"measure~value", "measure~unit"}
+        assert MeasureProducer.calls == 1
+
+    def test_whole_feature_and_part_co_requested_returns_all_parts(self) -> None:
+        results = _run(["measure", "measure~value"], MeasureProducer)
+
+        assert _columns(results) == {"measure~value", "measure~unit"}
+        assert MeasureProducer.calls == 1
+
+    def test_wildcard_group_resolves_a_produced_part(self) -> None:
+        results = _run(["wild~a"], WildcardProducer)
+
+        assert _columns(results) == {"wild~a"}
+
+    def test_wildcard_group_part_not_produced_raises_after_compute(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _run(["wild~zzz"], WildcardProducer)
+
+        message = str(exc_info.value)
+        assert "wild~zzz" in message
+        assert "wild~a" in message and "wild~b" in message
+
+    def test_nested_parent_part_returns_part_and_nested_columns(self) -> None:
+        results = _run(["nested_f~0"], NestedProducer)
+
+        assert _columns(results) == {"nested_f~0", "nested_f~0~lower", "nested_f~0~upper"}
+
+    def test_nested_exact_part_returns_only_that_column(self) -> None:
+        results = _run(["nested_f~0~lower"], NestedProducer)
+
+        assert _columns(results) == {"nested_f~0~lower"}
+
+    def test_match_criteria_stays_name_only_for_declared_part(self) -> None:
+        """Resolution-only rule: a direct matcher call with `measure~value` is still False."""
+        result = MeasureProducer.match_feature_group_criteria(FeatureName("measure~value"), Options({}), None)
+
+        assert result is False
+
+    @pytest.mark.parametrize("name", ["measure~", "measure~val ue", "measure~value\n"])
+    def test_malformed_part_is_not_a_part(self, name: str) -> None:
+        with pytest.raises(ValueError):
+            _run([name], MeasureProducer)
+
+
+class TestSplitOutputPart:
+    """FeatureGroup.split_output_part(name) -> (base, part) | None (assumed public name)."""
+
+    @pytest.mark.parametrize(
+        "name, expected",
+        [
+            ("measure~value", ("measure", "value")),
+            ("base_feature~1", ("base_feature", "1")),
+            ("f~0~lower", ("f", "0~lower")),
+            ("a~0__op~1", ("a~0__op", "1")),
+            ("x__op~1__next", None),
+            ("measure", None),
+            ("~x", None),
+            ("measure~", None),
+            ("measure~val ue", None),
+            ("measure~value\n", None),
+        ],
+    )
+    def test_split(self, name: str, expected: tuple[str, str] | None) -> None:
+        assert FeatureGroup.split_output_part(name) == expected
+
+
+class TestRequestedPartsOnFeature:
+    """Recorded parts stay out of equality/hash and survive pickling."""
+
+    def test_requested_parts_recorded_on_the_feature(self) -> None:
+        _run(["measure~value"], MeasureProducer)
+
+        [seen] = MeasureProducer.seen_parts
+        assert seen == frozenset({"value"})
+
+    def test_requested_parts_ignored_by_eq_hash_and_survive_pickle(self) -> None:
+        import pickle  # nosec B403
+
+        _run(["measure~value"], MeasureProducer)
+
+        [feature] = MeasureProducer.captured
+        plain = copy.copy(feature)
+        plain.requested_parts = frozenset()
+        plain.result_parts = None
+        assert feature == plain
+        assert hash(feature) == hash(plain)
+        restored = pickle.loads(pickle.dumps(feature))  # nosec B301
+        assert restored.requested_parts == feature.requested_parts == frozenset({"value"})
+
+    @staticmethod
+    def _feature(part: str | None, initial: bool = True) -> Feature:
+        feature = Feature("measure")
+        feature.initial_requested_data = initial
+        feature.record_part(part)
+        return feature
+
+    def test_whole_feature_is_not_parts_only(self) -> None:
+        assert self._feature(None).parts_only is False
+
+    def test_part_request_is_parts_only(self) -> None:
+        assert self._feature("value").parts_only is True
+
+    def test_part_plus_part_stays_parts_only(self) -> None:
+        a = self._feature("value")
+        a.absorb_parts(self._feature("other"))
+        assert a.parts_only is True
+
+    @pytest.mark.parametrize("first_initial,second_initial", [(True, True), (True, False), (False, True)])
+    def test_part_plus_whole_is_not_parts_only_either_order(self, first_initial: bool, second_initial: bool) -> None:
+        part_first = self._feature("value", first_initial)
+        part_first.absorb_parts(self._feature(None, second_initial))
+        whole_first = self._feature(None, second_initial)
+        whole_first.absorb_parts(self._feature("value", first_initial))
+
+        assert part_first.parts_only is False
+        assert whole_first.parts_only is False
+
+
+class TestFrameForDeclaredPart:
+    """RunResult.frame_for finds the frame by a requested part column name."""
+
+    def test_frame_for_part_returns_frame_holding_the_column(self) -> None:
+        results = _run(["measure~value"], MeasureProducer)
+
+        assert "measure~value" in results.frame_for("measure~value").columns
+
+
+class TestArtifactKeyedByBaseName:
+    """An artifact keyed by a part column name is rejected, pointing to the base name."""
+
+    def test_part_keyed_artifact_raises_value_error_pointing_to_base(self) -> None:
+        api = mloda(
+            ["measure~value"],
+            [PandasDataFrame],
+            plugin_collector=_collector(MeasureProducer),
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+
+        with pytest.raises(ValueError, match="(?i)artifact") as exc_info:
+            api.run(artifacts={"measure~value": "model"})
+
+        assert "'measure'" in str(exc_info.value)

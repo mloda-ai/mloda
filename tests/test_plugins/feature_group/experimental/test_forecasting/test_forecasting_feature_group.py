@@ -2,6 +2,8 @@
 Tests for the ForecastingFeatureGroup.
 """
 
+import json
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -11,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.user import Feature
 from mloda.user import FeatureName
-from mloda.provider import FeatureSet
+from mloda.provider import ANY_OUTPUT_PART, FeatureGroup, FeatureSet
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
@@ -50,7 +52,9 @@ class TestForecastingFeatureGroup:
         chained = "category__onehot_encoded__linear_forecast_7day"
         assert ForecastingFeatureGroup.parse_forecast_suffix(chained) == ("linear", 7, "day")
 
-        assert ForecastingFeatureGroup.parse_forecast_suffix("sales__linear_forecast_7day~0") == ("linear", 7, "day")
+        split = FeatureGroup.split_output_part("sales__linear_forecast_7day~0")
+        assert split == ("sales__linear_forecast_7day", "0")
+        assert ForecastingFeatureGroup.parse_forecast_suffix(split[0]) == ("linear", 7, "day")
         selected_chain = "x__linear_forecast_7day~0__linear_forecast_3day"
         assert ForecastingFeatureGroup.parse_forecast_suffix(selected_chain) == ("linear", 3, "day")
 
@@ -62,7 +66,8 @@ class TestForecastingFeatureGroup:
         # This test is failing because the feature name doesn't match the expected pattern
         # Let's modify it to use a valid feature name
         assert ForecastingFeatureGroup.match_feature_group_criteria("sales__randomforest_forecast_3day", Options())
-        assert ForecastingFeatureGroup.match_feature_group_criteria("sales__linear_forecast_7day~0", Options())
+        base, _part = FeatureGroup.split_output_part("sales__linear_forecast_7day~0") or ("", "")
+        assert ForecastingFeatureGroup.match_feature_group_criteria(base, Options())
         chained = "x__linear_forecast_7day~0__linear_forecast_3day"
         assert ForecastingFeatureGroup.match_feature_group_criteria(chained, Options())
 
@@ -139,11 +144,20 @@ class TestForecastingFeatureGroup:
         assert ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
         assert ForecastingFeatureGroup._extract_source_features(Feature(name)) == ["s__mean_imputed"]
 
-    def test_selector_name_matches_and_extracts_parameters_and_source(self) -> None:
+    def test_part_name_splits_to_a_base_that_matches_and_extracts_parameters_and_source(self) -> None:
         name = "sales__linear_forecast_7day~10"
-        assert ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
-        assert ForecastingFeatureGroup._extract_forecast_params(Feature(name)) == ("linear", 7, "day")
-        assert ForecastingFeatureGroup._extract_source_features(Feature(name)) == ["sales"]
+        assert FeatureGroup.split_output_part(name) == ("sales__linear_forecast_7day", "10")
+        base = "sales__linear_forecast_7day"
+        assert ForecastingFeatureGroup.match_feature_group_criteria(base, Options())
+        assert ForecastingFeatureGroup._extract_forecast_params(Feature(base)) == ("linear", 7, "day")
+        assert ForecastingFeatureGroup._extract_source_features(Feature(base)) == ["sales"]
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
+
+    def test_declares_any_output_part(self) -> None:
+        assert ForecastingFeatureGroup.output_parts("sales__linear_forecast_7day", Options()) == (ANY_OUTPUT_PART,)
+
+    def test_selector_machinery_is_gone(self) -> None:
+        assert not hasattr(ForecastingFeatureGroup, "_extract_selector")
 
     def test_valid_name_records_no_rejection(self, rejection_window: dict[str, MatchRejection]) -> None:
         assert ForecastingFeatureGroup.match_feature_group_criteria("x__linear_forecast_7day", Options())
@@ -360,7 +374,8 @@ class TestForecastingFeatureGroup:
         assert ForecastingFeatureGroup._has_valid_forecast_suffix("temp__gbr_forecast_12hour") is True
         chained = "category__onehot_encoded__linear_forecast_7day"
         assert ForecastingFeatureGroup._has_valid_forecast_suffix(chained) is True
-        assert ForecastingFeatureGroup._has_valid_forecast_suffix("sales__linear_forecast_7day~0") is True
+        base, _part = FeatureGroup.split_output_part("sales__linear_forecast_7day~0") or ("", "")
+        assert ForecastingFeatureGroup._has_valid_forecast_suffix(base) is True
         selected_chain = "x__linear_forecast_7day~0__linear_forecast_3day"
         assert ForecastingFeatureGroup._has_valid_forecast_suffix(selected_chain) is True
 
@@ -406,12 +421,22 @@ class TestForecastingFeatureGroup:
             ("x__mean_imputed__linear_forecast_7day~2", "2"),
             ("x__linear_forecast_7day", None),
             ("x__linear_forecast_7day~0__linear_forecast_3day", None),
-            ("x__bogus_forecast_7day~0", None),
-            ("x__linear_forecast_0day~0", None),
         ],
     )
-    def test_extract_selector(self, name: str, expected: str | None) -> None:
-        assert ForecastingFeatureGroup._extract_selector(name) == expected
+    def test_part_of_a_forecast_name(self, name: str, expected: str | None) -> None:
+        """Converted from _extract_selector: the core splitter finds the part, the base must still be a forecast."""
+        split = FeatureGroup.split_output_part(name)
+        assert (split[1] if split else None) == expected
+        if split:
+            assert ForecastingFeatureGroup.match_feature_group_criteria(split[0], Options())
+
+    @pytest.mark.parametrize("name", ["x__bogus_forecast_7day~0", "x__linear_forecast_0day~0"])
+    def test_part_of_a_non_forecast_base_is_not_claimed(self, name: str) -> None:
+        """Converted from _extract_selector: the part splits off but the base is no forecast."""
+        split = FeatureGroup.split_output_part(name)
+        assert split is not None
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(split[0], Options())
+        assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
 
     def test_empty_source_raises(self) -> None:
         name = "__linear_forecast_7day"
@@ -573,60 +598,138 @@ class TestForecastingFeatureGroup:
 
     SELECTED_NAME = "sales__linear_forecast_7day~10"
 
-    def _selected_feature_set(self, confidence_intervals: bool = False) -> FeatureSet:
+    def _part_feature_set(self, parts: set[str], confidence_intervals: bool = False) -> FeatureSet:
+        """A feature set whose base feature was asked only for `parts`, as core records it."""
+        feature = Feature(self.FEATURE_NAME, self._options(confidence_intervals))
+        feature.requested_parts = frozenset(parts)
+        feature.result_parts = frozenset(parts)
+        feature.parts_only = True
         feature_set = FeatureSet()
-        feature_set.add(Feature(self.SELECTED_NAME, self._options(confidence_intervals)))
+        feature_set.add(feature)
         return feature_set
 
-    def test_selector_forecasts_only_selected_column(self) -> None:
-        """`name~10` forecasts only `sales~10`, matching that column of the full run."""
+    def _save_part_artifact(
+        self, df: pd.DataFrame, parts: set[str], confidence_intervals: bool = False
+    ) -> tuple[pd.DataFrame, str]:
+        feature_set = self._part_feature_set(parts, confidence_intervals)
+        feature_set.artifact_to_save = self.FEATURE_NAME
+        result = self._calculate(df, feature_set)
+
+        assert feature_set.save_artifact is not None
+        return result, ForecastingArtifact._serialize_artifact(feature_set.save_artifact)
+
+    def _load_part_feature_set(
+        self, serialized: str, parts: set[str], confidence_intervals: bool = False
+    ) -> FeatureSet:
+        feature_set = self._part_feature_set(parts, confidence_intervals)
+        assert feature_set.options is not None
+        feature_set.options.add_to_group(self.FEATURE_NAME, serialized)
+        feature_set.artifact_to_load = self.FEATURE_NAME
+        return feature_set
+
+    def test_part_request_forecasts_only_the_requested_column(self) -> None:
+        """Parts {10} forecast only `sales~10`, matching that column of the full run."""
         df = self._expanded_df(["2", "10"])
         full = self._calculate(df)
-        result = self._calculate(df, self._selected_feature_set())
+        result = self._calculate(df, self._part_feature_set({"10"}))
 
         assert self.SELECTED_NAME in result.columns
         assert f"{self.FEATURE_NAME}~2" not in result.columns
         assert self.FEATURE_NAME not in result.columns
         assert np.allclose(result[self.SELECTED_NAME].to_numpy(), full[f"{self.FEATURE_NAME}~10"].to_numpy())
 
-    def test_selector_with_confidence_intervals(self) -> None:
-        """A selected column gets `~lower/~upper` bounds and no other column is forecast."""
-        result = self._calculate(self._expanded_df(["2", "10"]), self._selected_feature_set(True))
+    def test_result_parts_without_parts_only_trains_all_columns(self) -> None:
+        """Asked by part in one place and whole in another: every source column is trained."""
+        feature_set = self._part_feature_set({"1"})
+        [feature] = list(feature_set.features)
+        feature.parts_only = False
+        result = self._calculate(self._expanded_df(["1", "2"]), feature_set)
+
+        assert f"{self.FEATURE_NAME}~1" in result.columns
+        assert f"{self.FEATURE_NAME}~2" in result.columns
+
+    def test_parts_only_without_result_parts_trains_only_requested_parts(self) -> None:
+        """A dependency-only feature asked only by part trains just the requested column."""
+        feature_set = self._part_feature_set({"1"})
+        [feature] = list(feature_set.features)
+        feature.result_parts = None
+        result = self._calculate(self._expanded_df(["1", "2"]), feature_set)
+
+        assert f"{self.FEATURE_NAME}~1" in result.columns
+        assert f"{self.FEATURE_NAME}~2" not in result.columns
+
+    def test_part_request_with_confidence_intervals(self) -> None:
+        """A requested column gets `~lower/~upper` bounds and no other column is forecast."""
+        result = self._calculate(self._expanded_df(["2", "10"]), self._part_feature_set({"10"}, True))
 
         for name in (self.SELECTED_NAME, f"{self.SELECTED_NAME}~lower", f"{self.SELECTED_NAME}~upper"):
             assert name in result.columns
         assert not [c for c in result.columns if c.startswith(f"{self.FEATURE_NAME}~2")]
 
-    def test_selector_artifact_round_trip_is_flat(self) -> None:
-        """A selected forecast saves a flat single-model artifact and reproduces the forecast."""
+    def test_bound_part_request_trains_only_its_source_column(self) -> None:
+        """Parts {10~lower} forecast the `sales~10` column (with its bound) and nothing for `sales~2`."""
         df = self._expanded_df(["2", "10"])
-        trained, serialized = self._save_artifact(df, name=self.SELECTED_NAME)
+        full = self._calculate(df, self._part_feature_set({"10"}, True))
+        result = self._calculate(df, self._part_feature_set({"10~lower"}, True))
 
-        assert '"columns"' not in serialized
-        loaded = self._calculate(df, self._load_feature_set(serialized, name=self.SELECTED_NAME))
+        assert f"{self.SELECTED_NAME}~lower" in result.columns
+        assert not [c for c in result.columns if c.startswith(f"{self.FEATURE_NAME}~2")]
+        assert np.allclose(
+            result[f"{self.SELECTED_NAME}~lower"].to_numpy(), full[f"{self.SELECTED_NAME}~lower"].to_numpy()
+        )
+
+    def test_part_request_artifact_round_trip_is_nested_with_only_the_trained_column(self) -> None:
+        """Parts {10} save `{"columns": {"10": model}}` and the artifact reproduces the forecast."""
+        df = self._expanded_df(["2", "10"])
+        trained, serialized = self._save_part_artifact(df, {"10"})
+
+        assert json.loads(serialized)["columns"].keys() == {"10"}
+        loaded = self._calculate(df, self._load_part_feature_set(serialized, {"10"}))
 
         assert np.allclose(trained[self.SELECTED_NAME].to_numpy(), loaded[self.SELECTED_NAME].to_numpy())
 
-    def test_selector_uses_nested_artifact_column(self) -> None:
-        """A nested artifact saved from `name` serves `name~10` with the `~10` model."""
+    def test_part_request_with_confidence_intervals_artifact_round_trip(self) -> None:
+        df = self._expanded_df(["2", "10"])
+        trained, serialized = self._save_part_artifact(df, {"10"}, True)
+
+        loaded = self._calculate(df, self._load_part_feature_set(serialized, {"10"}, True))
+
+        for name in (self.SELECTED_NAME, f"{self.SELECTED_NAME}~lower", f"{self.SELECTED_NAME}~upper"):
+            assert np.allclose(trained[name].to_numpy(), loaded[name].to_numpy())
+
+    def test_part_request_uses_nested_artifact_column(self) -> None:
+        """A nested artifact saved from `name` serves part {10} with the `~10` model."""
         df = self._expanded_df(["2", "10"])
         trained, serialized = self._save_artifact(df)
 
-        loaded = self._calculate(df, self._load_feature_set(serialized, name=self.SELECTED_NAME))
+        loaded = self._calculate(df, self._load_part_feature_set(serialized, {"10"}))
 
         expected = trained[f"{self.FEATURE_NAME}~10"].to_numpy()
         assert np.allclose(loaded[self.SELECTED_NAME].to_numpy(), expected)
 
-    def test_selector_missing_from_nested_artifact_raises(self) -> None:
-        """A selector absent from a nested artifact raises ValueError mentioning the artifact."""
+    def test_part_missing_from_nested_artifact_raises(self) -> None:
+        """A part absent from a nested artifact raises ValueError mentioning the artifact."""
         df = self._expanded_df(["2", "10"])
         _, serialized = self._save_artifact(df)
 
         with pytest.raises(ValueError, match="artifact"):
-            self._calculate(
-                self._expanded_df(["2", "3"]),
-                self._load_feature_set(serialized, name="sales__linear_forecast_7day~3"),
-            )
+            self._calculate(self._expanded_df(["2", "3"]), self._load_part_feature_set(serialized, {"3"}))
+
+    def test_part_artifact_does_not_serve_another_part(self) -> None:
+        """An artifact trained for part {10} cannot serve part {2}."""
+        df = self._expanded_df(["2", "10"])
+        _, serialized = self._save_part_artifact(df, {"10"})
+
+        with pytest.raises(ValueError, match="artifact"):
+            self._calculate(df, self._load_part_feature_set(serialized, {"2"}))
+
+    def test_part_artifact_does_not_serve_the_whole_feature(self) -> None:
+        """An artifact trained for part {10} cannot serve the whole expanded feature."""
+        df = self._expanded_df(["2", "10"])
+        _, serialized = self._save_part_artifact(df, {"10"})
+
+        with pytest.raises(ValueError, match="artifact"):
+            self._calculate(df, self._load_feature_set(serialized))
 
     @pytest.mark.parametrize(
         "name",
@@ -638,27 +741,21 @@ class TestForecastingFeatureGroup:
         ],
     )
     def test_invalid_selector_tails_do_not_match(self, name: str) -> None:
-        """Bound names, selectors containing `_`, and a trailing newline are not forecasting features."""
+        """The matcher stays name-only: none of these tails is a forecasting feature name."""
         assert not ForecastingFeatureGroup.match_feature_group_criteria(name, Options())
         assert ForecastingFeatureGroup._has_valid_forecast_suffix(name) is False
 
-    def test_unknown_selector_raises(self) -> None:
-        """A selector matching no resolved column raises ValueError naming the selector."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("sales__linear_forecast_7day~3", self._options()))
+    def test_unknown_part_raises(self) -> None:
+        """A part matching no resolved column raises ValueError naming the part."""
+        with pytest.raises(ValueError) as excinfo:
+            self._calculate(self._expanded_df(["2", "10"]), self._part_feature_set({"3"}))
+        assert "3" in str(excinfo.value)
 
-        with pytest.raises(ValueError, match="selector") as excinfo:
-            self._calculate(self._expanded_df(["2", "10"]), feature_set)
-        assert "~3" in str(excinfo.value)
-
-    def test_selector_on_literal_source_raises(self) -> None:
-        """A selector on a literal single-column source raises ValueError naming the selector."""
-        feature_set = FeatureSet()
-        feature_set.add(Feature("sales__linear_forecast_7day~0", self._options()))
-
-        with pytest.raises(ValueError, match=r"single column.*selector|selector.*single column") as excinfo:
-            self._calculate(self.df, feature_set)
-        assert "~0" in str(excinfo.value)
+    def test_part_on_literal_source_raises(self) -> None:
+        """A numbered part on a literal single-column source raises ValueError naming the part."""
+        with pytest.raises(ValueError) as excinfo:
+            self._calculate(self.df, self._part_feature_set({"0"}))
+        assert "0" in str(excinfo.value)
 
     def test_chaining_skips_bound_columns(self) -> None:
         """Chaining on a multi-column forecast forecasts `~0`, `~1` but not the `~lower/~upper` bounds."""

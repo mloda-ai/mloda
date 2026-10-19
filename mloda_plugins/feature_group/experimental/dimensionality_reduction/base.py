@@ -206,6 +206,19 @@ class DimensionalityReductionFeatureGroup(FeatureChainParserMixin, FeatureGroup)
     }
 
     @classmethod
+    def output_parts(cls, feature_name: str, options: Options) -> tuple[str, ...] | None:
+        """Declare dim1..dimN from the name's dimension or the dimension option."""
+        parsed = FeatureChainParser.parse_name(feature_name, cls._get_prefix_patterns())
+        if parsed.matched:
+            dimension = int(cast(dict[str, str], parsed.named_captures)[cls.DIMENSION])
+        else:
+            raw = options.get(cls.DIMENSION)
+            if raw is None:
+                return None
+            dimension = int(raw)
+        return tuple(f"dim{i + 1}" for i in range(dimension))
+
+    @classmethod
     def parse_reduction_suffix(cls, feature_name: str) -> tuple[str, int]:
         """
         Parse the dimensionality reduction suffix into its components.

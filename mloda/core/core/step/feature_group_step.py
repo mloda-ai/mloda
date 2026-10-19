@@ -53,6 +53,8 @@ class FeatureGroupStep(Step):
         self.location = cfw_register.get_location()
 
         runtime_artifacts = cfw_register.get_runtime_artifacts()
+        if runtime_artifacts is not None:
+            self.features.reject_part_keyed_artifacts(runtime_artifacts)
         if runtime_artifacts is not None and self.feature_group.artifact() is not None:
             self.features.resolve_artifact_for_runtime(runtime_artifacts)
 

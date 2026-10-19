@@ -11,7 +11,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    ANY_OUTPUT_PART,
+    COLUMN_SEPARATOR,
+    PropertyValueRejection,
+)
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.match_rejection import (
@@ -33,6 +37,26 @@ class MatchHookOutcome:
     matched: bool
     returned: Any
     error: Exception | None
+    # (base, part) when the candidate matched the name as a declared output part of the base feature.
+    part: tuple[str, str] | None = None
+
+
+def _declared_part_verdict(
+    feature_group: type[FeatureGroup], split: tuple[str, str], base_options: Options, options: Options
+) -> tuple[bool, tuple[str, str] | None] | None:
+    """Verdict once the base name matched on a fork; None when the group declares no parts."""
+    base, part = split
+    declared = feature_group.output_parts(base, base_options)
+    if declared is None:
+        return None
+    if ANY_OUTPUT_PART in declared or part.split(COLUMN_SEPARATOR)[0] in declared:
+        options._adopt(base_options)
+        return True, split
+    record_match_rejection(
+        feature_group.get_class_name(),
+        f"'{part}' is not an output part of '{base}'; declared parts: {list(declared)}",
+    )
+    return False, None
 
 
 def call_match_hook(
@@ -40,6 +64,7 @@ def call_match_hook(
     feature_name: FeatureName | str,
     options: Options,
     data_access_collection: DataAccessCollection | None = None,
+    resolve_parts: bool = False,
 ) -> MatchHookOutcome:
     """Ask one candidate's match hook: a raise out of it is a non-match for that candidate only (#845).
 
@@ -51,11 +76,22 @@ def call_match_hook(
     raise.
 
     The contained exception is handed back rather than judged here: each seam records and isolates options its own way.
+    resolve_parts is set by feature resolution only: it reads `<base>~<part>` against the group's declared parts.
     """
     try:
-        # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
-        returned = feature_group.match_feature_group_criteria(feature_name, options, data_access_collection)
-        return MatchHookOutcome(bool(returned), returned, None)
+        split = feature_group.split_output_part(str(feature_name)) if resolve_parts else None
+        # The base name is asked first, on a fork whose writes are adopted only when the part verdict matches.
+        attempts = ((split[0], options._fork()), (feature_name, options)) if split else ((feature_name, options),)
+        for name, scoped in attempts:
+            returned = feature_group.match_feature_group_criteria(name, scoped, data_access_collection)
+            if scoped is options:
+                # bool() inside the try: reading a plugin's return is itself a plugin call (#927).
+                return MatchHookOutcome(bool(returned), returned, None)
+            if returned and split:
+                decided = _declared_part_verdict(feature_group, split, scoped, options)
+                if decided is not None:
+                    return MatchHookOutcome(decided[0], decided[0], None, decided[1])
+        return MatchHookOutcome(False, None, None)  # unreachable: the last attempt always returns
     except Exception as exc:  # noqa: BLE001  (contained: one broken matcher must not poison the whole run)
         if is_match_abort(exc):
             raise
@@ -76,6 +112,7 @@ class CriteriaProbeOutcome:
     rejection: MatchRejection | None
     # The (group, access) pair a matching probe wrote under the reserved key; None otherwise.
     written: tuple[Any, Any] | None
+    part: tuple[str, str] | None = None
 
 
 def _call_and_take_reader_pair(
@@ -83,10 +120,11 @@ def _call_and_take_reader_pair(
     feature_name: FeatureName | str,
     options: Options,
     data_access_collection: DataAccessCollection | None,
+    resolve_parts: bool,
 ) -> tuple[MatchHookOutcome, Any]:
     """Call the hook, then pop the reserved reader key whatever the outcome, a marked abort included."""
     try:
-        outcome = call_match_hook(feature_group, feature_name, options, data_access_collection)
+        outcome = call_match_hook(feature_group, feature_name, options, data_access_collection, resolve_parts)
     finally:
         popped = options.group.pop(RESERVED_READER_OPTION_KEY, None)
     return outcome, popped
@@ -97,11 +135,14 @@ def probe_match_criteria(
     feature_name: FeatureName | str,
     options: Options,
     data_access_collection: DataAccessCollection | None = None,
+    resolve_parts: bool = False,
 ) -> CriteriaProbeOutcome:
     """Ask one candidate under its own rejection window; a marked abort propagates, the finally only resets."""
     token = MATCH_REJECTION_REASONS.set({})
     try:
-        outcome, popped = _call_and_take_reader_pair(feature_group, feature_name, options, data_access_collection)
+        outcome, popped = _call_and_take_reader_pair(
+            feature_group, feature_name, options, data_access_collection, resolve_parts
+        )
         value_rejection = outcome.error if isinstance(outcome.error, PropertyValueRejection) else None
         matcher_error = outcome.error if value_rejection is None else None
         if value_rejection is not None:
@@ -115,7 +156,7 @@ def probe_match_criteria(
         rejection = next(iter(recorded.values())) if not outcome.matched and recorded else None
         written = popped if outcome.matched and isinstance(popped, tuple) and len(popped) == 2 else None
         return CriteriaProbeOutcome(
-            outcome.matched, outcome.returned, matcher_error, value_rejection, rejection, written
+            outcome.matched, outcome.returned, matcher_error, value_rejection, rejection, written, outcome.part
         )
     finally:
         MATCH_REJECTION_REASONS.reset(token)

@@ -226,6 +226,7 @@ class IdentifyFeatureGroupClass:
     _declarations: dict[type, tuple[dict[str, str | int | float | bool], str | None]]
     _replaced: set[type[FeatureGroup]]
     _matched_options: dict[type[FeatureGroup], Options]
+    _output_parts: dict[type[FeatureGroup], tuple[str, str]]
     _deferred_aborts: dict[type[FeatureGroup], Exception]
     _input_data_matches: dict[type[FeatureGroup], tuple[DataAccessReader, Any]]
 
@@ -246,6 +247,7 @@ class IdentifyFeatureGroupClass:
         self._declarations = {}
         self._replaced = set()
         self._matched_options = {}
+        self._output_parts = {}
         self._deferred_aborts = {}
         self._input_data_matches = {}
         self._data_access_collection = data_access_collection
@@ -284,6 +286,7 @@ class IdentifyFeatureGroupClass:
                 candidate_frameworks=self._candidate_frameworks,
                 eliminations=self._eliminations,
                 specialized_from=specialized_from,
+                output_parts={fg: self._output_parts[fg] for fg in identified if fg in self._output_parts},
             )
             if result.failure_kind is not None:
                 # Every elimination (value_rejection included) was already recorded during the single filter pass;
@@ -662,7 +665,7 @@ class IdentifyFeatureGroupClass:
             supported_frameworks = {
                 cfw
                 for cfw in compute_frameworks
-                if feature_group.supports_compute_framework(feature.name, options, cfw)
+                if feature_group.supports_compute_framework(self._hook_name(feature_group, feature), options, cfw)
             }
 
             # The split the capability hook just produced over this candidate's own accessible frameworks:
@@ -737,6 +740,11 @@ class IdentifyFeatureGroupClass:
             self._replay_match_data_writes(scratch, survivors)
         return _identified_feature_groups
 
+    def _hook_name(self, feature_group: type[FeatureGroup], feature: Feature) -> str:
+        """The name plugin hooks see: the base feature when the candidate matched a declared output part."""
+        part = self._output_parts.get(feature_group)
+        return part[0] if part else feature.name
+
     def _raise_unmasked_deferred_abort(self, feature: Feature, identified: FeatureGroupEnvironmentMapping) -> None:
         """Re-raise a pointed group's deferred abort unless another candidate computes the feature."""
         # A deferring group with a surviving strict subclass is subclass takeover: its abort is dropped.
@@ -755,7 +763,7 @@ class IdentifyFeatureGroupClass:
         reading = [
             fg
             for fg in sorted(identified, key=_candidate_sort_key)
-            if fg().is_root(self._matched_options[fg], feature.name)
+            if fg().is_root(self._matched_options[fg], self._hook_name(fg, feature))
         ]
         for fg in remaining:
             if not computing or any(not issubclass(survivor, fg) for survivor in reading):
@@ -765,7 +773,9 @@ class IdentifyFeatureGroupClass:
         """True when input_features returned a value; a raise is not computing, a marked abort still propagates."""
         try:
             return (
-                feature_group().input_features(self._matched_options[feature_group], FeatureName(feature.name))
+                feature_group().input_features(
+                    self._matched_options[feature_group], FeatureName(self._hook_name(feature_group, feature))
+                )
                 is not None
             )
         except Exception as exc:  # noqa: BLE001  (an unmarked raise only says this candidate does not compute)
@@ -883,11 +893,13 @@ class IdentifyFeatureGroupClass:
         """
         options = feature.options._fork()
         with feature_group_scope(feature.feature_group_scope):
-            probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection)
+            probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection, True)
         # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.
         written = probe.written
         if probe.matched:
             self._matched_options[feature_group] = options
+            if probe.part is not None:
+                self._output_parts[feature_group] = probe.part
             if written is not None:
                 if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
                     # A pair the candidate inherited rather than wrote.

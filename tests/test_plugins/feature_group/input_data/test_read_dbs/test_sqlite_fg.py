@@ -316,6 +316,80 @@ class TestSqliteProduceRows:
         assert pa.types.is_string(table.schema.field("name").type)
 
 
+class TestSqliteProduceRowsInference:
+    def _produce(self, tmp_path: Path, values: list[Any], feature: Feature) -> pa.Table:
+        path = tmp_path / "infer.db"
+        write_sqlite(path, {"infer_table": {"infer_col": values}})
+        connection = SqliteFG.connect({KEY: str(path)})
+        try:
+            table = SqliteFG.produce_rows(connection, "infer_table", _features(feature))
+        finally:
+            connection.close()
+        assert isinstance(table, pa.Table)
+        return table
+
+    @pytest.mark.parametrize(
+        "values",
+        [[None, 5, 7], [None, "a", "b"], [None, 1.5, 2.5], [1, None, 3]],
+        ids=["int", "str", "float", "null_in_middle"],
+    )
+    def test_a_null_in_the_first_row_does_not_break_inference(self, tmp_path: Path, values: list[Any]) -> None:
+        table = self._produce(tmp_path, values, Feature.not_typed("infer_col"))
+        assert table.column("infer_col").to_pylist() == values
+        assert not pa.types.is_null(table.schema.field("infer_col").type)
+
+    @pytest.mark.parametrize(
+        "values, check",
+        [
+            ([1, 2.5], pa.types.is_floating),
+            ([1, 2, 3_000_000_000], pa.types.is_int64),
+        ],
+        ids=["int_then_float", "int_then_large_int"],
+    )
+    def test_a_later_value_widens_the_inferred_type(self, tmp_path: Path, values: list[Any], check: Any) -> None:
+        table = self._produce(tmp_path, values, Feature.not_typed("infer_col"))
+        assert table.column("infer_col").to_pylist() == values
+        assert check(table.schema.field("infer_col").type)
+
+    def test_an_all_null_column_loads_as_null_type(self, tmp_path: Path) -> None:
+        table = self._produce(tmp_path, [None, None], Feature.not_typed("infer_col"))
+        assert table.column("infer_col").to_pylist() == [None, None]
+        assert pa.types.is_null(table.schema.field("infer_col").type)
+
+    def test_a_declared_type_still_wins_over_a_leading_null(self, tmp_path: Path) -> None:
+        table = self._produce(tmp_path, [None, 5], Feature.int32_of("infer_col"))
+        assert pa.types.is_int32(table.schema.field("infer_col").type)
+        assert table.column("infer_col").to_pylist() == [None, 5]
+
+    def test_a_leading_null_table_loads_through_run_all(self, tmp_path: Path) -> None:
+        path = tmp_path / "leading_null.db"
+        write_sqlite(path, {"leading_null_table": {"leading_null_col": [None, 1, 2.5]}})
+
+        result = mloda.run_all(
+            ["leading_null_col"],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+            data_access_collection=DataAccessCollection(credentials={"null_handle": {KEY: str(path)}}),
+        )
+
+        assert result[0].to_pydict() == {"leading_null_col": [None, 1.0, 2.5]}
+
+    def test_a_leading_null_table_loads_through_run_all_into_pandas(self, tmp_path: Path) -> None:
+        path = tmp_path / "leading_null_pd.db"
+        write_sqlite(path, {"leading_null_pd_table": {"leading_null_pd_col": [None, 3, 4]}})
+
+        result = mloda.run_all(
+            ["leading_null_pd_col"],
+            compute_frameworks=["PandasDataFrame"],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+            data_access_collection=DataAccessCollection(credentials={"null_pd_handle": {KEY: str(path)}}),
+        )
+
+        values = result[0]["leading_null_pd_col"].tolist()
+        assert values[0] != values[0] or values[0] is None
+        assert values[1:] == [3, 4]
+
+
 class TestSqliteDescribeColumns:
     @pytest.fixture()
     def affinity_db(self, tmp_path: Path) -> str:

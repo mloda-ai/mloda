@@ -56,7 +56,12 @@ def write_sqlite(path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
             names = list(columns)
             quoted_table = '"' + table.replace('"', '""') + '"'
             quoted = ['"' + name.replace('"', '""') + '"' for name in names]
-            types = [declared[type(columns[name][0])] for name in names]
+            types = [
+                declared[type(next(value for value in columns[name] if value is not None))]
+                if any(value is not None for value in columns[name])
+                else ""
+                for name in names
+            ]
             connection.execute(f"CREATE TABLE {quoted_table} ({', '.join(f'{q} {t}' for q, t in zip(quoted, types))})")
             placeholders = ", ".join("?" for _ in names)
             insert = f"INSERT INTO {quoted_table} VALUES ({placeholders})"  # nosec B608 - quoted names, bound values

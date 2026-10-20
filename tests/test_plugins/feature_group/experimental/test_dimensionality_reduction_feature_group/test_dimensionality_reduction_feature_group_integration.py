@@ -226,6 +226,57 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         assert f"{isomap_feature}~dim1" in result_df.columns, f"{isomap_feature}~dim1 not found"
         assert f"{isomap_feature}~dim2" in result_df.columns, f"{isomap_feature}~dim2 not found"
 
+    def test_integration_with_config_based_feature(self) -> None:
+        """Test integration with mloda using a config-based dimensionality reduction feature."""
+        # Enable the necessary feature groups
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
+        )
+
+        # Create a config-based feature (any name, with algorithm, dimension and in_features in options)
+        config_feature = Feature(
+            "my_red",
+            Options(
+                context={
+                    DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
+                    DimensionalityReductionFeatureGroup.DIMENSION: 2,
+                    DefaultOptionKeys.in_features: frozenset({"feature0", "feature1", "feature2"}),
+                }
+            ),
+        )
+
+        # Define the features
+        features: list[str | Feature] = ["feature0", "feature1", "feature2", config_feature]
+
+        # Run the mloda
+        result = mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+
+        # Verify we have at least one result
+        assert len(result) >= 1, "Expected at least one result"
+
+        # Convert all results to pandas DataFrames for consistent validation
+        dfs = []
+        for res in result:
+            if hasattr(res, "to_pandas"):
+                dfs.append(res.to_pandas())
+            else:
+                dfs.append(res)
+
+        # Find the DataFrame with the config-based feature result
+        result_df = None
+
+        for df in dfs:
+            if any(col.startswith("my_red") for col in df.columns):
+                result_df = df
+                break
+
+        # Verify that the result DataFrame was found
+        assert result_df is not None, "DataFrame with config-based dimensionality reduction features not found"
+
+        # Verify the result columns follow the multiple result columns pattern
+        assert "my_red~dim1" in result_df.columns, "my_red~dim1 not found"
+        assert "my_red~dim2" in result_df.columns, "my_red~dim2 not found"
+
 
 class TestDimensionalityReductionOutputParts:
     """The group declares dim1..dimN; core resolves, selects and checks `<feature>~dimK`."""

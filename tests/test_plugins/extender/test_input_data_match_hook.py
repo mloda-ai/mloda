@@ -82,7 +82,7 @@ class ImdMatchSiblingReader(_ImdBaseReader):
         return pa.table({_COL_B: [2]})
 
 
-class ImdMatchTwinReader(_ImdBaseReader):
+class ImdMatchAaTwinReader(_ImdBaseReader):
     served = frozenset({_COL_A})
     probes = 0
 
@@ -145,8 +145,8 @@ class ImdMatchSiblingGroup(_ImdBaseGroup):
     reader = ImdMatchSiblingReader
 
 
-class ImdMatchTwinGroup(_ImdBaseGroup):
-    reader = ImdMatchTwinReader
+class ImdMatchAaTwinGroup(_ImdBaseGroup):
+    reader = ImdMatchAaTwinReader
 
 
 class ImdMatchBrokenDeclGroup(_ImdBaseGroup):
@@ -370,7 +370,7 @@ class _ImdSkippingExtender(_ImdRefusingExtender):
 
 @pytest.fixture(autouse=True)
 def _reset_probe_counters() -> None:
-    for candidate in (*_ALL_READERS, ImdMatchTwinReader, *_ALL_FORMATS):
+    for candidate in (*_ALL_READERS, ImdMatchAaTwinReader, *_ALL_FORMATS):
         candidate.probes = 0
     for fmt in _ALL_FORMATS:
         fmt.column_reads = 0
@@ -423,6 +423,52 @@ def _refusal_error(kind: _Kind, scope: str) -> tuple[type[Exception], str]:
     if kind.is_format and scope == "pinned":
         return ValueError, _REFUSED
     return FeatureResolutionError, "no clearance"
+
+
+class _ImdChainedRefusingExtender(_ImdRefusingExtender):
+    """Refuses with a PermissionError chained from a LookupError raised inside an except block."""
+
+    def __init__(self, target: type) -> None:
+        super().__init__(target, never_fall_back=True)
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        if context is not None and context.reader_class in self._targets:
+            try:
+                raise KeyError("inner")
+            except KeyError:
+                try:
+                    raise LookupError("lookup failed")
+                except LookupError as lookup:
+                    raise PermissionError("denied") from lookup
+        return func(*args, **kwargs)
+
+
+class ImdMatchZzTwinReader(_ImdBaseReader):
+    served = frozenset({_COL_A})
+    probes = 0
+
+    @classmethod
+    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
+        return pa.table({_COL_A: [8]})
+
+
+class ImdMatchZzTwinGroup(_ImdBaseGroup):
+    reader = ImdMatchZzTwinReader
+
+
+class ImdMatchRefusedThenRaisingGroup(ImdMatchGateGroup):
+    """Probes its reader (refused by the extender), then raises an ordinary matcher error."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        super().match_feature_group_criteria(feature_name, options, data_access_collection)
+        raise RuntimeError("imdmatch matcher boom")
 
 
 class _ImdPostProbeRefusingExtender(_ImdRefusingExtender):
@@ -505,20 +551,63 @@ class TestRefusal:
             assert kind.gate.column_reads == 0
 
     def test_two_refused_candidates_are_both_carried_in_order(self) -> None:
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateGroup, ImdMatchTwinGroup})
-        extender = _ImdRefusingExtender((ImdMatchGateReader, ImdMatchTwinReader), never_fall_back=True)
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateGroup, ImdMatchAaTwinGroup})
+        extender = _ImdRefusingExtender((ImdMatchGateReader, ImdMatchAaTwinReader), never_fall_back=True)
 
         with pytest.raises(FeatureResolutionError) as excinfo:
             _prepare(Feature(_COL_A), enabled, _global_access(False), extender)
 
         refusals = excinfo.value.refusals
         assert [str(r) for r in refusals] == [
+            "no clearance for ImdMatchAaTwinReader",
             "no clearance for ImdMatchGateReader",
-            "no clearance for ImdMatchTwinReader",
         ]
         assert all(any(r is raised for raised in extender.raised) for r in refusals)
         assert excinfo.value.__cause__ is refusals[0]
         assert all(r.__traceback__ is None for r in refusals)
+
+    def test_ambiguity_failure_carries_no_refusals(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateGroup, ImdMatchAaTwinGroup, ImdMatchZzTwinGroup})
+        extender = _gate(ImdMatchGateReader)
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _prepare(Feature(_COL_A), enabled, _global_access(False), extender)
+
+        assert excinfo.value.result.failure_kind == "multiple"
+        assert extender.raised
+        assert excinfo.value.refusals == ()
+        assert excinfo.value.__cause__ is None
+
+    def test_chained_refusal_and_its_chain_are_stripped_of_tracebacks(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateGroup})
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _prepare(Feature(_COL_A), enabled, _global_access(False), _ImdChainedRefusingExtender(ImdMatchGateReader))
+
+        refusal = excinfo.value.refusals[0]
+        assert type(refusal) is PermissionError
+        assert type(refusal.__cause__) is LookupError
+        chain: list[BaseException] = []
+        pending: list[BaseException | None] = [refusal]
+        while pending:
+            current = pending.pop()
+            if current is not None and all(current is not seen for seen in chain):
+                chain.append(current)
+                pending.extend([current.__cause__, current.__context__])
+        assert len(chain) >= 2
+        assert all(e.__traceback__ is None for e in chain)
+
+    def test_matcher_error_eliminates_the_group_and_drops_its_refusal(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchRefusedThenRaisingGroup})
+        extender = _gate(ImdMatchGateReader)
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            _prepare(Feature(_COL_A), enabled, _global_access(False), extender)
+
+        assert extender.raised
+        assert "imdmatch matcher boom" in str(excinfo.value)
+        assert excinfo.value.refusals == ()
+        assert excinfo.value.__cause__ is None
 
     @_BY_KIND
     @pytest.mark.parametrize("scope", ["pinned", "global"])

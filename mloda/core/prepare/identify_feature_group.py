@@ -310,13 +310,14 @@ class IdentifyFeatureGroupClass:
                 # Every elimination (value_rejection included) was already recorded during the single filter pass;
                 # this only captures the non-elimination facts the messages still need.
                 result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature, links))
-                refusals = tuple(
-                    rejection.refusal
-                    for fg, rejection in sorted(
-                        self._match_rejections.items(), key=lambda item: _candidate_sort_key(item[0])
+                if result.failure_kind != "multiple":
+                    refusals = tuple(
+                        rejection.refusal
+                        for fg, rejection in sorted(
+                            self._match_rejections.items(), key=lambda item: _candidate_sort_key(item[0])
+                        )
+                        if fg not in self._matcher_errors and rejection.refusal is not None
                     )
-                    if fg not in self._matcher_errors and rejection.refusal is not None
-                )
         finally:
             self._match_rejections.clear()
             # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would

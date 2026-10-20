@@ -48,6 +48,21 @@ class FormatProbeOutcome:
     error: Exception | None = None
 
 
+def _strip_tracebacks(exc: Exception) -> Exception:
+    """Drop __traceback__ from exc and everything on its cause/context chain; returns exc."""
+    seen: list[int] = []
+    pending: list[BaseException | None] = [exc]
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.append(id(current))
+        current.__traceback__ = None
+        pending.append(current.__cause__)
+        pending.append(current.__context__)
+    return exc
+
+
 def _match_context(scope: ReaderProbeScope, reader: Any, feature_names: list[str]) -> HookContext:
     return HookContext(
         hook=ExtenderHook.INPUT_DATA_MATCH,
@@ -110,7 +125,7 @@ def probe_format_group(
                 raise
             reason = contained_raise_reason(exc)
             _log_refusal(scope, group, reason, "Format group")
-            return FormatProbeOutcome(reason, None, exc.with_traceback(None))
+            return FormatProbeOutcome(reason, None, _strip_tracebacks(exc))
     if not finished:
         reason = "the extender did not run the probe"
         _log_refusal(scope, group, reason, "Format group")
@@ -148,6 +163,6 @@ def probe_reader(reader: Any, data_access: Any, feature_names: list[str], option
                 reader.get_class_name(),
                 f"refused at INPUT_DATA_MATCH: {reason}",
                 stage=INPUT_DATA_STAGE,
-                refusal=exc.with_traceback(None),
+                refusal=_strip_tracebacks(exc),
             )
             return None

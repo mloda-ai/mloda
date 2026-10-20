@@ -49,6 +49,8 @@ except FeatureResolutionError as err:
     # err.result carries the per-candidate elimination facts (an EvaluationResult)
 ```
 
+When an INPUT_DATA_MATCH extender refused the candidate readers, `err.refusals` holds its exceptions, so an access refusal can be told apart from a missing plugin (see [Extender](../../chapter1/extender.md)).
+
 To inspect a request without catching an exception, use the non-raising
 surfaces: `resolve_feature` for a single name (above), or `mlodaAPI.diagnose(...)`,
 which returns a `ResolutionDiagnosis` for the whole request. See

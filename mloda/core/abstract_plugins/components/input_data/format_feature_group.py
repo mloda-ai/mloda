@@ -310,13 +310,13 @@ class FormatFeatureGroup(FeatureGroup):
         refusal: Exception | None = None,
     ) -> bool:
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
-        if refusal is not None:
-            error.__cause__ = refusal
         if aborts_are_contained():
             record_match_rejection(
                 cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE, candidates=candidates, refusal=refusal
             )
             return False
+        if refusal is not None:
+            error.__cause__ = refusal
         raise defer_match_abort(error) if deferrable else escalate_match_abort(error)
 
     @classmethod

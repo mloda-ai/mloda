@@ -126,10 +126,7 @@ class SqliteFramework(ComputeFramework):
         return data.append_columns({name: list(values) for name, values in columns.items()})
 
     def _output_schema(self, data: Any) -> OutputSchema | None:
-        """Report propagated hints (None per unresolved column) or, without any hints, PRAGMA affinity types.
-
-        Resolving an unresolved hint scans every row, so it is never done here.
-        """
+        """Report propagated hints (None per unresolved column) or, without hints, carried zero-row types else PRAGMA; never scans rows."""
         if not isinstance(data, SqliteRelation):
             return super()._output_schema(data)
         columns = data.columns

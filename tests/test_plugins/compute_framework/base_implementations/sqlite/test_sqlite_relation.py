@@ -1,6 +1,7 @@
 import datetime
 import sqlite3
 import warnings
+from collections.abc import Callable
 from typing import Any
 
 import pyarrow as pa
@@ -22,6 +23,25 @@ from tests.test_plugins.compute_framework.base_implementations.relation_test_mix
 from tests.test_plugins.compute_framework.base_implementations.sql_relation_window_test_mixin import (
     SqlRelationWindowTestMixin,
 )
+
+_COLS = "a", "n", "d", "b", "t", "i", "r", "x"
+
+
+def _row_count(connection: sqlite3.Connection) -> int:
+    count: int = connection.execute("SELECT COUNT(*) FROM loose").fetchone()[0]
+    return count
+
+
+_NO_HINT_BUILDERS: dict[str, Callable[[sqlite3.Connection], SqliteRelation]] = {
+    "table": lambda c: SqliteRelation(c, "loose"),
+    "select": lambda c: SqliteRelation(c, "loose").select(*_COLS),
+    "limit": lambda c: SqliteRelation(c, "loose").limit(5),
+    "order": lambda c: SqliteRelation(c, "loose").order("i"),
+    "filter": lambda c: SqliteRelation(c, "loose").filter("1 = 1"),
+    "filter_over_view": lambda c: SqliteRelation(c, "loose").limit(5).filter("1 = 1"),
+    "append": lambda c: SqliteRelation(c, "loose").append_column("extra", [1, 2][: _row_count(c)]),
+    "join": lambda c: SqliteRelation(c, "loose").join(SqliteRelation(c, "other"), "i"),
+}
 
 
 class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
@@ -308,11 +328,73 @@ class TestSqliteRelation(SqlRelationWindowTestMixin, RelationTestMixin):
 
         assert (arrow.schema.field("txt").type, arrow.column("txt").to_pylist()) == (pa.string(), ["x", "abc"])
 
-    def test_all_null_column_without_hints_is_string(self, connection: sqlite3.Connection) -> None:
-        connection.execute("CREATE TABLE nulls (a)")
-        connection.executemany("INSERT INTO nulls VALUES (?)", [(None,), (None,)])
-        arrow = SqliteRelation(connection, "nulls").select("a").to_arrow_table()
-        assert (arrow.schema.field("a").type, arrow.column("a").to_pylist()) == (pa.string(), [None, None])
+    @pytest.mark.parametrize("rows", ["none", "nulls", "ints"])
+    @pytest.mark.parametrize("builder", sorted(_NO_HINT_BUILDERS))
+    def test_no_hint_columns_type_the_same_through_every_builder(
+        self, connection: sqlite3.Connection, rows: str, builder: str
+    ) -> None:
+        connection.execute("CREATE TABLE loose (a, n NUMERIC, d DECIMAL, b BOOLEAN, t DATE, i INTEGER, r REAL, x BLOB)")
+        connection.execute("CREATE TABLE other (i INTEGER, o)")
+        connection.execute("INSERT INTO other VALUES (1, 'x')")
+        if rows == "nulls":
+            connection.executemany("INSERT INTO loose VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [(None,) * 8] * 2)
+        if rows == "ints":
+            connection.executemany("INSERT INTO loose VALUES (1, 1, 1, 1, 1, 1, 1.5, x'00')", [()] * 2)
+
+        rel = _NO_HINT_BUILDERS[builder](connection)
+
+        loose = ["a", "n", "d", "b", "t"]
+        expected = {c: pa.int64() if rows == "ints" else pa.string() for c in loose}
+        controls = {"i": pa.int64(), "r": pa.float64(), "x": pa.large_binary()}
+        arrow = rel.to_arrow_table()
+        schema = arrow.schema
+        assert {c: schema.field(c).type for c in loose} == expected
+        if rows == "nulls":
+            assert all(v is None for c in loose for v in arrow.column(c).to_pylist())
+        if rows == "none":
+            assert {c: schema.field(c).type for c in controls} == controls
+            by_name = dict(zip(rel.columns, rel.types, strict=True))
+            assert {c: by_name[c] for c in [*loose, *controls]} == {**expected, **controls}
+
+    @pytest.mark.parametrize("rows", [0, 1])
+    @pytest.mark.parametrize("pseudo", ["rowid", "ROWID", "oid"])
+    def test_select_pseudo_column_on_unhinted_table(
+        self, connection: sqlite3.Connection, pseudo: str, rows: int
+    ) -> None:
+        connection.execute("CREATE TABLE loose (a, n NUMERIC)")
+        connection.executemany("INSERT INTO loose VALUES (1, 1)", [()] * rows)
+
+        arrow = SqliteRelation(connection, "loose").select("a", pseudo).to_arrow_table()
+
+        assert (arrow.num_rows, arrow.schema.types[-1]) == (rows, pa.int64())
+
+    @pytest.mark.parametrize("mode", ["join", "append"])
+    def test_hinted_columns_mixed_with_unhinted_report_value_types(
+        self, connection: sqlite3.Connection, mode: str
+    ) -> None:
+        connection.execute("CREATE TABLE unhinted (i INTEGER, a)")
+        connection.execute("INSERT INTO unhinted VALUES (1, NULL)")
+        if mode == "join":
+            hinted = SqliteRelation.from_arrow(
+                connection,
+                pa.table(
+                    {
+                        "i": pa.array([1], pa.int64()),
+                        "flag": pa.array([True], pa.bool_()),
+                        "d": pa.array([datetime.date(2024, 1, 1)], pa.date32()),
+                    }
+                ),
+            )
+            rel = SqliteRelation(connection, "unhinted").join(hinted, "i")
+            hinted_expected = {"flag": pa.int64(), "d": pa.string()}
+        else:
+            rel = SqliteRelation(connection, "unhinted").append_column("flag", [True])
+            hinted_expected = {"flag": pa.int64()}
+
+        schema = rel.to_arrow_table().schema
+        by_name = dict(zip(rel.columns, rel.types, strict=True))
+        assert {c: schema.field(c).type for c in hinted_expected} == hinted_expected
+        assert {c: by_name[c] for c in hinted_expected} == hinted_expected
 
     def test_placeholder_row_failure_falls_back_to_string(self, connection: sqlite3.Connection) -> None:
         rel = SqliteRelation.from_arrow(connection, pa.table({"value": pa.array([], pa.int64())}))

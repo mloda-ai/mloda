@@ -602,6 +602,12 @@ class HubRightCDerivedConsumer(FeatureGroup):
         return {PyArrowTable}
 
 
+def _rows(results: list[Any], name: str, nullable: bool = False) -> list[Any]:
+    """Sorted values of the one result holding `name`; nulls sort last when `nullable`."""
+    (values,) = [r[name].to_pylist() for r in results if name in r.column_names]
+    return sorted(values, key=lambda v: (v is None, 0 if v is None else v)) if nullable else sorted(values)
+
+
 def _two_consumers_run(
     links: set[Link],
     spoke_c: type[FeatureGroup],
@@ -623,12 +629,7 @@ def _two_consumers_run(
         flight_server=flight_server,
     )
     names = (x_consumer.get_class_name(), y_consumer.get_class_name())
-
-    def ordered(values: list[Any]) -> list[Any]:
-        # Nulls sort last when the consumer does not fill them.
-        return sorted(values, key=lambda v: (v is None, 0 if v is None else v)) if nullable else sorted(values)
-
-    return {n: [ordered(r[n].to_pylist()) for r in results if n in r.column_names][0] for n in names}
+    return {n: _rows(results, n, nullable) for n in names}
 
 
 def _star_links(
@@ -650,6 +651,9 @@ def _star_links(
 
 _X_EXPECTED = [11, 22, 33]
 _Y_EXPECTED = [27, 38]
+_SPOKES = [HubRightCArrow, HubRightCPandas]
+_SPOKE_IDS = ["one_framework", "spokes_differ"]
+_ORIENTATION_IDS = ["spokes_left", "hub_left"]
 
 
 class TestTwoConsumersReadingDifferentSpokes:
@@ -706,11 +710,6 @@ class TestTwoConsumersReadingDifferentSpokes:
 
             assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
             assert got[HubRightCDerivedConsumer.get_class_name()] == [2007, 3008]
-
-
-_SPOKES = [HubRightCArrow, HubRightCPandas]
-_SPOKE_IDS = ["one_framework", "spokes_differ"]
-_ORIENTATION_IDS = ["spokes_left", "hub_left"]
 
 
 class TestAConsumerReadingPartOfAStar:
@@ -779,8 +778,7 @@ class TestAConsumerReadingPartOfAStar:
             HubRightCPairConsumer: _Y_EXPECTED,
         }
         for consumer, rows in expected.items():
-            name = consumer.get_class_name()
-            assert [sorted(r[name].to_pylist()) for r in results if name in r.column_names] == [rows]
+            assert _rows(results, consumer.get_class_name()) == rows
 
     def test_two_consumers_reading_part_of_a_star_plan_separate_joins_and_a_private_hop(self) -> None:
         links = _star_links(HubRightCArrow, True)
@@ -828,8 +826,8 @@ class TestAConsumerReadingPartOfAStar:
         assert got[HubRightConsumer.get_class_name()] == [11, 29, 41]
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
-    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
-    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    @pytest.mark.parametrize("spoke_c", _SPOKES, ids=_SPOKE_IDS)
     def test_a_consumer_missing_a_join_that_keeps_the_shared_group_gets_its_own_rows(
         self, spoke_c: type[FeatureGroup], hub_right: bool, mode: ParallelizationMode
     ) -> None:
@@ -898,8 +896,8 @@ class HubRightDPairConsumer(FeatureGroup):
 
 class TestStarNextToARivalGroup:
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
-    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
-    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    @pytest.mark.parametrize("spoke_c", _SPOKES, ids=_SPOKE_IDS)
     def test_a_star_and_a_rival_join_of_the_same_group_each_get_their_own_rows(
         self, hub_right: bool, spoke_c: type[FeatureGroup], mode: ParallelizationMode
     ) -> None:
@@ -908,25 +906,11 @@ class TestStarNextToARivalGroup:
             links = {Link.inner(a, b), Link.inner(c, b), Link.inner(d, b)}
         else:
             links = {Link.inner(b, a), Link.inner(b, c), Link.inner(b, d)}
-        groups: set[type[FeatureGroup]] = {
-            HubRightA,
-            HubRightB,
-            spoke_c,
-            HubRightD,
-            HubRightConsumer,
-            HubRightDPairConsumer,
-        }
-        names = (HubRightConsumer.get_class_name(), HubRightDPairConsumer.get_class_name())
         repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
         for _ in range(repeats):
-            results = mloda.run_all(
-                [Feature(name) for name in names],
-                links=links,
-                compute_frameworks=[PyArrowTable, PandasDataFrame],
-                parallelization_modes={mode},
-                plugin_collector=PluginCollector.enabled_feature_groups(groups),
+            got = _two_consumers_run(
+                links, spoke_c, HubRightDPairConsumer, mode, x_consumer=HubRightConsumer, extra={HubRightD}
             )
 
-            got = {n: [sorted(r[n].to_pylist()) for r in results if n in r.column_names][0] for n in names}
-            assert got[names[0]] == _HUB_RIGHT_INNER_EXPECTED
-            assert got[names[1]] == [110, 250]
+            assert got[HubRightConsumer.get_class_name()] == _HUB_RIGHT_INNER_EXPECTED
+            assert got[HubRightDPairConsumer.get_class_name()] == [110, 250]

@@ -10,6 +10,8 @@ Contract under test:
   * ``stream_all`` plans eagerly: an unresolvable request raises at the call, not at iteration.
   * One planning pass per one-shot call: ``run_all`` constructs exactly one Engine and accessing
     ``plan`` afterwards constructs no further Engine.
+  * Both classes expose read-only ``run_id``/``plan_id``, the run's ``HookContext`` ids, set on a
+    stream before consumption.
   * Both classes are exported from ``mloda.user``.
   * ``RunResult.frames()`` pairs each frame with the compute ``PlanStep`` that produced it, by
     ``step_uuid``, not by list position.
@@ -195,11 +197,12 @@ class TestRunResultPlan:
 
         assert results.plan == results.plan
 
-    def test_plan_is_read_only(self) -> None:
+    @pytest.mark.parametrize("name", ["plan", "run_id", "plan_id"])
+    def test_plan_and_ids_are_read_only(self, name: str) -> None:
         results = _run_all()
 
         with pytest.raises(AttributeError):
-            setattr(results, "plan", [])
+            setattr(results, name, [])
 
     def test_chained_request_plan_contains_the_aggregation_compute_step(self) -> None:
         """The plan names the concrete aggregation group and framework."""
@@ -224,6 +227,8 @@ class TestRunResultPlan:
         )
 
         assert results.plan == session.resolved_plan()
+        session_results = session.run(parallelization_modes={ParallelizationMode.SYNC})
+        assert session_results.plan == session.resolved_plan()
 
 
 class TestSinglePlanningPass:
@@ -284,13 +289,14 @@ class TestStreamAllPlansEagerly:
 
     def test_unresolvable_feature_raises_at_the_call(self) -> None:
         # Deliberately no iteration: the bare call itself must raise.
-        with pytest.raises(ValueError, match="No feature groups found"):
+        with pytest.raises(ValueError, match="No feature groups found") as raised:
             mlodaAPI.stream_all(
                 ["run_result_unresolvable_647"],
                 compute_frameworks=[PandasDataFrame],
                 parallelization_modes={ParallelizationMode.SYNC},
                 plugin_collector=_PLUGINS,
             )
+        assert getattr(raised.value, "__notes__", None) is None
 
 
 class TestStreamEarlyClose:
@@ -327,6 +333,15 @@ class TestPublicExports:
         assert type(_run_all()) is RunResult
         assert isinstance(_stream_all(), ResultStream)
 
+        session = mloda.prepare(
+            _CHAINED_FEATURES,
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_PLUGINS,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+        assert type(session.run(parallelization_modes={ParallelizationMode.SYNC})) is RunResult
+        assert isinstance(session.stream_run(parallelization_modes={ParallelizationMode.SYNC}), ResultStream)
+
 
 class TestRunResultIsPlainData:
     """RunResult is plain data: picklable, deep-copyable, and free of the producing session."""
@@ -339,7 +354,7 @@ class TestRunResultIsPlainData:
         assert len(loaded) == len(results) == 1
         assert loaded[0]["plan_info_sales__mean_aggr"].tolist() == results[0]["plan_info_sales__mean_aggr"].tolist()
 
-    def test_pickle_round_trip_preserves_type_and_plan(self) -> None:
+    def test_pickle_round_trip_preserves_type_plan_and_ids(self) -> None:
         from mloda.user import RunResult
 
         results = _run_all()
@@ -348,6 +363,9 @@ class TestRunResultIsPlainData:
 
         assert type(loaded) is RunResult
         assert loaded.plan == results.plan
+        assert results.run_id is not None
+        assert loaded.run_id == results.run_id
+        assert loaded.plan_id == results.plan_id
 
     def test_deepcopy_preserves_content(self) -> None:
         results = _run_all()
@@ -652,7 +670,11 @@ class TestResultStreamFrames:
 class TestRunAllListOrderMatchesPlanOrder:
     """run_all's list and frames() follow plan order, not THREADING completion order."""
 
-    def _run_with_plan_first_gated(self) -> Any:
+    @pytest.fixture(params=["run_all", "session_run"])
+    def entry(self, request: pytest.FixtureRequest) -> str:
+        return str(request.param)
+
+    def _run_with_plan_first_gated(self, entry: str) -> Any:
         session = mloda.prepare(
             [_order_probe_feature("alpha"), _order_probe_feature("beta")],
             compute_frameworks=[PandasDataFrame],
@@ -662,6 +684,22 @@ class TestRunAllListOrderMatchesPlanOrder:
         slow_probe_id = _order_probe_ids_in_plan(session.resolved_plan())[0]
         fast_probe_id = "beta" if slow_probe_id == "alpha" else "alpha"
         RunResultOrderProbe._gate = threading.Event()
+
+        if entry == "session_run":
+            gated = mloda.prepare(
+                [
+                    _order_probe_feature(slow_probe_id, role="slow"),
+                    _order_probe_feature(fast_probe_id, role="fast"),
+                ],
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=_ORDER_PROBE_PLUGINS,
+                parallelization_modes={ParallelizationMode.THREADING},
+            )
+            result = gated.run(parallelization_modes={ParallelizationMode.THREADING})
+            expected = _order_probe_ids_in_plan(result.plan)
+            stored = [f["run_result_order_probe_value"].iloc[0] for f in gated.get_result()]
+            assert stored == expected
+            return result
 
         return mlodaAPI.run_all(
             [
@@ -673,8 +711,8 @@ class TestRunAllListOrderMatchesPlanOrder:
             parallelization_modes={ParallelizationMode.THREADING},
         )
 
-    def test_threading_list_and_frames_match_plan_order(self) -> None:
-        results = self._run_with_plan_first_gated()
+    def test_threading_list_and_frames_match_plan_order(self, entry: str) -> None:
+        results = self._run_with_plan_first_gated(entry)
 
         expected_order = _order_probe_ids_in_plan(results.plan)
         actual_order = [frame["run_result_order_probe_value"].iloc[0] for frame in list(results)]

@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from collections.abc import Sequence
 from typing import Any, Callable, Generator
+from uuid import UUID
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
@@ -44,6 +45,7 @@ from mloda.core.abstract_plugins.function_extender import (
     call_run_complete_hook,
     call_run_start_hook,
     error_outcome,
+    note_mloda_id,
     reject_old_run_complete_signature,
 )
 from mloda.core.abstract_plugins.plan_context import PlanContext, PlanOrigin
@@ -144,6 +146,8 @@ class mlodaAPI:
                     self._stamp_structure_hash()
             except BaseException as error:
                 plan_outcome = error_outcome(error)
+                if self._extenders:
+                    note_mloda_id(error, "plan_id", self.plan_context.plan_id)
                 raise
             finally:
                 call_contained_hook(self._extenders, "on_plan_complete", self.plan_context, plan_outcome)
@@ -300,6 +304,7 @@ class mlodaAPI:
             requested features resolve to a single group, the list has one
             element. ``result.plan`` exposes the resolved plan of this run, and
             ``result.frames()`` pairs each result with the ``PlanStep`` that produced it.
+            ``result.run_id``/``result.plan_id`` are the run's ``HookContext`` ids.
 
         Example:
             result = mloda.run_all(
@@ -323,7 +328,7 @@ class mlodaAPI:
                 function_extender=function_extender,
                 output_framework=output_framework,
             )
-        results = session.run(
+        return session.run(
             api_data=api_data,
             parallelization_modes=parallelization_modes,
             flight_server=flight_server,
@@ -331,13 +336,6 @@ class mlodaAPI:
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
         )
-        plan = session.resolved_plan()
-        result_items = session.runner.get_result_items() if session.runner is not None else None
-        if result_items is not None:
-            position = {step.step_uuid: index for index, step in enumerate(plan)}
-            result_items = sorted(result_items, key=lambda item: position.get(item[0], len(position)))
-            results = [result for _, result in result_items]
-        return RunResult(results, plan, result_items)
 
     @classmethod
     def stream_all(
@@ -371,7 +369,8 @@ class mlodaAPI:
 
         Returns:
             ``ResultStream`` yielding one complete result per feature group; ``stream.frames()`` pairs each
-            result with the ``PlanStep`` that produced it.
+            result with the ``PlanStep`` that produced it. ``stream.run_id``/``stream.plan_id`` are the run's
+            ``HookContext`` ids, set before iteration.
         """
         with _plan_origin("stream_all"):
             session = cls.prepare(
@@ -389,19 +388,13 @@ class mlodaAPI:
                 function_extender=function_extender,
                 output_framework=output_framework,
             )
-        # Planning is eager in prepare, so the plan snapshot is available before iteration.
-        return ResultStream(
-            session._start_stream(
-                api_data=api_data,
-                parallelization_modes=parallelization_modes,
-                flight_server=flight_server,
-                artifacts=None,
-                carrier=carrier,
-                child_bootstrap=child_bootstrap,
-                with_step_uuids=True,
-                graceful_shutdown_timeout=graceful_shutdown_timeout,
-            ),
-            session.resolved_plan(),
+        return session.stream_run(
+            api_data=api_data,
+            parallelization_modes=parallelization_modes,
+            flight_server=flight_server,
+            carrier=carrier,
+            child_bootstrap=child_bootstrap,
+            graceful_shutdown_timeout=graceful_shutdown_timeout,
         )
 
     @classmethod
@@ -615,8 +608,8 @@ class mlodaAPI:
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
-    ) -> list[Any]:
-        """Execute the prepared session and return results.
+    ) -> RunResult:
+        """Execute the prepared session and return a ``RunResult`` (plan order, with ``run_id``/``plan_id``).
 
         Can be called multiple times on the same session with different ``api_data``
         and/or ``artifacts`` to re-run the execution plan against new inputs.
@@ -633,14 +626,13 @@ class mlodaAPI:
                 extenders' ``close()`` before being terminated, shared across every extender in
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
         """
-        self._batch_run(
-            parallelization_modes,
-            flight_server,
-            api_data=api_data,
-            artifacts=artifacts,
-            run_context=self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout),
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
+        plan = list(self._plan_snapshot())
+        runner = self._batch_run(
+            parallelization_modes, flight_server, api_data=api_data, artifacts=artifacts, run_context=run_context
         )
-        return self.get_result()
+        items = self._plan_ordered_items(runner, plan)
+        return RunResult([r for _, r in items], plan, items, run_id=run_context.run_id, plan_id=self.plan_id)
 
     def stream_run(
         self,
@@ -651,23 +643,18 @@ class mlodaAPI:
         carrier: dict[str, str] | None = None,
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
-    ) -> Generator[Any, None, None]:
-        """Execute the prepared session and yield each feature group's result as it completes.
+    ) -> ResultStream:
+        """Execute the prepared session and stream each feature group's result as it completes.
 
-        carrier/child_bootstrap and the active verified_context() scope are read here, at call
-        time, not at first iteration: a function whose body itself contains ``yield`` only starts
-        executing on first iteration, which would defer that read past the caller's intended scope.
+        Returns a ``ResultStream`` carrying the run's ``run_id``/``plan_id``. carrier/child_bootstrap and the
+        active verified_context() scope are read here, at call time, not at first iteration: a function whose
+        body itself contains ``yield`` only starts executing on first iteration, which would defer that read
+        past the caller's intended scope.
         """
-        return self._start_stream(
-            api_data,
-            parallelization_modes,
-            flight_server,
-            artifacts,
-            carrier,
-            child_bootstrap,
-            with_step_uuids=False,
-            graceful_shutdown_timeout=graceful_shutdown_timeout,
-        )
+        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
+        plan = list(self._plan_snapshot())
+        stream = self._start_stream(api_data, parallelization_modes, flight_server, artifacts, run_context)
+        return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id)
 
     def _start_stream(
         self,
@@ -675,17 +662,11 @@ class mlodaAPI:
         parallelization_modes: set[ParallelizationMode],
         flight_server: Any | None,
         artifacts: dict[str, Any] | None,
-        carrier: dict[str, str] | None,
-        child_bootstrap: Callable[[], None] | None,
-        with_step_uuids: bool,
-        graceful_shutdown_timeout: float = 2.0,
+        run_context: RunContext,
     ) -> Generator[Any, None, None]:
-        """Eager setup for ``stream_run``/``stream_all``; no yield, so carrier/verified_context read at call time."""
+        """Callers build ``run_context`` at call time; no yield here, so a refusal at run start raises at the call."""
         _api_data = api_data if api_data is not None else self.api_data
-        run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
-        stream = self._stream_run_results(
-            flight_server, parallelization_modes, _api_data, artifacts, run_context, with_step_uuids
-        )
+        stream = self._stream_run_results(flight_server, parallelization_modes, _api_data, artifacts, run_context)
         # Primes the generator so a refusal at run start raises here, not on first iteration.
         next(stream)
         return stream
@@ -707,9 +688,12 @@ class mlodaAPI:
                     "The run identity differs from the plan identity and no never_fall_back extender "
                     "overrides on_run_start to check it."
                 )
+        call_run_start_hook(self._extenders, run_context, plan, self._plan_snapshot())
+
+    def _plan_snapshot(self) -> tuple[PlanStep, ...]:
         if self._plan_steps is None:
             self._plan_steps = tuple(self.resolved_plan())
-        call_run_start_hook(self._extenders, run_context, plan, self._plan_steps)
+        return self._plan_steps
 
     def _complete_run(self, run_context: RunContext, outcome: LifecycleOutcome) -> None:
         call_run_complete_hook(self._extenders, run_context, outcome)
@@ -721,7 +705,6 @@ class mlodaAPI:
         api_data: dict[str, dict[str, Any]] | None,
         artifacts: dict[str, Any] | None,
         run_context: RunContext,
-        with_step_uuids: bool,
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
@@ -742,7 +725,7 @@ class mlodaAPI:
                 )
                 with contextlib.closing(runner.compute_stream()) as stream:
                     for step_uuid, result in stream:
-                        yield (step_uuid, result) if with_step_uuids else result
+                        yield (step_uuid, result)
             finally:
                 self._exit_runner_context(runner)
         except GeneratorExit:
@@ -750,6 +733,8 @@ class mlodaAPI:
             raise
         except BaseException as error:
             outcome = error_outcome(error)
+            if self._extenders:
+                note_mloda_id(error, "run_id", run_context.run_id)
             raise
         finally:
             self._complete_run(run_context, outcome)
@@ -784,6 +769,8 @@ class mlodaAPI:
             return runner
         except BaseException as error:
             outcome = error_outcome(error)
+            if self._extenders:
+                note_mloda_id(error, "run_id", run_context.run_id)
             raise
         finally:
             self._complete_run(run_context, outcome)
@@ -872,10 +859,15 @@ class mlodaAPI:
         return runner
 
     def get_result(self) -> list[Any]:
-        """Return the computed run results; raises if no run function has executed yet."""
+        """Return the computed run results in plan order; raises if no run function has executed yet."""
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
-        return self.runner.get_result()
+        items = self._plan_ordered_items(self.runner, list(self._plan_snapshot()))
+        return [r for _, r in items]
+
+    def _plan_ordered_items(self, runner: Any, plan: list[PlanStep]) -> list[tuple[UUID, Any]]:
+        position = {step.step_uuid: index for index, step in enumerate(plan)}
+        return sorted(runner.get_result_items(), key=lambda item: position.get(item[0], len(position)))
 
     def get_artifacts(self) -> dict[str, Any]:
         """Return the artifacts produced by the run; raises if no run function has executed yet."""

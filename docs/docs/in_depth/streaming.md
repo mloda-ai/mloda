@@ -13,7 +13,7 @@ for result in mloda.stream_all(
     print(result)
 ```
 
-`stream_all` returns a `ResultStream`: it iterates exactly like the old generator and additionally exposes a `.plan` property with the resolved execution plan. Planning happens eagerly, so an unresolvable request raises at the `stream_all` call, not at first iteration. `ResultStream.frames()` yields `(PlanStep, frame)` pairs from the same stream instead, pairing each frame with the compute step that produced it.
+`stream_all` returns a `ResultStream`: it iterates exactly like the old generator and additionally exposes a `.plan` property with the resolved execution plan, plus the run's `run_id` and `plan_id`. Planning happens eagerly, so an unresolvable request raises at the `stream_all` call, not at first iteration. `ResultStream.frames()` yields `(PlanStep, frame)` pairs from the same stream instead, pairing each frame with the compute step that produced it.
 
 ## Comparison with `run_all`
 
@@ -134,7 +134,7 @@ for batch in sensor_source():
         process(result)
 ```
 
-`stream_run()` has the same parameters as `run()`. `list(session.stream_run(...))` produces the same results as `session.run(...)`.
+`stream_run()` has the same parameters as `run()` and returns a `ResultStream`. `list(session.stream_run(...))` produces the same results as `session.run(...)`, except that `run()` returns plan order and the stream yields in completion order.
 
 ## Pattern 3: One-shot streaming with `stream_all()`
 

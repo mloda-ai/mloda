@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class RunResult(list[Any]):
-    """The results list of a ``run_all`` call, plus the resolved plan of the run that produced it.
+    """The results list of a ``run_all`` or ``run()`` call, plus the resolved plan of the run that produced it.
 
     Slicing and concatenation return a plain ``list`` without ``plan`` (standard list-subclass behavior).
     The list is in plan order, one element per step that produced requested output; ``frames()``
@@ -26,10 +26,25 @@ class RunResult(list[Any]):
         results: list[Any],
         plan: list[PlanStep],
         result_items: list[tuple[UUID, Any]] | None = None,
+        *,
+        run_id: str | None = None,
+        plan_id: str | None = None,
     ) -> None:
         super().__init__(results)
         self._plan = plan
         self._result_items = tuple(result_items or ())
+        self._run_id = run_id
+        self._plan_id = plan_id
+
+    @property
+    def run_id(self) -> str | None:
+        """Id of the run that produced these results, the run's ``HookContext.run_id``."""
+        return self._run_id
+
+    @property
+    def plan_id(self) -> str | None:
+        """Id of the prepared session, ``HookContext.plan_id``."""
+        return self._plan_id
 
     @property
     def plan(self) -> list[PlanStep]:
@@ -89,11 +104,30 @@ def _redacted(group: Any) -> dict[Any, Any]:
 
 
 class ResultStream(Generator[Any, None, None]):
-    """A ``stream_all`` result stream: iterates like a generator and exposes the resolved plan."""
+    """A ``stream_all`` or ``stream_run()`` result stream: iterates like a generator and exposes the resolved plan."""
 
-    def __init__(self, stream: Generator[tuple[UUID, Any], None, None], plan: list[PlanStep]) -> None:
+    def __init__(
+        self,
+        stream: Generator[tuple[UUID, Any], None, None],
+        plan: list[PlanStep],
+        *,
+        run_id: str | None = None,
+        plan_id: str | None = None,
+    ) -> None:
         self._stream = stream
         self._plan = plan
+        self._run_id = run_id
+        self._plan_id = plan_id
+
+    @property
+    def run_id(self) -> str | None:
+        """Id of the run, the run's ``HookContext.run_id``, available before any element is consumed."""
+        return self._run_id
+
+    @property
+    def plan_id(self) -> str | None:
+        """Id of the prepared session, ``HookContext.plan_id``, available before any element is consumed."""
+        return self._plan_id
 
     @property
     def plan(self) -> list[PlanStep]:

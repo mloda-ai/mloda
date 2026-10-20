@@ -259,7 +259,13 @@ def call_run_complete_hook(extenders: Iterable[Extender], run: "RunContext", out
             else:
                 logger.error("Extender %s.on_run_complete() %s", extender.__class__.__name__, contained_raise_reason(e))
     if failure is not None:
+        note_run_id(failure, run.run_id)
         raise failure
+
+
+def note_run_id(error: BaseException, run_id: str | None) -> None:
+    """Append a ``mloda run_id`` PEP 678 note to the exception."""
+    setattr(error, "__notes__", [*getattr(error, "__notes__", []), f"mloda run_id: {run_id}"])  # noqa: B010
 
 
 def call_run_start_hook(extenders: Iterable[Extender], run: "RunContext", plan: "PlanContext", steps: Any) -> None:

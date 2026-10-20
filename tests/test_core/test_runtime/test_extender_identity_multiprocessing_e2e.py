@@ -555,6 +555,12 @@ class _LifecycleMatrixExtender(Extender):
         self.ids.append(("run_complete", run.plan_id, run.run_id))
 
 
+def _assert_single_run_id_note(raised: BaseException, ext: _LifecycleMatrixExtender) -> None:
+    (run_id,) = [seen for hook, _, seen in ext.ids if hook == "run_start"]
+    assert run_id is not None
+    assert getattr(raised, "__notes__", None) == [f"mloda run_id: {run_id}"]
+
+
 def _matrix_kwargs(extenders: set[Extender], column: str = _RUN_COMPLETE_COLUMN) -> dict[str, Any]:
     groups: dict[str, type[FeatureGroup]] = {
         _FAIL_COLUMN: _FailingLifecycleFeatureGroup,
@@ -682,6 +688,7 @@ def _execution_failure(
                     parallelization_modes={mode}, flight_server=flight_server if multiprocessing else None
                 )
             )
+        _assert_single_run_id_note(raised.value, ext)
         status = "failed" if issubclass(error, Exception) else "cancelled"
         return [
             *_OK_PLAN,
@@ -745,16 +752,18 @@ def _finalizing_failure_stream_closed_early(
 def _refused_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     ext.refuse_run_start = True
     session = _matrix_session(ext)
-    with pytest.raises(RuntimeError, match="run start refused"):
+    with pytest.raises(RuntimeError, match="run start refused") as raised:
         session.run(parallelization_modes=_SYNC)
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
 def _refused_at_stream_run_call(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     ext.refuse_run_start = True
     session = _matrix_session(ext)
-    with pytest.raises(RuntimeError, match="run start refused"):
+    with pytest.raises(RuntimeError, match="run start refused") as raised:
         session.stream_run(parallelization_modes=_SYNC)
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
@@ -785,8 +794,9 @@ def _engine_setup_failure_at_stream_run_call(
 
 def _refused_at_stream_all_call(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     ext.refuse_run_start = True
-    with pytest.raises(RuntimeError, match="run start refused"):
+    with pytest.raises(RuntimeError, match="run start refused") as raised:
         mloda.stream_all([Feature(name=_RUN_COMPLETE_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 

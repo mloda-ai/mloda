@@ -138,7 +138,7 @@ See [Discover Plugins](discover-plugins.md#resolving-feature-names) for the full
 
 The runtime counterpart to `resolve_feature`: `mlodaAPI.explain(...)` builds the execution plan for a request without running it, and `session.resolved_plan()` returns the same records for a prepared session (before or after `run()`). Both return a `list[PlanStep]` in dependency order (independent steps sorted by content, so every process reports the same order). Every `explain` parameter after `features` is keyword-only.
 
-`explain` re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior `run_all` execution. For the plan of a run that actually happened, use the return value directly: `run_all` returns a `RunResult` (a `list` with a read-only `plan` property) and `stream_all` returns a `ResultStream` (generator-compatible, `plan` available before consuming). One planning pass serves both the results and the plan, unlike `explain`, which re-resolves.
+`explain` re-resolves the plan from scratch. It answers "what would this request resolve to", it is not a record of a prior `run_all` execution. For the plan of a run that actually happened, use the return value directly: `run_all` and `session.run()` return a `RunResult` (a `list` with a read-only `plan` property) and `stream_all` and `session.stream_run()` return a `ResultStream` (generator-compatible, `plan` available before consuming). One planning pass serves both the results and the plan, unlike `explain`, which re-resolves.
 
 ```python
 from mloda.user import mloda
@@ -154,7 +154,7 @@ for step in results.plan:
 
 `RunResult.frame_for(feature)` returns the frame that holds a requested feature, matched by name, or by a `Feature` whose group options (and pinned compute framework) are a subset of the step's; the closest step wins. It raises `ValueError` if none or several match (the error notes a feature that was computed but not requested).
 
-`run_id` and `plan_id` on `RunResult` and `ResultStream` are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.
+`run_id` and `plan_id` on `RunResult` and `ResultStream` (from `run_all`, `stream_all`, `run()` and `stream_run()`) are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.
 
 To pin a resolved plan, see [Plan Lock](plan-lock.md).
 

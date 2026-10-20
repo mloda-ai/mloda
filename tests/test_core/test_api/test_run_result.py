@@ -227,6 +227,8 @@ class TestRunResultPlan:
         )
 
         assert results.plan == session.resolved_plan()
+        session_results: Any = session.run(parallelization_modes={ParallelizationMode.SYNC})
+        assert session_results.plan == session.resolved_plan()
 
 
 class TestSinglePlanningPass:
@@ -329,6 +331,15 @@ class TestPublicExports:
 
         assert type(_run_all()) is RunResult
         assert isinstance(_stream_all(), ResultStream)
+
+        session = mloda.prepare(
+            _CHAINED_FEATURES,
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_PLUGINS,
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+        assert type(session.run(parallelization_modes={ParallelizationMode.SYNC})) is RunResult
+        assert isinstance(session.stream_run(parallelization_modes={ParallelizationMode.SYNC}), ResultStream)
 
 
 class TestRunResultIsPlainData:
@@ -658,7 +669,11 @@ class TestResultStreamFrames:
 class TestRunAllListOrderMatchesPlanOrder:
     """run_all's list and frames() follow plan order, not THREADING completion order."""
 
-    def _run_with_plan_first_gated(self) -> Any:
+    @pytest.fixture(params=["run_all", "session_run"])
+    def entry(self, request: pytest.FixtureRequest) -> str:
+        return str(request.param)
+
+    def _run_with_plan_first_gated(self, entry: str = "run_all") -> Any:
         session = mloda.prepare(
             [_order_probe_feature("alpha"), _order_probe_feature("beta")],
             compute_frameworks=[PandasDataFrame],
@@ -668,6 +683,18 @@ class TestRunAllListOrderMatchesPlanOrder:
         slow_probe_id = _order_probe_ids_in_plan(session.resolved_plan())[0]
         fast_probe_id = "beta" if slow_probe_id == "alpha" else "alpha"
         RunResultOrderProbe._gate = threading.Event()
+
+        if entry == "session_run":
+            gated = mloda.prepare(
+                [
+                    _order_probe_feature(slow_probe_id, role="slow"),
+                    _order_probe_feature(fast_probe_id, role="fast"),
+                ],
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=_ORDER_PROBE_PLUGINS,
+                parallelization_modes={ParallelizationMode.THREADING},
+            )
+            return gated.run(parallelization_modes={ParallelizationMode.THREADING})
 
         return mlodaAPI.run_all(
             [
@@ -679,8 +706,8 @@ class TestRunAllListOrderMatchesPlanOrder:
             parallelization_modes={ParallelizationMode.THREADING},
         )
 
-    def test_threading_list_and_frames_match_plan_order(self) -> None:
-        results = self._run_with_plan_first_gated()
+    def test_threading_list_and_frames_match_plan_order(self, entry: str) -> None:
+        results = self._run_with_plan_first_gated(entry)
 
         expected_order = _order_probe_ids_in_plan(results.plan)
         actual_order = [frame["run_result_order_probe_value"].iloc[0] for frame in list(results)]

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class RunResult(list[Any]):
-    """The results list of a ``run_all`` call, plus the resolved plan of the run that produced it.
+    """The results list of a ``run_all`` or ``run()`` call, plus the resolved plan of the run that produced it.
 
     Slicing and concatenation return a plain ``list`` without ``plan`` (standard list-subclass behavior).
     The list is in plan order, one element per step that produced requested output; ``frames()``
@@ -104,7 +104,7 @@ def _redacted(group: Any) -> dict[Any, Any]:
 
 
 class ResultStream(Generator[Any, None, None]):
-    """A ``stream_all`` result stream: iterates like a generator and exposes the resolved plan."""
+    """A ``stream_all`` or ``stream_run()`` result stream: iterates like a generator and exposes the resolved plan."""
 
     def __init__(
         self,

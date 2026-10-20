@@ -234,8 +234,9 @@ class TestFailedRerunDoesNotExposeStaleResults:
         assert first[0]["PrepareRunApiFeature"].tolist() == ["1_a", "2_b"]
 
         bad = {"PrepareExample": {"api_id": [1, 2], "api_value": [3, 4]}}
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as raised:
             _rerun(session, path, bad)
+        assert getattr(raised.value, "__notes__", None) is None
 
         with pytest.raises(ValueError, match="No results found"):
             session.get_result()

@@ -389,6 +389,7 @@ class TestComputeStreamNotifiesExtenders:
 
         assert raised.value is failure
         assert probe.run_ids
+        assert getattr(raised.value, "__notes__", None) == [f"mloda run_id: {probe.run_ids[0]}"]
 
     def test_early_closed_api_stream_does_not_raise_the_opt_in_extender_failure(
         self, caplog: pytest.LogCaptureFixture
@@ -412,6 +413,8 @@ class TestComputeStreamNotifiesExtenders:
             mloda.run_all([Feature(name=_EARLY_CLOSE_COLUMN)], **_early_close_kwargs({probe}))
 
         assert raised.value is failure
+        assert probe.run_ids
+        assert getattr(raised.value, "__notes__", None) == [f"mloda run_id: {probe.run_ids[0]}"]
 
 
 class TestComputeStreamErrorHandling:

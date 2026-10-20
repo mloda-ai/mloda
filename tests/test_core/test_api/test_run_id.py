@@ -77,6 +77,7 @@ class TestSessionPlanIdStableAcrossRunsRunIdPerRun:
 
         first_plan_id = session.plan_id
         mock_orchestrator = Mock(spec=ExecutionOrchestrator)
+        mock_orchestrator.get_result_items.return_value = []
 
         with (
             patch.object(session, "_setup_engine_runner", return_value=mock_orchestrator),

@@ -2,13 +2,12 @@
 
 These tests verify:
 1. mlodaAPI has a stream_run method that is callable
-2. stream_run returns a generator (types.GeneratorType), not a list
+2. stream_run returns a generator (collections.abc.Generator), not a list
 """
 
-import types
+import collections.abc
 
-
-from mloda.user import Feature, Features, ParallelizationMode, mlodaAPI
+from mloda.user import Feature, Features, ParallelizationMode, ResultStream, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 # stream_run plans eagerly, so ``EngineRunnerTest1`` must be a loaded FeatureGroup subclass at call
@@ -36,7 +35,8 @@ class TestStreamRunReturnsGenerator:
         )
         result = session.stream_run(parallelization_modes={ParallelizationMode.SYNC})
 
-        assert isinstance(result, types.GeneratorType), f"stream_run must return a generator, got {type(result)}"
+        assert isinstance(result, collections.abc.Generator), f"stream_run must return a generator, got {type(result)}"
+        assert isinstance(result, ResultStream), f"stream_run must return a ResultStream, got {type(result)}"
 
     def test_stream_run_is_not_a_list(self) -> None:
         """stream_run must NOT return a list (distinguishing it from run)."""

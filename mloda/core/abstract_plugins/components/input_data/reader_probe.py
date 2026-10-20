@@ -45,6 +45,7 @@ class FormatProbeOutcome:
 
     refused: str | None
     result: Any
+    error: Exception | None = None
 
 
 def _match_context(scope: ReaderProbeScope, reader: Any, feature_names: list[str]) -> HookContext:
@@ -109,7 +110,7 @@ def probe_format_group(
                 raise
             reason = contained_raise_reason(exc)
             _log_refusal(scope, group, reason, "Format group")
-            return FormatProbeOutcome(reason, None)
+            return FormatProbeOutcome(reason, None, exc.with_traceback(None))
     if not finished:
         reason = "the extender did not run the probe"
         _log_refusal(scope, group, reason, "Format group")
@@ -147,5 +148,6 @@ def probe_reader(reader: Any, data_access: Any, feature_names: list[str], option
                 reader.get_class_name(),
                 f"refused at INPUT_DATA_MATCH: {reason}",
                 stage=INPUT_DATA_STAGE,
+                refusal=exc.with_traceback(None),
             )
             return None

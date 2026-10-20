@@ -4,7 +4,7 @@ Neutral home so reader code does not depend on the feature-chainer module."""
 from __future__ import annotations
 
 import contextvars
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class MatchRejection:
     reason: str
     stage: str = "value_rejection"
     candidates: tuple[str, ...] = ()
+    refusal: Exception | None = field(default=None, compare=False, repr=False)
 
 
 # The owned stage marks a veto recorded while the user explicitly addressed the reader.
@@ -37,13 +38,17 @@ MATCH_REJECTION_REASONS: contextvars.ContextVar[dict[str, MatchRejection] | None
 
 
 def record_match_rejection(
-    owner_name: str, reason: str, stage: str = "value_rejection", candidates: tuple[str, ...] = ()
+    owner_name: str,
+    reason: str,
+    stage: str = "value_rejection",
+    candidates: tuple[str, ...] = (),
+    refusal: Exception | None = None,
 ) -> None:
     """Record a match rejection; the first per owner wins, and outside an active evaluation it is a no-op."""
     reasons = MATCH_REJECTION_REASONS.get()
     if reasons is None:
         return
-    reasons.setdefault(owner_name, MatchRejection(reason, stage, candidates))
+    reasons.setdefault(owner_name, MatchRejection(reason, stage, candidates, refusal))
 
 
 def replace_probe_match_rejection(
@@ -76,7 +81,7 @@ def restamp_match_rejections_since(known_owners: frozenset[str], from_stage: str
     for owner_name, rejection in list(reasons.items()):
         if owner_name in known_owners or rejection.stage != from_stage:
             continue
-        reasons[owner_name] = MatchRejection(rejection.reason, to_stage, rejection.candidates)
+        reasons[owner_name] = MatchRejection(rejection.reason, to_stage, rejection.candidates, rejection.refusal)
 
 
 def drop_match_rejections_since(known_owners: frozenset[str]) -> None:

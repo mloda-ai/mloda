@@ -80,8 +80,12 @@ class FeatureResolutionError(ValueError):
         feature_name: str,
         result: EvaluationResult,
         partial_records: Sequence[ResolutionRecord] = (),
+        refusals: Sequence[Exception] = (),
     ) -> None:
         super().__init__(message)
+        self.refusals: tuple[Exception, ...] = tuple(refusals)
+        if self.refusals:
+            self.__cause__ = self.refusals[0]
         self.feature_name = feature_name
         self.result = result
         # Cap then snapshot: slicing before deepcopy keeps the copied payload bounded on huge requests.
@@ -263,6 +267,20 @@ class IdentifyFeatureGroupClass:
         excluded: Mapping[type[FeatureGroup], str] | None = None,
     ) -> EvaluationResult:
         """Run the matching/filter logic without raising, returning a structured result."""
+        return cls._evaluate(feature, accessible_plugins, links, data_access_collection, excluded=excluded)[0]
+
+    @classmethod
+    def _evaluate(
+        cls,
+        feature: Feature,
+        accessible_plugins: FeatureGroupEnvironmentMapping,
+        links: set[Link] | None,
+        data_access_collection: DataAccessCollection | None = None,
+        *,
+        excluded: Mapping[type[FeatureGroup], str] | None = None,
+    ) -> tuple[EvaluationResult, tuple[Exception, ...]]:
+        """evaluate plus the extender refusals of the refused candidates, kept out of the result."""
+        refusals: tuple[Exception, ...] = ()
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
@@ -292,7 +310,15 @@ class IdentifyFeatureGroupClass:
                 # Every elimination (value_rejection included) was already recorded during the single filter pass;
                 # this only captures the non-elimination facts the messages still need.
                 result = replace(result, facts=self._capture_render_facts(result, accessible_plugins, feature, links))
+                refusals = tuple(
+                    rejection.refusal
+                    for fg, rejection in sorted(
+                        self._match_rejections.items(), key=lambda item: _candidate_sort_key(item[0])
+                    )
+                    if fg not in self._matcher_errors and rejection.refusal is not None
+                )
         finally:
+            self._match_rejections.clear()
             # A captured exception pins its traceback, whose frames pin this instance: a refcount cycle that would
             # keep both alive until a gc pass. Dropping the outcomes and option forks (user values) makes each
             # memo's lifetime what it claims,
@@ -302,7 +328,7 @@ class IdentifyFeatureGroupClass:
             self._matched_options.clear()
             self._deferred_aborts.clear()
             self._input_data_matches.clear()
-        return result
+        return result, refusals
 
     def _capture_render_facts(
         self,
@@ -1015,8 +1041,13 @@ def resolve_or_raise(
     excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
-    result, message = evaluate_and_render(feature, accessible_plugins, links, data_access_collection, excluded=excluded)
+    result, refusals = IdentifyFeatureGroupClass._evaluate(
+        feature, accessible_plugins, links, data_access_collection, excluded=excluded
+    )
+    message = render_resolution_failure(result, feature)
     if message is not None:
         # The constructor does the cap-then-deepcopy snapshot, so the records are forwarded as they are.
-        raise FeatureResolutionError(message, str(feature.name), result, partial_records=partial_records)
+        raise FeatureResolutionError(
+            message, str(feature.name), result, partial_records=partial_records, refusals=refusals
+        )
     return result

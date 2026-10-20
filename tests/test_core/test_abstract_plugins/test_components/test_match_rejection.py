@@ -26,6 +26,7 @@ from mloda.core.abstract_plugins.components.feature_chainer import feature_chain
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     record_match_rejection,
+    restamp_match_rejections_since,
 )
 from mloda.provider import record_match_rejection as provider_record_match_rejection
 
@@ -127,6 +128,40 @@ class TestStageHint:
 
         expected = MatchRejection(reason="first staged reason 727", stage="input_data")
         assert recording_window == {"StageRaceOwner727": expected}
+
+
+class TestRefusalField:
+    """A rejection can carry the extender exception that caused it, outside equality and repr."""
+
+    def test_refusal_defaults_to_none(self) -> None:
+        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+
+        assert MatchRejection(reason="r").refusal is None
+
+    def test_equality_and_repr_ignore_the_refusal(self) -> None:
+        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+
+        with_refusal = MatchRejection(reason="r", refusal=PermissionError("secret refusal"))
+
+        assert with_refusal == MatchRejection(reason="r")
+        assert "secret refusal" not in repr(with_refusal)
+
+    def test_recording_stores_the_refusal_object(self, recording_window: dict[str, Any]) -> None:
+        refusal = PermissionError("no clearance")
+
+        record_match_rejection("RefusalOwner", "refused", stage="input_data", refusal=refusal)
+
+        assert recording_window["RefusalOwner"].refusal is refusal
+
+    def test_restamp_keeps_the_refusal(self, recording_window: dict[str, Any]) -> None:
+        refusal = PermissionError("no clearance")
+        record_match_rejection("RestampOwner", "refused", stage="input_data", refusal=refusal)
+
+        restamp_match_rejections_since(frozenset(), "input_data", "input_data_owned")
+
+        stored = recording_window["RestampOwner"]
+        assert stored.stage == "input_data_owned"
+        assert stored.refusal is refusal
 
 
 class TestProviderExport:

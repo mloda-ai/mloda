@@ -440,6 +440,44 @@ class PlanInfoCalculateHookRecorder(Extender):
         }
 
 
+class PlanInfoOptionsRecorder(Extender):
+    """Records str(options) and the pointer value type each calculate hook sees."""
+
+    def __init__(self, pointer_key: str) -> None:
+        self.pointer_key = pointer_key
+        self.options_text: list[str] = []
+        self.pointer_types: list[type] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        options = Extender.feature_options(args)
+        assert options is not None
+        self.options_text.append(str(options))
+        self.pointer_types.append(type(options.get(self.pointer_key)))
+        return func(*args, **kwargs)
+
+
+class PlanInfoPointerConsumer(FeatureGroup):
+    """Consumes the SqliteFG column, so the pointer option forwards to this step."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("plan_info_pointer_col")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {cls.get_class_name()}
+
+
 _AGGREGATION_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, PandasAggregatedFeatureGroup})
 _TRANSFORM_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoArrowSource, PandasAggregatedFeatureGroup})
 _NEVER_EXECUTES_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNeverExecutes})
@@ -1083,6 +1121,26 @@ class TestPlanStepFeatureSetOptions:
         results = session.run()
         assert results[0]["plan_info_nested_value"].tolist() == [1, 2, 3]
 
+    def test_a_nested_group_value_reaches_the_content_hash_and_the_snapshot_masks_only_secret_keys(self) -> None:
+        def explain(table: str) -> list[PlanStep]:
+            return mloda.explain(
+                [
+                    Feature(
+                        "plan_info_nested_value",
+                        options={"plan_info_nested": {"table": table, "api_key": "plan-info-nested-key"}},
+                    )
+                ],
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=_NESTED_OPTIONS_PLUGINS,
+            )
+
+        plan_a, plan_b = explain("A"), explain("B")
+
+        assert plan_content_hash(plan_a) != plan_content_hash(plan_b)
+        step = next(s for s in plan_a if s.feature_group is PlanInfoNestedOptionsSource)
+        assert step.feature_set_options is not None
+        assert step.feature_set_options.group["plan_info_nested"] == {"table": "A", "api_key": "***"}
+
     def test_feature_set_options_is_excluded_from_equality(self) -> None:
         """Excluded like step_uuid, so a non-scalar group value cannot make plan comparison raise."""
         step = PlanStep(
@@ -1314,20 +1372,28 @@ class TestPlanStepDataAccessIdentity:
         assert [record["feature_group"] for record in records] == [f"{SqliteFG.__module__}:{SqliteFG.__qualname__}"]
         assert all("reader" not in record for record in records)
 
-    def test_a_plain_dict_pointer_secret_stays_out_of_the_plan_step(self, tmp_path: Path) -> None:
+    @staticmethod
+    def _pointer_db(tmp_path: Path) -> str:
         db = str(tmp_path / "pointer.db")
         conn = sqlite3.connect(db)
         conn.execute("CREATE TABLE t (plan_info_pointer_col INTEGER)")
+        conn.execute("INSERT INTO t VALUES (1)")
         conn.commit()
         conn.close()
+        return db
+
+    @pytest.mark.parametrize("in_context", [False, True], ids=["group", "context"])
+    def test_a_plain_dict_pointer_secret_stays_out_of_the_plan_step(self, tmp_path: Path, in_context: bool) -> None:
+        db = self._pointer_db(tmp_path)
         secret = "plan-info-pointer-secret"  # nosec B105
         pointer = {"sqlite": db, "password": secret}
-        feature = Feature("plan_info_pointer_col", options={"SqliteFG": pointer})
+        options = Options(context={"SqliteFG": pointer}) if in_context else {"SqliteFG": pointer}
+        plugins = PluginCollector.enabled_feature_groups({SqliteFG})
 
         explained = mloda.explain(
-            [feature],
+            [Feature("plan_info_pointer_col", options=options)],
             compute_frameworks=[PythonDictFramework],
-            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+            plugin_collector=plugins,
         )
 
         step = next(s for s in explained if s.step_kind == "compute")
@@ -1335,6 +1401,36 @@ class TestPlanStepDataAccessIdentity:
         for text in (str(step), repr(step), str(step.feature_set_options), repr(dataclasses.asdict(step))):
             assert secret not in text
         assert pointer == {"sqlite": db, "password": secret}
+
+        recorder = PlanInfoOptionsRecorder("SqliteFG")
+        mloda.run_all(
+            [Feature("plan_info_pointer_col", options=options)],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=plugins,
+            function_extender={recorder},
+        )
+
+        assert recorder.pointer_types == [RegisteredCredential]
+        assert all(secret not in text for text in recorder.options_text)
+        assert type(pointer) is dict
+        assert pointer == {"sqlite": db, "password": secret}
+
+    def test_a_forwarded_pointer_secret_stays_out_of_every_compute_step_snapshot(self, tmp_path: Path) -> None:
+        db = self._pointer_db(tmp_path)
+        secret = "plan-info-pointer-secret"  # nosec B105
+
+        explained = mloda.explain(
+            [Feature("PlanInfoPointerConsumer", options={"SqliteFG": {"sqlite": db, "password": secret}})],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG, PlanInfoPointerConsumer}),
+        )
+
+        steps = [s for s in explained if s.step_kind == "compute"]
+        assert {s.feature_group for s in steps} == {SqliteFG, PlanInfoPointerConsumer}
+        for step in steps:
+            assert step.feature_set_options is not None
+            assert secret not in str(step.feature_set_options)
+            assert db not in str(step.feature_set_options)
 
     @pytest.mark.parametrize(
         "in_context",

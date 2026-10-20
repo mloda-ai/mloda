@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
@@ -165,6 +166,23 @@ class ReadDBFG(FormatFeatureGroup):
         if isinstance(value, Credential):
             return RegisteredCredential(value.data)
         return None
+
+    @classmethod
+    def _matches_by_default_rules(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> bool:
+        """On a match, replace a plain mapping pointer with a redacting RegisteredCredential."""
+        if not super()._matches_by_default_rules(feature_name, options, data_access_collection):
+            return False
+        for key in cls.pointer_keys():
+            if key in options:
+                value = options.get(key)
+                if isinstance(value, Mapping) and not isinstance(value, RegisteredCredential):
+                    options.set(key, cls.wrap_feature_scoped_access(value))
+        return True
 
     @classmethod
     def get_connection(cls, credentials: Any) -> Any:

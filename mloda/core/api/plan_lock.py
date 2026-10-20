@@ -4,17 +4,13 @@ import difflib
 import hashlib
 import json
 import os
-import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from mloda.core.abstract_plugins.components.credential import RegisteredCredential
-from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_NAME
+from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.stable_text import stable_text
-
-_SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
 
 PLAN_LOCK_FORMAT = 7
 
@@ -29,22 +25,6 @@ def _class_path(cls: Any) -> str | None:
 
 def _sorted_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(records, key=lambda record: json.dumps(record, sort_keys=True))
-
-
-def _mask_secret_keys(value: Any) -> Any:
-    if isinstance(value, RegisteredCredential):
-        return value
-    if isinstance(value, Mapping):
-        return {
-            key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        items = [_mask_secret_keys(item) for item in value]
-        if hasattr(value, "_make"):
-            return value._make(items)
-        return tuple(items) if isinstance(value, tuple) else items
-    return value
 
 
 def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:

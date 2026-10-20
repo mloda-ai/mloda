@@ -114,6 +114,10 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
         "real edge, collided verdict: the format group override of the default rules; its raises are marked aborts"
     ),
+    ("mloda/core/abstract_plugins/components/input_data/read_db_fg.py", "_matches_by_default_rules"): (
+        "real edge: the database group override delegates to the format group default rules, whose raises are "
+        "marked aborts"
+    ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
         "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_reader or "
         "probe_format_group"
@@ -161,6 +165,10 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
         "real edge: the format group override of the default rules reaches probe_format_group's contained "
         "extender raise, which declines one candidate and re-raises probe and match aborts"
+    ),
+    ("mloda/core/abstract_plugins/components/input_data/read_db_fg.py", "_matches_by_default_rules"): (
+        "real edge: the database group override delegates through super() to the format group default rules, "
+        "whose contained probe declines one candidate and re-raises aborts"
     ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
         "a warning-only extender's own failure falls back to the probe; the probe's raise always propagates"

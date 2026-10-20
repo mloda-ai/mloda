@@ -37,8 +37,6 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
     @classmethod
     def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
         """Add the result to the DataFrame."""
-        import re
-
         # Convert sparse matrix to dense if needed
         if hasattr(result, "toarray"):
             result = result.toarray()
@@ -47,22 +45,9 @@ class PandasEncodingFeatureGroup(EncodingFeatureGroup):
         if hasattr(result, "shape") and len(result.shape) == 2:
             if result.shape[1] > 1:
                 # Multi-column result (e.g., from OneHotEncoder)
-                # Check if a specific column is requested via ~N suffix
-                column_match = re.fullmatch(r"(.+)~(\d+)", feature_name)
-                if column_match:
-                    requested_column_index = int(column_match.group(2))
-                    if requested_column_index < result.shape[1]:
-                        data[feature_name] = result[:, requested_column_index]
-                    else:
-                        raise ValueError(
-                            f"Requested column index {requested_column_index} is out of range. "
-                            f"Available columns: 0-{result.shape[1] - 1}"
-                        )
-                else:
-                    # Full multi-column encoding - create all columns with ~ separator
-                    named_columns = cls.apply_naming_convention(result, feature_name)
-                    for col_name, col_data in named_columns.items():
-                        data[col_name] = col_data
+                named_columns = cls.apply_naming_convention(result, feature_name)
+                for col_name, col_data in named_columns.items():
+                    data[col_name] = col_data
             else:
                 # Single column 2D result - flatten to 1D
                 data[feature_name] = result.flatten()

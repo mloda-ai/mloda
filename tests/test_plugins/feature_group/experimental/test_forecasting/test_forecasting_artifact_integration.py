@@ -5,8 +5,11 @@ This test demonstrates how the ForecastingFeatureGroup artifacts can be saved an
 allowing trained models to be reused for future forecasts.
 """
 
+import json
 from typing import Any
 from datetime import datetime, timedelta
+
+import pytest
 
 from mloda.user import Feature
 from mloda.user import Options
@@ -14,6 +17,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
+from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 from mloda.provider import DefaultOptionKeys
 
@@ -122,6 +126,82 @@ class TestForecastingArtifactIntegration:
         for suffix in ("0", "1", "2"):
             assert f"{base_name}~{suffix}" in columns2
         assert f"{base_name}~1" in columns2
+
+    BASE = "category__onehot_encoded__linear_forecast_7day"
+    SINGLE = "sales__linear_forecast_7day"
+
+    def _collector(self, creator: type[ATestDataCreator]) -> PluginCollector:
+        return PluginCollector.enabled_feature_groups(
+            {creator, PandasEncodingFeatureGroup, PandasForecastingFeatureGroup}
+        )
+
+    def _options(self, confidence_intervals: bool = False) -> Options:
+        options = Options({DefaultOptionKeys.reference_time: "time_filter"})
+        if confidence_intervals:
+            options.add_to_group(ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, True)
+        return options
+
+    def _run(self, name: str, creator: type[ATestDataCreator], options: Options) -> tuple[mloda, set[str]]:
+        api = mloda(
+            [Feature(name, options)], compute_frameworks=[PandasDataFrame], plugin_collector=self._collector(creator)
+        )
+        results = api.run()
+        return api, {c for r in results for c in r.columns}
+
+    def test_part_only_request_saves_nested_artifact_with_only_that_column_and_reloads(self) -> None:
+        api, columns = self._run(f"{self.BASE}~1", ForecastingCategoryTestDataCreator, self._options())
+
+        assert columns == {f"{self.BASE}~1"}
+        artifact = api.get_artifacts()[self.BASE]
+        assert json.loads(artifact)["columns"].keys() == {"1"}
+
+        options2 = self._options()
+        options2.add_to_group(self.BASE, artifact)
+        _, columns2 = self._run(f"{self.BASE}~1", ForecastingCategoryTestDataCreator, options2)
+        assert columns2 == {f"{self.BASE}~1"}
+
+        options3 = self._options()
+        options3.add_to_group(self.BASE, artifact)
+        with pytest.raises(ValueError) as excinfo:
+            self._run(self.BASE, ForecastingCategoryTestDataCreator, options3)
+        message = str(excinfo.value)
+        assert "['1']" in message
+        assert "part request" in message
+
+    def test_part_not_in_the_source_raises(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            self._run(f"{self.BASE}~7", ForecastingCategoryTestDataCreator, self._options())
+        assert f"{self.BASE}~7" in str(excinfo.value) or "7" in str(excinfo.value)
+        assert "No feature groups" not in str(excinfo.value)
+
+    def test_numbered_part_requests_its_bounds_along(self) -> None:
+        _, columns = self._run(f"{self.BASE}~0", ForecastingCategoryTestDataCreator, self._options(True))
+
+        assert columns == {f"{self.BASE}~0", f"{self.BASE}~0~lower", f"{self.BASE}~0~upper"}
+
+    def test_exact_bound_part_returns_only_that_column(self) -> None:
+        _, columns = self._run(f"{self.BASE}~0~lower", ForecastingCategoryTestDataCreator, self._options(True))
+
+        assert columns == {f"{self.BASE}~0~lower"}
+
+    def test_bound_part_on_single_source_with_intervals_returns_only_that_column(self) -> None:
+        """Changed intent: `name~lower` used to be no forecast name; with intervals it is now a valid bound part."""
+        _, columns = self._run(f"{self.SINGLE}~lower", ForecastingArtifactTestDataCreator, self._options(True))
+
+        assert columns == {f"{self.SINGLE}~lower"}
+
+    @pytest.mark.parametrize("tail", ["lower", "upper", "0_x"])
+    def test_part_not_produced_by_a_single_source_raises_after_resolution(self, tail: str) -> None:
+        """Changed intent: these tails resolve now (wildcard) and fail because the column is not produced."""
+        name = f"{self.SINGLE}~{tail}"
+        with pytest.raises(ValueError) as excinfo:
+            self._run(name, ForecastingArtifactTestDataCreator, self._options())
+        assert name in str(excinfo.value)
+        assert "No feature groups" not in str(excinfo.value)
+
+    def test_trailing_newline_tail_is_not_a_part_and_fails_resolution(self) -> None:
+        with pytest.raises(ValueError):
+            self._run(f"{self.SINGLE}~a\n", ForecastingArtifactTestDataCreator, self._options())
 
     def test_artifact_save_and_load(self) -> None:
         """Test saving and loading forecasting artifacts."""

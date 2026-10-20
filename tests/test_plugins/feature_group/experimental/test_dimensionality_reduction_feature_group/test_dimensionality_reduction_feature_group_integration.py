@@ -5,6 +5,7 @@ Integration tests for the DimensionalityReductionFeatureGroup.
 from typing import Any
 
 import numpy as np
+import pytest
 
 from mloda.user import mloda
 from mloda.user import Feature
@@ -224,3 +225,57 @@ class TestDimensionalityReductionFeatureGroupIntegration:
         assert f"{ica_feature}~dim2" in result_df.columns, f"{ica_feature}~dim2 not found"
         assert f"{isomap_feature}~dim1" in result_df.columns, f"{isomap_feature}~dim1 not found"
         assert f"{isomap_feature}~dim2" in result_df.columns, f"{isomap_feature}~dim2 not found"
+
+
+class TestDimensionalityReductionOutputParts:
+    """The group declares dim1..dimN; core resolves, selects and checks `<feature>~dimK`."""
+
+    SOURCE = "feature0,feature1,feature2"
+
+    def _run(self, *names: str) -> list[Any]:
+        plugin_collector = PluginCollector.enabled_feature_groups(
+            {DimensionalityReductionFeatureTestDataCreator, PandasDimensionalityReductionFeatureGroup}
+        )
+        features: list[Feature | str] = list(names)
+        return mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+
+    @staticmethod
+    def _columns(results: list[Any]) -> set[str]:
+        return {c for frame in results for c in frame.columns}
+
+    def test_name_declares_one_part_per_dimension(self) -> None:
+        group = DimensionalityReductionFeatureGroup
+        assert group.output_parts(f"{self.SOURCE}__pca_2d", Options()) == ("dim1", "dim2")
+        assert group.output_parts(f"{self.SOURCE}__pca_3d", Options()) == ("dim1", "dim2", "dim3")
+
+    def test_config_style_name_declares_no_parts(self) -> None:
+        options = Options(
+            context={
+                DimensionalityReductionFeatureGroup.ALGORITHM: "pca",
+                DimensionalityReductionFeatureGroup.DIMENSION: 3,
+                DefaultOptionKeys.in_features: self.SOURCE,
+            }
+        )
+
+        assert DimensionalityReductionFeatureGroup.output_parts("my_reduction", options) is None
+
+    def test_part_request_returns_only_that_column(self) -> None:
+        name = f"{self.SOURCE}__pca_2d"
+        full = self._run(name)[0]
+        results = self._run(f"{name}~dim1")
+
+        assert self._columns(results) == {f"{name}~dim1"}
+        np.testing.assert_allclose(results[0][f"{name}~dim1"].to_numpy(), full[f"{name}~dim1"].to_numpy())
+
+    def test_last_part_of_a_larger_reduction(self) -> None:
+        name = "feature0,feature1,feature2,feature3__pca_3d"
+
+        assert self._columns(self._run(f"{name}~dim3")) == {f"{name}~dim3"}
+
+    def test_undeclared_part_fails_at_resolution_and_lists_declared(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            self._run(f"{self.SOURCE}__pca_2d~dim3")
+
+        message = str(excinfo.value)
+        assert "dim3" in message
+        assert "dim1" in message and "dim2" in message

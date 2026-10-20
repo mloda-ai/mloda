@@ -81,6 +81,7 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 # Feature chaining
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
+    ANY_OUTPUT_PART,
     CHAIN_SEPARATOR,
     COLUMN_SEPARATOR,
     INPUT_SEPARATOR,
@@ -201,6 +202,7 @@ __all__ = [
     "DefaultOptionKeys",
     # Feature chaining
     "FeatureChainParser",
+    "ANY_OUTPUT_PART",
     "CHAIN_SEPARATOR",
     "COLUMN_SEPARATOR",
     "INPUT_SEPARATOR",

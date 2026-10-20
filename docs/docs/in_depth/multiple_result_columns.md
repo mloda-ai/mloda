@@ -131,6 +131,51 @@ class SpecificSubColumnConsumer(FeatureGroup):
 
 - `Feature("base_feature")` → Returns ALL columns: `base_feature~0`, `base_feature~1`, etc.
 - `Feature("base_feature~1")` → Returns ONLY `base_feature~1` column
+- `Feature("measure~value")` → Returns ONLY `measure~value`, if the group declares `value` as an output part (see below)
+
+### Declaring Output Parts
+
+A group that returns named parts declares them, so `Feature("measure~value")` resolves to the group that produces `measure`, at the top level and as a dependency:
+
+```python
+from typing import Any
+
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.user import PluginCollector, mloda
+
+
+class DocMeasureFeatureGroup(FeatureGroup):
+    OUTPUT_PARTS = ("value", "unit")  # or (ANY_OUTPUT_PART,) if parts are only named at run time
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"measure"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"measure~value": [1, 2], "measure~unit": ["m", "m"]}
+
+
+result = mloda.run_all(
+    ["measure~value"],
+    compute_frameworks=["PandasDataFrame"],
+    plugin_collector=PluginCollector.enabled_feature_groups({DocMeasureFeatureGroup}),
+)
+assert list(result[0].columns) == ["measure~value"]
+```
+
+If the parts depend on the feature name or options, override the classmethod `output_parts(feature_name, options)` instead.
+
+- `measure` is computed once, even if several parts are requested with the same options and data type; only the requested part columns are returned.
+- An undeclared part (`measure~bogus`) fails at resolution and lists the declared parts. With `ANY_OUTPUT_PART`, a part that was not produced fails after the computation.
+- A name any group matches as a whole (a literal `a~b` column or a config-based feature) is kept whole and wins over another group's part reading; a base name that itself contains `~` cannot have parts.
+- An artifact saved by a part request covers only the requested parts; a later whole-feature request cannot reuse it.
+- A nested part such as `f~0~lower` is declared by its first level (`0`).
+- Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`; a missing index fails after the computation.
+- `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution, not in global filters.
+- Artifacts are keyed by the base feature name, not a part column.
+- A trailing `~N` is also read against the declared parts: `measure~0` fails at resolution unless `0` is declared.
+- A part's declared data type is checked on its own column (`measure~value`).
 
 ## How It Works
 
@@ -175,4 +220,4 @@ mloda provides several utilities for working with multi-column features:
 | `expand_feature_columns(feature_name, num_columns)` | Generate column name list | Producer: Pre-generate expected column names |
 | `get_column_base_feature(column_name)` | Strip trailing `~N` suffix from column | Both: Extract base feature from `feature~N` (last `~` wins) |
 
-**Note**: When declaring dependencies with `Feature("base_feature~N")`, the framework automatically resolves to the parent FeatureGroup that produces `base_feature` and extracts only the specified sub-column. Only a numeric suffix is recognized this way: `get_column_base_feature` does not strip a non-digit suffix such as `~mean` or `~dim1` back to its base, so a feature name like `Feature("base_feature~mean")` will NOT resolve to the producing FeatureGroup as a formal sub-column dependency.
+**Note**: When declaring dependencies with `Feature("base_feature~N")` or `Feature("base_feature~part")`, the framework resolves to the FeatureGroup that produces `base_feature` and extracts only the specified sub-column. A numeric suffix works for any group that supports the base feature; a non-digit suffix such as `~mean` needs a group that declares it as an output part. `get_column_base_feature` still strips only a trailing numeric suffix.

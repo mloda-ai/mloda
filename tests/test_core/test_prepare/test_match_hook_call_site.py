@@ -23,9 +23,10 @@ assert _CORE_ROOT.is_dir(), f"core root not found; check the parents index for t
 
 HOOK = "match_feature_group_criteria"
 
-# The one home of the call, the marked-abort re-raise and the bool() coercion.
+# The one home of the call and the bool() coercion; call_match_hook owns the containment and reaches the hook only through it.
 HELPER_MODULE = "mloda/core/abstract_plugins/components/match_hook.py"
-HELPER_FUNCTION = "call_match_hook"
+HELPER_FUNCTION = "_ask_hook"
+CONTAINMENT_FUNCTION = "call_match_hook"
 
 # The two seams that keep only their own recording and rollback around that call.
 FILTER_SEAM = ("mloda/core/filter/global_filter.py", "criteria")
@@ -183,6 +184,17 @@ def test_the_helper_module_is_scanned_and_holds_the_call() -> None:
     )
 
 
+def test_call_match_hook_reaches_the_hook_through_the_helper() -> None:
+    definition = _definition(HELPER_MODULE, CONTAINMENT_FUNCTION)
+    called = [
+        node
+        for node in ast.walk(definition)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == HELPER_FUNCTION
+    ]
+
+    assert called, f"{CONTAINMENT_FUNCTION}() must call {HELPER_FUNCTION}(), the one home of the {HOOK} call"
+
+
 def test_the_sweep_does_not_collapse() -> None:
     """The helper canary is satisfied by a single scanned module, so pin the size of the walk too."""
     scanned = sweep().modules
@@ -213,7 +225,7 @@ def test_neither_seam_holds_an_exception_handler_of_its_own(module: str, functio
 
     assert handlers == [], (
         f"{module}::{function}() catches at line(s) {handlers}. The call, the marked-abort re-raise and the "
-        f"bool() coercion belong to {HELPER_FUNCTION}(); read its outcome instead and keep only this seam's "
+        f"bool() coercion belong to {CONTAINMENT_FUNCTION}(); read its outcome instead and keep only this seam's "
         "own recording and rollback here."
     )
 
@@ -225,7 +237,7 @@ def test_neither_seam_drops_an_exception_without_an_except(module: str, function
 
     assert drops == [], (
         f"{module}::{function}() drops an exception at line(s) {drops} with no except clause to show for it. A "
-        f"suppress block or a finally that returns swallows the marked abort {HELPER_FUNCTION}() deliberately "
+        f"suppress block or a finally that returns swallows the marked abort {CONTAINMENT_FUNCTION}() deliberately "
         "re-raised, and the handler pin beside this one sees none of it."
     )
 
@@ -433,3 +445,25 @@ def test_the_drop_pin_flags_a_suppress_spliced_into_a_real_seam(module: str, fun
     assert silent_drops(_definition_in(mutated, module, function)) == [lineno], (
         f"a suppress block spliced into {function}() itself was not flagged"
     )
+
+
+def test_ask_hook_is_referenced_only_inside_call_match_hook() -> None:
+    """Guard: a call or bare name load of the helper outside call_match_hook bypasses its containment."""
+    strays: list[str] = []
+    for path in sorted(_CORE_ROOT.rglob("*.py")):
+        module = path.relative_to(_REPO_ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=module)
+        allowed: set[int] = set()
+        if module == HELPER_MODULE:
+            contained = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == CONTAINMENT_FUNCTION]
+            allowed = {id(node) for fn in contained for node in ast.walk(fn)}
+        for node in ast.walk(tree):
+            named = (
+                (isinstance(node, ast.Name) and node.id == HELPER_FUNCTION)
+                or (isinstance(node, ast.Attribute) and node.attr == HELPER_FUNCTION)
+                or (isinstance(node, ast.alias) and node.name == HELPER_FUNCTION)
+            )
+            if named and id(node) not in allowed:
+                strays.append(f"{module}:{getattr(node, 'lineno', 0)}")
+
+    assert strays == [], f"{HELPER_FUNCTION} is referenced outside {CONTAINMENT_FUNCTION}(): {strays}"

@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, PreFilterPlugins
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
@@ -312,7 +313,7 @@ class Engine:
         self._warn_on_dual_option_consumption(feature, feature_group_class)
         feature_group = feature_group_class()
 
-        self._set_feature_name(feature, feature_group)
+        self._set_feature_name(feature, feature_group, result.output_parts.get(feature_group_class))
         self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
 
         # Stash the declared pre-default options: dependency declaration and child inheritance observe
@@ -347,9 +348,18 @@ class Engine:
         elif self.links:
             self._add_index_feature_from_links(feature_group_class, feature_group, feature, features)
 
-    def _set_feature_name(self, feature: Feature, feature_group: FeatureGroup) -> None:
-        """Sets the feature name using the feature group's logic."""
+    def _set_feature_name(
+        self, feature: Feature, feature_group: FeatureGroup, output_part: tuple[str, str] | None
+    ) -> None:
+        """Rename the feature to its base name and record the requested output part."""
+        requested = feature.name
+        if output_part is not None:
+            feature.name = FeatureName(output_part[0])
         feature.name = feature_group.set_feature_name(feature.options, feature.name)
+        if output_part is not None:
+            feature.record_part(output_part[1])
+        elif feature.name != requested and requested.startswith(f"{feature.name}{COLUMN_SEPARATOR}"):
+            feature.record_part(requested[len(feature.name) + 1 :])
 
     def _set_compute_framework_and_data_type(
         self,
@@ -683,6 +693,7 @@ class Engine:
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
         existing.options.union_own_keys(host.options)
+        existing.absorb_parts(host)
         for name, keys in host.consumer_attributions:
             existing.add_consumer_attribution(name, keys)
         if host.initial_requested_data:
@@ -764,6 +775,7 @@ class Engine:
                 merged = set(self.specialized_from.get(existing_feature.uuid, ())) | set(specialized_from)
                 self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
             existing_feature.options.union_own_keys(feature.options)
+            existing_feature.absorb_parts(feature)
             for name, keys in feature.consumer_attributions:
                 existing_feature.add_consumer_attribution(name, keys)
             self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)

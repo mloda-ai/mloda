@@ -77,7 +77,21 @@ class FeatureSet:
                 self.artifact_to_load = feature_name
                 return
 
+        self.reject_part_keyed_artifacts(self.options.keys())
         self.artifact_to_save = self.get_name_of_one_feature()
+
+    def reject_part_keyed_artifacts(self, keys: Iterable[str]) -> None:
+        """Raise when an artifact is keyed by a requested part column instead of the base feature name."""
+        keyed = set(keys)
+        if keyed & set(self.get_all_names()):
+            return
+        for feature in self.get_sorted_features():
+            for part in sorted(feature.requested_parts):
+                if f"{feature.name}~{part}" in keyed:
+                    raise ValueError(
+                        f"Artifact keyed by the part column '{feature.name}~{part}'; "
+                        f"key the artifact by the base feature name '{feature.name}'."
+                    )
 
     def resolve_artifact_for_runtime(self, runtime_artifacts: dict[str, Any]) -> None:
         """Re-resolve artifact save/load mode using runtime artifacts from run().
@@ -221,7 +235,16 @@ class FeatureSet:
         return self.options.get(key)
 
     def get_initial_requested_features(self) -> tuple[FeatureName, ...]:
-        return tuple(sorted({feature.name for feature in self.features if feature.initial_requested_data}))
+        """Names the initial request selects: the base name, or `<base>~<part>` for a feature asked only by part."""
+        names: set[str] = set()
+        for feature in self.features:
+            if not feature.initial_requested_data:
+                continue
+            if feature.result_parts is None:
+                names.add(feature.name)
+            else:
+                names.update(f"{feature.name}~{part}" for part in feature.result_parts)
+        return tuple(sorted(FeatureName(name) for name in names))
 
     def get_name_of_one_feature(self) -> FeatureName:
         """Return the alphabetically smallest feature name added to the set (deterministic regardless of add() order)."""

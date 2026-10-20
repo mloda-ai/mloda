@@ -8,7 +8,7 @@ import datetime
 from abc import abstractmethod
 from typing import Any
 
-from mloda.provider import FeatureGroup
+from mloda.provider import ANY_OUTPUT_PART, FeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import (
@@ -169,7 +169,9 @@ class EncodingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         "ordinal": "OrdinalEncoder",
     }
 
-    PREFIX_PATTERN = r".*__(?P<encoder_type>onehot|label|ordinal)_encoded(?:~\d+)?$"
+    PREFIX_PATTERN = r".*__(?P<encoder_type>onehot|label|ordinal)_encoded$"
+
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
 
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1

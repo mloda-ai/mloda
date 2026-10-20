@@ -191,6 +191,11 @@ class Feature:
         # resolution, before intake merges twins.
         self.required_declarations = self._normalize_required_declarations(required_declarations)
 
+        # Engine-stamped output parts (requested, selected by the initial request, parts-only); not in eq/hash.
+        self.requested_parts: frozenset[str] = frozenset()
+        self.result_parts: frozenset[str] | None = None
+        self.parts_only: bool = False
+
         # forward_group, forward_group_exclude and inherit_context_keys are merge directives
         # for input features with forward-by-default semantics (None/True inherit all consumer
         # group options, False isolates, an allowlist restricts, exclude subtracts),
@@ -221,6 +226,25 @@ class Feature:
         entry = (name, keys)
         if entry not in self.consumer_attributions:
             self.consumer_attributions.append(entry)
+
+    def record_part(self, part: str | None) -> None:
+        """Record the output part this intake asked for (None: the whole feature)."""
+        if part is not None:
+            self.requested_parts = frozenset({part})
+            self.result_parts = frozenset({part})
+            self.parts_only = True
+
+    def absorb_parts(self, other: Feature) -> None:
+        """Union a merged twin's parts in; call before the initial_requested_data flags merge."""
+        self.requested_parts |= other.requested_parts
+        self.parts_only = self.parts_only and other.parts_only
+        if other.initial_requested_data and not self.initial_requested_data:
+            self.result_parts = other.result_parts
+        elif other.initial_requested_data:
+            if self.result_parts is not None and other.result_parts is not None:
+                self.result_parts |= other.result_parts
+            else:
+                self.result_parts = None
 
     @staticmethod
     def _normalize_allowlist(

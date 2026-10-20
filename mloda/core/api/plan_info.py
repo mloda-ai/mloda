@@ -198,7 +198,9 @@ def build_plan_steps(
         if isinstance(step, FeatureGroupStep):
             feature_names = tuple(str(name) for name in step.features.get_all_names())
             requested = tuple(sorted(str(name) for name in step.features.get_initial_requested_features()))
-            injected = tuple(sorted(set(feature_names) - set(requested)))
+            # A feature requested by part (base~part) is not injected under its base name.
+            requested_bases = {str(f.name) for f in step.features.features if f.initial_requested_data}
+            injected = tuple(sorted(set(feature_names) - set(requested) - requested_bases))
             declared = step.features.declared_input_feature_names
             input_feature_names = tuple(sorted(declared)) if declared else ()
             replaced = {

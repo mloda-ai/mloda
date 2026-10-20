@@ -342,7 +342,7 @@ relation.types     # backend-specific dtype objects, same order as columns
 
 `SqliteRelation.to_arrow_table()` types a column by its propagated hint, else by its non-null values (int and float mixed gives float64, any other mix gives string, with numbers as text).
 A computed column without a non-null value takes the type its SQL expression yields for two placeholder rows, so its type is the same with and without rows unless the expression's type depends on the values; a projection reading `rowid` cannot be probed and is string.
-A relation mloda did not build falls back to the declared column affinity when it has no rows.
+A relation mloda did not build falls back to the declared column affinity when it has no rows: `INTEGER` is int64, `REAL` is float64, `BLOB` is large_binary, and `TEXT` is string. A typeless or `NUMERIC`-affinity column (`NUMERIC`, `DECIMAL`, `BOOLEAN`, `DATE`) has no fixed storage class, so with no rows it is string, like an all-null column, and with rows its values decide. Selects, filters, joins, and appended columns built from such a relation keep these types.
 A column Arrow cannot build (for example bytes that are not UTF-8 in a text column, or text that is not a date in a date column) raises a `ValueError` naming it.
 
 ### Window functions

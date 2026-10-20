@@ -211,7 +211,9 @@ class SqliteRelation(SqlBaseRelation):
         _is_view: bool = False,
         _types: Sequence[pa.DataType | None] | None = None,
         _probe: tuple[str, SqliteRelation] | None = None,
+        _fallback_types: Sequence[pa.DataType] | None = None,
     ) -> None:
+        self._fallback_types = list(_fallback_types) if _fallback_types is not None else None
         self._probe = _probe
         self._connection = connection
         self._table_name = table_name
@@ -240,12 +242,15 @@ class SqliteRelation(SqlBaseRelation):
         """Column types as PyArrow ``pa.DataType`` objects, aligned with ``columns``.
 
         Uses propagated type hints when available; otherwise falls back to SQLite
+        zero-row fallback types from the source, else SQLite
         column-affinity inference via ``PRAGMA table_info``.
         """
         columns = self.columns
         type_hints = self._types_for_current_columns()
         if type_hints is not None:
             return type_hints
+        if self._fallback_types is not None and len(self._fallback_types) == len(columns):
+            return list(self._fallback_types)
         type_map = self._sqlite_affinity_types_by_column()
         return [type_map.get(column, pa.string()) for column in columns]
 
@@ -257,6 +262,10 @@ class SqliteRelation(SqlBaseRelation):
     def _sqlite_affinity_types_by_column(self) -> dict[str, pa.DataType]:
         cursor = self._connection.execute(f"PRAGMA table_info({quote_ident(self._table_name)})")
         return {row[1]: _sqlite_affinity_to_arrow_type(str(row[2])) for row in cursor.fetchall()}
+
+    def _unhinted_types(self) -> list[pa.DataType] | None:
+        """Zero-row types for a relation without hints, else None; never scans rows."""
+        return self.types if self._type_hints_for_current_columns() is None else None
 
     def _type_hints_for_current_columns(self) -> list[pa.DataType | None] | None:
         if self._cached_types is None or len(self._cached_types) != len(self.columns):
@@ -370,6 +379,7 @@ class SqliteRelation(SqlBaseRelation):
             new_name,
             _is_view=False,
             _types=types,
+            _fallback_types=self._unhinted_types(),
         )
 
     def select(self, *columns: str, _raw_sql: str | None = None) -> "SqliteRelation":
@@ -386,15 +396,29 @@ class SqliteRelation(SqlBaseRelation):
         sql = f"CREATE TEMP VIEW {quote_ident(new_name)} AS SELECT {projection} FROM {quote_ident(self._table_name)}"  # nosec
         self._connection.execute(sql)
         probe: tuple[str, SqliteRelation] | None = None
+        fallback: list[pa.DataType] | None = None
+        if _raw_sql is None:
+            source_types = self._unhinted_types()
+            if source_types is not None:
+                type_map = dict(zip(self.columns, source_types, strict=True))
+                fallback = [type_map[c] for c in columns]
         if _raw_sql is not None:
             cursor = self._connection.execute(f"SELECT * FROM {quote_ident(new_name)} LIMIT 0")  # nosec
             output_columns = [desc[0] for desc in cursor.description]
             types = self._types_for_raw_sql_projection(projection, output_columns)
             probe = (projection, self)
-        return SqliteRelation(self._connection, new_name, _is_view=True, _types=types, _probe=probe)
+        return SqliteRelation(
+            self._connection, new_name, _is_view=True, _types=types, _probe=probe, _fallback_types=fallback
+        )
 
     def set_alias(self, alias: str) -> "SqliteRelation":
-        rel = SqliteRelation(self._connection, self._table_name, self._is_view, self._types_for_current_columns())
+        rel = SqliteRelation(
+            self._connection,
+            self._table_name,
+            self._is_view,
+            self._types_for_current_columns(),
+            _fallback_types=self._unhinted_types(),
+        )
         rel._alias = alias
         return rel
 
@@ -413,6 +437,7 @@ class SqliteRelation(SqlBaseRelation):
             new_name,
             _is_view=True,
             _types=types,
+            _fallback_types=self._unhinted_types(),
         )
 
     def order(self, *columns: str) -> "SqliteRelation":
@@ -431,6 +456,7 @@ class SqliteRelation(SqlBaseRelation):
             _is_view=True,
             _types=self._type_hints_for_current_columns(),
             _probe=self._probe,
+            _fallback_types=self._unhinted_types(),
         )
 
     def drop(self) -> None:
@@ -501,7 +527,13 @@ class SqliteRelation(SqlBaseRelation):
             f"ON {condition}"
         )
         self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_table, _is_view=True, _types=types)
+        fallback = None
+        if types is None:
+            left_rel, right_rel = (other, self) if how == "right" else (self, other)
+            fallback = self._types_for_join_projection(
+                sql_left_cols, left_rel.types, sql_right_cols, right_rel.types, shared
+            )
+        return SqliteRelation(self._connection, new_table, _is_view=True, _types=types, _fallback_types=fallback)
 
     def _full_outer_join(
         self,
@@ -555,7 +587,12 @@ class SqliteRelation(SqlBaseRelation):
         )
         sql = f"CREATE TEMP VIEW {quote_ident(new_table)} AS {left_sql} UNION ALL {right_sql}"
         self._connection.execute(sql)
-        return SqliteRelation(self._connection, new_table, _is_view=True, _types=types)
+        fallback = None
+        if types is None:
+            fallback = self._types_for_join_projection(
+                self_cols, self.types, other_cols, other.types, shared, coalesce_shared=True
+            )
+        return SqliteRelation(self._connection, new_table, _is_view=True, _types=types, _fallback_types=fallback)
 
     @staticmethod
     def _build_join_projection(
@@ -628,7 +665,8 @@ class SqliteRelation(SqlBaseRelation):
             f"ON {quote_ident(left_name)}.{qrn} = {quote_ident(right_name)}.{qrn}"
         )
         types = current_types + new_col_types if current_types is not None and new_col_types is not None else None
-        return SqliteRelation(self._connection, result_name, _is_view=True, _types=types)
+        fallback = [*self.types, *new_col_rel.types] if types is None else None
+        return SqliteRelation(self._connection, result_name, _is_view=True, _types=types, _fallback_types=fallback)
 
     def to_arrow_table(self) -> pa.Table:
         cursor = self._connection.execute(f"SELECT * FROM {quote_ident(self._table_name)}")  # nosec

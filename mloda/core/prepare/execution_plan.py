@@ -24,6 +24,7 @@ from mloda.core.prepare.declared_sides import (
     several_consumers_members_reason,
     split_by_declared_side,
 )
+from mloda.core.prepare.join_decision import DeclinedJoin, JoinDecision
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
@@ -209,7 +210,7 @@ class ExecutionPlan:
         fw_execution_plan = self.add_joinstep(pre_execution_plan, link_trekker, graph)
 
         # Run after add_joinstep, not inside add_feature_group_step: self.planned_records (which
-        # records already-resolved Links) is only populated by add_joinstep's run_link calls, and a
+        # records already-resolved Links) is only populated by add_joinstep's join builds, and a
         # split already bridged by a Link must not be blamed (see _stamp_option_split_hints).
         self._stamp_option_split_hints(fw_execution_plan, graph.parent_to_children_mapping)
         self._stamp_link_index_columns(fw_execution_plan, graph.parent_to_children_mapping)
@@ -477,9 +478,18 @@ class ExecutionPlan:
     ) -> list[JoinStep | FeatureGroupStep]:
         fw_execution_plan: list[JoinStep | FeatureGroupStep] = []
 
+        decided: dict[UUID, dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]] = {}
+        keys_by_link: dict[UUID, list[LinkFrameworkTrekker]] = defaultdict(list)
         for pex in pre_execution_plan:
             if isinstance(pex, tuple):
-                fw_execution_plan.extend(self.run_link(pex, link_trekker, graph, pre_execution_plan))
+                keys_by_link[pex[0].uuid].append(pex)
+        for pex in pre_execution_plan:
+            if isinstance(pex, tuple):
+                if pex[0].uuid not in decided:
+                    decided[pex[0].uuid] = self.decide_link_joins(
+                        pex[0], keys_by_link[pex[0].uuid], link_trekker, graph, pre_execution_plan
+                    )
+                fw_execution_plan.extend(self._build_decisions(decided[pex[0].uuid][pex], graph))
             else:
                 fw_execution_plan.append(pex)
 
@@ -2202,6 +2212,41 @@ Available join types:
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
     ) -> list[JoinStep]:
+        decided = self.decide_link_joins(link_fw[0], [link_fw], link_trekker, graph, pre_execution_plan)
+        return self._build_decisions(decided[link_fw], graph)
+
+    def _build_decisions(self, decisions: list[JoinDecision | DeclinedJoin], graph: Graph) -> list[JoinStep]:
+        """Build each decision in order; a declined orientation is recorded once."""
+        join_steps: list[JoinStep] = []
+        for decision in decisions:
+            if isinstance(decision, DeclinedJoin):
+                if decision.attempted_key not in self.declined_orientations:
+                    self.declined_orientations.append(decision.attempted_key)
+                continue
+            js = self._build_join(decision, graph)
+            if decision.fanned_out:
+                js.split_consumers = decision.consumers
+            join_steps.append(js)
+        return join_steps
+
+    def decide_link_joins(
+        self,
+        link: Link,
+        keys: list[LinkFrameworkTrekker],
+        link_trekker: LinkTrekker,
+        graph: Graph,
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+    ) -> dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]:
+        """Phase 1: decide every part of each key of one link; writes nothing to the plan."""
+        return {key: self._decide_key(key, link_trekker, graph, pre_execution_plan) for key in keys}
+
+    def _decide_key(
+        self,
+        link_fw: LinkFrameworkTrekker,
+        link_trekker: LinkTrekker,
+        graph: Graph,
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+    ) -> list[JoinDecision | DeclinedJoin]:
         link = link_fw[0]
         destination_framework = link_fw[1]
         source_framework = link_fw[2]
@@ -2240,15 +2285,14 @@ Available join types:
 
         children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
 
-        join_steps: list[JoinStep] = []
         parts: list[tuple[set[UUID], JoinSide | None, bool, bool]] = []
         for component, varying_side in self._independent_link_children(link, children_uuids, graph):
             pieces = self._split_by_carrier_frame(
                 link, component, varying_side, {destination_framework, source_framework}, graph
             )
             parts.extend((members, side, beside, len(pieces) > 1) for members, side, beside in pieces)
-        for component, varying_side, beside_carried, is_split in parts:
-            js = self._plan_link_join(
+        return [
+            self._decide_part(
                 link_fw,
                 link_trekker,
                 graph,
@@ -2260,12 +2304,10 @@ Available join types:
                 attempted_key,
                 varying_side,
                 beside_carried,
+                is_split,
             )
-            if js is not None:
-                if is_split:
-                    js.split_consumers = frozenset(component)
-                join_steps.append(js)
-        return join_steps
+            for component, varying_side, beside_carried, is_split in parts
+        ]
 
     def _split_by_carrier_frame(
         self,
@@ -2279,7 +2321,7 @@ Available join types:
         unsplit = [(component, varying_side, False)]
         if link.jointype in (JoinType.APPEND, JoinType.UNION) or len(component) < 2:
             return unsplit
-        # Same framework scope _plan_link_join uses for same-framework joins; the scan here stays per child.
+        # Same framework scope _decide_part uses for same-framework joins; the scan here stays per child.
         side_frameworks = frameworks if len(frameworks) == 1 else None
         by_carriers: dict[frozenset[UUID], set[UUID]] = {}
         for child in sorted(component):
@@ -2382,7 +2424,7 @@ Available join types:
         beyond = (split.left_uuids_any_distance | split.right_uuids_any_distance) - split.left_uuids - split.right_uuids
         return next((u for u in sorted(beyond) if nodes[u].feature.get_compute_framework() in frameworks), None)
 
-    def _plan_link_join(
+    def _decide_part(
         self,
         link_fw: LinkFrameworkTrekker,
         link_trekker: LinkTrekker,
@@ -2393,26 +2435,24 @@ Available join types:
         source_framework: type[ComputeFramework],
         swap_merge_sides: bool,
         attempted_key: LinkFrameworkTrekker,
-        varying_side: JoinSide | None = None,
-        beside_carried: bool = False,
-    ) -> JoinStep | None:
+        varying_side: JoinSide | None,
+        beside_carried: bool,
+        fanned_out: bool,
+    ) -> JoinDecision | DeclinedJoin:
         link = link_fw[0]
         entered_same_framework = destination_framework == source_framework
 
         # This gets the parent ids of the joinstep, which needs to be calculated before the link.
-        required_uuids: set[UUID] = set()
+        parent_uuids: set[UUID] = set()
         for uuid in children_uuids:
-            required_uuids.update(graph.parent_to_children_mapping[uuid])
+            parent_uuids.update(graph.parent_to_children_mapping[uuid])
 
-        # Split before the order-edge link uuids join required_uuids.
-        split = split_by_declared_side(link, required_uuids, graph)
+        split = split_by_declared_side(link, parent_uuids, graph)
 
         declared_left_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.left_uuids}
         declared_right_frameworks = {graph.get_nodes()[u].feature.get_compute_framework() for u in split.right_uuids}
 
-        declared_carried_uuids: frozenset[UUID] | None = None
-        declared_other_uuids: frozenset[UUID] = frozenset()
-        declared_carried_left = False
+        carried_left: bool | None = None
         if link.jointype not in (JoinType.APPEND, JoinType.UNION) and destination_framework != source_framework:
             scanned, scanned_sides, _ = self._carrier_scan(
                 children_uuids, split, graph, {destination_framework, source_framework}
@@ -2420,22 +2460,17 @@ Available join types:
             if scanned and len(scanned_sides) == 1:
                 # The join runs on the consumers' framework; the carrier frame hops in there.
                 consumer_frameworks = {graph.get_nodes()[c].feature.get_compute_framework() for c in children_uuids}
-                carried_left = next(iter(scanned_sides))
+                scanned_left = next(iter(scanned_sides))
                 carried_fws, other_fws = (
                     (declared_left_frameworks, declared_right_frameworks)
-                    if carried_left
+                    if scanned_left
                     else (declared_right_frameworks, declared_left_frameworks)
                 )
                 if len(consumer_frameworks) == 1 and consumer_frameworks <= {destination_framework, source_framework}:
                     consumer_framework = next(iter(consumer_frameworks))
                     if consumer_framework in other_fws and consumer_framework not in carried_fws:
                         destination_framework = source_framework = consumer_framework
-                        declared_carried_left = carried_left
-                        declared_carried_uuids, declared_other_uuids = (
-                            (split.left_uuids, split.right_uuids)
-                            if carried_left
-                            else (split.right_uuids, split.left_uuids)
-                        )
+                        carried_left = scanned_left
                     elif consumer_framework in carried_fws:
                         if consumer_framework == source_framework:
                             source_framework = destination_framework
@@ -2470,20 +2505,6 @@ Available join types:
                         message += " Compute the consumer on one of the join's frameworks."
                     raise ValueError(message)
 
-        # This filters the required_uuids to only the one with the final compute framework.
-        destination_framework_uuids: set[UUID] = set()
-        source_framework_uuids: set[UUID] = set()
-
-        for uuid in required_uuids:
-            node_framework = graph.get_nodes()[uuid].feature.get_compute_framework()
-
-            if node_framework == destination_framework:
-                destination_framework_uuids.add(uuid)
-
-            if node_framework == source_framework:
-                source_framework_uuids.add(uuid)
-        if declared_carried_uuids is not None:
-            destination_framework_uuids, source_framework_uuids = set(declared_carried_uuids), set(declared_other_uuids)
         widened_right_frameworks = {
             graph.get_nodes()[u].feature.get_compute_framework()
             for u in split.right_uuids_any_distance - split.left_uuids
@@ -2491,14 +2512,11 @@ Available join types:
 
         # The order shows which items should be added first.
         # Thus, we need to make sure that higher ordered links are calculated first.
+        order_uuids: set[UUID] = set()
         for k, v in link_trekker.order.items():
             if link.uuid in v:
-                required_uuids.add(k)
-
-        # Potential  -> This should be the feature uuid of the child of the joinstep. Can this be more than 1?
-        # This part can be dropped if we have more tests.
-        # if len(children_uuids) > 1:
-        #    raise ValueError("This is not supported yet.")
+                order_uuids.add(k)
+        required_uuids = parent_uuids | order_uuids
 
         # Hoisted above the case-override loop: a case helper's result is in declared left/right
         # order, so orienting it needs swap_sides.
@@ -2512,23 +2530,21 @@ Available join types:
             fallback=swap_merge_sides,
             jointype=link.jointype,
         )
-        if declared_carried_uuids is not None:
-            swap_sides = not declared_carried_left
+        if carried_left is not None:
+            swap_sides = not carried_left
 
         # This part is for handling specific join cases. Currently, we only deal with equal feature groups.
+        bound_buckets: tuple[frozenset[UUID], frozenset[UUID]] | None = None
         for children_uuid in children_uuids:
             children_fw = graph.get_nodes()[children_uuid].feature.get_compute_framework()
 
             # This runs with the assumption that children_uuids is exactly 1.
-            # result = True
             result = self.is_valid_join_step(link_fw, children_fw, children_uuid, graph)
             if result is False:
-                if attempted_key not in self.declined_orientations:
-                    self.declined_orientations.append(attempted_key)
-                return None
+                return DeclinedJoin(attempted_key)
             elif result is True:
                 pass
-            elif declared_carried_uuids is None:
+            elif carried_left is None:
                 # case_link_fw_is_equal_to_children_fw and case_link_equal_feature_groups both
                 # guarantee, by construction, that result[0] runs on link_fw[1] and result[1] runs
                 # on link_fw[2]; unlike the nearest-split-derived swap_sides, that framework
@@ -2536,61 +2552,30 @@ Available join types:
                 # fall back to swap_sides when the frameworks coincide and identity cannot decide.
                 # The destination side follows the same identity, so the record and the merge
                 # argument order agree with the parents actually bound.
+                first, second = frozenset(result[0]), frozenset(result[1])
                 if destination_framework != source_framework:
                     if destination_framework == link_fw[1]:
-                        destination_framework_uuids, source_framework_uuids = result
+                        bound_buckets = (first, second)
                         swap_sides = False
                     else:
-                        source_framework_uuids, destination_framework_uuids = result
+                        bound_buckets = (second, first)
                         swap_sides = True
                 elif swap_sides:
-                    source_framework_uuids, destination_framework_uuids = result
+                    bound_buckets = (second, first)
                 else:
-                    destination_framework_uuids, source_framework_uuids = result
+                    bound_buckets = (first, second)
 
-        join_step_required_uuids: set[UUID]
         carriers: frozenset[UUID] = frozenset()
         shared_source = False
         shared_destination = False
+        append_sides: AppendOrUnionSides | None = None
+        side = JoinSide.RIGHT if swap_sides else JoinSide.LEFT
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
-            sides = self.resolve_append_or_union_sides(link, link_fw, required_uuids, graph, pre_execution_plan)
-            destination_framework = sides.destination_framework
-            source_framework = sides.source_framework
+            append_sides = self.resolve_append_or_union_sides(link, link_fw, required_uuids, graph, pre_execution_plan)
+            destination_framework = append_sides.destination_framework
+            source_framework = append_sides.source_framework
             side = JoinSide.LEFT
-            destination_framework_uuids = {sides.left_uuid}
-            source_framework_uuids = {sides.right_uuid}
-            left_uuids = frozenset({sides.left_uuid})
-            right_uuids = frozenset({sides.right_uuid})
-            # Append/union gates only on its own two feature uuids, not on the general required_uuids.
-            join_step_required_uuids = {sides.left_uuid, sides.right_uuid}
-            join_uuids_left, join_uuids_right = left_uuids, right_uuids
         else:
-            side = JoinSide.RIGHT if swap_sides else JoinSide.LEFT
-            destination = frozenset(destination_framework_uuids)
-            source = frozenset(source_framework_uuids)
-            resolved_left, resolved_right = (destination, source) if side is JoinSide.LEFT else (source, destination)
-            left_from_split = split.left_uuids & resolved_left
-            right_from_split = split.right_uuids & resolved_right
-            if (
-                split.left_uuids <= resolved_left
-                and split.right_uuids <= resolved_right
-                and split.left_uuids != split.right_uuids
-            ):
-                left_uuids, right_uuids = split.left_uuids, split.right_uuids
-            elif left_from_split and right_from_split and left_from_split != right_from_split:
-                # The full containment check failed (the declared side spans more than one framework), but
-                # intersecting the declared split with the framework-resolved buckets still recovers the
-                # declared-side members that fall in this step's own framework bucket, and drops any
-                # unrelated parent that only shares a framework with one side. A declared-side member
-                # sitting in the *other* bucket is not recovered here; it belongs to a different join
-                # step/framework hop and is dropped by design.
-                left_uuids, right_uuids = left_from_split, right_from_split
-            else:
-                # Kept to declared members; a same-framework self link lands here too.
-                left_uuids = resolved_left & split.left_uuids_any_distance
-                right_uuids = resolved_right & split.right_uuids_any_distance
-            join_step_required_uuids = required_uuids
-
             carriers, carriers_on_left = self._join_carriers(
                 children_uuids,
                 split,
@@ -2611,15 +2596,98 @@ Available join types:
                     shared_destination = True
             shared_source = varying_side is not None and destination_framework == source_framework
 
+        self._reject_mixed_member_bucket(
+            link, children_uuids, required_uuids, split, {destination_framework, source_framework}, graph
+        )
+
+        return JoinDecision(
+            attempted_key=attempted_key,
+            link_fw=link_fw,
+            consumers=frozenset(children_uuids),
+            parent_uuids=frozenset(parent_uuids),
+            order_uuids=frozenset(order_uuids),
+            split=split,
+            destination_framework=destination_framework,
+            source_framework=source_framework,
+            buckets_inverted=swap_sides,
+            destination_side=side,
+            carriers=carriers,
+            shared_source=shared_source,
+            shared_destination=shared_destination,
+            carried_left=carried_left,
+            bound_buckets=bound_buckets,
+            append_sides=append_sides,
+            fanned_out=fanned_out,
+        )
+
+    def _build_join(self, decision: JoinDecision, graph: Graph) -> JoinStep:
+        """Phase 2: build the record and JoinStep a decision describes; no side or framework choice here."""
+        link = decision.link_fw[0]
+        split = decision.split
+        side = decision.destination_side
+        join_step_required_uuids: set[UUID]
+        sides = decision.append_sides
+        if sides is not None:
+            left_uuids = frozenset({sides.left_uuid})
+            right_uuids = frozenset({sides.right_uuid})
+            # Append/union gates only on its own two feature uuids, not on the general required_uuids.
+            join_step_required_uuids = {sides.left_uuid, sides.right_uuid}
+            join_uuids_left, join_uuids_right = left_uuids, right_uuids
+        else:
+            destination: frozenset[UUID]
+            source: frozenset[UUID]
+            if decision.carried_left is not None:
+                destination, source = (
+                    (split.left_uuids, split.right_uuids)
+                    if decision.carried_left
+                    else (split.right_uuids, split.left_uuids)
+                )
+            elif decision.bound_buckets is not None:
+                destination, source = decision.bound_buckets
+            else:
+                # This filters the parents to only the one with the final compute framework.
+                nodes = graph.get_nodes()
+                destination = frozenset(
+                    u
+                    for u in decision.parent_uuids
+                    if nodes[u].feature.get_compute_framework() == decision.destination_framework
+                )
+                source = frozenset(
+                    u
+                    for u in decision.parent_uuids
+                    if nodes[u].feature.get_compute_framework() == decision.source_framework
+                )
+            resolved_left, resolved_right = (
+                (source, destination) if decision.buckets_inverted else (destination, source)
+            )
+            left_from_split = split.left_uuids & resolved_left
+            right_from_split = split.right_uuids & resolved_right
+            if (
+                split.left_uuids <= resolved_left
+                and split.right_uuids <= resolved_right
+                and split.left_uuids != split.right_uuids
+            ):
+                left_uuids, right_uuids = split.left_uuids, split.right_uuids
+            elif left_from_split and right_from_split and left_from_split != right_from_split:
+                # The full containment check failed (the declared side spans more than one framework), but
+                # intersecting the declared split with the framework-resolved buckets still recovers the
+                # declared-side members that fall in this step's own framework bucket, and drops any
+                # unrelated parent that only shares a framework with one side. A declared-side member
+                # sitting in the *other* bucket is not recovered here; it belongs to a different join
+                # step/framework hop and is dropped by design.
+                left_uuids, right_uuids = left_from_split, right_from_split
+            else:
+                # Kept to declared members; a same-framework self link lands here too.
+                left_uuids = resolved_left & split.left_uuids_any_distance
+                right_uuids = resolved_right & split.right_uuids_any_distance
+            join_step_required_uuids = set(decision.parent_uuids | decision.order_uuids)
+
             # Any-distance widening keeps a nearer wrong-framework sibling from hiding a farther, correct one.
             join_uuids_left = resolved_left & split.left_uuids_any_distance
             join_uuids_right = resolved_right & split.right_uuids_any_distance
 
         destination_uuids, source_uuids = (
             (join_uuids_right, join_uuids_left) if side is JoinSide.RIGHT else (join_uuids_left, join_uuids_right)
-        )
-        self._reject_mixed_member_bucket(
-            link, children_uuids, required_uuids, split, {destination_framework, source_framework}, graph
         )
         self._validate_join_step_uuids(link, set(destination_uuids), set(source_uuids))
 
@@ -2635,9 +2703,9 @@ Available join types:
             destination_side=side,
             destination_uuids=frozenset(destination_uuids),
             source_uuids=frozenset(source_uuids),
-            destination_framework=destination_framework,
-            source_framework=source_framework,
-            consumers=frozenset(children_uuids),
+            destination_framework=decision.destination_framework,
+            source_framework=decision.source_framework,
+            consumers=decision.consumers,
             depends_on=frozenset(),
             token=uuid4(),
         )
@@ -2650,9 +2718,9 @@ Available join types:
             source_framework_uuids=set(record.source_uuids),
             swap_merge_sides=record.inverted,
             token=record.token,
-            carriers=carriers,
-            shared_source=shared_source,
-            shared_destination=shared_destination,
+            carriers=decision.carriers,
+            shared_source=decision.shared_source,
+            shared_destination=decision.shared_destination,
         )
         self.planned_records.append(record)
 
@@ -2674,7 +2742,7 @@ Available join types:
         """The declared left group's data must stay the merge engine's left argument, wherever the join runs.
 
         Declared-side membership decides first, whenever exactly one side names the destination framework.
-        For a key in declared order, `run_link` sets destination_framework to link_fw[2] for JoinType.RIGHT
+        For a key in declared order, `_decide_key` sets destination_framework to link_fw[2] for JoinType.RIGHT
         (unless it moved the join onto link_fw[1] because the consumers only run there), and link_fw[2] is
         the declared right framework, so membership settles on right. For a key
         reversed upstream by `LinkTrekker.invert_link`, link_fw[2] instead holds the declared left framework,
@@ -2686,7 +2754,7 @@ Available join types:
         through to jointype, which then always resolves to the declared right side. For other jointypes the
         trekker key breaks the tie instead: destination is always one of the key's two framework positions.
         ``trekker_left_framework`` is that key's first position (``link_fw[1]``): it is the destination
-        exactly when `run_link` kept the queued (non-flipped) orientation, and the source when it flipped.
+        exactly when `_decide_key` kept the queued (non-flipped) orientation, and the source when it flipped.
         It does not reliably mean "declared left", for the same reversed-key reason above. Links keyed on one
         single framework make the tie-break tautological, so the trekker-flip fallback stays for that case:
         it is a common path in practice, not a rare or unreachable one, hit by ordinary same-framework

@@ -606,7 +606,7 @@ class mlodaAPI:
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
     ) -> RunResult:
-        """Execute the prepared session and return a ``RunResult`` in plan order carrying the run's ``run_id``/``plan_id``.
+        """Execute the prepared session and return a ``RunResult`` (plan order, with ``run_id``/``plan_id``).
 
         Can be called multiple times on the same session with different ``api_data``
         and/or ``artifacts`` to re-run the execution plan against new inputs.
@@ -644,10 +644,10 @@ class mlodaAPI:
     ) -> ResultStream:
         """Execute the prepared session and stream each feature group's result as it completes.
 
-        Returns a ``ResultStream`` carrying the run's ``run_id``/``plan_id``. carrier/child_bootstrap
-        and the active verified_context() scope are read here, at call
-        time, not at first iteration: a function whose body itself contains ``yield`` only starts
-        executing on first iteration, which would defer that read past the caller's intended scope.
+        Returns a ``ResultStream`` carrying the run's ``run_id``/``plan_id``. carrier/child_bootstrap and the
+        active verified_context() scope are read here, at call time, not at first iteration: a function whose
+        body itself contains ``yield`` only starts executing on first iteration, which would defer that read
+        past the caller's intended scope.
         """
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
         stream = self._start_stream(api_data, parallelization_modes, flight_server, artifacts, run_context)

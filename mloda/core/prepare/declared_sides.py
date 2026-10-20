@@ -1,4 +1,4 @@
-"""Splits a join's parents by the declared sides of its link, once, for run_link and the resolved join records."""
+"""Splits a join's parents by the declared sides of its link, once, for the join decision and the resolved join records."""
 
 from collections import defaultdict
 from collections.abc import Callable, Iterable

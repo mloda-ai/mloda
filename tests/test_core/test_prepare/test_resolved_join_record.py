@@ -26,6 +26,7 @@ from mloda.core.prepare.resolved_join import (
     ResolvedJoin,
     ResolvedJoinPlan,
 )
+from mloda.core.prepare.join_decision import DeclinedJoin, JoinDecision
 from mloda.core.prepare.resolved_join_builder import joinstep_signatures
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
@@ -314,6 +315,28 @@ def _inverted_pair() -> Built:
     return _finish(planned, link, sides)
 
 
+def _flipped_decline_parts() -> tuple[Planned, Link]:
+    """The queue key finds no children and run_link flips it to the key that declines."""
+    planned = _planned()
+    link = Link.left(
+        JoinSpec(ResolvedJoinSelfSource, Index((SELF_LEFT_KEY,))),
+        JoinSpec(ResolvedJoinSelfSource, Index((SELF_RIGHT_KEY,))),
+        left_discriminator={SELF_SIDE: "left"},
+        right_discriminator={SELF_SIDE: "right"},
+    )
+
+    left = feature("resolved_join_flip_decline_left", PyArrowTable, link.left_index, {SELF_SIDE: "left"})
+    right = feature("resolved_join_flip_decline_right", PandasDataFrame, link.right_index, {SELF_SIDE: "right"})
+    child = feature("resolved_join_flip_decline_child", PyArrowTable)
+
+    _add_parents(planned, link, left, right)
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    planned.queue.append((link, PandasDataFrame, PyArrowTable))
+    _add_child(planned, child, left, right)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+    return planned, link
+
+
 def _right_join() -> Built:
     planned = _planned()
     link = _pair_link(Link.right)
@@ -383,7 +406,7 @@ def _two_links() -> Built:
     return _finish(planned, first, sides)
 
 
-def _pair_with_declined_orientation() -> Built:
+def _declined_orientation_parts() -> tuple[Planned, Link, Sides]:
     """Two children of one link, and only the PyArrow one pairs a left side with a right side."""
     planned = _planned()
     link = _pair_link()
@@ -402,7 +425,12 @@ def _pair_with_declined_orientation() -> Built:
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), kept.uuid)
     trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), dropped.uuid)
 
-    return _finish(planned, link, Sides(left.uuid, right.uuid, kept.uuid))
+    return planned, link, Sides(left.uuid, right.uuid, kept.uuid)
+
+
+def _pair_with_declined_orientation() -> Built:
+    planned, link, sides = _declined_orientation_parts()
+    return _finish(planned, link, sides)
 
 
 def _third_parent_the_link_never_mentions(third_cfw: type[ComputeFramework], descends_from_right: bool) -> ThirdParent:
@@ -1116,29 +1144,206 @@ def test_a_declined_orientation_builds_no_record_and_one_declined_entry() -> Non
 
 def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_it_attempted() -> None:
     """The queue key finds no children, run_link flips it, and the declined entry must name the flipped key."""
-    planned = _planned()
-    link = Link.left(
-        JoinSpec(ResolvedJoinSelfSource, Index((SELF_LEFT_KEY,))),
-        JoinSpec(ResolvedJoinSelfSource, Index((SELF_RIGHT_KEY,))),
-        left_discriminator={SELF_SIDE: "left"},
-        right_discriminator={SELF_SIDE: "right"},
-    )
-
-    left = feature("resolved_join_flip_decline_left", PyArrowTable, link.left_index, {SELF_SIDE: "left"})
-    right = feature("resolved_join_flip_decline_right", PandasDataFrame, link.right_index, {SELF_SIDE: "right"})
-    child = feature("resolved_join_flip_decline_child", PyArrowTable)
-
-    _add_parents(planned, link, left, right)
-    planned.queue.append((link, PyArrowTable, PandasDataFrame))
-    planned.queue.append((link, PandasDataFrame, PyArrowTable))
-    _add_child(planned, child, left, right)
-    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
+    planned, link = _flipped_decline_parts()
 
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
 
     resolved = planned.plan.resolved_join_plan
     assert len(resolved.records) == 1, "the kept orientation must plan a record for the decline to say anything"
     assert resolved.declined == (DeclinedOrientation(link.uuid, PyArrowTable, PandasDataFrame),)
+
+
+class Pending(NamedTuple):
+    plan: ExecutionPlan
+    link: Link
+    graph: Graph
+    link_trekker: LinkTrekker
+    pre_execution_plan: list[Any]
+
+
+def _pending(planned: Planned, link: Link, declared: DeclaredFrameworks | None = None) -> Pending:
+    """The plan state right before add_joinstep: feature groups stepped, no join built."""
+    plan = planned.plan
+    plan.declared_frameworks = declared or {}
+    child_links = plan.invert_link_trekker(planned.link_trekker)
+    pre_execution_plan = plan.add_feature_group_step(
+        planned.queue, planned.graph.parent_to_children_mapping, child_links, planned.graph.get_nodes()
+    )
+    return Pending(plan, link, planned.graph, planned.link_trekker, pre_execution_plan)
+
+
+def _plan_state(plan: ExecutionPlan) -> tuple[list[ResolvedJoin], dict[JoinStep, set[UUID]], list[Any]]:
+    return list(plan.planned_records), dict(plan.joinstep_collection.collection), list(plan.declined_orientations)
+
+
+def _decision_view(decision: JoinDecision) -> tuple[Any, ...]:
+    return (
+        decision.destination_framework,
+        decision.source_framework,
+        decision.destination_side,
+        decision.carriers,
+        decision.shared_source,
+        decision.shared_destination,
+    )
+
+
+DECIDE_SHAPES = [
+    pytest.param(Link.inner, {}, (PyArrowTable, PandasDataFrame), id="declared"),
+    pytest.param(
+        Link.inner,
+        {"child_cfw": PandasDataFrame, "trekked": (PandasDataFrame, PyArrowTable)},
+        (PyArrowTable, PandasDataFrame),
+        id="inverted",
+    ),
+    pytest.param(
+        Link.right,
+        {"child_cfw": PandasDataFrame},
+        (PyArrowTable, PandasDataFrame),
+        id="right",
+    ),
+]
+
+
+@pytest.mark.parametrize(("link_factory", "branch_kwargs", "orientation"), DECIDE_SHAPES)
+def test_deciding_a_key_reports_what_planning_builds_and_writes_nothing(
+    link_factory: Callable[[JoinSpec, JoinSpec], Link],
+    branch_kwargs: dict[str, Any],
+    orientation: Orientation,
+) -> None:
+    built_planned = _planned()
+    built_link = _pair_link(link_factory)
+    built_sides = _branch(built_planned, built_link, "resolved_join_decide_built", **branch_kwargs)
+    built = _finish(built_planned, built_link, built_sides)
+    record = _one_record(built.plan, built.link)
+    step = next(s for s in _join_steps(built.plan) if s.link.uuid == built.link.uuid)
+
+    planned = _planned()
+    link = _pair_link(link_factory)
+    _branch(planned, link, "resolved_join_decide", **branch_kwargs)
+    pending = _pending(planned, link)
+    before = _plan_state(pending.plan)
+    key = (link, orientation[0], orientation[1])
+
+    decided = pending.plan.decide_link_joins(
+        link, [key], pending.link_trekker, pending.graph, pending.pre_execution_plan
+    )
+
+    assert list(decided) == [key]
+    assert len(decided[key]) == 1
+    decision = decided[key][0]
+    assert isinstance(decision, JoinDecision)
+    assert decision.destination_framework is record.destination_framework
+    assert decision.source_framework is record.source_framework
+    assert decision.destination_side is record.destination_side
+    assert decision.carriers == step.carriers
+    assert decision.shared_source == step.shared_source
+    assert decision.shared_destination == step.shared_destination
+    assert _plan_state(pending.plan) == before
+
+
+def test_deciding_a_declined_orientation_returns_a_declined_join_and_records_nothing() -> None:
+    planned, link, _ = _declined_orientation_parts()
+    pending = _pending(planned, link)
+    key = (link, PandasDataFrame, PyArrowTable)
+
+    decided = pending.plan.decide_link_joins(
+        link, [key], pending.link_trekker, pending.graph, pending.pre_execution_plan
+    )
+
+    assert decided[key] == [DeclinedJoin(key)]
+    assert pending.plan.declined_orientations == []
+    assert pending.plan.planned_records == []
+
+
+def test_deciding_a_flipped_key_declines_with_the_orientation_it_attempted() -> None:
+    planned, link = _flipped_decline_parts()
+    pending = _pending(planned, link)
+    queued_key = (link, PandasDataFrame, PyArrowTable)
+
+    decided = pending.plan.decide_link_joins(
+        link, [queued_key], pending.link_trekker, pending.graph, pending.pre_execution_plan
+    )
+
+    assert decided[queued_key] == [DeclinedJoin((link, PyArrowTable, PandasDataFrame))]
+    assert pending.plan.declined_orientations == []
+
+
+def _polymorphic_sides_on_two_frameworks() -> tuple[Planned, Link, DeclaredFrameworks]:
+    """Both link sides have a PyArrow and a Pandas member, so the link carries two trekker keys."""
+    planned = _planned()
+    link = _pair_link()
+    left_arrow = feature("resolved_join_poly_left_arrow", PyArrowTable, link.left_index)
+    left_pandas = feature("resolved_join_poly_left_pandas", PandasDataFrame, link.left_index)
+    right_arrow = feature("resolved_join_poly_right_arrow", PyArrowTable, link.right_index)
+    right_pandas = feature("resolved_join_poly_right_pandas", PandasDataFrame, link.right_index)
+    child_arrow = feature("resolved_join_poly_child_arrow", PyArrowTable)
+    child_pandas = feature("resolved_join_poly_child_pandas", PandasDataFrame)
+
+    for node, group in (
+        (left_arrow, link.left_feature_group),
+        (left_pandas, link.left_feature_group),
+        (right_arrow, link.right_feature_group),
+        (right_pandas, link.right_feature_group),
+    ):
+        planned.graph.add_node(node.uuid, NodeProperties(node, group))
+    planned.queue.append((link.left_feature_group, {left_arrow, left_pandas}))
+    planned.queue.append((link.right_feature_group, {right_arrow, right_pandas}))
+    planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    planned.queue.append((link, PandasDataFrame, PyArrowTable))
+    _add_child(planned, child_arrow, left_arrow, right_pandas)
+    _add_child(planned, child_pandas, left_pandas, right_arrow)
+    trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child_arrow.uuid)
+    trek(planned.link_trekker, link, (PandasDataFrame, PyArrowTable), child_pandas.uuid)
+
+    declared: DeclaredFrameworks = {
+        left_arrow.uuid: frozenset({PyArrowTable}),
+        left_pandas.uuid: frozenset({PandasDataFrame}),
+        right_arrow.uuid: frozenset({PyArrowTable}),
+        right_pandas.uuid: frozenset({PandasDataFrame}),
+    }
+    return planned, link, declared
+
+
+def test_deciding_both_keys_of_a_link_together_equals_deciding_each_alone() -> None:
+    planned, link, declared = _polymorphic_sides_on_two_frameworks()
+    pending = _pending(planned, link, declared)
+    keys = list(pending.link_trekker.data)
+    assert len(keys) == 2
+
+    def decide(wanted: list[Any]) -> dict[Any, list[Any]]:
+        return pending.plan.decide_link_joins(
+            link, wanted, pending.link_trekker, pending.graph, pending.pre_execution_plan
+        )
+
+    together = decide(keys)
+    assert list(together) == keys
+    for key in keys:
+        alone = decide([key])[key]
+        assert [_decision_view(d) for d in together[key]] == [_decision_view(d) for d in alone]
+        assert len(alone) == 1
+
+
+def test_a_link_with_two_trekker_keys_still_plans_one_record_per_key() -> None:
+    planned, link, declared = _polymorphic_sides_on_two_frameworks()
+    pending = _pending(planned, link, declared)
+    keys = list(pending.link_trekker.data)
+    decided = pending.plan.decide_link_joins(
+        link, keys, pending.link_trekker, pending.graph, pending.pre_execution_plan
+    )
+
+    fresh, fresh_link, fresh_declared = _polymorphic_sides_on_two_frameworks()
+    fresh.plan.create_execution_plan(fresh.queue, fresh.graph, fresh.link_trekker, fresh_declared)
+    records = _records(fresh.plan, fresh_link)
+
+    decisions = [decision for key in keys for decision in decided[key]]
+    assert all(isinstance(decision, JoinDecision) for decision in decisions)
+    pairs = [
+        (decision.destination_framework, decision.source_framework)
+        for decision in decisions
+        if isinstance(decision, JoinDecision)
+    ]
+    assert len(records) == 2
+    assert [(r.destination_framework, r.source_framework) for r in records] == pairs
 
 
 @pytest.mark.parametrize(

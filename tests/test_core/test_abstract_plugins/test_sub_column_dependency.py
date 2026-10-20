@@ -1065,7 +1065,7 @@ class TestDeclaredOutputParts:
 
     def test_part_data_type_mismatch_raises(self) -> None:
         with pytest.raises(DataTypeMismatchError):
-            _run([Feature.int64_of("measure~unit")], MeasureProducer)
+            _run([Feature.str_of("measure~value")], MeasureProducer)
 
     def test_part_request_does_not_type_check_the_base_column(self) -> None:
         results = _run([Feature.str_of("price~currency")], _CurrencyGroup)

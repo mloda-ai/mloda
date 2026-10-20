@@ -332,7 +332,7 @@ class Options:
         if not val:
             if DefaultOptionKeys.in_features in self:
                 raise ValueError(
-                    f"The key '{DefaultOptionKeys.in_features}' is set to {val!r}, which resolves to no input features."
+                    f"The key '{DefaultOptionKeys.in_features}' is set to a falsy {type(val).__name__}, which resolves to no input features."
                 )
             raise ValueError(
                 f"Input features not found in options. Please ensure that the key '{DefaultOptionKeys.in_features}' is set."
@@ -365,7 +365,7 @@ class Options:
             return (_convert_to_feature(val),)
         else:
             raise TypeError(
-                f"Unsupported source feature {val!r} of type {type(val).__name__}. "
+                f"Unsupported source feature of type {type(val).__name__}. "
                 "Expected list, tuple, set, frozenset, str, or Feature object."
             )
 

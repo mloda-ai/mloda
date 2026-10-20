@@ -109,6 +109,53 @@ class TestFeatureConfigItemErrorReporting:
         assert path in message
         assert SECRET not in message
 
+    @pytest.mark.parametrize(
+        ("container", "path"),
+        [
+            ("options", "options.in_features:"),
+            ("group_options", "group_options.in_features:"),
+            ("context_options", "context_options.in_features:"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("bad", "description"),
+        [
+            ([SECRET, 7_654_321], "got element at index 1: int"),
+            (7_654_321, "got int"),
+            ([SECRET, [SECRET]], "got element at index 1: list"),
+        ],
+        ids=["list_with_int", "scalar_int", "list_with_list"],
+    )
+    def test_non_string_in_features_value_is_rejected_at_load(
+        self, container: str, path: str, bad: Any, description: str
+    ) -> None:
+        items = [{"name": "outer", container: {"in_features": bad}}, "plain_feature"]
+
+        message = _load_expect_error(items, ValueError)
+
+        assert "feature config item 1" in message
+        assert '("outer")' in message
+        assert path in message
+        assert description in message
+        assert SECRET not in message
+        assert "7654321" not in message
+
+    def test_nested_group_non_string_in_features_is_rejected_at_load(self) -> None:
+        items = [{"name": "outer", "group_options": {"x": {"in_features": [SECRET, 7_654_321]}}}]
+
+        message = _load_expect_error(items, ValueError)
+
+        assert "group_options.x.in_features:" in message
+        assert "got element at index 1: int" in message
+        assert SECRET not in message
+        assert "7654321" not in message
+
+    @pytest.mark.parametrize("value", ["src", ["a", "b"]], ids=["str", "list_of_names"])
+    def test_valid_string_or_name_list_in_features_still_loads(self, value: Any) -> None:
+        features = load_features_from_config(_config([{"name": "x", "options": {"in_features": value}}]))
+
+        assert len(features) == 1
+
     def test_option_key_with_newline_and_quote_is_escaped_in_path(self) -> None:
         """A non-identifier option key renders as a JSON-escaped bracket segment with no raw newline."""
         key = 'a\nb"c'

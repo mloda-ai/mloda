@@ -85,6 +85,9 @@ def process_nested_features(options: dict[str, Any], path: str = "") -> dict[str
             # Recursively process nested dicts
             processed[key] = process_nested_features(value, child)
         else:
+            if str(key) == str(DefaultOptionKeys.in_features):
+                with error_prefix(child):
+                    validate_nested_in_features(value)
             processed[key] = value
 
     return processed

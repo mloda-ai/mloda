@@ -266,6 +266,12 @@ class SqliteRelation(SqlBaseRelation):
         """Types to carry to derived relations when this one has no hints, else None."""
         return self.types if self._type_hints_for_current_columns() is None else None
 
+    def _affinity_types(self) -> list[pa.DataType]:
+        """Types as SQLite stores them: carried types when unhinted, else hint types mapped to affinity."""
+        if self._type_hints_for_current_columns() is None:
+            return self.types
+        return [_sqlite_affinity_to_arrow_type(_arrow_type_to_sqlite(t)) for t in self.types]
+
     def _type_hints_for_current_columns(self) -> list[pa.DataType | None] | None:
         if self._cached_types is None or len(self._cached_types) != len(self.columns):
             return None
@@ -400,7 +406,8 @@ class SqliteRelation(SqlBaseRelation):
             source_types = self._unhinted_types()
             if source_types is not None:
                 type_map = dict(zip(self.columns, source_types, strict=True))
-                fallback = [type_map[c] for c in columns]
+                if all(c in type_map for c in columns):
+                    fallback = [type_map[c] for c in columns]
         if _raw_sql is not None:
             cursor = self._connection.execute(f"SELECT * FROM {quote_ident(new_name)} LIMIT 0")  # nosec
             output_columns = [desc[0] for desc in cursor.description]
@@ -530,7 +537,7 @@ class SqliteRelation(SqlBaseRelation):
         if types is None:
             left_rel, right_rel = (other, self) if how == "right" else (self, other)
             fallback = self._types_for_join_projection(
-                sql_left_cols, left_rel.types, sql_right_cols, right_rel.types, shared
+                sql_left_cols, left_rel._affinity_types(), sql_right_cols, right_rel._affinity_types(), shared
             )
         return SqliteRelation(self._connection, new_table, _is_view=True, _types=types, _fallback_types=fallback)
 
@@ -589,7 +596,7 @@ class SqliteRelation(SqlBaseRelation):
         fallback = None
         if types is None:
             fallback = self._types_for_join_projection(
-                self_cols, self.types, other_cols, other.types, shared, coalesce_shared=True
+                self_cols, self._affinity_types(), other_cols, other._affinity_types(), shared, coalesce_shared=True
             )
         return SqliteRelation(self._connection, new_table, _is_view=True, _types=types, _fallback_types=fallback)
 
@@ -664,7 +671,7 @@ class SqliteRelation(SqlBaseRelation):
             f"ON {quote_ident(left_name)}.{qrn} = {quote_ident(right_name)}.{qrn}"
         )
         types = current_types + new_col_types if current_types is not None and new_col_types is not None else None
-        fallback = [*self.types, *new_col_rel.types] if types is None else None
+        fallback = [*self._affinity_types(), *new_col_rel._affinity_types()] if types is None else None
         return SqliteRelation(self._connection, result_name, _is_view=True, _types=types, _fallback_types=fallback)
 
     def to_arrow_table(self) -> pa.Table:

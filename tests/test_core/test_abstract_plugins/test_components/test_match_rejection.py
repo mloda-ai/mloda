@@ -28,16 +28,19 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     record_match_rejection,
     restamp_match_rejections_since,
 )
-from mloda.provider import record_match_rejection as provider_record_match_rejection
+from mloda.provider import collect_match_rejections
+from mloda.user import Options
+from tests.docs_corpus import REPO_ROOT
+from tests.test_core.test_abstract_plugins.test_components.feature_chainer.test_strict_validation_returns_false import (
+    PlainStrictModePgv,
+)
 
 
 @pytest.fixture
-def recording_window() -> Iterator[dict[str, Any]]:
+def recording_window() -> Iterator[dict[str, MatchRejection]]:
     """Open a fresh recording window and always close it again, even when the test body fails."""
-    reasons: dict[str, Any] = {}
-    token = MATCH_REJECTION_REASONS.set(reasons)
-    yield reasons
-    MATCH_REJECTION_REASONS.reset(token)
+    with collect_match_rejections() as reasons:
+        yield reasons
 
 
 class TestNeutralModuleOwnsTheChannel:
@@ -158,12 +161,72 @@ class TestRefusalField:
 
 
 class TestProviderExport:
-    """mloda.provider exposes the recording function for plugin authors."""
+    """mloda.provider exposes the recording function, the collector and the value type for plugin authors."""
 
-    def test_provider_exports_the_same_function(self) -> None:
-        """The provider export is the neutral module's function object."""
-        assert provider_record_match_rejection is match_rejection.record_match_rejection
+    @pytest.mark.parametrize("name", ["record_match_rejection", "collect_match_rejections", "MatchRejection"])
+    def test_provider_exports_the_same_object(self, name: str) -> None:
+        """The provider export is the neutral module's object."""
+        assert getattr(provider, name) is getattr(match_rejection, name)
 
-    def test_provider_all_lists_the_export(self) -> None:
+    @pytest.mark.parametrize("name", ["record_match_rejection", "collect_match_rejections", "MatchRejection"])
+    def test_provider_all_lists_the_export(self, name: str) -> None:
         """The export is part of the provider's public surface."""
-        assert "record_match_rejection" in provider.__all__
+        assert name in provider.__all__
+
+
+class TestCollectMatchRejections:
+    """collect_match_rejections opens a window, yields its dict and restores the previous value."""
+
+    def test_records_inside_the_window_are_collected(self) -> None:
+        with collect_match_rejections() as reasons:
+            record_match_rejection("CollectOwner", "collect reason")
+
+        assert reasons == {"CollectOwner": MatchRejection(reason="collect reason")}
+
+    def test_exit_restores_the_previous_value_and_freezes_the_dict(self) -> None:
+        def body() -> dict[str, MatchRejection]:
+            with collect_match_rejections() as reasons:
+                record_match_rejection("BeforeExit", "before")
+            assert MATCH_REJECTION_REASONS.get() is None
+            record_match_rejection("AfterExit", "after")
+            return reasons
+
+        reasons = contextvars.Context().run(body)
+
+        assert reasons == {"BeforeExit": MatchRejection(reason="before")}
+
+    def test_nested_windows_stay_separate(self) -> None:
+        with collect_match_rejections() as outer:
+            record_match_rejection("OuterOne", "outer one")
+            with collect_match_rejections() as inner:
+                record_match_rejection("InnerOne", "inner one")
+            assert MATCH_REJECTION_REASONS.get() is outer
+            record_match_rejection("OuterTwo", "outer two")
+
+        assert inner == {"InnerOne": MatchRejection(reason="inner one")}
+        assert outer == {
+            "OuterOne": MatchRejection(reason="outer one"),
+            "OuterTwo": MatchRejection(reason="outer two"),
+        }
+
+    def test_exception_propagates_and_restores_the_previous_value(self) -> None:
+        def body() -> None:
+            with pytest.raises(RuntimeError, match="boom"):
+                with collect_match_rejections():
+                    raise RuntimeError("boom")
+            assert MATCH_REJECTION_REASONS.get() is None
+
+        contextvars.Context().run(body)
+
+    def test_a_direct_match_call_is_collected(self) -> None:
+        name = PlainStrictModePgv.get_class_name()
+        with collect_match_rejections() as reasons:
+            assert PlainStrictModePgv.match_feature_group_criteria(name, Options(group={"mode": "mode_b"})) is False
+
+        assert reasons[name].stage == "value_rejection"
+        assert "mode_b" in reasons[name].reason
+
+    def test_the_matching_guide_documents_the_helper(self) -> None:
+        page = REPO_ROOT / "docs" / "docs" / "in_depth" / "feature-group-matching.md"
+
+        assert "collect_match_rejections" in page.read_text(encoding="utf-8")

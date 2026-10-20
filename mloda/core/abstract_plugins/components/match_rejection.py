@@ -4,6 +4,8 @@ Neutral home so reader code does not depend on the feature-chainer module."""
 from __future__ import annotations
 
 import contextvars
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 
@@ -49,6 +51,18 @@ def record_match_rejection(
     if reasons is None:
         return
     reasons.setdefault(owner_name, MatchRejection(reason, stage, candidates, refusal))
+
+
+@contextmanager
+def collect_match_rejections() -> Iterator[dict[str, MatchRejection]]:
+    """Open a fresh rejection window for direct match calls, yield its owner-to-rejection dict,
+    restore the previous one on exit."""
+    reasons: dict[str, MatchRejection] = {}
+    token = MATCH_REJECTION_REASONS.set(reasons)
+    try:
+        yield reasons
+    finally:
+        MATCH_REJECTION_REASONS.reset(token)
 
 
 def replace_probe_match_rejection(

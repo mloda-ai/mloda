@@ -41,6 +41,16 @@ Every caller reads the return by truthiness: any falsy value is a non-match, any
 
 A match hook that refuses the feature because of its name, for example an unknown output part, records the reason with `record_match_rejection(cls.__name__, reason, stage=NAME_STAGE)` (both from `mloda.provider`) and returns `False`; the near-miss then reads `feature name` instead of `option value`. Record the reason only when the name is otherwise addressed to the group, for example its base or prefix matches but the output part is unknown; a plain name mismatch returns `False` without recording anything.
 
+In a plugin test, `collect_match_rejections()` (from `mloda.provider`) collects what a direct `match_feature_group_criteria` call recorded. It yields a dict from the owner name (the class name on built-in paths) to a `MatchRejection` (`reason`, `stage`, `candidates`) and restores the previous window on exit. It collects nothing around `mloda.run_all`, because the engine opens its own window per candidate.
+
+```py
+from mloda.provider import collect_match_rejections
+
+with collect_match_rejections() as reasons:
+    assert MyFeatureGroup.match_feature_group_criteria("my_feature", options) is False
+assert "mode" in reasons[MyFeatureGroup.get_class_name()].reason
+```
+
 The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See [Applying declared defaults](property-mapping.md#applying-declared-defaults).
 
 #### Option writes from a match hook

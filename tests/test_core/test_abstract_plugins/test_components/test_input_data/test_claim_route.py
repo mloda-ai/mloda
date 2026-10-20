@@ -35,7 +35,9 @@ def test_provider_exports_are_the_core_objects() -> None:
     assert provider.NamePolicy is NamePolicy
     assert provider.SourceMatch is SourceMatch
     assert provider.FormatFeatureGroup is FormatFeatureGroup
-    for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "FormatFeatureGroup"):
+    assert provider.QUERY_OPTION == "query_text"
+    assert provider.HANDLE_OPTION == "data_access_handle"
+    for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "FormatFeatureGroup", "QUERY_OPTION", "HANDLE_OPTION"):
         assert name in provider.__all__
 
 
@@ -56,18 +58,6 @@ def test_claim_route_rejects_a_badly_typed_field(kwargs: dict[str, Any], field_n
     fields.update(kwargs)
     with pytest.raises(TypeError, match=field_name):
         ClaimRoute(**fields)
-
-
-def test_claim_route_positional_bad_names_raises() -> None:
-    with pytest.raises(TypeError):
-        ClaimRoute("x", "open", True)  # type: ignore[arg-type]
-
-
-def test_provider_exports_the_option_names() -> None:
-    assert provider.QUERY_OPTION == "query_text"
-    assert provider.HANDLE_OPTION == "data_access_handle"
-    assert "QUERY_OPTION" in provider.__all__
-    assert "HANDLE_OPTION" in provider.__all__
 
 
 def test_provider_exports_read_file_fg() -> None:

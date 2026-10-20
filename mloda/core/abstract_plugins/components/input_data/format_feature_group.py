@@ -112,7 +112,6 @@ class FormatFeatureGroup(FeatureGroup):
 
     @classmethod
     def _merge_property_mapping(cls) -> None:
-        """Merge a mapping the class body defines over the inherited one; own keys win."""
         own = cls.__dict__.get("PROPERTY_MAPPING")
         if isinstance(own, dict):
             inherited = getattr(super(cls, cls), "PROPERTY_MAPPING", None) or {}

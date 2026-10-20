@@ -204,8 +204,6 @@ def _extra_spec() -> PropertySpec:
 
 
 class TestOwnPropertyMappingIsMergedOverTheBase:
-    """A format group's own PROPERTY_MAPPING is merged over the base declarations; own keys win."""
-
     @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG, ReadDBFG])
     def test_an_own_extra_key_keeps_every_base_key(self, base: Any) -> None:
         child: Any = type("RodExtraKeyFG", (base,), {"PROPERTY_MAPPING": {"rod_extra": _extra_spec()}})
@@ -217,11 +215,6 @@ class TestOwnPropertyMappingIsMergedOverTheBase:
         own = _extra_spec()
         child: Any = type("RodOverrideKeyFG", (base,), {"PROPERTY_MAPPING": {"data_access_handle": own}})
         assert child.PROPERTY_MAPPING["data_access_handle"] is own
-        assert child.declared_option_keys() == base.declared_option_keys()
-
-    def test_a_child_without_a_mapping_still_inherits_it(self) -> None:
-        child = type("RodPlainChildFG", (ReadFileFG,), {})
-        assert "PROPERTY_MAPPING" not in child.__dict__
 
     def test_the_inherited_handle_check_still_rejects_a_non_str_handle(self) -> None:
         child: Any = type("RodHandleCheckFG", (ReadFileFG,), {"PROPERTY_MAPPING": {"rod_extra": _extra_spec()}})

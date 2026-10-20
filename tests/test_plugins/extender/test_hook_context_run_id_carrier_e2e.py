@@ -217,6 +217,29 @@ class TestRunIdAndCarrierSurfaceOnHookContext:
         assert extender.captured.run_id != session.plan_id
         assert extender.captured.carrier == _CARRIER
 
+    @pytest.mark.parametrize("entry", ["run_all", "stream_all"])
+    def test_result_ids_match_the_hook_context_ids(self, entry: str) -> None:
+        extender = _ContextCapturingExtender()
+
+        result = getattr(mloda, entry)(
+            [Feature(name="run_id_carrier_e2e_col_one")],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=_ENABLED,
+            parallelization_modes={ParallelizationMode.SYNC},
+            function_extender={extender},
+        )
+        run_id_before = result.run_id
+        plan_id_before = result.plan_id
+        list(result)
+
+        assert extender.captured is not None
+        assert result.run_id == extender.captured.run_id
+        assert result.plan_id == extender.captured.plan_id
+        assert result.run_id is not None
+        assert_valid_uuid7(result.run_id)
+        assert result.run_id != result.plan_id
+        assert (run_id_before, plan_id_before) == (result.run_id, result.plan_id)
+
     def test_stream_run_captures_the_session_structure_hash(self) -> None:
         extender = _ContextCapturingExtender()
         session = mloda.prepare(

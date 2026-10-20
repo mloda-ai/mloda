@@ -10,6 +10,8 @@ Contract under test:
   * ``stream_all`` plans eagerly: an unresolvable request raises at the call, not at iteration.
   * One planning pass per one-shot call: ``run_all`` constructs exactly one Engine and accessing
     ``plan`` afterwards constructs no further Engine.
+  * Both classes expose read-only ``run_id``/``plan_id``, the run's ``HookContext`` ids, set on a
+    stream before consumption.
   * Both classes are exported from ``mloda.user``.
   * ``RunResult.frames()`` pairs each frame with the compute ``PlanStep`` that produced it, by
     ``step_uuid``, not by list position.
@@ -195,11 +197,12 @@ class TestRunResultPlan:
 
         assert results.plan == results.plan
 
-    def test_plan_is_read_only(self) -> None:
+    @pytest.mark.parametrize("name", ["plan", "run_id", "plan_id"])
+    def test_plan_and_ids_are_read_only(self, name: str) -> None:
         results = _run_all()
 
         with pytest.raises(AttributeError):
-            setattr(results, "plan", [])
+            setattr(results, name, [])
 
     def test_chained_request_plan_contains_the_aggregation_compute_step(self) -> None:
         """The plan names the concrete aggregation group and framework."""
@@ -339,7 +342,7 @@ class TestRunResultIsPlainData:
         assert len(loaded) == len(results) == 1
         assert loaded[0]["plan_info_sales__mean_aggr"].tolist() == results[0]["plan_info_sales__mean_aggr"].tolist()
 
-    def test_pickle_round_trip_preserves_type_and_plan(self) -> None:
+    def test_pickle_round_trip_preserves_type_plan_and_ids(self) -> None:
         from mloda.user import RunResult
 
         results = _run_all()
@@ -348,6 +351,9 @@ class TestRunResultIsPlainData:
 
         assert type(loaded) is RunResult
         assert loaded.plan == results.plan
+        assert results.run_id is not None
+        assert loaded.run_id == results.run_id
+        assert loaded.plan_id == results.plan_id
 
     def test_deepcopy_preserves_content(self) -> None:
         results = _run_all()

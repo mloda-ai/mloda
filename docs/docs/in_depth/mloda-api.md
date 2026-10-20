@@ -154,6 +154,8 @@ for step in results.plan:
 
 `RunResult.frame_for(feature)` returns the frame that holds a requested feature, matched by name, or by a `Feature` whose group options (and pinned compute framework) are a subset of the step's; the closest step wins. It raises `ValueError` if none or several match (the error notes a feature that was computed but not requested).
 
+`run_id` and `plan_id` on `RunResult` and `ResultStream` are the run's `HookContext.run_id` and `plan_id`, so a result can be matched to the records extenders wrote for its run; a `ResultStream` has them before its first element.
+
 To pin a resolved plan, see [Plan Lock](plan-lock.md).
 
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.

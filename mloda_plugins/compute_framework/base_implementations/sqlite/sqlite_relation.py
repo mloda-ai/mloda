@@ -241,9 +241,8 @@ class SqliteRelation(SqlBaseRelation):
     def types(self) -> list[pa.DataType]:
         """Column types as PyArrow ``pa.DataType`` objects, aligned with ``columns``.
 
-        Uses propagated type hints when available; otherwise falls back to SQLite
-        zero-row fallback types from the source, else SQLite
-        column-affinity inference via ``PRAGMA table_info``.
+        Uses propagated type hints, else the zero-row types carried from the source
+        relation, else column affinity from ``PRAGMA table_info``.
         """
         columns = self.columns
         type_hints = self._types_for_current_columns()
@@ -264,7 +263,7 @@ class SqliteRelation(SqlBaseRelation):
         return {row[1]: _sqlite_affinity_to_arrow_type(str(row[2])) for row in cursor.fetchall()}
 
     def _unhinted_types(self) -> list[pa.DataType] | None:
-        """Zero-row types for a relation without hints, else None; never scans rows."""
+        """Types to carry to derived relations when this one has no hints, else None."""
         return self.types if self._type_hints_for_current_columns() is None else None
 
     def _type_hints_for_current_columns(self) -> list[pa.DataType | None] | None:

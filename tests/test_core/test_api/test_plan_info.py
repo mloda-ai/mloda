@@ -53,6 +53,7 @@ claim is registry-wide, so generic names like ``sales`` would leak into every ot
 import ast
 import copy
 import dataclasses
+import importlib
 import itertools
 import json
 import sqlite3
@@ -865,7 +866,7 @@ class TestPlanStepImplementation:
 
         step = _explain_toy_group(ToyWorkerFG)
 
-        assert step.implementation is impl
+        assert step.implementation == impl
         assert step.implementation_path == _class_path(impl)
         assert step.implementation_path != step.compute_framework_name
         assert step.implementation_version == impl.version()
@@ -873,6 +874,26 @@ class TestPlanStepImplementation:
         assert step.implementation_hash != BaseFeatureGroupVersion.implementation_hash(impl)
         assert step.implementation_specialized_from == ()
         assert step.feature_group_version == ToyWorkerFG.version()
+
+    @pytest.mark.parametrize(
+        "framework_name, impl_name", [("PandasDataFrame", "OpToyPandas"), ("PyArrowTable", "OpToyPyArrow")]
+    )
+    def test_an_operation_step_reports_the_serving_implementation(self, framework_name: str, impl_name: str) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        impl: Any = getattr(toy, impl_name)
+
+        steps = mloda.explain(
+            [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework=framework_name)],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+        )
+        step = next(s for s in steps if s.step_kind == "compute")
+
+        assert step.implementation == impl
+        assert step.implementation_path == _class_path(impl)
+        assert step.implementation_version == impl.version()
 
     def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
         step = _explain_toy_group(neutral_csv_group(tmp_path / "n.csv"))
@@ -939,7 +960,7 @@ class TestPlanStepImplementation:
 
         step = _explain_toy_group(group)
 
-        assert step.implementation is impl
+        assert step.implementation == impl
         assert step.implementation_version is None
         assert step.feature_group_version is None
 

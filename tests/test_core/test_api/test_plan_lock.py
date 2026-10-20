@@ -30,7 +30,7 @@ from collections.abc import Iterator
 
 from mloda.core.abstract_plugins.components import base_feature_group_version
 from mloda.core.abstract_plugins.components.code_closure import closure_parts, dependency_entry
-from mloda.user import Options, PluginCollector, mloda
+from mloda.user import Feature, Options, PluginCollector, mloda
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     neutral_csv_group,
     toy_dac,
@@ -262,6 +262,25 @@ def test_explain_writes_the_serving_implementation_and_its_dependency_free_hash_
     else:
         assert record["implementation"] == "neutral"
         assert record["implementation_hash"] is None
+    check_plan_lock(steps, lock)
+
+
+def test_an_operation_group_step_round_trips_its_serving_implementation(tmp_path: Path) -> None:
+    toy = importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
+    lock = tmp_path / "plan.lock"
+    steps = mloda.explain(
+        [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework="PyArrowTable")],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+    )
+
+    write_plan_lock(steps, lock)
+
+    record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
+    assert record["implementation"] == _impl_path(toy.OpToyPyArrow)
+    assert record["implementation_hash"] == _dependency_free_hash(toy.OpToyPyArrow)
     check_plan_lock(steps, lock)
 
 

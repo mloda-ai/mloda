@@ -249,17 +249,9 @@ class FormatFeatureGroup(FeatureGroup):
         """The implementation serving this group and framework: group MRO outer, framework MRO inner."""
         if not compute_framework.is_available():
             return None
-        by_pair: dict[tuple[type, type], list[type[Implementation]]] = {}
-        for impl in implementations:
-            by_pair.setdefault((impl.feature_group, impl.compute_framework), []).append(impl)
-        for klass in cls.__mro__:
-            for framework_class in compute_framework.__mro__:
-                candidates = by_pair.get((klass, framework_class))
-                if candidates:
-                    return next(c for c in candidates if not any(o is not c and issubclass(o, c) for o in candidates))
-            if "load_neutral" in klass.__dict__:
-                return None
-        return None
+        from mloda.core.abstract_plugins.implementation import serving_implementation
+
+        return serving_implementation(cls, compute_framework, implementations, stop_after="load_neutral")
 
     @classmethod
     def calculate_feature(cls, data: Any, features: Any) -> Any:

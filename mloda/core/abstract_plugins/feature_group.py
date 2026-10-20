@@ -337,6 +337,10 @@ class FeatureGroup(ABC):
         if not universe:
             return {}
 
+        implemented = cls._implemented_subtype_matrix()
+        if implemented is not None:
+            return implemented
+
         if cls._overrides("supports_compute_framework"):
             raise ValueError(
                 f"{cls.get_class_name()} overrides supports_compute_framework, so the hand-written hook makes "
@@ -357,6 +361,16 @@ class FeatureGroup(ABC):
             compute_framework.get_class_name(): cls.supported_subtypes(compute_framework)
             for compute_framework in cls.compute_framework_definition()
         }
+
+    @classmethod
+    def _implemented_frameworks(cls) -> set[type[ComputeFramework]] | None:
+        """Frameworks served by Implementations; None for groups that do not delegate to them."""
+        return None
+
+    @classmethod
+    def _implemented_subtype_matrix(cls) -> dict[str, frozenset[str]] | None:
+        """Subtype matrix read from Implementations; None for groups that do not delegate to them."""
+        return None
 
     def __init__(self) -> None:
         pass
@@ -809,14 +823,16 @@ class FeatureGroup(ABC):
         """
         rule = cls.compute_framework_rule()
 
-        if rule is None:
-            return get_all_subclasses(ComputeFramework)
-
-        if not isinstance(rule, set):
+        if rule is not None and not isinstance(rule, set):
             raise ValueError(
                 f"compute_framework_rule() of {cls.__name__} must return None or a set of "
                 f"ComputeFramework subclasses, got {type(rule).__name__}."
             )
+        implemented = cls._implemented_frameworks()
+        if implemented is not None:
+            return implemented if rule is None else implemented & rule
+        if rule is None:
+            return get_all_subclasses(ComputeFramework)
         return rule
 
     @classmethod

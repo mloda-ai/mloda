@@ -22,6 +22,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 
 if TYPE_CHECKING:
@@ -531,6 +532,12 @@ class PreFilterPlugins:
                 identity = f"{feature_group.__module__}:{feature_group.__qualname__}"
                 raise FrameworkDeclarationError(identity, exc) from exc
             new_set_of_compute_frameworks = {cp_fg for cp_fg in definition if cp_fg in compute_frameworks}
+            if issubclass(feature_group, OperationFeatureGroup):
+                new_set_of_compute_frameworks = {
+                    cp_fg
+                    for cp_fg in new_set_of_compute_frameworks
+                    if feature_group.select_implementation(cp_fg, self.implementations) is not None
+                }
             accessible_plugins[feature_group] = new_set_of_compute_frameworks
 
         return accessible_plugins

@@ -1,6 +1,8 @@
 """FormatFeatureGroup loaders, neutral fallback and the describe_columns/count_rows tools."""
 
 import gc
+import importlib
+from abc import abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -8,6 +10,8 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.options import Options
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -34,6 +38,13 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
 )
 
 SENTINEL = [{"toyfmt_ld": 111}, {"toyfmt_ld": 222}]
+
+
+def _toy_operation() -> Any:
+    """Imported lazily so a missing OperationFeatureGroup fails only the tests that need it."""
+    return importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
 
 
 def _run(group: type, frameworks: Any = None, column: str = "toyfmt_ld") -> list[Any]:
@@ -205,16 +216,25 @@ class TestImplementationDefinition:
         with pytest.raises(TypeError, match="feature_group" if missing != "compute_framework" else "compute_framework"):
             type("_Missing", (Implementation,), attributes)
 
-    def test_feature_group_must_be_a_format_feature_group(self) -> None:
-        with pytest.raises(TypeError, match="feature_group"):
+    @pytest.mark.parametrize("kind", ["plain", "format", "operation"])
+    def test_feature_group_must_be_a_format_or_operation_feature_group(
+        self, kind: str, make_implementation: Any
+    ) -> None:
+        if kind == "plain":
+            with pytest.raises(TypeError, match="feature_group"):
 
-            class _PlainGroup(Implementation):
-                feature_group = FeatureGroup
-                compute_framework = PythonDictFramework
+                class _PlainGroup(Implementation):
+                    feature_group = FeatureGroup
+                    compute_framework = PythonDictFramework
 
-                @classmethod
-                def calculate(cls, *args: Any) -> Any:
-                    return None
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            return
+        group = ToyFormatFG if kind == "format" else _toy_operation().OpToyFG
+        impl = make_implementation(group, PythonDictFramework, _sentinel)
+        assert impl in loaded_implementations()
 
     def test_compute_framework_must_be_a_compute_framework(self) -> None:
         with pytest.raises(TypeError, match="compute_framework"):
@@ -233,8 +253,125 @@ class TestImplementationDefinition:
 
         sibling = make_implementation(ToyFormatFG, PythonDictFramework, _sentinel)
 
+        class _HelperBase(Implementation):
+            @classmethod
+            def calculate(cls, *args: Any) -> Any:
+                return None
+
+            @classmethod
+            @abstractmethod
+            def hook(cls) -> Any: ...
+
+        class _HelperPythonDict(_HelperBase):
+            feature_group = ToyDeclaredFG
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def hook(cls) -> Any:
+                return None
+
+        class _HelperPyArrow(_HelperBase):
+            feature_group = ToyDeclaredFG
+            compute_framework = PyArrowTable
+
+            @classmethod
+            def hook(cls) -> Any:
+                return None
+
         assert sibling in loaded_implementations()
         assert _IntermediateBase not in loaded_implementations()
+        assert _HelperBase not in loaded_implementations()
+        assert {_HelperPythonDict, _HelperPyArrow} <= set(loaded_implementations())
+        assert PreFilterPlugins({PythonDictFramework, PyArrowTable}).implementations is not None
+        del _HelperPythonDict, _HelperPyArrow, _HelperBase
+        gc.collect()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _collect_local_classes() -> Iterator[None]:
+    yield
+    gc.collect()
+
+
+def _run_operation(
+    feature_name: str,
+    framework: Any = None,
+    group: Any = None,
+    disabled: Any = (),
+    kind: str = "sum",
+) -> list[Any]:
+    toy = _toy_operation()
+    feature = Feature(
+        feature_name,
+        {toy.OPTOY_KEY: kind},
+        compute_framework=None if framework is None else framework.get_class_name(),
+    )
+    collector = PluginCollector.enabled_feature_groups({group or toy.OpToyFG})
+    collector.add_disabled_implementation_classes(set(disabled))
+    return mloda.run_all(
+        [feature],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=collector,
+    )
+
+
+class TestOperationImplementation:
+    @pytest.mark.parametrize("framework, mark", [(PandasDataFrame, 1), (PyArrowTable, 2)])
+    def test_one_group_runs_the_implementation_of_the_chosen_framework(self, framework: Any, mark: int) -> None:
+        toy = _toy_operation()
+
+        result = _run_operation(toy.OPTOY_FEATURE, framework)
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [mark]
+
+    def test_unpinned_run_with_two_frameworks_resolves_to_one_group(self) -> None:
+        toy = _toy_operation()
+
+        result = _run_operation(toy.OPTOY_FEATURE)
+
+        assert column_values(result, toy.OPTOY_FEATURE) in ([toy.PANDAS_MARK], [toy.PYARROW_MARK])
+
+    def test_a_subclass_group_is_served_by_the_parent_implementation_with_the_subclass_as_group(self) -> None:
+        toy = _toy_operation()
+        toy.OpToyPandas.served_by.clear()
+
+        result = _run_operation(toy.OPTOY_CHILD_FEATURE, PandasDataFrame, group=toy.OpToyChildFG)
+
+        assert column_values(result, toy.OPTOY_CHILD_FEATURE) == [toy.PANDAS_MARK]
+        assert toy.OpToyPandas.served_by == [toy.OpToyChildFG]
+
+    def test_an_operation_group_without_an_implementation_is_never_a_candidate(self) -> None:
+        toy = _toy_operation()
+
+        assert toy.OpToyBareFG.compute_framework_definition() == set()
+        with pytest.raises(ValueError):
+            _run_operation(toy.OPTOY_BARE_FEATURE, group=toy.OpToyBareFG)
+
+    def test_a_framework_without_an_implementation_is_not_in_the_definition(self, make_implementation: Any) -> None:
+        toy = _toy_operation()
+
+        definition = toy.OpToyFG.compute_framework_definition()
+        assert {PandasDataFrame, PyArrowTable} <= definition
+        assert PythonDictFramework not in definition
+        make_implementation(toy.OpToyFG, PythonDictFramework, _sentinel)
+        assert PythonDictFramework in toy.OpToyFG.compute_framework_definition()
+
+    def test_a_disabled_implementation_removes_its_framework_from_the_run(self) -> None:
+        toy = _toy_operation()
+
+        result = _run_operation(toy.OPTOY_FEATURE, disabled={toy.OpToyPyArrow})
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [toy.PANDAS_MARK]
+        with pytest.raises(ValueError):
+            _run_operation(toy.OPTOY_FEATURE, PyArrowTable, disabled={toy.OpToyPyArrow})
+
+    def test_divergence_reports_the_declared_reason_for_its_subtype_only(self) -> None:
+        toy = _toy_operation()
+        sum_options = Options({toy.OPTOY_KEY: "sum"})
+        median_options = Options({toy.OPTOY_KEY: "median"})
+
+        assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, sum_options) == "skips NaN in sum"
+        assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, median_options) is None
 
 
 class TestFrameworkSubclassImplementation:

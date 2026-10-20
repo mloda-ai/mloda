@@ -12,6 +12,7 @@ runs in parallel, so a shared name would leak into another module's candidate un
 
 import copy
 import pickle  # nosec B403
+from typing import Any
 
 import pytest
 
@@ -83,6 +84,8 @@ class TestFeatureResolutionErrorAtTheSeam:
 
         assert isinstance(exc_info.value, ValueError)
         assert exc_info.value.feature_name == NO_MATCH_FEATURE_809
+        assert exc_info.value.refusals == ()
+        assert exc_info.value.__cause__ is None
 
     def test_the_error_carries_the_evaluation_result(self) -> None:
         """The raised error exposes the structured EvaluationResult of its single pass."""
@@ -157,6 +160,14 @@ class TestFeatureResolutionErrorEndToEnd:
             )
 
 
+class _UnloadableRefusal_809(Exception):
+    """Cannot be unpickled: the required keyword-only argument is not in args."""
+
+    def __init__(self, *, code: str) -> None:
+        super().__init__("unloadable refusal")
+        self.code = code
+
+
 class TestFeatureResolutionErrorTransport:
     """The typed error survives the transport boundaries the engine uses: pickle and deepcopy.
 
@@ -186,6 +197,24 @@ class TestFeatureResolutionErrorTransport:
         assert str(duplicate) == str(original)
         assert duplicate.feature_name == original.feature_name
         assert duplicate.result.failure_kind == original.result.failure_kind
+
+    @pytest.mark.parametrize(
+        "round_trip",
+        [lambda e: pickle.loads(pickle.dumps(e)), copy.deepcopy],  # nosec B301
+        ids=["pickle", "deepcopy"],
+    )
+    def test_round_trip_drops_refusals_even_when_one_cannot_be_unpickled(self, round_trip: Any) -> None:
+        original = _raised_resolution_error_809()
+        with_refusal = FeatureResolutionError(
+            str(original), original.feature_name, original.result, refusals=(_UnloadableRefusal_809(code="s"),)
+        )
+        assert len(with_refusal.refusals) == 1
+
+        restored = round_trip(with_refusal)
+
+        assert isinstance(restored, FeatureResolutionError)
+        assert str(restored) == str(original)
+        assert restored.refusals == ()
 
 
 class TestFeatureResolutionErrorImportSurfaces:

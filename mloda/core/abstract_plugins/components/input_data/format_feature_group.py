@@ -302,11 +302,21 @@ class FormatFeatureGroup(FeatureGroup):
         )
 
     @classmethod
-    def _abort(cls, error: ValueError, deferrable: bool = False, candidates: tuple[str, ...] = ()) -> bool:
+    def _abort(
+        cls,
+        error: ValueError,
+        deferrable: bool = False,
+        candidates: tuple[str, ...] = (),
+        refusal: Exception | None = None,
+    ) -> bool:
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
         if aborts_are_contained():
-            record_match_rejection(cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE, candidates=candidates)
+            record_match_rejection(
+                cls.get_class_name(), str(error), stage=INPUT_DATA_STAGE, candidates=candidates, refusal=refusal
+            )
             return False
+        if refusal is not None:
+            error.__cause__ = refusal
         raise defer_match_abort(error) if deferrable else escalate_match_abort(error)
 
     @classmethod
@@ -384,8 +394,10 @@ class FormatFeatureGroup(FeatureGroup):
                 drop_match_rejections_since(known_owners)
                 message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
                 if pointed:
-                    return cls._abort(ValueError(f"{cls.get_class_name()} {message}"), deferrable=True)
-                record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE)
+                    return cls._abort(
+                        ValueError(f"{cls.get_class_name()} {message}"), deferrable=True, refusal=outcome.error
+                    )
+                record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE, refusal=outcome.error)
                 return False
             fitting, seen, undeclared = outcome.result
         if query_declined:

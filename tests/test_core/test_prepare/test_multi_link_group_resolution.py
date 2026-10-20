@@ -1693,12 +1693,33 @@ def test_a_pair_consumer_missing_a_join_of_the_polymorphic_link_layout_is_reject
     assert "Resolution:" in message
 
 
+def _a_without_x(cls: Any, data: Any, features: FeatureSet) -> Any:
+    return {"mlg_a": [2, 3], "mlg_idx": ["y", "z"]}
+
+
+# Mid is mlg_a * 100 + mlg_a1 + mlg_b, direct is mlg_a + mlg_a1 + mlg_b. Without x in A, the inner joins
+# drop row x for both consumers; the outer joins keep x (A1 and B have it) with the missing mlg_a as null.
+_POLYMORPHIC_EXPECTED = {
+    (Link.inner, False): ([117, 228, 339], [18, 30, 42]),
+    (Link.outer, False): ([117, 228, 339], [18, 30, 42]),
+    (Link.inner, True): ([228, 339], [30, 42]),
+    (Link.outer, True): ([228, 339, None], [30, 42, None]),
+}
+
+
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("a_lacks_x", [False, True], ids=["full_data", "a_lacks_row_x"])
 def test_a_mid_and_a_direct_consumer_of_one_polymorphic_link_layout_return_their_values_together(
-    swap_link_sides: bool, link_factory: Any, mode: ParallelizationMode
+    monkeypatch: pytest.MonkeyPatch,
+    a_lacks_x: bool,
+    swap_link_sides: bool,
+    link_factory: Any,
+    mode: ParallelizationMode,
 ) -> None:
+    if a_lacks_x:
+        monkeypatch.setattr(MultiLinkRootA, "calculate_feature", classmethod(_a_without_x))
     first, second = RemedyThirdBThirdMidConsumer, RemedyThirdBThirdConsumer
     session = _side_path_prepare(
         SidePathArrowP,
@@ -1717,8 +1738,9 @@ def test_a_mid_and_a_direct_consumer_of_one_polymorphic_link_layout_return_their
 
     results = session.run(parallelization_modes={mode})
 
-    assert _side_path_values(results, first) == [[117, 228, 339]]
-    assert _side_path_values(results, second) == [[18, 30, 42]]
+    first_expected, second_expected = _POLYMORPHIC_EXPECTED[(link_factory, a_lacks_x)]
+    assert _nullable_column_values(results, first.get_class_name()) == [first_expected]
+    assert _nullable_column_values(results, second.get_class_name()) == [second_expected]
 
 
 RemedyArrowPairConsumer = _remedy_sum_consumer("RemedyArrowPairConsumer", PyArrowTable, ("mlg_a1", "mlg_b"))

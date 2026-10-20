@@ -264,15 +264,26 @@ def _sides_of(record: ResolvedJoin) -> frozenset[UUID]:
     return record.left.uuids | record.right.uuids
 
 
-def _missed_join_reason(consumer: UUID, missed: ResolvedJoin, reached: frozenset[UUID], graph: Graph) -> str:
+def _missed_join_reason(
+    consumer: UUID, missed: ResolvedJoin, reached: set[UUID], own_records: list[ResolvedJoin], graph: Graph
+) -> str:
     shared_side = missed.left if missed.left.uuids & reached else missed.right
+    shared_uuids = shared_side.uuids & reached
     nodes = graph.get_nodes()
-    other = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in missed.consumers)[0]
+    own_consumers = frozenset().union(*(record.consumers for record in own_records))
+    candidates = (missed.consumers & own_consumers) or missed.consumers
+    other = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in candidates)[0]
+    can_keep = True
+    for record in own_records:
+        for side in (record.left, record.right):
+            if side.uuids & shared_uuids and _role(record, side) in ("outer", "dropped"):
+                can_keep = False
     return star_missed_join_reason(
         nodes[consumer].feature_group_class.get_class_name(),
         other,
-        _class_names(shared_side.uuids & reached, graph),
+        _class_names(shared_uuids, graph),
         _class_names(_other_side(missed, shared_side).uuids, graph),
+        can_keep,
     )
 
 
@@ -297,7 +308,8 @@ def raise_on_consumer_missing_a_star_join(plan: ResolvedJoinPlan, graph: Graph) 
             ]
             if not missed:
                 continue
-            reached = frozenset().union(*(_sides_of(group[index]) for index in own_indexes))
+            own_records = [group[index] for index in own_indexes]
+            reached = set().union(*(_sides_of(record) for record in own_records))
             pending = missed
             changed = True
             while changed:
@@ -309,7 +321,7 @@ def raise_on_consumer_missing_a_star_join(plan: ResolvedJoinPlan, graph: Graph) 
                         continue
                     kept_and_dropped = _kept_and_dropped(record)
                     if kept_and_dropped is None or not kept_and_dropped[0].uuids & reached:
-                        raise ValueError(f"{_missed_join_reason(consumer, record, reached, graph)}.")
-                    reached |= kept_and_dropped[1].uuids
+                        raise ValueError(f"{_missed_join_reason(consumer, record, reached, own_records, graph)}.")
+                    reached.update(kept_and_dropped[1].uuids)
                     changed = True
                 pending = still_pending

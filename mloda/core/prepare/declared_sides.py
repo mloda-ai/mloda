@@ -103,13 +103,13 @@ def star_mixed_joins_reason(
     )
 
 
-def star_missed_join_reason(consumer: str, other: str, shared: str, joined: str) -> str:
+def star_missed_join_reason(consumer: str, other: str, shared: str, joined: str, can_keep: bool) -> str:
     """Reason for a consumer skipping a join of a shared group that another consumer reads, without final period."""
+    keep_text = f", or make the join of {shared} with {joined} a left or right link that keeps {shared}"
     return (
-        f"{consumer} reads a join into {shared} that {other} also reads, but not {other}'s join of {shared} with "
-        f"{joined}: {consumer} would see the rows that join drops or adds.\n"
-        f"Resolution: request {consumer} and {other} in separate runs, or make the join of {shared} with {joined} "
-        f"a left or right link that keeps {shared}"
+        f"{consumer} skips the join of {shared} with {joined} that {other} reads, but shares {other}'s frame, so "
+        f"{consumer} would see the rows that join drops or adds.\n"
+        f"Resolution: request {consumer} and {other} in separate runs{keep_text if can_keep else ''}"
     )
 
 

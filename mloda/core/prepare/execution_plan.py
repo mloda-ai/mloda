@@ -1349,6 +1349,7 @@ Available join types:
         side_frames = {
             j.uuid: frames_of(j.destination_framework_uuids | j.source_framework_uuids) for j in planned_joins
         }
+        destination_frames = {j.uuid: frames_of(j.destination_framework_uuids) for j in planned_joins}
         side_ancestors = {
             j.uuid: set().union(
                 *(
@@ -1384,10 +1385,7 @@ Available join types:
                     j
                     for j in joins_on_frame[frame]
                     if group_of.get(j.uuid) == group_of[js.uuid]
-                    and (
-                        j.destination_framework == j.source_framework
-                        or frame in frames_of(j.destination_framework_uuids)
-                    )
+                    and (j.destination_framework == j.source_framework or frame in destination_frames[j.uuid])
                 ]
                 if len(own_joins) > 1:
                     raise ValueError(
@@ -1400,8 +1398,7 @@ Available join types:
                     )
             if frames_of(js.source_framework_uuids) & touched:
                 js.shared_source = True
-            destination_frames = frames_of(js.destination_framework_uuids)
-            if len(destination_frames) == 1 and destination_frames & touched:
+            if len(destination_frames[js.uuid]) == 1 and destination_frames[js.uuid] & touched:
                 js.shared_destination = True
 
         for ep in execution_plan:

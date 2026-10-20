@@ -712,6 +712,55 @@ class TestAConsumerReadingPartOfAStar:
         assert "HubRightPairConsumer" in message
         assert "HubRightConsumer" in message
         assert "HubRightB" in message
+        assert "left or right" in message
+
+    def test_the_consumer_to_separate_from_reads_a_join_of_the_rejected_consumer_too(self) -> None:
+        # Z (c+b) sorts before Y (a+b+c) but reads no join X (a+b) reads, so only Y is a valid partner for X.
+        consumers = [HubRightPairConsumer, HubRightConsumer, HubRightCPairConsumer]
+        groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, HubRightCArrow, *consumers}
+
+        with pytest.raises(ValueError) as exc:
+            mloda.run_all(
+                [Feature(name=consumer.get_class_name()) for consumer in consumers],
+                links=_star_links(HubRightCArrow, True),
+                compute_frameworks=[PyArrowTable, PandasDataFrame],
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(groups),
+            )
+
+        resolution = str(exc.value).split("Resolution:")[1]
+        assert "request HubRightPairConsumer and HubRightConsumer in separate runs" in resolution
+
+    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
+    def test_a_consumer_missing_an_outer_join_of_the_star_is_not_offered_a_left_or_right_link(
+        self, hub_right: bool
+    ) -> None:
+        a, b, c = (JoinSpec(g, HUB_RIGHT_INDEX) for g in (HubRightA, HubRightB, HubRightCArrow))
+        links = {Link.outer(a, b), Link.outer(c, b)} if hub_right else {Link.outer(b, a), Link.outer(b, c)}
+
+        with pytest.raises(ValueError) as exc:
+            _two_consumers_run(links, HubRightCArrow, HubRightConsumer, ParallelizationMode.SYNC)
+
+        message = str(exc.value)
+        assert "HubRightPairConsumer" in message
+        assert "HubRightConsumer" in message
+        assert "separate runs" in message
+        assert "left or right" not in message
+
+    @pytest.mark.timeout(60)
+    def test_a_consumer_missing_a_join_that_keeps_the_shared_group_gets_its_own_rows_with_multiprocessing(
+        self, flight_server: Any
+    ) -> None:
+        got = _two_consumers_run(
+            _star_links(HubRightCArrow, True, c_link=Link.right),
+            HubRightCArrow,
+            HubRightConsumer,
+            ParallelizationMode.MULTIPROCESSING,
+            flight_server,
+        )
+
+        assert got[HubRightPairConsumer.get_class_name()] == [11, 22, 33]
+        assert got[HubRightConsumer.get_class_name()] == [11, 29, 41]
 
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])

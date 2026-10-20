@@ -543,7 +543,6 @@ def _star_missed_join_kept(missed_kind: str) -> Any:
 
 
 def test_raise_on_consumer_missing_a_star_join_names_both_consumers_and_the_hub() -> None:
-
     plan, graph = _build_star_plan(_star_missed_join_kept("inner"), partial_consumer=True)
 
     with pytest.raises(ValueError) as excinfo:
@@ -556,7 +555,6 @@ def test_raise_on_consumer_missing_a_star_join_names_both_consumers_and_the_hub(
 
 
 def test_raise_on_consumer_missing_a_star_join_accepts_a_missed_join_keeping_the_shared_group() -> None:
-
     plan, graph = _build_star_plan(_star_missed_join_kept("right"), partial_consumer=True)
 
     assert len(plan.resolved_join_plan.records) == 2
@@ -564,5 +562,4 @@ def test_raise_on_consumer_missing_a_star_join_accepts_a_missed_join_keeping_the
 
 
 def test_raise_on_consumer_missing_a_star_join_accepts_a_plan_with_no_records() -> None:
-
     raise_on_consumer_missing_a_star_join(ExecutionPlan().resolved_join_plan, Graph())

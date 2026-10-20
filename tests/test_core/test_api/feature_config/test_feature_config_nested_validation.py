@@ -567,8 +567,20 @@ def test_nested_sibling_in_features_list_rejects_feature_dict_element(in_feature
         process_nested_features(options)
 
     message = str(exc_info.value)
-    assert "dict" in message
-    assert "list" in message
+    index = next(i for i, e in enumerate(in_features) if isinstance(e, dict))
+    assert f"got element at index {index}: " in message
+    assert "inner_token" not in message
+    assert "a nested feature dict is supported as the direct value of 'in_features', not as a list element" in message
+
+
+def test_nested_in_features_bad_scalar_uses_plain_got_wording() -> None:
+    """The scalar rejection reads 'got int' without a colon."""
+    with pytest.raises(ValueError) as exc_info:
+        process_nested_features({"in_features": {"name": "outer", "in_features": 7}})
+
+    message = str(exc_info.value)
+    assert "or a nested feature dict, got int" in message
+    assert "got: " not in message
 
 
 @pytest.mark.parametrize(
@@ -586,25 +598,33 @@ def test_nested_sibling_in_features_list_rejects_non_string_element(in_features:
         "in_features": {"name": "outer_token", "in_features": in_features},
     }
 
-    with pytest.raises(ValueError, match="in_features"):
+    with pytest.raises(ValueError, match="in_features") as exc_info:
         process_nested_features(options)
+
+    index = next(i for i, e in enumerate(in_features) if not isinstance(e, str))
+    expected = type(in_features[index]).__name__
+    assert f"got element at index {index}: {expected}" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
-    "in_features",
+    "in_features, index, expected",
     [
-        pytest.param([""], id="empty_string"),
-        pytest.param(["age", "   "], id="whitespace_only_string"),
+        pytest.param([""], 0, "an empty string", id="empty_string"),
+        pytest.param(["age", "   "], 1, "a blank string", id="whitespace_only_string"),
     ],
 )
-def test_nested_sibling_in_features_list_rejects_empty_string_element(in_features: list[Any]) -> None:
+def test_nested_sibling_in_features_list_rejects_empty_string_element(
+    in_features: list[Any], index: int, expected: str
+) -> None:
     """An empty or whitespace-only list element names no feature and must be rejected."""
     options: dict[str, Any] = {
         "in_features": {"name": "outer_token", "in_features": in_features},
     }
 
-    with pytest.raises(ValueError, match="in_features"):
+    with pytest.raises(ValueError, match="in_features") as exc_info:
         process_nested_features(options)
+
+    assert f"got element at index {index}: {expected}" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -661,8 +681,8 @@ def test_loader_nested_sibling_in_features_list_rejects_feature_dict_element() -
         load_features_from_config(config_str, format="json")
 
     message = str(exc_info.value)
-    assert "dict" in message
-    assert "list" in message
+    assert "got element at index 0: " in message
+    assert '"a"' not in message
 
 
 BAD_NESTED_SIBLING_IN_FEATURES: list[Any] = [
@@ -692,12 +712,8 @@ def test_loader_nested_sibling_in_features_rejects_invalid_value(in_features: An
 # ---------------------------------------------------------------------------
 # An in_features error names an offending DICT by its keys, never by its repr
 #
-# A rejected feature dict reported with {element!r} would dump its whole
-# 'options' payload into the error: a credential written there lands in logs and in
-# a reader's context. The missing-'name' error already sets the norm by listing the
-# keys present. Every in_features error follows it: a dict offender is named by its
-# KEYS, a non-dict offender (string, int, None) is named by its type name, so no
-# rejected value is ever echoed into the message.
+# A dict offender is named by its keys, any other offender by its type name,
+# so no rejected value is echoed into the message.
 # ---------------------------------------------------------------------------
 
 SENSITIVE_OPTION_VALUE = "hunter2-do-not-log"
@@ -744,7 +760,7 @@ def test_nested_in_features_list_element_error_names_type_for_non_dict_offender(
     with pytest.raises(ValueError, match="in_features") as exc_info:
         load_features_from_config(json.dumps([config]), format="json")
 
-    assert "int" in str(exc_info.value)
+    assert "got element at index 1: int" in str(exc_info.value)
 
 
 def test_top_level_in_features_array_element_error_names_keys_not_payload() -> None:

@@ -15,32 +15,30 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
 from mloda.core.api.feature_config.models import (
     FeatureConfig,
+    error_prefix,
     feature_config_error_prefix,
     parse_nested_feature_config,
+    render_user_text,
     validate_nested_in_features,
 )
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 
 
-def build_nested_feature(value: dict[str, Any], path: str = "") -> Feature:
+def build_nested_feature(value: dict[str, Any], path: str) -> Feature:
     """Build a Feature from a nested in_features dict, validated through FeatureConfig.
 
     Args:
         value: Nested feature definition under an "in_features" key
-        path: Dotted field path of this dict within the config, naming errors (empty for none)
+        path: Dotted field path of this dict within the config, naming errors
 
     Returns:
         Feature object for the nested definition
     """
-    try:
+    with error_prefix(path):
         config = parse_nested_feature_config(value)
         validate_nested_in_features(config.in_features)
-    except (ValueError, TypeError) as exc:
-        if not path:
-            raise
-        raise type(exc)(f"{path}: {exc}") from exc
 
-    processed_nested_options = process_nested_features(config.options, f"{path}.options" if path else "options")
+    processed_nested_options = process_nested_features(config.options, f"{path}.options")
 
     # Sibling in_features: a list of more than one source name stays a list, a 1-element list collapses to its
     # element, a dict recurses into another nested Feature, a string is a single source name stored as-is.
@@ -49,13 +47,19 @@ def build_nested_feature(value: dict[str, Any], path: str = "") -> Feature:
         if isinstance(in_features, list):
             processed_nested_options["in_features"] = in_features if len(in_features) > 1 else in_features[0]
         elif isinstance(in_features, dict):
-            processed_nested_options["in_features"] = build_nested_feature(
-                in_features, f"{path}.in_features" if path else "in_features"
-            )
+            processed_nested_options["in_features"] = build_nested_feature(in_features, f"{path}.in_features")
         else:
             processed_nested_options["in_features"] = in_features
 
-    return Feature(name=config.name, options=processed_nested_options, feature_group=config.feature_group)
+    with error_prefix(path):
+        return Feature(name=config.name, options=processed_nested_options, feature_group=config.feature_group)
+
+
+def child_path(path: str, key: Any) -> str:
+    """Join an identifier key with a dot; render any other key as an escaped bracket segment."""
+    if isinstance(key, str) and key.isidentifier():
+        return f"{path}.{key}" if path else key
+    return f"{path}[{render_user_text(str(key))}]"
 
 
 def process_nested_features(options: dict[str, Any], path: str = "") -> dict[str, Any]:
@@ -74,11 +78,12 @@ def process_nested_features(options: dict[str, Any], path: str = "") -> dict[str
         # through it rather than a literal keeps this branch matching if that
         # value is renamed. Not `key == DefaultOptionKeys.in_features`, which
         # holds only while DefaultOptionKeys mixes in str (see #1063).
+        child = child_path(path, key)
         if str(key) == str(DefaultOptionKeys.in_features) and isinstance(value, dict):
-            processed[key] = build_nested_feature(value, f"{path}.{key}" if path else str(key))
+            processed[key] = build_nested_feature(value, child)
         elif isinstance(value, dict):
             # Recursively process nested dicts
-            processed[key] = process_nested_features(value, f"{path}.{key}" if path else str(key))
+            processed[key] = process_nested_features(value, child)
         else:
             processed[key] = value
 
@@ -131,7 +136,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
         if isinstance(item, str):
             features.append(item)
         elif isinstance(item, FeatureConfig):
-            try:
+            with error_prefix(feature_config_error_prefix(position, item.name)):
                 # Build feature name with column index suffix if present
                 feature_name = item.name
                 if item.column_index is not None:
@@ -178,8 +183,6 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                     processed_options = process_nested_features(item.options, "options")
                     feature = Feature(name=feature_name, options=processed_options, feature_group=item.feature_group)
                     features.append(feature)
-            except (ValueError, TypeError) as exc:
-                raise type(exc)(f"{feature_config_error_prefix(position, item.name)}: {exc}") from exc
         else:
             raise ValueError(f"Unexpected config item type: {type(item)}")
 

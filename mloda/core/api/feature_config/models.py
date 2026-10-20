@@ -5,8 +5,21 @@ This module defines the data models used to validate and parse
 feature configuration files.
 """
 
+import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 from typing import Any
+
+
+@contextmanager
+def error_prefix(prefix: str) -> Iterator[None]:
+    """Prefix a ValueError/TypeError message raised inside, re-raising the same exception object."""
+    try:
+        yield
+    except (ValueError, TypeError) as exc:
+        exc.args = (f"{prefix}: {exc}",)
+        raise
 
 
 def validate_feature_group_scope(value: Any) -> str | None:
@@ -69,16 +82,16 @@ class FeatureConfig:
 
     def __post_init__(self) -> None:
         """Validate the invariants shared by the top-level and the nested feature dict."""
-        # A container must be an object: group/context also accept None (their default, i.e. absent),
-        # while options defaults to {}, so an explicit null there is a rejected config value.
+        if self.options is None:
+            self.options = {}
         for container_field in ("options", "group_options", "context_options"):
             container_value = getattr(self, container_field)
-            if container_field != "options" and container_value is None:
+            if container_value is None:
                 continue
             if not isinstance(container_value, dict):
                 raise ValueError(f"'{container_field}' must be an object, got {type(container_value).__name__}")
         if not isinstance(self.name, str) or not self.name.strip():
-            raise ValueError(f"'name' must be a non-empty string, got {type(self.name).__name__}")
+            raise ValueError(f"'name' must be a non-empty string, got {describe_offender(self.name)}")
         if self.options and (self.group_options or self.context_options):
             raise ValueError("Cannot use both 'options' and 'group_options'/'context_options'")
         for key_field in ("propagate_context_keys", "cascade_context_keys"):
@@ -88,6 +101,13 @@ class FeatureConfig:
                     f"'{key_field}' requires 'context_options'; "
                     "it is meaningless without context options and would otherwise be silently dropped"
                 )
+        if self.column_index is not None:
+            if not isinstance(self.column_index, int) or isinstance(self.column_index, bool):
+                raise ValueError(
+                    f"'column_index' must be a non-negative integer, got {describe_offender(self.column_index)}"
+                )
+            if self.column_index < 0:
+                raise ValueError("'column_index' must be a non-negative integer, got a negative integer")
         validate_feature_group_scope(self.feature_group)
         validate_feature_group_not_in_options(self.options, "options")
         validate_feature_group_not_in_options(self.group_options, "group_options")
@@ -99,25 +119,28 @@ NESTED_FIELDS = frozenset(f.name for f in fields(FeatureConfig) if f.metadata.ge
 
 
 def feature_config_error_prefix(position: int, name: Any) -> str:
-    """The 1-based position of a config item, plus its name when that name is a usable non-empty string.
-
-    A name that is not a usable string is itself often the rejected field, so it never appears
-    in the prefix; the prefix must not turn into another echo of a bad value.
-    """
+    """The 1-based item position, plus its escaped name when usable; an unusable name is the rejected field."""
     prefix = f"feature config item {position}"
     if isinstance(name, str) and name.strip():
-        prefix += f' ("{name}")'
+        prefix += f" ({render_user_text(name)})"
     return prefix
 
 
-def describe_offender(value: Any) -> str:
-    """Name a rejected dict by its keys, and any other value by its type.
+def render_user_text(text: str) -> str:
+    """Cut user text to 100 characters and JSON-escape it for a message."""
+    shown = text if len(text) <= 100 else text[:100] + "..."
+    return json.dumps(shown)
 
-    A repr could dump an options payload that may hold credentials, so only dict
-    keys and type names ever reach an error message.
-    """
+
+def describe_offender(value: Any) -> str:
+    """Name a rejected dict by its keys and any other value by its type: a value may hold a credential."""
     if isinstance(value, dict):
         return f"a dict with keys {sorted(value)}"
+    if isinstance(value, str):
+        if not value:
+            return "an empty string"
+        if not value.strip():
+            return "a blank string"
     return type(value).__name__
 
 
@@ -130,14 +153,14 @@ def validate_top_level_in_features(value: Any) -> None:
         return
     if not isinstance(value, list):
         raise ValueError(
-            f"'in_features' must be an array of source feature names at the top level of a feature config, got: "
+            f"'in_features' must be an array of source feature names at the top level of a feature config, got "
             f"{describe_offender(value)}"
         )
-    for element in value:
+    for index, element in enumerate(value):
         if not isinstance(element, str) or not element.strip():
             raise ValueError(
                 f"'in_features' must be an array of non-empty source feature names at the top level of a feature "
-                f"config, got element: {describe_offender(element)}"
+                f"config, got element at index {index}: {describe_offender(element)}"
             )
 
 
@@ -149,26 +172,27 @@ def validate_nested_in_features(value: Any) -> None:
         return
     if isinstance(value, str):
         if not value.strip():
-            raise ValueError(f"'in_features' must be a non-empty source feature name, got: {type(value).__name__}")
+            raise ValueError(f"'in_features' must be a non-empty source feature name, got {describe_offender(value)}")
         return
     if isinstance(value, list):
         if not value:
             raise ValueError("'in_features' must not be an empty list; it declares the source features")
-        for element in value:
+        for index, element in enumerate(value):
             if isinstance(element, dict):
                 raise ValueError(
                     "'in_features' as a list holds source feature names only; a nested feature dict is supported "
-                    f"as the direct value of 'in_features', not as a list element, got: {describe_offender(element)}"
+                    f"as the direct value of 'in_features', not as a list element, "
+                    f"got element at index {index}: {describe_offender(element)}"
                 )
             if not isinstance(element, str) or not element.strip():
                 raise ValueError(
-                    f"'in_features' as a list holds non-empty source feature names, got element: "
-                    f"{describe_offender(element)}"
+                    f"'in_features' as a list holds non-empty source feature names, "
+                    f"got element at index {index}: {describe_offender(element)}"
                 )
         return
     raise ValueError(
         f"'in_features' must be a source feature name, a list of source feature names, or a nested feature dict, "
-        f"got: {describe_offender(value)}"
+        f"got {describe_offender(value)}"
     )
 
 
@@ -207,7 +231,7 @@ def feature_config_schema() -> dict[str, Any]:
             "context_options": {"type": "object"},
             "propagate_context_keys": {"type": "array", "items": {"type": "string"}},
             "cascade_context_keys": {"type": "array", "items": {"type": "string"}},
-            "column_index": {"type": "integer"},
+            "column_index": {"type": "integer", "minimum": 0},
             "feature_group": {"type": "string", "minLength": 1},
         },
         "required": ["name"],

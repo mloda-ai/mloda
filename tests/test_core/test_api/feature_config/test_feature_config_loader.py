@@ -450,18 +450,23 @@ BAD_TOP_LEVEL_IN_FEATURES: list[Any] = [
 ]
 
 
-def _assert_offender_named_without_payload(message: str, offender: Any) -> None:
-    """A dict offender is named by its keys: its repr would dump an options payload that may hold credentials.
-
-    Every other offender is named by its type name; a repr of the value itself is never echoed.
-    """
+def _assert_offender_named_without_payload(message: str, in_features: list[Any], offender: Any) -> None:
+    """A dict offender is named by its keys, never its repr; other offenders by wording or type name."""
+    index = next(i for i, e in enumerate(in_features) if type(e) is type(offender) and e == offender)
+    assert f"got element at index {index}: " in message
     if isinstance(offender, dict):
         for key in offender:
             assert key in message
         for value in offender.values():
             assert repr(value) not in message
         return
-    assert type(offender).__name__ in message
+    if offender == "":
+        expected = "an empty string"
+    elif isinstance(offender, str):
+        expected = "a blank string"
+    else:
+        expected = type(offender).__name__
+    assert f"got element at index {index}: {expected}" in message
 
 
 @pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
@@ -472,7 +477,7 @@ def test_load_features_rejects_in_features_element_that_is_not_a_name(in_feature
     with pytest.raises(ValueError, match="in_features") as exc_info:
         load_features_from_config(config_str, format="json")
 
-    _assert_offender_named_without_payload(str(exc_info.value), offender)
+    _assert_offender_named_without_payload(str(exc_info.value), in_features, offender)
 
 
 @pytest.mark.parametrize("in_features, offender", BAD_TOP_LEVEL_IN_FEATURES)
@@ -483,7 +488,7 @@ def test_load_features_rejects_in_features_element_with_group_options(in_feature
     with pytest.raises(ValueError, match="in_features") as exc_info:
         load_features_from_config(config_str, format="json")
 
-    _assert_offender_named_without_payload(str(exc_info.value), offender)
+    _assert_offender_named_without_payload(str(exc_info.value), in_features, offender)
 
 
 def test_load_features_accepts_in_features_array_of_names() -> None:

@@ -26,6 +26,7 @@ from mloda.core.prepare.resolved_join import (
     ResolvedJoin,
     ResolvedJoinPlan,
 )
+from mloda.core.prepare.join_decision import DeclinedJoin, JoinDecision
 from mloda.core.prepare.resolved_join_builder import joinstep_signatures
 from mloda.provider import BaseInputData
 from mloda.provider import ComputeFramework
@@ -1175,7 +1176,7 @@ def _plan_state(plan: ExecutionPlan) -> tuple[list[ResolvedJoin], dict[JoinStep,
     return list(plan.planned_records), dict(plan.joinstep_collection.collection), list(plan.declined_orientations)
 
 
-def _decision_view(decision: Any) -> tuple[Any, ...]:
+def _decision_view(decision: JoinDecision) -> tuple[Any, ...]:
     return (
         decision.destination_framework,
         decision.source_framework,
@@ -1209,8 +1210,6 @@ def test_deciding_a_key_reports_what_planning_builds_and_writes_nothing(
     branch_kwargs: dict[str, Any],
     orientation: Orientation,
 ) -> None:
-    from mloda.core.prepare.join_decision import JoinDecision
-
     built_planned = _planned()
     built_link = _pair_link(link_factory)
     built_sides = _branch(built_planned, built_link, "resolved_join_decide_built", **branch_kwargs)
@@ -1237,12 +1236,12 @@ def test_deciding_a_key_reports_what_planning_builds_and_writes_nothing(
     assert decision.source_framework is record.source_framework
     assert decision.destination_side is record.destination_side
     assert decision.carriers == step.carriers
+    assert decision.shared_source == step.shared_source
+    assert decision.shared_destination == step.shared_destination
     assert _plan_state(pending.plan) == before
 
 
 def test_deciding_a_declined_orientation_returns_a_declined_join_and_records_nothing() -> None:
-    from mloda.core.prepare.join_decision import DeclinedJoin
-
     planned, link, _ = _declined_orientation_parts()
     pending = _pending(planned, link)
     key = (link, PandasDataFrame, PyArrowTable)
@@ -1257,8 +1256,6 @@ def test_deciding_a_declined_orientation_returns_a_declined_join_and_records_not
 
 
 def test_deciding_a_flipped_key_declines_with_the_orientation_it_attempted() -> None:
-    from mloda.core.prepare.join_decision import DeclinedJoin
-
     planned, link = _flipped_decline_parts()
     pending = _pending(planned, link)
     queued_key = (link, PandasDataFrame, PyArrowTable)
@@ -1338,17 +1335,15 @@ def test_a_link_with_two_trekker_keys_still_plans_one_record_per_key() -> None:
     fresh.plan.create_execution_plan(fresh.queue, fresh.graph, fresh.link_trekker, fresh_declared)
     records = _records(fresh.plan, fresh_link)
 
-    from mloda.core.prepare.join_decision import JoinDecision
-
     decisions = [decision for key in keys for decision in decided[key]]
     assert all(isinstance(decision, JoinDecision) for decision in decisions)
-    pairs = {
+    pairs = [
         (decision.destination_framework, decision.source_framework)
         for decision in decisions
         if isinstance(decision, JoinDecision)
-    }
+    ]
     assert len(records) == 2
-    assert {(r.destination_framework, r.source_framework) for r in records} == pairs
+    assert [(r.destination_framework, r.source_framework) for r in records] == pairs
 
 
 @pytest.mark.parametrize(

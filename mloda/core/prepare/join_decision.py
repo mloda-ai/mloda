@@ -1,7 +1,7 @@
 """The orientation decided for one part of one link key, before any JoinStep is built."""
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import NamedTuple
 from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -9,8 +9,14 @@ from mloda.core.prepare.declared_sides import DeclaredSideSplit
 from mloda.core.prepare.resolve_links import LinkFrameworkTrekker
 from mloda.core.prepare.resolved_join import JoinSide
 
-if TYPE_CHECKING:
-    from mloda.core.prepare.execution_plan import AppendOrUnionSides
+
+class AppendOrUnionSides(NamedTuple):
+    """The left/right feature uuids and frameworks an APPEND or UNION link resolved to."""
+
+    destination_framework: type[ComputeFramework]
+    source_framework: type[ComputeFramework]
+    left_uuid: UUID
+    right_uuid: UUID
 
 
 @dataclass(frozen=True)
@@ -39,5 +45,5 @@ class JoinDecision:
     shared_destination: bool
     carried_left: bool | None
     bound_buckets: tuple[frozenset[UUID], frozenset[UUID]] | None
-    append_sides: "AppendOrUnionSides | None"
+    append_sides: AppendOrUnionSides | None
     fanned_out: bool

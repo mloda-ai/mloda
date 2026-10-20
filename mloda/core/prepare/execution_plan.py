@@ -24,7 +24,7 @@ from mloda.core.prepare.declared_sides import (
     several_consumers_members_reason,
     split_by_declared_side,
 )
-from mloda.core.prepare.join_decision import DeclinedJoin, JoinDecision
+from mloda.core.prepare.join_decision import AppendOrUnionSides, DeclinedJoin, JoinDecision
 from mloda.core.prepare.joinstep_collection import JoinStepCollection
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
@@ -95,15 +95,6 @@ def _describe_step(step: Step) -> str:
             f"{step.to_framework.get_class_name()}, uuid={step.uuid})"
         )
     return f"{type(step).__name__}(uuid={step.uuid})"
-
-
-class AppendOrUnionSides(NamedTuple):
-    """The left/right feature uuids and frameworks an APPEND or UNION link resolved to."""
-
-    destination_framework: type[ComputeFramework]
-    source_framework: type[ComputeFramework]
-    left_uuid: UUID
-    right_uuid: UUID
 
 
 class _JoinServedParent(NamedTuple):
@@ -2212,6 +2203,7 @@ Available join types:
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
     ) -> list[JoinStep]:
+        """Decide and build one key."""
         decided = self.decide_link_joins(link_fw[0], [link_fw], link_trekker, graph, pre_execution_plan)
         return self._build_decisions(decided[link_fw], graph)
 

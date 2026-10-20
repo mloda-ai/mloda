@@ -71,16 +71,45 @@ def star_keeping_two_groups_reason(
     """Reason for one consumer reading left or right joins that keep different groups, without final period."""
     kinds = {jointype.value for jointype in jointypes}
     kind = " or ".join(sorted(kinds))
-    if kinds == {"right"}:
-        keep_links = f"Link.right({first}, {dropped}) and Link.right({second}, {dropped})"
+    if kinds == {"asof"}:
+        keep_links = f"Link.asof({dropped}, {first}, ...) and Link.asof({dropped}, {second}, ...)"
+        keep_text = f"keep {dropped} in both joins ({keep_links})"
     else:
-        keep_links = f"Link.left({dropped}, {first}) and Link.left({dropped}, {second})"
+        if kinds == {"right"}:
+            keep_links = f"Link.right({first}, {dropped}) and Link.right({second}, {dropped})"
+        else:
+            keep_links = f"Link.left({dropped}, {first}) and Link.left({dropped}, {second})"
+        star = f'Link.star({dropped}, {first}, {second}, index_column=..., jointype="left")'
+        keep_text = f"keep {dropped} in both joins ({keep_links}, or {star})"
     return (
         f"{consumer} reads two {kind} joins that keep different groups, {first} and {second}, and drop the same "
         f"group {dropped}: the rows depend on which join runs first, so the result is not defined.\n"
-        f"Resolution: keep {dropped} in both joins ({keep_links}, or "
-        f'Link.star({dropped}, {first}, {second}, index_column=..., jointype="left")), '
+        f"Resolution: {keep_text}, "
         f"use inner joins for both or outer joins for both, or read {first} and {second} in separate consumers"
+    )
+
+
+def star_mixed_joins_reason(
+    consumer: str, shared: str, first: str, second: str, roles: tuple[str, str], jointypes: Iterable[JoinType]
+) -> str:
+    """Reason for one consumer reading two joins that treat a shared group differently, without final period."""
+    kind = " and ".join(sorted({jointype.value for jointype in jointypes}))
+    return (
+        f"{consumer} reads two joins ({kind}) into {shared} with {first} and {second}, and {shared} is "
+        f"{roles[0]} in one and {roles[1]} in the other: the rows depend on which join runs first, so the result "
+        "is not defined.\n"
+        f"Resolution: keep {shared} in every left or right join (an inner join beside them is fine), "
+        f"use one join type for all links, or read {first} and {second} in separate consumers"
+    )
+
+
+def star_missed_join_reason(consumer: str, other: str, shared: str, joined: str, can_keep: bool) -> str:
+    """Reason for a consumer skipping a join of a shared group that another consumer reads, without final period."""
+    keep_text = f", or make the join of {shared} with {joined} a left or right link that keeps {shared}"
+    return (
+        f"{consumer} skips the join of {shared} with {joined} that {other} reads, but shares {other}'s frame, so "
+        f"{consumer} would see the rows that join drops or adds.\n"
+        f"Resolution: request {consumer} and {other} in separate runs{keep_text if can_keep else ''}"
     )
 
 

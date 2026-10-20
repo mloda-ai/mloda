@@ -236,7 +236,7 @@ The returned set is passed straight to `mlodaAPI` like any other link set.
 
 **Known limits when several links feed one consumer**
 
-Joins feeding one consumer run in sequence, each on the previous join's frame, so the result must not depend on their order. When the links share a group, as in `Link.left(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.left(JoinSpec(C, ...), JoinSpec(B, ...))`, a left or right join star that keeps both `A` and `C` is rejected at plan time. Keep `B` in every join (`Link.star(B, A, C, index_column=..., jointype="left")`), or use inner joins for all links or outer joins for all links. Other mixes of join types in one star, such as a left join that keeps `A` next to an inner join, are not checked yet: they run in one fixed order, which may not give the rows you expect. Two members of one link side (see below) count as two such links.
+Joins feeding one consumer run in sequence, each on the previous join's frame, so the result must not depend on their order. When two links share a group `B`, as in `Link.left(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.left(JoinSpec(C, ...), JoinSpec(B, ...))`, each join treats `B` as inner, outer, kept (the kept side of a left, right or asof join) or dropped. Planned: inner with inner, outer with outer, kept with kept, and kept with inner. Rejected at plan time: dropped with inner, dropped with outer, inner with outer, and two left or right joins that drop `B` and keep different groups. Dropped with kept (a chain such as `Link.left(A, B)` plus `Link.left(B, C)`) and kept with outer are rejected only when both joins join `B` on the same index and the dropped or outer join's two keys share one column name (differently named keys, as in a foreign key chain, stay planned). To fix it, keep `B` in every left or right join (`Link.star(B, A, C, index_column=..., jointype="left")`; an inner join beside them is fine), use one join type for all links, or read the joins in separate consumers. Two members of one link side (see below) count as two such links. A consumer that skips a join another consumer reads is rejected at plan time, unless the skipped join is a left, right or asof join keeping the shared group.
 
 #### Same-Class Joins with Discriminators
 
@@ -348,12 +348,12 @@ from mloda.user import mloda
 set_of_links = {link}
 
 mloda.run_all(
-    features=["Feature_of_FeatureGroupA", "Feature_of_FeatureGroupB"],
+    features=["Consumer_of_FeatureGroupA_and_FeatureGroupB"],
     links=set_of_links
     )
 ```
 
-mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed.
+mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed. A join happens only for a feature group whose `input_features()` read both linked groups. Requested features of two linked groups come back as separate frames unless a feature reads both; planning logs a warning then.
 
 A feature between a join side and the feature consuming the join runs on that side's compute framework. The one exception is a direct input of the consumer that is pinned to another framework: the join then reads that side through the input's hop. Still rejected at plan time are an off-framework feature below another input of the consumer, one side reaching the consumer through two different frameworks, inputs off the sides' framework when the two sides differ in framework, and any such input for APPEND or UNION links. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join, also when the variants differ on one side only, and each consumer waits only on its own join. Consumers of one RIGHT link never split across its two sides; when one consumer cannot run on the right side's framework, siblings on the same side frameworks join on the left with it.
 

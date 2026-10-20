@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict, defaultdict
 from typing import Any
 from uuid import UUID
@@ -8,6 +9,8 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.prepare.stable_text import stable_text
 from mloda.core.prepare.validators.resolve_link_validator import ResolveLinkValidator
 
+
+logger = logging.getLogger(__name__)
 
 LinkFrameworkTrekker = tuple[Link, type[ComputeFramework], type[ComputeFramework]]
 
@@ -43,6 +46,12 @@ class LinkTrekker:
         self.data_ordered: OrderedDict[LinkFrameworkTrekker, set[UUID]] = OrderedDict()
 
         self.order: OrderedDict[UUID, set[UUID]] = OrderedDict()
+
+        self.ancestors_of: dict[UUID, set[UUID]] = {}
+
+    def _feeds(self, uuids: set[UUID], other_uuids: set[UUID]) -> bool:
+        """Whether a consumer in `uuids` is an ancestor of one in `other_uuids`, so the other link reads its result."""
+        return any(uuids & self.ancestors_of.get(other, set()) for other in other_uuids)
 
     def update(self, key: LinkFrameworkTrekker, value: UUID) -> None:
         self.data[key].add(value)
@@ -191,6 +200,11 @@ class LinkTrekker:
                 if link.uuid == other_link.uuid:
                     continue
 
+                # A link whose consumers the other link reads goes first: the other join would wait on itself.
+                if self._feeds(uuids, other_uuids):
+                    self.order.setdefault(link.uuid, set()).add(other_link.uuid)
+                    continue
+
                 if right_framework == other_left_framework == left_framework:
                     continue
 
@@ -251,6 +265,7 @@ class ResolveLinks:
         self.graph.set_direct_parents_for_each_child()
         self.graph.set_all_parents_for_each_child()
         self.graph.set_root_parents_by_direct_()
+        self.link_trekker.ancestors_of = self.graph.parent_to_children_mapping
 
         self.go_through_each_child_and_its_parents_and_look_for_links()
 
@@ -268,6 +283,69 @@ class ResolveLinks:
 
     def get_link_trekker(self) -> LinkTrekker:
         return self.link_trekker
+
+    def _side_nodes(
+        self, nodes_by_class: dict[type, list[UUID]], feature_group: type, discriminator: dict[str, Any] | None
+    ) -> set[UUID]:
+        nodes = self.graph.get_nodes()
+        return {
+            uuid
+            for uuid in nodes_by_class.get(feature_group, [])
+            if discriminator is None or Link.matches_discriminator(discriminator, nodes[uuid].feature.options)
+        }
+
+    def warn_on_unjoined_links(self) -> None:
+        """Warn once per declared link whose two sides are both planned but never joined."""
+        if not self.links:
+            return
+
+        nodes = self.graph.get_nodes()
+        nodes_by_class: dict[type, list[UUID]] = defaultdict(list)
+        for uuid, node in nodes.items():
+            for cls in node.feature_group_class.__mro__:
+                nodes_by_class[cls].append(uuid)
+
+        messages: set[str] = set()
+        for link in self.links:
+            discriminated = link.left_discriminator is not None or link.right_discriminator is not None
+            if link.left_feature_group is link.right_feature_group and not discriminated:
+                continue
+
+            lefts = self._side_nodes(nodes_by_class, link.left_feature_group, link.left_discriminator)
+            rights = self._side_nodes(nodes_by_class, link.right_feature_group, link.right_discriminator)
+            if not lefts or not rights:
+                continue
+            # Same-class nodes only pair up when discriminators separate them.
+            identities: set[Any]
+            if discriminated:
+                identities = lefts | rights
+            else:
+                identities = {nodes[uuid].feature_group_class for uuid in lefts | rights}
+            if len(identities) < 2:
+                continue
+
+            def separates(left: UUID, right: UUID) -> bool:
+                return left != right and (
+                    discriminated or nodes[left].feature_group_class is not nodes[right].feature_group_class
+                )
+
+            if any(
+                (left in lefts and right in rights and separates(left, right))
+                or (right in lefts and left in rights and separates(right, left))
+                for _, left, right, _ in self.occurrences
+            ):
+                continue
+
+            left_name = link.left_feature_group.__name__
+            right_name = link.right_feature_group.__name__
+            messages.add(
+                f"Link between {left_name} and {right_name} planned no join: no requested feature reads both "
+                f"sides. A join needs a feature group whose input_features() read both {left_name} and "
+                f"{right_name}; otherwise their features come back as separate frames."
+            )
+
+        for message in sorted(messages):
+            logger.warning(message)
 
     def go_through_each_child_and_its_parents_and_look_for_links(self) -> None:
         if not self.links:

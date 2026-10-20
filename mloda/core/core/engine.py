@@ -254,6 +254,7 @@ class Engine:
         resolver.set_nodes_per_feature_group()
 
         planned_queue = resolver.resolve_links()
+        resolver.resolver_links.warn_on_unjoined_links()
 
         planned_queue = resolver.resolver_compute_framework.links(
             planned_queue, resolver.resolver_links.get_link_trekker()

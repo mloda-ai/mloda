@@ -386,9 +386,17 @@ class TestEngineMultipleJoinCfw:
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
         links = {Link("left", left, right_1), Link("left", right_2, left), Link("left", left, right_3)}
-        self.base_join_runner(modes, flight_server, links, f_name="4")
+        with pytest.raises(ValueError, match="runs first"):
+            self.base_join_runner(modes, flight_server, links, f_name="4")
 
         links = {Link("outer", left, right_1), Link("inner", right_2, left), Link("inner", right_3, left)}
+        with pytest.raises(ValueError, match="runs first"):
+            self.base_join_runner(modes, flight_server, links, f_name="4")
+
+        links = {Link("outer", left, right_1), Link("outer", right_2, left), Link("outer", left, right_3)}
+        self.base_join_runner(modes, flight_server, links, f_name="4")
+
+        links = {Link("left", left, right_1), Link("left", left, right_2), Link("inner", right_3, left)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
     def test_runner_join_multiple_cfw6_double_chained_join_right(

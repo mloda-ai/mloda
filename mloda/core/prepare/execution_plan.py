@@ -1,4 +1,4 @@
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from copy import copy, deepcopy
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
@@ -44,6 +44,7 @@ from mloda.core.prepare.resolved_join_builder import (
     wire_join_dependencies,
 )
 from mloda.core.prepare.validate_resolved_join import (
+    raise_on_consumer_missing_a_star_join,
     raise_on_dishonest_join_record,
     raise_on_join_star_keeping_two_groups,
     raise_on_orphaned_join_source,
@@ -227,9 +228,11 @@ class ExecutionPlan:
         raise_on_dishonest_join_record(self.resolved_join_plan, join_steps, graph)
         if validate:
             raise_on_join_star_keeping_two_groups(self.resolved_join_plan, graph)
+            raise_on_consumer_missing_a_star_join(self.resolved_join_plan, graph)
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)
+        self._anchor_join_consumers_on_destination(self.execution_plan)
         self.raise_on_step_cycle(self.execution_plan)
 
         # Only read during add_joinstep above; ExecutionPlan gets deepcopy'd on every Engine.compute()
@@ -242,6 +245,56 @@ class ExecutionPlan:
         self._feature_set_index_cache = {}
         self._feature_set_index_source = None
         self._feature_set_index_length = 0
+
+    @staticmethod
+    def _shared_frame_error(
+        graph: Graph, frame_step: Step, consumers: frozenset[UUID], rival_consumers: frozenset[UUID]
+    ) -> str:
+        nodes = graph.get_nodes()
+
+        def names(uuids: Iterable[UUID]) -> str:
+            return " and ".join(sorted({nodes[uuid].feature_group_class.get_class_name() for uuid in uuids}))
+
+        shared = names(u for u in frame_step.get_uuids() if u in nodes)
+        first, second = sorted((names(consumers), names(rival_consumers)))
+        return (
+            f"The consumers {first} and {second} each join {shared} through their own joins, and each group's "
+            f"joins would see the other's rows.\n"
+            f"Resolution: read {shared} through one consumer group, or declare separate links or groups for each."
+        )
+
+    def _anchor_join_consumers_on_destination(
+        self, plan: Sequence[TransformFrameworkStep | JoinStep | FeatureGroupStep]
+    ) -> None:
+        """Anchor a hop-less join consumer's frame lookup on the destination step's frame."""
+        fg_steps = [step for step in plan if isinstance(step, FeatureGroupStep)]
+        listers_of: dict[tuple[type[ComputeFramework], UUID | None], set[int]] = defaultdict(set)
+        for position, other in enumerate(fg_steps):
+            for child in other.children_if_root:
+                listers_of[(other.compute_framework, child)].add(position)
+        records_of: dict[UUID, list[ResolvedJoin]] = defaultdict(list)
+        for record in self.planned_records:
+            for consumer in record.consumers:
+                records_of[consumer].append(record)
+        for position, step in enumerate(fg_steps):
+            if step.tfs_ids:
+                continue
+            # A single lister is unambiguous; re-anchoring it would only change the pinned plan shape.
+            if len(listers_of.get((step.compute_framework, step.features.any_uuid), set()) - {position}) < 2:
+                continue
+            step_uuids = step.get_uuids()
+            step_records = {id(r): r for uuid in step_uuids for r in records_of.get(uuid, [])}.values()
+            anchors = {
+                min(dest.get_uuids() & record.destination_uuids)
+                for record in step_records
+                if record.destination_framework == step.compute_framework
+                for dest in fg_steps
+                if dest is not step
+                and dest.compute_framework == step.compute_framework
+                and dest.get_uuids() & record.destination_uuids
+            }
+            if len(anchors) == 1:
+                step.features.any_uuid = next(iter(anchors))
 
     def add_feature_group_step(
         self,
@@ -1274,6 +1327,80 @@ Available join types:
         # (consumer step, its hop, same-framework parent) triples, resolved once the plan list is complete.
         hop_same_framework_pairs: list[tuple[FeatureGroupStep, TransformFrameworkStep, UUID]] = []
         destination_index = self.joinstep_collection.joins_by_destination_owner(owning_step_of)
+
+        # Joins of unrelated consumer groups touching one frame must not redirect or merge into it in place.
+        consumers_by_token = {r.token: r.consumers for r in self.planned_records}
+        planned_joins = [ep for ep in execution_plan if isinstance(ep, JoinStep) and ep.uuid in consumers_by_token]
+        group_of = {
+            j.uuid: index
+            for index, group in enumerate(
+                JoinStepCollection.groups_sharing_consumers(planned_joins, consumers_by_token)
+            )
+            for j in group
+        }
+
+        def frames_of(uuids: set[UUID]) -> set[UUID]:
+            found: set[UUID] = set()
+            for uuid in uuids:
+                lineage = {owning_step_of.get(u, u) for u in self._same_framework_lineage(uuid, graph, memo)}
+                found |= (lineage & root_steps) or {owning_step_of.get(uuid, uuid)}
+            return found
+
+        side_frames = {
+            j.uuid: frames_of(j.destination_framework_uuids | j.source_framework_uuids) for j in planned_joins
+        }
+        destination_frames = {j.uuid: frames_of(j.destination_framework_uuids) for j in planned_joins}
+        side_ancestors = {
+            j.uuid: set().union(
+                *(
+                    {u} | graph.parent_to_children_mapping.get(u, set())
+                    for u in j.destination_framework_uuids | j.source_framework_uuids
+                )
+            )
+            for j in planned_joins
+        }
+        joins_on_frame: dict[UUID, list[JoinStep]] = defaultdict(list)
+        for j in planned_joins:
+            for frame in side_frames[j.uuid]:
+                joins_on_frame[frame].append(j)
+
+        for js in planned_joins:
+            if js.uuid not in group_of or js.link.jointype in (JoinType.APPEND, JoinType.UNION):
+                continue
+            touched: set[UUID] = set()
+            rival_of: dict[UUID, JoinStep] = {}
+            for frame in side_frames[js.uuid]:
+                for rival in joins_on_frame[frame]:
+                    if rival.uuid not in group_of or group_of[rival.uuid] == group_of[js.uuid]:
+                        continue
+                    # A join reading another join's consumer works on its result, so it shares the frame on purpose.
+                    if side_ancestors[rival.uuid] & consumers_by_token[js.uuid]:
+                        continue
+                    if side_ancestors[js.uuid] & consumers_by_token[rival.uuid]:
+                        continue
+                    touched.add(frame)
+                    rival_of[frame] = rival
+            for frame in touched:
+                own_joins = [
+                    j
+                    for j in joins_on_frame[frame]
+                    if group_of.get(j.uuid) == group_of[js.uuid]
+                    and (j.destination_framework == j.source_framework or frame in destination_frames[j.uuid])
+                ]
+                if len(own_joins) > 1:
+                    raise ValueError(
+                        self._shared_frame_error(
+                            graph,
+                            steps_by_uuid[frame],
+                            consumers_by_token[js.uuid],
+                            consumers_by_token[rival_of[frame].uuid],
+                        )
+                    )
+            if frames_of(js.source_framework_uuids) & touched:
+                js.shared_source = True
+            if len(destination_frames[js.uuid]) == 1 and destination_frames[js.uuid] & touched:
+                js.shared_destination = True
+
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
                 if ep.destination_framework != ep.source_framework:
@@ -1379,6 +1506,12 @@ Available join types:
             elif isinstance(ep, FeatureGroupStep):
                 if ep.features.any_uuid is None:
                     raise ValueError(f"Feature group {format_feature_group_class(ep.feature_group)} has no uuid.")
+
+                # A parentless member (an index column) is not in the parent frame's children, so it cannot locate it.
+                if not ep.tfs_ids and not graph.parent_to_children_mapping.get(ep.features.any_uuid):
+                    derived = sorted(u for u in ep.get_uuids() if graph.parent_to_children_mapping.get(u))
+                    if derived:
+                        ep.features.any_uuid = derived[0]
 
                 parents: set[UUID] = set()
                 for member_uuid in ep.get_uuids():

@@ -1663,44 +1663,64 @@ def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_s
     assert _side_path_values(results, consumer) == expected
 
 
-@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
-    "first, first_expected, second, second_expected",
+    "first, second",
     [
-        pytest.param(
-            RemedyThirdBThirdMidConsumer,
-            [[117, 228, 339]],
-            RemedyThirdPairConsumer,
-            [[17, 28, 39]],
-            id="mid_and_pair",
-        ),
-        pytest.param(
-            RemedyThirdBThirdMidConsumer,
-            [[117, 228, 339]],
-            RemedyThirdBThirdConsumer,
-            [[18, 30, 42]],
-            id="mid_and_direct",
-        ),
-        pytest.param(
-            RemedyThirdBThirdConsumer,
-            [[18, 30, 42]],
-            RemedyThirdPairConsumer,
-            [[17, 28, 39]],
-            id="direct_and_pair",
-        ),
+        pytest.param(RemedyThirdBThirdMidConsumer, RemedyThirdPairConsumer, id="mid_and_pair"),
+        pytest.param(RemedyThirdBThirdConsumer, RemedyThirdPairConsumer, id="direct_and_pair"),
     ],
 )
-def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_together(
-    first: type[FeatureGroup],
-    first_expected: list[list[int]],
-    second: type[FeatureGroup],
-    second_expected: list[list[int]],
+def test_a_pair_consumer_missing_a_join_of_the_polymorphic_link_layout_is_rejected(
+    first: type[FeatureGroup], second: type[FeatureGroup], swap_link_sides: bool, link_factory: Any
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            ParallelizationMode.SYNC,
+            consumer=first,
+            features=[first.get_class_name(), second.get_class_name()],
+            link_factory=link_factory,
+            **{**_REMEDY_KWARGS, "root_b": RemedyRootBThird, "extra_groups": {*_REMEDY_KWARGS["extra_groups"], second}},
+        )
+
+    message = str(exc_info.value)
+    assert first.get_class_name() in message
+    assert second.get_class_name() in message
+    assert "Resolution:" in message
+
+
+def _a_without_x(cls: Any, data: Any, features: FeatureSet) -> Any:
+    return {"mlg_a": [2, 3], "mlg_idx": ["y", "z"]}
+
+
+# Mid is mlg_a * 100 + mlg_a1 + mlg_b, direct is mlg_a + mlg_a1 + mlg_b. Without x in A, the inner joins
+# drop row x for both consumers; the outer joins keep x (A1 and B have it) with the missing mlg_a as null.
+_POLYMORPHIC_EXPECTED = {
+    (Link.inner, False): ([117, 228, 339], [18, 30, 42]),
+    (Link.outer, False): ([117, 228, 339], [18, 30, 42]),
+    (Link.inner, True): ([228, 339], [30, 42]),
+    (Link.outer, True): ([228, 339, None], [30, 42, None]),
+}
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+@pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+@pytest.mark.parametrize("a_lacks_x", [False, True], ids=["full_data", "a_lacks_row_x"])
+def test_a_mid_and_a_direct_consumer_of_one_polymorphic_link_layout_return_their_values_together(
+    monkeypatch: pytest.MonkeyPatch,
+    a_lacks_x: bool,
     swap_link_sides: bool,
     link_factory: Any,
     mode: ParallelizationMode,
 ) -> None:
+    if a_lacks_x:
+        monkeypatch.setattr(MultiLinkRootA, "calculate_feature", classmethod(_a_without_x))
+    first, second = RemedyThirdBThirdMidConsumer, RemedyThirdBThirdConsumer
     session = _side_path_prepare(
         SidePathArrowP,
         False,
@@ -1718,44 +1738,32 @@ def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_togeth
 
     results = session.run(parallelization_modes={mode})
 
-    assert _side_path_values(results, first) == first_expected
-    assert _side_path_values(results, second) == second_expected
+    first_expected, second_expected = _POLYMORPHIC_EXPECTED[(link_factory, a_lacks_x)]
+    assert _nullable_column_values(results, first.get_class_name()) == [first_expected]
+    assert _nullable_column_values(results, second.get_class_name()) == [second_expected]
 
 
 RemedyArrowPairConsumer = _remedy_sum_consumer("RemedyArrowPairConsumer", PyArrowTable, ("mlg_a1", "mlg_b"))
 
 
-@pytest.mark.parametrize(
-    "mode",
-    [
-        ParallelizationMode.SYNC,
-        ParallelizationMode.THREADING,
-        # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-        pytest.param(ParallelizationMode.MULTIPROCESSING, marks=pytest.mark.timeout(60)),
-    ],
-)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_return_their_values_together(
-    flight_server: Any, swap_link_sides: bool, mode: ParallelizationMode
-) -> None:
-    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_are_rejected(swap_link_sides: bool) -> None:
     first, second = RemedyArrowSameBConsumer, RemedyArrowPairConsumer
-    repeats = 4 if mode == ParallelizationMode.THREADING else 1
-    for _ in range(repeats):
-        session = _side_path_prepare(
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
             SidePathArrowP,
             False,
             swap_link_sides,
-            mode,
+            ParallelizationMode.SYNC,
             consumer=first,
             features=[first.get_class_name(), second.get_class_name()],
             **{**_REMEDY_KWARGS, "root_b": MultiLinkRootBSame, "extra_groups": {RemedyRootA1, second}},
         )
 
-        results = session.run(parallelization_modes={mode}, flight_server=server)
-
-        assert _side_path_values(results, first) == [[18, 30, 42]]
-        assert _side_path_values(results, second) == [[17, 28, 39]]
+    message = str(exc_info.value)
+    assert first.get_class_name() in message
+    assert second.get_class_name() in message
+    assert "Resolution:" in message
 
 
 class RemedyRootBArrowX(RemedyRootBThird):
@@ -2413,15 +2421,24 @@ _ALL_FRAMEWORKS = [PandasDataFrame, PyArrowTable, SecondCfw, ThirdCfw]
 
 
 def _star_prepare(
-    link_factory: Callable[[JoinSpec, JoinSpec], Link], hub_first: bool, spoke_c: type[FeatureGroup] = StarSpokeCArrow
+    link_factory: Callable[[JoinSpec, JoinSpec], Link],
+    hub_first: bool,
+    spoke_c: type[FeatureGroup] = StarSpokeCArrow,
+    second: tuple[Callable[[JoinSpec, JoinSpec], Link], bool] | None = None,
 ) -> Any:
-    def link(spoke: type[FeatureGroup]) -> Link:
-        sides = (StarHubArrow, spoke) if hub_first else (spoke, StarHubArrow)
-        return link_factory(JoinSpec(sides[0], MLG_INDEX), JoinSpec(sides[1], MLG_INDEX))
+    """Both spokes join the hub with link_factory; second, if given, is the spoke C link's (factory, hub_first)."""
 
+    def link(spoke: type[FeatureGroup], factory: Callable[[JoinSpec, JoinSpec], Link], first: bool) -> Link:
+        sides = (StarHubArrow, spoke) if first else (spoke, StarHubArrow)
+        return factory(JoinSpec(sides[0], MLG_INDEX), JoinSpec(sides[1], MLG_INDEX))
+
+    second_factory, second_hub_first = second or (link_factory, hub_first)
     return mloda.prepare(
         [StarConsumerArrow.get_class_name()],
-        links={link(MultiLinkRootAPartial), link(spoke_c)},
+        links={
+            link(MultiLinkRootAPartial, link_factory, hub_first),
+            link(spoke_c, second_factory, second_hub_first),
+        },
         compute_frameworks=_ALL_FRAMEWORKS,
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=PluginCollector.enabled_feature_groups(
@@ -2465,6 +2482,31 @@ def test_two_right_joins_keeping_different_spokes_of_a_shared_group_still_raise(
         _star_prepare(Link.right, hub_first=True)
 
 
+_ORDER_DEPENDENT_STAR_ROWS = [
+    pytest.param(Link.left, False, (Link.inner, False), id="left_keeping_a_spoke_plus_inner"),
+    pytest.param(Link.left, False, (Link.outer, False), id="left_keeping_a_spoke_plus_outer"),
+    pytest.param(Link.left, True, (Link.outer, False), id="left_keeping_the_hub_plus_outer"),
+    pytest.param(Link.inner, False, (Link.outer, False), id="inner_plus_outer"),
+    pytest.param(Link.left, False, (Link.left, True), id="chain_through_the_hub"),
+    pytest.param(Link.right, False, (Link.left, False), id="right_keeping_the_hub_plus_left_dropping_it"),
+]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+@pytest.mark.parametrize("link_factory, hub_first, second", _ORDER_DEPENDENT_STAR_ROWS)
+def test_a_star_whose_rows_depend_on_which_join_runs_first_is_rejected_at_plan_time(
+    link_factory: Any, hub_first: bool, second: Any, spoke_c: type[FeatureGroup]
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _star_prepare(link_factory, hub_first, spoke_c, second)
+
+    message = str(exc_info.value)
+    for name in (StarConsumerArrow.get_class_name(), "MultiLinkRootAPartial", spoke_c.get_class_name(), "StarHubArrow"):
+        assert name in message, f"{name} must be named; got: {message}"
+    assert "runs first" in message
+    assert "separate consumers" in message
+
+
 _STAR_ROWS = [
     pytest.param(Link.left, True, [11, 29, 41, 50, 60], id="left_keeps_hub"),
     pytest.param(Link.inner, False, [29, 41], id="inner"),
@@ -2480,6 +2522,15 @@ def test_a_star_with_a_defined_result_returns_its_rows_when_the_spokes_hold_diff
     results = _star_prepare(link_factory, hub_first, spoke_c).run()
 
     assert _side_path_values(results, StarConsumerArrow) == [expected]
+
+
+@pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
+def test_a_left_join_keeping_the_hub_beside_an_inner_join_returns_the_inner_rows_with_every_spoke_value(
+    spoke_c: type[FeatureGroup],
+) -> None:
+    results = _star_prepare(Link.left, True, spoke_c, (Link.inner, False)).run()
+
+    assert _side_path_values(results, StarConsumerArrow) == [[29, 41]]
 
 
 @pytest.mark.parametrize("spoke_c", [StarSpokeCArrow, StarSpokeCSecond], ids=["one_framework", "spokes_differ"])
@@ -2593,14 +2644,19 @@ def _below_consumer(
     return created
 
 
-def _below_layout(tag: str, source: type[ComputeFramework], other: type[ComputeFramework]) -> dict[str, Any]:
+def _below_layout(
+    tag: str,
+    source: type[ComputeFramework],
+    other: type[ComputeFramework],
+    joined_and_d_framework: type[ComputeFramework] | None = None,
+) -> dict[str, Any]:
     """Root A on `source`, root B and the consumer's child on `other`, the consumer on A's framework."""
     root_a = _star_group(f"BelowRootA{tag}", f"below_a_{tag}", _xyz([1, 2, 3]), source)
     root_b = _star_group(f"BelowRootB{tag}", f"below_b_{tag}", _xyz([10, 20, 30]), other)
     root_d = _star_group(f"BelowRootD{tag}", f"below_d_{tag}", _xyz([7, 8, 9]), PandasDataFrame)
     joined_inputs = (f"below_a_{tag}", f"below_b_{tag}")
     joined = _below_consumer(f"BelowJoined{tag}", source, joined_inputs)
-    return {
+    layout = {
         "a": root_a,
         "b": root_b,
         "d": root_d,
@@ -2608,12 +2664,37 @@ def _below_layout(tag: str, source: type[ComputeFramework], other: type[ComputeF
         "below": _below_consumer(f"BelowChild{tag}", other, (joined.get_class_name(),), scale=2),
         "bd": _below_consumer(f"BelowBD{tag}", PandasDataFrame, (f"below_b_{tag}", f"below_d_{tag}")),
     }
+    if joined_and_d_framework is not None:
+        inputs = (joined.get_class_name(), f"below_d_{tag}")
+        layout["below_jd"] = _below_consumer(f"BelowJD{tag}", joined_and_d_framework, inputs, scale=2)
+    return layout
 
 
 _BELOW_LAYOUTS = {
     "arrow_source": _below_layout("Pa", PyArrowTable, PandasDataFrame),
     "pandas_source": _below_layout("Pd", PandasDataFrame, PyArrowTable),
+    "jd_arrow_pandas": _below_layout("PaJd", PyArrowTable, PandasDataFrame, PandasDataFrame),
+    "jd_pandas_arrow": _below_layout("PdJd", PandasDataFrame, PyArrowTable, PandasDataFrame),
+    "jd_joined_framework": _below_layout("PaJf", PyArrowTable, PandasDataFrame, PyArrowTable),
 }
+_BELOW_PLAIN_LAYOUTS = ("arrow_source", "pandas_source")
+_BELOW_JD_LAYOUTS = ("jd_arrow_pandas", "jd_pandas_arrow", "jd_joined_framework")
+
+
+def _below_link_set(
+    layout: dict[str, Any],
+    swap_link_sides: bool,
+    links: tuple[tuple[str, str], ...],
+    swap_second_link: bool = False,
+) -> set[Link]:
+    """The first link flips with `swap_link_sides`, the second with `swap_second_link`."""
+    flips = (swap_link_sides, swap_second_link)
+    link_set = set()
+    for position, (left, right) in enumerate(links):
+        flip = flips[position] if position < len(flips) else False
+        first, second = (right, left) if flip else (left, right)
+        link_set.add(Link.inner(JoinSpec(layout[first], MLG_INDEX), JoinSpec(layout[second], MLG_INDEX)))
+    return link_set
 
 
 def _below_run(
@@ -2623,16 +2704,10 @@ def _below_run(
     requested: tuple[str, ...],
     links: tuple[tuple[str, str], ...] = (("a", "b"),),
     flight_server: Any = None,
+    swap_second_link: bool = False,
 ) -> dict[str, list[list[int]]]:
     layout = _BELOW_LAYOUTS[layout_name]
-    # Only the first link flips; the extra link keeps its orientation.
-    link_set = {
-        Link.inner(
-            JoinSpec(layout[right if swap_link_sides and position == 0 else left], MLG_INDEX),
-            JoinSpec(layout[left if swap_link_sides and position == 0 else right], MLG_INDEX),
-        )
-        for position, (left, right) in enumerate(links)
-    }
+    link_set = _below_link_set(layout, swap_link_sides, links, swap_second_link)
     names = [layout[key].get_class_name() for key in requested]
     results = mloda.run_all(
         names,
@@ -2654,7 +2729,7 @@ _BELOW_NEXT_TO_SECOND_LINK = (
 _BELOW_CASES = [
     pytest.param(layout, swap, mode, *variant, id=f"{name}-{layout}-{'b_a' if swap else 'a_b'}-{mode.name.lower()}")
     for name, variant in (("alone", _BELOW_ALONE), ("second_link", _BELOW_NEXT_TO_SECOND_LINK))
-    for layout in _BELOW_LAYOUTS
+    for layout in _BELOW_PLAIN_LAYOUTS
     for swap in (False, True)
     for mode in (ParallelizationMode.SYNC, ParallelizationMode.THREADING)
 ]
@@ -2685,3 +2760,43 @@ def test_a_feature_below_a_join_consumer_reads_the_joined_frame(
     values = _below_run(layout, swap_link_sides, mode, requested, links=links, flight_server=server)
 
     assert values == expected
+
+
+_BELOW_JOINED_AND_D = (("a", "b"), ("joined", "d"))
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING], ids=["sync", "threading"])
+@pytest.mark.parametrize("swap_second_link", [False, True], ids=["joined_d", "d_joined"])
+@pytest.mark.parametrize("layout", _BELOW_JD_LAYOUTS)
+def test_a_feature_reading_a_join_consumer_and_a_root_joined_to_it_returns_its_values(
+    layout: str, swap_second_link: bool, mode: ParallelizationMode
+) -> None:
+    values = _below_run(
+        layout, False, mode, ("below_jd",), links=_BELOW_JOINED_AND_D, swap_second_link=swap_second_link
+    )
+
+    assert values == {"below_jd": [[29, 52, 75]]}
+
+
+@pytest.mark.parametrize("swap_second_link", [False, True], ids=["joined_d", "d_joined"])
+@pytest.mark.parametrize("layout", _BELOW_JD_LAYOUTS)
+def test_a_feature_reading_a_join_consumer_and_a_root_anchors_its_frame_on_the_join_destination(
+    layout: str, swap_second_link: bool
+) -> None:
+    fixture = _BELOW_LAYOUTS[layout]
+    link_set = _below_link_set(fixture, False, _BELOW_JOINED_AND_D, swap_second_link)
+    session = mloda.prepare(
+        [fixture["below_jd"].get_class_name()],
+        links=link_set,
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=PluginCollector.enabled_feature_groups(set(fixture.values())),
+    )
+
+    assert session.engine is not None
+    planner = session.engine.execution_planner
+    steps = [s for s in planner if isinstance(s, FeatureGroupStep) and s.feature_group is fixture["below_jd"]]
+    assert len(steps) == 1
+    records = [r for r in planner.resolved_join_plan.records if r.consumers & steps[0].get_uuids()]
+    assert records
+    assert steps[0].features.any_uuid in set().union(*(r.destination_uuids for r in records))

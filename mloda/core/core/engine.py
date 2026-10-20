@@ -35,6 +35,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
+from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
@@ -258,6 +259,8 @@ class Engine:
             planned_queue, resolver.resolver_links.get_link_trekker()
         )
 
+        self._warn_on_unjoined_links(resolver.resolver_links.get_link_trekker())
+
         if self.global_filter:
             # Setup still shifts a stored hash: a copied option Feature reaches the host's Feature via child_options.
             self.global_filter.rehash_stored_filters()
@@ -392,6 +395,32 @@ class Engine:
                 f"forward_group_exclude={{...}}, an allowlist, or forward_group=False on the child in "
                 f"input_features."
             )
+
+    def _warn_on_unjoined_links(self, link_trekker: LinkTrekker) -> None:
+        """Warn once per declared link whose two sides both plan but which no step joins (issue #1998)."""
+        if not self.links:
+            return
+
+        # After resolve_links(), a trekker entry exists only for a link that planned a join.
+        joined_links = {trekker[0] for trekker in link_trekker.data}
+        planned_groups = set(self.feature_group_collection)
+
+        messages: list[str] = []
+        for link in self.links:
+            if link in joined_links:
+                continue
+            left_planned = any(issubclass(group, link.left_feature_group) for group in planned_groups)
+            right_planned = any(issubclass(group, link.right_feature_group) for group in planned_groups)
+            if not (left_planned and right_planned):
+                continue
+            messages.append(
+                f"Link {link.left_feature_group.get_class_name()} -> {link.right_feature_group.get_class_name()} "
+                "planned no join: no feature group reads both sides. "
+                "A join needs a feature group whose input_features() read both sides."
+            )
+        # `links` is a set, so the emission is sorted: one record per unjoined link, in a stable order.
+        for message in sorted(messages):
+            logger.warning(message)
 
     def _identify_feature_group_and_frameworks(
         self, feature: Feature, depth: int = 0

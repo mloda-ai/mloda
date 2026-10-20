@@ -203,8 +203,6 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     def test_db_foreign_credentials_stay_silent(
         self, rejection_window: dict[str, MatchRejection], option_items: dict[str, str]
     ) -> None:
-        if option_items:
-            self._skip_if_query_route()
         assert not self.feature_group_class.match_feature_group_criteria(
             self.present_column, Options(option_items), self.foreign_dac()
         )

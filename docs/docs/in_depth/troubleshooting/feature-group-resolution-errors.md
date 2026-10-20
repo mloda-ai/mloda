@@ -245,6 +245,10 @@ ValueError: column 'idd' is in none of the sources of CsvFG: /data/application_t
 
 Check the spelling, request a column a source has, or point at the source that has it. Columns and a close-match suggestion appear only when the group was pointed or a `data_access_handle` narrows the search; otherwise only the sources are named, and a database is named by its identity only, once, without its table names. At most five sources are described, then "and N more". A source whose columns cannot be read shows `<source>: <reason>`. If no source can list its columns, the message says so. A folder entry that links outside its folder is skipped; add it as a files handle or point at it.
 
+### query_text on a group without a query route
+
+`query_text is set, but <Group> lists no query route`: `query_text` is reserved for groups that list `ReadDBFG.QUERY_ROUTE`; any other format group declines when unpointed and aborts when pointed. Point the feature at a group that lists the route, or keep `query_text` off the feature with `forward_group_exclude`.
+
 ### Pointers on derived features
 
 A class-name pointer on a derived feature reaches its inputs, because group options forward to input features. A consumer whose inputs come from several sources must put each pointer on its input feature (or use the `DataAccessCollection`): a forwarded pointer to a source without the column aborts with the missing-column error above.

@@ -73,7 +73,7 @@ class ReadDBFG(FormatFeatureGroup):
     CREDENTIAL_KEY: ClassVar[str] = "<credential key>"
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        if cls.QUERY_ROUTE in cls.CLAIM_ROUTES and QUERY_OPTION not in cls.PROPERTY_MAPPING:
+        if cls.serves_query_text() and QUERY_OPTION not in cls.PROPERTY_MAPPING:
             cls.PROPERTY_MAPPING = {**cls.PROPERTY_MAPPING, QUERY_OPTION: QUERY_SPEC}
         super().__init_subclass__(**kwargs)
 
@@ -149,7 +149,8 @@ class ReadDBFG(FormatFeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None,
     ) -> list[SourceMatch]:
-        query = route == cls.QUERY_ROUTE
+        query = QUERY_OPTION in route.required_options
+        candidates = [c for c in cls._candidates(options, data_access_collection) if cls.is_valid_credentials(c)]
         if query:
             query_text = options.get(QUERY_OPTION)
             if not isinstance(query_text, str) or not query_text:
@@ -157,37 +158,39 @@ class ReadDBFG(FormatFeatureGroup):
                     cls.get_class_name(), f"{QUERY_OPTION} must be a non-empty string", stage=INPUT_DATA_STAGE
                 )
                 return []
-        elif cls.QUERY_ROUTE in cls.CLAIM_ROUTES and QUERY_OPTION in options:
-            record_match_rejection(
-                cls.get_class_name(), f"{QUERY_OPTION} is set, so the table route is not used", stage=INPUT_DATA_STAGE
-            )
+        elif cls.serves_query_text() and QUERY_OPTION in options:
+            if candidates:
+                record_match_rejection(
+                    cls.get_class_name(),
+                    f"{QUERY_OPTION} is set, so the table route is not used",
+                    stage=INPUT_DATA_STAGE,
+                )
             return []
         digest = sha256(query_text.encode()).hexdigest()[:16] if query else ""
         by_source: dict[str, dict[Any, tuple[Any, SourceMatch]]] = {}
-        for credentials in cls._candidates(options, data_access_collection):
-            if cls.is_valid_credentials(credentials):
-                identity = cls.database_identity(credentials)
-                if query:
-                    found = [SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))]
-                else:
-                    found = cls._tables(identity, credentials)
-                principal = cls.database_principal(credentials)
-                for match in found:
-                    by_source.setdefault(match.source, {}).setdefault(principal, (credentials, match))
+        for credentials in candidates:
+            identity = cls.database_identity(credentials)
+            if query:
+                found = [SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))]
+            else:
+                found = cls._tables(identity, credentials)
+            principal = cls.database_principal(credentials)
+            for match in found:
+                by_source.setdefault(match.source, {}).setdefault(principal, (credentials, match))
         matches: list[SourceMatch] = []
         for source, principals in by_source.items():
             if len(principals) == 1:
                 matches.append(next(iter(principals.values()))[1])
                 continue
-            for credentials, match in principals.values():
-                handle = cls._handle_of(credentials, data_access_collection)
+            for index, (credentials, match) in enumerate(principals.values(), 1):
+                handle = cls._handle_of(credentials, data_access_collection, index)
                 matches.append(SourceMatch(f"{source}@{handle}", match.access))
         return matches
 
     @classmethod
-    def _handle_of(cls, credentials: Any, data_access_collection: DataAccessCollection | None) -> str:
+    def _handle_of(cls, credentials: Any, data_access_collection: DataAccessCollection | None, index: int) -> str:
         items = data_access_collection.credentials.items() if data_access_collection else ()
-        return next((handle for handle, value in items if value is credentials), cls.CREDENTIAL_KEY)
+        return next((handle for handle, value in items if value is credentials), f"credential {index}")
 
     @classmethod
     def database_principal(cls, credentials: Any) -> Hashable:
@@ -310,7 +313,7 @@ class ReadDBFG(FormatFeatureGroup):
             return None
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
-            return f"its preset table does not exist{REASON_DETAIL}{access.table!r}"
+            return "its preset table does not exist"
         return reason
 
     @classmethod

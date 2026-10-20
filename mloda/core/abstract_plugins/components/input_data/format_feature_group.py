@@ -120,6 +120,11 @@ class FormatFeatureGroup(FeatureGroup):
                 )
 
     @classmethod
+    def serves_query_text(cls) -> bool:
+        """True when a claim route requires query_text."""
+        return any(QUERY_OPTION in route.required_options for route in cls.CLAIM_ROUTES)
+
+    @classmethod
     @abstractmethod
     def find_sources(
         cls,
@@ -344,11 +349,7 @@ class FormatFeatureGroup(FeatureGroup):
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
         foreign = None if pointed else cls.foreign_pointer(options)
-        query_declined = (
-            foreign is None
-            and QUERY_OPTION in options
-            and not any(QUERY_OPTION in route.required_options for route in cls.CLAIM_ROUTES)
-        )
+        query_declined = foreign is None and QUERY_OPTION in options and not cls.serves_query_text()
         query_reason = (
             f"{QUERY_OPTION} is set, but {cls.get_class_name()} lists no query route "
             "(database groups opt in with ReadDBFG.QUERY_ROUTE)"
@@ -417,7 +418,9 @@ class FormatFeatureGroup(FeatureGroup):
             else:
                 labelled: dict[str, tuple[str, SourceMatch]] = {}
                 for source, match in items:
-                    labelled.setdefault(cls._hidden_source(match), (source, match))
+                    label = cls._hidden_source(match)
+                    if label not in labelled or (known[labelled[label][0]] is None and known[source] is not None):
+                        labelled[label] = (source, match)
                 described = [(label, source, match) for label, (source, match) in labelled.items()]
             for label, source, match in described[:_MAX_DESCRIBED]:
                 if known[source] is not None:

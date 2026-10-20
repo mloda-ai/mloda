@@ -189,6 +189,7 @@ class TestReadDBFGBase:
         assert handle.match_guard("a_handle")
         assert not handle.match_guard(["a_handle"])
         assert set(ToyBaseDB.PROPERTY_MAPPING) == {"data_access_handle"}
+        assert "query_text" in ToyQueryDB.PROPERTY_MAPPING
 
     def test_the_table_name_key_and_catalog_errors_are_declared(self) -> None:
         assert ReadDBFG.TABLE_KEY == "table_name"
@@ -514,6 +515,45 @@ class TestTwoPrincipalsOnOneSource:
         assert "zq_orders_tbl" not in message
 
 
+class ToyFlakyRoleDB(ToyRoleDB):
+    """ToyRoleDB whose broken role cannot read the catalog."""
+
+    @classmethod
+    def list_tables(cls, connection: Any) -> Collection[str]:
+        if connection.role == "broken":
+            raise OSError("toyfmt catalog down")
+        return super().list_tables(connection)
+
+
+class ToyOutsideCollectionDB(ToyRoleDB):
+    """Supplies two principals from outside the data access collection."""
+
+    @classmethod
+    def _candidates(cls, options: Options, data_access_collection: DataAccessCollection | None) -> list[Any]:
+        return [dict(_ANALYST), dict(_ADMIN)]
+
+
+class TestTwoPrincipalsEdges:
+    def test_unpointed_missing_column_does_not_blame_a_failed_read_when_another_principal_read_the_catalog(
+        self,
+    ) -> None:
+        broken = {KEY: "shop", "role": "broken"}
+        dac = DataAccessCollection(credentials={"a_broken_h": broken, "b_analyst_h": _ANALYST})
+        plugins: FeatureGroupEnvironmentMapping = {ToyFlakyRoleDB: {PythonDictFramework}}
+        with pytest.raises(ValueError) as excinfo:
+            resolve_or_raise(Feature("toyfmt_missing_col"), plugins, None, dac)
+        message = str(excinfo.value)
+        assert "toyfmt-db:shop" in message
+        assert "could not read" not in message
+
+    def test_principals_found_outside_the_collection_still_get_distinct_sources(self) -> None:
+        matches = ToyOutsideCollectionDB.find_sources(
+            ToyOutsideCollectionDB.CLAIM_ROUTES[0], "toyfmt_shared", Options({}), None
+        )
+        assert len(matches) == 2
+        assert len({match.source for match in matches}) == 2
+
+
 class TestDatabasePrincipal:
     @pytest.mark.parametrize(
         ("first", "second", "equal"),
@@ -610,7 +650,25 @@ class ToyQueryDB(ToyBaseDB):
     CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)
 
 
+class ToyOwnQueryRouteDB(ToyBaseDB):
+    """Lists its own query route, which differs from ReadDBFG.QUERY_ROUTE."""
+
+    CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ClaimRoute("own_credentials", NamePolicy.OPEN, False, ("query_text",)))
+
+
 class TestQueryRoute:
+    def test_a_group_with_its_own_query_text_route_declares_query_text_and_claims_a_query_source(self) -> None:
+        assert ReadDBFG.QUERY_ROUTE not in ToyOwnQueryRouteDB.CLAIM_ROUTES
+        assert "query_text" in ToyOwnQueryRouteDB.PROPERTY_MAPPING
+        feature = Feature("anything", options={"ToyOwnQueryRouteDB": {KEY: "a"}, "query_text": "SELECT 1"})
+        plugins: FeatureGroupEnvironmentMapping = {ToyOwnQueryRouteDB: {PythonDictFramework}}
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None, None)
+        assert ToyOwnQueryRouteDB in result.identified
+        assert feature.input_data_match is not None
+        assert (
+            feature.input_data_match[1].source == f"toyfmt-db:a::query:{hashlib.sha256(b'SELECT 1').hexdigest()[:16]}"
+        )
+
     def test_the_query_route_is_an_open_pointed_only_route_unlocked_by_query_text_and_not_a_default(self) -> None:
         assert ReadDBFG.QUERY_ROUTE == ClaimRoute("credentials", NamePolicy.OPEN, False, ("query_text",))
         assert ReadDBFG.QUERY_ROUTE not in ReadDBFG.CLAIM_ROUTES
@@ -621,10 +679,6 @@ class TestQueryRoute:
         with pytest.raises(ValueError, match="query_text is set, but ToyBaseDB lists no query route"):
             resolve_or_raise(feature, {ToyBaseDB: {PythonDictFramework}}, None, None)
         assert ToyBaseDB.created == []
-
-    def test_only_a_group_listing_the_route_declares_query_text(self) -> None:
-        assert "query_text" not in ToyBaseDB.PROPERTY_MAPPING
-        assert "query_text" in ToyQueryDB.PROPERTY_MAPPING
 
     def test_the_default_produce_query_rows_raises_naming_the_group(self) -> None:
         with pytest.raises(NotImplementedError, match="ToyBaseDB"):
@@ -646,7 +700,8 @@ class TestQueryRoute:
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
         options = Options({"query_text": "SELECT 1"})
-        assert ToyQueryDB.find_sources(ToyQueryDB.CLAIM_ROUTES[0], "toy_a", options, None) == []
+        dac = DataAccessCollection(credentials={"toy_handle": {KEY: "a"}})
+        assert ToyQueryDB.find_sources(ToyQueryDB.CLAIM_ROUTES[0], "toy_a", options, dac) == []
         rejection = rejection_window[ToyQueryDB.get_class_name()]
         assert rejection.stage == INPUT_DATA_STAGE
         assert "query_text" in rejection.reason

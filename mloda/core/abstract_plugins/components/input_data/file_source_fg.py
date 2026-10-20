@@ -49,6 +49,18 @@ class _FileSourceFG(FormatFeatureGroup):
     }
     SAMPLE_SIZE_BYTES: ClassVar[int] = 0
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        for route in cls.__dict__.get("CLAIM_ROUTES", ()):
+            if route.source_kind not in ("file", "folder"):
+                raise TypeError(
+                    f"{cls.__name__} route source_kind must be 'file' or 'folder', got {route.source_kind!r}"
+                )
+        if not getattr(cls.suffixes, "__isabstractmethod__", False):
+            suffixes = cls.suffixes()
+            if not isinstance(suffixes, tuple) or not suffixes or not all(isinstance(s, str) and s for s in suffixes):
+                raise TypeError(f"{cls.__name__}.suffixes() must return a non-empty tuple of non-empty str")
+
     @classmethod
     @abstractmethod
     def suffixes(cls) -> tuple[str, ...]:

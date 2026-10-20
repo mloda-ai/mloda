@@ -4,10 +4,8 @@ import csv
 from collections.abc import Collection
 from typing import Any
 
-from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.abstract_plugins.implementation import loaded_implementations
-from mloda.provider import ComputeFramework, Implementation, ReadFileFG
+from mloda.provider import ComputeFramework, Implementation, ReadFileFG, SourceMatch, is_match_abort
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
 )
@@ -40,7 +38,7 @@ class CsvFG(ReadFileFG):
             return None
         if cls.select_implementation(compute_framework, match, loaded_implementations()) is not None:
             return None
-        if cls._overrides_load_neutral(CsvFG):
+        if cls.overrides_load_neutral(CsvFG):
             return None
         file_name = match.access
         with open(file_name, newline="", encoding="utf-8-sig") as f:

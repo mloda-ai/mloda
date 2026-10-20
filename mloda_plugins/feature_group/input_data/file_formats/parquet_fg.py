@@ -3,9 +3,8 @@
 from collections.abc import Collection
 from typing import Any
 
-from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.optional_dependency import require
-from mloda.provider import ComputeFramework, Implementation, ReadFileFG
+from mloda.provider import ComputeFramework, Implementation, ReadFileFG, SourceMatch
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
@@ -40,7 +39,7 @@ class ParquetFG(ReadFileFG):
 
     @classmethod
     def count_rows(cls, match: SourceMatch, compute_framework: type[ComputeFramework]) -> int | None:
-        if cls._overrides_load_neutral(ParquetFG):
+        if cls.overrides_load_neutral(ParquetFG):
             return None
         pyarrow_parquet = require("pyarrow.parquet", "reading Parquet files")
         with pyarrow_parquet.ParquetFile(match.access) as parquet_file:

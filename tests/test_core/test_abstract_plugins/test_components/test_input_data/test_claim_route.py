@@ -1,5 +1,9 @@
 """ClaimRoute, NamePolicy and SourceMatch value objects, and their public exports."""
 
+from typing import Any
+
+import pytest
+
 import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
@@ -33,6 +37,37 @@ def test_provider_exports_are_the_core_objects() -> None:
     assert provider.FormatFeatureGroup is FormatFeatureGroup
     for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "FormatFeatureGroup"):
         assert name in provider.__all__
+
+
+@pytest.mark.parametrize(
+    "kwargs,field_name",
+    [
+        ({"source_kind": ""}, "source_kind"),
+        ({"source_kind": 5}, "source_kind"),
+        ({"names": "open"}, "names"),
+        ({"searched": "yes"}, "searched"),
+        ({"searched": 1}, "searched"),
+        ({"required_options": ["q"]}, "required_options"),
+        ({"required_options": (1,)}, "required_options"),
+    ],
+)
+def test_claim_route_rejects_a_badly_typed_field(kwargs: dict[str, Any], field_name: str) -> None:
+    fields: dict[str, Any] = {"source_kind": "x", "names": NamePolicy.OPEN, "searched": False}
+    fields.update(kwargs)
+    with pytest.raises(TypeError, match=field_name):
+        ClaimRoute(**fields)
+
+
+def test_claim_route_positional_bad_names_raises() -> None:
+    with pytest.raises(TypeError):
+        ClaimRoute("x", "open", True)  # type: ignore[arg-type]
+
+
+def test_provider_exports_the_option_names() -> None:
+    assert provider.QUERY_OPTION == "query_text"
+    assert provider.HANDLE_OPTION == "data_access_handle"
+    assert "QUERY_OPTION" in provider.__all__
+    assert "HANDLE_OPTION" in provider.__all__
 
 
 def test_provider_exports_read_file_fg() -> None:

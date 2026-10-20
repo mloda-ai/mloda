@@ -113,6 +113,7 @@ class ReadDBFG(FormatFeatureGroup):
     CREDENTIAL_KEY: ClassVar[str] = "<credential key>"
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
+        cls._merge_property_mapping()
         if cls.serves_query_text() and QUERY_OPTION not in cls.PROPERTY_MAPPING:
             cls.PROPERTY_MAPPING = {**cls.PROPERTY_MAPPING, QUERY_OPTION: QUERY_SPEC}
         super().__init_subclass__(**kwargs)

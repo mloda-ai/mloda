@@ -110,7 +110,16 @@ class FormatFeatureGroup(FeatureGroup):
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = ()
 
+    @classmethod
+    def _merge_property_mapping(cls) -> None:
+        """Merge a mapping the class body defines over the inherited one; own keys win."""
+        own = cls.__dict__.get("PROPERTY_MAPPING")
+        if isinstance(own, dict):
+            inherited = getattr(super(cls, cls), "PROPERTY_MAPPING", None) or {}
+            cls.PROPERTY_MAPPING = {**inherited, **own}
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
+        cls._merge_property_mapping()
         super().__init_subclass__(**kwargs)
         for route in cls.__dict__.get("CLAIM_ROUTES", ()):
             if route.names is NamePolicy.OPEN and route.searched:

@@ -98,6 +98,20 @@ class TestReadFileFGBase:
         monkeypatch.setattr(ToyFileFormatFG, "suffixes", classmethod(lambda cls: (".ToyFmtFile", ".other")))
         assert ToyFileFormatFG.file_format() == "toyfmtfile"
 
+    def test_a_route_with_a_source_kind_other_than_file_or_folder_is_rejected(self) -> None:
+        routes = (ClaimRoute("credentials", NamePolicy.CHECKED, True),)
+        with pytest.raises(TypeError, match="BadKindFileFG"):
+            type("BadKindFileFG", (ReadFileFG,), {"CLAIM_ROUTES": routes})
+
+    @pytest.mark.parametrize("bad", ["toyfmtfile", (), (".ok", ""), (".ok", 1)])
+    def test_suffixes_that_are_not_a_non_empty_tuple_of_non_empty_str_are_rejected(self, bad: Any) -> None:
+        with pytest.raises(TypeError, match="BadSuffixFileFG"):
+            type("BadSuffixFileFG", (ReadFileFG,), {"suffixes": classmethod(lambda cls: bad)})
+
+    def test_an_abstract_subclass_with_abstract_suffixes_defines_fine(self) -> None:
+        child = type("AbstractSuffixFileFG", (ReadFileFG,), {"CLAIM_ROUTES": ReadFileFG.CLAIM_ROUTES})
+        assert inspect.isabstract(child)
+
     def test_sample_listing_defaults_to_none_and_the_sample_size_is_an_int(self) -> None:
         assert ReadFileFG.sample_column_names("toyfmt_unused") is None
         assert isinstance(ReadFileFG.SAMPLE_SIZE_BYTES, int)

@@ -11,6 +11,7 @@ from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_links import LinkTrekker
 from mloda.core.prepare.validate_resolved_join import (
+    raise_on_consumer_missing_a_star_join,
     raise_on_join_star_keeping_two_groups,
     raise_on_orphaned_join_source,
 )
@@ -287,10 +288,7 @@ STAR_HUB_CFW = PythonDictFramework
 def _build_star_plan(
     make_links: Any, *, separate_consumers: bool = False, partial_consumer: bool = False
 ) -> tuple[ExecutionPlan, Graph]:
-    """Two joins over StarFirstSpoke, StarSecondSpoke and StarHub, built by make_links(first, second, hub).
-
-    partial_consumer: StarOtherConsumer reads only the first link's parents and shares that join with StarConsumer.
-    """
+    """Two joins over StarFirstSpoke, StarSecondSpoke and StarHub, built by make_links(first, second, hub)."""
     first = feature("star_first", STAR_FIRST_CFW, STAR_INDEX)
     second = feature("star_second", STAR_SECOND_CFW, STAR_INDEX)
     hub = feature("star_hub", STAR_HUB_CFW, STAR_INDEX)
@@ -545,7 +543,6 @@ def _star_missed_join_kept(missed_kind: str) -> Any:
 
 
 def test_raise_on_consumer_missing_a_star_join_names_both_consumers_and_the_hub() -> None:
-    from mloda.core.prepare.validate_resolved_join import raise_on_consumer_missing_a_star_join
 
     plan, graph = _build_star_plan(_star_missed_join_kept("inner"), partial_consumer=True)
 
@@ -559,7 +556,6 @@ def test_raise_on_consumer_missing_a_star_join_names_both_consumers_and_the_hub(
 
 
 def test_raise_on_consumer_missing_a_star_join_accepts_a_missed_join_keeping_the_shared_group() -> None:
-    from mloda.core.prepare.validate_resolved_join import raise_on_consumer_missing_a_star_join
 
     plan, graph = _build_star_plan(_star_missed_join_kept("right"), partial_consumer=True)
 
@@ -568,6 +564,5 @@ def test_raise_on_consumer_missing_a_star_join_accepts_a_missed_join_keeping_the
 
 
 def test_raise_on_consumer_missing_a_star_join_accepts_a_plan_with_no_records() -> None:
-    from mloda.core.prepare.validate_resolved_join import raise_on_consumer_missing_a_star_join
 
     raise_on_consumer_missing_a_star_join(ExecutionPlan().resolved_join_plan, Graph())

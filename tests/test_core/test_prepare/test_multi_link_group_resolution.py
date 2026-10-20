@@ -1690,6 +1690,7 @@ def test_a_pair_consumer_missing_a_join_of_the_polymorphic_link_layout_is_reject
     message = str(exc_info.value)
     assert first.get_class_name() in message
     assert second.get_class_name() in message
+    assert "Resolution:" in message
 
 
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
@@ -1740,6 +1741,7 @@ def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_are_rejecte
     message = str(exc_info.value)
     assert first.get_class_name() in message
     assert second.get_class_name() in message
+    assert "Resolution:" in message
 
 
 class RemedyRootBArrowX(RemedyRootBThird):

@@ -57,6 +57,9 @@ class TransformFrameworkStep(Step):
         # Steps reading a private copy; its cfw lives until they have all finished.
         self.copy_readers: frozenset[UUID] = frozenset()
 
+        # A join reads this hop as its source, so a join merging into it uploads the merged frame again.
+        self.read_by_join = False
+
         # Tokens the hop only waits for; unlike required_uuids they never pick its source frame.
         self.order_after_uuids: set[UUID] = set()
 
@@ -131,6 +134,8 @@ class TransformFrameworkStep(Step):
             # upload_finished_data overwrites cfw.data with the Arrow transport copy; restore the
             # native object so a same-process consumer of this cfw does not see the transport type.
             cfw.set_data(data)
+            if self.read_by_join:
+                cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.copy_readers))
             return data
         return None
 

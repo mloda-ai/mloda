@@ -468,6 +468,7 @@ class ExecutionPlan:
         graph: Graph,
     ) -> list[JoinStep | FeatureGroupStep]:
         fw_execution_plan: list[JoinStep | FeatureGroupStep] = []
+        child_links = self.invert_link_trekker(link_trekker)
 
         decided: dict[UUID, dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]] = {}
         keys_by_link: dict[UUID, list[LinkFrameworkTrekker]] = defaultdict(list)
@@ -478,7 +479,7 @@ class ExecutionPlan:
             if isinstance(pex, tuple):
                 if pex[0].uuid not in decided:
                     decided[pex[0].uuid] = self.decide_link_joins(
-                        pex[0], keys_by_link[pex[0].uuid], link_trekker, graph, pre_execution_plan
+                        pex[0], keys_by_link[pex[0].uuid], link_trekker, graph, pre_execution_plan, child_links
                     )
                 fw_execution_plan.extend(self._build_decisions(decided[pex[0].uuid][pex], graph))
             else:
@@ -1184,8 +1185,8 @@ Available join types:
         execution_plan: Sequence[JoinStep | FeatureGroupStep],
         only_consumers: frozenset[UUID] | None = None,
         required_by: Mapping[UUID, Sequence[int]] | None = None,
-    ) -> None:
-        """Point the join's consumers on its destination framework at the hop's frame."""
+    ) -> frozenset[UUID]:
+        """Point the join's consumers on its destination framework at the hop's frame; returns the readers."""
         readers: set[UUID] = set()
         candidates: Sequence[JoinStep | FeatureGroupStep] = execution_plan
         if required_by is not None:
@@ -1200,7 +1201,8 @@ Available join types:
                 inner_ep.tfs_ids = {hop.uuid}
                 inner_ep.features.any_uuid = hop.uuid
                 readers |= inner_ep.get_uuids()
-        hop.copy_readers = frozenset(readers)
+        hop.copy_readers |= frozenset(readers)
+        return frozenset(readers)
 
     @staticmethod
     def _same_framework_mids(ep: JoinStep, consumers: frozenset[UUID], graph: Graph) -> set[UUID]:
@@ -1340,6 +1342,21 @@ Available join types:
             for j in group
         }
 
+        twin_count: dict[tuple[UUID, frozenset[UUID], frozenset[UUID]], int] = defaultdict(int)
+        for j in planned_joins:
+            twin_count[
+                (j.link.uuid, frozenset(j.destination_framework_uuids), frozenset(j.source_framework_uuids))
+            ] += 1
+
+        def own_consumers(j: JoinStep) -> frozenset[UUID] | None:
+            """The consumers a join may redirect: its split part, or its record's when a twin join has the same sides."""
+            twins = twin_count[
+                (j.link.uuid, frozenset(j.destination_framework_uuids), frozenset(j.source_framework_uuids))
+            ]
+            if j.split_consumers is not None or twins < 2:
+                return j.split_consumers
+            return consumers_by_token[j.uuid]
+
         def frames_of(uuids: set[UUID]) -> set[UUID]:
             found: set[UUID] = set()
             for uuid in uuids:
@@ -1351,6 +1368,7 @@ Available join types:
             j.uuid: frames_of(j.destination_framework_uuids | j.source_framework_uuids) for j in planned_joins
         }
         destination_frames = {j.uuid: frames_of(j.destination_framework_uuids) for j in planned_joins}
+        source_frames = {j.uuid: frames_of(j.source_framework_uuids) for j in planned_joins}
         side_ancestors = {
             j.uuid: set().union(
                 *(
@@ -1365,7 +1383,7 @@ Available join types:
             for frame in side_frames[j.uuid]:
                 joins_on_frame[frame].append(j)
 
-        # A step reading a side frame without a join record runs before any join merges into or redirects it.
+        # A step reading a side frame without a join record runs before any join that mutates or redirects it.
         record_consumers = frozenset().union(*consumers_by_token.values())
         consumer_ancestors = set().union(*(graph.parent_to_children_mapping.get(c, set()) for c in record_consumers))
         all_carriers = set().union(*(j.carriers for j in left_join_frameworks))
@@ -1388,8 +1406,15 @@ Available join types:
                     side_frames[js.uuid] - destination_frames[js.uuid]
                 ):
                     continue
+                mutated = set(destination_frames[js.uuid])
+                if js.destination_framework == js.source_framework and not js.shared_source:
+                    mutated |= source_frames[js.uuid]
+                if not read_frames & mutated:
+                    continue
                 js.required_uuids |= own
 
+        group_touched: dict[int, set[UUID]] = defaultdict(set)
+        chain_errors: dict[int, tuple[Step, frozenset[UUID], frozenset[UUID]]] = {}
         for js in planned_joins:
             if js.uuid not in group_of or js.link.jointype in (JoinType.APPEND, JoinType.UNION):
                 continue
@@ -1414,18 +1439,69 @@ Available join types:
                     and (j.destination_framework == j.source_framework or frame in destination_frames[j.uuid])
                 ]
                 if len(own_joins) > 1:
-                    raise ValueError(
-                        self._shared_frame_error(
-                            graph,
-                            steps_by_uuid[frame],
-                            consumers_by_token[js.uuid],
-                            consumers_by_token[rival_of[frame].uuid],
-                        )
+                    chain_errors.setdefault(
+                        group_of[js.uuid],
+                        (steps_by_uuid[frame], consumers_by_token[js.uuid], consumers_by_token[rival_of[frame].uuid]),
                     )
-            if frames_of(js.source_framework_uuids) & touched:
+            group_touched[group_of[js.uuid]] |= touched
+            if source_frames[js.uuid] & touched:
                 js.shared_source = True
             if len(destination_frames[js.uuid]) == 1 and destination_frames[js.uuid] & touched:
                 js.shared_destination = True
+
+        # A group joining one touched frame several times chains its joins through private hops.
+        chain_of: dict[UUID, int] = {}
+        for js in planned_joins:
+            chain_id = group_of.get(js.uuid)
+            if chain_id not in chain_errors or js.link.jointype in (JoinType.APPEND, JoinType.UNION):
+                continue
+            if (
+                js.carriers
+                or js.split_consumers is not None
+                or len(destination_frames[js.uuid]) != 1
+                or len(source_frames[js.uuid]) != 1
+            ):
+                raise ValueError(self._shared_frame_error(graph, *chain_errors[chain_id]))
+            js.shared_source = js.shared_destination = False
+            chain_of[js.uuid] = chain_id
+        chain_hops: dict[tuple[int, UUID], TransformFrameworkStep] = {}
+        last_writer: dict[UUID, UUID] = {}
+        routed_joins: set[UUID] = set()
+
+        def chain_join(ep: JoinStep) -> None:
+            """Merge into the group's hop of the destination frame, reading the source from its hop when it has one."""
+            group = chain_of[ep.uuid]
+            (dest_frame,), (source_frame,) = destination_frames[ep.uuid], source_frames[ep.uuid]
+            hop = chain_hops.get((group, dest_frame))
+            if hop is None:
+                hop = chain_hops[(group, dest_frame)] = self._destination_hop(ep, graph, owning_step_of, True)
+                new_execution_plan.append(hop)
+            source_hop = chain_hops.get((group, source_frame))
+            same_framework = ep.destination_framework == ep.source_framework
+            if source_hop is not None and (not same_framework or source_hop.to_framework != ep.source_framework):
+                raise ValueError(self._shared_frame_error(graph, *chain_errors[group]))
+            ep.destination_hop_uuid = hop.uuid
+            ep.required_uuids.add(hop.uuid)
+            need_to_upload_collector.update(ep.destination_framework_uuids)
+            for read_hop in (hop, source_hop):
+                if read_hop is not None and read_hop.uuid in last_writer:
+                    ep.required_uuids.add(last_writer[read_hop.uuid])
+            last_writer[hop.uuid] = ep.uuid
+            if source_hop is not None:
+                routed_joins.add(ep.uuid)
+                source_hop.copy_readers |= {ep.uuid}
+                source_hop.read_by_join = True
+                for key, mapped in chain_hops.items():
+                    if mapped is source_hop:
+                        chain_hops[key] = hop
+            else:
+                ep.shared_source = source_frame in group_touched[group]
+                if same_framework:
+                    chain_hops[(group, source_frame)] = hop
+            readers = self._redirect_consumers_to_hop(ep, hop, execution_plan, own_consumers(ep), required_by)
+            for other in {id(h): h for h in (*chain_hops.values(), source_hop) if h is not None}.values():
+                if other is not hop:
+                    other.copy_readers -= readers
 
         for ep in execution_plan:
             if isinstance(ep, JoinStep):
@@ -1447,8 +1523,10 @@ Available join types:
                         ep.destination_hop_uuid = destination_hop.uuid
                         need_to_upload_collector.update(ep.carriers or ep.destination_framework_uuids)
                         self._redirect_consumers_to_hop(
-                            ep, destination_hop, execution_plan, ep.split_consumers, required_by
+                            ep, destination_hop, execution_plan, own_consumers(ep), required_by
                         )
+                    elif ep.uuid in chain_of:
+                        chain_join(ep)
 
                     need_to_upload_collector.update(ep.source_framework_uuids)
 
@@ -1484,9 +1562,12 @@ Available join types:
                             destination_hop.order_after_uuids |= mids
                             need_to_upload_collector.update(mids | ep.destination_framework_uuids)
                         self._redirect_consumers_to_hop(
-                            ep, destination_hop, execution_plan, ep.split_consumers, required_by
+                            ep, destination_hop, execution_plan, own_consumers(ep), required_by
                         )
+                    elif ep.uuid in chain_of:
+                        chain_join(ep)
 
+                    scope = own_consumers(ep)
                     candidate_positions = {
                         p
                         for u in ep.source_framework_uuids | ep.destination_framework_uuids
@@ -1498,7 +1579,8 @@ Available join types:
                             for uuid in inner_ep.get_uuids():
                                 if uuid in ep.source_framework_uuids:
                                     # add the JoinStep token to the children_if_root of the source feature group
-                                    inner_ep.add_value_to_children_if_root(ep.uuid)
+                                    if ep.uuid not in routed_joins:
+                                        inner_ep.add_value_to_children_if_root(ep.uuid)
 
                                     # add to upload as this source feature group gets accessed in mp by other process
                                     need_to_upload_collector.update(ep.source_framework_uuids)
@@ -1516,6 +1598,7 @@ Available join types:
                             # same for source framework
                             if (
                                 ep.destination_hop_uuid is None
+                                and (scope is None or inner_ep.get_uuids() & scope)
                                 and any(elem in inner_ep.required_uuids for elem in ep.destination_framework_uuids)
                                 and any(elem in inner_ep.required_uuids for elem in ep.source_framework_uuids)
                             ):
@@ -2227,9 +2310,10 @@ Available join types:
         link_trekker: LinkTrekker,
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+        child_links: dict[UUID, set[LinkFrameworkTrekker]] | None = None,
     ) -> list[JoinStep]:
         """Decide and build one key."""
-        decided = self.decide_link_joins(link_fw[0], [link_fw], link_trekker, graph, pre_execution_plan)
+        decided = self.decide_link_joins(link_fw[0], [link_fw], link_trekker, graph, pre_execution_plan, child_links)
         return self._build_decisions(decided[link_fw], graph)
 
     def _build_decisions(self, decisions: list[JoinDecision | DeclinedJoin], graph: Graph) -> list[JoinStep]:
@@ -2253,9 +2337,12 @@ Available join types:
         link_trekker: LinkTrekker,
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+        child_links: dict[UUID, set[LinkFrameworkTrekker]] | None = None,
     ) -> dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]:
         """Phase 1: decide every part of each key of one link; writes nothing to the plan."""
-        return {key: self._decide_key(key, link_trekker, graph, pre_execution_plan) for key in keys}
+        if child_links is None:
+            child_links = self.invert_link_trekker(link_trekker)
+        return {key: self._decide_key(key, link_trekker, graph, pre_execution_plan, child_links) for key in keys}
 
     def _decide_key(
         self,
@@ -2263,6 +2350,7 @@ Available join types:
         link_trekker: LinkTrekker,
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+        child_links: dict[UUID, set[LinkFrameworkTrekker]],
     ) -> list[JoinDecision | DeclinedJoin]:
         link = link_fw[0]
         destination_framework = link_fw[1]
@@ -2303,11 +2391,12 @@ Available join types:
         children_uuids = self.reduce_children_to_one_level(children_uuids, graph)
 
         parts: list[tuple[set[UUID], JoinSide | None, bool, bool]] = []
-        for component, varying_side in self._independent_link_children(link, children_uuids, graph):
-            pieces = self._split_by_carrier_frame(
-                link, component, varying_side, {destination_framework, source_framework}, graph
-            )
-            parts.extend((members, side, beside, len(pieces) > 1) for members, side, beside in pieces)
+        for star_children in self._split_by_star(link, children_uuids, child_links):
+            for component, varying_side in self._independent_link_children(link, star_children, graph):
+                pieces = self._split_by_carrier_frame(
+                    link, component, varying_side, {destination_framework, source_framework}, graph
+                )
+                parts.extend((members, side, beside, len(pieces) > 1) for members, side, beside in pieces)
         return [
             self._decide_part(
                 link_fw,
@@ -2325,6 +2414,35 @@ Available join types:
             )
             for component, varying_side, beside_carried, is_split in parts
         ]
+
+    @staticmethod
+    def _split_by_star(
+        link: Link, children: set[UUID], child_links: Mapping[UUID, set[LinkFrameworkTrekker]]
+    ) -> list[set[UUID]]:
+        """Group children by the links of their star: those joined with `link` through shared declared groups."""
+        if link.jointype in (JoinType.APPEND, JoinType.UNION):
+            return [children]
+        by_star: dict[frozenset[UUID], set[UUID]] = {}
+        for child in children:
+            read = {
+                t[0].uuid: t[0]
+                for t in child_links.get(child, ())
+                if t[0].jointype not in (JoinType.APPEND, JoinType.UNION)
+                and t[0].left_feature_group is not t[0].right_feature_group
+            }
+            read[link.uuid] = link
+            groups = {link.left_feature_group, link.right_feature_group}
+            star: set[UUID] = set()
+            grew = True
+            while grew:
+                grew = False
+                for uuid, other in read.items():
+                    if uuid not in star and {other.left_feature_group, other.right_feature_group} & groups:
+                        star.add(uuid)
+                        groups |= {other.left_feature_group, other.right_feature_group}
+                        grew = True
+            by_star.setdefault(frozenset(star), set()).add(child)
+        return list(by_star.values())
 
     def _split_by_carrier_frame(
         self,

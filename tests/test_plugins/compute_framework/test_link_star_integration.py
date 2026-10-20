@@ -13,6 +13,9 @@ from typing import Any
 import pyarrow.compute as pc
 import pytest
 
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
+from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.provider import ComputeFramework, FeatureGroup, FeatureSet, BaseInputData, DataCreator
 from mloda.user import (
     Feature,
@@ -607,7 +610,8 @@ def _two_consumers_run(
     flight_server: Any = None,
     extra: set[type[FeatureGroup]] | None = None,
     x_consumer: type[FeatureGroup] = HubRightPairConsumer,
-) -> dict[str, list[int]]:
+    nullable: bool = False,
+) -> dict[str, list[Any]]:
     groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, spoke_c, x_consumer, y_consumer}
     groups |= extra or set()
     results = mloda.run_all(
@@ -619,7 +623,12 @@ def _two_consumers_run(
         flight_server=flight_server,
     )
     names = (x_consumer.get_class_name(), y_consumer.get_class_name())
-    return {n: [sorted(r[n].to_pylist()) for r in results if n in r.column_names][0] for n in names}
+
+    def ordered(values: list[Any]) -> list[Any]:
+        # Nulls sort last when the consumer does not fill them.
+        return sorted(values, key=lambda v: (v is None, 0 if v is None else v)) if nullable else sorted(values)
+
+    return {n: [ordered(r[n].to_pylist()) for r in results if n in r.column_names][0] for n in names}
 
 
 def _star_links(
@@ -699,53 +708,109 @@ class TestTwoConsumersReadingDifferentSpokes:
             assert got[HubRightCDerivedConsumer.get_class_name()] == [2007, 3008]
 
 
+_SPOKES = [HubRightCArrow, HubRightCPandas]
+_SPOKE_IDS = ["one_framework", "spokes_differ"]
+_ORIENTATION_IDS = ["spokes_left", "hub_left"]
+
+
 class TestAConsumerReadingPartOfAStar:
-    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
-    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
-    def test_a_consumer_missing_a_join_of_the_star_is_rejected(
-        self, spoke_c: type[FeatureGroup], hub_right: bool
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    @pytest.mark.parametrize("spoke_c", _SPOKES, ids=_SPOKE_IDS)
+    def test_a_consumer_missing_a_join_of_the_star_gets_its_own_rows(
+        self, spoke_c: type[FeatureGroup], hub_right: bool, mode: ParallelizationMode
     ) -> None:
-        with pytest.raises(ValueError) as exc:
-            _two_consumers_run(_star_links(spoke_c, hub_right), spoke_c, HubRightConsumer, ParallelizationMode.SYNC)
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            got = _two_consumers_run(_star_links(spoke_c, hub_right), spoke_c, HubRightConsumer, mode)
 
-        message = str(exc.value)
-        assert "HubRightPairConsumer" in message
-        assert "HubRightConsumer" in message
-        assert "HubRightB" in message
-        assert "left or right" in message
+            assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
+            assert got[HubRightConsumer.get_class_name()] == _HUB_RIGHT_INNER_EXPECTED
 
-    def test_the_consumer_to_separate_from_reads_a_join_of_the_rejected_consumer_too(self) -> None:
-        # Z (c+b) sorts before Y (a+b+c) but reads no join X (a+b) reads, so only Y is a valid partner for X.
-        consumers = [HubRightPairConsumer, HubRightConsumer, HubRightCPairConsumer]
-        groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, HubRightCArrow, *consumers}
+    @pytest.mark.timeout(60)
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    @pytest.mark.parametrize("spoke_c", _SPOKES, ids=_SPOKE_IDS)
+    def test_a_consumer_missing_a_join_of_the_star_gets_its_own_rows_with_multiprocessing(
+        self, spoke_c: type[FeatureGroup], hub_right: bool, flight_server: Any
+    ) -> None:
+        got = _two_consumers_run(
+            _star_links(spoke_c, hub_right),
+            spoke_c,
+            HubRightConsumer,
+            ParallelizationMode.MULTIPROCESSING,
+            flight_server,
+        )
 
-        with pytest.raises(ValueError) as exc:
-            mloda.run_all(
-                [Feature(name=consumer.get_class_name()) for consumer in consumers],
-                links=_star_links(HubRightCArrow, True),
-                compute_frameworks=[PyArrowTable, PandasDataFrame],
-                parallelization_modes={ParallelizationMode.SYNC},
-                plugin_collector=PluginCollector.enabled_feature_groups(groups),
-            )
+        assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
+        assert got[HubRightConsumer.get_class_name()] == _HUB_RIGHT_INNER_EXPECTED
 
-        resolution = str(exc.value).split("Resolution:")[1]
-        assert "request HubRightPairConsumer and HubRightConsumer in separate runs" in resolution
-
-    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
-    def test_a_consumer_missing_an_outer_join_of_the_star_is_not_offered_a_left_or_right_link(
-        self, hub_right: bool
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    def test_a_consumer_missing_an_outer_join_of_the_star_gets_its_own_rows(
+        self, hub_right: bool, mode: ParallelizationMode
     ) -> None:
         a, b, c = (JoinSpec(g, HUB_RIGHT_INDEX) for g in (HubRightA, HubRightB, HubRightCArrow))
         links = {Link.outer(a, b), Link.outer(c, b)} if hub_right else {Link.outer(b, a), Link.outer(b, c)}
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            got = _two_consumers_run(links, HubRightCArrow, HubRightConsumer, mode, nullable=True)
 
-        with pytest.raises(ValueError) as exc:
-            _two_consumers_run(links, HubRightCArrow, HubRightConsumer, ParallelizationMode.SYNC)
+            pair = got[HubRightPairConsumer.get_class_name()]
+            assert [v for v in pair if v is not None] == _X_EXPECTED
+            assert pair.count(None) == 3
+            assert got[HubRightConsumer.get_class_name()] == _HUB_RIGHT_OUTER_EXPECTED
 
-        message = str(exc.value)
-        assert "HubRightPairConsumer" in message
-        assert "HubRightConsumer" in message
-        assert "separate runs" in message
-        assert "left or right" not in message
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    def test_three_consumers_reading_different_parts_of_a_star_each_get_their_own_rows(self, hub_right: bool) -> None:
+        consumers = [HubRightPairConsumer, HubRightConsumer, HubRightCPairConsumer]
+        groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, HubRightCArrow, *consumers}
+
+        results = mloda.run_all(
+            [Feature(name=consumer.get_class_name()) for consumer in consumers],
+            links=_star_links(HubRightCArrow, hub_right),
+            compute_frameworks=[PyArrowTable, PandasDataFrame],
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        )
+
+        expected = {
+            HubRightPairConsumer: _X_EXPECTED,
+            HubRightConsumer: _HUB_RIGHT_INNER_EXPECTED,
+            HubRightCPairConsumer: _Y_EXPECTED,
+        }
+        for consumer, rows in expected.items():
+            name = consumer.get_class_name()
+            assert [sorted(r[name].to_pylist()) for r in results if name in r.column_names] == [rows]
+
+    def test_two_consumers_reading_part_of_a_star_plan_separate_joins_and_a_private_hop(self) -> None:
+        links = _star_links(HubRightCArrow, True)
+        ab = next(
+            link for link in links if link.right_feature_group is HubRightB and link.left_feature_group is HubRightA
+        )
+        cb = next(link for link in links if link is not ab)
+        consumers = [HubRightPairConsumer, HubRightConsumer]
+        groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, HubRightCArrow, *consumers}
+        session = mloda.prepare(
+            [Feature(name=consumer.get_class_name()) for consumer in consumers],
+            links=links,
+            compute_frameworks=[PyArrowTable],
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        )
+
+        assert session.engine is not None
+        plan = session.engine.execution_planner
+        joins = [step for step in plan if isinstance(step, JoinStep)]
+        ab_tokens = [step.uuid for step in joins if step.link.uuid == ab.uuid]
+        cb_tokens = [step.uuid for step in joins if step.link.uuid == cb.uuid]
+        consumers_of = {record.token: record.consumers for record in plan.planned_records}
+
+        assert len(ab_tokens) == 2
+        assert not consumers_of[ab_tokens[0]] & consumers_of[ab_tokens[1]]
+        assert len(cb_tokens) == 1
+        hops = [step for step in plan if isinstance(step, TransformFrameworkStep) and step.private_copy]
+        assert any(cb_tokens[0] in hop.copy_readers for hop in hops)
+        assert not any(cb_tokens[0] in step.children_if_root for step in plan if isinstance(step, FeatureGroupStep))
 
     @pytest.mark.timeout(60)
     def test_a_consumer_missing_a_join_that_keeps_the_shared_group_gets_its_own_rows_with_multiprocessing(
@@ -800,6 +865,7 @@ class TestAStepReadingAJoinSideWithoutALink:
         self, shape: str, hub_right: bool, mode: ParallelizationMode
     ) -> None:
         a, b = JoinSpec(HubRightA, HUB_RIGHT_INDEX), JoinSpec(HubRightB, HUB_RIGHT_INDEX)
+        consumer: type[FeatureGroup]
         if shape == "one_join":
             links = {Link.inner(a, b) if hub_right else Link.inner(b, a)}
             consumer, expected = HubRightPairConsumer, _X_EXPECTED
@@ -831,10 +897,11 @@ class HubRightDPairConsumer(FeatureGroup):
 
 
 class TestStarNextToARivalGroup:
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
     @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
-    def test_a_star_and_a_rival_join_of_the_same_group_are_rejected_at_plan_time(
-        self, hub_right: bool, spoke_c: type[FeatureGroup]
+    def test_a_star_and_a_rival_join_of_the_same_group_each_get_their_own_rows(
+        self, hub_right: bool, spoke_c: type[FeatureGroup], mode: ParallelizationMode
     ) -> None:
         a, b, c, d = (JoinSpec(g, HUB_RIGHT_INDEX) for g in (HubRightA, HubRightB, spoke_c, HubRightD))
         if hub_right:
@@ -849,17 +916,17 @@ class TestStarNextToARivalGroup:
             HubRightConsumer,
             HubRightDPairConsumer,
         }
-
-        with pytest.raises(ValueError) as excinfo:
-            mloda.run_all(
-                [Feature(HubRightConsumer.get_class_name()), Feature(HubRightDPairConsumer.get_class_name())],
+        names = (HubRightConsumer.get_class_name(), HubRightDPairConsumer.get_class_name())
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            results = mloda.run_all(
+                [Feature(name) for name in names],
                 links=links,
                 compute_frameworks=[PyArrowTable, PandasDataFrame],
-                parallelization_modes={ParallelizationMode.SYNC},
+                parallelization_modes={mode},
                 plugin_collector=PluginCollector.enabled_feature_groups(groups),
             )
 
-        message = str(excinfo.value)
-        for name in ("HubRightConsumer", "HubRightDPairConsumer", "HubRightB"):
-            assert name in message, f"{name} must be named; got: {message}"
-        assert "Resolution:" in message, f"must be a plan time rejection; got: {message}"
+            got = {n: [sorted(r[n].to_pylist()) for r in results if n in r.column_names][0] for n in names}
+            assert got[names[0]] == _HUB_RIGHT_INNER_EXPECTED
+            assert got[names[1]] == [110, 250]

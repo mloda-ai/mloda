@@ -10,7 +10,10 @@ from mloda.core.abstract_plugins.components.error_utils import internal_invarian
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
 )
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import implementation_path
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+    concrete_format_groups,
+    implementation_path,
+)
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -64,7 +67,8 @@ class PlanStep:
     candidates, sorted by class name; ``()`` when no resolved join plan is given, or when the plan
     recorded no candidates for that side. APPEND/UNION sides carry only the index-bearing parent.
 
-    ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``,
+    ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``
+    (a mapping under a format group's name, a pointer, is redacted to its keys),
     and ``step_uuid`` its ``FeatureGroupStep.uuid`` (equal to ``HookContext.step_uuid`` on that step's hooks), the
     key ``RunResult.frames()`` pairs frames by; both are None for join/transform steps and, like ``join_token``,
     excluded from equality.
@@ -187,6 +191,7 @@ def build_plan_steps(
     replaced parents) to fill each compute step's ``specialized_from``.
     """
     replaced_by_uuid = specialized_from or {}
+    format_group_names = concrete_format_groups().keys()
     records: dict[UUID, "ResolvedJoin"] = (
         {} if resolved_join_plan is None else {record.token: record for record in resolved_join_plan.records}
     )
@@ -234,7 +239,7 @@ def build_plan_steps(
                         Options(
                             group={
                                 key: redact_option_value(value)
-                                if isinstance(value, Mapping)
+                                if isinstance(value, Mapping) and key in format_group_names
                                 else _safe_deepcopy(value, {})
                                 for key, value in step.features.options.group.items()
                             }

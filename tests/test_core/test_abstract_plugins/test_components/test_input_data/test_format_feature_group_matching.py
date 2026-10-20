@@ -859,6 +859,19 @@ class TestForeignPointerMakesSearchedRoutesDecline:
         del group_a, group_b, result, feature
         gc.collect()
 
+    def test_a_group_without_a_query_route_keeps_the_foreign_pointer_reason_on_query_text(self) -> None:
+        route = ClaimRoute("toy", NamePolicy.CHECKED, False, required_options=("query_text",))
+        pointed = type("_QueryToyFG", (ToyFormatBase,), {"CLAIM_ROUTES": (route,)})
+        feature = Feature(COL, Options({"query_text": "SELECT 1", "_QueryToyFG": {COL: [1]}}))
+        result = _identify(feature, toy_dac(h1={COL: [1]}), pointed, ToyFormatFG)
+
+        assert set(result.identified) == {pointed}
+        reason = result.eliminations[ToyFormatFG].reason
+        assert "options point at _QueryToyFG" in reason
+        assert "query_text" not in reason
+        del pointed, result, feature
+        gc.collect()
+
 
 class TestUnreachablePointerRaises:
     def _run(self, options: Options | None, feature_group: Any, collector: PluginCollector, folder: Path) -> None:

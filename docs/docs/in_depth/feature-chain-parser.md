@@ -578,6 +578,8 @@ present is not called out, because identifying it would need a second, speculati
 pass. If a feature resolves without its forwarded group options but not with them, keep
 them off the child with `forward_group_exclude`, an allowlist, or `forward_group=False`.
 
+A forwarded `query_text` makes format groups without a query route decline, so consumers that use `query_text` for themselves should exclude it from forwarding.
+
 ### Upstream feature deduplication
 
 The engine deduplicates upstream features that share the same group identity. Declaring

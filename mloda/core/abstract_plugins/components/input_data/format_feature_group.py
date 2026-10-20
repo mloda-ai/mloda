@@ -47,6 +47,7 @@ _MAX_REASON = 200
 FOLDER_ESCAPE_MARK = "links outside its folder"
 REASON_DETAIL = "\x1f"  # splits a reason lead from detail (reader error text) that only pointed users see
 
+QUERY_OPTION = "query_text"
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(
     "Name of the DataAccessCollection handle to read from.",
@@ -119,6 +120,11 @@ class FormatFeatureGroup(FeatureGroup):
                 )
 
     @classmethod
+    def serves_query_text(cls) -> bool:
+        """True when a claim route requires query_text."""
+        return any(QUERY_OPTION in route.required_options for route in cls.CLAIM_ROUTES)
+
+    @classmethod
     @abstractmethod
     def find_sources(
         cls,
@@ -148,6 +154,11 @@ class FormatFeatureGroup(FeatureGroup):
     def _hidden_reason(cls, match: SourceMatch) -> str | None:
         """The unknown_columns_reason safe to show a user who did not point at the group."""
         return cls.unknown_columns_reason(match)
+
+    @classmethod
+    def _hidden_source(cls, match: SourceMatch) -> str:
+        """The source label shown to a user who did not point at the group."""
+        return match.source
 
     @classmethod
     def has_column(cls, match: SourceMatch, column: str) -> bool | None:
@@ -338,6 +349,13 @@ class FormatFeatureGroup(FeatureGroup):
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
         foreign = None if pointed else cls.foreign_pointer(options)
+        query_declined = foreign is None and QUERY_OPTION in options and not cls.serves_query_text()
+        query_reason = (
+            f"{QUERY_OPTION} is set, but {cls.get_class_name()} lists no query route "
+            "(database groups opt in with ReadDBFG.QUERY_ROUTE)"
+        )
+        if pointed and query_declined:
+            return cls._abort(ValueError(query_reason), deferrable=True)
         skipped = False
         selected: list[ClaimRoute] = []
         for route in cls.CLAIM_ROUTES:
@@ -370,6 +388,10 @@ class FormatFeatureGroup(FeatureGroup):
                 record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE)
                 return False
             fitting, seen, undeclared = outcome.result
+        if query_declined:
+            if fitting or seen:
+                replace_probe_match_rejection(cls.get_class_name(), query_reason, known_owners, stage=INPUT_DATA_STAGE)
+            return False
         if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls.passes_option_declarations(options):
             return False
         if len(fitting) > 1:
@@ -391,14 +413,23 @@ class FormatFeatureGroup(FeatureGroup):
             items = sorted(seen.items())
             known = {source: cls.columns(match) for source, match in items}
             parts: list[str] = []
-            for source, match in items[:_MAX_DESCRIBED]:
+            if show_columns:
+                described = [(source, source, match) for source, match in items]
+            else:
+                labelled: dict[str, tuple[str, SourceMatch]] = {}
+                for source, match in items:
+                    label = cls._hidden_source(match)
+                    if label not in labelled or (known[labelled[label][0]] is None and known[source] is not None):
+                        labelled[label] = (source, match)
+                described = [(label, source, match) for label, (source, match) in labelled.items()]
+            for label, source, match in described[:_MAX_DESCRIBED]:
                 if known[source] is not None:
-                    parts.append(f"{source} has columns {_listed(known[source])}" if show_columns else source)
+                    parts.append(f"{label} has columns {_listed(known[source])}" if show_columns else label)
                 else:
                     why = cls.unknown_columns_reason(match) if show_columns else cls._hidden_reason(match)
-                    parts.append(source if why is None else f"{source}: {_clip(scrub_credentials(why), _MAX_REASON)}")
-            if len(items) > _MAX_DESCRIBED:
-                parts.append(f"and {len(items) - _MAX_DESCRIBED} more")
+                    parts.append(label if why is None else f"{label}: {_clip(scrub_credentials(why), _MAX_REASON)}")
+            if len(described) > _MAX_DESCRIBED:
+                parts.append(f"and {len(described) - _MAX_DESCRIBED} more")
             name = cls.get_class_name()
             head = (
                 f"column '{base_name}' is in none of the sources of {name}"

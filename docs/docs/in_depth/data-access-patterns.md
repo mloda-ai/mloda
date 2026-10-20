@@ -57,10 +57,10 @@ Subclass the base that fits your source and write only what it asks for. The bas
 
 A format group can also describe its data through `declared_attributes`, see [Declared Attributes and Input Requirements](feature-group-matching.md#declared-attributes-and-input-requirements).
 
-- **FormatFeatureGroup** (any source): declare `CLAIM_ROUTES`, implement `find_sources` and `load_neutral`; optionally `columns`, `has_column`, `ambiguity_fix`, `describe_columns`, `count_rows`.
+- **FormatFeatureGroup** (any source): declare `CLAIM_ROUTES`, implement `find_sources` and `load_neutral`; optionally `columns`, `has_column`, `ambiguity_fix`, `describe_columns`, `count_rows`. `query_text` is reserved: a group whose routes do not require it declines, and aborts when pointed.
 - **ReadFileFG**: implement `suffixes()` and `column_names(path)`. It inherits file and folder discovery, the pinned-file rule, and a default `load_neutral` that hands a `FileSource` to the compute framework; the stock `FileSource` transformers read csv, parquet, json, feather and orc.
 - **ReadDocumentFG**: implement `suffixes()`; optionally `read_text` and `handover_suffixes`. It inherits the three names `<Group>`, `<Group>~source` and `<Group>~file_type`.
-- **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns` and `produce_rows`. `is_valid_credentials` must never raise. `database_identity` must not contain credential values. The table catalog is cached per run and per credential; with a preset `table_name`, only that table's columns are read. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
+- **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns` and `produce_rows`. `is_valid_credentials` must never raise. `database_identity` must not contain credential values. `login_key(credentials)` returns a credential-free hashable where equal keys mean the same login (default: a keyed digest of the credentials without `table_name`, with values that are not plain scalars compared by equality); two logins on one source are told apart by `data_access_handle`. Override `login_key` when credential fields that do not change grants (timeouts, application names) differ between handles. `data_access_identity` names the dataset, not the login. The table catalog is cached per run and per credential; with a preset `table_name`, only that table's columns are read. To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
 
     ```python
     from typing import Any
@@ -103,7 +103,7 @@ The stdlib reader does not yet cover pyarrow's full surface. Where they differ, 
 
 - `options={"CsvFG": path}` points the group at one file (or folder). A subclass also answers to its parent's name, so `Feature("x", options={"CsvFG": path})` reaches a `CsvFG` subclass. A pointer makes the other format groups skip the collection, and a pointer at a group that is not accessible in the run raises, naming the filter that dropped it.
 - `options={"SqliteFG": Credential(sqlite="/x.db")}` points a database group at one database. Prefer `Credential` for secrets: a plain-dict pointer shows its values in `str(options)`.
-- `Feature(name, options={"query_text": ..., "<Group>": Credential(...)})` runs a query on a database group that opts into `ReadDBFG.QUERY_ROUTE`.
+- `Feature(name, options={"query_text": ..., "<Group>": Credential(...)})` runs a query on a database group that opts into `ReadDBFG.QUERY_ROUTE`; a group without the route declines when unpointed and aborts when pointed.
 - `Feature(..., feature_group=CsvFG)` scopes resolution to that group (and its subclasses) without choosing a source.
 - `data_access_handle` only narrows: it picks one of the sources the `DataAccessCollection` holds and never points a group at a source the collection lacks.
 - `column_to_file` pins columns to files in the `DataAccessCollection`; a pinned file that cannot serve the request aborts instead of falling back (see [access-feature-data](access-feature-data.md)).

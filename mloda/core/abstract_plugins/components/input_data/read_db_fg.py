@@ -5,9 +5,10 @@ and ``produce_rows``; the opt-in ``QUERY_ROUTE`` adds ``produce_query_rows``.
 """
 
 from abc import abstractmethod
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Hashable, Iterable, Mapping
 from dataclasses import dataclass, field
-from hashlib import sha256
+import secrets
+from hashlib import blake2b, sha256
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -18,6 +19,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     HANDLE_OPTION,
     HANDLE_SPEC,
+    QUERY_OPTION as QUERY_OPTION,
     REASON_DETAIL,
     _MAX_DESCRIBED,
     FormatFeatureGroup,
@@ -32,7 +34,45 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
 
-QUERY_OPTION = "query_text"
+QUERY_SPEC = PropertySpec("SQL text this group runs through QUERY_ROUTE.", default=None, context=False)
+
+_LOGIN_KEY_SECRET = secrets.token_bytes(16)  # login keys are compared within one process only
+_PLAIN_LEAVES = (str, bytes, int, float, bool, type(None))
+
+
+def _login_text(value: Any, others: list[Any], seen: frozenset[int] = frozenset()) -> str:
+    """Canonical text of a credential value; a value that is not a plain scalar goes to others, compared by ==."""
+    if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+        if id(value) in seen:
+            return "cycle"
+        seen = seen | {id(value)}
+        if isinstance(value, Mapping):
+            items = sorted(value.items(), key=lambda item: repr(item[0]))
+            return (
+                "{" + ",".join(f"{_login_text(k, others, seen)}:{_login_text(v, others, seen)}" for k, v in items) + "}"
+            )
+        parts = [_login_text(item, others, seen) for item in value]
+        if isinstance(value, (set, frozenset)):
+            return "<" + ",".join(sorted(parts)) + ">"
+        return ("[" if isinstance(value, list) else "(") + ",".join(parts) + ("]" if isinstance(value, list) else ")")
+    if type(value) in _PLAIN_LEAVES:
+        return f"{type(value).__name__}:{value!r}"
+    others.append(value)
+    return "?"
+
+
+@dataclass(frozen=True, eq=False)
+class _LoginKey:
+    """Hashes by the digest of the plain values; equal only when the other values compare equal too."""
+
+    digest: str
+    others: tuple[Any, ...] = field(default=(), repr=False)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _LoginKey) and self.digest == other.digest and self.others == other.others
+
+    def __hash__(self) -> int:
+        return hash(self.digest)
 
 
 def _capped(names: list[str]) -> str:
@@ -70,6 +110,11 @@ class ReadDBFG(FormatFeatureGroup):
     TABLE_KEY: ClassVar[str] = "table_name"
     CATALOG_ERRORS: ClassVar[tuple[type[BaseException], ...]] = (OSError, ValueError, ImportError)
     CREDENTIAL_KEY: ClassVar[str] = "<credential key>"
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        if cls.serves_query_text() and QUERY_OPTION not in cls.PROPERTY_MAPPING:
+            cls.PROPERTY_MAPPING = {**cls.PROPERTY_MAPPING, QUERY_OPTION: QUERY_SPEC}
+        super().__init_subclass__(**kwargs)
 
     @classmethod
     @abstractmethod
@@ -143,7 +188,8 @@ class ReadDBFG(FormatFeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None,
     ) -> list[SourceMatch]:
-        query = route == cls.QUERY_ROUTE
+        query = QUERY_OPTION in route.required_options
+        candidates = [c for c in cls._candidates(options, data_access_collection) if cls.is_valid_credentials(c)]
         if query:
             query_text = options.get(QUERY_OPTION)
             if not isinstance(query_text, str) or not query_text:
@@ -151,24 +197,58 @@ class ReadDBFG(FormatFeatureGroup):
                     cls.get_class_name(), f"{QUERY_OPTION} must be a non-empty string", stage=INPUT_DATA_STAGE
                 )
                 return []
-        elif cls.QUERY_ROUTE in cls.CLAIM_ROUTES and QUERY_OPTION in options:
-            record_match_rejection(
-                cls.get_class_name(), f"{QUERY_OPTION} is set, so the table route is not used", stage=INPUT_DATA_STAGE
-            )
+        elif cls.serves_query_text() and QUERY_OPTION in options:
+            if candidates:
+                record_match_rejection(
+                    cls.get_class_name(),
+                    f"{QUERY_OPTION} is set, so the table route is not used",
+                    stage=INPUT_DATA_STAGE,
+                )
             return []
         digest = sha256(query_text.encode()).hexdigest()[:16] if query else ""
-        candidates = cls._candidates(options, data_access_collection)
-        sources: dict[str, SourceMatch] = {}
+        by_source: dict[str, dict[Any, tuple[Any, SourceMatch]]] = {}
         for credentials in candidates:
-            if cls.is_valid_credentials(credentials):
-                identity = cls.database_identity(credentials)
-                if query:
-                    match = SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))
-                    sources.setdefault(match.source, match)
-                else:
-                    for match in cls._tables(identity, credentials):
-                        sources.setdefault(match.source, match)
-        return list(sources.values())
+            identity = cls.database_identity(credentials)
+            if query:
+                found = [SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))]
+            else:
+                found = cls._tables(identity, credentials)
+            login = cls.login_key(credentials)
+            for match in found:
+                by_source.setdefault(match.source, {}).setdefault(login, (credentials, match))
+        matches: list[SourceMatch] = []
+        for source, logins in by_source.items():
+            if len(logins) == 1:
+                matches.append(next(iter(logins.values()))[1])
+                continue
+            for index, (credentials, match) in enumerate(logins.values(), 1):
+                handle = cls._handle_of(credentials, data_access_collection, index)
+                matches.append(SourceMatch(f"{source}@{handle}", match.access))
+        return matches
+
+    @classmethod
+    def _handle_of(cls, credentials: Any, data_access_collection: DataAccessCollection | None, index: int) -> str:
+        items = data_access_collection.credentials.items() if data_access_collection else ()
+        return next((handle for handle, value in items if value is credentials), f"credential {index}")
+
+    @classmethod
+    def login_key(cls, credentials: Any) -> Hashable:
+        """A credential-free key; equal keys mean the same login. Default: a keyed digest of all but the table."""
+        # A custom _candidates may hand over a Credential.
+        data = credentials.data if isinstance(credentials, Credential) else credentials
+        if isinstance(data, Mapping):
+            data = {k: v for k, v in data.items() if k != cls.TABLE_KEY}
+        others: list[Any] = []
+        text = _login_text(data, others)
+        return _LoginKey(blake2b(text.encode(), key=_LOGIN_KEY_SECRET).hexdigest(), tuple(others))
+
+    @classmethod
+    def data_access_identity(cls, match: SourceMatch) -> str:
+        access = match.access
+        identity = cls.database_identity(access.credentials)
+        if isinstance(access, DBQuery):
+            return f"{identity}::query:{sha256(access.query_text.encode()).hexdigest()[:16]}"
+        return identity if access.table is None else f"{identity}::{access.table}"
 
     @classmethod
     def _candidates(cls, options: Options, data_access_collection: DataAccessCollection | None) -> list[Any]:
@@ -276,8 +356,12 @@ class ReadDBFG(FormatFeatureGroup):
             return None
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
-            return f"table '{access.table}' does not exist"
+            return "its preset table does not exist"
         return reason
+
+    @classmethod
+    def _hidden_source(cls, match: SourceMatch) -> str:
+        return cls.database_identity(match.access.credentials)
 
     @classmethod
     def ambiguity_fix(
@@ -285,7 +369,8 @@ class ReadDBFG(FormatFeatureGroup):
     ) -> str:
         name = cls.get_class_name()
         identities = {cls.database_identity(match.access.credentials) for match in matches}
-        if len(identities) > 1:
+        logins = {cls.login_key(match.access.credentials) for match in matches}
+        if len(identities) > 1 or len(logins) > 1:
             handles = sorted(
                 handle
                 for handle, credentials in (
@@ -294,7 +379,8 @@ class ReadDBFG(FormatFeatureGroup):
                 if cls.is_valid_credentials(credentials) and cls.database_identity(credentials) in identities
             )
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
-            return f"select one database with data_access_handle{hint}, or point {name} at one credential."
+            what = "one database" if len(identities) > 1 else "one credential handle"
+            return f"select {what} with data_access_handle{hint}, or point {name} at one credential."
         table = cast(DBTable, matches[0].access).table
         return (
             f"point {name} at one table with options={{{name!r}: "

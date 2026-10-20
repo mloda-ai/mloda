@@ -1121,10 +1121,15 @@ class TestPlanStepFeatureSetOptions:
         results = session.run()
         assert results[0]["plan_info_nested_value"].tolist() == [1, 2, 3]
 
-    def test_a_nested_group_value_change_changes_the_content_hash_and_the_snapshot_keeps_it(self) -> None:
+    def test_a_nested_group_value_reaches_the_content_hash_and_the_snapshot_masks_only_secret_keys(self) -> None:
         def explain(table: str) -> list[PlanStep]:
             return mloda.explain(
-                [Feature("plan_info_nested_value", options={"plan_info_nested": {"table": table}})],
+                [
+                    Feature(
+                        "plan_info_nested_value",
+                        options={"plan_info_nested": {"table": table, "api_key": "plan-info-nested-key"}},
+                    )
+                ],
                 compute_frameworks=[PandasDataFrame],
                 plugin_collector=_NESTED_OPTIONS_PLUGINS,
             )
@@ -1134,7 +1139,7 @@ class TestPlanStepFeatureSetOptions:
         assert plan_content_hash(plan_a) != plan_content_hash(plan_b)
         step = next(s for s in plan_a if s.feature_group is PlanInfoNestedOptionsSource)
         assert step.feature_set_options is not None
-        assert step.feature_set_options.group["plan_info_nested"] == {"table": "A"}
+        assert step.feature_set_options.group["plan_info_nested"] == {"table": "A", "api_key": "***"}
 
     def test_feature_set_options_is_excluded_from_equality(self) -> None:
         """Excluded like step_uuid, so a non-scalar group value cannot make plan comparison raise."""
@@ -1410,7 +1415,7 @@ class TestPlanStepDataAccessIdentity:
         assert type(pointer) is dict
         assert pointer == {"sqlite": db, "password": secret}
 
-    def test_a_forwarded_pointer_secret_stays_out_of_every_compute_step(self, tmp_path: Path) -> None:
+    def test_a_forwarded_pointer_secret_stays_out_of_every_compute_step_snapshot(self, tmp_path: Path) -> None:
         db = self._pointer_db(tmp_path)
         secret = "plan-info-pointer-secret"  # nosec B105
 

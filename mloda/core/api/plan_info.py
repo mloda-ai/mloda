@@ -5,7 +5,7 @@ from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
-from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
+from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys, redact_option_value
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
@@ -68,7 +68,8 @@ class PlanStep:
     recorded no candidates for that side. APPEND/UNION sides carry only the index-bearing parent.
 
     ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``
-    (a mapping under a format group's name, a pointer, is redacted to its keys),
+    (a mapping under a format group's name, a pointer, is redacted to its keys; other mappings have
+    credential-shaped keys masked),
     and ``step_uuid`` its ``FeatureGroupStep.uuid`` (equal to ``HookContext.step_uuid`` on that step's hooks), the
     key ``RunResult.frames()`` pairs frames by; both are None for join/transform steps and, like ``join_token``,
     excluded from equality.
@@ -175,6 +176,14 @@ class PlanStep:
         return self._data_access_identity_is_fallback
 
 
+def _snapshot_option(key: Any, value: Any, format_group_names: Iterable[str]) -> Any:
+    if not isinstance(value, Mapping):
+        return _safe_deepcopy(value, {})
+    if key in format_group_names:
+        return redact_option_value(value)
+    return _mask_secret_keys(_safe_deepcopy(value, {}))
+
+
 def build_plan_steps(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep],
     resolved_join_plan: "ResolvedJoinPlan | None" = None,
@@ -238,9 +247,7 @@ def build_plan_steps(
                     feature_set_options=(
                         Options(
                             group={
-                                key: redact_option_value(value)
-                                if isinstance(value, Mapping) and key in format_group_names
-                                else _safe_deepcopy(value, {})
+                                key: _snapshot_option(key, value, format_group_names)
                                 for key, value in step.features.options.group.items()
                             }
                         )

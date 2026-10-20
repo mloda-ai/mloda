@@ -181,7 +181,7 @@ class ReadDBFG(FormatFeatureGroup):
             if key in options:
                 value = options.get(key)
                 if isinstance(value, Mapping) and not isinstance(value, RegisteredCredential):
-                    options.set(key, RegisteredCredential(dict(value)))
+                    options.set(key, cls.wrap_feature_scoped_access(value))
         return True
 
     @classmethod

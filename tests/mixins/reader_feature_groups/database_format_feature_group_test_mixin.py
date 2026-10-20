@@ -184,7 +184,9 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         ],
         ids=["dict", "credential", "registered_credential"],
     )
-    def test_db_claims_via_a_pointer_in_each_credential_form_and_leaves_it_unchanged(self, wrap: Any) -> None:
+    def test_db_claims_via_a_pointer_in_each_credential_form_and_leaves_the_callers_value_unchanged(
+        self, wrap: Any
+    ) -> None:
         mapping = self.make_credential(self.own_path)
         value = wrap(mapping)
         before = copy.deepcopy(value.data if isinstance(value, Credential) else dict(value))

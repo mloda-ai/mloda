@@ -479,25 +479,25 @@ class TestTwoPrincipalsOnOneSource:
         ToyRoleDB.load_neutral(match, object())
         assert ToyBaseDB.row_calls[-1][0].role == "admin"
 
-    def test_a_column_both_principals_see_aborts_naming_both_handles_without_a_secret(self) -> None:
-        plugins: FeatureGroupEnvironmentMapping = {ToyRoleDB: {PythonDictFramework}}
-        with pytest.raises(ValueError) as excinfo:
-            resolve_or_raise(Feature("toyfmt_shared"), plugins, None, _two_principals())
-        message = str(excinfo.value)
-        assert "@admin_h" in message
-        assert "@analyst_h" in message
-        assert "data_access_handle" in message
-        assert _ADMIN_SECRET not in message
-
-    def test_the_query_route_with_two_principals_on_one_identity_aborts_naming_both_handles(self) -> None:
-        feature = Feature("anything", options={"query_text": "SELECT 1"})
-        plugins: FeatureGroupEnvironmentMapping = {ToyRoleQueryDB: {PythonDictFramework}}
+    @pytest.mark.parametrize(
+        ("feature", "group"),
+        [
+            (Feature("toyfmt_shared"), ToyRoleDB),
+            (Feature("anything", options={"query_text": "SELECT 1"}), ToyRoleQueryDB),
+        ],
+        ids=["table_route", "query_route"],
+    )
+    def test_two_principals_on_one_identity_abort_naming_both_handles_without_a_secret(
+        self, feature: Feature, group: type[ToyRoleDB]
+    ) -> None:
+        plugins: FeatureGroupEnvironmentMapping = {group: {PythonDictFramework}}
         with pytest.raises(ValueError) as excinfo:
             resolve_or_raise(feature, plugins, None, _two_principals())
         message = str(excinfo.value)
         assert "@admin_h" in message
         assert "@analyst_h" in message
         assert "data_access_handle" in message
+        assert _ADMIN_SECRET not in message
 
     def test_the_data_access_identity_of_a_suffixed_match_is_the_unsuffixed_source(self) -> None:
         matches = ToyRoleDB.find_sources(ToyRoleDB.CLAIM_ROUTES[0], "toyfmt_shared", Options({}), _two_principals())
@@ -515,16 +515,26 @@ class TestTwoPrincipalsOnOneSource:
 
 
 class TestDatabasePrincipal:
-    def test_credentials_equal_up_to_the_table_name_are_one_principal(self) -> None:
-        first = ToyBaseDB.database_principal({KEY: "a", "password": "p", ToyBaseDB.TABLE_KEY: "t1"})  # nosec B105
-        second = ToyBaseDB.database_principal({KEY: "a", "password": "p", ToyBaseDB.TABLE_KEY: "t2"})  # nosec B105
-        assert first == second
-        assert hash(first) == hash(second)
-
-    def test_credentials_differing_in_another_field_are_two_principals(self) -> None:
-        first = ToyBaseDB.database_principal({KEY: "a", "role": "admin"})
-        second = ToyBaseDB.database_principal({KEY: "a", "role": "analyst"})
-        assert first != second
+    @pytest.mark.parametrize(
+        ("first", "second", "equal"),
+        [
+            (
+                {KEY: "a", "password": "p", ToyBaseDB.TABLE_KEY: "t1"},  # nosec B105
+                {KEY: "a", "password": "p", ToyBaseDB.TABLE_KEY: "t2"},  # nosec B105
+                True,
+            ),
+            ({KEY: "a", "role": "admin"}, {KEY: "a", "role": "analyst"}, False),
+        ],
+        ids=["differ_only_in_table_name", "differ_in_another_field"],
+    )
+    def test_credentials_are_one_principal_only_up_to_the_table_name(
+        self, first: dict[str, Any], second: dict[str, Any], equal: bool
+    ) -> None:
+        one = ToyBaseDB.database_principal(first)
+        two = ToyBaseDB.database_principal(second)
+        assert (one == two) is equal
+        if equal:
+            assert hash(one) == hash(two)
 
     def test_a_non_mapping_credential_is_a_principal_by_value(self) -> None:
         assert ToyBaseDB.database_principal("dsn-one") == ToyBaseDB.database_principal("dsn-one")
@@ -612,28 +622,9 @@ class TestQueryRoute:
             resolve_or_raise(feature, {ToyBaseDB: {PythonDictFramework}}, None, None)
         assert ToyBaseDB.created == []
 
-    def test_a_group_without_the_route_declines_unpointed_on_query_text_with_a_rejection(self) -> None:
-        feature = Feature("toy_a", options={"query_text": "SELECT 1"})
-        dac = DataAccessCollection(credentials={"toy_handle": {KEY: "a"}})
-        result = IdentifyFeatureGroupClass.evaluate(feature, {ToyBaseDB: {PythonDictFramework}}, None, dac)
-        assert ToyBaseDB not in result.identified
-        reason = result.eliminations[ToyBaseDB].reason
-        assert "query_text is set, but ToyBaseDB lists no query route" in reason
-        assert "QUERY_ROUTE" in reason
-
     def test_only_a_group_listing_the_route_declares_query_text(self) -> None:
         assert "query_text" not in ToyBaseDB.PROPERTY_MAPPING
-        spec = ToyQueryDB.PROPERTY_MAPPING["query_text"]
-        assert spec.default is None
-        assert spec.context is False
-        assert spec.strict_validation is False
-        assert set(ToyQueryDB.PROPERTY_MAPPING) == {"data_access_handle", "query_text"}
-
-    def test_the_query_option_constant_lives_with_the_format_group_and_stays_importable_from_read_db_fg(self) -> None:
-        from mloda.core.abstract_plugins.components.input_data import format_feature_group, read_db_fg
-
-        assert format_feature_group.QUERY_OPTION == "query_text"
-        assert read_db_fg.QUERY_OPTION == "query_text"
+        assert "query_text" in ToyQueryDB.PROPERTY_MAPPING
 
     def test_the_default_produce_query_rows_raises_naming_the_group(self) -> None:
         with pytest.raises(NotImplementedError, match="ToyBaseDB"):

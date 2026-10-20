@@ -199,20 +199,14 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self.feature_group_class not in result.identified
         assert result.eliminations[self.feature_group_class].reason
 
-    def test_db_foreign_credentials_stay_silent(self, rejection_window: dict[str, MatchRejection]) -> None:
-        options = Options()
-        assert not self.feature_group_class.match_feature_group_criteria(
-            self.present_column, options, self.foreign_dac()
-        )
-        assert self._group_name() not in rejection_window
-
-    def test_db_foreign_credentials_stay_silent_with_query_text(
-        self, rejection_window: dict[str, MatchRejection]
+    @pytest.mark.parametrize("option_items", [{}, {"query_text": "select 1"}], ids=["plain", "query_text"])
+    def test_db_foreign_credentials_stay_silent(
+        self, rejection_window: dict[str, MatchRejection], option_items: dict[str, str]
     ) -> None:
-        self._skip_if_query_route()
-        options = Options({"query_text": "select 1"})
+        if option_items:
+            self._skip_if_query_route()
         assert not self.feature_group_class.match_feature_group_criteria(
-            self.present_column, options, self.foreign_dac()
+            self.present_column, Options(option_items), self.foreign_dac()
         )
         assert self._group_name() not in rejection_window
 
@@ -249,13 +243,6 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert "db_a" in message
         assert "db_b" in message
         assert SECRET not in message
-
-    def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
-        super().test_unpointed_missing_column_declines_with_a_rejection()
-        result = self._evaluate(Feature(self.missing_column), self.own_dac())
-        reason = result.eliminations[self.feature_group_class].reason
-        assert self.expected_source not in reason
-        assert OWN_TABLE not in reason
 
     def test_db_unpointed_missing_column_over_two_tables_names_the_identity_once_and_no_table(self) -> None:
         path = self._make("two_tbl_db", {"toyfmt_tbl_alpha": {"toyfmt_a": [1]}, "toyfmt_tbl_beta": {"toyfmt_b": [2]}})

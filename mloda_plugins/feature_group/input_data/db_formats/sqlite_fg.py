@@ -2,7 +2,7 @@
 
 import os
 import sqlite3
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Hashable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -34,6 +34,10 @@ class SqliteFG(ReadDBFG):
     @classmethod
     def database_identity(cls, credentials: Any) -> str:
         return str(os.path.abspath(credentials[cls.CREDENTIAL_KEY]))
+
+    @classmethod
+    def database_principal(cls, credentials: Any) -> Hashable:
+        return ()
 
     @classmethod
     def connect(cls, credentials: Any) -> Any:

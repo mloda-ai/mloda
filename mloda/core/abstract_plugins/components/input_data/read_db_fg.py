@@ -5,7 +5,7 @@ and ``produce_rows``; the opt-in ``QUERY_ROUTE`` adds ``produce_query_rows``.
 """
 
 from abc import abstractmethod
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Hashable, Iterable, Mapping
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import TYPE_CHECKING, Any, ClassVar, cast
@@ -163,18 +163,46 @@ class ReadDBFG(FormatFeatureGroup):
             )
             return []
         digest = sha256(query_text.encode()).hexdigest()[:16] if query else ""
-        candidates = cls._candidates(options, data_access_collection)
-        sources: dict[str, SourceMatch] = {}
-        for credentials in candidates:
+        by_source: dict[str, dict[Any, tuple[Any, SourceMatch]]] = {}
+        for credentials in cls._candidates(options, data_access_collection):
             if cls.is_valid_credentials(credentials):
                 identity = cls.database_identity(credentials)
                 if query:
-                    match = SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))
-                    sources.setdefault(match.source, match)
+                    found = [SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))]
                 else:
-                    for match in cls._tables(identity, credentials):
-                        sources.setdefault(match.source, match)
-        return list(sources.values())
+                    found = cls._tables(identity, credentials)
+                principal = cls.database_principal(credentials)
+                for match in found:
+                    by_source.setdefault(match.source, {}).setdefault(principal, (credentials, match))
+        matches: list[SourceMatch] = []
+        for source, principals in by_source.items():
+            if len(principals) == 1:
+                matches.append(next(iter(principals.values()))[1])
+                continue
+            for credentials, match in principals.values():
+                handle = cls._handle_of(credentials, data_access_collection)
+                matches.append(SourceMatch(f"{source}@{handle}", match.access))
+        return matches
+
+    @classmethod
+    def _handle_of(cls, credentials: Any, data_access_collection: DataAccessCollection | None) -> str:
+        items = data_access_collection.credentials.items() if data_access_collection else ()
+        return next((handle for handle, value in items if value is credentials), cls.CREDENTIAL_KEY)
+
+    @classmethod
+    def database_principal(cls, credentials: Any) -> Hashable:
+        """Equal values mean the same grants on the database; the default is the credentials minus the table."""
+        if isinstance(credentials, Mapping):
+            return cast(Hashable, _deep_hashable({k: v for k, v in credentials.items() if k != cls.TABLE_KEY}))
+        return cast(Hashable, _deep_hashable(credentials))
+
+    @classmethod
+    def data_access_identity(cls, match: SourceMatch) -> str:
+        access = match.access
+        identity = cls.database_identity(access.credentials)
+        if isinstance(access, DBQuery):
+            return f"{identity}::query:{sha256(access.query_text.encode()).hexdigest()[:16]}"
+        return identity if access.table is None else f"{identity}::{access.table}"
 
     @classmethod
     def _candidates(cls, options: Options, data_access_collection: DataAccessCollection | None) -> list[Any]:
@@ -295,7 +323,8 @@ class ReadDBFG(FormatFeatureGroup):
     ) -> str:
         name = cls.get_class_name()
         identities = {cls.database_identity(match.access.credentials) for match in matches}
-        if len(identities) > 1:
+        principals = {cls.database_principal(match.access.credentials) for match in matches}
+        if len(identities) > 1 or len(principals) > 1:
             handles = sorted(
                 handle
                 for handle, credentials in (

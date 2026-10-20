@@ -442,6 +442,95 @@ class TestCatalogCache:
         assert "toyfmt_admin_only" not in message
 
 
+class ToyRoleQueryDB(ToyRoleDB):
+    """ToyRoleDB that also opts into the query route."""
+
+    CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)
+
+
+class ToyRoleOrdersDB(ToyRoleDB):
+    """ToyRoleDB over a distinctively named table."""
+
+    @classmethod
+    def list_tables(cls, connection: Any) -> Collection[str]:
+        return ["zq_orders_tbl"]
+
+
+_ADMIN_SECRET = "toyfmt-admin-secret"  # nosec B105
+_ADMIN = {KEY: "shop", "role": "admin", "password": _ADMIN_SECRET}
+_ANALYST = {KEY: "shop", "role": "analyst", "password": "toyfmt-analyst-secret"}  # nosec B105
+
+
+def _two_principals() -> DataAccessCollection:
+    return DataAccessCollection(credentials={"analyst_h": _ANALYST, "admin_h": _ADMIN})
+
+
+class TestTwoPrincipalsOnOneSource:
+    def test_a_column_only_the_second_principal_sees_is_claimed_with_its_match_and_loaded_with_its_credentials(
+        self,
+    ) -> None:
+        feature = Feature("toyfmt_admin_only")
+        plugins: FeatureGroupEnvironmentMapping = {ToyRoleDB: {PythonDictFramework}}
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None, _two_principals())
+        assert ToyRoleDB in result.identified
+        assert feature.input_data_match is not None
+        match = feature.input_data_match[1]
+        assert match.source == "toyfmt-db:shop::toy_table@admin_h"
+        ToyRoleDB.load_neutral(match, object())
+        assert ToyBaseDB.row_calls[-1][0].role == "admin"
+
+    def test_a_column_both_principals_see_aborts_naming_both_handles_without_a_secret(self) -> None:
+        plugins: FeatureGroupEnvironmentMapping = {ToyRoleDB: {PythonDictFramework}}
+        with pytest.raises(ValueError) as excinfo:
+            resolve_or_raise(Feature("toyfmt_shared"), plugins, None, _two_principals())
+        message = str(excinfo.value)
+        assert "@admin_h" in message
+        assert "@analyst_h" in message
+        assert "data_access_handle" in message
+        assert _ADMIN_SECRET not in message
+
+    def test_the_query_route_with_two_principals_on_one_identity_aborts_naming_both_handles(self) -> None:
+        feature = Feature("anything", options={"query_text": "SELECT 1"})
+        plugins: FeatureGroupEnvironmentMapping = {ToyRoleQueryDB: {PythonDictFramework}}
+        with pytest.raises(ValueError) as excinfo:
+            resolve_or_raise(feature, plugins, None, _two_principals())
+        message = str(excinfo.value)
+        assert "@admin_h" in message
+        assert "@analyst_h" in message
+        assert "data_access_handle" in message
+
+    def test_the_data_access_identity_of_a_suffixed_match_is_the_unsuffixed_source(self) -> None:
+        matches = ToyRoleDB.find_sources(ToyRoleDB.CLAIM_ROUTES[0], "toyfmt_shared", Options({}), _two_principals())
+        assert len(matches) == 2
+        assert {ToyRoleDB.data_access_identity(match) for match in matches} == {"toyfmt-db:shop::toy_table"}
+
+    def test_unpointed_missing_column_text_shows_neither_a_handle_suffix_nor_the_table_name(self) -> None:
+        plugins: FeatureGroupEnvironmentMapping = {ToyRoleOrdersDB: {PythonDictFramework}}
+        with pytest.raises(ValueError) as excinfo:
+            resolve_or_raise(Feature("toyfmt_missing_col"), plugins, None, _two_principals())
+        message = str(excinfo.value)
+        assert "toyfmt-db:shop" in message
+        assert "@" not in message
+        assert "zq_orders_tbl" not in message
+
+
+class TestDatabasePrincipal:
+    def test_credentials_equal_up_to_the_table_name_are_one_principal(self) -> None:
+        first = ToyBaseDB.database_principal({KEY: "a", "password": "p", ToyBaseDB.TABLE_KEY: "t1"})  # nosec B105
+        second = ToyBaseDB.database_principal({KEY: "a", "password": "p", ToyBaseDB.TABLE_KEY: "t2"})  # nosec B105
+        assert first == second
+        assert hash(first) == hash(second)
+
+    def test_credentials_differing_in_another_field_are_two_principals(self) -> None:
+        first = ToyBaseDB.database_principal({KEY: "a", "role": "admin"})
+        second = ToyBaseDB.database_principal({KEY: "a", "role": "analyst"})
+        assert first != second
+
+    def test_a_non_mapping_credential_is_a_principal_by_value(self) -> None:
+        assert ToyBaseDB.database_principal("dsn-one") == ToyBaseDB.database_principal("dsn-one")
+        assert ToyBaseDB.database_principal("dsn-one") != ToyBaseDB.database_principal("dsn-two")
+
+
 class TestMultipleMessageSourceIsScrubbed:
     def test_the_source_part_of_the_multiple_message_lacks_a_secret_in_the_identity(self, tmp_path: Path) -> None:
         secret = "toyfmt-secret"  # nosec B105

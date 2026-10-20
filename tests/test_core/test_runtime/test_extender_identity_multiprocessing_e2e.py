@@ -561,6 +561,12 @@ def _assert_single_run_id_note(raised: BaseException, ext: _LifecycleMatrixExten
     assert getattr(raised, "__notes__", None) == [f"mloda run_id: {run_id}"]
 
 
+def _assert_single_plan_id_note(raised: BaseException, ext: _LifecycleMatrixExtender) -> None:
+    (plan_id,) = [seen for hook, seen, _ in ext.ids if hook == "plan_start"]
+    assert plan_id is not None
+    assert getattr(raised, "__notes__", None) == [f"mloda plan_id: {plan_id}"]
+
+
 def _matrix_kwargs(extenders: set[Extender], column: str = _RUN_COMPLETE_COLUMN) -> dict[str, Any]:
     groups: dict[str, type[FeatureGroup]] = {
         _FAIL_COLUMN: _FailingLifecycleFeatureGroup,
@@ -590,8 +596,9 @@ def _ok_run(status: str = "succeeded", calculated: bool = True, error: str | Non
 
 
 def _planning_failure_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
-    with pytest.raises(FeatureResolutionError):
+    with pytest.raises(FeatureResolutionError) as raised:
         mloda.prepare([Feature(name=_MISSING_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
+    _assert_single_plan_id_note(raised.value, ext)
     return [
         ("plan_start",),
         ("plan_complete", "failed", "mloda.core.prepare.identify_feature_group.FeatureResolutionError"),
@@ -608,8 +615,9 @@ def _planning_failure_diagnose(ext: _LifecycleMatrixExtender, tmp_path: Path, mp
 
 
 def _planning_failure_explain(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
-    with pytest.raises(FeatureResolutionError):
+    with pytest.raises(FeatureResolutionError) as raised:
         mloda.explain([Feature(name=_MISSING_COLUMN)], parallelization_modes=_SYNC, **_matrix_kwargs({ext}))
+    _assert_single_plan_id_note(raised.value, ext)
     return [
         ("plan_start",),
         ("plan_complete", "failed", "mloda.core.prepare.identify_feature_group.FeatureResolutionError"),
@@ -707,8 +715,9 @@ def _planning_interrupted_prepare(ext: _LifecycleMatrixExtender, tmp_path: Path,
         raise KeyboardInterrupt()
 
     mp.setattr(mloda, "_plan", interrupted)
-    with pytest.raises(KeyboardInterrupt):
+    with pytest.raises(KeyboardInterrupt) as raised:
         _matrix_session(ext)
+    _assert_single_plan_id_note(raised.value, ext)
     return [("plan_start",), ("plan_complete", "cancelled", "builtins.KeyboardInterrupt")]
 
 

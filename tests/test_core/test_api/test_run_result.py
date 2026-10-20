@@ -289,13 +289,14 @@ class TestStreamAllPlansEagerly:
 
     def test_unresolvable_feature_raises_at_the_call(self) -> None:
         # Deliberately no iteration: the bare call itself must raise.
-        with pytest.raises(ValueError, match="No feature groups found"):
+        with pytest.raises(ValueError, match="No feature groups found") as raised:
             mlodaAPI.stream_all(
                 ["run_result_unresolvable_647"],
                 compute_frameworks=[PandasDataFrame],
                 parallelization_modes={ParallelizationMode.SYNC},
                 plugin_collector=_PLUGINS,
             )
+        assert getattr(raised.value, "__notes__", None) is None
 
 
 class TestStreamEarlyClose:

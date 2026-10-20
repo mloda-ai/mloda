@@ -238,6 +238,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self.expected_source in message
         assert self._source_of(other, "second_table") in message
         assert "data_access_handle" in message
+        assert "select one database" in message
         assert "db_a" in message
         assert "db_b" in message
         assert SECRET not in message

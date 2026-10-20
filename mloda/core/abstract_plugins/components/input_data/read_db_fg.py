@@ -7,7 +7,8 @@ and ``produce_rows``; the opt-in ``QUERY_ROUTE`` adds ``produce_query_rows``.
 from abc import abstractmethod
 from collections.abc import Collection, Hashable, Iterable, Mapping
 from dataclasses import dataclass, field
-from hashlib import sha256
+import secrets
+from hashlib import blake2b, sha256
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -34,6 +35,44 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
 
 QUERY_SPEC = PropertySpec("SQL text this group runs through QUERY_ROUTE.", default=None, context=False)
+
+_LOGIN_KEY_SECRET = secrets.token_bytes(16)  # login keys are compared within one process only
+_PLAIN_LEAVES = (str, bytes, int, float, bool, type(None))
+
+
+def _login_text(value: Any, others: list[Any], seen: frozenset[int] = frozenset()) -> str:
+    """Canonical text of a credential value; a value that is not a plain scalar goes to others, compared by ==."""
+    if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+        if id(value) in seen:
+            return "cycle"
+        seen = seen | {id(value)}
+        if isinstance(value, Mapping):
+            items = sorted(value.items(), key=lambda item: repr(item[0]))
+            return (
+                "{" + ",".join(f"{_login_text(k, others, seen)}:{_login_text(v, others, seen)}" for k, v in items) + "}"
+            )
+        parts = [_login_text(item, others, seen) for item in value]
+        if isinstance(value, (set, frozenset)):
+            return "<" + ",".join(sorted(parts)) + ">"
+        return ("[" if isinstance(value, list) else "(") + ",".join(parts) + ("]" if isinstance(value, list) else ")")
+    if type(value) in _PLAIN_LEAVES:
+        return f"{type(value).__name__}:{value!r}"
+    others.append(value)
+    return "?"
+
+
+@dataclass(frozen=True, eq=False)
+class _LoginKey:
+    """Hashes by the digest of the plain values; equal only when the other values compare equal too."""
+
+    digest: str
+    others: tuple[Any, ...] = field(default=(), repr=False)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _LoginKey) and self.digest == other.digest and self.others == other.others
+
+    def __hash__(self) -> int:
+        return hash(self.digest)
 
 
 def _capped(names: list[str]) -> str:
@@ -174,15 +213,15 @@ class ReadDBFG(FormatFeatureGroup):
                 found = [SourceMatch(f"{identity}::query:{digest}", DBQuery(credentials, query_text))]
             else:
                 found = cls._tables(identity, credentials)
-            principal = cls.database_principal(credentials)
+            login = cls.login_key(credentials)
             for match in found:
-                by_source.setdefault(match.source, {}).setdefault(principal, (credentials, match))
+                by_source.setdefault(match.source, {}).setdefault(login, (credentials, match))
         matches: list[SourceMatch] = []
-        for source, principals in by_source.items():
-            if len(principals) == 1:
-                matches.append(next(iter(principals.values()))[1])
+        for source, logins in by_source.items():
+            if len(logins) == 1:
+                matches.append(next(iter(logins.values()))[1])
                 continue
-            for index, (credentials, match) in enumerate(principals.values(), 1):
+            for index, (credentials, match) in enumerate(logins.values(), 1):
                 handle = cls._handle_of(credentials, data_access_collection, index)
                 matches.append(SourceMatch(f"{source}@{handle}", match.access))
         return matches
@@ -193,11 +232,15 @@ class ReadDBFG(FormatFeatureGroup):
         return next((handle for handle, value in items if value is credentials), f"credential {index}")
 
     @classmethod
-    def database_principal(cls, credentials: Any) -> Hashable:
-        """Equal values mean the same grants on the database; the default is the credentials minus the table."""
-        if isinstance(credentials, Mapping):
-            return cast(Hashable, _deep_hashable({k: v for k, v in credentials.items() if k != cls.TABLE_KEY}))
-        return cast(Hashable, _deep_hashable(credentials))
+    def login_key(cls, credentials: Any) -> Hashable:
+        """A credential-free key; equal keys mean the same login. Default: a keyed digest of all but the table."""
+        # A custom _candidates may hand over a Credential.
+        data = credentials.data if isinstance(credentials, Credential) else credentials
+        if isinstance(data, Mapping):
+            data = {k: v for k, v in data.items() if k != cls.TABLE_KEY}
+        others: list[Any] = []
+        text = _login_text(data, others)
+        return _LoginKey(blake2b(text.encode(), key=_LOGIN_KEY_SECRET).hexdigest(), tuple(others))
 
     @classmethod
     def data_access_identity(cls, match: SourceMatch) -> str:
@@ -326,8 +369,8 @@ class ReadDBFG(FormatFeatureGroup):
     ) -> str:
         name = cls.get_class_name()
         identities = {cls.database_identity(match.access.credentials) for match in matches}
-        principals = {cls.database_principal(match.access.credentials) for match in matches}
-        if len(identities) > 1 or len(principals) > 1:
+        logins = {cls.login_key(match.access.credentials) for match in matches}
+        if len(identities) > 1 or len(logins) > 1:
             handles = sorted(
                 handle
                 for handle, credentials in (
@@ -336,7 +379,8 @@ class ReadDBFG(FormatFeatureGroup):
                 if cls.is_valid_credentials(credentials) and cls.database_identity(credentials) in identities
             )
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
-            return f"select one database with data_access_handle{hint}, or point {name} at one credential."
+            what = "one database" if len(identities) > 1 else "one credential handle"
+            return f"select {what} with data_access_handle{hint}, or point {name} at one credential."
         table = cast(DBTable, matches[0].access).table
         return (
             f"point {name} at one table with options={{{name!r}: "

@@ -36,7 +36,7 @@ class SqliteFG(ReadDBFG):
         return str(os.path.abspath(credentials[cls.CREDENTIAL_KEY]))
 
     @classmethod
-    def database_principal(cls, credentials: Any) -> Hashable:
+    def login_key(cls, credentials: Any) -> Hashable:
         return ()
 
     @classmethod

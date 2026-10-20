@@ -383,6 +383,20 @@ class _OpaqueSecret:
     value: str = field(repr=False)
 
 
+@dataclass
+class _MutableOpaqueSecret:
+    """Unhashable, equality by value, repr hides the value."""
+
+    value: str = field(repr=False)
+
+
+class _SecretText(str):
+    pass
+
+
+_SHARED_OPAQUE = _OpaqueSecret("one")
+
+
 class TestCatalogCache:
     def test_a_run_reads_a_database_catalog_once_and_a_second_database_separately(self) -> None:
         first, second = _match({KEY: "a"}), _match({KEY: "b"})
@@ -462,17 +476,17 @@ _ADMIN = {KEY: "shop", "role": "admin", "password": _ADMIN_SECRET}
 _ANALYST = {KEY: "shop", "role": "analyst", "password": "toyfmt-analyst-secret"}  # nosec B105
 
 
-def _two_principals() -> DataAccessCollection:
+def _two_logins() -> DataAccessCollection:
     return DataAccessCollection(credentials={"analyst_h": _ANALYST, "admin_h": _ADMIN})
 
 
-class TestTwoPrincipalsOnOneSource:
-    def test_a_column_only_the_second_principal_sees_is_claimed_with_its_match_and_loaded_with_its_credentials(
+class TestTwoLoginsOnOneSource:
+    def test_a_column_only_the_second_login_sees_is_claimed_with_its_match_and_loaded_with_its_credentials(
         self,
     ) -> None:
         feature = Feature("toyfmt_admin_only")
         plugins: FeatureGroupEnvironmentMapping = {ToyRoleDB: {PythonDictFramework}}
-        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None, _two_principals())
+        result = IdentifyFeatureGroupClass.evaluate(feature, plugins, None, _two_logins())
         assert ToyRoleDB in result.identified
         assert feature.input_data_match is not None
         match = feature.input_data_match[1]
@@ -488,27 +502,29 @@ class TestTwoPrincipalsOnOneSource:
         ],
         ids=["table_route", "query_route"],
     )
-    def test_two_principals_on_one_identity_abort_naming_both_handles_without_a_secret(
+    def test_two_logins_on_one_identity_abort_naming_both_handles_without_a_secret(
         self, feature: Feature, group: type[ToyRoleDB]
     ) -> None:
         plugins: FeatureGroupEnvironmentMapping = {group: {PythonDictFramework}}
         with pytest.raises(ValueError) as excinfo:
-            resolve_or_raise(feature, plugins, None, _two_principals())
+            resolve_or_raise(feature, plugins, None, _two_logins())
         message = str(excinfo.value)
         assert "@admin_h" in message
         assert "@analyst_h" in message
         assert "data_access_handle" in message
+        assert "select one credential handle" in message
+        assert "select one database" not in message
         assert _ADMIN_SECRET not in message
 
     def test_the_data_access_identity_of_a_suffixed_match_is_the_unsuffixed_source(self) -> None:
-        matches = ToyRoleDB.find_sources(ToyRoleDB.CLAIM_ROUTES[0], "toyfmt_shared", Options({}), _two_principals())
+        matches = ToyRoleDB.find_sources(ToyRoleDB.CLAIM_ROUTES[0], "toyfmt_shared", Options({}), _two_logins())
         assert len(matches) == 2
         assert {ToyRoleDB.data_access_identity(match) for match in matches} == {"toyfmt-db:shop::toy_table"}
 
     def test_unpointed_missing_column_text_shows_neither_a_handle_suffix_nor_the_table_name(self) -> None:
         plugins: FeatureGroupEnvironmentMapping = {ToyRoleOrdersDB: {PythonDictFramework}}
         with pytest.raises(ValueError) as excinfo:
-            resolve_or_raise(Feature("toyfmt_missing_col"), plugins, None, _two_principals())
+            resolve_or_raise(Feature("toyfmt_missing_col"), plugins, None, _two_logins())
         message = str(excinfo.value)
         assert "toyfmt-db:shop" in message
         assert "@" not in message
@@ -526,15 +542,15 @@ class ToyFlakyRoleDB(ToyRoleDB):
 
 
 class ToyOutsideCollectionDB(ToyRoleDB):
-    """Supplies two principals from outside the data access collection."""
+    """Supplies two logins from outside the data access collection."""
 
     @classmethod
     def _candidates(cls, options: Options, data_access_collection: DataAccessCollection | None) -> list[Any]:
         return [dict(_ANALYST), dict(_ADMIN)]
 
 
-class TestTwoPrincipalsEdges:
-    def test_unpointed_missing_column_does_not_blame_a_failed_read_when_another_principal_read_the_catalog(
+class TestTwoLoginsEdges:
+    def test_unpointed_missing_column_does_not_blame_a_failed_read_when_another_login_read_the_catalog(
         self,
     ) -> None:
         broken = {KEY: "shop", "role": "broken"}
@@ -546,7 +562,7 @@ class TestTwoPrincipalsEdges:
         assert "toyfmt-db:shop" in message
         assert "could not read" not in message
 
-    def test_principals_found_outside_the_collection_still_get_distinct_sources(self) -> None:
+    def test_logins_found_outside_the_collection_still_get_distinct_sources(self) -> None:
         matches = ToyOutsideCollectionDB.find_sources(
             ToyOutsideCollectionDB.CLAIM_ROUTES[0], "toyfmt_shared", Options({}), None
         )
@@ -554,7 +570,7 @@ class TestTwoPrincipalsEdges:
         assert len({match.source for match in matches}) == 2
 
 
-class TestDatabasePrincipal:
+class TestLoginKey:
     @pytest.mark.parametrize(
         ("first", "second", "equal"),
         [
@@ -564,21 +580,70 @@ class TestDatabasePrincipal:
                 True,
             ),
             ({KEY: "a", "role": "admin"}, {KEY: "a", "role": "analyst"}, False),
+            (
+                Credential({KEY: "a", "password": "toyfmt-pw-one"}),  # nosec B105
+                {KEY: "a", "password": "toyfmt-pw-one"},  # nosec B105
+                True,
+            ),
+            (
+                {KEY: "a", "password": _OpaqueSecret("one")},  # nosec B105
+                {KEY: "a", "password": _OpaqueSecret("two")},  # nosec B105
+                False,
+            ),
+            (
+                Credential({KEY: "a", "password": "toyfmt-pw-one", ToyBaseDB.TABLE_KEY: "t1"}),  # nosec B105
+                Credential({KEY: "a", "password": "toyfmt-pw-one", ToyBaseDB.TABLE_KEY: "t2"}),  # nosec B105
+                True,
+            ),
+            (
+                {KEY: "a", "password": _SHARED_OPAQUE},  # nosec B105
+                {KEY: "a", "password": _SHARED_OPAQUE},  # nosec B105
+                True,
+            ),
+            (
+                {KEY: "a", "password": _MutableOpaqueSecret("one")},  # nosec B105
+                {KEY: "a", "password": _MutableOpaqueSecret("two")},  # nosec B105
+                False,
+            ),
+            (
+                {KEY: "a", "cert": Path("toyfmt-cert.pem")},
+                {KEY: "a", "cert": Path("toyfmt-cert.pem")},
+                True,
+            ),
+            (
+                {KEY: "a", "hosts": ["h1", "h2"]},
+                {KEY: "a", "hosts": ("h1", "h2")},
+                False,
+            ),
         ],
-        ids=["differ_only_in_table_name", "differ_in_another_field"],
+        ids=[
+            "differ_only_in_table_name",
+            "differ_in_another_field",
+            "credential_object_equals_its_mapping",
+            "opaque_secrets_with_one_redacted_repr_differ",
+            "credential_objects_differ_only_in_table_name",
+            "same_opaque_secret_instance_is_one_login",
+            "unhashable_opaque_secrets_with_one_redacted_repr_differ",
+            "equal_but_distinct_value_objects_are_one_login",
+            "a_list_and_a_tuple_value_differ",
+        ],
     )
-    def test_credentials_are_one_principal_only_up_to_the_table_name(
-        self, first: dict[str, Any], second: dict[str, Any], equal: bool
-    ) -> None:
-        one = ToyBaseDB.database_principal(first)
-        two = ToyBaseDB.database_principal(second)
+    def test_credentials_are_one_login_only_up_to_the_table_name(self, first: Any, second: Any, equal: bool) -> None:
+        one = ToyBaseDB.login_key(first)
+        two = ToyBaseDB.login_key(second)
         assert (one == two) is equal
-        if equal:
-            assert hash(one) == hash(two)
 
-    def test_a_non_mapping_credential_is_a_principal_by_value(self) -> None:
-        assert ToyBaseDB.database_principal("dsn-one") == ToyBaseDB.database_principal("dsn-one")
-        assert ToyBaseDB.database_principal("dsn-one") != ToyBaseDB.database_principal("dsn-two")
+    def test_a_non_mapping_credential_is_a_login_by_value(self) -> None:
+        assert ToyBaseDB.login_key("dsn-one") == ToyBaseDB.login_key("dsn-one")
+        assert ToyBaseDB.login_key("dsn-one") != ToyBaseDB.login_key("dsn-two")
+
+    def test_the_default_key_carries_no_credential_value(self) -> None:
+        key = ToyBaseDB.login_key({KEY: "a", "password": _ADMIN_SECRET})
+        assert _ADMIN_SECRET not in str(key)
+        assert _ADMIN_SECRET not in repr(key)
+        key = ToyBaseDB.login_key({KEY: "a", "password": _SecretText(_ADMIN_SECRET)})
+        assert _ADMIN_SECRET not in str(key)
+        assert _ADMIN_SECRET not in repr(key)
 
 
 class TestMultipleMessageSourceIsScrubbed:

@@ -11,7 +11,11 @@ from mloda.core.abstract_plugins.components.link import JoinType
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.declared_sides import star_keeping_two_groups_reason, star_mixed_joins_reason
+from mloda.core.prepare.declared_sides import (
+    star_keeping_two_groups_reason,
+    star_missed_join_reason,
+    star_mixed_joins_reason,
+)
 from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan, ResolvedJoinSide
 
 
@@ -234,3 +238,78 @@ def raise_on_dishonest_join_record(plan: ResolvedJoinPlan, join_steps: Iterable[
                         f"{label} uuids {sorted(str(uuid) for uuid in uuids)} share none with the side.",
                     )
                 )
+
+
+def _record_groups(records: tuple[ResolvedJoin, ...]) -> list[list[ResolvedJoin]]:
+    """Records connected through shared consumers."""
+    parent = list(range(len(records)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    first_with: dict[UUID, int] = {}
+    for index, record in enumerate(records):
+        for consumer in record.consumers:
+            parent[find(index)] = find(first_with.setdefault(consumer, index))
+    groups: dict[int, list[ResolvedJoin]] = defaultdict(list)
+    for index, record in enumerate(records):
+        groups[find(index)].append(record)
+    return list(groups.values())
+
+
+def _sides_of(record: ResolvedJoin) -> frozenset[UUID]:
+    return record.left.uuids | record.right.uuids
+
+
+def _missed_join_reason(consumer: UUID, missed: ResolvedJoin, reached: frozenset[UUID], graph: Graph) -> str:
+    shared_side = missed.left if missed.left.uuids & reached else missed.right
+    nodes = graph.get_nodes()
+    other = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in missed.consumers)[0]
+    return star_missed_join_reason(
+        nodes[consumer].feature_group_class.get_class_name(),
+        other,
+        _class_names(shared_side.uuids & reached, graph),
+        _class_names(_other_side(missed, shared_side).uuids, graph),
+    )
+
+
+def raise_on_consumer_missing_a_star_join(plan: ResolvedJoinPlan, graph: Graph) -> None:
+    """Raise when a consumer skips a join of a star that another consumer reads and the skipped join changes its rows."""
+    ancestors = graph.parent_to_children_mapping
+    for group in _record_groups(plan.records):
+        if len(group) < 2:
+            continue
+        by_consumer: dict[UUID, set[int]] = defaultdict(set)
+        for index, record in enumerate(group):
+            for consumer in record.consumers:
+                by_consumer[consumer].add(index)
+        for consumer, own_indexes in by_consumer.items():
+            missed = [
+                record
+                for index, record in enumerate(group)
+                if index not in own_indexes
+                and record.jointype not in (JoinType.APPEND, JoinType.UNION)
+                and not _is_self_link(record)
+                and not any(consumer in ancestors.get(uuid, ()) for uuid in _sides_of(record))
+            ]
+            if not missed:
+                continue
+            reached = frozenset().union(*(_sides_of(group[index]) for index in own_indexes))
+            pending = missed
+            changed = True
+            while changed:
+                changed = False
+                still_pending = []
+                for record in pending:
+                    if not _sides_of(record) & reached:
+                        still_pending.append(record)
+                        continue
+                    kept_and_dropped = _kept_and_dropped(record)
+                    if kept_and_dropped is None or not kept_and_dropped[0].uuids & reached:
+                        raise ValueError(f"{_missed_join_reason(consumer, record, reached, graph)}.")
+                    reached |= kept_and_dropped[1].uuids
+                    changed = True
+                pending = still_pending

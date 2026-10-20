@@ -284,8 +284,13 @@ STAR_SECOND_CFW = PandasDataFrame
 STAR_HUB_CFW = PythonDictFramework
 
 
-def _build_star_plan(make_links: Any, *, separate_consumers: bool = False) -> tuple[ExecutionPlan, Graph]:
-    """Two joins over StarFirstSpoke, StarSecondSpoke and StarHub, built by make_links(first, second, hub)."""
+def _build_star_plan(
+    make_links: Any, *, separate_consumers: bool = False, partial_consumer: bool = False
+) -> tuple[ExecutionPlan, Graph]:
+    """Two joins over StarFirstSpoke, StarSecondSpoke and StarHub, built by make_links(first, second, hub).
+
+    partial_consumer: StarOtherConsumer reads only the first link's parents and shares that join with StarConsumer.
+    """
     first = feature("star_first", STAR_FIRST_CFW, STAR_INDEX)
     second = feature("star_second", STAR_SECOND_CFW, STAR_INDEX)
     hub = feature("star_hub", STAR_HUB_CFW, STAR_INDEX)
@@ -301,13 +306,13 @@ def _build_star_plan(make_links: Any, *, separate_consumers: bool = False) -> tu
     consumer_parents = (first, hub) if separate_consumers else (first, second, hub)
     for parent in consumer_parents:
         graph.adjacency_list[parent.uuid].append(consumer.uuid)
-    other_parents = (second, hub) if separate_consumers else ()
+    other_parents = (second, hub) if separate_consumers else (first, hub) if partial_consumer else ()
     for parent in other_parents:
         graph.adjacency_list[parent.uuid].append(other_consumer.uuid)
     graph.adjacency_list[consumer.uuid] = []
     graph.adjacency_list[other_consumer.uuid] = []
     graph.parent_to_children_mapping[consumer.uuid] = {parent.uuid for parent in consumer_parents}
-    if separate_consumers:
+    if separate_consumers or partial_consumer:
         graph.parent_to_children_mapping[other_consumer.uuid] = {parent.uuid for parent in other_parents}
 
     cfws = {StarFirstSpoke: STAR_FIRST_CFW, StarSecondSpoke: STAR_SECOND_CFW, StarHub: STAR_HUB_CFW}
@@ -322,9 +327,11 @@ def _build_star_plan(make_links: Any, *, separate_consumers: bool = False) -> tu
         owner = other_consumer if separate_consumers and position == 1 else consumer
         left_cfw, right_cfw = cfws[link.left_feature_group], cfws[link.right_feature_group]
         trek(link_trekker, link, (left_cfw, right_cfw), owner.uuid)
+        if partial_consumer and position == 0:
+            trek(link_trekker, link, (left_cfw, right_cfw), other_consumer.uuid)
         queue.append((link, left_cfw, right_cfw))
     queue.append((StarConsumer, {consumer}))
-    if separate_consumers:
+    if separate_consumers or partial_consumer:
         queue.append((StarOtherConsumer, {other_consumer}))
 
     plan = ExecutionPlan()
@@ -525,3 +532,42 @@ def test_raise_on_join_star_keeping_two_groups_accepts_two_steps_of_one_kept_gro
 
 def test_raise_on_join_star_keeping_two_groups_accepts_a_plan_with_no_records() -> None:
     raise_on_join_star_keeping_two_groups(ExecutionPlan().resolved_join_plan, Graph())
+
+
+def _star_missed_join_kept(missed_kind: str) -> Any:
+    def make_links(first: Any, second: Any, hub: Any) -> list[Link]:
+        return [
+            Link.inner(JoinSpec(first, STAR_INDEX), JoinSpec(hub, STAR_INDEX)),
+            getattr(Link, missed_kind)(JoinSpec(second, STAR_INDEX), JoinSpec(hub, STAR_INDEX)),
+        ]
+
+    return make_links
+
+
+def test_raise_on_consumer_missing_a_star_join_names_both_consumers_and_the_hub() -> None:
+    from mloda.core.prepare.validate_resolved_join import raise_on_consumer_missing_a_star_join
+
+    plan, graph = _build_star_plan(_star_missed_join_kept("inner"), partial_consumer=True)
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_consumer_missing_a_star_join(plan.resolved_join_plan, graph)
+
+    message = str(excinfo.value)
+    for name in ("StarOtherConsumer", "StarConsumer", "StarHub"):
+        assert name in message, f"{name} must be named; got: {message}"
+    assert "Resolution:" in message
+
+
+def test_raise_on_consumer_missing_a_star_join_accepts_a_missed_join_keeping_the_shared_group() -> None:
+    from mloda.core.prepare.validate_resolved_join import raise_on_consumer_missing_a_star_join
+
+    plan, graph = _build_star_plan(_star_missed_join_kept("right"), partial_consumer=True)
+
+    assert len(plan.resolved_join_plan.records) == 2
+    raise_on_consumer_missing_a_star_join(plan.resolved_join_plan, graph)
+
+
+def test_raise_on_consumer_missing_a_star_join_accepts_a_plan_with_no_records() -> None:
+    from mloda.core.prepare.validate_resolved_join import raise_on_consumer_missing_a_star_join
+
+    raise_on_consumer_missing_a_star_join(ExecutionPlan().resolved_join_plan, Graph())

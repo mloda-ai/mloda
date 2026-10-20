@@ -622,7 +622,12 @@ def _two_consumers_run(
     return {n: [sorted(r[n].to_pylist()) for r in results if n in r.column_names][0] for n in names}
 
 
-def _star_links(spoke_c: type[FeatureGroup], hub_right: bool, hub_c: type[FeatureGroup] = HubRightB) -> set[Link]:
+def _star_links(
+    spoke_c: type[FeatureGroup],
+    hub_right: bool,
+    hub_c: type[FeatureGroup] = HubRightB,
+    c_link: Any = Link.inner,
+) -> set[Link]:
     a, b, c = (
         JoinSpec(HubRightA, HUB_RIGHT_INDEX),
         JoinSpec(HubRightB, HUB_RIGHT_INDEX),
@@ -630,8 +635,8 @@ def _star_links(spoke_c: type[FeatureGroup], hub_right: bool, hub_c: type[Featur
     )
     c_hub = JoinSpec(hub_c, HUB_RIGHT_INDEX)
     if hub_right:
-        return {Link.inner(a, b), Link.inner(c, c_hub)}
-    return {Link.inner(b, a), Link.inner(c_hub, c)}
+        return {Link.inner(a, b), c_link(c, c_hub)}
+    return {Link.inner(b, a), c_link(c_hub, c)}
 
 
 _X_EXPECTED = [11, 22, 33]
@@ -692,6 +697,35 @@ class TestTwoConsumersReadingDifferentSpokes:
 
             assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
             assert got[HubRightCDerivedConsumer.get_class_name()] == [2007, 3008]
+
+
+class TestAConsumerReadingPartOfAStar:
+    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
+    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
+    def test_a_consumer_missing_a_join_of_the_star_is_rejected(
+        self, spoke_c: type[FeatureGroup], hub_right: bool
+    ) -> None:
+        with pytest.raises(ValueError) as exc:
+            _two_consumers_run(_star_links(spoke_c, hub_right), spoke_c, HubRightConsumer, ParallelizationMode.SYNC)
+
+        message = str(exc.value)
+        assert "HubRightPairConsumer" in message
+        assert "HubRightConsumer" in message
+        assert "HubRightB" in message
+
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
+    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
+    def test_a_consumer_missing_a_join_that_keeps_the_shared_group_gets_its_own_rows(
+        self, spoke_c: type[FeatureGroup], hub_right: bool, mode: ParallelizationMode
+    ) -> None:
+        c_link = Link.right if hub_right else Link.left
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            got = _two_consumers_run(_star_links(spoke_c, hub_right, c_link=c_link), spoke_c, HubRightConsumer, mode)
+
+            assert got[HubRightPairConsumer.get_class_name()] == [11, 22, 33]
+            assert got[HubRightConsumer.get_class_name()] == [11, 29, 41]
 
 
 HubRightD = _hub_right_group("HubRightD", "hr_d", {"x": 100, "v": 200, "q": 300}, PyArrowTable)

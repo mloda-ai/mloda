@@ -1663,44 +1663,42 @@ def test_a_consumer_reading_members_of_one_link_side_is_correct_when_the_other_s
     assert _side_path_values(results, consumer) == expected
 
 
-@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 @pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
 @pytest.mark.parametrize(
-    "first, first_expected, second, second_expected",
+    "first, second",
     [
-        pytest.param(
-            RemedyThirdBThirdMidConsumer,
-            [[117, 228, 339]],
-            RemedyThirdPairConsumer,
-            [[17, 28, 39]],
-            id="mid_and_pair",
-        ),
-        pytest.param(
-            RemedyThirdBThirdMidConsumer,
-            [[117, 228, 339]],
-            RemedyThirdBThirdConsumer,
-            [[18, 30, 42]],
-            id="mid_and_direct",
-        ),
-        pytest.param(
-            RemedyThirdBThirdConsumer,
-            [[18, 30, 42]],
-            RemedyThirdPairConsumer,
-            [[17, 28, 39]],
-            id="direct_and_pair",
-        ),
+        pytest.param(RemedyThirdBThirdMidConsumer, RemedyThirdPairConsumer, id="mid_and_pair"),
+        pytest.param(RemedyThirdBThirdConsumer, RemedyThirdPairConsumer, id="direct_and_pair"),
     ],
 )
-def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_together(
-    first: type[FeatureGroup],
-    first_expected: list[list[int]],
-    second: type[FeatureGroup],
-    second_expected: list[list[int]],
-    swap_link_sides: bool,
-    link_factory: Any,
-    mode: ParallelizationMode,
+def test_a_pair_consumer_missing_a_join_of_the_polymorphic_link_layout_is_rejected(
+    first: type[FeatureGroup], second: type[FeatureGroup], swap_link_sides: bool, link_factory: Any
 ) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
+            SidePathArrowP,
+            False,
+            swap_link_sides,
+            ParallelizationMode.SYNC,
+            consumer=first,
+            features=[first.get_class_name(), second.get_class_name()],
+            link_factory=link_factory,
+            **{**_REMEDY_KWARGS, "root_b": RemedyRootBThird, "extra_groups": {*_REMEDY_KWARGS["extra_groups"], second}},
+        )
+
+    message = str(exc_info.value)
+    assert first.get_class_name() in message
+    assert second.get_class_name() in message
+
+
+@pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+@pytest.mark.parametrize("link_factory", [Link.inner, Link.outer], ids=["inner", "outer"])
+@pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
+def test_a_mid_and_a_direct_consumer_of_one_polymorphic_link_layout_return_their_values_together(
+    swap_link_sides: bool, link_factory: Any, mode: ParallelizationMode
+) -> None:
+    first, second = RemedyThirdBThirdMidConsumer, RemedyThirdBThirdConsumer
     session = _side_path_prepare(
         SidePathArrowP,
         False,
@@ -1718,44 +1716,30 @@ def test_two_consumers_of_one_polymorphic_link_layout_return_their_values_togeth
 
     results = session.run(parallelization_modes={mode})
 
-    assert _side_path_values(results, first) == first_expected
-    assert _side_path_values(results, second) == second_expected
+    assert _side_path_values(results, first) == [[117, 228, 339]]
+    assert _side_path_values(results, second) == [[18, 30, 42]]
 
 
 RemedyArrowPairConsumer = _remedy_sum_consumer("RemedyArrowPairConsumer", PyArrowTable, ("mlg_a1", "mlg_b"))
 
 
-@pytest.mark.parametrize(
-    "mode",
-    [
-        ParallelizationMode.SYNC,
-        ParallelizationMode.THREADING,
-        # Spawning workers and moving data over the flight server exceeds the suite-wide timeout budget.
-        pytest.param(ParallelizationMode.MULTIPROCESSING, marks=pytest.mark.timeout(60)),
-    ],
-)
 @pytest.mark.parametrize("swap_link_sides", [False, True], ids=["a_b", "b_a"])
-def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_return_their_values_together(
-    flight_server: Any, swap_link_sides: bool, mode: ParallelizationMode
-) -> None:
-    server = flight_server if mode == ParallelizationMode.MULTIPROCESSING else None
+def test_a_direct_consumer_and_a_pair_consumer_on_the_framework_of_b_are_rejected(swap_link_sides: bool) -> None:
     first, second = RemedyArrowSameBConsumer, RemedyArrowPairConsumer
-    repeats = 4 if mode == ParallelizationMode.THREADING else 1
-    for _ in range(repeats):
-        session = _side_path_prepare(
+    with pytest.raises(ValueError) as exc_info:
+        _side_path_prepare(
             SidePathArrowP,
             False,
             swap_link_sides,
-            mode,
+            ParallelizationMode.SYNC,
             consumer=first,
             features=[first.get_class_name(), second.get_class_name()],
             **{**_REMEDY_KWARGS, "root_b": MultiLinkRootBSame, "extra_groups": {RemedyRootA1, second}},
         )
 
-        results = session.run(parallelization_modes={mode}, flight_server=server)
-
-        assert _side_path_values(results, first) == [[18, 30, 42]]
-        assert _side_path_values(results, second) == [[17, 28, 39]]
+    message = str(exc_info.value)
+    assert first.get_class_name() in message
+    assert second.get_class_name() in message
 
 
 class RemedyRootBArrowX(RemedyRootBThird):

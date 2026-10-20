@@ -103,6 +103,16 @@ def star_mixed_joins_reason(
     )
 
 
+def star_missed_join_reason(consumer: str, other: str, shared: str, joined: str) -> str:
+    """Reason for a consumer skipping a join of a shared group that another consumer reads, without final period."""
+    return (
+        f"{consumer} reads a join into {shared} that {other} also reads, but not {other}'s join of {shared} with "
+        f"{joined}: {consumer} would see the rows that join drops or adds.\n"
+        f"Resolution: request {consumer} and {other} in separate runs, or make the join of {shared} with {joined} "
+        f"a left or right link that keeps {shared}"
+    )
+
+
 def _nearest(uuids_by_distance: dict[int, set[UUID]]) -> frozenset[UUID]:
     """The minimum-distance bucket, or an empty side."""
     if not uuids_by_distance:

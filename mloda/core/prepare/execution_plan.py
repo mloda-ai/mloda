@@ -44,6 +44,7 @@ from mloda.core.prepare.resolved_join_builder import (
     wire_join_dependencies,
 )
 from mloda.core.prepare.validate_resolved_join import (
+    raise_on_consumer_missing_a_star_join,
     raise_on_dishonest_join_record,
     raise_on_join_star_keeping_two_groups,
     raise_on_orphaned_join_source,
@@ -227,6 +228,7 @@ class ExecutionPlan:
         raise_on_dishonest_join_record(self.resolved_join_plan, join_steps, graph)
         if validate:
             raise_on_join_star_keeping_two_groups(self.resolved_join_plan, graph)
+            raise_on_consumer_missing_a_star_join(self.resolved_join_plan, graph)
             raise_on_orphaned_join_source(self.resolved_join_plan)
 
         self.execution_plan = self.add_tfs(fw_execution_plan, graph)

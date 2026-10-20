@@ -58,6 +58,10 @@ tests/
 ├── test_examples/                  # Tests for example code
 │   ├── mloda_basics/               # Tests for basic mloda examples
 │   └── sklearn_integration/        # Tests for the sklearn integration example
+├── test_interfaces/                # Tests for the MCP server, the CLI and their service layer
+│   ├── cli/                        # Tests for the `mloda` command
+│   ├── mcp/                        # Tests for the MCP adapter; stdio smoke tests run via `tox -e mcp`
+│   └── service/                    # Tests for settings, requests, catalog, planner and runner
 └── test_plugins/                   # Tests for plugin implementations
     ├── api/                        # Tests for plugin-facing API
     ├── compute_framework/          # Tests for compute framework plugins

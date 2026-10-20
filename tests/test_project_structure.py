@@ -311,6 +311,22 @@ class TestToxConfig:
         ]
         assert not overridden, f"[testenv:lint] must inherit the full [testenv] install, overrides: {overridden}"
 
+    def test_mcp_env_fails_when_its_smoke_test_is_skipped(self) -> None:
+        """The mcp env runs one stdio smoke test; a failed `mcp` import must not skip it into a green run."""
+        parser = self._tox_parser()
+        sections = [name for name in parser.sections() if name.replace(" ", "") == "testenv:mcp"]
+        assert len(sections) == 1, f"tox.ini needs exactly one [testenv:mcp] section: {parser.sections()}"
+        setenv: dict[str, str] = {}
+        for line in parser.get(sections[0], "setenv", fallback="").splitlines():
+            key, sep, value = line.partition("=")
+            if sep:
+                setenv[key.strip()] = value.strip()
+        defaults = {key: re.sub(r"^\{env:.*:([^:}]*)\}$", r"\1", value) for key, value in setenv.items()}
+        assert defaults.get("CHECK_SKIP_COUNT") == "1", f"[testenv:mcp] must default CHECK_SKIP_COUNT to 1: {setenv}"
+        assert defaults.get("EXPECTED_SKIP_COUNT") == "0", (
+            f"[testenv:mcp] must default EXPECTED_SKIP_COUNT to 0: {setenv}"
+        )
+
     def test_ci_runs_lint_env(self) -> None:
         jobs = self._workflow_jobs("ci.yaml")
         assert "lint" in jobs, "ci.yaml needs a lint job"

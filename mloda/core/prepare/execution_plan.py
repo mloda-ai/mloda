@@ -1349,7 +1349,7 @@ Available join types:
             ] += 1
 
         def own_consumers(j: JoinStep) -> frozenset[UUID] | None:
-            """The consumers a join may redirect: its split part, or its record's when a twin join has the same sides."""
+            """The consumers a join may redirect: its split part, or its record's when a twin join shares its sides."""
             twins = twin_count[
                 (j.link.uuid, frozenset(j.destination_framework_uuids), frozenset(j.source_framework_uuids))
             ]
@@ -1469,7 +1469,6 @@ Available join types:
         routed_joins: set[UUID] = set()
 
         def chain_join(ep: JoinStep) -> None:
-            """Merge into the group's hop of the destination frame, reading the source from its hop when it has one."""
             group = chain_of[ep.uuid]
             (dest_frame,), (source_frame,) = destination_frames[ep.uuid], source_frames[ep.uuid]
             hop = chain_hops.get((group, dest_frame))

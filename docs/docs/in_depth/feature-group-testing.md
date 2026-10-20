@@ -67,10 +67,15 @@ options = Options(context={
 })
 assert PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", options)
 
-# Assert the negative too, or the test passes on a name the group never claims
-assert not PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", Options(context={
-    "aggregation_type": "not_an_aggregation"
-}))
+# Assert the negative too, or the test passes on a name the group never claims;
+# collect_match_rejections captures the reason the group recorded
+from mloda.provider import collect_match_rejections
+
+with collect_match_rejections() as reasons:
+    assert not PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", Options(context={
+        "aggregation_type": "not_an_aggregation"
+    }))
+assert "not_an_aggregation" in reasons["PandasAggregatedFeatureGroup"].reason
 ```
 
 ### 5. Integration with mloda API

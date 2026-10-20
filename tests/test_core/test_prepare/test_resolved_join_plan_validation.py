@@ -1,6 +1,7 @@
 """A parent read as the source of two joins that share a consumer, with no join writing back into
 that parent, leaves two branches that can never reunite."""
 
+from dataclasses import replace
 from typing import Any, NamedTuple
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.graph import Graph
 from mloda.core.prepare.graph.properties import NodeProperties
 from mloda.core.prepare.resolve_links import LinkTrekker
+from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
 from mloda.core.prepare.validate_resolved_join import (
     raise_on_consumer_missing_a_star_join,
     raise_on_join_star_keeping_two_groups,
@@ -542,23 +544,76 @@ def _star_missed_join_kept(missed_kind: str) -> Any:
     return make_links
 
 
+class StarThirdConsumer(FeatureGroup):
+    """A third consumer, sorting after the others."""
+
+
+def _shared_record_plan(make_links: Any) -> tuple[ResolvedJoinPlan, Graph]:
+    """The star plan with one record per link, the consumers of a link's records merged."""
+    plan, graph = _build_star_plan(make_links, partial_consumer=True)
+    merged: dict[Any, ResolvedJoin] = {}
+    for record in plan.resolved_join_plan.records:
+        key = record.link_uuid
+        merged[key] = (
+            replace(merged[key], consumers=merged[key].consumers | record.consumers) if key in merged else record
+        )
+    return ResolvedJoinPlan(records=tuple(merged.values()), declined=plan.resolved_join_plan.declined), graph
+
+
+def _consumer_uuids(graph: Graph) -> dict[str, Any]:
+    return {node.feature_group_class.get_class_name(): uuid for uuid, node in graph.get_nodes().items()}
+
+
 def test_raise_on_consumer_missing_a_star_join_names_both_consumers_and_the_hub() -> None:
-    plan, graph = _build_star_plan(_star_missed_join_kept("inner"), partial_consumer=True)
+    plan, graph = _shared_record_plan(_star_missed_join_kept("inner"))
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_consumer_missing_a_star_join(plan.resolved_join_plan, graph)
+        raise_on_consumer_missing_a_star_join(plan, graph)
 
     message = str(excinfo.value)
     for name in ("StarOtherConsumer", "StarConsumer", "StarHub"):
         assert name in message, f"{name} must be named; got: {message}"
     assert "Resolution:" in message
+    assert "left or right" in message
+
+
+def test_raise_on_consumer_missing_a_star_join_does_not_offer_a_left_or_right_link_for_outer_joins() -> None:
+    plan, graph = _shared_record_plan(_star_of("outer", False, "outer", False))
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_consumer_missing_a_star_join(plan, graph)
+
+    message = str(excinfo.value)
+    assert "separate runs" in message
+    assert "left or right" not in message
+
+
+def test_raise_on_consumer_missing_a_star_join_pairs_the_consumer_with_one_that_reads_a_join_it_reads() -> None:
+    plan, graph = _shared_record_plan(_star_missed_join_kept("inner"))
+    third = feature("star_third_consumer", STAR_SECOND_CFW)
+    graph.add_node(third.uuid, NodeProperties(third, StarThirdConsumer))
+    uuids = _consumer_uuids(graph)
+    shared_first, shared_second = uuids["StarConsumer"], uuids["StarOtherConsumer"]
+    # StarOtherConsumer reads the first join only, StarConsumer the second only, the third consumer both.
+    plan = ResolvedJoinPlan(
+        records=(
+            replace(plan.records[0], consumers=frozenset({shared_second, third.uuid})),
+            replace(plan.records[1], consumers=frozenset({shared_first, third.uuid})),
+        ),
+        declined=plan.declined,
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        raise_on_consumer_missing_a_star_join(plan, graph)
+
+    assert "and StarThirdConsumer in separate runs" in str(excinfo.value)
 
 
 def test_raise_on_consumer_missing_a_star_join_accepts_a_missed_join_keeping_the_shared_group() -> None:
-    plan, graph = _build_star_plan(_star_missed_join_kept("right"), partial_consumer=True)
+    plan, graph = _shared_record_plan(_star_missed_join_kept("right"))
 
-    assert len(plan.resolved_join_plan.records) == 2
-    raise_on_consumer_missing_a_star_join(plan.resolved_join_plan, graph)
+    assert len(plan.records) == 2
+    raise_on_consumer_missing_a_star_join(plan, graph)
 
 
 def test_raise_on_consumer_missing_a_star_join_accepts_a_plan_with_no_records() -> None:

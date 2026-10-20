@@ -9,7 +9,13 @@ class FeatureValidator:
         for subclass in available_frameworks:
             if framework_name == subclass.get_class_name():
                 return subclass
-        raise ValueError(f"Compute framework via {source} {framework_name} not found.")
+        available = sorted(subclass.get_class_name() for subclass in available_frameworks)
+        if source == "options":
+            raise ValueError(
+                "Compute framework via options not found: no available compute framework has that class name; "
+                f"available: {available}"
+            )
+        raise ValueError(f"Compute framework via {source} {framework_name} not found; available: {available}")
 
     @staticmethod
     def validate_compute_frameworks_resolved(

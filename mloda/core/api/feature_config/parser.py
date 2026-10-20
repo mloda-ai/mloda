@@ -8,6 +8,8 @@ import json
 from mloda.core.api.feature_config.models import (
     FeatureConfig,
     FeatureConfigItem,
+    describe_offender,
+    error_prefix,
     feature_config_error_prefix,
     validate_top_level_in_features,
 )
@@ -30,17 +32,21 @@ def parse_json(config_str: str) -> list[FeatureConfigItem]:
     result: list[FeatureConfigItem] = []
     for position, item in enumerate(data, start=1):
         if isinstance(item, str):
+            if not item.strip():
+                raise ValueError(
+                    f"{feature_config_error_prefix(position, None)}: a feature name string must be non-empty, "
+                    f"got {describe_offender(item)}"
+                )
             result.append(item)
         elif isinstance(item, dict):
-            try:
+            with error_prefix(feature_config_error_prefix(position, item.get("name"))):
                 config = FeatureConfig(**item)
                 validate_top_level_in_features(config.in_features)
-            except (TypeError, ValueError) as exc:
-                raise type(exc)(f"{feature_config_error_prefix(position, item.get('name'))}: {exc}") from exc
             result.append(config)
         else:
             raise ValueError(
-                f"feature config item {position}: must be a feature name string or an object, got {type(item).__name__}"
+                f"{feature_config_error_prefix(position, None)}: must be a feature name string or an object, "
+                f"got {type(item).__name__}"
             )
 
     return result

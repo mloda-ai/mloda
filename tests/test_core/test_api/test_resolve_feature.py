@@ -731,9 +731,10 @@ class TestResolveFeatureIsNonThrowing:
         assert isinstance(result, ResolvedFeature)
         assert result.feature_group is None
         assert result.error is not None
-        assert "NoSuchFrameworkXYZ" in result.error, (
+        assert "Compute framework via options not found" in result.error, (
             f"Error must surface the unknown compute framework reason, got: {result.error}"
         )
+        assert "NoSuchFrameworkXYZ" not in result.error
 
 
 class TestResolveFeatureOptionsNoneEqualsEmpty:

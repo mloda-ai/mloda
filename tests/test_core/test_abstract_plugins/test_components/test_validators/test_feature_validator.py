@@ -77,6 +77,34 @@ class TestValidateAndResolveComputeFramework:
         # Verify error message includes the source
         assert "options" in str(exc_info.value)
 
+    def test_options_source_does_not_echo_value_and_lists_available(self) -> None:
+        """Options-sourced errors omit the given value and list the available names."""
+        available_frameworks = get_all_subclasses(ComputeFramework)
+        secret_name = "SecretFrameworkValue123"  # nosec B105
+
+        with pytest.raises(ValueError) as exc_info:
+            FeatureValidator.validate_and_resolve_compute_framework(
+                framework_name=secret_name, available_frameworks=available_frameworks, source="options"
+            )
+
+        message = str(exc_info.value)
+        assert secret_name not in message
+        assert "Compute framework via options not found: no available compute framework has that class name" in message
+        names = sorted(f.get_class_name() for f in available_frameworks)
+        assert f"available: {names}" in message
+
+    def test_parameter_source_keeps_name_and_lists_available(self) -> None:
+        """Parameter-sourced errors keep the given name and list the available names."""
+        available_frameworks = get_all_subclasses(ComputeFramework)
+
+        with pytest.raises(ValueError) as exc_info:
+            FeatureValidator.validate_and_resolve_compute_framework(
+                framework_name="GivenName", available_frameworks=available_frameworks, source="parameter"
+            )
+
+        names = sorted(f.get_class_name() for f in available_frameworks)
+        assert f"Compute framework via parameter GivenName not found; available: {names}" in str(exc_info.value)
+
     def test_case_sensitive_framework_matching(self) -> None:
         """Should match framework names case-sensitively."""
         available_frameworks = get_all_subclasses(ComputeFramework)

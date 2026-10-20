@@ -86,6 +86,10 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         self.own_path = self._make("own_db", {OWN_TABLE: {self.present_column: [1, 2]}})
         self.expected_source = f"{self.identity_of(self.own_path)}::{OWN_TABLE}"
 
+    @property
+    def unpointed_source(self) -> str:
+        return self.identity_of(self.own_path)
+
     def own_pointer(self) -> Any:
         return self.make_credential(self.own_path)
 
@@ -246,6 +250,21 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert "db_b" in message
         assert SECRET not in message
 
+    def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
+        super().test_unpointed_missing_column_declines_with_a_rejection()
+        result = self._evaluate(Feature(self.missing_column), self.own_dac())
+        reason = result.eliminations[self.feature_group_class].reason
+        assert self.expected_source not in reason
+        assert OWN_TABLE not in reason
+
+    def test_db_unpointed_missing_column_over_two_tables_names_the_identity_once_and_no_table(self) -> None:
+        path = self._make("two_tbl_db", {"toyfmt_tbl_alpha": {"toyfmt_a": [1]}, "toyfmt_tbl_beta": {"toyfmt_b": [2]}})
+        result = self._evaluate(Feature(self.missing_column), self._dac_of(path))
+        reason = result.eliminations[self.feature_group_class].reason
+        assert reason.count(self.identity_of(path)) == 1
+        assert "toyfmt_tbl_alpha" not in reason
+        assert "toyfmt_tbl_beta" not in reason
+
     def test_db_a_preset_table_name_restricts_the_lookup_to_that_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
         path = self._make("preset", {"table_a": {self.present_column: [1]}, "table_b": {self.present_column: [2]}})
         dac = DataAccessCollection(credentials={"preset_handle": self.make_credential(path, table_name="table_b")})
@@ -260,15 +279,19 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert spy.table_columns == ["table_b"]
 
     def test_db_a_preset_table_name_without_the_column_declines_and_aborts_when_pointed(self) -> None:
-        path = self._make("preset_lacks", {"table_a": {"toyfmt_other_a": [1]}, "table_b": {self.present_column: [2]}})
-        credential = self.make_credential(path, table_name="table_a")
+        path = self._make(
+            "preset_lacks", {"toyfmt_tbl_lacks": {"toyfmt_other_a": [1]}, "toyfmt_tbl_has": {self.present_column: [2]}}
+        )
+        credential = self.make_credential(path, table_name="toyfmt_tbl_lacks")
         dac = DataAccessCollection(credentials={"preset_handle": credential})
         result = self._evaluate(Feature(self.present_column), dac)
         assert self.feature_group_class not in result.identified
-        assert self._source_of(path, "table_a") in result.eliminations[self.feature_group_class].reason
+        reason = result.eliminations[self.feature_group_class].reason
+        assert self.identity_of(path) in reason
+        assert "toyfmt_tbl_lacks" not in reason
         with pytest.raises(ValueError) as exc_info:
             self._resolve(self._pointed(self.present_column, credential), None)
-        assert self._source_of(path, "table_a") in str(exc_info.value)
+        assert self._source_of(path, "toyfmt_tbl_lacks") in str(exc_info.value)
 
     def test_db_a_preset_table_name_missing_from_the_catalog_declines_and_aborts_when_pointed(
         self, monkeypatch: pytest.MonkeyPatch
@@ -278,7 +301,9 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         spy = self._spy(monkeypatch)
         result = self._evaluate(Feature(self.present_column), dac)
         assert self.feature_group_class not in result.identified
-        assert "toyfmt_no_such_table" in result.eliminations[self.feature_group_class].reason
+        reason = result.eliminations[self.feature_group_class].reason
+        assert self.identity_of(self.own_path) in reason
+        assert "toyfmt_no_such_table" not in reason
         with pytest.raises(ValueError, match="toyfmt_no_such_table"):
             self._resolve(self._pointed(self.present_column, credential), None)
         assert spy.list_tables >= 1

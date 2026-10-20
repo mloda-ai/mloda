@@ -99,6 +99,11 @@ class FormatFeatureGroupTestMixin:
     load_framework: type[ComputeFramework] = PyArrowTable
     context_options: ClassVar[dict[str, Any]] = {}
 
+    @property
+    def unpointed_source(self) -> str:
+        """What an unpointed missing-column reason names for the source (default: expected_source)."""
+        return self.expected_source
+
     def own_dac(self) -> DataAccessCollection:
         """A fresh collection holding a source of the group's own kind with present_column."""
         raise NotImplementedError
@@ -337,13 +342,13 @@ class FormatFeatureGroupTestMixin:
         result = self._evaluate(Feature(self.missing_column), self.own_dac())
         assert self.feature_group_class not in result.identified
         reason = result.eliminations[self.feature_group_class].reason
-        assert self.expected_source in reason
+        assert self.unpointed_source in reason
         assert self.missing_column in reason
 
     def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
         unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
         reason = unpointed.eliminations[self.feature_group_class].reason
-        assert self.expected_source in reason
+        assert self.unpointed_source in reason
         assert self.present_column not in reason
 
         dac = self.own_dac()
@@ -377,7 +382,7 @@ class FormatFeatureGroupTestMixin:
         assert not self._claims(Feature(chained), self.own_dac())
         assert not self.feature_group_class.match_feature_group_criteria(chained, self._options(), self.own_dac())
         reason = rejection_window[self._group_name()].reason
-        assert self.expected_source in reason
+        assert self.unpointed_source in reason
         assert chained in reason
         assert not self._claims(Feature(separated), self.own_dac())
 

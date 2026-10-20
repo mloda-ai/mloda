@@ -282,8 +282,12 @@ class ReadDBFG(FormatFeatureGroup):
             return None
         catalog, reason = cls._catalog(access.credentials)
         if catalog is not None and access.table is not None and access.table not in catalog:
-            return f"table '{access.table}' does not exist"
+            return f"its preset table does not exist{REASON_DETAIL}{access.table!r}"
         return reason
+
+    @classmethod
+    def _hidden_source(cls, match: SourceMatch) -> str:
+        return cls.database_identity(match.access.credentials)
 
     @classmethod
     def ambiguity_fix(

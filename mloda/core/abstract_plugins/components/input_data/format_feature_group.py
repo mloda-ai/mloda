@@ -151,6 +151,11 @@ class FormatFeatureGroup(FeatureGroup):
         return cls.unknown_columns_reason(match)
 
     @classmethod
+    def _hidden_source(cls, match: SourceMatch) -> str:
+        """The source label shown to a user who did not point at the group."""
+        return match.source
+
+    @classmethod
     def has_column(cls, match: SourceMatch, column: str) -> bool | None:
         """Whether the source has the column, None when unknown."""
         columns = cls.columns(match)
@@ -407,14 +412,21 @@ class FormatFeatureGroup(FeatureGroup):
             items = sorted(seen.items())
             known = {source: cls.columns(match) for source, match in items}
             parts: list[str] = []
-            for source, match in items[:_MAX_DESCRIBED]:
+            if show_columns:
+                described = [(source, source, match) for source, match in items]
+            else:
+                labelled: dict[str, tuple[str, SourceMatch]] = {}
+                for source, match in items:
+                    labelled.setdefault(cls._hidden_source(match), (source, match))
+                described = [(label, source, match) for label, (source, match) in labelled.items()]
+            for label, source, match in described[:_MAX_DESCRIBED]:
                 if known[source] is not None:
-                    parts.append(f"{source} has columns {_listed(known[source])}" if show_columns else source)
+                    parts.append(f"{label} has columns {_listed(known[source])}" if show_columns else label)
                 else:
                     why = cls.unknown_columns_reason(match) if show_columns else cls._hidden_reason(match)
-                    parts.append(source if why is None else f"{source}: {_clip(scrub_credentials(why), _MAX_REASON)}")
-            if len(items) > _MAX_DESCRIBED:
-                parts.append(f"and {len(items) - _MAX_DESCRIBED} more")
+                    parts.append(label if why is None else f"{label}: {_clip(scrub_credentials(why), _MAX_REASON)}")
+            if len(described) > _MAX_DESCRIBED:
+                parts.append(f"and {len(described) - _MAX_DESCRIBED} more")
             name = cls.get_class_name()
             head = (
                 f"column '{base_name}' is in none of the sources of {name}"

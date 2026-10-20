@@ -5,7 +5,9 @@ import pickle  # nosec B403
 import pstats
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
+import sys
 from typing import Any, Callable, Iterable, NamedTuple
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -1630,9 +1632,21 @@ def _independent_pairs(count: int, shape: str) -> IndependentPairs:
 
 
 def _total_calls(work: Callable[..., Any], *args: Any) -> int:
-    profiler = cProfile.Profile()
-    profiler.runcall(work, *args)
-    return int(pstats.Stats(profiler).total_calls)  # type: ignore[attr-defined]
+    """Count function calls and line execution steps, ensuring comprehension iterations are captured."""
+    count = 0
+
+    def tracer(frame: Any, event: str, arg: Any) -> Any:
+        nonlocal count
+        if event in ("call", "line"):
+            count += 1
+        return tracer
+
+    sys.settrace(tracer)
+    try:
+        work(*args)
+    finally:
+        sys.settrace(None)
+    return count
 
 
 def _planning_calls(count: int, shape: str) -> tuple[int, IndependentPairs]:
@@ -1706,6 +1720,64 @@ def test_planning_work_grows_linearly_with_independent_joins(shape: str) -> None
     for link in pairs.links:
         assert len(_records(planned.plan, link)) == 1
     assert all(len(step.required_uuids) <= 4 for step in join_steps)
+
+
+def _build_independent_engine(count: int) -> tuple[Engine, Features]:
+    links = set()
+    features = []
+    groups = set()
+    for i in range(count):
+        left_name = f"eng_left_{i}"
+        right_name = f"eng_right_{i}"
+        left_fg = type(f"EngLeft{i}", (FeatureGroup,), {
+            "input_data": classmethod(lambda cls, n=left_name: DataCreator(supports_features={n})),
+            "compute_framework_rule": classmethod(lambda cls: {PythonDictFramework}),
+        })
+        right_fg = type(f"EngRight{i}", (FeatureGroup,), {
+            "input_data": classmethod(lambda cls, n=right_name: DataCreator(supports_features={n})),
+            "compute_framework_rule": classmethod(lambda cls: {PythonDictFramework}),
+        })
+        child_fg = type(f"EngChild{i}", (FeatureGroup,), {
+            "input_features": lambda self, opts, fn, l=left_name, r=right_name: {Feature(l), Feature(r)},
+            "compute_framework_rule": classmethod(lambda cls: {PythonDictFramework}),
+        })
+        link = Link.inner(
+            JoinSpec(left_fg, Index((f"left_key_{i}",))),
+            JoinSpec(right_fg, Index((f"right_key_{i}",))),
+        )
+        links.add(link)
+        features.append(Feature(child_fg.get_class_name()))
+        groups.update({left_fg, right_fg, child_fg})
+
+    collector = PluginCollector.enabled_feature_groups(groups)
+    feat_coll = Features(features)
+
+    with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
+        engine = Engine(feat_coll, {PythonDictFramework}, links, plugin_collector=collector)
+
+    # Pre-run feature intake once so the planning passes from graph build through link resolution are measured.
+    engine.setup_features_recursion(feat_coll)
+    engine.setup_features_recursion = lambda f: None  # type: ignore[assignment]
+    return engine, feat_coll
+
+
+def test_engine_planning_work_grows_linearly_with_independent_joins() -> None:
+    """Verifies that planning passes in Engine.create_setup_execution_plan grow linearly."""
+    warm_eng, warm_f = _build_independent_engine(2)
+    warm_eng.create_setup_execution_plan(warm_f)
+
+    base_count = 8
+    eng_base, f_base = _build_independent_engine(base_count)
+    steps_at_base = _total_calls(eng_base.create_setup_execution_plan, f_base)
+
+    eng_double, f_double = _build_independent_engine(2 * base_count)
+    steps_at_double = _total_calls(eng_double.create_setup_execution_plan, f_double)
+
+    ratio = steps_at_double / steps_at_base
+    assert steps_at_double < MAX_CALL_RATIO_FOR_DOUBLED_JOINS * steps_at_base, (
+        f"steps at {base_count} joins: {steps_at_base}, at {2 * base_count}: {steps_at_double}, ratio {ratio:.2f}, "
+        f"bound {MAX_CALL_RATIO_FOR_DOUBLED_JOINS} (linear is 2, quadratic is 4)"
+    )
 
 
 def _fg_step(plan: ExecutionPlan, uuid: UUID) -> FeatureGroupStep:

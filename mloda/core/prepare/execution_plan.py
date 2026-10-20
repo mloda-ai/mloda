@@ -1387,18 +1387,32 @@ Available join types:
         record_consumers = frozenset().union(*consumers_by_token.values())
         consumer_ancestors = set().union(*(graph.parent_to_children_mapping.get(c, set()) for c in record_consumers))
         all_carriers = set().union(*(j.carriers for j in left_join_frameworks))
-        framework_of_step = {ep.uuid: ep.compute_framework for ep in execution_plan if isinstance(ep, FeatureGroupStep)}
+        excluded_readers = record_consumers | consumer_ancestors | join_side_uuids | all_carriers
+        # A step hopped into a reader that also reads a join consumer is ordered by that hop; awaiting would cycle.
+        hopped_excluded: set[UUID] = set()
+        for reader in execution_plan:
+            if not isinstance(reader, FeatureGroupStep) or not any(
+                not graph.parent_to_children_mapping.get(u, set()).isdisjoint(record_consumers)
+                for u in reader.get_uuids()
+            ):
+                continue
+            for parent in reader.required_uuids:
+                parent_step = steps_by_uuid.get(owning_step_of.get(parent, parent))
+                if (
+                    isinstance(parent_step, FeatureGroupStep)
+                    and parent_step.compute_framework is not reader.compute_framework
+                ):
+                    hopped_excluded |= parent_step.get_uuids()
+        excluded_readers |= hopped_excluded
         for step in execution_plan:
             if not isinstance(step, FeatureGroupStep) or not joins_on_frame:
                 continue
             own = step.get_uuids()
-            if own & (record_consumers | consumer_ancestors | join_side_uuids | all_carriers):
+            if not own.isdisjoint(excluded_readers):
                 continue
-            if any(graph.parent_to_children_mapping.get(u, set()) & record_consumers for u in own):
+            if any(not graph.parent_to_children_mapping.get(u, set()).isdisjoint(record_consumers) for u in own):
                 continue
             read_frames = frames_of(step.required_uuids)
-            if any(framework_of_step.get(f) is not step.compute_framework for f in read_frames):
-                continue
             for js in {j.uuid: j for frame in read_frames for j in joins_on_frame.get(frame, ())}.values():
                 if js.link.jointype in (JoinType.APPEND, JoinType.UNION):
                     continue
@@ -1464,18 +1478,19 @@ Available join types:
                 raise ValueError(self._shared_frame_error(graph, *chain_errors[chain_id]))
             js.shared_source = js.shared_destination = False
             chain_of[js.uuid] = chain_id
-        chain_hops: dict[tuple[int, UUID], TransformFrameworkStep] = {}
+        chain_hops: dict[int, dict[UUID, TransformFrameworkStep]] = defaultdict(dict)
         last_writer: dict[UUID, UUID] = {}
         routed_joins: set[UUID] = set()
 
         def chain_join(ep: JoinStep) -> None:
             group = chain_of[ep.uuid]
+            group_hops = chain_hops[group]
             (dest_frame,), (source_frame,) = destination_frames[ep.uuid], source_frames[ep.uuid]
-            hop = chain_hops.get((group, dest_frame))
+            hop = group_hops.get(dest_frame)
             if hop is None:
-                hop = chain_hops[(group, dest_frame)] = self._destination_hop(ep, graph, owning_step_of, True)
+                hop = group_hops[dest_frame] = self._destination_hop(ep, graph, owning_step_of, True)
                 new_execution_plan.append(hop)
-            source_hop = chain_hops.get((group, source_frame))
+            source_hop = group_hops.get(source_frame)
             same_framework = ep.destination_framework == ep.source_framework
             if source_hop is not None and (not same_framework or source_hop.to_framework != ep.source_framework):
                 raise ValueError(self._shared_frame_error(graph, *chain_errors[group]))
@@ -1490,15 +1505,15 @@ Available join types:
                 routed_joins.add(ep.uuid)
                 source_hop.copy_readers |= {ep.uuid}
                 source_hop.read_by_join = True
-                for key, mapped in chain_hops.items():
+                for key, mapped in group_hops.items():
                     if mapped is source_hop:
-                        chain_hops[key] = hop
+                        group_hops[key] = hop
             else:
                 ep.shared_source = source_frame in group_touched[group]
                 if same_framework:
-                    chain_hops[(group, source_frame)] = hop
+                    group_hops[source_frame] = hop
             readers = self._redirect_consumers_to_hop(ep, hop, execution_plan, own_consumers(ep), required_by)
-            for other in {id(h): h for h in (*chain_hops.values(), source_hop) if h is not None}.values():
+            for other in {id(h): h for h in (*group_hops.values(), source_hop) if h is not None}.values():
                 if other is not hop:
                     other.copy_readers -= readers
 
@@ -2414,33 +2429,40 @@ Available join types:
             for component, varying_side, beside_carried, is_split in parts
         ]
 
-    @staticmethod
     def _split_by_star(
-        link: Link, children: set[UUID], child_links: Mapping[UUID, set[LinkFrameworkTrekker]]
+        self, link: Link, children: set[UUID], child_links: Mapping[UUID, set[LinkFrameworkTrekker]]
     ) -> list[set[UUID]]:
-        """Group children by the links of their star: those joined with `link` through shared declared groups."""
+        """Group children by the links of their star; children computed by one step stay in one part."""
         if link.jointype in (JoinType.APPEND, JoinType.UNION):
             return [children]
+        step_index = self._feature_set_index()
+        stars: dict[UUID, set[UUID]] = {}
+        for child in sorted(children):
+            by_group: dict[type[FeatureGroup], list[Link]] = defaultdict(list)
+            for other in (link, *(t[0] for t in child_links.get(child, ()))):
+                if other is link or (
+                    other.jointype not in (JoinType.APPEND, JoinType.UNION)
+                    and other.left_feature_group is not other.right_feature_group
+                ):
+                    by_group[other.left_feature_group].append(other)
+                    by_group[other.right_feature_group].append(other)
+            star: set[UUID] = {link.uuid}
+            seen = {link.left_feature_group, link.right_feature_group}
+            queue = list(seen)
+            while queue:
+                for other in by_group[queue.pop()]:
+                    star.add(other.uuid)
+                    for group in (other.left_feature_group, other.right_feature_group):
+                        if group not in seen:
+                            seen.add(group)
+                            queue.append(group)
+            stars[child] = star
+        by_step: dict[int, set[UUID]] = {}
+        for child in sorted(children):
+            by_step.setdefault(step_index[child][-1], set()).update(stars[child])
         by_star: dict[frozenset[UUID], set[UUID]] = {}
-        for child in children:
-            read = {
-                t[0].uuid: t[0]
-                for t in child_links.get(child, ())
-                if t[0].jointype not in (JoinType.APPEND, JoinType.UNION)
-                and t[0].left_feature_group is not t[0].right_feature_group
-            }
-            read[link.uuid] = link
-            groups = {link.left_feature_group, link.right_feature_group}
-            star: set[UUID] = set()
-            grew = True
-            while grew:
-                grew = False
-                for uuid, other in read.items():
-                    if uuid not in star and {other.left_feature_group, other.right_feature_group} & groups:
-                        star.add(uuid)
-                        groups |= {other.left_feature_group, other.right_feature_group}
-                        grew = True
-            by_star.setdefault(frozenset(star), set()).add(child)
+        for child in sorted(children):
+            by_star.setdefault(frozenset(by_step[step_index[child][-1]]), set()).add(child)
         return list(by_star.values())
 
     def _split_by_carrier_frame(

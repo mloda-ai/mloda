@@ -10,6 +10,7 @@ cell values.
 
 from typing import Any
 
+import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 
@@ -604,7 +605,11 @@ class HubRightCDerivedConsumer(FeatureGroup):
 
 def _rows(results: list[Any], name: str, nullable: bool = False) -> list[Any]:
     """Sorted values of the one result holding `name`; nulls sort last when `nullable`."""
-    (values,) = [r[name].to_pylist() for r in results if name in r.column_names]
+    (values,) = [
+        r[name].to_pylist() if isinstance(r, pa.Table) else r[name].tolist()
+        for r in results
+        if name in (r.column_names if isinstance(r, pa.Table) else r.columns)
+    ]
     return sorted(values, key=lambda v: (v is None, 0 if v is None else v)) if nullable else sorted(values)
 
 
@@ -712,7 +717,49 @@ class TestTwoConsumersReadingDifferentSpokes:
             assert got[HubRightCDerivedConsumer.get_class_name()] == [2007, 3008]
 
 
+_PARTIAL_AND_FULL_COLUMNS = {"PartialStarSum": ["hr_a", "hr_b"], "FullStarSum": ["hr_a", "hr_b", "hr_c"]}
+
+
+class PartialAndFullStarSums(FeatureGroup):
+    """One group serving a feature that reads part of the star and one that reads all of it."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(_PARTIAL_AND_FULL_COLUMNS)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(c) for c in _PARTIAL_AND_FULL_COLUMNS[str(feature_name)]}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for name in features.get_all_names():
+            total = pc.fill_null(data[_PARTIAL_AND_FULL_COLUMNS[name][0]], 0)
+            for column in _PARTIAL_AND_FULL_COLUMNS[name][1:]:
+                total = pc.add(total, pc.fill_null(data[column], 0))
+            data = data.append_column(name, total)
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
 class TestAConsumerReadingPartOfAStar:
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    def test_one_step_serving_a_partial_and_a_full_star_feature_is_rejected(self, hub_right: bool) -> None:
+        groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, HubRightCArrow, PartialAndFullStarSums}
+
+        with pytest.raises(
+            ValueError, match=r"(?s)PartialAndFullStarSums.*HubRightB|HubRightB.*PartialAndFullStarSums"
+        ):
+            mloda.run_all(
+                [Feature(name=name) for name in _PARTIAL_AND_FULL_COLUMNS],
+                links=_star_links(HubRightCArrow, hub_right),
+                compute_frameworks=[PyArrowTable],
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(groups),
+            )
+
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
     @pytest.mark.parametrize("spoke_c", _SPOKES, ids=_SPOKE_IDS)
@@ -855,12 +902,35 @@ class OnlyB(FeatureGroup):
         return {PyArrowTable}
 
 
+class OnlyBPandas(FeatureGroup):
+    """Reads hr_b only, on pandas."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data[cls.get_class_name()] = data["hr_b"]
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
 class TestAStepReadingAJoinSideWithoutALink:
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
-    @pytest.mark.parametrize("hub_right", [True, False], ids=["hub_right", "hub_left"])
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
     @pytest.mark.parametrize("shape", ["one_join", "star"])
+    @pytest.mark.parametrize("bystander", [OnlyB, OnlyBPandas], ids=["pyarrow", "pandas"])
+    @pytest.mark.parametrize("bystander_first", [True, False], ids=["bystander_first", "joiner_first"])
     def test_a_step_reading_a_side_frame_keeps_all_its_rows(
-        self, shape: str, hub_right: bool, mode: ParallelizationMode
+        self,
+        bystander_first: bool,
+        bystander: type[FeatureGroup],
+        shape: str,
+        hub_right: bool,
+        mode: ParallelizationMode,
     ) -> None:
         a, b = JoinSpec(HubRightA, HUB_RIGHT_INDEX), JoinSpec(HubRightB, HUB_RIGHT_INDEX)
         consumer: type[FeatureGroup]
@@ -872,9 +942,10 @@ class TestAStepReadingAJoinSideWithoutALink:
             consumer, expected = HubRightConsumer, _HUB_RIGHT_INNER_EXPECTED
         repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
         for _ in range(repeats):
-            got = _two_consumers_run(links, HubRightCArrow, consumer, mode, x_consumer=OnlyB)
+            first, second = (bystander, consumer) if bystander_first else (consumer, bystander)
+            got = _two_consumers_run(links, HubRightCArrow, second, mode, x_consumer=first)
 
-            assert got[OnlyB.get_class_name()] == [10, 20, 30, 50, 60]
+            assert got[bystander.get_class_name()] == [10, 20, 30, 50, 60]
             assert got[consumer.get_class_name()] == expected
 
 
@@ -914,3 +985,27 @@ class TestStarNextToARivalGroup:
 
             assert got[HubRightConsumer.get_class_name()] == _HUB_RIGHT_INNER_EXPECTED
             assert got[HubRightDPairConsumer.get_class_name()] == [110, 250]
+
+    @pytest.mark.timeout(60)
+    @pytest.mark.parametrize("hub_right", [True, False], ids=_ORIENTATION_IDS)
+    def test_a_star_and_a_rival_join_of_the_same_group_each_get_their_own_rows_with_multiprocessing(
+        self, hub_right: bool, flight_server: Any
+    ) -> None:
+        a, b, c, d = (JoinSpec(g, HUB_RIGHT_INDEX) for g in (HubRightA, HubRightB, HubRightCArrow, HubRightD))
+        if hub_right:
+            links = {Link.inner(a, b), Link.inner(c, b), Link.inner(d, b)}
+        else:
+            links = {Link.inner(b, a), Link.inner(b, c), Link.inner(b, d)}
+
+        got = _two_consumers_run(
+            links,
+            HubRightCArrow,
+            HubRightDPairConsumer,
+            ParallelizationMode.MULTIPROCESSING,
+            flight_server,
+            x_consumer=HubRightConsumer,
+            extra={HubRightD},
+        )
+
+        assert got[HubRightConsumer.get_class_name()] == _HUB_RIGHT_INNER_EXPECTED
+        assert got[HubRightDPairConsumer.get_class_name()] == [110, 250]

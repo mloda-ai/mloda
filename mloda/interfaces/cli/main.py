@@ -50,23 +50,40 @@ def build_services(
     return catalog, planner, Runner(planner)
 
 
+REQUEST = ("request", {"help": "Path to a JSON feature request, or - for stdin."})
+COMMANDS: tuple[tuple[str, str, tuple[tuple[str, dict[str, Any]], ...]], ...] = (
+    ("explain", "Plan a feature request and print the plan.", (REQUEST,)),
+    (
+        "run",
+        "Plan and execute a feature request and print its preview.",
+        (
+            REQUEST,
+            ("--max-rows", {"type": int, "help": "Refuse sources and results over this, and uncountable reads."}),
+            ("--format", {"choices": FORMATS, "default": "json", "help": "Output format of the result."}),
+        ),
+    ),
+)
+
+
+def _add_config_options(command: argparse.ArgumentParser) -> None:
+    config = command.add_mutually_exclusive_group()
+    config.add_argument("--config", help=f"Settings file (default: ./{DEFAULT_CONFIG} if present).")
+    config.add_argument("--no-config", action="store_true", help="Ignore any settings file.")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mloda", description="Explain, run or serve mloda feature requests.")
     commands = parser.add_subparsers(dest="command", required=True)
-    explain = commands.add_parser("explain", help="Plan a feature request and print the plan.")
-    run = commands.add_parser("run", help="Plan and execute a feature request and print its preview.")
-    for command in (explain, run):
-        command.add_argument("request", help="Path to a JSON feature request, or - for stdin.")
-    run.add_argument("--max-rows", type=int, help="Refuse sources and results over this, and uncountable reads.")
-    run.add_argument("--format", choices=FORMATS, default="json", help="Output format of the result.")
+    for name, help_text, arguments in COMMANDS:
+        command = commands.add_parser(name, help=help_text)
+        for flag, options in arguments:
+            command.add_argument(flag, **options)
+        _add_config_options(command)
     mcp = commands.add_parser("mcp", help="Serve the feature catalog, explain and run to MCP clients.")
     serve = mcp.add_subparsers(dest="mcp_command", required=True).add_parser(
         "serve", help="Serve over stdio; settings from the config file, then MLODA_MCP_* env vars."
     )
-    for command in (explain, run, serve):
-        config = command.add_mutually_exclusive_group()
-        config.add_argument("--config", help=f"Settings file (default: ./{DEFAULT_CONFIG} if present).")
-        config.add_argument("--no-config", action="store_true", help="Ignore any settings file.")
+    _add_config_options(serve)
     return parser
 
 

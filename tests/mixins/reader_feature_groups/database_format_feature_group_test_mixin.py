@@ -202,6 +202,16 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         )
         assert self._group_name() not in rejection_window
 
+    def test_db_foreign_credentials_stay_silent_with_query_text(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        self._skip_if_query_route()
+        options = Options({"query_text": "select 1"})
+        assert not self.feature_group_class.match_feature_group_criteria(
+            self.present_column, options, self.foreign_dac()
+        )
+        assert self._group_name() not in rejection_window
+
     # missing columns, tables and ambiguity
 
     def test_db_two_tables_with_the_column_abort_naming_both_and_the_fix_without_any_secret(self) -> None:

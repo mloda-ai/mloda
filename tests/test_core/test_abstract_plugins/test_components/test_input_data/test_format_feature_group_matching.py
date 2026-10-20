@@ -860,6 +860,24 @@ class TestForeignPointerMakesSearchedRoutesDecline:
         gc.collect()
 
 
+class TestForeignPointerWithQueryText:
+    def test_a_group_without_a_query_route_keeps_the_foreign_pointer_reason(self) -> None:
+        from mloda.provider import ReadDBFG
+        from tests.test_plugins.feature_group.input_data.test_read_dbs.test_read_db_fg import KEY, ToyBaseDB
+
+        pointed = type("_QueryDBC", (ToyBaseDB,), {"CLAIM_ROUTES": (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)})
+        plain = type("_PlainDBD", (ToyBaseDB,), {})
+        feature = Feature("anything", Options({"query_text": "SELECT 1", "_QueryDBC": {KEY: "a"}}))
+        result = _identify(feature, DataAccessCollection(credentials={"toy_handle": {KEY: "a"}}), pointed, plain)
+
+        assert set(result.identified) == {pointed}
+        reason = result.eliminations[plain].reason
+        assert "options point at _QueryDBC" in reason
+        assert "query_text" not in reason
+        del pointed, plain, result, feature
+        gc.collect()
+
+
 class TestUnreachablePointerRaises:
     def _run(self, options: Options | None, feature_group: Any, collector: PluginCollector, folder: Path) -> None:
         write_csv(folder / "fpg_a.csv", {"fpg_x": [1]})

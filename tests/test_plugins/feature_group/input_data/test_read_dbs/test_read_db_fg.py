@@ -517,12 +517,34 @@ class TestQueryRoute:
         assert ReadDBFG.QUERY_ROUTE not in ReadDBFG.CLAIM_ROUTES
         assert ReadDBFG.QUERY_ROUTE not in ToyBaseDB.CLAIM_ROUTES
 
-    def test_a_group_without_the_route_ignores_query_text_and_claims_by_table(self) -> None:
+    def test_a_group_without_the_route_aborts_pointed_on_query_text(self) -> None:
         feature = Feature("toy_a", options={"ToyBaseDB": {KEY: "a"}, "query_text": "SELECT 1"})
-        result = IdentifyFeatureGroupClass.evaluate(feature, {ToyBaseDB: {PythonDictFramework}}, None, None)
-        assert ToyBaseDB in result.identified
-        assert feature.input_data_match is not None
-        assert feature.input_data_match[1].source == "toyfmt-db:a::toy_table"
+        with pytest.raises(ValueError, match="query_text is set, but ToyBaseDB lists no query route"):
+            resolve_or_raise(feature, {ToyBaseDB: {PythonDictFramework}}, None, None)
+        assert ToyBaseDB.created == []
+
+    def test_a_group_without_the_route_declines_unpointed_on_query_text_with_a_rejection(self) -> None:
+        feature = Feature("toy_a", options={"query_text": "SELECT 1"})
+        dac = DataAccessCollection(credentials={"toy_handle": {KEY: "a"}})
+        result = IdentifyFeatureGroupClass.evaluate(feature, {ToyBaseDB: {PythonDictFramework}}, None, dac)
+        assert ToyBaseDB not in result.identified
+        reason = result.eliminations[ToyBaseDB].reason
+        assert "query_text is set, but ToyBaseDB lists no query route" in reason
+        assert "QUERY_ROUTE" in reason
+
+    def test_only_a_group_listing_the_route_declares_query_text(self) -> None:
+        assert "query_text" not in ToyBaseDB.PROPERTY_MAPPING
+        spec = ToyQueryDB.PROPERTY_MAPPING["query_text"]
+        assert spec.default is None
+        assert spec.context is False
+        assert spec.strict_validation is False
+        assert set(ToyQueryDB.PROPERTY_MAPPING) == {"data_access_handle", "query_text"}
+
+    def test_the_query_option_constant_lives_with_the_format_group_and_stays_importable_from_read_db_fg(self) -> None:
+        from mloda.core.abstract_plugins.components.input_data import format_feature_group, read_db_fg
+
+        assert format_feature_group.QUERY_OPTION == "query_text"
+        assert read_db_fg.QUERY_OPTION == "query_text"
 
     def test_the_default_produce_query_rows_raises_naming_the_group(self) -> None:
         with pytest.raises(NotImplementedError, match="ToyBaseDB"):

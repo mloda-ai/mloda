@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     HANDLE_OPTION,
     HANDLE_SPEC,
+    QUERY_OPTION as QUERY_OPTION,
     REASON_DETAIL,
     _MAX_DESCRIBED,
     FormatFeatureGroup,
@@ -32,7 +33,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
 
-QUERY_OPTION = "query_text"
+QUERY_SPEC = PropertySpec("SQL text this group runs through QUERY_ROUTE.", default=None, context=False)
 
 
 def _capped(names: list[str]) -> str:
@@ -70,6 +71,11 @@ class ReadDBFG(FormatFeatureGroup):
     TABLE_KEY: ClassVar[str] = "table_name"
     CATALOG_ERRORS: ClassVar[tuple[type[BaseException], ...]] = (OSError, ValueError, ImportError)
     CREDENTIAL_KEY: ClassVar[str] = "<credential key>"
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        if cls.QUERY_ROUTE in cls.CLAIM_ROUTES and QUERY_OPTION not in cls.PROPERTY_MAPPING:
+            cls.PROPERTY_MAPPING = {**cls.PROPERTY_MAPPING, QUERY_OPTION: QUERY_SPEC}
+        super().__init_subclass__(**kwargs)
 
     @classmethod
     @abstractmethod

@@ -315,6 +315,24 @@ class FormatFeatureGroupTestMixin:
         assert self.expected_source in message
         assert self.present_column in message
 
+    def _skip_if_query_route(self) -> None:
+        if any("query_text" in route.required_options for route in self.feature_group_class.CLAIM_ROUTES):
+            pytest.skip("the group lists a query route, so query_text is served")
+
+    def test_pointed_with_query_text_aborts_naming_the_query_route_when_the_group_lists_none(self) -> None:
+        self._skip_if_query_route()
+        feature = self._feature(self.present_column, {self._group_name(): self.own_pointer(), "query_text": "select 1"})
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(feature, None)
+        assert "QUERY_ROUTE" in str(exc_info.value)
+
+    def test_unpointed_with_query_text_declines_naming_the_query_route_when_the_group_lists_none(self) -> None:
+        self._skip_if_query_route()
+        feature = self._feature(self.present_column, {"query_text": "select 1"})
+        result = self._evaluate(feature, self.own_dac())
+        assert self.feature_group_class not in result.identified
+        assert "QUERY_ROUTE" in result.eliminations[self.feature_group_class].reason
+
     def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
         result = self._evaluate(Feature(self.missing_column), self.own_dac())
         assert self.feature_group_class not in result.identified

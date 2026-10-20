@@ -47,6 +47,7 @@ _MAX_REASON = 200
 FOLDER_ESCAPE_MARK = "links outside its folder"
 REASON_DETAIL = "\x1f"  # splits a reason lead from detail (reader error text) that only pointed users see
 
+QUERY_OPTION = "query_text"
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(
     "Name of the DataAccessCollection handle to read from.",
@@ -338,6 +339,17 @@ class FormatFeatureGroup(FeatureGroup):
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)
         foreign = None if pointed else cls.foreign_pointer(options)
+        query_declined = (
+            foreign is None
+            and QUERY_OPTION in options
+            and not any(QUERY_OPTION in route.required_options for route in cls.CLAIM_ROUTES)
+        )
+        query_reason = (
+            f"{QUERY_OPTION} is set, but {cls.get_class_name()} lists no query route "
+            "(database groups opt in with ReadDBFG.QUERY_ROUTE)"
+        )
+        if pointed and query_declined:
+            return cls._abort(ValueError(query_reason), deferrable=True)
         skipped = False
         selected: list[ClaimRoute] = []
         for route in cls.CLAIM_ROUTES:
@@ -370,6 +382,10 @@ class FormatFeatureGroup(FeatureGroup):
                 record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE)
                 return False
             fitting, seen, undeclared = outcome.result
+        if query_declined:
+            if fitting or seen:
+                replace_probe_match_rejection(cls.get_class_name(), query_reason, known_owners, stage=INPUT_DATA_STAGE)
+            return False
         if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls.passes_option_declarations(options):
             return False
         if len(fitting) > 1:

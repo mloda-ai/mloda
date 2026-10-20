@@ -722,8 +722,9 @@ def _break_join(mp: pytest.MonkeyPatch) -> None:
 def _finalizing_failure_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     session = _matrix_session(ext)
     _break_join(mp)
-    with pytest.raises(RuntimeError, match="join failed"):
+    with pytest.raises(RuntimeError, match="join failed") as raised:
         session.run(parallelization_modes=_SYNC)
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", error="builtins.RuntimeError")]
 
 
@@ -732,8 +733,9 @@ def _finalizing_failure_stream_consumed(
 ) -> list[Any]:
     session = _matrix_session(ext)
     _break_join(mp)
-    with pytest.raises(RuntimeError, match="join failed"):
+    with pytest.raises(RuntimeError, match="join failed") as raised:
         list(session.stream_run(parallelization_modes=_SYNC))
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", error="builtins.RuntimeError")]
 
 
@@ -744,8 +746,9 @@ def _finalizing_failure_stream_closed_early(
     _break_join(mp)
     stream = session.stream_run(parallelization_modes=_SYNC)
     next(stream)
-    with pytest.raises(RuntimeError, match="join failed"):
+    with pytest.raises(RuntimeError, match="join failed") as raised:
         stream.close()
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", error="builtins.RuntimeError")]
 
 
@@ -777,8 +780,9 @@ def _break_engine_setup(mp: pytest.MonkeyPatch) -> None:
 def _engine_setup_failure_batch(ext: _LifecycleMatrixExtender, tmp_path: Path, mp: pytest.MonkeyPatch) -> list[Any]:
     session = _matrix_session(ext)
     _break_engine_setup(mp)
-    with pytest.raises(RuntimeError, match="engine setup failed"):
+    with pytest.raises(RuntimeError, match="engine setup failed") as raised:
         session.run(parallelization_modes=_SYNC)
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 
@@ -787,8 +791,9 @@ def _engine_setup_failure_at_stream_run_call(
 ) -> list[Any]:
     session = _matrix_session(ext)
     _break_engine_setup(mp)
-    with pytest.raises(RuntimeError, match="engine setup failed"):
+    with pytest.raises(RuntimeError, match="engine setup failed") as raised:
         session.stream_run(parallelization_modes=_SYNC)
+    _assert_single_run_id_note(raised.value, ext)
     return [*_OK_PLAN, *_ok_run("failed", calculated=False, error="builtins.RuntimeError")]
 
 

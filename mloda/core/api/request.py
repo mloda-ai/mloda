@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from collections.abc import Sequence
 from typing import Any, Callable, Generator
+from uuid import UUID
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
@@ -624,12 +625,11 @@ class mlodaAPI:
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
         """
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
+        plan = list(self._plan_snapshot())
         runner = self._batch_run(
             parallelization_modes, flight_server, api_data=api_data, artifacts=artifacts, run_context=run_context
         )
-        plan = list(self._plan_snapshot())
-        position = {step.step_uuid: index for index, step in enumerate(plan)}
-        items = sorted(runner.get_result_items(), key=lambda item: position.get(item[0], len(position)))
+        items = self._plan_ordered_items(runner, plan)
         return RunResult([r for _, r in items], plan, items, run_id=run_context.run_id, plan_id=self.plan_id)
 
     def stream_run(
@@ -650,8 +650,9 @@ class mlodaAPI:
         past the caller's intended scope.
         """
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
+        plan = list(self._plan_snapshot())
         stream = self._start_stream(api_data, parallelization_modes, flight_server, artifacts, run_context)
-        return ResultStream(stream, list(self._plan_snapshot()), run_id=run_context.run_id, plan_id=self.plan_id)
+        return ResultStream(stream, plan, run_id=run_context.run_id, plan_id=self.plan_id)
 
     def _start_stream(
         self,
@@ -856,10 +857,15 @@ class mlodaAPI:
         return runner
 
     def get_result(self) -> list[Any]:
-        """Return the computed run results; raises if no run function has executed yet."""
+        """Return the computed run results in plan order; raises if no run function has executed yet."""
         if self.runner is None:
             raise ValueError("You need to run any run function beforehand.")
-        return self.runner.get_result()
+        items = self._plan_ordered_items(self.runner, list(self._plan_snapshot()))
+        return [r for _, r in items]
+
+    def _plan_ordered_items(self, runner: Any, plan: list[PlanStep]) -> list[tuple[UUID, Any]]:
+        position = {step.step_uuid: index for index, step in enumerate(plan)}
+        return sorted(runner.get_result_items(), key=lambda item: position.get(item[0], len(position)))
 
     def get_artifacts(self) -> dict[str, Any]:
         """Return the artifacts produced by the run; raises if no run function has executed yet."""

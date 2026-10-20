@@ -227,7 +227,7 @@ class TestRunResultPlan:
         )
 
         assert results.plan == session.resolved_plan()
-        session_results: Any = session.run(parallelization_modes={ParallelizationMode.SYNC})
+        session_results = session.run(parallelization_modes={ParallelizationMode.SYNC})
         assert session_results.plan == session.resolved_plan()
 
 
@@ -673,7 +673,7 @@ class TestRunAllListOrderMatchesPlanOrder:
     def entry(self, request: pytest.FixtureRequest) -> str:
         return str(request.param)
 
-    def _run_with_plan_first_gated(self, entry: str = "run_all") -> Any:
+    def _run_with_plan_first_gated(self, entry: str) -> Any:
         session = mloda.prepare(
             [_order_probe_feature("alpha"), _order_probe_feature("beta")],
             compute_frameworks=[PandasDataFrame],
@@ -694,7 +694,11 @@ class TestRunAllListOrderMatchesPlanOrder:
                 plugin_collector=_ORDER_PROBE_PLUGINS,
                 parallelization_modes={ParallelizationMode.THREADING},
             )
-            return gated.run(parallelization_modes={ParallelizationMode.THREADING})
+            result = gated.run(parallelization_modes={ParallelizationMode.THREADING})
+            expected = _order_probe_ids_in_plan(result.plan)
+            stored = [f["run_result_order_probe_value"].iloc[0] for f in gated.get_result()]
+            assert stored == expected
+            return result
 
         return mlodaAPI.run_all(
             [

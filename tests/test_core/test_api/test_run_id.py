@@ -83,12 +83,17 @@ class TestSessionPlanIdStableAcrossRunsRunIdPerRun:
             patch.object(session, "_setup_engine_runner", return_value=mock_orchestrator),
             patch.object(session, "_run_engine_computation") as compute,
         ):
-            session.run()
-            session.run()
+            first_result = session.run()
+            second_result = session.run()
 
         contexts = [call.kwargs["run_context"] for call in compute.call_args_list]
         assert session.plan_id == first_plan_id
         assert len(contexts) == 2
+        assert first_result.run_id == contexts[0].run_id
+        assert second_result.run_id == contexts[1].run_id
+        assert first_result.run_id != second_result.run_id
+        assert first_result.plan_id == first_plan_id
+        assert second_result.plan_id == first_plan_id
         assert contexts[0].run_id != contexts[1].run_id
         assert {c.plan_id for c in contexts} == {first_plan_id}
 

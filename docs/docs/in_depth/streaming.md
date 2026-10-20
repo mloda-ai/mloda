@@ -134,7 +134,7 @@ for batch in sensor_source():
         process(result)
 ```
 
-`stream_run()` has the same parameters as `run()` and returns a `ResultStream`. `list(session.stream_run(...))` produces the same results as `session.run(...)`.
+`stream_run()` has the same parameters as `run()` and returns a `ResultStream`. `list(session.stream_run(...))` produces the same results as `session.run(...)`, except that `run()` returns plan order and the stream yields in completion order.
 
 ## Pattern 3: One-shot streaming with `stream_all()`
 

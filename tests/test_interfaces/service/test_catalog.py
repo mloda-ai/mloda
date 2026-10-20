@@ -25,7 +25,6 @@ from mloda.interfaces.service.errors import is_error
 from mloda.provider import FeatureChainParserMixin, property_spec
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
 from tests.helpers.plugin_stubs import StubFeatureGroup
 
 # Catalog.build enumerates FeatureGroups; a cold cache under xdist load can exceed the default timeout.
@@ -497,7 +496,7 @@ class TestDescribe:
         assert result["error"]["alternatives"] == ["mcp3_alpha_total"]
         assert "deny_feature_groups" not in json.dumps(result)
 
-    @pytest.mark.parametrize("key", [CsvReader.data_access_name(), RESERVED_READER_OPTION_KEY])
+    @pytest.mark.parametrize("key", ["CsvFG", "JsonFG", RESERVED_READER_OPTION_KEY])
     def test_data_access_option_is_policy_denied(self, catalog: Catalog, key: str) -> None:
         result = catalog.describe("mcp3_alpha_total", options={"mcp3_mode": "sum", key: SECRET})
 

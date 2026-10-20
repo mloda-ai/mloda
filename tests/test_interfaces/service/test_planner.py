@@ -21,13 +21,13 @@ from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.planner import PLAN_TOKEN_PREFIX, Planner
-from mloda.provider import FeatureSet
-from mloda.user import PluginCollector
+from mloda.provider import FeatureSet, ResolutionDiagnosis, SourceMatch
+from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
-from mloda_plugins.feature_group.input_data.read_files.json import JsonReader
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from tests.helpers.plugin_stubs import StubFeatureGroup
+from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
 
 # Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -139,7 +139,7 @@ class PlannerDeniedMcp4(StubFeatureGroup):
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups({ReadFileFeature, PlannerDoubleMcp4, PlannerDeniedMcp4})
+    return PluginCollector.enabled_feature_groups({*FILE_FORMAT_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4})
 
 
 def _write_sales(tmp_path: Path) -> Path:
@@ -240,7 +240,7 @@ class TestRequestChecks:
         error = _error(result, "validation_failed")
         assert _has_detail(error, path="/restrict_sources/0", problem="unknown_source", suggestion="sales")
 
-    @pytest.mark.parametrize("key", [CsvReader.data_access_name(), RESERVED_READER_OPTION_KEY])
+    @pytest.mark.parametrize("key", ["CsvFG", "JsonFG", "ParquetFG", RESERVED_READER_OPTION_KEY])
     def test_data_access_option_is_policy_denied(self, tmp_path: Path, key: str) -> None:
         request = {"features": ["customer_id", {"name": "income", "options": {key: SECRET}}]}
 
@@ -249,6 +249,19 @@ class TestRequestChecks:
         error = _error(result, "policy_denied")
         assert [detail["path"] for detail in error["details"]] == [f"/features/1/options/{key}"]
         assert SECRET not in json.dumps(result)
+
+    def test_csv_pointer_at_unconfigured_file_is_policy_denied(self, tmp_path: Path) -> None:
+        _write_sales(tmp_path)
+        other = tmp_path / "other_mcp4.csv"
+        other.write_text("income\n987654321\n")
+        request = {"features": [{"name": "income", "options": {"CsvFG": str(other)}}]}
+
+        result = _planner(_settings(tmp_path)).explain(request)
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == ["/features/0/options/CsvFG"]
+        assert "987654321" not in json.dumps(result)
+        _assert_no_paths(result, tmp_path, "other_mcp4.csv")
 
     def test_semantic_feature_config_error_is_validation_failed(self, tmp_path: Path) -> None:
         request = {"features": [{"name": "income", "options": {"x": 1}, "group_options": {"y": 1}}]}
@@ -274,6 +287,36 @@ class TestUnresolved:
         assert len(details) == 1
         assert details[0]["problem"] == "unresolved"
         assert "suggestion" not in details[0]
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+
+class TestDiagnosisWithoutFeatureName:
+    def test_scope_at_inaccessible_format_group_is_validation_failed(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "feature_group": "SqliteFG"}]}
+
+        result = _explain(tmp_path, request)
+
+        error = _error(result, "validation_failed")
+        assert isinstance(error["message"], str)
+        assert error["message"]
+        assert "not accessible in this run" not in json.dumps(result)
+        _assert_no_paths(result, tmp_path, "sales.csv")
+
+    def test_unnamed_diagnosis_is_validation_failed_with_generic_message(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        settings = _settings(tmp_path)
+        leaked = str(tmp_path / "sales.csv")
+        core_message = f"options point at CsvFG, but CsvFG is not accessible in this run: {leaked}."
+        diagnosis = ResolutionDiagnosis(records=[], complete=False, message=core_message)
+        monkeypatch.setattr(mloda, "diagnose", lambda *args, **kwargs: diagnosis)
+
+        result = _planner(settings).explain({"features": ["income"]})
+
+        error = _error(result, "validation_failed")
+        assert isinstance(error["message"], str)
+        assert error["message"]
+        assert core_message not in json.dumps(result)
         _assert_no_paths(result, tmp_path, "sales.csv")
 
 
@@ -358,7 +401,7 @@ class TestSuccess:
         assert step["step"] == 1
         assert step["kind"] == "compute"
         assert sorted(step["features"]) == ["customer_id", "income"]
-        assert step["feature_group"] == "ReadFileFeature"
+        assert step["feature_group"] == "CsvFG"
         assert step["compute_framework"] == "PythonDictFramework"
         assert step["compute_framework_reason"] == "only allowed framework"
         assert step["specialized_from"] == []
@@ -403,7 +446,7 @@ class TestDerived:
         assert [step["step"] for step in steps] == [1, 2]
         assert all(set(step) == STEP_KEYS for step in steps)
         read, derived = steps
-        assert read["feature_group"] == "ReadFileFeature"
+        assert read["feature_group"] == "CsvFG"
         assert read["source"] == "sales"
         assert sorted(read["features"]) == ["customer_id", "income"]
         assert derived["kind"] == "compute"
@@ -504,11 +547,17 @@ class TestRowLimits:
         assert result["estimate"]["sources"] == [{"alias": "events", "rows": None, "rows_exact": False}]
         assert result["estimate"]["rows_read"] is None
         assert result["steps"][0]["source"] == "events"
+        assert result["steps"][0]["feature_group"] == "JsonFG"
         assert result["lineage"] == {"event_id": ["events.event_id"]}
         _assert_no_paths(result, tmp_path, "events.json")
 
     def test_json_reader_does_not_count_rows(self, tmp_path: Path) -> None:
-        assert JsonReader.count_rows(str(_write_events(tmp_path)), PythonDictFramework) is None
+        path = str(_write_events(tmp_path))
+        assert JsonFG.count_rows(SourceMatch(source=path, access=path), PythonDictFramework) is None
+
+    def test_csv_reader_counts_rows_exactly_on_python_dict(self, tmp_path: Path) -> None:
+        path = str(_write_sales(tmp_path))
+        assert CsvFG.count_rows(SourceMatch(source=path, access=path), PythonDictFramework) == 5
 
 
 class TestRestrictSources:

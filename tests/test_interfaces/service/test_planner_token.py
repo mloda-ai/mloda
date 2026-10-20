@@ -14,7 +14,7 @@ from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import PLAN_TOKEN_PREFIX, Planner
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
 
 # Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -47,7 +47,7 @@ def _planner(
     principal: str | None = "alice",
     clock: _Clock | None = None,
 ) -> Planner:
-    base = PluginCollector.enabled_feature_groups({ReadFileFeature})
+    base = PluginCollector.enabled_feature_groups(set(FILE_FORMAT_GROUPS))
     return Planner(
         settings,
         Catalog.build(settings, base),

@@ -1,23 +1,24 @@
 """The configured sources as mloda sees them: their files, readers, columns and data access collection."""
 
+import inspect
 import os
 from collections.abc import Mapping
 from functools import partial
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.interfaces.service.config import SourceConfig
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import ReadFileFG, get_all_subclasses
 
-# The reader contract signals "cannot tell" by raising one of these.
-READER_ERRORS: tuple[type[Exception], ...] = (NotImplementedError, ImportError, OSError, ValueError)
+# A file format group signals "cannot tell" by raising one of these.
+READER_ERRORS: tuple[type[Exception], ...] = (ImportError, OSError, ValueError)
 
 
-def readers_for(path: str) -> list[type[ReadFile]]:
-    """The ReadFile classes whose suffix matches ``path``, in a stable order."""
-    readers = get_all_subclasses(ReadFile)
-    matching = [r for r in readers if path.endswith(safe_field(r.suffix, (), catching=(NotImplementedError,)))]
-    return sorted(matching, key=lambda reader: reader.__qualname__)
+def readers_for(path: str) -> list[type[ReadFileFG]]:
+    """The loaded concrete ReadFileFG classes that own ``path`` by suffix, in a stable order."""
+    groups = [fg for fg in get_all_subclasses(ReadFileFG) if not inspect.isabstract(fg)]
+    matching = [fg for fg in groups if path.endswith(fg.default_owned_suffixes())]
+    return sorted(matching, key=lambda fg: fg.__qualname__)
 
 
 def source_files(sources: Mapping[str, SourceConfig]) -> list[str]:
@@ -34,7 +35,7 @@ def source_columns(sources: Mapping[str, SourceConfig]) -> list[str]:
     columns: set[str] = set()
     for path in source_files(sources):
         for reader in readers_for(path):
-            columns.update(safe_field(partial(reader.describe_columns, path), {}, catching=READER_ERRORS))
+            columns.update(safe_field(partial(reader.column_names, path), (), catching=READER_ERRORS))
     return sorted(columns)
 
 

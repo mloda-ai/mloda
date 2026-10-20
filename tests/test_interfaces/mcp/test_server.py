@@ -26,7 +26,7 @@ from mloda.interfaces.service.planner import Planner  # noqa: E402
 from mloda.interfaces.service.request import MAX_FEATURES, SCHEMA_ID, request_schema  # noqa: E402
 from mloda.interfaces.service.runner import Runner  # noqa: E402
 from mloda.user import PluginCollector  # noqa: E402
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature  # noqa: E402
+from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS  # noqa: E402
 
 # The tools resolve real FeatureGroups and read source files; a cold cache under xdist load can exceed 10s.
 pytestmark = [pytest.mark.timeout(30), pytest.mark.anyio]
@@ -85,7 +85,7 @@ def _clock() -> float:
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups({ReadFileFeature})
+    return PluginCollector.enabled_feature_groups(set(FILE_FORMAT_GROUPS))
 
 
 def _settings(tmp_path: Path, mode: str = "plan") -> Settings:
@@ -394,8 +394,9 @@ class TestParity:
         "arguments",
         [
             {"name": "income"},
-            {"name": "ReadFileFeature"},
+            {"name": "CsvFG"},
             {"name": "income", "options": {RESERVED_READER_OPTION_KEY: "x"}},
+            {"name": "income", "options": {"CsvFG": "x"}},
         ],
     )
     async def test_describe_equals_the_catalog_apart_from_audit_id(

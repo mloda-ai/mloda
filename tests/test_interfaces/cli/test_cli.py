@@ -25,7 +25,7 @@ from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
 from mloda.user import PluginCollector, PluginLoader
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -73,7 +73,7 @@ def _clock() -> float:
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups({ReadFileFeature})
+    return PluginCollector.enabled_feature_groups(set(FILE_FORMAT_GROUPS))
 
 
 @dataclass(frozen=True)

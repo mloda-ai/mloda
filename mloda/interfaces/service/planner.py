@@ -32,6 +32,7 @@ from mloda.interfaces.service.request import (
     validate_request,
 )
 from mloda.interfaces.service.sources import READER_ERRORS, data_access_collection, source_columns
+from mloda.provider import ReadFileFG, SourceMatch
 from mloda.steward import verified_context
 from mloda.user import (
     Feature,
@@ -53,6 +54,7 @@ ROWS_RETURNED_NOTE = "Rows returned depend on filters and joins; they are known 
 _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _PAYLOAD_KEYS = frozenset({"kid", "req", "digest", "cfg", "sub", "exp"})
 _DENIED_MESSAGE = "This feature is not available under the service policy."
+_UNPLANNABLE_MESSAGE = "The request cannot be planned under the service policy and sources."
 
 
 def _b64(data: bytes) -> str:
@@ -77,11 +79,18 @@ def _strictness(label: str) -> int:
     return STRICTNESS.index(label) if label in STRICTNESS else len(STRICTNESS)
 
 
-def _alias_of(step: PlanStep, sources: Mapping[str, SourceConfig]) -> str | None:
-    pair = step.reader_data_access
-    if pair is None or not isinstance(pair[1], (str, Path)):
+def _file_identity(step: PlanStep) -> str | None:
+    fg = step.feature_group
+    if not (isinstance(fg, type) and issubclass(fg, ReadFileFG)):
         return None
-    path = Path(pair[1])
+    return step.data_access_identity
+
+
+def _alias_of(step: PlanStep, sources: Mapping[str, SourceConfig]) -> str | None:
+    identity = _file_identity(step)
+    if identity is None:
+        return None
+    path = Path(identity)
     for alias in sorted(sources):
         source = sources[alias]
         if str(path) in source.files or any(path.is_relative_to(folder) for folder in source.folders):
@@ -304,7 +313,9 @@ class Planner:
     ) -> dict[str, Any]:
         name = diagnosis.feature_name
         if name is None:
-            return error_result("internal", "The service configuration cannot plan this request.")
+            # The core message may name configured paths, so it is never forwarded.
+            detail = {"path": "/features", "problem": "unresolved", "message": _UNPLANNABLE_MESSAGE}
+            return error_result("validation_failed", _UNPLANNABLE_MESSAGE, [detail])
         known = diagnosis.failed_result.facts.known_names if diagnosis.failed_result is not None else ()
         candidates = [candidate for candidate in dict.fromkeys([*known, *source_columns(sources)]) if candidate != name]
         close = difflib.get_close_matches(name, candidates, n=1)
@@ -388,8 +399,9 @@ class Planner:
     def _estimate(self, steps: Sequence[PlanStep], aliases: Sequence[str | None]) -> dict[str, Any]:
         reads: dict[str, dict[str, PlanStep]] = {}
         for step, alias in zip(steps, aliases):
-            if alias is not None and step.reader_data_access is not None and step.compute_framework is not None:
-                reads.setdefault(alias, {}).setdefault(str(step.reader_data_access[1]), step)
+            identity = _file_identity(step)
+            if alias is not None and identity is not None and step.compute_framework is not None:
+                reads.setdefault(alias, {}).setdefault(identity, step)
         totals = {
             alias: _total(self._count(path, step) for path, step in sorted(reads[alias].items())) for alias in reads
         }
@@ -406,10 +418,11 @@ class Planner:
 
     @staticmethod
     def _count(path: str, step: PlanStep) -> int | None:
-        if step.reader_data_access is None or step.compute_framework is None:
+        fg = step.feature_group
+        if not (isinstance(fg, type) and issubclass(fg, ReadFileFG)) or step.compute_framework is None:
             return None
-        reader = step.reader_data_access[0]
-        return safe_field(partial(reader.count_rows, path, step.compute_framework), None, catching=READER_ERRORS)
+        count = partial(fg.count_rows, SourceMatch(source=path, access=path), step.compute_framework)
+        return safe_field(count, None, catching=READER_ERRORS)
 
     def _limit_exceeded(self, entries: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
         max_rows = self._settings.max_rows

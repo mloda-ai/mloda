@@ -13,17 +13,16 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    RESERVED_READER_OPTION_KEY,
-    BaseInputData,
-)
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import concrete_format_groups
+from mloda.core.abstract_plugins.components.input_data.read_db_fg import QUERY_OPTION
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.api.feature_config.models import feature_config_schema
 from mloda.core.filter.filter_type_enum import FilterType
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.interfaces.service.config import Settings
+from mloda.provider import BaseInputData, get_all_subclasses
 
 SCHEMA_ID = "mloda://schema/feature-request"
 MAX_FEATURES = 50
@@ -250,9 +249,10 @@ def validate_request(request: Any, settings: Settings) -> list[Problem]:
 
 
 def data_access_option_keys() -> frozenset[str]:
-    """Option keys that configure data access: the reserved reader key and every loaded reader's name."""
+    """Option keys that configure data access: reserved and query keys, format pointers and input data names."""
+    pointers = {key for group in concrete_format_groups().values() for key in group.pointer_keys()}
     names = {reader.data_access_name() for reader in get_all_subclasses(BaseInputData)}
-    return frozenset({RESERVED_READER_OPTION_KEY, *names})
+    return frozenset({RESERVED_READER_OPTION_KEY, QUERY_OPTION, *pointers, *names})
 
 
 def option_data_access_violations(options: Mapping[str, Any], path: str = "") -> list[Problem]:

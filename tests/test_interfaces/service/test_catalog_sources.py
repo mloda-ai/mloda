@@ -12,7 +12,7 @@ from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import is_error
 from mloda.user import PluginCollector, PluginLoader
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
 
 # Building the catalog loads every plugin and enumerates all FeatureGroups; a cold run can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -49,7 +49,7 @@ def _settings(tmp_path: Path) -> Settings:
 
 @pytest.fixture
 def catalog(tmp_path: Path) -> Catalog:
-    return Catalog.build(_settings(tmp_path), PluginCollector.enabled_feature_groups({ReadFileFeature}))
+    return Catalog.build(_settings(tmp_path), PluginCollector.enabled_feature_groups(set(FILE_FORMAT_GROUPS)))
 
 
 class TestBuildLoadsPlugins:
@@ -67,7 +67,7 @@ class TestDescribeWithSources:
 
         assert not is_error(result), result
         assert result["name"] == "income"
-        assert result["feature_group"] == "ReadFileFeature"
+        assert result["feature_group"] == "CsvFG"
         dumped = json.dumps(result)
         assert str(tmp_path) not in dumped
         assert tmp_path.name not in dumped

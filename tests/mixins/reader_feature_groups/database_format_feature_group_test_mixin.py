@@ -191,6 +191,8 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         feature = self._pointed(self.present_column, value)
         assert self._claims(feature, None)
         assert self._claimed_match(feature).source == self.expected_source
+        held = feature.options.get(self._group_name())
+        assert type(held) is (Credential if isinstance(value, Credential) else RegisteredCredential)
         assert (value.data if isinstance(value, Credential) else dict(value)) == before
         assert mapping == self.make_credential(self.own_path)
 

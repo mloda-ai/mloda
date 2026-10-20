@@ -7,7 +7,9 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
-from mloda.user import DataType
+from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+from mloda.user import DataType, Index
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
@@ -32,6 +34,24 @@ def _row_count(connection: sqlite3.Connection) -> int:
     return count
 
 
+def _merge_with_self(method: str) -> Callable[[sqlite3.Connection], SqliteRelation]:
+    def build(c: sqlite3.Connection) -> SqliteRelation:
+        index = Index(("i",))
+        merge = getattr(SqliteMergeEngine(c), method)
+        result: SqliteRelation = merge(SqliteRelation(c, "loose"), SqliteRelation(c, "loose"), index, index)
+        return result
+
+    return build
+
+
+def _merge_asof_loose(c: sqlite3.Connection) -> SqliteRelation:
+    index = Index(("i",))
+    cfg = AsOfJoinConfig(left_time_column="r", right_time_column="r", direction="backward")
+    right = SqliteRelation(c, "loose").select("i", "r")
+    result: SqliteRelation = SqliteMergeEngine(c).merge_asof(SqliteRelation(c, "loose"), right, index, index, cfg)
+    return result
+
+
 _NO_HINT_BUILDERS: dict[str, Callable[[sqlite3.Connection], SqliteRelation]] = {
     "table": lambda c: SqliteRelation(c, "loose"),
     "select": lambda c: SqliteRelation(c, "loose").select(*_COLS),
@@ -41,6 +61,9 @@ _NO_HINT_BUILDERS: dict[str, Callable[[sqlite3.Connection], SqliteRelation]] = {
     "filter_over_view": lambda c: SqliteRelation(c, "loose").limit(5).filter("1 = 1"),
     "append": lambda c: SqliteRelation(c, "loose").append_column("extra", [1, 2][: _row_count(c)]),
     "join": lambda c: SqliteRelation(c, "loose").join(SqliteRelation(c, "other"), "i"),
+    "merge_union": _merge_with_self("merge_union"),
+    "merge_append": _merge_with_self("merge_append"),
+    "merge_asof": _merge_asof_loose,
 }
 
 

@@ -362,6 +362,30 @@ def _snowflake_chain(first: Any, second: Any, hub: Any) -> list[Link]:
     ]
 
 
+def _foreign_key_chain(kind_second: str) -> Any:
+    """The first spoke joins the hub from a differently named key column; the second joins on the hub's key."""
+
+    def make_links(first: Any, second: Any, hub: Any) -> list[Link]:
+        key_name = "fk"
+        hub_spec, second_spec = JoinSpec(hub, STAR_INDEX), JoinSpec(second, STAR_INDEX)
+        if kind_second == "outer_other_key":
+            return [
+                Link.left(hub_spec, JoinSpec(first, STAR_INDEX)),
+                Link.outer(hub_spec, JoinSpec(second, key_name)),
+            ]
+        return [Link.left(JoinSpec(first, key_name), hub_spec), Link.left(hub_spec, second_spec)]
+
+    return make_links
+
+
+def _kept_and_outer_on_different_indexes(first: Any, second: Any, hub: Any) -> list[Link]:
+    other_index = Index(("star_other_idx",))
+    return [
+        Link.left(JoinSpec(hub, STAR_INDEX), JoinSpec(first, STAR_INDEX)),
+        Link.outer(JoinSpec(hub, other_index), JoinSpec(second, other_index)),
+    ]
+
+
 def _star_of(kind_first: str, first_hub_first: bool, kind_second: str, second_hub_first: bool) -> Any:
     """Links of the given kinds into the hub, each with the hub declared first or second."""
 
@@ -432,6 +456,9 @@ def test_raise_on_join_star_keeping_two_groups_rejects_asofs_keeping_different_g
     message = str(excinfo.value)
     for name in ("StarConsumer", "StarFirstSpoke", "StarSecondSpoke", "StarHub"):
         assert name in message, f"{name} must be named; got: {message}"
+    assert "Link.left(" not in message
+    assert 'jointype="left"' not in message
+    assert "Link.asof(" in message
 
 
 @pytest.mark.parametrize(
@@ -444,6 +471,9 @@ def test_raise_on_join_star_keeping_two_groups_rejects_asofs_keeping_different_g
         pytest.param(_star_of("left", True, "inner", False), False, id="kept_hub_with_inner"),
         pytest.param(_star_of("right", False, "left", True), False, id="kept_with_kept"),
         pytest.param(_snowflake_chain, False, id="chain_on_different_index_columns"),
+        pytest.param(_foreign_key_chain("left"), False, id="dropped_then_kept_on_differently_named_keys"),
+        pytest.param(_foreign_key_chain("outer_other_key"), False, id="kept_with_outer_on_differently_named_keys"),
+        pytest.param(_kept_and_outer_on_different_indexes, False, id="kept_with_outer_on_different_indexes"),
         pytest.param(_star_of("asof", True, "asof", True), False, id="asof_keeping_the_hub_twice"),
     ],
 )

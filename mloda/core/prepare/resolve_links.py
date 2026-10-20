@@ -284,12 +284,14 @@ class ResolveLinks:
     def get_link_trekker(self) -> LinkTrekker:
         return self.link_trekker
 
-    def _side_nodes(self, feature_group: type, discriminator: dict[str, Any] | None) -> set[UUID]:
+    def _side_nodes(
+        self, nodes_by_class: dict[type, list[UUID]], feature_group: type, discriminator: dict[str, Any] | None
+    ) -> set[UUID]:
+        nodes = self.graph.get_nodes()
         return {
             uuid
-            for uuid, node in self.graph.get_nodes().items()
-            if issubclass(node.feature_group_class, feature_group)
-            and (discriminator is None or Link.matches_discriminator(discriminator, node.feature.options))
+            for uuid in nodes_by_class.get(feature_group, [])
+            if discriminator is None or Link.matches_discriminator(discriminator, nodes[uuid].feature.options)
         }
 
     def warn_on_unjoined_links(self) -> None:
@@ -297,17 +299,41 @@ class ResolveLinks:
         if not self.links:
             return
 
-        joined = {(left, right) for _, left, right, _ in self.occurrences}
+        nodes = self.graph.get_nodes()
+        nodes_by_class: dict[type, list[UUID]] = defaultdict(list)
+        for uuid, node in nodes.items():
+            for cls in node.feature_group_class.__mro__:
+                nodes_by_class[cls].append(uuid)
+
         messages: set[str] = set()
         for link in self.links:
-            is_self_link = link.left_feature_group is link.right_feature_group
-            if is_self_link and link.left_discriminator is None and link.right_discriminator is None:
+            discriminated = link.left_discriminator is not None or link.right_discriminator is not None
+            if link.left_feature_group is link.right_feature_group and not discriminated:
                 continue
 
-            lefts = self._side_nodes(link.left_feature_group, link.left_discriminator)
-            rights = self._side_nodes(link.right_feature_group, link.right_discriminator)
-            pairs = {(left, right) for left in lefts for right in rights if left != right}
-            if not pairs or any((left, right) in joined or (right, left) in joined for left, right in pairs):
+            lefts = self._side_nodes(nodes_by_class, link.left_feature_group, link.left_discriminator)
+            rights = self._side_nodes(nodes_by_class, link.right_feature_group, link.right_discriminator)
+            if not lefts or not rights:
+                continue
+            # Same-class nodes only pair up when discriminators separate them.
+            identities: set[Any]
+            if discriminated:
+                identities = lefts | rights
+            else:
+                identities = {nodes[uuid].feature_group_class for uuid in lefts | rights}
+            if len(identities) < 2:
+                continue
+
+            def separates(left: UUID, right: UUID) -> bool:
+                return left != right and (
+                    discriminated or nodes[left].feature_group_class is not nodes[right].feature_group_class
+                )
+
+            if any(
+                (left in lefts and right in rights and separates(left, right))
+                or (right in lefts and left in rights and separates(right, left))
+                for _, left, right, _ in self.occurrences
+            ):
                 continue
 
             left_name = link.left_feature_group.__name__

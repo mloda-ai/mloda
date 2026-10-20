@@ -608,14 +608,14 @@ def _two_consumers_run(
     extra: set[type[FeatureGroup]] | None = None,
 ) -> dict[str, list[int]]:
     x_consumer = HubRightPairConsumer
+    groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, spoke_c, x_consumer, y_consumer}
+    groups |= extra or set()
     results = mloda.run_all(
         [Feature(name=x_consumer.get_class_name()), Feature(name=y_consumer.get_class_name())],
         links=links,
         compute_frameworks=[PyArrowTable, PandasDataFrame],
         parallelization_modes={mode},
-        plugin_collector=PluginCollector.enabled_feature_groups(
-            {HubRightA, HubRightB, spoke_c, x_consumer, y_consumer} | (extra or set())
-        ),
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
         flight_server=flight_server,
     )
     names = (x_consumer.get_class_name(), y_consumer.get_class_name())
@@ -692,3 +692,50 @@ class TestTwoConsumersReadingDifferentSpokes:
 
             assert got[HubRightPairConsumer.get_class_name()] == _X_EXPECTED
             assert got[HubRightCDerivedConsumer.get_class_name()] == [2007, 3008]
+
+
+HubRightD = _hub_right_group("HubRightD", "hr_d", {"x": 100, "v": 200, "q": 300}, PyArrowTable)
+
+
+class HubRightDPairConsumer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_d"), Feature("hr_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), pc.add(data["hr_d"], data["hr_b"]))
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TestStarNextToARivalGroup:
+    @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
+    def test_a_star_and_a_rival_join_of_the_same_group_are_rejected_at_plan_time(self, hub_right: bool) -> None:
+        a, b, c, d = (JoinSpec(g, HUB_RIGHT_INDEX) for g in (HubRightA, HubRightB, HubRightCArrow, HubRightD))
+        if hub_right:
+            links = {Link.inner(a, b), Link.inner(c, b), Link.inner(d, b)}
+        else:
+            links = {Link.inner(b, a), Link.inner(b, c), Link.inner(b, d)}
+        groups: set[type[FeatureGroup]] = {
+            HubRightA,
+            HubRightB,
+            HubRightCArrow,
+            HubRightD,
+            HubRightConsumer,
+            HubRightDPairConsumer,
+        }
+
+        with pytest.raises(ValueError) as excinfo:
+            mloda.run_all(
+                [Feature(HubRightConsumer.get_class_name()), Feature(HubRightDPairConsumer.get_class_name())],
+                links=links,
+                compute_frameworks=[PyArrowTable, PandasDataFrame],
+                parallelization_modes={ParallelizationMode.SYNC},
+                plugin_collector=PluginCollector.enabled_feature_groups(groups),
+            )
+
+        message = str(excinfo.value)
+        for name in ("HubRightConsumer", "HubRightDPairConsumer", "HubRightB"):
+            assert name in message, f"{name} must be named; got: {message}"

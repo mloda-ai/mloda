@@ -1,4 +1,4 @@
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from copy import copy, deepcopy
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
@@ -244,29 +244,48 @@ class ExecutionPlan:
         self._feature_set_index_source = None
         self._feature_set_index_length = 0
 
+    @staticmethod
+    def _shared_frame_error(
+        graph: Graph, frame_step: Step, consumers: frozenset[UUID], rival_consumers: frozenset[UUID]
+    ) -> str:
+        nodes = graph.get_nodes()
+
+        def names(uuids: Iterable[UUID]) -> str:
+            return " and ".join(sorted({nodes[uuid].feature_group_class.get_class_name() for uuid in uuids}))
+
+        shared = names(u for u in frame_step.get_uuids() if u in nodes)
+        first, second = sorted((names(consumers), names(rival_consumers)))
+        return (
+            f"The consumers {first} and {second} each join {shared} through their own joins, and each group's "
+            f"joins would see the other's rows.\n"
+            f"Resolution: read {shared} through one consumer group, or declare separate links or groups for each."
+        )
+
     def _anchor_join_consumers_on_destination(
         self, plan: Sequence[TransformFrameworkStep | JoinStep | FeatureGroupStep]
     ) -> None:
         """Anchor a hop-less join consumer's frame lookup on the destination step's frame."""
         fg_steps = [step for step in plan if isinstance(step, FeatureGroupStep)]
-        for step in fg_steps:
+        listers_of: dict[tuple[type[ComputeFramework], UUID | None], set[int]] = defaultdict(set)
+        for position, other in enumerate(fg_steps):
+            for child in other.children_if_root:
+                listers_of[(other.compute_framework, child)].add(position)
+        records_of: dict[UUID, list[ResolvedJoin]] = defaultdict(list)
+        for record in self.planned_records:
+            for consumer in record.consumers:
+                records_of[consumer].append(record)
+        for position, step in enumerate(fg_steps):
             if step.tfs_ids:
                 continue
             # A single lister is unambiguous; re-anchoring it would only change the pinned plan shape.
-            listers = [
-                other
-                for other in fg_steps
-                if other is not step
-                and other.compute_framework == step.compute_framework
-                and step.features.any_uuid in other.children_if_root
-            ]
-            if len(listers) < 2:
+            if len(listers_of.get((step.compute_framework, step.features.any_uuid), set()) - {position}) < 2:
                 continue
             step_uuids = step.get_uuids()
+            step_records = {id(r): r for uuid in step_uuids for r in records_of.get(uuid, [])}.values()
             anchors = {
                 min(dest.get_uuids() & record.destination_uuids)
-                for record in self.planned_records
-                if record.destination_framework == step.compute_framework and step_uuids & record.consumers
+                for record in step_records
+                if record.destination_framework == step.compute_framework
                 for dest in fg_steps
                 if dest is not step
                 and dest.compute_framework == step.compute_framework
@@ -1346,6 +1365,7 @@ Available join types:
             if js.uuid not in group_of or js.link.jointype in (JoinType.APPEND, JoinType.UNION):
                 continue
             touched: set[UUID] = set()
+            rival_of: dict[UUID, JoinStep] = {}
             for frame in side_frames[js.uuid]:
                 for rival in joins_on_frame[frame]:
                     if rival.uuid not in group_of or group_of[rival.uuid] == group_of[js.uuid]:
@@ -1356,6 +1376,22 @@ Available join types:
                     if side_ancestors[js.uuid] & consumers_by_token[rival.uuid]:
                         continue
                     touched.add(frame)
+                    rival_of[frame] = rival
+            for frame in touched:
+                own_joins = [
+                    j
+                    for j in joins_on_frame[frame]
+                    if group_of.get(j.uuid) == group_of[js.uuid] and j.destination_framework == j.source_framework
+                ]
+                if len(own_joins) > 1:
+                    raise ValueError(
+                        self._shared_frame_error(
+                            graph,
+                            steps_by_uuid[frame],
+                            consumers_by_token[js.uuid],
+                            consumers_by_token[rival_of[frame].uuid],
+                        )
+                    )
             if frames_of(js.source_framework_uuids) & touched:
                 js.shared_source = True
             destination_frames = frames_of(js.destination_framework_uuids)

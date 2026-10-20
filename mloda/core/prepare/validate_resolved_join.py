@@ -91,6 +91,23 @@ _ALWAYS_REJECTED = (frozenset({"dropped", "inner"}), frozenset({"dropped", "oute
 _REJECTED_ON_SAME_INDEX = (frozenset({"dropped", "kept"}), frozenset({"kept", "outer"}))
 
 
+def _coalesces_keys(record: ResolvedJoin) -> bool:
+    """Same-named key columns merge into one column; differently named ones keep both."""
+    return record.left.index.index == record.right.index.index
+
+
+def _order_dependent(
+    roles: frozenset[str],
+    first: tuple[ResolvedJoin, ResolvedJoinSide, str],
+    second: tuple[ResolvedJoin, ResolvedJoinSide, str],
+) -> bool:
+    if roles in _ALWAYS_REJECTED:
+        return True
+    if roles not in _REJECTED_ON_SAME_INDEX or first[1].index != second[1].index:
+        return False
+    return any(_coalesces_keys(record) for record, _, role in (first, second) if role in ("dropped", "outer"))
+
+
 def _raise_on_two_dropped(first: ResolvedJoin, second: ResolvedJoin, graph: Graph) -> None:
     first_sides = _kept_and_dropped(first)
     second_sides = _kept_and_dropped(second)
@@ -143,9 +160,7 @@ def raise_on_join_star_keeping_two_groups(plan: ResolvedJoinPlan, graph: Graph) 
                 if not shared or first_role is None or second_role is None:
                     continue
                 roles = frozenset({first_role, second_role})
-                if roles in _ALWAYS_REJECTED or (
-                    roles in _REJECTED_ON_SAME_INDEX and first_side.index == second_side.index
-                ):
+                if _order_dependent(roles, (first, first_side, first_role), (second, second_side, second_role)):
                     nodes = graph.get_nodes()
                     consumer = sorted(nodes[uuid].feature_group_class.get_class_name() for uuid in shared_consumers)[0]
                     others = sorted(

@@ -261,7 +261,11 @@ def _plan_warnings(
             links=links,
             plugin_collector=PluginCollector.enabled_feature_groups(groups),
         )
-    return [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    return [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.WARNING and r.name == "mloda.core.prepare.resolve_links"
+    ]
 
 
 def _assert_unjoined_link_warning(messages: list[str]) -> None:
@@ -310,4 +314,15 @@ def test_base_link_shadowed_by_a_joined_subclass_link_does_not_warn(caplog: pyte
         {_UNJOINED_LINK, sub_link},
         {UnjoinedSubCustomers, UnjoinedSubOrders, UnjoinedSubNameAmount},
     )
+    assert messages == []
+
+
+def test_link_between_related_classes_with_one_requested_does_not_warn(caplog: pytest.LogCaptureFixture) -> None:
+    link = Link.inner(JoinSpec(UnjoinedCustomers, "ujc_id"), JoinSpec(UnjoinedSubCustomers, "ujsc_id"))
+    messages = _plan_warnings(caplog, ["ujsc_name"], {link}, {UnjoinedCustomers, UnjoinedSubCustomers})
+    assert messages == []
+
+
+def test_link_between_groups_outside_the_plan_does_not_warn(caplog: pytest.LogCaptureFixture) -> None:
+    messages = _plan_warnings(caplog, ["ujs_a"], {_UNJOINED_LINK}, _UNJOINED_GROUPS | {UnjoinedSelf})
     assert messages == []

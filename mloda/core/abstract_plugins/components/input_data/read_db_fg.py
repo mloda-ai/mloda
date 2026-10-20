@@ -15,7 +15,6 @@ from mloda.core.abstract_plugins.components.credential_scrub import scrub_creden
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     HANDLE_OPTION,
@@ -321,7 +320,7 @@ class ReadDBFG(FormatFeatureGroup):
     @classmethod
     def _catalog(cls, credentials: Any) -> tuple[dict[str, tuple[str, ...]] | None, str | None]:
         identity = cls.database_identity(credentials)
-        key = (cls, "catalog", identity, _deep_hashable(credentials))
+        key = (cls, "catalog", identity, cls.login_key(credentials), cls._preset_table(credentials))
         return run_cached(key, lambda: cls._read_catalog(credentials))
 
     @classmethod

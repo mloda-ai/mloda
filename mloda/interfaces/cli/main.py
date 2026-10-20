@@ -37,12 +37,13 @@ def build_services(
 ) -> tuple[Catalog, Planner, Runner]:
     """Build the catalog, planner and runner for ``settings``, signing plans with the env key if set."""
     key = env.get(SIGNING_KEY_ENV)
-    catalog = Catalog.build(settings, plugin_collector)
+    principal = getpass.getuser()
+    catalog = Catalog.build(settings, plugin_collector, principal=principal)
     planner = Planner(
         settings,
         catalog,
         signing_key=key.encode("utf-8") if key else None,
-        principal=getpass.getuser(),
+        principal=principal,
         plugin_collector=plugin_collector,
         clock=time.time if clock is None else clock,
     )
@@ -56,7 +57,7 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run", help="Plan and execute a feature request and print its preview.")
     for command in (explain, run):
         command.add_argument("request", help="Path to a JSON feature request, or - for stdin.")
-    run.add_argument("--max-rows", type=int, help="Refuse sources with more rows than this.")
+    run.add_argument("--max-rows", type=int, help="Refuse sources and results over this, and uncountable reads.")
     run.add_argument("--format", choices=FORMATS, default="json", help="Output format of the result.")
     mcp = commands.add_parser("mcp", help="Serve the feature catalog, explain and run to MCP clients.")
     serve = mcp.add_subparsers(dest="mcp_command", required=True).add_parser(

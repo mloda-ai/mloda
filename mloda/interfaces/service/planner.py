@@ -55,6 +55,7 @@ _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _PAYLOAD_KEYS = frozenset({"kid", "req", "digest", "cfg", "sub", "exp"})
 _DENIED_MESSAGE = "This feature is not available under the service policy."
 _UNPLANNABLE_MESSAGE = "The request cannot be planned under the service policy and sources."
+_WITHHELD_FILTER_MESSAGE = "Filters on columns the preview withholds are refused; row counts would reveal their values."
 
 
 def _b64(data: bytes) -> str:
@@ -96,6 +97,12 @@ def _alias_of(step: PlanStep, sources: Mapping[str, SourceConfig]) -> str | None
         if str(path) in source.files or any(path.is_relative_to(folder) for folder in source.folders):
             return alias
     return None
+
+
+def _is_plugin_root(step: PlanStep, alias: str | None) -> bool:
+    """A compute step that reads data itself: no declared inputs and no configured source."""
+    has_inputs = bool(step.input_feature_names) or any(step.input_feature_edges.values())
+    return step.step_kind == "compute" and alias is None and not has_inputs
 
 
 def _inputs(step: PlanStep, name: str) -> tuple[str, ...]:
@@ -209,10 +216,15 @@ class Planner:
             steps = mloda.explain(parsed.features, **self._plan_kwargs(parsed, sources)) if diagnosis.complete else []
         if not diagnosis.complete:
             return self._unresolved(diagnosis, request_names, sources)
-        unmatched = self._unmatched_filters(parsed, request.get("filters", []))
+        filters = request.get("filters", [])
+        unmatched = self._unmatched_filters(parsed, filters)
         if unmatched is not None:
             return unmatched
         aliases = tuple(_alias_of(step, sources) for step in steps)
+        producers = _producers(steps, aliases)
+        withheld = self._withheld_filters(filters, producers)
+        if withheld is not None:
+            return withheld
         estimate = self._estimate(steps, aliases)
         limited = self._limit_exceeded(estimate["sources"])
         if limited is not None:
@@ -223,7 +235,7 @@ class Planner:
             sources=sources,
             steps=tuple(steps),
             aliases=aliases,
-            producers=_producers(steps, aliases),
+            producers=producers,
             estimate=estimate,
             digest=_digest(steps),
         )
@@ -346,6 +358,22 @@ class Planner:
             return None
         return error_result("validation_failed", "A filter matches no planned feature.", details)
 
+    def _withheld_filters(
+        self, filters: Sequence[Mapping[str, Any]], producers: Mapping[str, tuple[PlanStep, str | None]]
+    ) -> dict[str, Any] | None:
+        details = [
+            {
+                "path": f"/filters/{index}",
+                "problem": "filter_on_withheld_column",
+                "message": f"The filter on '{sanitize_text(item['feature'])}' uses a column the preview withholds.",
+            }
+            for index, item in enumerate(filters)
+            if self._classification(item["feature"], producers, frozenset()) not in self._settings.preview_allows
+        ]
+        if not details:
+            return None
+        return error_result("policy_denied", _WITHHELD_FILTER_MESSAGE, details)
+
     def _described(self, planned: PlannedRequest) -> dict[str, Any]:
         expires = math.floor(self._clock()) + self._settings.plan_ttl_seconds
         steps = zip(planned.steps, planned.aliases)
@@ -405,10 +433,14 @@ class Planner:
         totals = {
             alias: _total(self._count(path, step) for path, step in sorted(reads[alias].items())) for alias in reads
         }
-        entries = [
+        entries: list[dict[str, Any]] = [
             {"alias": alias, "rows": totals[alias], "rows_exact": totals[alias] is not None} for alias in sorted(totals)
         ]
-        rows_read = _total(totals.values())
+        plugin_reads = sorted(
+            {str(step.feature_group_name) for step, alias in zip(steps, aliases) if _is_plugin_root(step, alias)}
+        )
+        entries += [{"alias": None, "feature_group": name, "rows": None, "rows_exact": False} for name in plugin_reads]
+        rows_read = None if plugin_reads else _total(totals.values())
         return {
             "sources": entries,
             "rows_read": rows_read,
@@ -430,7 +462,10 @@ class Planner:
             return None
         details: list[dict[str, Any]] = []
         for entry in entries:
-            if entry["rows"] is None:
+            if entry["alias"] is None:
+                plugin = {"source": None, "feature_group": entry["feature_group"]}
+                details.append({**plugin, "reason": "uncountable", "max_rows": max_rows})
+            elif entry["rows"] is None:
                 details.append({"source": entry["alias"], "reason": "uncountable", "max_rows": max_rows})
             elif entry["rows"] > max_rows:
                 details.append(
@@ -438,6 +473,6 @@ class Planner:
                 )
         if not details:
             return None
-        names = ", ".join(detail["source"] for detail in details)
+        names = ", ".join(detail["source"] or detail["feature_group"] for detail in details)
         message = f"Sources exceed max_rows ({max_rows}) or cannot be counted: {names}."
         return error_result("limit_exceeded", message, details)

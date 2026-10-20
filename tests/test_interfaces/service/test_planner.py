@@ -363,7 +363,8 @@ class TestFilters:
     def test_matched_filter_on_unrequested_column_is_allowed(self, tmp_path: Path) -> None:
         request = {"features": ["customer_id"], "filters": [{"feature": "segment", "op": "in", "values": ["a"]}]}
 
-        result = _success(_explain(tmp_path, request))
+        # A filter column must be previewable; an unclassified one is refused (filter_on_withheld_column).
+        result = _success(_explain(tmp_path, request, classification={"segment": "public"}))
 
         assert result["policy"] == {"verdict": "allowed"}
         assert result["normalized_request"] == request

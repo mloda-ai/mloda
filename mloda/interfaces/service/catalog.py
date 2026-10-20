@@ -26,6 +26,7 @@ from mloda.interfaces.service.errors import error_result, problems_to_details, s
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import MAX_NAME_LENGTH, Problem, option_data_access_violations
 from mloda.interfaces.service.sources import data_access_collection, source_columns
+from mloda.steward import verified_context
 
 MAX_DESCRIPTION_LENGTH = 300
 MAX_SEARCH_LIMIT = 50
@@ -161,21 +162,34 @@ def _options(fg: type[FeatureGroup]) -> tuple[list[dict[str, Any]], list[str]]:
 class Catalog:
     """A search and describe index over the FeatureGroups and sources one Settings allows."""
 
-    def __init__(self, settings: Settings, collector: PluginCollector, entries: Sequence[_Entry]) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        collector: PluginCollector,
+        entries: Sequence[_Entry],
+        *,
+        principal: str | None = None,
+    ) -> None:
         self._settings = settings
+        self._principal = principal
         self._collector = collector
         self._entries = tuple(entries)
         self._by_name = {entry.name: entry for entry in self._entries}
         self._known_names = sorted({name for entry in self._entries for name in entry.supported_names})
 
     @classmethod
-    def build(cls, settings: Settings, base: PluginCollector | None = None) -> "Catalog":
-        """Load the installed plugins, then index the FeatureGroups ``base`` enables minus the denied ones, once."""
+    def build(
+        cls, settings: Settings, base: PluginCollector | None = None, *, principal: str | None = None
+    ) -> "Catalog":
+        """Load the installed plugins, then index the FeatureGroups ``base`` enables minus the denied ones, once.
+
+        ``describe`` resolves names under ``principal``.
+        """
         with MLODA_LOCK:
             PluginLoader.all()
             collector = plugin_collector_for(settings, base)
             infos = get_feature_group_docs(plugin_collector=collector)
-        return cls(settings, collector, [_entry(info) for info in infos])
+        return cls(settings, collector, [_entry(info) for info in infos], principal=principal)
 
     def search(
         self,
@@ -227,12 +241,13 @@ class Catalog:
         if violations:
             details = problems_to_details(violations)
             return error_result("policy_denied", "A request may not set data-access options.", details)
-        resolved = resolve_feature(
-            name,
-            options=Options(group=group),
-            plugin_collector=self._collector,
-            data_access_collection=data_access_collection(self._settings.sources),
-        )
+        with verified_context(principal=self._principal), MLODA_LOCK:
+            resolved = resolve_feature(
+                name,
+                options=Options(group=group),
+                plugin_collector=self._collector,
+                data_access_collection=data_access_collection(self._settings.sources),
+            )
         if resolved.feature_group is not None:
             return self._described(name, resolved.feature_group, resolved)
         if resolved.candidates:

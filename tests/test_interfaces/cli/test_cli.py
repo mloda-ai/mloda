@@ -526,6 +526,30 @@ class TestRunFormats:
         _assert_no_paths(outcome.out, tmp_path)
 
 
+class TestWithheldFilters:
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_filter_on_withheld_column_is_policy_denied(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = {
+            "features": ["segment"],
+            "filters": [{"feature": "customer_id", "op": "eq", "value": CUSTOMER_IDS[2]}],
+        }
+
+        outcome = _cli([command, str(_request_file(tmp_path, request)), "--config", str(config)])
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "policy_denied"
+        details = outcome.json()["error"]["details"]
+        assert [(detail["path"], detail["problem"]) for detail in details] == [
+            ("/filters/0", "filter_on_withheld_column")
+        ]
+        assert "tables" not in outcome.json()
+        _assert_no_withheld_values(outcome)
+
+
 class TestBuildServices:
     def _settings(self, tmp_path: Path, mode: str = "plan") -> Settings:
         return load_settings(_config(tmp_path), ENV, {"mode": mode})

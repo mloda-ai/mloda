@@ -45,6 +45,11 @@ class Runner:
             return error_result("plan_stale", message)
         result = self._planner.execute(planned)
         tables = [self._table(frame, planned.names, result.plan) for frame in result]
+        max_rows = self._planner.settings.max_rows
+        over = [table["row_count"] for table in tables if max_rows is not None and table["row_count"] > max_rows]
+        if over:
+            details = [{"reason": "result_over_limit", "rows": rows, "max_rows": max_rows} for rows in over]
+            return error_result("limit_exceeded", f"A result table has more rows than max_rows ({max_rows}).", details)
         return {"status": "completed", "tables": tables, "audit_id": f"run_{secrets.token_hex(8)}"}
 
     def _table(self, frame: Mapping[Any, Any], names: Sequence[str], steps: Sequence[PlanStep]) -> dict[str, Any]:

@@ -34,7 +34,7 @@ Settings live in the `[mcp]` table of `mloda.toml`. Without `--config`, `./mloda
 [mcp]
 mode = "plan"                          # "plan" (default) or "execute"
 compute_frameworks = ["PythonDictFramework"]
-max_rows = 100000                      # refuse sources with more rows, or rows that cannot be counted
+max_rows = 100000                      # refuse requests that may read or return more rows (see below)
 deny_feature_groups = ["CustomerEmailFeatureGroup"]
 alternatives = { customer_email = ["customer_id"] }
 preview_allows = ["public", "internal"]
@@ -84,10 +84,14 @@ the request by JSON pointer, with a suggestion when a close name exists.
   result, and a request cannot set data-access options.
 - Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees `policy_denied` and
   the alternatives you configured.
-- `run` re-plans the request: validation, policy and row limits are checked again, and a plan that resolves
+- `run` re-plans the request: validation, policy, filters and row limits are checked again, and a plan that resolves
   differently is refused as `plan_stale`.
+- With `max_rows` set, a request is refused as `limit_exceeded` when a configured source has more rows or cannot be
+  counted (a CSV is counted exactly only when read on `PythonDictFramework`), when it reads data that a FeatureGroup
+  loads itself (never countable), and, after `run`, when a result table has more rows.
 - The preview holds only columns whose classification is in `preview_allows`. A derived feature takes the strictest
   classification of its inputs unless you classify it yourself. Unclassified columns are withheld.
+- A filter on a column the preview withholds is refused as `policy_denied`: row counts would reveal its values.
 - Descriptions and previewed values come from plugins and data: the server marks them untrusted.
 - Each call writes one audit line to the `mloda.interfaces.mcp` logger, without argument values. The principal is the
   local OS user.

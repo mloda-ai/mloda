@@ -12,6 +12,7 @@ runs in parallel, so a shared name would leak into another module's candidate un
 
 import copy
 import pickle  # nosec B403
+from typing import Any
 
 import pytest
 
@@ -162,9 +163,9 @@ class TestFeatureResolutionErrorEndToEnd:
 class _UnloadableRefusal_809(Exception):
     """Cannot be unpickled: the required keyword-only argument is not in args."""
 
-    def __init__(self, *, secret: str) -> None:
+    def __init__(self, *, code: str) -> None:
         super().__init__("unloadable refusal")
-        self.secret = secret
+        self.code = code
 
 
 class TestFeatureResolutionErrorTransport:
@@ -197,29 +198,23 @@ class TestFeatureResolutionErrorTransport:
         assert duplicate.feature_name == original.feature_name
         assert duplicate.result.failure_kind == original.result.failure_kind
 
-    def test_pickle_drops_refusals_even_when_one_cannot_be_unpickled(self) -> None:
+    @pytest.mark.parametrize(
+        "round_trip",
+        [lambda e: pickle.loads(pickle.dumps(e)), copy.deepcopy],  # nosec B301
+        ids=["pickle", "deepcopy"],
+    )
+    def test_round_trip_drops_refusals_even_when_one_cannot_be_unpickled(self, round_trip: Any) -> None:
         original = _raised_resolution_error_809()
         with_refusal = FeatureResolutionError(
-            str(original), original.feature_name, original.result, refusals=(_UnloadableRefusal_809(secret="s"),)
+            str(original), original.feature_name, original.result, refusals=(_UnloadableRefusal_809(code="s"),)
         )
         assert len(with_refusal.refusals) == 1
 
-        restored = pickle.loads(pickle.dumps(with_refusal))  # nosec B301
+        restored = round_trip(with_refusal)
 
         assert isinstance(restored, FeatureResolutionError)
         assert str(restored) == str(original)
         assert restored.refusals == ()
-
-    def test_deepcopy_drops_refusals_even_when_one_cannot_be_unpickled(self) -> None:
-        original = _raised_resolution_error_809()
-        with_refusal = FeatureResolutionError(
-            str(original), original.feature_name, original.result, refusals=(_UnloadableRefusal_809(secret="s"),)
-        )
-
-        duplicate = copy.deepcopy(with_refusal)
-
-        assert isinstance(duplicate, FeatureResolutionError)
-        assert duplicate.refusals == ()
 
 
 class TestFeatureResolutionErrorImportSurfaces:

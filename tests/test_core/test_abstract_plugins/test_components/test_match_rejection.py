@@ -8,8 +8,7 @@ recording function for plugin authors.
 
 Cycle 3: the window value is a frozen ``MatchRejection`` dataclass carrying the reason and a stage
 hint (default ``"value_rejection"``), so a reader decline can arrive stamped ``"input_data"``. The
-neutral module does not validate the stage string. ``MatchRejection`` is imported inside the test
-functions on purpose: while it does not exist yet, only these tests fail, not the whole collection.
+neutral module does not validate the stage string.
 """
 
 from __future__ import annotations
@@ -25,6 +24,7 @@ from mloda.core.abstract_plugins.components import match_hook, match_rejection
 from mloda.core.abstract_plugins.components.feature_chainer import feature_chain_parser
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
+    MatchRejection,
     record_match_rejection,
     restamp_match_rejections_since,
 )
@@ -72,7 +72,6 @@ class TestRecording:
 
     def test_the_first_reason_per_owner_wins_and_owners_stay_separate(self, recording_window: dict[str, Any]) -> None:
         """A second reason for the same owner never overwrites the first; a second owner gets its own slot."""
-        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
         record_match_rejection("FirstOwner727", "first reason 727")
         record_match_rejection("FirstOwner727", "second reason 727")
@@ -92,7 +91,6 @@ class TestStageHint:
 
     def test_the_neutral_module_exposes_matchrejection(self) -> None:
         """MatchRejection lives in the neutral module; its stage defaults to value_rejection."""
-        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
         rejection = MatchRejection(reason="probe reason 727")
 
@@ -103,7 +101,6 @@ class TestStageHint:
         self, recording_window: dict[str, Any]
     ) -> None:
         """No stage argument: the stored MatchRejection carries the default value_rejection stage."""
-        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
         record_match_rejection("DefaultStageOwner727", "default stage reason 727")
 
@@ -112,7 +109,6 @@ class TestStageHint:
 
     def test_recording_with_a_stage_stores_that_stage(self, recording_window: dict[str, Any]) -> None:
         """stage='input_data' is stored verbatim on the MatchRejection."""
-        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
         record_match_rejection("InputDataOwner727", "input data reason 727", stage="input_data")
 
@@ -121,7 +117,6 @@ class TestStageHint:
 
     def test_the_first_recording_per_owner_wins_across_differing_stages(self, recording_window: dict[str, Any]) -> None:
         """A later recording never overwrites the first, not even with a different stage."""
-        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
         record_match_rejection("StageRaceOwner727", "first staged reason 727", stage="input_data")
         record_match_rejection("StageRaceOwner727", "second staged reason 727")
@@ -134,12 +129,10 @@ class TestRefusalField:
     """A rejection can carry the extender exception that caused it, outside equality and repr."""
 
     def test_refusal_defaults_to_none(self) -> None:
-        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
         assert MatchRejection(reason="r").refusal is None
 
     def test_equality_and_repr_ignore_the_refusal(self) -> None:
-        from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
         with_refusal = MatchRejection(reason="r", refusal=PermissionError("secret refusal"))
 

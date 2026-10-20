@@ -335,12 +335,14 @@ class _ImdRecordingExtender(Extender):
 class _ImdRefusingExtender(Extender):
     """Raises PermissionError for the target candidate, passes everything else through."""
 
-    def __init__(self, target: type, never_fall_back: bool = False, raise_on_error: bool = True) -> None:
+    def __init__(
+        self, target: type | tuple[type, ...], never_fall_back: bool = False, raise_on_error: bool = True
+    ) -> None:
         self.priority = 100
         self.raise_on_error = raise_on_error
         self.never_fall_back = never_fall_back
         self.name = "imdmatch_refuse"
-        self._target = target
+        self._targets: tuple[type, ...] = target if isinstance(target, tuple) else (target,)
         self.raised: list[Exception] = []
 
     def wraps(self) -> set[ExtenderHook]:
@@ -348,20 +350,8 @@ class _ImdRefusingExtender(Extender):
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         context = HookContext.current()
-        if context is not None and context.reader_class is self._target:
-            refusal = PermissionError("no clearance")
-            self.raised.append(refusal)
-            raise refusal
-        return func(*args, **kwargs)
-
-
-class _ImdTwoTargetGate(_ImdRefusingExtender):
-    """Gate refusing both the gate reader and the twin reader."""
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        context = HookContext.current()
-        if context is not None and context.reader_class in (ImdMatchGateReader, ImdMatchTwinReader):
-            refusal = PermissionError("no clearance")
+        if context is not None and context.reader_class in self._targets:
+            refusal = PermissionError(f"no clearance for {context.reader_class.__name__}")
             self.raised.append(refusal)
             raise refusal
         return func(*args, **kwargs)
@@ -372,7 +362,7 @@ class _ImdSkippingExtender(_ImdRefusingExtender):
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         context = HookContext.current()
-        if context is not None and context.reader_class is self._target:
+        if context is not None and context.reader_class in self._targets:
             forged = SourceMatch(source="imdmatch_forged", access=dict(_FMT_COLUMNS))
             return {forged.source: forged}, {}, False
         return func(*args, **kwargs)
@@ -444,7 +434,7 @@ class _ImdPostProbeRefusingExtender(_ImdRefusingExtender):
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         result = func(*args, **kwargs)
         context = HookContext.current()
-        if context is not None and context.reader_class is self._target:
+        if context is not None and context.reader_class in self._targets:
             raise PermissionError("no clearance")
         return result
 
@@ -499,10 +489,11 @@ class TestRefusal:
         assert "no clearance" in str(excinfo.value)
         assert text in str(excinfo.value)
         if error_type is FeatureResolutionError:
-            refusals = excinfo.value.refusals  # type: ignore[attr-defined]
+            assert isinstance(excinfo.value, FeatureResolutionError)
+            refusals = excinfo.value.refusals
             assert len(refusals) == 1
             assert type(refusals[0]) is PermissionError
-            assert str(refusals[0]) == "no clearance"
+            assert str(refusals[0]) == f"no clearance for {kind.gate.__name__}"
             assert any(refusals[0] is raised for raised in extender.raised)
             assert excinfo.value.__cause__ is refusals[0]
             assert refusals[0].__traceback__ is None
@@ -515,15 +506,17 @@ class TestRefusal:
 
     def test_two_refused_candidates_are_both_carried_in_order(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateGroup, ImdMatchTwinGroup})
-        extender = _ImdTwoTargetGate(ImdMatchGateReader, never_fall_back=True)
+        extender = _ImdRefusingExtender((ImdMatchGateReader, ImdMatchTwinReader), never_fall_back=True)
 
         with pytest.raises(FeatureResolutionError) as excinfo:
             _prepare(Feature(_COL_A), enabled, _global_access(False), extender)
 
         refusals = excinfo.value.refusals
-        assert len(refusals) == 2
+        assert [str(r) for r in refusals] == [
+            "no clearance for ImdMatchGateReader",
+            "no clearance for ImdMatchTwinReader",
+        ]
         assert all(any(r is raised for raised in extender.raised) for r in refusals)
-        assert refusals[0] is not refusals[1]
         assert excinfo.value.__cause__ is refusals[0]
         assert all(r.__traceback__ is None for r in refusals)
 
@@ -707,7 +700,8 @@ class TestFormatGroupHook:
         assert type(excinfo.value) is error_type
         assert "the extender did not run the probe" in str(excinfo.value)
         if error_type is FeatureResolutionError:
-            assert excinfo.value.refusals == ()  # type: ignore[attr-defined]
+            assert isinstance(excinfo.value, FeatureResolutionError)
+            assert excinfo.value.refusals == ()
             assert excinfo.value.__cause__ is None
         assert ImdMatchGateFormat.probes == 0
         assert ImdMatchGateFormat.column_reads == 0

@@ -1365,6 +1365,31 @@ Available join types:
             for frame in side_frames[j.uuid]:
                 joins_on_frame[frame].append(j)
 
+        # A step reading a side frame without a join record runs before any join merges into or redirects it.
+        record_consumers = frozenset().union(*consumers_by_token.values())
+        consumer_ancestors = set().union(*(graph.parent_to_children_mapping.get(c, set()) for c in record_consumers))
+        all_carriers = set().union(*(j.carriers for j in left_join_frameworks))
+        framework_of_step = {ep.uuid: ep.compute_framework for ep in execution_plan if isinstance(ep, FeatureGroupStep)}
+        for step in execution_plan:
+            if not isinstance(step, FeatureGroupStep) or not joins_on_frame:
+                continue
+            own = step.get_uuids()
+            if own & (record_consumers | consumer_ancestors | join_side_uuids | all_carriers):
+                continue
+            if any(graph.parent_to_children_mapping.get(u, set()) & record_consumers for u in own):
+                continue
+            read_frames = frames_of(step.required_uuids)
+            if any(framework_of_step.get(f) is not step.compute_framework for f in read_frames):
+                continue
+            for js in {j.uuid: j for frame in read_frames for j in joins_on_frame.get(frame, ())}.values():
+                if js.link.jointype in (JoinType.APPEND, JoinType.UNION):
+                    continue
+                if read_frames & destination_frames[js.uuid] and read_frames & (
+                    side_frames[js.uuid] - destination_frames[js.uuid]
+                ):
+                    continue
+                js.required_uuids |= own
+
         for js in planned_joins:
             if js.uuid not in group_of or js.link.jointype in (JoinType.APPEND, JoinType.UNION):
                 continue

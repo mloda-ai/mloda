@@ -606,8 +606,8 @@ def _two_consumers_run(
     mode: ParallelizationMode,
     flight_server: Any = None,
     extra: set[type[FeatureGroup]] | None = None,
+    x_consumer: type[FeatureGroup] = HubRightPairConsumer,
 ) -> dict[str, list[int]]:
-    x_consumer = HubRightPairConsumer
     groups: set[type[FeatureGroup]] = {HubRightA, HubRightB, spoke_c, x_consumer, y_consumer}
     groups |= extra or set()
     results = mloda.run_all(
@@ -775,6 +775,43 @@ class TestAConsumerReadingPartOfAStar:
 
             assert got[HubRightPairConsumer.get_class_name()] == [11, 22, 33]
             assert got[HubRightConsumer.get_class_name()] == [11, 29, 41]
+
+
+class OnlyB(FeatureGroup):
+    """Reads hr_b only, so it needs no join."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("hr_b")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column(cls.get_class_name(), data["hr_b"])
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+
+class TestAStepReadingAJoinSideWithoutALink:
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    @pytest.mark.parametrize("hub_right", [True, False], ids=["hub_right", "hub_left"])
+    @pytest.mark.parametrize("shape", ["one_join", "star"])
+    def test_a_step_reading_a_side_frame_keeps_all_its_rows(
+        self, shape: str, hub_right: bool, mode: ParallelizationMode
+    ) -> None:
+        a, b = JoinSpec(HubRightA, HUB_RIGHT_INDEX), JoinSpec(HubRightB, HUB_RIGHT_INDEX)
+        if shape == "one_join":
+            links = {Link.inner(a, b) if hub_right else Link.inner(b, a)}
+            consumer, expected = HubRightPairConsumer, _X_EXPECTED
+        else:
+            links = _star_links(HubRightCArrow, hub_right)
+            consumer, expected = HubRightConsumer, _HUB_RIGHT_INNER_EXPECTED
+        repeats = _THREADING_REPEATS if mode == ParallelizationMode.THREADING else 1
+        for _ in range(repeats):
+            got = _two_consumers_run(links, HubRightCArrow, consumer, mode, x_consumer=OnlyB)
+
+            assert got[OnlyB.get_class_name()] == [10, 20, 30, 50, 60]
+            assert got[consumer.get_class_name()] == expected
 
 
 HubRightD = _hub_right_group("HubRightD", "hr_d", {"x": 100, "v": 200, "q": 300}, PyArrowTable)

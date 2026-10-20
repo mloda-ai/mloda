@@ -188,6 +188,13 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         feature = self._feature(self._group_name(), {self._group_name(): str(self.foreign_path)})
         assert not self._claims(feature, self.own_dac())
 
+    def test_doc_a_pointer_to_a_foreign_suffix_records_the_suffix_reason(self) -> None:
+        feature = self._feature(self._group_name(), {self._group_name(): str(self.foreign_path)})
+        reason = self._evaluate(feature, None).eliminations[self.feature_group_class].reason
+        assert str(self.foreign_path) in reason
+        assert f"does not end in a {self._group_name()} suffix" in reason
+        assert self._suffix() in reason
+
     def test_doc_foreign_suffix_files_in_a_folder_never_claim(self) -> None:
         folder = self.tmp_path / "foreign_folder"
         self._make("decoy", folder, FOREIGN_SUFFIX)
@@ -207,8 +214,8 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             result = self._evaluate(self._feature(name, group), dac)
             assert self.feature_group_class not in result.identified
             if dac is not None:
-                assert "not a regular file" in result.eliminations[self.feature_group_class].reason
-        with pytest.raises(ValueError, match="not a regular file"):
+                assert "it does not exist" in result.eliminations[self.feature_group_class].reason
+        with pytest.raises(ValueError, match="it does not exist"):
             self._resolve(self._feature(name, {name: gone}), None)
 
     def test_doc_a_pointer_to_a_handed_over_suffix_names_document_suffixes(self) -> None:
@@ -219,6 +226,7 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert sub not in result.identified
         assert DOCUMENT_SUFFIXES_OPTION in result.eliminations[sub].reason, result.eliminations[sub]
+        assert "does not end in" not in result.eliminations[sub].reason
         del sub, mapping, result, feature
         gc.collect()
 
@@ -397,6 +405,12 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     def test_unpointed_missing_column_declines_with_a_rejection(self) -> None:
         pytest.skip("document names are declared, so an undeclared name has no column listing to cite")
+
+    def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
+        pytest.skip("undeclared document names decline without a column listing")
+
+    def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:
+        pytest.skip("undeclared document names decline without a column listing")
 
     def test_chain_and_column_separated_names_that_are_not_columns_decline(
         self, rejection_window: dict[str, MatchRejection]

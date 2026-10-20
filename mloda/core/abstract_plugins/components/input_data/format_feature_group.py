@@ -1,11 +1,13 @@
 """Shared base of one-FeatureGroup-per-format: claim routes decide matching, hooks discover and load sources."""
 
+import difflib
 import inspect
 import types
 from abc import abstractmethod
 from collections.abc import Callable, Collection, Iterable
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
@@ -22,9 +24,11 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
 from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_format_group
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
+    MATCH_REJECTION_REASONS,
     drop_match_rejections_since,
     match_rejection_owners,
     record_match_rejection,
+    replace_probe_match_rejection,
 )
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
@@ -37,6 +41,11 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
 
 _MAX_LISTED_COLUMNS = 20
+_MAX_DESCRIBED = 5
+_MAX_COLUMN_NAME = 64
+_MAX_REASON = 200
+FOLDER_ESCAPE_MARK = "links outside its folder"
+REASON_DETAIL = "\x1f"  # splits a reason lead from detail (reader error text) that only pointed users see
 
 HANDLE_OPTION = "data_access_handle"
 HANDLE_SPEC = PropertySpec(
@@ -50,10 +59,20 @@ HANDLE_SPEC = PropertySpec(
 )
 
 
+def _clip(text: str, limit: int) -> str:
+    return text if len(text) <= limit else f"{text[: limit - 3]}..."
+
+
+def _suggestion(column: str, known: list[str]) -> str:
+    close = difflib.get_close_matches(column, sorted(set(known)), n=3, cutoff=0.6)
+    names = ", ".join(repr(_clip(scrub_credentials(name), _MAX_COLUMN_NAME)) for name in close)
+    return f"; did you mean {names}?" if close else ""
+
+
 def _listed(columns: Collection[str] | None) -> str:
     if columns is None:
         return "unknown"
-    names = sorted(columns)
+    names = sorted(_clip(scrub_credentials(column), _MAX_COLUMN_NAME) for column in columns)
     text = ", ".join(names[:_MAX_LISTED_COLUMNS])
     if len(names) > _MAX_LISTED_COLUMNS:
         text += f", ... and {len(names) - _MAX_LISTED_COLUMNS} more"
@@ -124,6 +143,11 @@ class FormatFeatureGroup(FeatureGroup):
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
         """Why the source cannot enumerate its columns, None when no reason is known."""
         return None
+
+    @classmethod
+    def _hidden_reason(cls, match: SourceMatch) -> str | None:
+        """The unknown_columns_reason safe to show a user who did not point at the group."""
+        return cls.unknown_columns_reason(match)
 
     @classmethod
     def has_column(cls, match: SourceMatch, column: str) -> bool | None:
@@ -267,14 +291,6 @@ class FormatFeatureGroup(FeatureGroup):
         )
 
     @classmethod
-    def _listed_columns(cls, match: SourceMatch) -> str:
-        columns = cls.columns(match)
-        if columns is not None:
-            return _listed(columns)
-        reason = cls.unknown_columns_reason(match)
-        return "unknown" if reason is None else f"unknown ({reason})"
-
-    @classmethod
     def _abort(cls, error: ValueError, deferrable: bool = False, candidates: tuple[str, ...] = ()) -> bool:
         """Raise the match abort, or decline with a rejection when the global filter probe contains it."""
         if aborts_are_contained():
@@ -337,8 +353,8 @@ class FormatFeatureGroup(FeatureGroup):
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, SourceMatch] = {}
         undeclared = False
+        known_owners = match_rejection_owners()
         if selected:
-            known_owners = match_rejection_owners()
             outcome = probe_format_group(
                 cls,
                 lambda: cls._probe_routes(selected, name, base_name, options, data_access_collection),
@@ -359,9 +375,11 @@ class FormatFeatureGroup(FeatureGroup):
         if len(fitting) > 1:
             return cls._abort(
                 ValueError(
-                    f"{cls.get_class_name()} found feature '{name}' in several sources: "
-                    f"{', '.join(sorted(fitting))}; "
-                    f"{cls.ambiguity_fix(name, list(fitting.values()), data_access_collection)}"
+                    scrub_credentials(
+                        f"{cls.get_class_name()} found feature '{name}' in several sources: "
+                        f"{', '.join(sorted(fitting))}; "
+                        f"{cls.ambiguity_fix(name, list(fitting.values()), data_access_collection)}"
+                    )
                 ),
                 candidates=tuple(sorted(fitting)),
             )
@@ -369,16 +387,37 @@ class FormatFeatureGroup(FeatureGroup):
             options.add_to_group(RESERVED_READER_OPTION_KEY, (cls, next(iter(fitting.values()))))
             return True
         if seen:
-            described = "; ".join(
-                f"{source} has columns {cls._listed_columns(match)}" for source, match in sorted(seen.items())
+            show_columns = pointed or isinstance(options.get(HANDLE_OPTION), str)
+            items = sorted(seen.items())
+            known = {source: cls.columns(match) for source, match in items}
+            parts: list[str] = []
+            for source, match in items[:_MAX_DESCRIBED]:
+                if known[source] is not None:
+                    parts.append(f"{source} has columns {_listed(known[source])}" if show_columns else source)
+                else:
+                    why = cls.unknown_columns_reason(match) if show_columns else cls._hidden_reason(match)
+                    parts.append(source if why is None else f"{source}: {_clip(scrub_credentials(why), _MAX_REASON)}")
+            if len(items) > _MAX_DESCRIBED:
+                parts.append(f"and {len(items) - _MAX_DESCRIBED} more")
+            name = cls.get_class_name()
+            head = (
+                f"column '{base_name}' is in none of the sources of {name}"
+                if any(columns is not None for columns in known.values())
+                else f"{name} could not list the columns of any of its sources for column '{base_name}'"
             )
-            reason = f"column '{base_name}' is in none of the sources of {cls.get_class_name()}: {described}"
+            text = f"{head}: {'; '.join(parts)}"
+            if show_columns:
+                text += _suggestion(base_name, [c for columns in known.values() for c in columns or ()])
+            reason = scrub_credentials(text)
+            probed = (MATCH_REJECTION_REASONS.get() or {}).get(cls.get_class_name())
+            if probed is not None and FOLDER_ESCAPE_MARK in probed.reason and cls.get_class_name() not in known_owners:
+                reason += "; skipped folder entries that link outside their folder"
             if pointed:
                 return cls._abort(
                     ValueError(f"{reason}; request a column a source has or point at another source."),
                     deferrable=True,
                 )
-            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            replace_probe_match_rejection(cls.get_class_name(), reason, known_owners, stage=INPUT_DATA_STAGE)
         elif skipped:
             reason = f"options point at {foreign}, so {cls.get_class_name()} does not search the collection"
             record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)

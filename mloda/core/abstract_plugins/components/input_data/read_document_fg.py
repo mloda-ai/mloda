@@ -8,10 +8,12 @@ A subclass declares ``suffixes()``. Third-party groups should run the contract m
 import os
 from typing import Any, ClassVar
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import HANDLE_OPTION
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -76,17 +78,52 @@ class ReadDocumentFG(_FileSourceFG):
             cls._record_handed_over(feature_name, options, data_access_collection)
         gone = [match for match in found if not os.path.isfile(match.access)]
         if gone:
-            reason = f"{name} matched {os.path.abspath(gone[0].access)} but it is not a regular file"
-            record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
-        return [match for match in found if match not in gone]
+            path = os.path.abspath(gone[0].access)
+            record_match_rejection(
+                name, scrub_credentials(f"{name} matched {path} but {not_a_file_reason(path)}"), stage=INPUT_DATA_STAGE
+            )
+        kept = [match for match in found if match not in gone]
+        if not kept and cls._pointer_key(options) is None:
+            cls._record_collection_handed_over(route, options, data_access_collection)
+        return kept
 
     @classmethod
     def _record_handed_over(
         cls, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
     ) -> None:
         path = cls._pointer_value(options) or cls._pinned_path(feature_name, data_access_collection)
-        excluded = cls._document_suffixes(options)
-        if path is not None and path.endswith(cls.suffixes()) and not cls._owns(path, excluded):
+        if path is not None:
+            cls._record_if_handed_over(path, options)
+
+    @classmethod
+    def _record_collection_handed_over(
+        cls, route: ClaimRoute, options: Options, data_access_collection: DataAccessCollection | None
+    ) -> None:
+        if data_access_collection is None:
+            return
+        files = data_access_collection.files
+        folders = data_access_collection.folders
+        handle = options.get(HANDLE_OPTION)
+        if isinstance(handle, str):
+            files = {handle: files[handle]} if handle in files else {}
+            folders = {handle: folders[handle]} if handle in folders else {}
+        if route.source_kind == "file":
+            paths = list(files.values())
+        else:
+            paths = [
+                os.path.join(f, entry)
+                for f in folders.values()
+                if os.path.isdir(f)
+                for entry in sorted(os.listdir(f))
+                if cls._inside(os.path.realpath(f), os.path.join(f, entry))
+            ]
+        for path in paths:
+            if os.path.isfile(path):
+                cls._record_if_handed_over(path, options)
+
+    @classmethod
+    def _record_if_handed_over(cls, path: str, options: Options) -> None:
+        if path.endswith(cls.suffixes()) and not cls._owns(path, cls._document_suffixes(options)):
             record_match_rejection(
                 cls.get_class_name(),
                 f"{path} is handed over to another reader; list its suffix in document_suffixes to read it here",

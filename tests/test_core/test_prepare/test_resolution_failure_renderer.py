@@ -230,6 +230,7 @@ TROUBLESHOOTING_LINE = (
     "For troubleshooting guide, see: "
     "https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/"
 )
+STEWARD_LINE = "A steward can keep one with PluginCollector or a PluginPolicy.\n"
 
 SUGGESTION_PREFIX = "Did you mean one of: "
 
@@ -1743,6 +1744,7 @@ class TestRenderResolutionFailureMessages:
             f"Multiple feature groups found for feature '{MULTIPLE_FEATURE_791}':\n"
             f"  - RendererMultipleAFG791 ({module}) [domain: renderer_domain_a_791]\n"
             f"  - RendererMultipleBFG791 ({module}) [domain: renderer_domain_b_791]\n"
+            f"{STEWARD_LINE}"
             f"{TROUBLESHOOTING_LINE}"
         )
 
@@ -2054,6 +2056,7 @@ class TestFactCaptureNeverTakesEvaluateDown:
             f"Multiple feature groups found for feature '{RAISING_DOMAIN_FEATURE_791}':\n"
             f"  - {healthy.__name__} ({module}) [domain: {HEALTHY_DOMAIN_791}]\n"
             f"  - {raising.__name__} ({module})\n"
+            f"{STEWARD_LINE}"
             f"{TROUBLESHOOTING_LINE}"
         )
 
@@ -2338,6 +2341,7 @@ class TestSortTiesAreStable:
             f"Multiple feature groups found for feature '{TIE_FEATURE_791}':\n"
             f"  - RendererTieFG791 ({TIE_MODULE_A_791}) [domain: renderer_tie_domain_a_791]\n"
             f"  - RendererTieFG791 ({TIE_MODULE_B_791}) [domain: renderer_tie_domain_b_791]\n"
+            f"{STEWARD_LINE}"
             f"{TROUBLESHOOTING_LINE}"
         )
 
@@ -3082,6 +3086,7 @@ class TestADeadNameIsCapturedOnlyForTheMessageThatReadsIt:
             f"Multiple feature groups found for feature '{MULTIPLE_FEATURE_791}':\n"
             f"  - RendererMultipleAFG791 ({module}) [domain: renderer_domain_a_791]\n"
             f"  - RendererMultipleBFG791 ({module}) [domain: renderer_domain_b_791]\n"
+            f"{STEWARD_LINE}"
             f"{TROUBLESHOOTING_LINE}"
         )
 

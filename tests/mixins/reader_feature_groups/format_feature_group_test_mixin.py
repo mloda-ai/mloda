@@ -322,6 +322,35 @@ class FormatFeatureGroupTestMixin:
         assert self.expected_source in reason
         assert self.missing_column in reason
 
+    def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
+        unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
+        reason = unpointed.eliminations[self.feature_group_class].reason
+        assert self.expected_source in reason
+        assert self.present_column not in reason
+
+        dac = self.own_dac()
+        handle = sorted(dac.handles())[0]
+        narrowed = Feature(self.missing_column, self._options(context={HANDLE_OPTION: handle}))
+        reason = self._evaluate(narrowed, dac).eliminations[self.feature_group_class].reason
+        assert self.expected_source in reason
+        assert self.present_column in reason
+
+    def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:
+        typo = f"{self.present_column}x"
+        suggestion = f"did you mean '{self.present_column}'?"
+
+        pointed = self._feature(typo, {self._group_name(): self.own_pointer()})
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        assert suggestion in str(exc_info.value)
+
+        unpointed = self._evaluate(Feature(typo), self.own_dac())
+        assert "did you mean" not in unpointed.eliminations[self.feature_group_class].reason
+
+        dac = self.own_dac()
+        narrowed = Feature(typo, self._options(context={HANDLE_OPTION: sorted(dac.handles())[0]}))
+        assert suggestion in self._evaluate(narrowed, dac).eliminations[self.feature_group_class].reason
+
     def test_chain_and_column_separated_names_that_are_not_columns_decline(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:

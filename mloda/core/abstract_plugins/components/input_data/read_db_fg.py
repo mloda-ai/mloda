@@ -13,10 +13,13 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     HANDLE_OPTION,
     HANDLE_SPEC,
+    REASON_DETAIL,
+    _MAX_DESCRIBED,
     FormatFeatureGroup,
 )
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
@@ -29,8 +32,12 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
 
-_MAX_DESCRIBED = 5
 QUERY_OPTION = "query_text"
+
+
+def _capped(names: list[str]) -> str:
+    text = ", ".join(repr(name) for name in names[:_MAX_DESCRIBED])
+    return text if len(names) <= _MAX_DESCRIBED else f"{text}, and {len(names) - _MAX_DESCRIBED} more"
 
 
 @dataclass(frozen=True, eq=False)
@@ -47,11 +54,6 @@ class DBQuery:
 
     credentials: Any = field(repr=False)
     query_text: str
-
-
-def _capped(names: list[str]) -> str:
-    text = ", ".join(repr(name) for name in names[:_MAX_DESCRIBED])
-    return text if len(names) <= _MAX_DESCRIBED else f"{text}, and {len(names) - _MAX_DESCRIBED} more"
 
 
 class ReadDBFG(FormatFeatureGroup):
@@ -77,7 +79,7 @@ class ReadDBFG(FormatFeatureGroup):
     @classmethod
     @abstractmethod
     def database_identity(cls, credentials: Any) -> str:
-        """A credential-free name of the database, used as source prefix and cache key."""
+        """A credential-free name of the database, used as source prefix; catalogs are cached per credential."""
 
     @classmethod
     @abstractmethod
@@ -209,21 +211,31 @@ class ReadDBFG(FormatFeatureGroup):
         catalog, _ = cls._catalog(credentials)
         if catalog is None:
             return [SourceMatch(identity, DBTable(credentials, None))]
-        preset = credentials.get(cls.TABLE_KEY) if isinstance(credentials, Mapping) else None
-        tables = [preset] if isinstance(preset, str) and preset else list(catalog)
+        preset = cls._preset_table(credentials)
+        tables = [preset] if preset else list(catalog)
         return [SourceMatch(f"{identity}::{table}", DBTable(credentials, table)) for table in tables]
+
+    @classmethod
+    def _preset_table(cls, credentials: Any) -> str | None:
+        preset = credentials.get(cls.TABLE_KEY) if isinstance(credentials, Mapping) else None
+        return preset if isinstance(preset, str) and preset else None
 
     @classmethod
     def _catalog(cls, credentials: Any) -> tuple[dict[str, tuple[str, ...]] | None, str | None]:
         identity = cls.database_identity(credentials)
-        return run_cached((cls, "catalog", identity), lambda: cls._read_catalog(credentials))
+        key = (cls, "catalog", identity, _deep_hashable(credentials))
+        return run_cached(key, lambda: cls._read_catalog(credentials))
 
     @classmethod
     def _read_catalog(cls, credentials: Any) -> tuple[dict[str, tuple[str, ...]] | None, str | None]:
         try:
             connection = cls.get_connection(credentials)
             try:
-                catalog = {table: tuple(cls.table_columns(connection, table)) for table in cls.list_tables(connection)}
+                tables = list(cls.list_tables(connection))
+                preset = cls._preset_table(credentials)
+                if preset:
+                    tables = [preset] if preset in tables else []
+                catalog = {table: tuple(cls.table_columns(connection, table)) for table in tables}
             finally:
                 cls.close_connection(connection)
         except cls.CATALOG_ERRORS as exc:
@@ -235,7 +247,8 @@ class ReadDBFG(FormatFeatureGroup):
                     (v for v in credentials.values() if isinstance(v, str) and v), key=len, reverse=True
                 ):
                     text = text.replace(secret, "***")
-            return None, f"could not read its tables: {scrub_credentials(text)}"
+            detail = ": " if isinstance(exc, ImportError) else REASON_DETAIL
+            return None, f"could not read its tables{detail}{scrub_credentials(text)}"
         return catalog, None
 
     @classmethod
@@ -248,6 +261,16 @@ class ReadDBFG(FormatFeatureGroup):
 
     @classmethod
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
+        raw = cls._raw_reason(match)
+        return None if raw is None else raw.replace(REASON_DETAIL, ": ")
+
+    @classmethod
+    def _hidden_reason(cls, match: SourceMatch) -> str | None:
+        raw = cls._raw_reason(match)
+        return None if raw is None else raw.split(REASON_DETAIL)[0]
+
+    @classmethod
+    def _raw_reason(cls, match: SourceMatch) -> str | None:
         access = match.access
         if isinstance(access, DBQuery):
             return None

@@ -9,6 +9,7 @@ import hashlib
 import inspect
 from collections import OrderedDict
 from collections.abc import Collection, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, ClassVar
@@ -20,6 +21,7 @@ from mloda.core.abstract_plugins.components.credential import RegisteredCredenti
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, MatchRejection
 from mloda.core.abstract_plugins.components.options import Options
@@ -345,6 +347,41 @@ class TestInheritedDefaults:
         assert "toyfmt-secret-value" not in repr(match)
 
 
+class RoleConnection(FakeConnection):
+    def __init__(self, role: str) -> None:
+        super().__init__()
+        self.role = role
+
+
+class ToyRoleDB(ToyBaseDB):
+    """The catalog depends on the credential's role: only the admin reads the extra column."""
+
+    @classmethod
+    def connect(cls, credentials: Any) -> Any:
+        return RoleConnection(str(credentials.get("role")))
+
+    @classmethod
+    def table_columns(cls, connection: Any, table: str) -> Collection[str]:
+        if connection.role == "admin":
+            return ("toyfmt_shared", "toyfmt_admin_only")
+        return ("toyfmt_shared",)
+
+
+class ToySecretIdentityDB(ToyBaseDB):
+    """Puts the credential into the database identity, as a driver that embeds it in a URL would."""
+
+    @classmethod
+    def database_identity(cls, credentials: Any) -> str:
+        return f"kv://shop?pw={credentials[KEY]}"
+
+
+@dataclass(frozen=True)
+class _OpaqueSecret:
+    """Equality separates two values whose repr is identical."""
+
+    value: str = field(repr=False)
+
+
 class TestCatalogCache:
     def test_a_run_reads_a_database_catalog_once_and_a_second_database_separately(self) -> None:
         first, second = _match({KEY: "a"}), _match({KEY: "b"})
@@ -359,6 +396,70 @@ class TestCatalogCache:
         ToyBaseDB.columns(match)
         ToyBaseDB.columns(match)
         assert len(ToyBaseDB.list_calls) == 2
+
+    def test_credentials_differing_only_in_a_secret_read_two_catalogs_in_one_run(self) -> None:
+        first = _match({KEY: "a", "password": "toyfmt-secret-one"})  # nosec B105
+        second = _match({KEY: "a", "password": "toyfmt-secret-two"})  # nosec B105
+        with run_match_cache():
+            ToyBaseDB.columns(first)
+            ToyBaseDB.columns(second)
+        assert len(ToyBaseDB.list_calls) == 2
+
+    def test_secrets_with_an_identical_redacted_repr_still_read_two_catalogs_in_one_run(self) -> None:
+        first = _match({KEY: "a", "password": _OpaqueSecret("one")})  # nosec B105
+        second = _match({KEY: "a", "password": _OpaqueSecret("two")})  # nosec B105
+        assert repr(first.access.credentials["password"]) == repr(second.access.credentials["password"])
+        with run_match_cache():
+            ToyBaseDB.columns(first)
+            ToyBaseDB.columns(second)
+        assert len(ToyBaseDB.list_calls) == 2
+
+    def test_equal_but_distinct_credential_objects_read_one_catalog_in_a_run(self) -> None:
+        first = _match({KEY: "a", "password": "toyfmt-secret-one", "options": {"x": [1]}})  # nosec B105
+        second = _match({KEY: "a", "password": "toyfmt-secret-one", "options": {"x": [1]}})  # nosec B105
+        assert first.access is not second.access
+        with run_match_cache():
+            ToyBaseDB.columns(first)
+            ToyBaseDB.columns(second)
+        assert len(ToyBaseDB.list_calls) == 1
+
+    def test_an_analyst_never_sees_or_claims_a_column_only_the_admin_credential_reads(self) -> None:
+        admin = {KEY: "shop", "role": "admin"}
+        analyst = {KEY: "shop", "role": "analyst"}
+        plugins: FeatureGroupEnvironmentMapping = {ToyRoleDB: {PythonDictFramework}}
+        with run_match_cache():
+            assert "toyfmt_admin_only" in (ToyRoleDB.columns(_match(admin)) or ())
+
+            dac = DataAccessCollection(credentials={"analyst_handle": analyst})
+            claim = Feature("toyfmt_admin_only")
+            assert ToyRoleDB not in IdentifyFeatureGroupClass.evaluate(claim, plugins, None, dac).identified
+
+            typo = Feature("toyfmt_missing_col", options={"ToyRoleDB": analyst})
+            with pytest.raises(ValueError) as excinfo:
+                resolve_or_raise(typo, plugins, None, None)
+        message = str(excinfo.value)
+        assert "toyfmt_shared" in message
+        assert "toyfmt_admin_only" not in message
+
+
+class TestMultipleMessageSourceIsScrubbed:
+    def test_the_source_part_of_the_multiple_message_lacks_a_secret_in_the_identity(self, tmp_path: Path) -> None:
+        secret = "toyfmt-secret"  # nosec B105
+        csv_path = tmp_path / "twin.csv"
+        csv_path.write_text("toy_a\n1\n2\n", encoding="utf-8")
+        dac = DataAccessCollection(credentials={"toy_handle": {KEY: secret}}, files={"csv_handle": str(csv_path)})
+        plugins: FeatureGroupEnvironmentMapping = {
+            ToySecretIdentityDB: {PythonDictFramework},
+            CsvFG: {PythonDictFramework},
+        }
+
+        with pytest.raises(ValueError, match="Multiple feature groups found") as excinfo:
+            resolve_or_raise(Feature("toy_a"), plugins, None, dac)
+
+        message = str(excinfo.value)
+        assert "[source: " in message
+        assert "kv://shop" in message
+        assert secret not in message
 
 
 class TestCatalogFailures:

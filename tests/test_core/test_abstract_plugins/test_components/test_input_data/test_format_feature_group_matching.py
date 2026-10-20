@@ -194,6 +194,46 @@ class TestPointedMissingColumnText:
         assert "... and 5 more" in message
 
 
+class TestBoundedScrubbedMissingColumnText:
+    def test_unpointed_sources_beyond_five_are_counted_not_named(self) -> None:
+        dac = toy_dac(**{f"h{i}": {"other": [i]} for i in range(1, 8)})
+        reason = _identify(Feature(COL), dac, ToyFormatFG).eliminations[ToyFormatFG].reason
+        assert "h5:toy" in reason
+        assert "h6:toy" not in reason
+        assert "h7:toy" not in reason
+        assert "and 2 more" in reason
+
+    def test_pointed_column_names_are_scrubbed_before_they_are_listed(self) -> None:
+        feature = Feature(COL, Options({"ToyFormatFG": {"token=toyfmt-secret-1234": [1]}}))
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+        assert "toyfmt-secret-1234" not in str(exc_info.value)
+
+    def test_pointed_column_names_are_clipped(self) -> None:
+        long_name = "toyfmt_long_" + "x" * 100
+        feature = Feature(COL, Options({"ToyFormatFG": {long_name: [1]}}))
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
+        assert long_name not in str(exc_info.value)
+        assert long_name[:40] in str(exc_info.value)
+
+    def test_the_several_sources_abort_is_scrubbed(self) -> None:
+        dac = toy_dac(h1={COL: [1]}, h2={COL: [2]})
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(Feature(COL), _plugins(_SecretFixTextFG), None, dac)
+        message = str(exc_info.value)
+        assert "h1:toy" in message
+        assert "toyfmt-secret-1234" not in message
+
+
+class _SecretFixTextFG(ToyFormatFG):
+    @classmethod
+    def ambiguity_fix(
+        cls, feature_name: str, matches: list[SourceMatch], data_access_collection: DataAccessCollection | None
+    ) -> str:
+        return "retry with token=toyfmt-secret-1234."
+
+
 class TestAmbiguousSources:
     def test_two_fitting_sources_raise_naming_both_and_the_fix(self) -> None:
         dac = toy_dac(h1={COL: [1]}, h2={COL: [2]})

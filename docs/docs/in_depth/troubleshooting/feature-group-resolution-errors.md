@@ -133,6 +133,8 @@ Each line names a plugin module or entry point `PluginLoader` skipped at import 
 FeatureResolutionError: Multiple feature groups found for feature '<feature_name>':
   - FeatureGroupA (...) [domain: ...]
   - FeatureGroupB (...) [domain: ...]
+A steward can keep one with PluginCollector or a PluginPolicy.
+For troubleshooting guide, see: ...
 ```
 
 This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts. It is raised as `FeatureResolutionError` (a `ValueError` subclass) during planning; see [Catching resolution failures](#catching-resolution-failures) to inspect it.
@@ -238,10 +240,10 @@ Fix it with one of:
 The group owns sources but none has the column. Unpointed, this is a decline recorded in the near-miss block; once the feature is pointed at the group (by a pointer or `feature_group=`), it aborts:
 
 ```text
-ValueError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; request a column a source has or point at another source.
+ValueError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; did you mean 'id'?; request a column a source has or point at another source.
 ```
 
-Check the spelling, request a column a source has, or point at the source that has it. A source whose columns cannot be read is listed as `unknown (could not read its columns: ...)`.
+Check the spelling, request a column a source has, or point at the source that has it. Columns and a close-match suggestion appear only when the group was pointed or a `data_access_handle` narrows the search; otherwise only the sources are named. At most five sources are described, then "and N more". A source whose columns cannot be read shows `<source>: <reason>`. If no source can list its columns, the message says so. A folder entry that links outside its folder is skipped; add it as a files handle or point at it.
 
 ### Pointers on derived features
 

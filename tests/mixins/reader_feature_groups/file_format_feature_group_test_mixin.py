@@ -446,7 +446,183 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
             self._resolve(pointed, None)
         message = str(exc_info.value)
         assert os.path.abspath(missing) in message
+        assert "it does not exist" in message
+        assert "not a regular file" not in message
+
+    def test_file_no_source_lists_columns_so_the_head_says_so_and_each_source_gives_its_reason(self) -> None:
+        missing = self.tmp_path / f"head_missing{self._suffix()}"
+        pointed = Feature(self.present_column, Options({self._group_name(): str(missing)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        message = str(exc_info.value)
+        assert f"could not list the columns of any of its sources for column '{self.present_column}'" in message
+        assert f"{os.path.abspath(missing)}: it does not exist" in message
+        assert "is in none of the sources" not in message
+        assert "has columns unknown" not in message
+
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="fifos need POSIX")
+    def test_file_a_pointer_to_a_non_regular_path_says_so_instead_of_missing(self) -> None:
+        fifo = self.tmp_path / f"pointed_fifo{self._suffix()}"
+        os.mkfifo(fifo)
+        pointed = Feature(self.present_column, Options({self._group_name(): str(fifo)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        message = str(exc_info.value)
         assert "not a regular file" in message
+        assert "it does not exist" not in message
+
+    def test_file_a_pointer_to_a_foreign_suffix_records_the_suffix_reason(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = self._options({self._group_name(): str(self.foreign_path)})
+        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, None)
+        reason = rejection_window[self._group_name()].reason
+        assert str(self.foreign_path) in reason
+        assert f"does not end in a {self._group_name()} suffix" in reason
+        assert self._suffix() in reason
+
+    def test_file_a_pointer_to_an_own_suffix_excluded_by_document_suffixes_gets_no_suffix_reason(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        options = self._options(
+            {self._group_name(): str(self.own_path)}, context={"document_suffixes": frozenset({self._suffix()})}
+        )
+        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, None)
+        assert "does not end in" not in rejection_window.get(self._group_name(), MatchRejection("")).reason
+
+    def test_file_a_missing_column_in_a_big_folder_describes_five_sources_and_counts_the_rest(self) -> None:
+        folder = self.tmp_path / "big_folder"
+        paths = [self._make(f"f{i}", {self.present_column: [i]}, folder) for i in range(7)]
+        sources = sorted(os.path.abspath(p) for p in paths)
+        pointed = Feature(self.missing_column, Options({self._group_name(): str(folder)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        message = str(exc_info.value)
+        assert "and 2 more" in message
+        assert sources[4] in message
+        assert sources[5] not in message
+        assert sources[6] not in message
+
+    def test_file_a_pointed_missing_column_scrubs_and_clips_the_listed_column_names(self) -> None:
+        long_name = "toyfmt_long_" + "x" * 100
+        path = self._make("secret_cols", {"token=toyfmt-secret-1234": [1], long_name: [2]})
+        pointed = Feature(self.missing_column, Options({self._group_name(): str(path)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        message = str(exc_info.value)
+        assert "toyfmt-secret-1234" not in message
+        assert "token=***" in message
+        assert long_name not in message
+        assert long_name[:40] in message
+
+    def test_file_a_long_unknown_reason_is_clipped_in_a_pointed_abort(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def unreadable(klass: Any, path: str) -> Any:
+            raise ValueError("y" * 500)
+
+        monkeypatch.setattr(self.feature_group_class, "column_names", classmethod(unreadable))
+        pointed = Feature(self.missing_column, Options({self._group_name(): str(self.own_path)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        message = str(exc_info.value)
+        assert "y" * 100 in message
+        assert "y" * 300 not in message
+
+    def test_file_an_unpointed_unreadable_reason_shows_only_its_lead_while_pointed_shows_it_whole(
+        self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        def unreadable(klass: Any, path: str) -> Any:
+            raise ValueError("toyfmt-leak-token-77 inside the file body")
+
+        monkeypatch.setattr(self.feature_group_class, "column_names", classmethod(unreadable))
+        dac = DataAccessCollection(files={"own_handle": str(self.own_path)})
+        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+        reason = rejection_window[self._group_name()].reason
+        assert "could not read its columns" in reason
+        assert "toyfmt-leak-token-77" not in reason
+
+        pointed = Feature(self.missing_column, Options({self._group_name(): str(self.own_path)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        assert "toyfmt-leak-token-77" in str(exc_info.value)
+
+    def test_file_a_credential_url_in_a_long_reason_is_scrubbed_before_it_is_clipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        url = "s3://AKIAEXAMPLE:verysecret" + "q" * 80 + "@bucket/key"
+
+        def unreadable(klass: Any, path: str) -> Any:
+            raise ValueError("z" * 140 + url)
+
+        monkeypatch.setattr(self.feature_group_class, "column_names", classmethod(unreadable))
+        pointed = Feature(self.missing_column, Options({self._group_name(): str(self.own_path)}))
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(pointed, None)
+        message = str(exc_info.value)
+        assert "z" * 100 in message
+        assert "AKIAEXAMPLE" not in message
+        assert "verysecret" not in message
+
+    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
+    def test_file_a_missing_column_summary_still_says_folder_entries_were_skipped(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        target = self._make("elsewhere_target", {self.missing_column: [1]})
+        folder = self.tmp_path / "skip_folder"
+        self._make("kept_entry", {self.present_column: [1]}, folder)
+        os.symlink(target, folder / f"escape{self._suffix()}")
+        dac = DataAccessCollection(folders={"skip_dir": str(folder)})
+
+        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+
+        reason = rejection_window[self._group_name()].reason
+        assert "is in none of the sources" in reason
+        assert "link outside their folder" in reason
+        assert "elsewhere_target" not in reason
+
+    def test_file_a_pointer_with_a_foreign_suffix_masks_a_credential_in_the_suffix_reason(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        path = self.tmp_path / f"token=toyfmt-secret-1234{FOREIGN_SUFFIX}"
+        path.write_text("x\n")
+        options = self._options({self._group_name(): str(path)})
+        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, options, None)
+        reason = rejection_window[self._group_name()].reason
+        assert "does not end in" in reason
+        assert "toyfmt-secret-1234" not in reason
+        assert "token=***" in reason
+
+    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
+    def test_file_a_folder_escape_rejection_masks_a_credential_in_the_entry_name(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        target = self._make("elsewhere_target", {self.present_column: [1]})
+        folder = self.tmp_path / "mask_folder"
+        folder.mkdir()
+        os.symlink(target, folder / f"token=toyfmt-secret-1234{self._suffix()}")
+        dac = DataAccessCollection(folders={"mask_dir": str(folder)})
+
+        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, self._options(), dac)
+
+        reason = rejection_window[self._group_name()].reason
+        assert "links outside its folder" in reason
+        assert "toyfmt-secret-1234" not in reason
+        assert "token=***" in reason
+
+    def test_file_an_unreadable_file_next_to_readable_ones_leaves_the_summary_and_other_owners_untouched(
+        self, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        corrupt = self.tmp_path / f"corrupt_next{self._suffix()}"
+        self.write_corrupt_file(corrupt)
+        dac = DataAccessCollection(files={"corrupt": str(corrupt), "own_handle": str(self.own_path)})
+        rejection_window["SomeOtherOwner"] = MatchRejection("recorded earlier")
+
+        assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+
+        reason = rejection_window[self._group_name()].reason
+        assert "is in none of the sources" in reason
+        assert self.missing_column in reason
+        assert f"{os.path.abspath(corrupt)}: could not read its columns" in reason
+        assert rejection_window["SomeOtherOwner"] == MatchRejection("recorded earlier")
 
     # pointer of the wrong type
 
@@ -521,13 +697,43 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
     def test_file_a_symlink_to_a_regular_file_in_a_folder_is_read(self) -> None:
-        real = self._make("symlink_target", {self.present_column: [1]})
         folder = self.tmp_path / "link_folder"
-        folder.mkdir()
+        real = self._make("symlink_target", {self.present_column: [1]}, folder / "targets")
         link = folder / f"link{self._suffix()}"
         os.symlink(real, link)
         feature = Feature(self.present_column)
         assert self._claims(feature, DataAccessCollection(folders={"link_dir": str(folder)}))
         assert os.path.basename(self._claimed_match(feature).source) == link.name
+
+    @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
+    def test_file_a_folder_entry_linking_outside_the_folder_is_skipped_with_a_rejection(
+        self, monkeypatch: pytest.MonkeyPatch, rejection_window: dict[str, MatchRejection]
+    ) -> None:
+        target = self._make("outside_target", {self.present_column: [1]})
+        folder = self.tmp_path / "escape_folder"
+        folder.mkdir()
+        link = folder / f"escape{self._suffix()}"
+        os.symlink(target, link)
+        names, samples = self._spy_reads(monkeypatch)
+        dac = DataAccessCollection(folders={"escape_dir": str(folder)})
+
+        assert not self.feature_group_class.match_feature_group_criteria(self.present_column, self._options(), dac)
+
+        assert names + samples == []
+        reason = rejection_window[self._group_name()].reason
+        assert link.name in reason
+        assert target.name not in reason
+        assert "files handle" in reason
+
+        pointed = Feature(self.present_column, Options({self._group_name(): str(link)}))
+        assert self._claims(pointed, None)
+
+        real_folder = self.tmp_path / "real_folder"
+        entry = self._make("entry", {self.present_column: [1]}, real_folder)
+        folder_link = self.tmp_path / "folder_via_link"
+        os.symlink(real_folder, folder_link, target_is_directory=True)
+        via_link = Feature(self.present_column)
+        assert self._claims(via_link, DataAccessCollection(folders={"via_link": str(folder_link)}))
+        assert os.path.basename(self._claimed_match(via_link).source) == entry.name
 
     # subclass takeover

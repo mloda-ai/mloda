@@ -14,7 +14,8 @@ from typing import Any, ClassVar
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
-from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
+from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import REASON_DETAIL
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.utils import is_match_abort
@@ -92,13 +93,19 @@ class ReadFileFG(_FileSourceFG):
 
     @classmethod
     def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
-        return cls._listing_result("full", match)[1]
+        raw = cls._listing_result("full", match)[1]
+        return None if raw is None else raw.replace(REASON_DETAIL, ": ")
+
+    @classmethod
+    def _hidden_reason(cls, match: SourceMatch) -> str | None:
+        raw = cls._listing_result("full", match)[1]
+        return None if raw is None else raw.split(REASON_DETAIL)[0]
 
     @classmethod
     def _listing_result(cls, kind: str, match: SourceMatch) -> tuple[Collection[str] | None, str | None]:
         path = os.path.abspath(match.access)
         if not os.path.isfile(path):
-            return None, "it is not a regular file"
+            return None, not_a_file_reason(path)
         stat_result = os.stat(path)
         key = (cls, kind, path, stat_result.st_mtime_ns, stat_result.st_size)
         return run_cached(key, lambda: cls._read_listing(kind, match.access))
@@ -110,11 +117,14 @@ class ReadFileFG(_FileSourceFG):
         except (OSError, ValueError, ImportError) as exc:
             if is_match_abort(exc):
                 raise
-            return None, f"could not read its columns: {exc}"
+            detail = ": " if isinstance(exc, ImportError) else REASON_DETAIL
+            return None, f"could not read its columns{detail}{exc}"
         return (None if names is None else tuple(names)), None
 
     @classmethod
     def _reject_listing(cls, path: str, reason: str) -> None:
         record_match_rejection(
-            cls.get_class_name(), f"{cls.get_class_name()} matched {path} but {reason}", stage=INPUT_DATA_STAGE
+            cls.get_class_name(),
+            f"{cls.get_class_name()} matched {path} but {reason.replace(REASON_DETAIL, ': ')}",
+            stage=INPUT_DATA_STAGE,
         )

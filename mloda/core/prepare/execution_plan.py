@@ -1383,7 +1383,11 @@ Available join types:
                 own_joins = [
                     j
                     for j in joins_on_frame[frame]
-                    if group_of.get(j.uuid) == group_of[js.uuid] and j.destination_framework == j.source_framework
+                    if group_of.get(j.uuid) == group_of[js.uuid]
+                    and (
+                        j.destination_framework == j.source_framework
+                        or frame in frames_of(j.destination_framework_uuids)
+                    )
                 ]
                 if len(own_joins) > 1:
                     raise ValueError(

@@ -746,8 +746,11 @@ class HubRightDPairConsumer(FeatureGroup):
 
 class TestStarNextToARivalGroup:
     @pytest.mark.parametrize("hub_right", [True, False], ids=["spokes_left", "hub_left"])
-    def test_a_star_and_a_rival_join_of_the_same_group_are_rejected_at_plan_time(self, hub_right: bool) -> None:
-        a, b, c, d = (JoinSpec(g, HUB_RIGHT_INDEX) for g in (HubRightA, HubRightB, HubRightCArrow, HubRightD))
+    @pytest.mark.parametrize("spoke_c", [HubRightCArrow, HubRightCPandas], ids=["one_framework", "spokes_differ"])
+    def test_a_star_and_a_rival_join_of_the_same_group_are_rejected_at_plan_time(
+        self, hub_right: bool, spoke_c: type[FeatureGroup]
+    ) -> None:
+        a, b, c, d = (JoinSpec(g, HUB_RIGHT_INDEX) for g in (HubRightA, HubRightB, spoke_c, HubRightD))
         if hub_right:
             links = {Link.inner(a, b), Link.inner(c, b), Link.inner(d, b)}
         else:
@@ -755,7 +758,7 @@ class TestStarNextToARivalGroup:
         groups: set[type[FeatureGroup]] = {
             HubRightA,
             HubRightB,
-            HubRightCArrow,
+            spoke_c,
             HubRightD,
             HubRightConsumer,
             HubRightDPairConsumer,
@@ -773,3 +776,4 @@ class TestStarNextToARivalGroup:
         message = str(excinfo.value)
         for name in ("HubRightConsumer", "HubRightDPairConsumer", "HubRightB"):
             assert name in message, f"{name} must be named; got: {message}"
+        assert "Resolution:" in message, f"must be a plan time rejection; got: {message}"

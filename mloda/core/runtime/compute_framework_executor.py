@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.worker.thread_worker import thread_worker
@@ -294,20 +294,7 @@ class ComputeFrameworkExecutor:
         elif isinstance(step, JoinStep):
             # Both join sides are destination-framework cfws, whose modes kept this join in the
             # parent, so neither can be worker-owned.
-            from_cfw_uuid = self.cfw_register.get_cfw_uuid(step.destination_framework.get_class_name(), step.uuid)
-
-            if from_cfw_uuid is None:
-                from_cfw_uuid = self.cfw_register.get_cfw_uuid(
-                    step.destination_framework.get_class_name(), next(iter(step.source_framework_uuids))
-                )
-
-            if from_cfw_uuid is None:
-                raise ValueError(
-                    f"from_cfw_uuid should not be none: {step.destination_framework.get_class_name()}, "
-                    f"join token {step.uuid}"
-                )
-
-            from_cfw = self.cfw_collection[from_cfw_uuid]
+            from_cfw = self.cfw_collection[resolve_join_source_cfw(step, self.cfw_register)]
         return from_cfw
 
     def _bind_tfs_connection(self, step: Any, cfw_uuid: UUID) -> None:

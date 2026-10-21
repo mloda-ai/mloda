@@ -14,6 +14,7 @@ from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda.core.core.step.join_step import JoinStep
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
@@ -177,3 +178,30 @@ class TestNonRootMerge:
             assert res["Call2GroupedNonRootJoinTestFeature"].values == ["Same ValueSame ValueSame ValueSame Value"]
             assert len(res.columns) == 1
             assert len(res) == 1
+
+
+def test_same_framework_join_steps_record_their_source_owner() -> None:
+    link = Link.inner(
+        left=JoinSpec(GroupedNonRootJoinTestFeature, Index(("GroupedNonRootJoinTestFeature",))),
+        right=JoinSpec(GroupedSecondNonRootJoinTestFeature, Index(("GroupedSecondNonRootJoinTestFeature",))),
+    )
+    session = mloda.prepare(
+        [Feature(name=Call2GroupedNonRootJoinTestFeature.get_class_name())],
+        links={link},
+        compute_frameworks=["PandasDataFrame"],
+        plugin_collector=PluginCollector.enabled_feature_groups(
+            {
+                NonRootJoinTestFeature,
+                SecondNonRootJoinTestFeature,
+                GroupedNonRootJoinTestFeature,
+                GroupedSecondNonRootJoinTestFeature,
+                Call2GroupedNonRootJoinTestFeature,
+            }
+        ),
+        parallelization_modes={ParallelizationMode.SYNC},
+    )
+    assert session.engine is not None
+    joins = [s for s in session.engine.execution_planner if isinstance(s, JoinStep)]
+    assert joins
+    for join in joins:
+        assert join.source_owner_uuid in join.source_framework_uuids

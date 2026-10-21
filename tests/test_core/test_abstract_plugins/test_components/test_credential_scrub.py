@@ -952,3 +952,228 @@ def test_redact_option_value_shared_inner_dict_without_cycle_renders_both_masked
     assert result == [{"sqlite": "***"}, {"sqlite": "***"}]
     rendered = repr(result)
     assert "<cycle>" not in rendered
+
+
+class TestScrubUriProjection:
+    """A fullmatching scheme://... drops user info, query and fragment. A jdbc: scheme drops the path entirely;
+    any other scheme cuts its path back to the last / before the first percent-escape, and fails closed when a
+    path segment has a : followed by =. An azure container userinfo is kept only when it fullmatches an azure
+    container name or a well-known $root/$web/$logs alias."""
+
+    @pytest.mark.parametrize(
+        ("uri", "expected"),
+        [
+            pytest.param(
+                "postgresql://admin:s3cr3t@host:5432/db",
+                "postgresql://host:5432/db",
+                id="userinfo-stripped",
+            ),
+            pytest.param(
+                "abfss://key:s3cr3t@account.dfs.core.windows.net/p",
+                "abfss://account.dfs.core.windows.net/p",
+                id="abfss-userinfo-with-colon-is-stripped",
+            ),
+            pytest.param("postgresql://u:p@ss@host/db", "postgresql://host/db", id="at-sign-in-userinfo"),
+            pytest.param("postgresql://u:p@host", "postgresql://host", id="no-path"),
+            pytest.param(
+                "abfss://container@account.dfs.core.windows.net/p?sig=S",
+                "abfss://container@account.dfs.core.windows.net/p",
+                id="abfss-keeps-container-drops-query",
+            ),
+            pytest.param(
+                "abfs://container@account.dfs.core.windows.net/p",
+                "abfs://container@account.dfs.core.windows.net/p",
+                id="abfs-keeps-container",
+            ),
+            pytest.param(
+                "wasb://container@account.blob.core.windows.net/p",
+                "wasb://container@account.blob.core.windows.net/p",
+                id="wasb-keeps-container",
+            ),
+            pytest.param(
+                "wasbs://container@account.blob.core.windows.net/p",
+                "wasbs://container@account.blob.core.windows.net/p",
+                id="wasbs-keeps-container",
+            ),
+            pytest.param(
+                "ABFSS://container@account.dfs.core.windows.net/p",
+                "ABFSS://container@account.dfs.core.windows.net/p",
+                id="upper-case-abfss-keeps-container",
+            ),
+            pytest.param(
+                "WASB://container@account.blob.core.windows.net/p",
+                "WASB://container@account.blob.core.windows.net/p",
+                id="upper-case-wasb-keeps-container",
+            ),
+            pytest.param(
+                "wasbs://key:secret@account.blob.core.windows.net/p",
+                "wasbs://account.blob.core.windows.net/p",
+                id="wasbs-userinfo-with-colon-is-stripped",
+            ),
+            pytest.param(
+                "wasbs://container@account.blob.core.windows.net/p?sig=S",
+                "wasbs://container@account.blob.core.windows.net/p",
+                id="wasbs-keeps-container-drops-query",
+            ),
+            pytest.param("postgresql://token@host/db", "postgresql://host/db", id="non-azure-colon-free-userinfo"),
+            pytest.param(
+                "postgresql://host/db%3Fpassword=hunter2",
+                "postgresql://host/",
+                id="path-cut-back-to-segment-before-percent-encoded-question-mark-secret",
+            ),
+            pytest.param(
+                "postgresql://host/db%3fpassword=hunter2",
+                "postgresql://host/",
+                id="path-cut-back-to-segment-before-percent-encoded-lower-case-question-mark-secret",
+            ),
+            pytest.param(
+                "postgresql://host/db%23password=hunter2",
+                "postgresql://host/",
+                id="path-cut-back-to-segment-before-percent-encoded-hash-secret",
+            ),
+            pytest.param(
+                "postgresql+psycopg2://u:p@host/db",
+                "postgresql+psycopg2://host/db",
+                id="scheme-with-plus-suffix",
+            ),
+            pytest.param(
+                "https://host/a%3Fb.csv",
+                "https://host/",
+                id="path-cut-back-to-segment-before-percent-encoded-question-mark",
+            ),
+            pytest.param(
+                "postgresql://host/db%3Flimit=10",
+                "postgresql://host/",
+                id="path-cut-back-to-segment-before-percent-encoded-question-mark-with-non-secret-key",
+            ),
+            pytest.param("file:///tmp/a.csv", "file:///tmp/a.csv", id="file-uri-with-empty-host"),
+            pytest.param("sqlite:///x.db", "sqlite:///x.db", id="sqlite-uri-with-empty-host"),
+            pytest.param(
+                "s3://bucket/year=2024/part.parquet",
+                "s3://bucket/year=2024/part.parquet",
+                id="s3-uri-with-equals-in-path",
+            ),
+            pytest.param("http://[::1]/x", "http://[::1]/x", id="ipv6-host-without-at-sign"),
+            pytest.param(
+                "jdbc:postgresql://u:p@host:5432/db?ssl=true",
+                "jdbc:postgresql://host:5432",
+                id="jdbc-scheme-drops-path-entirely",
+            ),
+            pytest.param(
+                "jdbc:db2://host:50000/DB:password=hunter2",
+                "jdbc:db2://host:50000",
+                id="jdbc-db2-drops-path-with-secret",
+            ),
+            pytest.param(
+                "jdbc:teradata://host/PASSWORD=hunter2",
+                "jdbc:teradata://host",
+                id="jdbc-teradata-drops-path-with-secret",
+            ),
+            pytest.param(
+                "jdbc:informix-sqli://h:1533/db:password=hunter2",
+                "jdbc:informix-sqli://h:1533",
+                id="jdbc-informix-drops-path-with-secret",
+            ),
+            pytest.param(
+                "postgresql://host/db%3Bpassword=hunter2",
+                "postgresql://host/",
+                id="path-cut-back-to-segment-before-percent-encoded-semicolon",
+            ),
+            pytest.param(
+                "postgresql://host/db%26password=hunter2",
+                "postgresql://host/",
+                id="path-cut-back-to-segment-before-percent-encoded-ampersand",
+            ),
+            pytest.param(
+                "https://host/data%253Fpassword%253Dhunter2",
+                "https://host/",
+                id="path-cut-back-to-segment-before-double-percent-encoded-escape",
+            ),
+            pytest.param(
+                "s3://bucket/my%20file.csv",
+                "s3://bucket/",
+                id="path-cut-back-to-segment-before-percent-encoded-space",
+            ),
+            pytest.param(
+                "s3://bucket/2024%2F01/a.parquet",
+                "s3://bucket/",
+                id="path-cut-back-to-segment-before-percent-encoded-slash",
+            ),
+            pytest.param(
+                "s3://bucket/dir/my%20file.csv",
+                "s3://bucket/dir/",
+                id="path-cut-back-to-parent-dir-before-percent-escape",
+            ),
+            pytest.param(
+                "https://host/a/b%20c/d.csv",
+                "https://host/a/",
+                id="path-cut-back-to-segment-before-mid-path-percent-escape",
+            ),
+            pytest.param("file:///C:/data/x.csv", "file:///C:/data/x.csv", id="windows-drive-colon-in-file-uri-kept"),
+            pytest.param(
+                "s3://bucket/2024-01-01T00:00:00/part.parquet",
+                "s3://bucket/2024-01-01T00:00:00/part.parquet",
+                id="timestamp-colons-in-path-segment-kept",
+            ),
+            pytest.param(
+                "s3://bucket/ts=2024-01-01T00:00:00/part.parquet",
+                "s3://bucket/ts=2024-01-01T00:00:00/part.parquet",
+                id="equals-before-colon-hive-partition-kept",
+            ),
+            pytest.param(
+                "abfss://$web@account.dfs.core.windows.net/p",
+                "abfss://$web@account.dfs.core.windows.net/p",
+                id="well-known-dollar-container-alias-is-kept",
+            ),
+            pytest.param(
+                "abfss://Container_X@account.dfs.core.windows.net/p",
+                "abfss://account.dfs.core.windows.net/p",
+                id="upper-case-and-underscore-container-is-dropped",
+            ),
+            pytest.param(
+                "abfss://ab@account.dfs.core.windows.net/p",
+                "abfss://account.dfs.core.windows.net/p",
+                id="too-short-container-is-dropped",
+            ),
+        ],
+    )
+    def test_scrub_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
+        assert scrub_credentials(uri) == expected
+
+    def test_long_uri_without_secrets_returns_quickly(self) -> None:
+        value = "s3://b/" + "a" * 40000
+        assert scrub_credentials(value) == value
+
+    def test_long_uri_with_a_trailing_invalid_character_returns_quickly(self) -> None:
+        value = "a://" + "a@" * 20000 + "/" + "a" * 20000 + "!"
+        started = time.monotonic()
+        scrub_credentials(value)
+        assert time.monotonic() - started < 5
+
+
+class TestScrubUriFailClosed:
+    """A URI whose path or userinfo does not project cleanly never keeps its secret."""
+
+    @pytest.mark.parametrize(
+        ("value", "secret"),
+        [
+            pytest.param("s3://bucket/key with space password=hunter2", "hunter2", id="space-in-uri-path"),
+            pytest.param("postgresql://host/db\npassword=hunter2", "hunter2", id="newline-in-uri-path"),
+            pytest.param("https://host/db&password=hunter2", "hunter2", id="ampersand-in-uri-path"),
+            pytest.param("s3://bucket/path;password=hunter2", "hunter2", id="semicolon-in-uri-path"),
+            pytest.param(
+                "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
+                "hunter2",
+                id="jdbc-sqlserver-semicolons",
+            ),
+            pytest.param("jdbc:db2://host:50000/DB:user=u;password=hunter2;", "hunter2", id="jdbc-db2-semicolon"),
+            pytest.param("mongodb://host/db:password=hunter2", "hunter2", id="colon-then-equals-in-path-segment"),
+            pytest.param(
+                "https://host/a/db:password=hunter2/x.csv", "hunter2", id="colon-then-equals-in-mid-path-segment"
+            ),
+            pytest.param("postgresql://u:12?ss@host/db", "ss", id="colon-digit-question-mark-in-userinfo"),
+            pytest.param("DRIVER={x};Server=https://host;PWD=secret", "secret", id="keyword-string-with-scheme"),
+        ],
+    )
+    def test_secret_is_not_kept(self, value: str, secret: str) -> None:
+        assert secret not in scrub_credentials(value)

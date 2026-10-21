@@ -7,7 +7,7 @@ from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, SourceMatch
+from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, SourceMatch, first_report_of_pin
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     FOLDER_ESCAPE_MARK,
     HANDLE_OPTION,
@@ -16,9 +16,11 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
 )
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 
 _DOCUMENT_SUFFIXES_OPTION = "document_suffixes"
+_UNOWNED_PIN_OWNER = "unowned pin"
 
 
 def _is_suffix_value(value: Any) -> bool:
@@ -119,6 +121,8 @@ class _FileSourceFG(FormatFeatureGroup):
             return [cls._source(pointer)] if is_file_route and cls._owns(pointer, excluded) else []
         pinned = cls._pinned_path(feature_name, data_access_collection)
         if pinned is not None:
+            if is_file_route and not cls._owns(pinned, excluded):
+                cls._record_unowned_pin(pinned)
             return [cls._source(pinned)] if is_file_route and cls._owns(pinned, excluded) else []
         dac = data_access_collection
         if dac is None:
@@ -171,6 +175,22 @@ class _FileSourceFG(FormatFeatureGroup):
             return None
         handle = data_access_collection.column_to_file.get(feature_name)
         return None if handle is None else data_access_collection.files.get(handle)
+
+    @classmethod
+    def _record_unowned_pin(cls, pinned_path: str) -> None:
+        """Names a pinned file whose suffix no file or document group owns, once per resolution."""
+        if any(
+            not inspect.isabstract(group) and pinned_path.endswith(group.suffixes())
+            for group in get_all_subclasses(_FileSourceFG)
+        ):
+            return
+        if not first_report_of_pin(pinned_path):
+            return
+        record_match_rejection(
+            _UNOWNED_PIN_OWNER,
+            scrub_credentials(f"pinned file {pinned_path} has a suffix no registered reader owns"),
+            stage=INPUT_DATA_STAGE,
+        )
 
     @classmethod
     def _owns(cls, path: str, document_suffixes: tuple[str, ...]) -> bool:

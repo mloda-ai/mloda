@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.input_data.input_data_descriptor imp
 class FileSource(InputDataDescriptor):
     """Immutable, hashable descriptor for a file-backed input.
 
-    Decouples file input from any compute framework: ``load_data`` resolves a file into
+    Decouples file input from any compute framework: ``load_neutral`` resolves a file into
     this lightweight value object, and a per-framework transformer materializes it into
     that framework's native type.
 

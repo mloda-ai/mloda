@@ -351,8 +351,7 @@ class GlobalFilter:
         The shared probe owns the window and the containment; this seam keeps the filter policy: no option
         rollback (the hook sees a per-match deepcopy) and a defect outranks a harvested decline. A matcher
         defect warns whatever its exception type, unlike the resolution seam, because nothing else surfaces
-        it here. A typed decline can flip an attachment verdict, since the default hook's owned-reader veto
-        gates under the probe's window.
+        it here. A typed decline can flip an attachment verdict.
 
         Mark-or-contain policy: see call_match_hook.
         `filter` must be one of this GlobalFilter's declared filters or a per-match copy of one: the drop ledger

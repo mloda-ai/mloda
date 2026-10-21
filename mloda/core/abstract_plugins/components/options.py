@@ -78,7 +78,7 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any], leaf: Callable[[A
 
 
 def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
-    """Reader class keys normalize to data_access_name() so both documented key forms
+    """Format group class keys normalize to data_access_name() so both documented key forms
     (class object and class-name string) share one identity."""
     if not any(isinstance(k, type) for k in d):
         return d
@@ -88,7 +88,7 @@ def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _is_reader_tuple(value: Any) -> bool:
-    """True for a (reader class, mapping) BaseInputData tuple, the same reader-class shape
+    """True for a (format group class, access) pair, the same class shape
     ``_normalize_reader_class_keys`` recognizes."""
     return (
         isinstance(value, tuple)
@@ -99,7 +99,7 @@ def _is_reader_tuple(value: Any) -> bool:
 
 
 def _str_option_value(value: Any) -> Any:
-    """Mask only a reserved reader tuple; every other value prints raw."""
+    """Mask only a reserved match tuple; every other value prints raw."""
     return redact_option_value(value) if _is_reader_tuple(value) else value
 
 

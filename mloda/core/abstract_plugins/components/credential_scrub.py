@@ -4,13 +4,6 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-_URI_PATTERN = re.compile(
-    r"(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://"
-    r"(?:(?P<userinfo>[^/?#]*)@)?"
-    r"(?P<host>(?:[\w.~-]*|\[[0-9A-Fa-f:.]+\])(?::\d+)?)"
-    r"(?P<path>/[\w.~%/:=+-]*)?"
-    r"(?:[?#][^@]*)?"
-)
 _AZURE_CONTAINER_SCHEMES = frozenset({"abfs", "abfss", "wasb", "wasbs"})
 _AZURE_CONTAINER_PATTERN = re.compile(r"[a-z0-9-]{3,63}|\$(?:root|web|logs)")
 

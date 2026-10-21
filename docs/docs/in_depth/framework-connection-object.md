@@ -80,7 +80,7 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | 
 ### Using DuckDB with mloda API
 
 The API examples below are sketches, not executed: `feature1` and `feature2` stand for columns your own
-tables or readers provide, so a connection alone does not make the request resolve.
+tables or format groups provide, so a connection alone does not make the request resolve.
 
 ```py
 from mloda.user import mloda

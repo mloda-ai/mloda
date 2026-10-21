@@ -1,9 +1,7 @@
 """Reads a plugin's declared_attributes(features) into a validated, scalar-only, fresh dict."""
 
 import math
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -88,20 +86,3 @@ class DeclarationRequirement:
         if error is not None:
             return f"{self.consumer} requires declarations of {owner_name}; reading them raised: {error}"
         return unmet_declaration_reason(self.consumer, owner_name, declared, self.required)
-
-
-_CURRENT: ContextVar[DeclarationRequirement | None] = ContextVar("mloda_declaration_requirement", default=None)
-
-
-def current_declaration_requirement() -> DeclarationRequirement | None:
-    return _CURRENT.get()
-
-
-@contextmanager
-def declaration_requirement_scope(requirement: DeclarationRequirement | None) -> Iterator[None]:
-    """Make requirement (or none) current for reader selection inside the block."""
-    token = _CURRENT.set(requirement)
-    try:
-        yield
-    finally:
-        _CURRENT.reset(token)

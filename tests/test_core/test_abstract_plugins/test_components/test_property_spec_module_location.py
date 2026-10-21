@@ -1,8 +1,7 @@
 """Pins the PropertySpec module location to components/, not components/feature_chainer/.
 
-property_spec.py is shared by PROPERTY_MAPPING (FeatureGroup) and READER_OPTIONS
-(BaseInputData, which does not chain features), so nesting it under feature_chainer/
-misrepresents what it is.
+property_spec.py declares PROPERTY_MAPPING for every FeatureGroup, including those that do not
+chain features, so nesting it under feature_chainer/ misrepresents what it is.
 """
 
 import importlib

@@ -64,7 +64,7 @@ argument to `resolve_feature`:
   string form, `options=` and `feature_group=`).
 - `links`: a set of `Link` objects, threaded to the matcher so link-gated groups
   resolve.
-- `data_access_collection`: threaded to the matcher so reader / input-data groups
+- `data_access_collection`: threaded to the matcher so format FeatureGroups
   resolve.
 - `plugin_collector`: restricts the FeatureGroups considered and threads its
   `allow_redefinition` flag into deduplication.

@@ -34,11 +34,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data import
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
-from mloda.core.abstract_plugins.components.match_rejection import (
-    INPUT_DATA_OWNED_STAGE,
-    has_match_rejection,
-    record_match_rejection,
-)
+from mloda.core.abstract_plugins.components.match_rejection import record_match_rejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -678,9 +674,6 @@ class FeatureGroup(ABC):
         Matching logic that reads option values can therefore see different values on the two paths.
         See ``docs/in_depth/property-mapping.md`` ("Applying declared defaults").
 
-        A veto recorded while the user explicitly addressed the reader gates the name-based
-        rules below; the MatchData rule still decides on its own.
-
         Writes to ``options`` reach the feature only if this candidate wins.
 
         A matched candidate must also pass the value validation and ``match_guard`` of its PROPERTY_MAPPING;
@@ -706,11 +699,6 @@ class FeatureGroup(ABC):
 
         if cls._matches_data(base_feature_name, options, data_access_collection):
             return True
-
-        # An owned veto: the user explicitly addressed this candidate and its declaration
-        # rejected the request; recovering by name would only defer the failure to load time in init_reader.
-        if has_match_rejection(INPUT_DATA_OWNED_STAGE):
-            return False
 
         if cls.feature_name_equal_to_class_name(base_feature_name):
             return True

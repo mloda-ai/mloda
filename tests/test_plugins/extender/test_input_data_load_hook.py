@@ -1,4 +1,4 @@
-"""Tests wiring ExtenderHook.INPUT_DATA_LOAD into BaseInputData.load().
+"""Tests wiring ExtenderHook.INPUT_DATA_LOAD into dispatch_input_data_load().
 
 Covers ComputeFramework.current(), HookContext population (inherited identity fields plus
 data_access_identity/format/dataset_version), the no-extender baseline, deny-before-load /
@@ -14,13 +14,13 @@ import pickle  # nosec B403
 import sqlite3
 import threading
 from pathlib import Path, PurePosixPath
-from types import MappingProxyType
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData, dispatch_input_data_load
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -327,7 +327,7 @@ class TestComputeFrameworkCurrentShortCircuit:
 
 
 def _build_calc_context(compute_framework_name: str = "stub", **overrides: Any) -> HookContext:
-    """A minimal calculate-phase HookContext to activate() around a direct _load_data_via_hook call."""
+    """A minimal calculate-phase HookContext to activate() around a direct dispatch_input_data_load call."""
     fields: dict[str, Any] = {
         "hook": ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
         "feature_group_class": "test.Fake",
@@ -341,28 +341,39 @@ def _build_calc_context(compute_framework_name: str = "stub", **overrides: Any) 
     return HookContext(**fields)
 
 
-class _DirectLoadReader(BaseInputData):
-    """Minimal reader whose load_data returns a fixed 3-element list, for direct
-    _load_data_via_hook calls that bypass matching/init_reader entirely."""
+class _DirectLoader:
+    """Minimal loader whose load_data returns a fixed 3-element list, for direct dispatch_input_data_load calls."""
 
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return [1, 2, 3]
 
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        if isinstance(data_access, Mapping):
+            return "{" + ", ".join(sorted(str(key) for key in data_access)) + "}"
+        return type(data_access).__name__
 
-def _identity_of(data_access: Any) -> str:
-    extender = _InputDataLoadCapturingExtender()
-    cfw = ComputeFramework(function_extender={extender})
-    reader = _DirectLoadReader()
-    features = FeatureSet()
+    @classmethod
+    def data_access_name(cls) -> str:
+        return cls.__name__
 
-    with cfw.activate(), _build_calc_context().activate():
-        BaseInputData._load_data_via_hook(reader, data_access, features)
+    @classmethod
+    def declared_attributes(cls, features: FeatureSet | None) -> Mapping[str, str | int | float | bool]:
+        return {}
 
-    assert extender.captured is not None
-    identity = extender.captured.data_access_identity
-    assert identity is not None
-    return identity
+
+def _load(loader: type[_DirectLoader], data_access: Any, features: FeatureSet) -> Any:
+    """Run loader.load_data through dispatch_input_data_load with an identity lambda."""
+    return dispatch_input_data_load(
+        loader,
+        loader,
+        loader.load_data,
+        data_access,
+        features,
+        identity=lambda: loader.data_access_identity(data_access),
+        data_access_format=loader.data_access_name,
+    )
 
 
 class TestDataAccessIdentityHidesDictCredentialValues:
@@ -466,516 +477,6 @@ class TestSqliteFGSources:
         assert "alice" not in repr(sources[0])
 
 
-class TestDataAccessIdentityOfUriStrings:
-    """A fullmatching scheme://... drops user info, query and fragment. A jdbc: scheme drops the path entirely;
-    any other scheme cuts its path back to the last / before the first percent-escape, and fails closed when a
-    path segment has a : followed by =. An azure container userinfo is kept only when it fullmatches an azure
-    container name or a well-known $root/$web/$logs alias."""
-
-    @pytest.mark.parametrize(
-        ("uri", "expected"),
-        [
-            pytest.param(
-                "postgresql://admin:s3cr3t@host:5432/db",
-                "postgresql://host:5432/db",
-                id="userinfo-stripped",
-            ),
-            pytest.param(
-                "abfss://key:s3cr3t@account.dfs.core.windows.net/p",
-                "abfss://account.dfs.core.windows.net/p",
-                id="abfss-userinfo-with-colon-is-stripped",
-            ),
-            pytest.param("postgresql://u:p@ss@host/db", "postgresql://host/db", id="at-sign-in-userinfo"),
-            pytest.param("postgresql://u:p@host", "postgresql://host", id="no-path"),
-            pytest.param(
-                "abfss://container@account.dfs.core.windows.net/p?sig=S",
-                "abfss://container@account.dfs.core.windows.net/p",
-                id="abfss-keeps-container-drops-query",
-            ),
-            pytest.param(
-                "abfs://container@account.dfs.core.windows.net/p",
-                "abfs://container@account.dfs.core.windows.net/p",
-                id="abfs-keeps-container",
-            ),
-            pytest.param(
-                "wasb://container@account.blob.core.windows.net/p",
-                "wasb://container@account.blob.core.windows.net/p",
-                id="wasb-keeps-container",
-            ),
-            pytest.param(
-                "wasbs://container@account.blob.core.windows.net/p",
-                "wasbs://container@account.blob.core.windows.net/p",
-                id="wasbs-keeps-container",
-            ),
-            pytest.param(
-                "ABFSS://container@account.dfs.core.windows.net/p",
-                "ABFSS://container@account.dfs.core.windows.net/p",
-                id="upper-case-abfss-keeps-container",
-            ),
-            pytest.param(
-                "WASB://container@account.blob.core.windows.net/p",
-                "WASB://container@account.blob.core.windows.net/p",
-                id="upper-case-wasb-keeps-container",
-            ),
-            pytest.param(
-                "wasbs://key:secret@account.blob.core.windows.net/p",
-                "wasbs://account.blob.core.windows.net/p",
-                id="wasbs-userinfo-with-colon-is-stripped",
-            ),
-            pytest.param(
-                "wasbs://container@account.blob.core.windows.net/p?sig=S",
-                "wasbs://container@account.blob.core.windows.net/p",
-                id="wasbs-keeps-container-drops-query",
-            ),
-            pytest.param("postgresql://token@host/db", "postgresql://host/db", id="non-azure-colon-free-userinfo"),
-            pytest.param(
-                "postgresql://host/db%3Fpassword=hunter2",
-                "postgresql://host/",
-                id="path-cut-back-to-segment-before-percent-encoded-question-mark-secret",
-            ),
-            pytest.param(
-                "postgresql://host/db%3fpassword=hunter2",
-                "postgresql://host/",
-                id="path-cut-back-to-segment-before-percent-encoded-lower-case-question-mark-secret",
-            ),
-            pytest.param(
-                "postgresql://host/db%23password=hunter2",
-                "postgresql://host/",
-                id="path-cut-back-to-segment-before-percent-encoded-hash-secret",
-            ),
-            pytest.param(
-                "postgresql+psycopg2://u:p@host/db",
-                "postgresql+psycopg2://host/db",
-                id="scheme-with-plus-suffix",
-            ),
-            pytest.param(
-                "https://host/a%3Fb.csv",
-                "https://host/",
-                id="path-cut-back-to-segment-before-percent-encoded-question-mark",
-            ),
-            pytest.param(
-                "postgresql://host/db%3Flimit=10",
-                "postgresql://host/",
-                id="path-cut-back-to-segment-before-percent-encoded-question-mark-with-non-secret-key",
-            ),
-            pytest.param("file:///tmp/a.csv", "file:///tmp/a.csv", id="file-uri-with-empty-host"),
-            pytest.param("sqlite:///x.db", "sqlite:///x.db", id="sqlite-uri-with-empty-host"),
-            pytest.param(
-                "s3://bucket/year=2024/part.parquet",
-                "s3://bucket/year=2024/part.parquet",
-                id="s3-uri-with-equals-in-path",
-            ),
-            pytest.param("http://[::1]/x", "http://[::1]/x", id="ipv6-host-without-at-sign"),
-            pytest.param(
-                "jdbc:postgresql://u:p@host:5432/db?ssl=true",
-                "jdbc:postgresql://host:5432",
-                id="jdbc-scheme-drops-path-entirely",
-            ),
-            pytest.param(
-                "jdbc:db2://host:50000/DB:password=hunter2",
-                "jdbc:db2://host:50000",
-                id="jdbc-db2-drops-path-with-secret",
-            ),
-            pytest.param(
-                "jdbc:teradata://host/PASSWORD=hunter2",
-                "jdbc:teradata://host",
-                id="jdbc-teradata-drops-path-with-secret",
-            ),
-            pytest.param(
-                "jdbc:informix-sqli://h:1533/db:password=hunter2",
-                "jdbc:informix-sqli://h:1533",
-                id="jdbc-informix-drops-path-with-secret",
-            ),
-            pytest.param(
-                "postgresql://host/db%3Bpassword=hunter2",
-                "postgresql://host/",
-                id="path-cut-back-to-segment-before-percent-encoded-semicolon",
-            ),
-            pytest.param(
-                "postgresql://host/db%26password=hunter2",
-                "postgresql://host/",
-                id="path-cut-back-to-segment-before-percent-encoded-ampersand",
-            ),
-            pytest.param(
-                "https://host/data%253Fpassword%253Dhunter2",
-                "https://host/",
-                id="path-cut-back-to-segment-before-double-percent-encoded-escape",
-            ),
-            pytest.param(
-                "s3://bucket/my%20file.csv",
-                "s3://bucket/",
-                id="path-cut-back-to-segment-before-percent-encoded-space",
-            ),
-            pytest.param(
-                "s3://bucket/2024%2F01/a.parquet",
-                "s3://bucket/",
-                id="path-cut-back-to-segment-before-percent-encoded-slash",
-            ),
-            pytest.param(
-                "s3://bucket/dir/my%20file.csv",
-                "s3://bucket/dir/",
-                id="path-cut-back-to-parent-dir-before-percent-escape",
-            ),
-            pytest.param(
-                "https://host/a/b%20c/d.csv",
-                "https://host/a/",
-                id="path-cut-back-to-segment-before-mid-path-percent-escape",
-            ),
-            pytest.param("file:///C:/data/x.csv", "file:///C:/data/x.csv", id="windows-drive-colon-in-file-uri-kept"),
-            pytest.param(
-                "s3://bucket/2024-01-01T00:00:00/part.parquet",
-                "s3://bucket/2024-01-01T00:00:00/part.parquet",
-                id="timestamp-colons-in-path-segment-kept",
-            ),
-            pytest.param(
-                "s3://bucket/ts=2024-01-01T00:00:00/part.parquet",
-                "s3://bucket/ts=2024-01-01T00:00:00/part.parquet",
-                id="equals-before-colon-hive-partition-kept",
-            ),
-            pytest.param(
-                "abfss://$web@account.dfs.core.windows.net/p",
-                "abfss://$web@account.dfs.core.windows.net/p",
-                id="well-known-dollar-container-alias-is-kept",
-            ),
-            pytest.param(
-                "abfss://Container_X@account.dfs.core.windows.net/p",
-                "abfss://account.dfs.core.windows.net/p",
-                id="upper-case-and-underscore-container-is-dropped",
-            ),
-            pytest.param(
-                "abfss://ab@account.dfs.core.windows.net/p",
-                "abfss://account.dfs.core.windows.net/p",
-                id="too-short-container-is-dropped",
-            ),
-        ],
-    )
-    def test_identity_keeps_host_and_path_only(self, uri: str, expected: str) -> None:
-        assert _identity_of(uri) == expected
-
-    def test_long_uri_without_secrets_returns_quickly(self) -> None:
-        value = "s3://b/" + "a" * 40000
-        assert _identity_of(value) == value
-
-    def test_long_uri_with_a_trailing_invalid_character_returns_quickly(self) -> None:
-        value = "a://" + "a@" * 20000 + "/" + "a" * 20000 + "!"
-        assert _identity_of(value) == "str"
-
-
-class TestDataAccessIdentityDefaultDenyForSchemeLessAndPathValues:
-    """None of these values is a Mapping, a fullmatching URI, or an existing local path, so each resolves to
-    its type name only."""
-
-    @pytest.mark.parametrize(
-        ("value", "secret"),
-        [
-            pytest.param("https://host/p?email=a@b.com/x&sig=S", None, id="at-sign-in-query-fails-uri-shape"),
-            pytest.param(
-                "postgresql://host/db?user=u&password=p@ss/word",
-                None,
-                id="secret-with-at-and-slash-in-query-fails-uri-shape",
-            ),
-            pytest.param("https://host:8080/a@b/c", None, id="at-sign-in-path-fails-uri-shape"),
-            pytest.param("https://u:p@host/a@b/c", None, id="at-sign-in-path-with-userinfo-fails-uri-shape"),
-            pytest.param("https://host:/a@b/c", None, id="empty-port-at-sign-in-path-fails-uri-shape"),
-            pytest.param("postgresql://u:pa]/ss@host/db", None, id="bracket-in-userinfo-fails-uri-shape"),
-            pytest.param("https://host/p#a@b", None, id="at-sign-in-fragment-fails-uri-shape"),
-            pytest.param("postgresql://u:pa/ss@host/db", None, id="slash-in-userinfo-fails-uri-shape"),
-            pytest.param("postgresql://u:pa?ss@host/db", None, id="question-mark-in-userinfo-fails-uri-shape"),
-            pytest.param("postgresql://u:pa#ss@host/db", None, id="hash-in-userinfo-fails-uri-shape"),
-            pytest.param("http://[::1]/x@y", None, id="ipv6-host-at-sign-in-path-fails-uri-shape"),
-            pytest.param("https://host/p;user=alice/x", None, id="uri-with-plain-connection-key-fails-uri-shape"),
-            pytest.param(
-                "s3://bucket/a;db=main/part.parquet", None, id="s3-uri-with-plain-connection-key-fails-uri-shape"
-            ),
-            pytest.param(
-                "s3://bucket/key with space password=hunter2", "hunter2", id="space-in-uri-path-fails-uri-shape"
-            ),
-            pytest.param("postgresql://host/db\npassword=hunter2", "hunter2", id="newline-in-uri-path-fails-uri-shape"),
-            pytest.param("https://host/db&password=hunter2", "hunter2", id="ampersand-in-uri-path-fails-uri-shape"),
-            pytest.param("s3://bucket/path;password=hunter2", "hunter2", id="semicolon-in-uri-path-fails-uri-shape"),
-            pytest.param(
-                "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
-                "hunter2",
-                id="jdbc-sqlserver-semicolons-fail-uri-shape",
-            ),
-            pytest.param(
-                "jdbc:db2://host:50000/DB:user=u;password=hunter2;", "hunter2", id="jdbc-db2-semicolon-terminated"
-            ),
-            pytest.param(
-                "JDBC:db2://host:50000/DB:password=hunter2", "hunter2", id="upper-case-jdbc-prefix-fails-uri-shape"
-            ),
-            pytest.param(
-                "mongodb://host/db:password=hunter2", "hunter2", id="non-jdbc-colon-then-equals-in-path-segment"
-            ),
-            pytest.param(
-                "https://host/a/db:password=hunter2/x.csv",
-                "hunter2",
-                id="non-jdbc-colon-then-equals-in-mid-path-segment",
-            ),
-            pytest.param("s3://bucket/a:b=c/part.parquet", None, id="s3-colon-then-equals-in-path-segment"),
-            pytest.param("alice:hunter2://host/db", "hunter2", id="colon-before-scheme-separator-is-not-a-scheme"),
-            pytest.param("mongodb://u:p@h1:27017,h2:27017/db", None, id="comma-separated-host-list-fails-uri-shape"),
-            pytest.param("postgresql://u:12/ss@host/db", "ss", id="colon-digit-slash-in-userinfo-fails-uri-shape"),
-            pytest.param(
-                "postgresql://u:12?ss@host/db", "ss", id="colon-digit-question-mark-in-userinfo-fails-uri-shape"
-            ),
-            pytest.param("https://tok/en@host/x", "en", id="slash-in-userinfo-before-at-sign-fails-uri-shape"),
-            pytest.param("host=localhost user=alice password=hunter2", "hunter2", id="libpq-keywords"),
-            pytest.param("DRIVER={ODBC};UID=alice;PWD=hunter2", "hunter2", id="odbc-keywords"),
-            pytest.param("user:hunter2@host/db", "hunter2", id="userinfo-scheme-less"),
-            pytest.param("user:pw@host/db?token=hunter2", "hunter2", id="scheme-less-userinfo-query-secret"),
-            pytest.param("user:pw@host/db#token=hunter2", "hunter2", id="scheme-less-userinfo-fragment-secret"),
-            pytest.param("host=localhost password='hunter 2'", "hunter 2", id="libpq-quoted-value"),
-            pytest.param(
-                "DRIVER={ODBC Driver 17};UID=alice;PWD={hun;ter2}", "hun;ter2", id="odbc-braces-with-separator"
-            ),
-            pytest.param("Host=a HOST=b", "=b", id="mixed-case-duplicate-keys"),
-            pytest.param("password=hunter2", "hunter2", id="single-known-key"),
-            pytest.param(
-                "DRIVER={x};Server=https://host;PWD=secret",
-                "secret",
-                id="keyword-string-containing-scheme-separator",
-            ),
-            pytest.param("user:p@ss@host/db", "p@ss", id="at-sign-in-userinfo-password"),
-            pytest.param("user:p@ss/word@host/db", "ss/word", id="at-sign-and-slash-in-password"),
-            pytest.param("dbname=x user=y", "=y", id="dbname-and-user"),
-            pytest.param("password = hunter2 host = localhost", "hunter2", id="whitespace-around-equals"),
-            pytest.param("password= hunter2 host =localhost", "hunter2", id="uneven-whitespace-around-equals"),
-            pytest.param("dbname = mydb password = hunter2 port = 5432", "hunter2", id="spaced-dbname-password-port"),
-            pytest.param("PWD={x; secret1 host=y};UID=a", "secret1", id="odbc-brace-value-with-fake-key"),
-            pytest.param("user = alice password = hunter2", "hunter2", id="spaced-user-password"),
-            pytest.param(
-                "host=h password=correct horse=battery", "horse", id="unrecognized-key-after-secret-not-printed"
-            ),
-            pytest.param("host=h password='my pass=word'", "my pass=word", id="quoted-value-with-key-fragment"),
-            pytest.param("pass=hunter2", "hunter2", id="secret-key-pass"),
-            pytest.param("sslpassword=hunter2", "hunter2", id="secret-key-sslpassword"),
-            pytest.param("key=abc", "abc", id="secret-key-key"),
-            pytest.param("access_key=abc secret_key=def", "abc", id="secret-keys-access-secret"),
-            pytest.param("aws_secret_access_key=hunter2", "hunter2", id="secret-key-aws-secret-access"),
-            pytest.param("client_secret=x client_id=abc", "abc", id="client-id-not-printed"),
-            pytest.param("account_key=hunter2", "hunter2", id="secret-key-account-key"),
-            pytest.param("auth_token=hunter2", "hunter2", id="secret-key-auth-token"),
-            pytest.param("credentials=hunter2", "hunter2", id="secret-key-credentials"),
-            pytest.param("sas=hunter2", "hunter2", id="secret-key-sas"),
-            pytest.param("service-account-key=hunter2", "hunter2", id="secret-key-with-dashes"),
-            pytest.param("host=/var/run/postgresql user=alice password=hunter2", "hunter2", id="host-value-is-a-path"),
-            pytest.param("u:p/w@host/db", "p/w", id="slash-in-userinfo-password"),
-            pytest.param("u:p w@host/db", "p w", id="space-in-userinfo-password"),
-            pytest.param("u:p\\w@host/db", "p\\w", id="backslash-in-userinfo-password"),
-            pytest.param(":hunter2@host/db", "hunter2", id="empty-user-userinfo"),
-            pytest.param(Path("host=localhost password=hunter2"), "hunter2", id="path-object-keywords"),
-            pytest.param(Path("user:hunter2@host/db"), "hunter2", id="path-object-userinfo"),
-            pytest.param(PurePosixPath("s3://alice:hunter2@bucket/key"), "hunter2", id="pure-posix-path-uri"),
-            pytest.param("user:pw@host/db%3Ftoken=hunter2", "hunter2", id="userinfo-percent-encoded-question-mark"),
-            pytest.param(
-                "host.com/db%3Fx password=hunter2",
-                "hunter2",
-                id="percent-encoded-question-mark-then-keyword-scan-guard",
-            ),
-            pytest.param("notes:2024@work.txt", None, id="userinfo-lookalike"),
-            pytest.param("user=alice.csv", None, id="file-name-starting-with-connection-key"),
-            pytest.param(
-                "host.com/db?config=password:hunter2", "hunter2", id="secret-value-under-unrecognized-key-now-hidden"
-            ),
-            pytest.param(
-                "host.com/db%253Fpassword=hunter2", "hunter2", id="double-percent-encoded-question-mark-now-hidden"
-            ),
-            pytest.param("password%3Dhunter2", "hunter2", id="percent-encoded-pair-without-anchor-now-hidden"),
-            pytest.param(
-                "host.com/db%3Bpassword=hunter2", "hunter2", id="percent-encoded-semicolon-without-anchor-now-hidden"
-            ),
-            pytest.param(
-                "host.com/db?user=alice&password=hunter2", "hunter2", id="scheme-less-query-secret-drops-whole-query"
-            ),
-            pytest.param("localhost:5432/db?password=hunter2", "hunter2", id="scheme-less-query-secret-with-port"),
-            pytest.param("host.com/db#password=hunter2", "hunter2", id="scheme-less-fragment-secret"),
-            pytest.param(
-                "host.com/db?  password=hunter2",
-                "hunter2",
-                id="scheme-less-query-secret-with-whitespace-after-delimiter",
-            ),
-            pytest.param("host.com/db%3Fpassword=hunter2", "hunter2", id="percent-encoded-question-mark-secret"),
-            pytest.param(
-                "host.com/db%3fpassword=hunter2", "hunter2", id="percent-encoded-lower-case-question-mark-secret"
-            ),
-            pytest.param("host.com/db?password%3Dhunter2", "hunter2", id="percent-encoded-equals-in-query-secret"),
-            pytest.param("host.com/db%23password=hunter2", "hunter2", id="percent-encoded-hash-secret"),
-            pytest.param(
-                "host.com/db?a=1%26password=hunter2", "hunter2", id="percent-encoded-ampersand-in-query-secret"
-            ),
-            pytest.param("host.com/db?%20password=hunter2", "hunter2", id="percent-encoded-leading-space-secret"),
-            pytest.param("host.com/db?pass%77ord=hunter2", "hunter2", id="percent-encoded-key-letter-secret"),
-            pytest.param(
-                "host.com/db?x password=hunter2", "hunter2", id="scheme-less-query-secret-after-space-separated-param"
-            ),
-            pytest.param(
-                "host.com/db#x password=hunter2",
-                "hunter2",
-                id="scheme-less-fragment-secret-after-space-separated-param",
-            ),
-            pytest.param(
-                "host.com/db?a=1 token=hunter2", "hunter2", id="scheme-less-query-secret-space-separated-token-key"
-            ),
-            pytest.param("host.com/db?x\tpassword=hunter2", "hunter2", id="scheme-less-query-secret-tab-separated"),
-            pytest.param("host.com/db?x,password=hunter2", "hunter2", id="scheme-less-query-secret-comma-separated"),
-            pytest.param("host.com/db?x+password=hunter2", "hunter2", id="scheme-less-query-secret-plus-separated"),
-            pytest.param(
-                "host.com/db?x%20password=hunter2",
-                "hunter2",
-                id="scheme-less-query-secret-percent-encoded-space-separated",
-            ),
-            pytest.param("host.com/db?jwt=hunter2", "hunter2", id="scheme-less-query-secret-key-jwt"),
-            pytest.param("host.com/db?p=hunter2", "hunter2", id="scheme-less-query-secret-key-p"),
-            pytest.param("host.com/db?sessionid=hunter2", "hunter2", id="scheme-less-query-secret-key-sessionid"),
-            pytest.param(
-                "host.com/db?redirect=https://x&password=y",
-                "password=y",
-                id="embedded-scheme-in-query-is-not-misrouted-to-the-uri-branch",
-            ),
-            pytest.param(
-                "host.com/db?a=1;password=2", "password=2", id="semicolon-bounded-secret-after-question-mark-anchor"
-            ),
-            pytest.param(
-                "host.com/db?a=1&b=2;password=3",
-                "password=3",
-                id="semicolon-bounded-secret-after-ampersand-then-question-mark-anchor",
-            ),
-            pytest.param("host.com/db;password=hunter2", "hunter2", id="semicolon-bounded-secret-with-no-anchor"),
-            pytest.param("some/path/user=alice.csv", None, id="ordinary-path-with-connection-key-lookalike"),
-            pytest.param("data/q?a/report=2024.csv", None, id="query-lookalike-path"),
-            pytest.param(
-                "Data Source=srv;User Id=alice;Password=hunter2", "hunter2", id="semicolon-separated-keyword-string"
-            ),
-            pytest.param("/srv/a;host=b", None, id="absolute-path-with-semicolon-key"),
-            pytest.param("C:\\data;user=1", None, id="windows-path-with-semicolon-key"),
-            pytest.param("host.com/db?limit=10", None, id="scheme-less-query-with-non-secret-key"),
-            pytest.param("data/plain.csv", None, id="relative-path"),
-            pytest.param("user=42/part.parquet", None, id="connection-key-lookalike-path"),
-            pytest.param("/data/year=2024/part.parquet", None, id="hive-path"),
-            pytest.param("report=2024.csv", None, id="unknown-key-file-name"),
-            pytest.param("a=1 b=2", None, id="unknown-keys"),
-            pytest.param("year=2024 month=01", None, id="unknown-keys-partition-like"),
-            pytest.param("", None, id="empty-string"),
-            pytest.param("C:\\dir\\a@b", None, id="windows-backslash-path"),
-            pytest.param("C:/a@b", None, id="windows-forward-slash-path"),
-            pytest.param("me@work.txt", None, id="email-like"),
-            pytest.param("alice@host/db", None, id="username-only-userinfo"),
-            pytest.param("/mnt/share/my db=main.csv", None, id="path-with-space-and-key"),
-            pytest.param("/var/log/app db=1.log", None, id="path-with-space-and-db-key"),
-            pytest.param(Path("data/plain.csv"), None, id="plain-path-object"),
-            pytest.param("data/file%3Fname.csv", None, id="percent-encoded-question-mark-in-file-name"),
-            pytest.param("host.com/db%3Flimit=10", None, id="percent-encoded-question-mark-with-non-secret-key"),
-        ],
-    )
-    def test_type_name_only_hides_any_secret(self, value: Any, secret: str | None) -> None:
-        identity = _identity_of(value)
-        assert identity == type(value).__name__
-        if secret is not None:
-            assert secret not in identity
-
-    def test_long_string_without_equals_returns_quickly(self) -> None:
-        value = "a " * 20000
-        assert _identity_of(value) == "str"
-
-
-class _SecretBearingAccess:
-    """Object whose repr and str both carry a secret."""
-
-    def __repr__(self) -> str:
-        return "SecretBearingAccess(password=hunter2)"
-
-    __str__ = __repr__
-
-
-class TestDataAccessIdentityOfNonStringValues:
-    """Mappings are identified by sorted keys; any other non-str, including every PurePath, by type name only."""
-
-    @pytest.mark.parametrize(
-        ("value", "expected"),
-        [
-            pytest.param(
-                MappingProxyType({"user": "alice", "password": "hunter2"}),  # nosec B105
-                "{password, user}",
-                id="mapping-proxy-key-names-only",
-            ),
-            pytest.param(_SecretBearingAccess(), "_SecretBearingAccess", id="arbitrary-object-type-name"),
-            pytest.param(b"postgresql://u:hunter2@host/db", "bytes", id="bytes-type-name"),
-            pytest.param(["postgresql://u:hunter2@host/db"], "list", id="list-type-name"),
-            pytest.param(Path("data/plain.csv"), type(Path("data/plain.csv")).__name__, id="plain-path-type-name"),
-        ],
-    )
-    def test_identity_of_non_string_value(self, value: Any, expected: str) -> None:
-        assert _identity_of(value) == expected
-
-
-_LOCAL_PATH_CASES: tuple[tuple[str, str], ...] = (
-    ("plain.csv", "plain-file"),
-    ("user=42/part.parquet", "connection-key-lookalike-dir"),
-    ("year=2024/part.parquet", "hive-style-dir"),
-    ("report=2024.csv", "unknown-key-file-name"),
-    ("a@b", "at-sign-in-name"),
-    ("me@work.txt", "email-like-name"),
-    ("my db=main.csv", "space-and-key-in-name"),
-    ("a;host=b", "semicolon-key-in-name"),
-    ("q?a/report=2024.csv", "query-lookalike-dir"),
-    ("file%3Fname.csv", "percent-encoded-question-mark-in-name"),
-    ("notes:2024@work.txt", "userinfo-lookalike-name"),
-    ("user=alice.csv", "file-name-starting-with-connection-key"),
-)
-
-
-class TestDataAccessIdentityOfExistingLocalPaths:
-    """An existing local file or directory is published as given, for both the str and the Path form;
-    the same name under a missing parent falls back to the type name."""
-
-    @pytest.mark.parametrize(
-        "relative", [pytest.param(relative, id=case_id) for relative, case_id in _LOCAL_PATH_CASES]
-    )
-    def test_existing_file_is_published_as_given(self, tmp_path: Path, relative: str) -> None:
-        path = tmp_path / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("x", encoding="utf-8")
-
-        assert _identity_of(str(path)) == str(path)
-        assert _identity_of(path) == str(path)
-
-    def test_existing_directory_is_published_as_given(self, tmp_path: Path) -> None:
-        directory = tmp_path / "user=42"
-        directory.mkdir()
-
-        assert _identity_of(str(directory)) == str(directory)
-        assert _identity_of(directory) == str(directory)
-
-    @pytest.mark.parametrize(
-        "relative", [pytest.param(relative, id=case_id) for relative, case_id in _LOCAL_PATH_CASES]
-    )
-    def test_same_name_under_a_missing_parent_is_the_type_name(self, tmp_path: Path, relative: str) -> None:
-        path = tmp_path / "missing" / relative
-        assert _identity_of(str(path)) == "str"
-        assert _identity_of(path) == type(path).__name__
-
-
-class TestDataAccessIdentityRegressionGuardForReportedLeak:
-    """A credential-shaped value must never come back verbatim from any reader's data_access_identity."""
-
-    @pytest.mark.parametrize("reader", [BaseInputData, _DirectLoadReader])
-    @pytest.mark.parametrize(
-        ("value", "secret"),
-        [
-            pytest.param("u:hunter2@fileserver/share/notes.txt", "hunter2", id="userinfo-scheme-less-file-path"),
-            pytest.param("host=h password=hunter2 notes.txt", "hunter2", id="keyword-string-with-file-name"),
-            pytest.param(PurePosixPath("s3://alice:hunter2@bucket/key.csv"), "hunter2", id="pure-posix-path-uri"),
-        ],
-    )
-    def test_credential_shaped_value_never_comes_back_verbatim(
-        self, reader: type[BaseInputData], value: Any, secret: str
-    ) -> None:
-        identity = reader.data_access_identity(value)
-        assert identity == type(value).__name__
-        assert secret not in identity
-
-
 class TestFormatGroupIdentityNeverEchoesTheAccess:
     """A format group publishes the match's source, never a credential-shaped access value."""
 
@@ -992,8 +493,9 @@ class TestDataAccessIdentityWiring:
     """The hook reads the identity from the reader's own data_access_identity classmethod."""
 
     def test_hook_uses_the_readers_data_access_identity(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(_DirectLoadReader, "data_access_identity", classmethod(lambda cls, data_access: "sentinel"))
-        assert _identity_of("anything") == "sentinel"
+        loader = type("_SentinelIdentityLoader", (_DirectLoader,), {})
+        monkeypatch.setattr(loader, "data_access_identity", classmethod(lambda cls, data_access: "sentinel"))
+        assert _direct_load_context(loader, "anything").data_access_identity == "sentinel"
 
 
 class TestDataAccessIdentityBaselineForNonCredentialShapedValues:
@@ -1030,14 +532,13 @@ class TestCarrierIsNotAliasedAcrossTwoInputDataLoadHookContexts:
         carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
         cfw = ComputeFramework(function_extender={extender})
         cfw.run_context = RunContext()
-        reader = _DirectLoadReader()
         features = FeatureSet()
         calc_context = _build_calc_context(carrier=carrier)
 
         with cfw.activate(), calc_context.activate():
-            BaseInputData._load_data_via_hook(reader, "access-one", features)
+            _load(_DirectLoader, "access-one", features)
             first_context = extender.captured
-            BaseInputData._load_data_via_hook(reader, "access-two", features)
+            _load(_DirectLoader, "access-two", features)
             second_context = extender.captured
 
         assert first_context is not None
@@ -1072,11 +573,10 @@ class TestInputDataLoadHookCarriesInputFeatureEdges:
         extender = _InputDataLoadCapturingExtender()
         cfw = ComputeFramework(function_extender={extender})
         cfw.run_context = RunContext()
-        reader = _DirectLoadReader()
         calc_context = _build_calc_context(input_feature_edges={"a": ("src_a",), "b": ("src_b",)})
 
         with cfw.activate(), calc_context.activate():
-            BaseInputData._load_data_via_hook(reader, "access", FeatureSet())
+            _load(_DirectLoader, "access", FeatureSet())
 
         assert extender.captured is not None
         assert extender.captured.input_feature_edges == {"a": ("src_a",), "b": ("src_b",)}
@@ -1085,10 +585,9 @@ class TestInputDataLoadHookCarriesInputFeatureEdges:
         extender = _InputDataLoadCapturingExtender()
         cfw = ComputeFramework(function_extender={extender})
         cfw.run_context = RunContext()
-        reader = _DirectLoadReader()
 
         with cfw.activate(), _build_calc_context().activate():
-            BaseInputData._load_data_via_hook(reader, "access", FeatureSet())
+            _load(_DirectLoader, "access", FeatureSet())
 
         assert extender.captured is not None
         assert extender.captured.input_feature_edges is None
@@ -1118,7 +617,7 @@ class TestInputDataLoadIdentityComesFromTheCalcContext:
         cfw.worker_index = 9
 
         with cfw.activate(), calc_context.activate():
-            BaseInputData._load_data_via_hook(_DirectLoadReader(), "access", FeatureSet())
+            _load(_DirectLoader, "access", FeatureSet())
 
         captured = extender.captured
         assert captured is not None
@@ -1136,8 +635,8 @@ class _GateInputDataLoadExtender(_InputDataLoadCapturingExtender):
     never_fall_back = True
 
 
-class _CountingReader(_DirectLoadReader):
-    """Reader counting its load_data calls, for direct _load_data_via_hook calls."""
+class _CountingReader(_DirectLoader):
+    """Reader counting its load_data calls, for direct dispatch_input_data_load calls."""
 
     loads = 0
 
@@ -1171,9 +670,7 @@ def _threaded_load_feature_group(mode: str, leaked: list[FeatureSet] | None = No
                 return [0]
 
             def load() -> Any:
-                return BaseInputData._load_data_via_hook(
-                    _CountingReader(), "access", FeatureSet() if hopped is None else hopped
-                )
+                return _load(_CountingReader, "access", FeatureSet() if hopped is None else hopped)
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 if mode == "copied":
@@ -1189,7 +686,7 @@ def _load_in_thread(features: FeatureSet) -> tuple[Any, BaseException | None]:
 
     def run() -> None:
         try:
-            outcome.append((BaseInputData._load_data_via_hook(_CountingReader(), "access", features), None))
+            outcome.append((_load(_CountingReader, "access", features), None))
         except BaseException as exc:  # noqa: BLE001
             outcome.append((None, exc))
 
@@ -1342,10 +839,10 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
 
         if kind == "gate":
             with pytest.raises(GateBypassError):
-                BaseInputData._load_data_via_hook(_CountingReader(), "access", restored)
+                _load(_CountingReader, "access", restored)
             assert _CountingReader.loads == 0
         else:
-            assert BaseInputData._load_data_via_hook(_CountingReader(), "access", restored) == [1, 2, 3]
+            assert _load(_CountingReader, "access", restored) == [1, 2, 3]
             assert _CountingReader.loads == 1
 
     def test_bare_thread_hop_with_a_self_built_feature_set_raises_and_the_reader_never_loads(self) -> None:
@@ -1393,7 +890,7 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         _CountingReader.loads = 0
 
         with cfw.activate(), pytest.raises(GateBypassError):
-            BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+            _load(_CountingReader, "access", FeatureSet())
 
         assert _CountingReader.loads == 0
         assert len(gate.all_captured) == 0
@@ -1403,7 +900,7 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
         cfw = ComputeFramework(function_extender={extender})
 
         with cfw.activate():
-            result = BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+            result = _load(_CountingReader, "access", FeatureSet())
 
         assert result == [1, 2, 3]
         assert extender.captured is None
@@ -1419,29 +916,29 @@ class TestThreadHoppedReaderLoadIsDispatchedPerRun:
             _run_calculate(cfw, _RaisingFeatureGroup)
 
         _CountingReader.loads = 0
-        result = BaseInputData._load_data_via_hook(_CountingReader(), "access", FeatureSet())
+        result = _load(_CountingReader, "access", FeatureSet())
 
         assert result == [1, 2, 3]
         assert _CountingReader.loads == 1
 
 
-class _DeclaringReader(_DirectLoadReader):
+class _DeclaringReader(_DirectLoader):
     @classmethod
     def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
         return {"unit": "mm", "scale": 3, "skipped": [1], "bad": float("nan")}  # type: ignore[dict-item]
 
 
-class _RaisingDeclarationReader(_DirectLoadReader):
+class _RaisingDeclarationReader(_DirectLoader):
     @classmethod
     def declared_attributes(cls, features: FeatureSet | None) -> dict[str, str | int | float | bool]:
         raise RuntimeError("reader declaration boom")
 
 
-def _direct_load_context(reader_cls: type[BaseInputData], data_access: Any = "access") -> HookContext:
+def _direct_load_context(reader_cls: type[_DirectLoader], data_access: Any = "access") -> HookContext:
     extender = _InputDataLoadCapturingExtender()
     cfw = ComputeFramework(function_extender={extender})
     with cfw.activate(), _build_calc_context().activate():
-        BaseInputData._load_data_via_hook(reader_cls(), data_access, FeatureSet())
+        _load(reader_cls, data_access, FeatureSet())
     assert extender.captured is not None
     return extender.captured
 
@@ -1449,10 +946,18 @@ def _direct_load_context(reader_cls: type[BaseInputData], data_access: Any = "ac
 _BASE_INPUT_DATA_LOGGER = "mloda.core.abstract_plugins.components.input_data.base_input_data"
 
 
-class _NamedIdentityReader(_DirectLoadReader):
+class _NamedIdentityReader(_DirectLoader):
     @classmethod
     def data_access_identity(cls, data_access: Any) -> str:
         return "db://orders"
+
+
+class _AccessIdentityLoader(_DirectLoader):
+    """Publishes the access itself as the identity, like a path or URI naming its source."""
+
+    @classmethod
+    def data_access_identity(cls, data_access: Any) -> str:
+        return str(data_access)
 
 
 class TestFallbackDataAccessIdentityIsFlagged:
@@ -1467,7 +972,7 @@ class TestFallbackDataAccessIdentityIsFlagged:
             "jdbc-uri": "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
         }[kind]
 
-        context = _direct_load_context(_DirectLoadReader, data_access)
+        context = _direct_load_context(_DirectLoader, data_access)
 
         assert context.data_access_identity_is_fallback is True
 
@@ -1483,7 +988,7 @@ class TestFallbackDataAccessIdentityIsFlagged:
             "override": "nowhere",
             "override-dict": {"sqlite": "/data/a.db"},
         }[kind]
-        base_cls = _NamedIdentityReader if kind.startswith("override") else _DirectLoadReader
+        base_cls = _NamedIdentityReader if kind.startswith("override") else _AccessIdentityLoader
         reader_cls = type("_FreshPublished", (base_cls,), {})
 
         with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
@@ -1495,10 +1000,10 @@ class TestFallbackDataAccessIdentityIsFlagged:
         ]
 
     def test_warns_once_per_reader_class(self, caplog: pytest.LogCaptureFixture) -> None:
-        class _FreshA(_DirectLoadReader):
+        class _FreshA(_DirectLoader):
             pass
 
-        class _FreshB(_DirectLoadReader):
+        class _FreshB(_DirectLoader):
             pass
 
         with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
@@ -1515,13 +1020,13 @@ class TestFallbackDataAccessIdentityIsFlagged:
             assert _FreshB.__qualname__ in records[1].getMessage()
 
     def test_no_warning_without_input_data_load_extender(self, caplog: pytest.LogCaptureFixture) -> None:
-        class _FreshNoExtender(_DirectLoadReader):
+        class _FreshNoExtender(_DirectLoader):
             pass
 
         cfw = ComputeFramework(function_extender=set())
         with caplog.at_level(logging.WARNING, logger=_BASE_INPUT_DATA_LOGGER):
             with cfw.activate(), _build_calc_context().activate():
-                BaseInputData._load_data_via_hook(_FreshNoExtender(), "missing", FeatureSet())
+                _load(_FreshNoExtender, "missing", FeatureSet())
 
         assert not [r for r in caplog.records if "data_access_identity" in r.getMessage()]
 
@@ -1529,25 +1034,22 @@ class TestFallbackDataAccessIdentityIsFlagged:
 class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
     """INPUT_DATA_LOAD carries the concrete reader class and the READER's declared attributes."""
 
-    def test_reader_default_declared_attributes_is_empty_mapping(self) -> None:
-        assert BaseInputData.declared_attributes(None) == {}
-
     def test_direct_load_carries_reader_class_and_scalar_declarations(self) -> None:
         context = _direct_load_context(_DeclaringReader)
 
-        assert context.reader_class is _DeclaringReader
+        assert cast(Any, context.reader_class) is _DeclaringReader
         assert context.declared_attributes == {"unit": "mm", "scale": 3}
 
     def test_reader_without_declarations_surfaces_empty_mapping(self) -> None:
-        context = _direct_load_context(_DirectLoadReader)
+        context = _direct_load_context(_DirectLoader)
 
-        assert context.reader_class is _DirectLoadReader
+        assert cast(Any, context.reader_class) is _DirectLoader
         assert context.declared_attributes == {}
 
     def test_raising_reader_declaration_degrades_to_none_and_load_succeeds(self) -> None:
         context = _direct_load_context(_RaisingDeclarationReader)
 
-        assert context.reader_class is _RaisingDeclarationReader
+        assert cast(Any, context.reader_class) is _RaisingDeclarationReader
         assert context.declared_attributes is None
 
     def test_end_to_end_format_group_declarations_reach_both_load_and_calculate(
@@ -1593,11 +1095,10 @@ class TestInputDataLoadHookUsesFrameworkRowCountNotDefaultLen:
     def test_rows_out_reflects_cfw_row_count_not_len(self) -> None:
         extender = _InputDataLoadCapturingExtender()
         cfw = _SentinelRowCountComputeFramework(function_extender={extender})
-        reader = _DirectLoadReader()
         features = FeatureSet()
 
         with cfw.activate(), _build_calc_context().activate():
-            result = BaseInputData._load_data_via_hook(reader, {"any": "value"}, features)
+            result = _load(_DirectLoader, {"any": "value"}, features)
 
         assert result == [1, 2, 3]
         assert extender.captured is not None
@@ -1685,7 +1186,7 @@ class _MultiprocessingHopFeatureGroup(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            loaded = pool.submit(lambda: BaseInputData._load_data_via_hook(_DirectLoadReader(), "access", features))
+            loaded = pool.submit(lambda: _load(_DirectLoader, "access", features))
             return {_MP_HOP_COLUMN: loaded.result()}
 
 
@@ -1755,7 +1256,7 @@ class TestInputDataLoadAuditForFormatGroups:
         assert extender.func_owner == group.__name__
 
     def test_readers_leave_the_loader_field_none(self) -> None:
-        context = _direct_load_context(_DirectLoadReader)
+        context = _direct_load_context(_DirectLoader)
         assert context.data_access_loader is None
         assert context.implementation is None
         assert context.implementation_version is None

@@ -25,8 +25,10 @@ from mloda.core.abstract_plugins.components.feature_chainer import feature_chain
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     MatchRejection,
+    drop_match_rejections_since,
+    has_match_rejection,
+    match_rejection_owners,
     record_match_rejection,
-    restamp_match_rejections_since,
 )
 from mloda.provider import collect_match_rejections
 from tests.docs_corpus import REPO_ROOT
@@ -145,15 +147,61 @@ class TestRefusalField:
 
         assert recording_window["RefusalOwner"].refusal is refusal
 
-    def test_restamp_keeps_the_refusal(self, recording_window: dict[str, Any]) -> None:
-        refusal = PermissionError("no clearance")
-        record_match_rejection("RestampOwner", "refused", stage="input_data", refusal=refusal)
 
-        restamp_match_rejections_since(frozenset(), "input_data", "input_data_owned")
+class TestHasMatchRejection:
+    """The helper reports whether the ACTIVE window holds a rejection with the exact stage."""
 
-        stored = recording_window["RestampOwner"]
-        assert stored.stage == "input_data_owned"
-        assert stored.refusal is refusal
+    def test_no_active_window_reports_false(self) -> None:
+        assert MATCH_REJECTION_REASONS.get() is None
+        assert has_match_rejection("input_data") is False
+
+    def test_a_window_holding_only_a_foreign_stage_reports_false(self, recording_window: dict[str, Any]) -> None:
+        record_match_rejection("HasRejectionOwner", "a reason")
+
+        assert has_match_rejection("input_data") is False
+
+    def test_a_window_holding_an_input_data_rejection_reports_true(self, recording_window: dict[str, Any]) -> None:
+        record_match_rejection("HasRejectionOwner", "a reason", stage="input_data")
+
+        assert has_match_rejection("input_data") is True
+
+
+class TestMatchRejectionOwnersAndDrop:
+    """The owner snapshot and the delta drop scope what one probe recorded."""
+
+    OWNER = "vg1006_unit_owner"
+    OTHER_OWNER = "vg1006_unit_other_owner"
+    REASON = "vg1006 unit reason"
+
+    def test_owners_outside_a_window_are_empty_and_open_none(self) -> None:
+        assert MATCH_REJECTION_REASONS.get() is None
+        assert match_rejection_owners() == frozenset()
+        assert MATCH_REJECTION_REASONS.get() is None
+
+    def test_owners_inside_a_window_are_the_recorded_names(self, rejection_window: dict[str, MatchRejection]) -> None:
+        record_match_rejection(self.OWNER, self.REASON, stage="input_data")
+        record_match_rejection(self.OTHER_OWNER, self.REASON, stage="input_data")
+
+        assert match_rejection_owners() == frozenset({self.OWNER, self.OTHER_OWNER})
+
+    def test_drop_without_a_window_is_a_no_op(self) -> None:
+        assert MATCH_REJECTION_REASONS.get() is None
+        drop_match_rejections_since(frozenset())
+        assert MATCH_REJECTION_REASONS.get() is None
+
+    def test_drop_keeps_owners_in_the_snapshot(self, rejection_window: dict[str, MatchRejection]) -> None:
+        record_match_rejection(self.OWNER, self.REASON, stage="input_data")
+        drop_match_rejections_since(match_rejection_owners())
+
+        assert set(rejection_window) == {self.OWNER}
+
+    def test_drop_removes_owners_recorded_after_the_snapshot(self, rejection_window: dict[str, MatchRejection]) -> None:
+        record_match_rejection(self.OWNER, self.REASON, stage="input_data")
+        known_owners = match_rejection_owners()
+        record_match_rejection(self.OTHER_OWNER, self.REASON, stage="input_data")
+        drop_match_rejections_since(known_owners)
+
+        assert set(rejection_window) == {self.OWNER}
 
 
 class TestProviderExport:

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, is_match_abort, safe_field
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -131,38 +130,3 @@ def probe_format_group(
         _log_refusal(scope, group, reason, "Format group")
         return FormatProbeOutcome(reason, None)
     return FormatProbeOutcome(None, result)
-
-
-def probe_reader(reader: Any, data_access: Any, feature_names: list[str], options: Any) -> Any:
-    """Run reader.match_subclass_data_access, through the INPUT_DATA_MATCH extender when one is in scope."""
-    scope = _CURRENT.get()
-    if scope is None:
-        return reader.match_subclass_data_access(data_access, feature_names, options=options)
-
-    context = _match_context(scope, reader, feature_names)
-    probe_raised = False
-
-    def probe(access: Any, names: list[str], options: Any) -> Any:
-        nonlocal probe_raised
-        try:
-            return reader.match_subclass_data_access(access, names, options=options)
-        except BaseException:
-            probe_raised = True
-            raise
-
-    with context.activate():
-        try:
-            return _invoke_extender(scope.extender, probe, data_access, feature_names, options=options)
-        # Contained: an extender refusing one candidate reader skips it, like a reader that did not match.
-        except Exception as exc:
-            if probe_raised or is_match_abort(exc):
-                raise
-            reason = contained_raise_reason(exc)
-            _log_refusal(scope, reader, reason)
-            record_match_rejection(
-                reader.get_class_name(),
-                f"refused at INPUT_DATA_MATCH: {reason}",
-                stage=INPUT_DATA_STAGE,
-                refusal=_strip_tracebacks(exc),
-            )
-            return None

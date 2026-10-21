@@ -19,7 +19,6 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import PropertyValueRejection
 from mloda.core.abstract_plugins.components.match_rejection import (
-    INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
     MatchRejection,
@@ -45,7 +44,6 @@ RECORDED_DECLINE_CLASS_NAME = "RtxRecordedDeclineFG728"
 RECORD_THEN_VALUE_CLASS_NAME = "RtxRecordThenValueRaiseFG728"
 STAGE_DECLINE_CLASS_NAME = "RtxStageDeclineFG728"
 RECORD_THEN_ERROR_CLASS_NAME = "RtxRecordThenErrorFG728"
-OWNED_VETO_CLASS_NAME = "RtxOwnedVetoFG728"
 FALSY_DECLINE_CLASS_NAME = "RtxFalsyDeclineFG728"
 DECLINE_THEN_DEFECT_CLASS_NAME = "RtxDeclineThenDefectFG728"
 
@@ -55,7 +53,6 @@ REASON_B = "rtx_reason_b_728"
 RUNTIME_MESSAGE = "rtx_runtime_boom_728"
 RUNTIME_TYPE_NAME = "RuntimeError"
 ESCALATE_MESSAGE = "rtx_escalated_728"
-OWNED_REASON = "rtx_owned_veto_reason_728"
 VALUE_REJECTION_STAGE = "value_rejection"
 VALUE_REJECTION_TYPE_NAME = "PropertyValueRejection"
 DEFECT_MESSAGE = "rtx_defect_after_decline_728"
@@ -237,28 +234,6 @@ def _make_record_then_error_fg() -> tuple[type[FeatureGroup], Callable[[], bool]
             return str(feature_name) in cls.feature_names_supported()
 
     return RtxRecordThenErrorFG728, lambda: RtxRecordThenErrorFG728.window_active
-
-
-def _make_owned_veto_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
-    """A throwaway group supporting the filter name whose hook records an owned veto, then defers to super."""
-    gc.collect()
-
-    class RtxOwnedVetoFG728(FeatureGroup):
-        @classmethod
-        def feature_names_supported(cls) -> set[str]:
-            return {HOST_FEATURE, FILTER_FEATURE}
-
-        @classmethod
-        def match_feature_group_criteria(
-            cls,
-            feature_name: FeatureName | str,
-            options: Options,
-            data_access_collection: DataAccessCollection | None = None,
-        ) -> bool:
-            record_match_rejection(cls.__name__, OWNED_REASON, stage=INPUT_DATA_OWNED_STAGE)
-            return super().match_feature_group_criteria(feature_name, options, data_access_collection)
-
-    return RtxOwnedVetoFG728, _window_not_observed
 
 
 def _make_record_but_match_fg() -> tuple[type[FeatureGroup], Callable[[], bool]]:
@@ -669,9 +644,9 @@ class TestRecordedRejectionIsATypedDrop:
         assert snapshot.warnings == (), f"a recorded decline is a verdict, not a defect, got: {snapshot.warnings}"
         assert len(snapshot.debugs) == 1, f"the drop must still be visible at DEBUG, got: {snapshot.debugs}"
 
-    @pytest.mark.parametrize("stage", [INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE])
-    def test_both_input_data_stages_flow_through(self, stage: str, caplog: pytest.LogCaptureFixture) -> None:
-        """A rejection recorded under either input-data stage still surfaces as a typed drop."""
+    def test_the_input_data_stage_flows_through(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A rejection recorded under the input-data stage still surfaces as a typed drop."""
+        stage = INPUT_DATA_STAGE
         snapshot = _drive_criteria(partial(_make_stage_decline_fg, stage), caplog)
 
         assert snapshot.escaped is None, f"nothing may cross GlobalFilter.criteria: {snapshot.escaped}"
@@ -778,24 +753,6 @@ class TestMatchAndEscalationLeaveNoDrop:
         assert window_after_is_none, "the probe must reset MATCH_REJECTION_REASONS even on the abort path"
 
 
-class TestOwnedVetoParity:
-    """The default hook's owned-veto gate sees the filter seam's active window."""
-
-    def test_the_default_hooks_owned_veto_gate_sees_the_filter_seams_window(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """An owned-stage recording before super() must veto a name the group otherwise supports."""
-        snapshot = _drive_criteria(_make_owned_veto_fg, caplog)
-
-        assert snapshot.escaped is None, f"nothing may cross GlobalFilter.criteria: {snapshot.escaped}"
-        assert snapshot.is_false, "the owned veto must gate the default hook's name rules"
-        assert snapshot.entries == ((OWNED_VETO_CLASS_NAME, FILTER_FEATURE),), (
-            f"the veto is a typed drop, whose key names the group and the filter feature, got: {snapshot.entries}"
-        )
-        assert snapshot.reasons == (OWNED_REASON,), f"the drop must hold the veto's reason, got: {snapshot.reasons}"
-        assert snapshot.warnings == (), f"an owned veto is a verdict, not a defect, got: {snapshot.warnings}"
-
-
 @dataclass(frozen=True)
 class _ProbeSnapshot:
     """Plain-data readout of one probe_match_criteria call. Holds no class and no exception object."""
@@ -867,15 +824,6 @@ class TestCriteriaProbeOutcome:
         )
         assert snapshot.rejection_stage == VALUE_REJECTION_STAGE, (
             f"a value rejection owns the harvested stage, got: {snapshot.rejection_stage}"
-        )
-
-    def test_an_owned_stage_recording_keeps_its_stage(self) -> None:
-        snapshot = _drive_probe(partial(_make_stage_decline_fg, INPUT_DATA_OWNED_STAGE))
-
-        assert snapshot.matched is False, "a declining matcher is a non-match"
-        assert snapshot.has_rejection, "the recorded rejection must be harvested on a non-match"
-        assert snapshot.rejection_stage == INPUT_DATA_OWNED_STAGE, (
-            f"the recorded stage must survive the harvest, got: {snapshot.rejection_stage}"
         )
 
     def test_a_recording_match_harvests_nothing(self) -> None:

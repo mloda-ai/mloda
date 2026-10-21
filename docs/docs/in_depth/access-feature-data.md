@@ -10,7 +10,7 @@ This framework provides several structured mechanisms for features to access and
 
 These methods ensure efficient data management while maintaining flexibility and scalability. A typical scenario involves a complex feature relying on three input features. These input features, in turn, may depend on other input features or load data using ApiData.
 
-> **Advanced**: For a detailed explanation of the underlying data access patterns (BaseInputData vs MatchData), see [Data Access Patterns](data-access-patterns.md).
+> **Advanced**: For a detailed explanation of the underlying data access patterns (format FeatureGroups and MatchData), see [Data Access Patterns](data-access-patterns.md).
 
 #### DataAccessCollection - global data access
 
@@ -137,7 +137,7 @@ Feature("SK_ID_CURR", options=Options({"CsvFG": "application_train.csv"}))
 The Feature Scope Data access is instead designed to control the access to data of any kind 
 on a local level. 
 
-If data needs to be added specifically for a single feature (or features from the same feature group), you can use the feature_scope_data_access_name functionality.
+If data needs to be added specifically for a single feature (or features from the same feature group), you can point the feature at its own source through its options.
 
 We show `CsvFG` as example, a `ReadFileFG` subclass that claims CSV files.
 In this case, we point it at a path with its class name as option key: `CsvFG`.

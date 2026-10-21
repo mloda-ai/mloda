@@ -14,7 +14,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
@@ -22,6 +22,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 
@@ -173,11 +175,11 @@ ORDER_KEY = "order_shared_key_winner_iso"
 ORIGINAL_KEY = "original_key_winner_iso"
 
 
-class ReaderParent_winner_iso(BaseInputData):
+class ReaderParent_winner_iso(ToyFormatBase):
     """Reader class of the parent candidate."""
 
 
-class ReaderSub_winner_iso(BaseInputData):
+class ReaderSub_winner_iso(ToyFormatBase):
     """Reader class of the subclass candidate."""
 
 
@@ -186,7 +188,7 @@ class _Writes:
     group: dict[str, Any]
     context: dict[str, Any]
     non_forwarded: frozenset[str]
-    reader: tuple[type[BaseInputData], str] | None = None
+    reader: tuple[type[ToyFormatBase], str] | None = None
     matches: bool = True
     api_group: dict[str, Any] | None = None
     abort: bool = False
@@ -210,7 +212,9 @@ def _make_candidate(
         options.context.update(writes.context)
         options.non_forwarded_group_keys = options.non_forwarded_group_keys | writes.non_forwarded
         if writes.reader is not None:
-            BaseInputData.add_base_input_data_to_options(writes.reader[0], writes.reader[1], options)
+            options.add_to_group(
+                RESERVED_READER_OPTION_KEY, (writes.reader[0], SourceMatch(writes.reader[1], writes.reader[1]))
+            )
         for api_key, api_value in (writes.api_group or {}).items():
             options.add_to_group(api_key, api_value)
         if writes.abort:
@@ -310,8 +314,8 @@ class TestWinnerOptionsAreOriginalPlusOwnWrites:
 
         assert resolved.escaped is None
         assert resolved.winners == ("SubFG_winner_iso",)
-        assert BaseInputData.__name__ not in resolved.group
-        assert resolved.match == (ReaderSub_winner_iso, "sub_access")
+        assert RESERVED_READER_OPTION_KEY not in resolved.group
+        assert resolved.match == (ReaderSub_winner_iso, SourceMatch("sub_access", "sub_access"))
 
 
 class TestEachCandidateSeesTheOriginalOptions:
@@ -350,8 +354,8 @@ class TestUnrelatedDifferentReadersStillConflict:
         assert message.startswith("FeatureResolutionError")
         assert "Multiple feature groups found" in message
         assert "BaseInputData already set" not in message
-        assert "ReaderParent_winner_iso: str" in message
-        assert "ReaderSub_winner_iso: str" in message
+        assert "ReaderParent_winner_iso: one_access" in message
+        assert "ReaderSub_winner_iso: two_access" in message
 
         resolved = _resolve([one, two] if one_first else [two, one])
 
@@ -359,7 +363,7 @@ class TestUnrelatedDifferentReadersStillConflict:
         assert resolved.match is None
         assert resolved.group == {ORIGINAL_KEY: "original"}
         assert resolved.context == {}
-        assert BaseInputData.__name__ not in resolved.group
+        assert RESERVED_READER_OPTION_KEY not in resolved.group
         assert resolved.own_group_keys == _requested_own_keys()
 
 
@@ -381,11 +385,11 @@ class TestReplayStartsFromTheOriginalOptions:
         assert resolved.winners == ("SurvivorOneFG_winner_iso", "SurvivorTwoFG_winner_iso")
         assert resolved.group == {ORIGINAL_KEY: "original"}
         assert resolved.context == {}
-        assert BaseInputData.__name__ not in resolved.group
+        assert RESERVED_READER_OPTION_KEY not in resolved.group
         assert resolved.own_group_keys == _requested_own_keys()
 
 
-class ReaderGrand_winner_iso(BaseInputData):
+class ReaderGrand_winner_iso(ToyFormatBase):
     """Reader class of the grandparent candidate."""
 
 
@@ -403,8 +407,8 @@ class TestReaderlessWinnerInheritsNearestAncestorReader:
 
         assert resolved.escaped is None
         assert resolved.winners == ("LeafFG_winner_iso",)
-        assert BaseInputData.__name__ not in resolved.group
-        assert resolved.match == (ReaderParent_winner_iso, "b")
+        assert RESERVED_READER_OPTION_KEY not in resolved.group
+        assert resolved.match == (ReaderParent_winner_iso, SourceMatch("b", "b"))
 
 
 DROPPED_KEY = "dropped_own_key_winner_iso"

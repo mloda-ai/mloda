@@ -19,7 +19,6 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.match_rejection import (
-    INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
     NAME_STAGE,
     record_match_rejection,
@@ -115,7 +114,6 @@ ABSENT_UUID = "<no uuid in the key>"  # what a ledger key carrying no filter ide
 # (recorded free-form hint, the elimination stage it maps onto).
 STAGE_HINT_TABLE: tuple[tuple[str, EliminationStage], ...] = (
     (INPUT_DATA_STAGE, INPUT_DATA_ELIMINATION_STAGE),
-    (INPUT_DATA_OWNED_STAGE, INPUT_DATA_ELIMINATION_STAGE),
     (VALUE_REJECTION_STAGE, VALUE_REJECTION_STAGE),
     (UNKNOWN_STAGE, VALUE_REJECTION_STAGE),
     (NAME_STAGE, NAME_ELIMINATION_STAGE),

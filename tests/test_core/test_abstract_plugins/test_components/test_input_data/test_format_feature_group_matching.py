@@ -560,48 +560,44 @@ class TestOpenClaimDefersToAComputingCandidate:
     def test_open_group_declaring_the_derived_name_does_not_step_aside(self) -> None:
         feature = Feature(_DERIVED, Options({"_OpenDeclaringDerivedFG": {COL: [1, 2]}}))
         with pytest.raises(ValueError, match="Multiple feature groups found"):
-            evaluate_or_raise(feature, _plugins(_OpenDeclaringDerivedFG, PyArrowAggregatedFeatureGroup), None, None)
+            evaluate_or_raise(feature, _plugins(_OpenDeclaringDerivedFG, AggregatedFeatureGroup), None, None)
 
     def _open_feature(self, name: str, **kwargs: Any) -> Feature:
         return Feature(name, Options({"ToyOpenFG": {COL: [1, 2]}}), **kwargs)
 
     @pytest.mark.parametrize("name", [_DERIVED, "toyfmt_col__sum_aggr__max_aggr"], ids=["derived", "chained"])
     def test_pointed_open_group_steps_aside_for_the_aggregation(self, name: str) -> None:
-        result = evaluate_or_raise(
-            self._open_feature(name), _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None
-        )
+        result = evaluate_or_raise(self._open_feature(name), _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
-        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+        assert set(result.identified) == {AggregatedFeatureGroup}
         elimination = result.eliminations[ToyOpenFG]
         assert elimination.stage == "input_data"
-        assert "PyArrowAggregatedFeatureGroup" in elimination.reason
+        assert "AggregatedFeatureGroup" in elimination.reason
         assert "feature_group=" in elimination.reason
         assert "ToyOpenFG" in elimination.reason
 
     def test_computing_candidate_eliminated_later_still_masks_the_open_claim(self) -> None:
         feature = self._open_feature(self.DERIVED, compute_framework=_ToyUnservedFramework.get_class_name())
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None)
+            evaluate_or_raise(feature, _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
         result = exc_info.value.result
         assert result.identified == {}
-        assert result.eliminations[PyArrowAggregatedFeatureGroup].stage == "framework_pin"
+        assert result.eliminations[AggregatedFeatureGroup].stage == "framework_pin"
 
     def test_feature_group_scope_lets_the_open_group_claim_the_derived_name(self) -> None:
         feature = self._open_feature(self.DERIVED, feature_group=ToyOpenFG)
-        result = evaluate_or_raise(feature, _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None)
+        result = evaluate_or_raise(feature, _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
         assert set(result.identified) == {ToyOpenFG}
 
     def test_another_plain_claimant_still_makes_the_name_ambiguous(self) -> None:
-        groups = (ToyOpenFG, _PlainClaimsDerived, PyArrowAggregatedFeatureGroup)
+        groups = (ToyOpenFG, _PlainClaimsDerived, AggregatedFeatureGroup)
         with pytest.raises(ValueError, match="Multiple feature groups found"):
             evaluate_or_raise(self._open_feature(self.DERIVED), _plugins(*groups), None, None)
 
     def test_open_route_on_a_leaf_name_still_claims(self) -> None:
-        result = evaluate_or_raise(
-            self._open_feature(COL), _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None
-        )
+        result = evaluate_or_raise(self._open_feature(COL), _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
         assert set(result.identified) == {ToyOpenFG}
 

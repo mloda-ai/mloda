@@ -96,8 +96,8 @@ pass them by name.
 
 ### Scoping to a Feature Group
 
-When several FeatureGroups match the same name, such as the framework-specific
-`AggregatedFeatureGroup` subclasses, narrow the resolution with the keyword-only
+When several FeatureGroups match the same name, such as the per-framework
+subclasses of a family that still ships one class per framework, narrow the resolution with the keyword-only
 `feature_group` argument. It takes a FeatureGroup subclass or its class-name
 string (the string matches the named class and its subclasses), the same forms
 as `Feature(..., feature_group=...)`:
@@ -150,7 +150,7 @@ fgs = get_feature_group_docs(compute_framework="PandasDataFrame")
 Each `FeatureGroupInfo` also carries the subtype declaration: `subtype_key`
 (the `SUBTYPES.key`, `None` for shape-B and undeclared families), `subtypes`
 (the sorted universe), `parametric_subtypes`, `subtype_support` (supported
-subtypes per framework; empty for abstract bases) and `subtype_error` (set
+subtypes per framework; empty for abstract bases, read from the implementations for an operation group) and `subtype_error` (set
 when the declaration is invalid). See
 [Declaring capability per subtype](compute-framework-integration.md#declaring-capability-per-subtype).
 A file or document group also reports `suffixes`, the sorted suffixes it owns by default (empty for other groups).

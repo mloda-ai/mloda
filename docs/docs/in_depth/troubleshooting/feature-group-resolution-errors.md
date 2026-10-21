@@ -206,7 +206,7 @@ Both forms match the scoped class and its subclasses, preferring the most specif
 
 ```json
 [
-    {"name": "age__mean_aggr", "feature_group": "AggregatedFeatureGroup"}
+    {"name": "age__mean_aggr", "feature_group": "AggregatedFeatureGroup", "implementation": "PandasAggregation"}
 ]
 ```
 
@@ -214,7 +214,7 @@ Caveats:
 
 - The scope narrows candidates; it does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does. Enable one framework for the run, or pin `compute_frameworks` on the `Feature` (Python only).
 - The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises.
-- Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific implementation, name that implementation.
+- Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific class, name that class. For an operation group such as `AggregatedFeatureGroup`, name the implementation instead with `implementation="PandasAggregation"`; a bad pin raises `ImplementationPinError`.
 - The root `FeatureGroup` base is rejected in either form: it names no family.
 - The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
 

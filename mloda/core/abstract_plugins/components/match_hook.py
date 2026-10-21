@@ -88,7 +88,8 @@ def call_match_hook(
     framework defect; leave it contained when it is one candidate's own judgment or own defect. Every raise
     the match path reaches must say which, at the raise: tests/test_core/test_prepare/test_match_abort_sweep.py
     enforces that. A mark only survives if every handler in between re-raises it (``safe_field`` does not). An
-    option-write conflict during source selection escalates as a contradiction, decided at the selection raise.
+    option-write conflict during MatchData source selection escalates as a contradiction, decided at the selection
+    raise; a format group's conflicting write is contained as an elimination of that group.
 
     The contained exception is handed back rather than judged here: each seam records and isolates options its own way.
     resolve_parts (feature resolution only) reads `<base>~<part>` against the declared parts.

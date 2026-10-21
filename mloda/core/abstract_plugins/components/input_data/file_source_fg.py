@@ -188,7 +188,7 @@ class _FileSourceFG(FormatFeatureGroup):
             return
         record_match_rejection(
             _UNOWNED_PIN_OWNER,
-            f"pinned file {pinned_path} has a suffix no registered reader owns",
+            scrub_credentials(f"pinned file {pinned_path} has a suffix no registered reader owns"),
             stage=INPUT_DATA_STAGE,
         )
 

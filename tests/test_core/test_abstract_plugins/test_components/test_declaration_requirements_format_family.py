@@ -12,7 +12,8 @@ from typing import Any, ClassVar
 import pyarrow as pa
 import pytest
 
-from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.provider import ClaimRoute, ComputeFramework, FeatureGroup, FeatureSet, NamePolicy, SourceMatch
 from mloda.user import (
     DataAccessCollection,
@@ -76,6 +77,25 @@ class DeclLonelyFormat(_DeclServingFormat):
     """The only provider of the lonely depth; declares nothing."""
 
     served = frozenset({LONELY_DEPTH})
+
+
+class DeclDerivedDepthFG(FeatureGroup):
+    """Serves the depth name without a reader and declares nothing."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {DEPTH}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({DEPTH: [1]})
 
 
 class DeclFrameFG(FeatureGroup):
@@ -295,6 +315,34 @@ class TestDeclarationRequirementsEndToEnd:
         assert f"request for '{LONELY_DEPTH}'" in resolved.error
         assert "needed by" not in resolved.error
         assert DeclSharedInstanceRequiringConsumer.get_class_name() not in resolved.error
+
+
+FORMAT_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
+    DeclScaledDepthFormat: {PyArrowTable},
+    DeclDerivedDepthFG: {PyArrowTable},
+}
+DERIVED_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
+    DeclDerivedDepthFG: {PyArrowTable},
+    DeclScaledDepthFormat: {PyArrowTable},
+}
+
+
+class TestWrittenPairIsPerCandidate:
+    """A format group's written pair does not satisfy a sibling candidate's declaration requirement."""
+
+    @pytest.mark.parametrize(
+        "mapping", [FORMAT_FIRST_MAPPING, DERIVED_FIRST_MAPPING], ids=["format_first", "derived_first"]
+    )
+    def test_format_group_written_by_one_candidate_does_not_satisfy_another(
+        self, mapping: FeatureGroupEnvironmentMapping
+    ) -> None:
+        requesting = Feature(DEPTH, required_declarations={"scale": None})
+        requesting.resolving_consumer = "DepthToMetres"
+
+        result = IdentifyFeatureGroupClass.evaluate(requesting, mapping, None, DEPTH_DAC)
+
+        assert set(result.identified) == {DeclScaledDepthFormat}
+        assert result.eliminations[DeclDerivedDepthFG].stage == "declarations"
 
 
 class TestTopLevelRequestRequirement:

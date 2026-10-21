@@ -263,7 +263,7 @@ return {
 }
 ```
 
-A pointer (or `query_text`) on a derived name such as `price__sum_aggr` does not make an open-route group claim it: the group that computes the feature wins, and the open group is eliminated at stage `input_data` with a reason naming the computing group. To read the derived name straight from the source, pass `feature_group=<OpenGroup>`.
+A pointer (or `query_text`) on a derived name such as `price__sum_aggr` does not make an open-route group claim it: the group that computes the feature wins, and the open group is eliminated at stage `input_data` with a reason naming the computing group. The open group steps aside even when the computing group is filtered out later (for example by a framework pin or links). To read the derived name straight from the source, pass `feature_group=<OpenGroup>`, which reads the name from the source.
 
 ### Global filters on a pointed-only group
 

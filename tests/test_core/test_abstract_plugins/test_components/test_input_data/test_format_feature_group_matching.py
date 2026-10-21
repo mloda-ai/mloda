@@ -546,8 +546,21 @@ class TestPointedGroupDefersToAComputingCandidate:
         assert result.eliminations[ToyFormatFG].stage == "input_data"
 
 
+class _OpenDeclaringDerivedFG(ToyOpenFG):
+    """Open route that also declares the derived name."""
+
+    @classmethod
+    def declared_names(cls) -> frozenset[str]:
+        return frozenset({_DERIVED})
+
+
 class TestOpenClaimDefersToAComputingCandidate:
     DERIVED = _DERIVED
+
+    def test_open_group_declaring_the_derived_name_does_not_step_aside(self) -> None:
+        feature = Feature(_DERIVED, Options({"_OpenDeclaringDerivedFG": {COL: [1, 2]}}))
+        with pytest.raises(ValueError, match="Multiple feature groups found"):
+            evaluate_or_raise(feature, _plugins(_OpenDeclaringDerivedFG, PyArrowAggregatedFeatureGroup), None, None)
 
     def _open_feature(self, name: str, **kwargs: Any) -> Feature:
         return Feature(name, Options({"ToyOpenFG": {COL: [1, 2]}}), **kwargs)

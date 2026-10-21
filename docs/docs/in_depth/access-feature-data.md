@@ -137,7 +137,7 @@ Feature("SK_ID_CURR", options=Options({"CsvFG": "application_train.csv"}))
 The Feature Scope Data access is instead designed to control the access to data of any kind 
 on a local level. 
 
-If data needs to be added specifically for a single feature (or features from the same feature group), you can use the feature_scope_data_access_name functionality.
+If data needs to be added specifically for a single feature (or features from the same feature group), you can point the feature at its own source through its options.
 
 We show `CsvFG` as example, a `ReadFileFG` subclass that claims CSV files.
 In this case, we point it at a path with its class name as option key: `CsvFG`.

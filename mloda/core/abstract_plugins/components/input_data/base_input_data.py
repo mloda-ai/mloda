@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
-_REMOVED_HOOKS = ("match_subclass_data_access", "load_data", "READER_OPTIONS")
+_REMOVED_HOOKS = ("match_subclass_data_access", "load_data", "READER_OPTIONS", "init_reader", "match_data_access")
 
 
 def _format_keys(keys: Iterable[str]) -> str:
@@ -67,13 +67,13 @@ def dispatch_input_data_load(
                     )
             if marker.gate:
                 raise GateBypassError(
-                    f"{owner_type.__qualname__}.load_data ran after its calculation finished under an "
+                    f"{owner_type.__qualname__} loaded its source after its calculation finished under an "
                     "INPUT_DATA_LOAD gate."
                 )
             return load(data_access, features)
         if input_data_load_gate_scopes_active() > 0:
             raise GateBypassError(
-                f"{owner_type.__qualname__}.load_data ran outside the calculation context while an "
+                f"{owner_type.__qualname__} loaded its source outside the calculation context while an "
                 "INPUT_DATA_LOAD gate is active (a thread hop lost it); run the thread's work with "
                 "contextvars.copy_context().run."
             )
@@ -87,7 +87,7 @@ def dispatch_input_data_load(
     if calc_context is None:
         if extender.never_fall_back:
             raise GateBypassError(
-                f"{owner_type.__qualname__}.load_data ran without a calculate-phase HookContext under an "
+                f"{owner_type.__qualname__} loaded its source without a calculate-phase HookContext under an "
                 "INPUT_DATA_LOAD gate; run the thread's work with contextvars.copy_context().run."
             )
         return load(data_access, features)
@@ -150,12 +150,15 @@ class BaseInputData(ABC):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Reject the removed reader hooks at class definition, naming the replacement."""
-        for hook in _REMOVED_HOOKS:
-            if hook in cls.__dict__:
-                raise TypeError(
-                    f"{cls.__name__} defines {hook}, which BaseInputData no longer supports; "
-                    "subclass FormatFeatureGroup to read a source."
-                )
+        for klass in cls.__mro__:
+            if klass is object or (klass is not cls and issubclass(klass, BaseInputData)):
+                continue
+            for hook in _REMOVED_HOOKS:
+                if hook in klass.__dict__:
+                    raise TypeError(
+                        f"{cls.__name__} defines {hook}, which BaseInputData no longer supports; "
+                        "subclass FormatFeatureGroup to read a source."
+                    )
         super().__init_subclass__(**kwargs)
 
     @classmethod

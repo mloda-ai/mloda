@@ -253,6 +253,18 @@ class TestPinnedFileOwnedBySomeFileGroup:
 
         assert str(excinfo.value).count(self.UNOWNED_FRAGMENT) == 1
 
+    def test_the_unowned_pin_message_scrubs_uri_credentials(self) -> None:
+        uri = "s3://AKIAKEY:supersecret@bucket/data.weirdext"
+        dac = DataAccessCollection(files={"p": uri}, column_to_file={"col_x": "p"})
+        plugins: Any = {CsvFG: {PyArrowTable}}
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            evaluate_or_raise(Feature("col_x"), plugins, None, dac)
+
+        text = str(excinfo.value)
+        assert "supersecret" not in text
+        assert self.UNOWNED_FRAGMENT in text
+
 
 class TestAbstractReadFileFGWithAPin:
     """A column_to_file pin must not make the abstract ReadFileFG raise from its match hook."""

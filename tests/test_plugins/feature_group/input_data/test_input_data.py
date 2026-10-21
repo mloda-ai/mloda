@@ -12,6 +12,7 @@ from mloda.user import Feature, Options
 from mloda.provider import FeatureSet
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
@@ -200,6 +201,37 @@ class TestBaseInputDataIsOnlyAMarker:
             type("LegacyHookInputData", (BaseInputData,), {hook: value})
 
         assert hook in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        ("hook", "value"),
+        [
+            ("init_reader", classmethod(lambda cls, data_access: None)),
+            ("match_data_access", classmethod(lambda cls, data_access, feature_names, options=None: None)),
+        ],
+    )
+    def test_defining_init_reader_or_match_data_access_raises(self, hook: str, value: Any) -> None:
+        with pytest.raises(TypeError, match="FormatFeatureGroup") as excinfo:
+            type("LegacyHookInputData2", (BaseInputData,), {hook: value})
+
+        assert hook in str(excinfo.value)
+
+    def test_a_mixin_defining_a_legacy_hook_raises(self) -> None:
+        class LoadMixin:
+            @classmethod
+            def load_data(cls, data_access: Any, features: Any) -> None:
+                return None
+
+        with pytest.raises(TypeError, match="FormatFeatureGroup") as excinfo:
+            type("MixedInputData", (LoadMixin, BaseInputData), {})
+
+        assert "load_data" in str(excinfo.value)
+
+    def test_data_creator_and_api_input_data_subclasses_still_define(self) -> None:
+        creator = type("PlainCreator", (DataCreator,), {})
+        api = type("PlainApi", (ApiInputData,), {})
+
+        assert issubclass(creator, BaseInputData)
+        assert issubclass(api, BaseInputData)
 
     def test_a_subclass_without_a_legacy_hook_still_defines(self) -> None:
         defined = type("PlainMarkerInputData", (BaseInputData,), {})

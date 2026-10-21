@@ -355,6 +355,8 @@ class FormatFeatureGroup(FeatureGroup):
                         firm.add(match.source)
                 elif route.names is NamePolicy.OPEN:
                     fitting[match.source] = match
+                    if cls._declared_name(base_name):
+                        firm.add(match.source)
                 elif cls._declared_name(base_name):
                     fitting[match.source] = match
                     firm.add(match.source)

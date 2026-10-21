@@ -316,7 +316,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self._claims(Feature(self.present_column), dac)
         assert not [p for p in names + samples if p.endswith(FOREIGN_SUFFIX)]
 
-    def test_file_foreign_credentials_stay_silent(self, rejection_window: dict[str, MatchRejection]) -> None:
+    def test_file_foreign_suffix_sources_stay_silent(self, rejection_window: dict[str, MatchRejection]) -> None:
         assert not self.feature_group_class.match_feature_group_criteria(
             self.present_column, Options(), self.foreign_dac()
         )

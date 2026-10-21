@@ -290,7 +290,9 @@ class TestPropertyMappingMatching:
         del keys[absent]
         result = _identify(Feature(COL, Options({**pointer, **keys})), None, _ReqViaMixinFG)
         assert result.identified == {}
-        assert _ReqViaMixinFG in result.eliminations
+        elimination = result.eliminations[_ReqViaMixinFG]
+        assert elimination.stage == "value_rejection"
+        assert absent in elimination.reason
 
     def test_a_value_the_element_validator_accepts_claims_despite_the_allowed_values(self) -> None:
         feature = Feature(COL, Options({"_ElementValidatedFG": {COL: [1]}, _VALUE_KEY: "b"}))
@@ -314,14 +316,17 @@ class TestPropertyMappingMatching:
         )
         feature = Feature(COL, Options({group.__name__: {COL: [1]}, _EQ_KEY: value}))
 
+        caplog.set_level(logging.DEBUG)
         result = _identify(feature, None, group)
 
         assert result.identified == {}
         elimination = result.eliminations[group]
         assert elimination.stage == "value_rejection"
         assert _EQ_SECRET not in elimination.reason
-        warnings = [record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING]
-        assert not any(_EQ_SECRET in message for message in warnings)
+        assert not any(_EQ_SECRET in record.getMessage() for record in caplog.records)
+        if error is RuntimeError:
+            warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+            assert any("RuntimeError" in m and _EQ_KEY in m for m in warnings)
 
 
 class TestTwoPointedGroups:
@@ -346,8 +351,10 @@ class TestTwoPointedGroups:
     def test_two_valid_pointed_groups_are_ambiguous(self) -> None:
         feature = Feature(COL, Options({**self.OPTIONS, _VALUE_KEY: "good"}))
 
-        with pytest.raises(ValueError, match="Multiple feature groups"):
+        with pytest.raises(ValueError, match="Multiple feature groups") as exc_info:
             evaluate_or_raise(feature, _plugins(_ValueCheckedFG, ToyOtherFormatFG), None, None)
+        assert "_ValueCheckedFG" in str(exc_info.value)
+        assert "ToyOtherFormatFG" in str(exc_info.value)
 
 
 class TestPointedMissingColumnText:

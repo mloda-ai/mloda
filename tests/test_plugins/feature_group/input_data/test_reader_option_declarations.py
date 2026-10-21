@@ -204,6 +204,11 @@ def _extra_spec() -> PropertySpec:
 
 
 class TestOwnPropertyMappingIsMergedOverTheBase:
+    def test_a_plain_mixin_first_in_the_bases_keeps_the_mixin_and_base_keys(self) -> None:
+        mixin: Any = type("RodMixin", (), {"PROPERTY_MAPPING": {"mixin_key": _extra_spec()}})
+        child: Any = type("RodMixinFG", (mixin, ReadFileFG), {"PROPERTY_MAPPING": {"own_key": _extra_spec()}})
+        assert child.declared_option_keys() == {"mixin_key", "own_key", "data_access_handle", "document_suffixes"}
+
     @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG, ReadDBFG])
     def test_an_own_extra_key_keeps_every_base_key(self, base: Any) -> None:
         child: Any = type("RodExtraKeyFG", (base,), {"PROPERTY_MAPPING": {"rod_extra": _extra_spec()}})

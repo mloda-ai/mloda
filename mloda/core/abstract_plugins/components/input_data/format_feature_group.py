@@ -4,7 +4,7 @@ import difflib
 import inspect
 import types
 from abc import abstractmethod
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -113,9 +113,14 @@ class FormatFeatureGroup(FeatureGroup):
     @classmethod
     def _merge_property_mapping(cls) -> None:
         own = cls.__dict__.get("PROPERTY_MAPPING")
-        if isinstance(own, dict):
-            inherited = getattr(super(cls, cls), "PROPERTY_MAPPING", None) or {}
-            cls.PROPERTY_MAPPING = {**inherited, **own}
+        if isinstance(own, Mapping):
+            merged: dict[Any, Any] = {}
+            for klass in reversed(cls.__mro__[1:]):
+                mapping = klass.__dict__.get("PROPERTY_MAPPING")
+                if isinstance(mapping, Mapping):
+                    merged.update(mapping)
+            merged.update(own)
+            cls.PROPERTY_MAPPING = merged
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         cls._merge_property_mapping()

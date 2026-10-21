@@ -56,7 +56,8 @@ class _FileSourceFG(FormatFeatureGroup):
                 raise TypeError(
                     f"{cls.__name__} route source_kind must be 'file' or 'folder', got {route.source_kind!r}"
                 )
-        if not getattr(cls.suffixes, "__isabstractmethod__", False):
+        names = {n for base in cls.__bases__ for n in getattr(base, "__abstractmethods__", ())} | set(cls.__dict__)
+        if not any(getattr(getattr(cls, n, None), "__isabstractmethod__", False) for n in names):
             suffixes = cls.suffixes()
             if not isinstance(suffixes, tuple) or not suffixes or not all(isinstance(s, str) and s for s in suffixes):
                 raise TypeError(f"{cls.__name__}.suffixes() must return a non-empty tuple of non-empty str")

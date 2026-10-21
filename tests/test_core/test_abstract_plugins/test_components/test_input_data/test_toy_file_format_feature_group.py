@@ -63,6 +63,16 @@ class _Features:
 
 
 class TestReadFileFGBase:
+    def test_a_template_base_may_implement_suffixes_from_an_unset_suffix(self) -> None:
+        template: Any = type("RodTemplateFG", (ReadFileFG,), {"suffixes": classmethod(lambda cls: (cls.SUFFIX,))})
+        assert inspect.isabstract(template)
+        child: Any = type(
+            "RodTemplateChildFG",
+            (template,),
+            {"SUFFIX": ".x", "column_names": classmethod(lambda cls, file_name: {"c"})},
+        )
+        assert child.suffixes() == (".x",)
+
     def test_is_an_abstract_format_group_exported_from_provider(self) -> None:
         assert provider.ReadFileFG is ReadFileFG
         assert "ReadFileFG" in provider.__all__
@@ -106,7 +116,11 @@ class TestReadFileFGBase:
     @pytest.mark.parametrize("bad", ["toyfmtfile", (), (".ok", ""), (".ok", 1)])
     def test_suffixes_that_are_not_a_non_empty_tuple_of_non_empty_str_are_rejected(self, bad: Any) -> None:
         with pytest.raises(TypeError, match="BadSuffixFileFG"):
-            type("BadSuffixFileFG", (ReadFileFG,), {"suffixes": classmethod(lambda cls: bad)})
+            type(
+                "BadSuffixFileFG",
+                (ReadFileFG,),
+                {"suffixes": classmethod(lambda cls: bad), "column_names": classmethod(lambda cls, path: [])},
+            )
 
     def test_an_abstract_subclass_with_abstract_suffixes_defines_fine(self) -> None:
         child = type("AbstractSuffixFileFG", (ReadFileFG,), {"CLAIM_ROUTES": ReadFileFG.CLAIM_ROUTES})

@@ -1061,14 +1061,15 @@ class TestResolveFeatureRaisingMatchDuringConflict:
             extra_body="    def extra_method(self):\n        return 755\n",
         )
 
-        _exec_conflict_fg(qualname, src_v1, "cell-raise-match-755-v1")
-        _exec_conflict_fg(qualname, src_v2, "cell-raise-match-755-v2")
+        first_cls = _exec_conflict_fg(qualname, src_v1, "cell-raise-match-755-v1")
+        second_cls = _exec_conflict_fg(qualname, src_v2, "cell-raise-match-755-v2")
 
         result = resolve_feature(feature_name)
 
         assert isinstance(result, ResolvedFeature)
         assert result.feature_group is None
         assert result.error is not None
+        assert first_cls is not second_cls
 
 
 def _domain_conflict_source(qualname: str, feature_name: str, domain: str, extra_body: str = "") -> str:
@@ -1122,7 +1123,7 @@ class TestResolveFeatureConflictBranchProjectsFailure:
             extra_body="    def extra_method(self):\n        return 792\n",
         )
 
-        _exec_conflict_fg(qualname, src_v1, "cell-conflict-projection-792-v1")
+        first_cls = _exec_conflict_fg(qualname, src_v1, "cell-conflict-projection-792-v1")
         conflict_cls = _exec_conflict_fg(qualname, src_v2, "cell-conflict-projection-792-v2")
 
         # Sanity: the exec'd class declares the matching domain, so the OLD re-matching behavior
@@ -1142,6 +1143,7 @@ class TestResolveFeatureConflictBranchProjectsFailure:
         assert mismatch.feature_group is None
         assert mismatch.error is not None
         assert mismatch.candidates == []
+        assert first_cls is not conflict_cls
 
     def test_conflict_branch_scoped_string_form_keeps_callout_and_no_candidates(self, _cleanup_main_after: Any) -> None:
         """The string form with a feature_group scope keeps the scope callout suffix, candidates stay empty."""
@@ -1157,8 +1159,8 @@ class TestResolveFeatureConflictBranchProjectsFailure:
             extra_body="    def extra_method(self):\n        return 793\n",
         )
 
-        _exec_conflict_fg(qualname, src_v1, "cell-conflict-projection-scoped-792-v1")
-        _exec_conflict_fg(qualname, src_v2, "cell-conflict-projection-scoped-792-v2")
+        first_cls = _exec_conflict_fg(qualname, src_v1, "cell-conflict-projection-scoped-792-v1")
+        second_cls = _exec_conflict_fg(qualname, src_v2, "cell-conflict-projection-scoped-792-v2")
 
         result = resolve_feature(feature_name, feature_group=qualname)
 
@@ -1166,6 +1168,7 @@ class TestResolveFeatureConflictBranchProjectsFailure:
         assert result.error is not None
         assert result.error.endswith(f"Scoped to feature group: '{qualname}'.")
         assert result.candidates == []
+        assert first_cls is not second_cls
 
 
 class TestResolveFeatureAdapterIsThin:

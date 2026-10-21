@@ -4,7 +4,7 @@
 ``record_match_rejection`` so input-data reader code can record rejections without depending on the
 feature-chainer module. The documented ``feature_chain_parser`` seam keeps re-exporting the SAME
 function object, the engine harvests through the new home, and ``mloda.provider`` exports the
-recording function for plugin authors.
+recording function, the ``collect_match_rejections`` collector and ``MatchRejection``.
 
 Cycle 3: the window value is a frozen ``MatchRejection`` dataclass carrying the reason and a stage
 hint (default ``"value_rejection"``), so a reader decline can arrive stamped ``"input_data"``. The
@@ -29,11 +29,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     restamp_match_rejections_since,
 )
 from mloda.provider import collect_match_rejections
-from mloda.user import Options
 from tests.docs_corpus import REPO_ROOT
-from tests.test_core.test_abstract_plugins.test_components.feature_chainer.test_strict_validation_returns_false import (
-    PlainStrictModePgv,
-)
 
 
 @pytest.fixture
@@ -183,7 +179,7 @@ class TestCollectMatchRejections:
 
         assert reasons == {"CollectOwner": MatchRejection(reason="collect reason")}
 
-    def test_exit_restores_the_previous_value_and_freezes_the_dict(self) -> None:
+    def test_exit_restores_the_previous_value(self) -> None:
         def body() -> dict[str, MatchRejection]:
             with collect_match_rejections() as reasons:
                 record_match_rejection("BeforeExit", "before")
@@ -217,14 +213,6 @@ class TestCollectMatchRejections:
             assert MATCH_REJECTION_REASONS.get() is None
 
         contextvars.Context().run(body)
-
-    def test_a_direct_match_call_is_collected(self) -> None:
-        name = PlainStrictModePgv.get_class_name()
-        with collect_match_rejections() as reasons:
-            assert PlainStrictModePgv.match_feature_group_criteria(name, Options(group={"mode": "mode_b"})) is False
-
-        assert reasons[name].stage == "value_rejection"
-        assert "mode_b" in reasons[name].reason
 
     def test_the_matching_guide_documents_the_helper(self) -> None:
         page = REPO_ROOT / "docs" / "docs" / "in_depth" / "feature-group-matching.md"

@@ -55,7 +55,7 @@ def record_match_rejection(
 
 @contextmanager
 def collect_match_rejections() -> Iterator[dict[str, MatchRejection]]:
-    """Open a rejection window for direct match calls and yield its owner-to-rejection dict."""
+    """Open one rejection window for one direct match call, as the engine does per candidate, and yield its dict."""
     reasons: dict[str, MatchRejection] = {}
     token = MATCH_REJECTION_REASONS.set(reasons)
     try:

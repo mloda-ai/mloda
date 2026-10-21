@@ -1,9 +1,10 @@
 """
-Tests for the PythonDictTextCleaningFeatureGroup implementation.
+Tests for the PythonDictTextCleaning implementation.
 """
 
 import pytest
 from typing import Any
+from unittest.mock import Mock
 
 from mloda.user import Feature
 from mloda.user import FeatureName
@@ -14,7 +15,7 @@ from mloda.user import mloda
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
-from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import PythonDictTextCleaningFeatureGroup
+from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import PythonDictTextCleaning
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -57,13 +58,19 @@ class PythonDictTextCleaningTestDataCreator(ATestDataCreator):
         return data
 
 
+def _feature_set(name: str, *operations: str) -> FeatureSet:
+    feature_set = FeatureSet()
+    feature_set.add(Feature(FeatureName(name), Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: operations})))
+    return feature_set
+
+
 def _copy_columnar(data: dict[str, Any]) -> dict[str, Any]:
     """Deep-copy a columnar dict so tests don't mutate the shared fixture."""
     return {key: list(values) for key, values in data.items()}
 
 
-class TestPythonDictTextCleaningFeatureGroup:
-    """Tests for the PythonDictTextCleaningFeatureGroup implementation."""
+class TestPythonDictTextCleaning:
+    """Tests for the PythonDictTextCleaning implementation."""
 
     def setup_method(self) -> None:
         """Set up columnar test data."""
@@ -79,26 +86,18 @@ class TestPythonDictTextCleaningFeatureGroup:
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PythonDictTextCleaningFeatureGroup.compute_framework_rule() == {PythonDictFramework}
+        assert PythonDictTextCleaning.compute_framework is PythonDictFramework
 
-    def test_check_source_features_exist(self) -> None:
-        """Test that the source feature existence check works correctly."""
-        # Feature exists
-        PythonDictTextCleaningFeatureGroup._check_source_features_exist(self.data, ["text"])
-
-        # Feature doesn't exist
-        with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaningFeatureGroup._check_source_features_exist(self.data, ["nonexistent"])
-
-        assert "Source features not found in data:" in str(excinfo.value)
-
-        # Empty data
+    def test_calculate_rejects_empty_data_before_the_group(self) -> None:
+        group = Mock()
+        feature_set = _feature_set("text__cleaned_text", "normalize")
         with pytest.raises(ValueError, match="Data cannot be empty"):
-            PythonDictTextCleaningFeatureGroup._check_source_features_exist({}, ["text"])
+            PythonDictTextCleaning.calculate(group, {}, feature_set)
+        group.clean.assert_not_called()
 
     def test_get_source_text(self) -> None:
         """Test that the source text is correctly retrieved."""
-        result = PythonDictTextCleaningFeatureGroup._get_source_text(self.data, "text")
+        result = PythonDictTextCleaning._get_source_text(self.data, "text")
 
         assert isinstance(result, list)
         assert len(result) == len(self.data["text"])
@@ -107,7 +106,7 @@ class TestPythonDictTextCleaningFeatureGroup:
 
         # Test with None values
         data_with_none: dict[str, Any] = {"text": ["Hello", None, "World"]}
-        result_with_none = PythonDictTextCleaningFeatureGroup._get_source_text(data_with_none, "text")
+        result_with_none = PythonDictTextCleaning._get_source_text(data_with_none, "text")
         assert result_with_none == ["Hello", "", "World"]
 
     def test_add_result_to_data(self) -> None:
@@ -115,7 +114,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         result = ["test1", "test2", "test3", "test4", "test5"]
         data_copy = _copy_columnar(self.data)
 
-        updated_data = PythonDictTextCleaningFeatureGroup._add_result_to_data(data_copy, "new_column", result)
+        updated_data = PythonDictTextCleaning._add_result_to_data(data_copy, "new_column", result)
 
         assert "new_column" in updated_data
         assert updated_data["new_column"][0] == "test1"
@@ -123,12 +122,12 @@ class TestPythonDictTextCleaningFeatureGroup:
 
         # Test mismatched lengths
         with pytest.raises(ValueError, match="Result length 3 does not match data length 5"):
-            PythonDictTextCleaningFeatureGroup._add_result_to_data(data_copy, "test", ["a", "b", "c"])
+            PythonDictTextCleaning._add_result_to_data(data_copy, "test", ["a", "b", "c"])
 
     def test_normalize_operation(self) -> None:
         """Test the normalize operation."""
         text = ["Hello World!", "TESTING text normalization"]
-        result = PythonDictTextCleaningFeatureGroup._normalize_text(text)
+        result = PythonDictTextCleaning._normalize_text(text)
 
         assert result[0] == "hello world!"
         assert result[1] == "testing text normalization"
@@ -136,7 +135,7 @@ class TestPythonDictTextCleaningFeatureGroup:
     def test_remove_punctuation_operation(self) -> None:
         """Test the remove_punctuation operation."""
         text = ["Hello World!", "This is a test, with punctuation."]
-        result = PythonDictTextCleaningFeatureGroup._remove_punctuation(text)
+        result = PythonDictTextCleaning._remove_punctuation(text)
 
         assert "!" not in result[0]
         assert "," not in result[1]
@@ -147,7 +146,7 @@ class TestPythonDictTextCleaningFeatureGroup:
     def test_remove_special_chars_operation(self) -> None:
         """Test the remove_special_chars operation."""
         text = ["Hello World!", "Test @#$%^&*() special chars"]
-        result = PythonDictTextCleaningFeatureGroup._remove_special_chars(text)
+        result = PythonDictTextCleaning._remove_special_chars(text)
 
         assert "!" not in result[0]
         assert "@" not in result[1]
@@ -159,7 +158,7 @@ class TestPythonDictTextCleaningFeatureGroup:
     def test_normalize_whitespace_operation(self) -> None:
         """Test the normalize_whitespace operation."""
         text = ["Hello    World", "Multiple   spaces  and\ttabs\nand newlines"]
-        result = PythonDictTextCleaningFeatureGroup._normalize_whitespace(text)
+        result = PythonDictTextCleaning._normalize_whitespace(text)
 
         assert "    " not in result[0]
         assert "   " not in result[1]
@@ -171,7 +170,7 @@ class TestPythonDictTextCleaningFeatureGroup:
     def test_remove_urls_operation(self) -> None:
         """Test the remove_urls operation."""
         text = ["Visit https://example.com for info", "Email test@example.com for help"]
-        result = PythonDictTextCleaningFeatureGroup._remove_urls(text)
+        result = PythonDictTextCleaning._remove_urls(text)
 
         assert "https://example.com" not in result[0]
         assert "test@example.com" not in result[1]
@@ -181,7 +180,7 @@ class TestPythonDictTextCleaningFeatureGroup:
     def test_remove_stopwords_operation(self) -> None:
         """Test the remove_stopwords operation."""
         text = ["This is a test with stopwords", "The quick brown fox"]
-        result = PythonDictTextCleaningFeatureGroup._remove_stopwords(text)
+        result = PythonDictTextCleaning._remove_stopwords(text)
 
         # Note: This test may pass even if NLTK is not available, as the method
         # gracefully falls back to returning the original text
@@ -193,17 +192,17 @@ class TestPythonDictTextCleaningFeatureGroup:
         text = ["Hello World!", "TESTING text"]
 
         # Test normalize
-        result = PythonDictTextCleaningFeatureGroup._apply_operation(self.data, text, "normalize")
+        result = PythonDictTextCleaning._apply_operation(self.data, text, "normalize")
         assert result[0] == "hello world!"
 
         # Test invalid operation
         with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaningFeatureGroup._apply_operation(self.data, text, "invalid_operation")
+            PythonDictTextCleaning._apply_operation(self.data, text, "invalid_operation")
 
         assert "Unsupported cleaning operation" in str(excinfo.value)
 
-    def test_calculate_feature_single_operation(self) -> None:
-        """Test calculate_feature with a single operation."""
+    def test_calculate_single_operation(self) -> None:
+        """Test calculate with a single operation."""
         # Create feature with normalize operation
         feature = Feature(
             FeatureName("text__cleaned_text"),
@@ -218,15 +217,15 @@ class TestPythonDictTextCleaningFeatureGroup:
 
         # Apply feature
         data_copy = _copy_columnar(self.data)
-        result = PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
+        result = PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
 
         # Check results
         assert "text__cleaned_text" in result
         assert result["text__cleaned_text"][0] == "hello world!"
         assert result["text__cleaned_text"][1] == "testing text normalization"
 
-    def test_calculate_feature_multiple_operations(self) -> None:
-        """Test calculate_feature with multiple operations."""
+    def test_calculate_multiple_operations(self) -> None:
+        """Test calculate with multiple operations."""
         # Create feature with multiple operations
         feature = Feature(
             FeatureName("text__cleaned_text"),
@@ -245,7 +244,7 @@ class TestPythonDictTextCleaningFeatureGroup:
 
         # Apply feature
         data_copy = _copy_columnar(self.data)
-        result = PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
+        result = PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
 
         # Check results
         assert "text__cleaned_text" in result
@@ -253,8 +252,8 @@ class TestPythonDictTextCleaningFeatureGroup:
         assert "," not in result["text__cleaned_text"][2]  # No punctuation
         assert "   " not in result["text__cleaned_text"][2]  # No extra spaces
 
-    def test_calculate_feature_missing_source(self) -> None:
-        """Test calculate_feature with a missing source feature."""
+    def test_calculate_missing_source(self) -> None:
+        """Test calculate with a missing source feature."""
         # Create feature with nonexistent source
         feature = Feature(
             FeatureName("nonexistent__cleaned_text"),
@@ -270,12 +269,12 @@ class TestPythonDictTextCleaningFeatureGroup:
         # Apply feature
         data_copy = _copy_columnar(self.data)
         with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
+            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
 
         assert "Source features not found in data:" in str(excinfo.value)
 
-    def test_calculate_feature_invalid_operation(self) -> None:
-        """Test calculate_feature with an invalid operation."""
+    def test_calculate_invalid_operation(self) -> None:
+        """Test calculate with an invalid operation."""
         # Create feature with invalid operation
         feature = Feature(
             FeatureName("text__cleaned_text"),
@@ -291,7 +290,7 @@ class TestPythonDictTextCleaningFeatureGroup:
         # Apply feature
         data_copy = _copy_columnar(self.data)
         with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaningFeatureGroup.calculate_feature(data_copy, feature_set)
+            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
 
         assert "Unsupported cleaning operation" in str(excinfo.value)
 
@@ -304,7 +303,7 @@ class TestTextCleaningPythonDictIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PythonDictTextCleaningTestDataCreator, PythonDictTextCleaningFeatureGroup}
+            {PythonDictTextCleaningTestDataCreator, TextCleaningFeatureGroup}
         )
 
         # Create options for text cleaning operations

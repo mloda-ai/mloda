@@ -22,7 +22,6 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import (
     PandasSklearnPipelineFeatureGroup,
 )
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
 
 try:
     from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
@@ -43,7 +42,6 @@ ALL_PANDAS_CLASSES = [
     PandasEncodingFeatureGroup,
     PandasSklearnPipelineFeatureGroup,
     PandasScalingFeatureGroup,
-    PandasTextCleaningFeatureGroup,
 ]
 
 if HAS_FORECASTING_PANDAS:
@@ -112,7 +110,6 @@ STRICT_PANDAS_CLASSES = [
     PandasScalingFeatureGroup,
     PandasSklearnPipelineFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
-    PandasTextCleaningFeatureGroup,
     PandasNodeCentralityFeatureGroup,
     PandasGeoDistanceFeatureGroup,
 ]

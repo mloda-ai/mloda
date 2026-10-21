@@ -25,42 +25,29 @@ except ImportError:
     pd = None
 
 
-from mloda.provider import ComputeFramework
+from typing import Any
+
+from mloda.provider import FeatureSet, Implementation
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 
-class PandasTextCleaningFeatureGroup(TextCleaningFeatureGroup):
-    """
-    Pandas implementation of the TextCleaningFeatureGroup.
+class PandasTextCleaning(Implementation):
+    """Pandas implementation of the text cleaning operations."""
 
-    This class implements the text cleaning operations for Pandas DataFrames.
-    It supports various text preprocessing operations such as normalization,
-    stopword removal, punctuation removal, etc.
-    """
+    feature_group = TextCleaningFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Define the compute framework for this feature group."""
-        return {PandasDataFrame}
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the source features exist in the DataFrame.
-
-        Args:
-            data: The pandas DataFrame
-            feature_names: List of feature names to check
-
-        Raises:
-            ValueError: If a feature does not exist in the DataFrame
-        """
-        missing_features = [f for f in feature_names if f not in data.columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {list(data.columns)}"
-            )
+    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet) -> Any:
+        return group.clean(
+            data,
+            features,
+            source_text=cls._get_source_text,
+            apply=cls._apply_operation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _get_source_text(cls, data: pd.DataFrame, feature_name: str) -> pd.Series:

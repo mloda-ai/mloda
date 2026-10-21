@@ -9,7 +9,7 @@ import string
 import unicodedata
 from typing import Any
 
-from mloda.provider import ComputeFramework
+from mloda.provider import FeatureSet, Implementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
@@ -26,7 +26,7 @@ except ImportError:
     nltk_available = False
 
 
-class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
+class PythonDictTextCleaning(Implementation):
     """
     PythonDict implementation for text cleaning feature groups.
 
@@ -35,22 +35,21 @@ class PythonDictTextCleaningFeatureGroup(TextCleaningFeatureGroup):
     (except optional NLTK).
     """
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PythonDictFramework}
+    feature_group = TextCleaningFeatureGroup
+    compute_framework = PythonDictFramework
 
     @classmethod
-    def _check_source_features_exist(cls, data: dict[str, list[Any]], feature_names: list[str]) -> None:
+    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
-
-        available_features = set(data.keys())
-        missing_features = [f for f in feature_names if f not in available_features]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. "
-                f"Available columns: {sorted(available_features)}"
-            )
+        return group.clean(
+            data,
+            features,
+            source_text=cls._get_source_text,
+            apply=cls._apply_operation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _get_source_text(cls, data: dict[str, list[Any]], feature_name: str) -> list[str]:

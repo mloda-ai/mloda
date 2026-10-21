@@ -9,7 +9,7 @@ the sys.modules cache path too (import-order and import-history independent), an
 never picks up ad-hoc subclasses defined outside loaded plugin modules.
 
 All scopes used here import without optional dependencies (python_dict, sqlite,
-and text_cleaning). The autouse conftest fixture restores the default registry
+and geo_distance with pandas and numpy). The autouse conftest fixture restores the default registry
 around every test, so clearing it inside a test is safe.
 """
 
@@ -276,27 +276,25 @@ class TestLoaderRegistrationSkipsAbstractClasses:
             gc.collect()
 
     def test_loaded_scope_registers_concrete_classes_but_not_abstract_bases(self) -> None:
-        """End to end through PluginLoader: the text_cleaning scope is dependency-free and its
+        """End to end through PluginLoader: the geo_distance scope needs only pandas and numpy and its
         base module defines an inspect.isabstract helper base."""
         registry = PluginRegistry.default()
         registry.clear()
 
         loader = PluginLoader()
-        loader.load_matching("feature_group", "text_cleaning/*")
+        loader.load_matching("feature_group", "geo_distance/*")
 
-        from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
-        from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import (
-            PythonDictTextCleaningFeatureGroup,
-        )
+        from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
+        from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
 
-        assert inspect.isabstract(TextCleaningFeatureGroup), "sanity: the scope's base class is abstract"
-        assert not inspect.isabstract(PythonDictTextCleaningFeatureGroup), "sanity: the scope has a concrete class"
+        assert inspect.isabstract(GeoDistanceFeatureGroup), "sanity: the scope's base class is abstract"
+        assert not inspect.isabstract(PandasGeoDistanceFeatureGroup), "sanity: the scope has a concrete class"
 
         registered_feature_groups = registry.list_registered(FeatureGroup)
-        assert PythonDictTextCleaningFeatureGroup in registered_feature_groups, (
+        assert PandasGeoDistanceFeatureGroup in registered_feature_groups, (
             "loading a scope must register its concrete plugin classes"
         )
-        assert TextCleaningFeatureGroup not in registered_feature_groups, (
+        assert GeoDistanceFeatureGroup not in registered_feature_groups, (
             "loading a scope must not register its abstract helper base class; abstract classes "
             "pollute list_registered(), registered-only docs, and strict resolution"
         )

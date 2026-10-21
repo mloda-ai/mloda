@@ -11,12 +11,15 @@ in_features path, which bypasses FeatureConfig validation), invalid values are
 rejected with ValueError, and the schema advertises it.
 """
 
+from abc import abstractmethod
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.api.feature_config.loader import load_features_from_config, process_nested_features
 from mloda.core.api.feature_config.models import FeatureConfig, feature_config_schema
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.api.feature_config.parser import parse_json
 from mloda.provider import BaseInputData
 from mloda.provider import DataCreator
@@ -28,12 +31,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
-from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_time_window_utils import (
-    PandasTimeWindowTestDataCreator,
-)
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 # ---------------------------------------------------------------------------
@@ -697,20 +695,64 @@ def test_end2end_config_aggregation_group_scope_runs_the_pandas_implementation()
     assert aggregation.implementation is PandasAggregation
 
 
+class ConfigScopeAbstractFamilyBase(FeatureGroup):
+    """Abstract family base: the config names it, a concrete member must run."""
+
+    @classmethod
+    @abstractmethod
+    def _family_hook(cls) -> str:
+        """Abstract hook that makes this base abstract."""
+
+
+class ConfigScopePandasMember(ConfigScopeAbstractFamilyBase):
+    """The member on the enabled Pandas framework."""
+
+    @classmethod
+    def _family_hook(cls) -> str:
+        return "pandas"
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"config_scope_token"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"config_scope_token": [1, 2]}
+
+
+class ConfigScopePyArrowMember(ConfigScopeAbstractFamilyBase):
+    """The rival sibling on a framework that is not enabled."""
+
+    @classmethod
+    def _family_hook(cls) -> str:
+        return "pyarrow"
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"config_scope_token"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pa.table({"config_scope_token": [3, 4]})
+
+
 def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass() -> None:
-    """A config scoped to the abstract 'TimeWindowFeatureGroup' runs the Pandas subclass.
+    """A config scoped to a test-local abstract family base runs the Pandas member.
 
     The base drops out because it cannot be instantiated, the PyArrow sibling because its framework is not enabled.
     """
-    name = "temperature__avg_3_day_window"
-    config_str = '[{"name": "%s", "feature_group": "TimeWindowFeatureGroup"}]' % name
+    name = "config_scope_token"
+    config_str = '[{"name": "%s", "feature_group": "ConfigScopeAbstractFamilyBase"}]' % name
     plugin_collector = PluginCollector.enabled_feature_groups(
-        {
-            PandasTimeWindowTestDataCreator,
-            TimeWindowFeatureGroup,
-            PandasTimeWindowFeatureGroup,
-            PyArrowTimeWindowFeatureGroup,
-        }
+        {ConfigScopeAbstractFamilyBase, ConfigScopePandasMember, ConfigScopePyArrowMember}
     )
 
     features = load_features_from_config(config_str, format="json")
@@ -718,7 +760,7 @@ def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass()
 
     assert len([df for df in results if name in df.columns]) == 1
     steps = mloda.explain(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
-    assert any(step.feature_group is PandasTimeWindowFeatureGroup for step in steps)
+    assert any(step.feature_group is ConfigScopePandasMember for step in steps)
 
 
 # ---------------------------------------------------------------------------

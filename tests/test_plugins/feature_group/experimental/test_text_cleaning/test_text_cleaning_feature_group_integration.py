@@ -10,7 +10,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
-from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
+from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaning as PandasTextCleaning
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
@@ -49,7 +49,7 @@ class TestTextCleaningFeatureGroupIntegration:
         """Test integration with mloda using configuration-based features."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {TextCleaningTestDataCreator, PandasTextCleaningFeatureGroup}
+            {TextCleaningTestDataCreator, TextCleaningFeatureGroup}
         )
 
         # Create features with configuration-based options using new Options structure

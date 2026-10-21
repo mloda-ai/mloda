@@ -225,7 +225,7 @@ since ordered time columns are intrinsic to the operation.
 
 ### Operation Groups: one group, one Implementation per framework
 
-An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup` is built this way; the other core families still use one class per framework for now.
+An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup`, `TimeWindowFeatureGroup`, `MissingValueFeatureGroup` and `TextCleaningFeatureGroup` are built this way.
 
 ```py
 class MyOperation(OperationFeatureGroup):
@@ -245,7 +245,7 @@ class PandasMyOperation(Implementation):
 - **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature.
 - **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "skips NaN in sum"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: a NaN-free column still prefers the matching implementation. Polars `max` is declared divergent because its multi-column form propagates NaN.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
-- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate` call inside each implementation's `calculate`.
+- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window`, `impute` or `clean` call inside each implementation's `calculate`.
 
 ### Choosing among implementations
 
@@ -269,10 +269,17 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 ### Migrating from per-framework classes
 
 - `PandasAggregatedFeatureGroup`, `PyArrowAggregatedFeatureGroup` and `PolarsLazyAggregatedFeatureGroup` are replaced by `AggregatedFeatureGroup` with `PandasAggregation`, `PyArrowAggregation` and `PolarsLazyAggregation`.
-- `feature_group="PandasAggregatedFeatureGroup"` becomes `implementation="PandasAggregation"`, or `compute_framework=PandasDataFrame`.
+- The per-framework time window, missing value and text cleaning classes are replaced by `TimeWindowFeatureGroup` (`PandasTimeWindow`, `PyArrowTimeWindow`), `MissingValueFeatureGroup` (`PandasMissingValueImputation`, `PyArrowMissingValueImputation`, `PythonDictMissingValueImputation`) and `TextCleaningFeatureGroup` (`PandasTextCleaning`, `PythonDictTextCleaning`).
+- Implementations are found by import: import the implementation modules or call `PluginLoader.all()`.
+- An allow or deny list that names an old class must name the group or the implementation instead.
+- Plan locks recorded before the move no longer match.
+- A subclass of an old per-framework class must subclass the group (or the implementation) instead.
+- Framework differences not declared yet: only Pandas imputes NaN (the others impute null only), `mode` ties differ, a single-column PyArrow time window propagates NaN in `sum`, `avg`/`mean`, `std` and `var` (Pandas skips it) and counts it in `count`, and PythonDict text cleaning turns NaN into `"nan"` (Pandas gives `""`).
+- PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.
+- `feature_group="<old per-framework class>"` becomes `implementation="<implementation>"`, or `compute_framework=...`, for every moved family.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
 - With Pandas and PyArrow both enabled, a sum now runs on PyArrow (it matches the reference contract; Pandas skips NaN) and may add a conversion. Pin `implementation="PandasAggregation"` to keep the old behaviour.
-- A provider customizes an aggregation implementation by overriding `_perform_aggregation` or `_add_result_to_data` on an implementation subclass, and the loop by overriding `aggregate` on a group subclass.
+- A provider customizes an implementation by overriding its methods (for example `_perform_aggregation`, `_perform_window_operation`, `_perform_imputation`, `_apply_operation`) on an implementation subclass, and the loop by overriding the group's loop (`aggregate`, `window`, `impute`, `clean`) on a group subclass.
 
 ## Framework Selection Process
 

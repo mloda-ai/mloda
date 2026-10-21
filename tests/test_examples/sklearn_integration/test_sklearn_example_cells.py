@@ -18,7 +18,10 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
     PandasAggregation as PandasAggregation,
 )
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
+    PandasMissingValueImputation as PandasMissingValueImputation,
+)
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 import numpy as np
@@ -128,8 +131,9 @@ def cell4_mloda_approach() -> Any:
     from mloda.user import PluginCollector
     from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
     from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
-        PandasMissingValueFeatureGroup,
+        PandasMissingValueImputation as PandasMissingValueImputation,
     )
     from mloda.user import mloda
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -140,7 +144,7 @@ def cell4_mloda_approach() -> Any:
             SklearnDataCreator,
             PandasEncodingFeatureGroup,
             PandasScalingFeatureGroup,
-            PandasMissingValueFeatureGroup,
+            MissingValueFeatureGroup,
         }
     )
 
@@ -171,8 +175,9 @@ def cell5_demonstrate_feature_chaining() -> None:
     from mloda.user import PluginCollector
     from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
     from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
-        PandasMissingValueFeatureGroup,
+        PandasMissingValueImputation as PandasMissingValueImputation,
     )
     from mloda.user import mloda
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
@@ -183,7 +188,7 @@ def cell5_demonstrate_feature_chaining() -> None:
             SklearnDataCreator,
             PandasEncodingFeatureGroup,
             PandasScalingFeatureGroup,
-            PandasMissingValueFeatureGroup,
+            MissingValueFeatureGroup,
             AggregatedFeatureGroup,
         }
     )
@@ -238,7 +243,7 @@ def cell6_reusability_demo() -> None:
             SecondSklearnDataCreator,
             PandasEncodingFeatureGroup,
             PandasScalingFeatureGroup,
-            PandasMissingValueFeatureGroup,
+            MissingValueFeatureGroup,
             AggregatedFeatureGroup,
         }
     )

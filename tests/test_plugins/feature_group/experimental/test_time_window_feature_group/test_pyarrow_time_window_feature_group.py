@@ -1,5 +1,5 @@
 """
-Tests for the PyArrowTimeWindowFeatureGroup class.
+Tests for the PyArrowTimeWindow implementation.
 """
 
 from typing import Any
@@ -11,7 +11,8 @@ from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.provider import DefaultOptionKeys
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.conftest import EXPECTED_VALUES
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.time_window_zero_row_test_mixin import (
     TimeWindowZeroRowTestMixin,
@@ -19,26 +20,26 @@ from tests.test_plugins.feature_group.experimental.test_time_window_feature_grou
 from tests.test_plugins.feature_group.experimental.zero_row_result_type_test_mixin import PyArrowZeroRowAdapter
 
 
-class TestPyArrowTimeWindowFeatureGroup:
-    """Tests for the PyArrowTimeWindowFeatureGroup class."""
+class TestPyArrowTimeWindow:
+    """Tests for the PyArrowTimeWindow implementation."""
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PyArrowTimeWindowFeatureGroup.compute_framework_rule() == {PyArrowTable}
+        assert PyArrowTimeWindow.compute_framework is PyArrowTable
 
     def test_get_time_delta(self) -> None:
         """Test _get_time_delta method."""
-        assert PyArrowTimeWindowFeatureGroup._get_time_delta(3, "day") == datetime.timedelta(days=3)
-        assert PyArrowTimeWindowFeatureGroup._get_time_delta(7, "hour") == datetime.timedelta(hours=7)
-        assert PyArrowTimeWindowFeatureGroup._get_time_delta(2, "minute") == datetime.timedelta(minutes=2)
-        assert PyArrowTimeWindowFeatureGroup._get_time_delta(4, "second") == datetime.timedelta(seconds=4)
-        assert PyArrowTimeWindowFeatureGroup._get_time_delta(1, "week") == datetime.timedelta(weeks=1)
-        assert PyArrowTimeWindowFeatureGroup._get_time_delta(6, "month") == datetime.timedelta(days=180)  # 6 * 30
-        assert PyArrowTimeWindowFeatureGroup._get_time_delta(2, "year") == datetime.timedelta(days=730)  # 2 * 365
+        assert TimeWindowFeatureGroup._get_time_delta(3, "day") == datetime.timedelta(days=3)
+        assert TimeWindowFeatureGroup._get_time_delta(7, "hour") == datetime.timedelta(hours=7)
+        assert TimeWindowFeatureGroup._get_time_delta(2, "minute") == datetime.timedelta(minutes=2)
+        assert TimeWindowFeatureGroup._get_time_delta(4, "second") == datetime.timedelta(seconds=4)
+        assert TimeWindowFeatureGroup._get_time_delta(1, "week") == datetime.timedelta(weeks=1)
+        assert TimeWindowFeatureGroup._get_time_delta(6, "month") == datetime.timedelta(days=180)  # 6 * 30
+        assert TimeWindowFeatureGroup._get_time_delta(2, "year") == datetime.timedelta(days=730)  # 2 * 365
 
         # Test with invalid time unit
         with pytest.raises(ValueError):
-            PyArrowTimeWindowFeatureGroup._get_time_delta(3, "invalid")
+            TimeWindowFeatureGroup._get_time_delta(3, "invalid")
 
     @pytest.mark.parametrize(
         "window_function,expected_values",
@@ -53,11 +54,10 @@ class TestPyArrowTimeWindowFeatureGroup:
         self, sample_time_table: pa.Table, window_function: str, expected_values: Any
     ) -> None:
         """Test _perform_window_operation method with different window functions."""
-        result = PyArrowTimeWindowFeatureGroup._perform_window_operation(
+        result = PyArrowTimeWindow._perform_window_operation(
             sample_time_table,
             window_function,
-            3,
-            "day",
+            TimeWindowFeatureGroup._get_time_delta(3, "day"),
             ["temperature"],
             DefaultOptionKeys.reference_time,
         )
@@ -72,18 +72,17 @@ class TestPyArrowTimeWindowFeatureGroup:
     def test_perform_window_operation_invalid(self, sample_time_table: pa.Table) -> None:
         """Test _perform_window_operation method with invalid window function."""
         with pytest.raises(ValueError):
-            PyArrowTimeWindowFeatureGroup._perform_window_operation(
+            PyArrowTimeWindow._perform_window_operation(
                 sample_time_table,
                 "invalid",
-                3,
-                "day",
+                TimeWindowFeatureGroup._get_time_delta(3, "day"),
                 ["temperature"],
                 DefaultOptionKeys.reference_time,
             )
 
     def test_calculate_feature_single(self, sample_time_table: pa.Table, feature_set_avg_window: FeatureSet) -> None:
         """Test calculate_feature method with a single time window feature."""
-        result = PyArrowTimeWindowFeatureGroup.calculate_feature(sample_time_table, feature_set_avg_window)
+        result = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set_avg_window)
 
         # Check that the result contains the original data plus the time window feature
         assert "temperature__avg_3_day_window" in result.schema.names
@@ -106,7 +105,7 @@ class TestPyArrowTimeWindowFeatureGroup:
         self, sample_time_table: pa.Table, feature_set_multiple_windows: FeatureSet
     ) -> None:
         """Test calculate_feature method with multiple time window features."""
-        result = PyArrowTimeWindowFeatureGroup.calculate_feature(sample_time_table, feature_set_multiple_windows)
+        result = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set_multiple_windows)
 
         # Check that the result contains all time window features
         assert "temperature__avg_3_day_window" in result.schema.names
@@ -126,7 +125,7 @@ class TestPyArrowTimeWindowFeatureGroup:
         feature_set.add(Feature("missing__avg_3_day_window"))
 
         with pytest.raises(ValueError, match="None of the source features .* found in data"):
-            PyArrowTimeWindowFeatureGroup.calculate_feature(sample_time_table, feature_set)
+            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set)
 
     def test_calculate_feature_missing_time_filter(self) -> None:
         """Test calculate_feature method with Table that has no time filter feature."""
@@ -145,7 +144,7 @@ class TestPyArrowTimeWindowFeatureGroup:
             ValueError,
             match=f"Reference time column '{DefaultOptionKeys.reference_time}' not found in data.*",
         ):
-            PyArrowTimeWindowFeatureGroup.calculate_feature(table, feature_set)
+            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set)
 
     def test_calculate_feature_invalid_time_column(self, sample_time_table: pa.Table) -> None:
         """Test calculate_feature method with invalid time column type."""
@@ -164,8 +163,8 @@ class TestPyArrowTimeWindowFeatureGroup:
             ValueError,
             match=f"Column '{DefaultOptionKeys.reference_time}' must be temporal.*",
         ):
-            PyArrowTimeWindowFeatureGroup.calculate_feature(table, feature_set)
+            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set)
 
 
 class TestPyArrowTimeWindowZeroRow(PyArrowZeroRowAdapter, TimeWindowZeroRowTestMixin):
-    feature_group_class = PyArrowTimeWindowFeatureGroup
+    feature_group_class = PyArrowTimeWindow

@@ -2,14 +2,36 @@
 Tests for the TextCleaningFeatureGroup base class.
 """
 
+from typing import Any
+from unittest.mock import Mock, call
+
+import pandas as pd
 import pytest
 
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
+from mloda.provider import FeatureSet
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
-from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
+from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaning
+from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import PythonDictTextCleaning
+
+IMPLEMENTATIONS = [PandasTextCleaning, PythonDictTextCleaning]
+FRAMEWORKS = [PandasDataFrame, PythonDictFramework]
+IMPL_DATA = [
+    (PandasTextCleaning, lambda: pd.DataFrame({"b": ["x"], "a": ["y"]})),
+    (PythonDictTextCleaning, lambda: {"b": ["x"], "a": ["y"]}),
+]
+IMPL_IDS = ["pandas", "python_dict"]
+
+
+def _feature_set(name: str, *operations: str) -> FeatureSet:
+    feature_set = FeatureSet()
+    feature_set.add(Feature(FeatureName(name), Options({TextCleaningFeatureGroup.CLEANING_OPERATIONS: operations})))
+    return feature_set
 
 
 class TestTextCleaningFeatureGroupBase:
@@ -54,7 +76,7 @@ class TestTextCleaningFeatureGroupBase:
         feature_name = FeatureName("review__cleaned_text")
         options = Options()
 
-        feature_group = PandasTextCleaningFeatureGroup()
+        feature_group = TextCleaningFeatureGroup()
         input_features = feature_group.input_features(options, feature_name)
 
         assert input_features is not None
@@ -67,12 +89,44 @@ class TestTextCleaningFeatureGroupBase:
         feature_name = FeatureName("sum_aggr__sales__cleaned_text")
         options = Options()
 
-        feature_group = PandasTextCleaningFeatureGroup()
+        feature_group = TextCleaningFeatureGroup()
         input_features = feature_group.input_features(options, feature_name)
 
         assert input_features is not None
         assert len(input_features) == 1
         assert next(iter(input_features)).name == "sum_aggr__sales"
+
+    @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
+    def test_clean_source_check_is_strict_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            impl.calculate(TextCleaningFeatureGroup, make_data(), _feature_set("nope__cleaned_text", "normalize"))
+        assert str(exc_info.value) == "Source features not found in data: ['nope']. Available columns: ['a', 'b']"
+
+    @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
+    def test_clean_rejects_an_unsupported_operation(self, impl: Any, make_data: Any) -> None:
+        with pytest.raises(ValueError, match="Unsupported cleaning operation"):
+            impl.calculate(TextCleaningFeatureGroup, make_data(), _feature_set("a__cleaned_text", "bogus"))
+
+    def test_clean_applies_operations_in_order_through_apply(self) -> None:
+        data = object()
+        source_text = Mock(return_value="t0")
+        apply = Mock(side_effect=["t1", "t2"])
+        add_column = Mock(return_value="done")
+        feature_set = _feature_set("a__cleaned_text", "normalize", "remove_urls")
+
+        result = TextCleaningFeatureGroup.clean(
+            data,
+            feature_set,
+            source_text=source_text,
+            apply=apply,
+            add_column=add_column,
+            columns=Mock(return_value={"a"}),
+        )
+
+        source_text.assert_called_once_with(data, "a")
+        assert apply.call_args_list == [call(data, "t0", "normalize"), call(data, "t1", "remove_urls")]
+        add_column.assert_called_once_with(data, "a__cleaned_text", "t2")
+        assert result == "done"
 
 
 class TestTextCleaningFeatureChainParser:
@@ -111,7 +165,7 @@ class TestTextCleaningFeatureChainParser:
             }
         )
 
-        feature_group = PandasTextCleaningFeatureGroup()
+        feature_group = TextCleaningFeatureGroup()
         feature_name = FeatureName("placeholder")
 
         input_features = feature_group.input_features(options, feature_name)

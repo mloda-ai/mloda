@@ -52,7 +52,7 @@ from mloda_plugins.feature_group.experimental.source_input_feature import (
     SourceInputFeatureComposite,
     SourceTuple,
 )
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
 
 def _by_name(result: set[Feature] | None) -> dict[str, Feature]:
@@ -257,7 +257,7 @@ class TestTimeWindowInputFeatureDefaults:
 
     def test_string_parsed_children_have_forward_group_none(self) -> None:
         """String path: the source child AND the time_filter child carry forward_group is None."""
-        group = PandasTimeWindowFeatureGroup()
+        group = TimeWindowFeatureGroup()
         options = Options({DefaultOptionKeys.reference_time: "time_filter"})
 
         by_name = _by_name(group.input_features(options, FeatureName("sales__avg_7_day_window")))
@@ -268,7 +268,7 @@ class TestTimeWindowInputFeatureDefaults:
 
     def test_config_declared_children_have_forward_group_none(self) -> None:
         """Config path: the unspecified source child stays at None; time_filter is None too."""
-        group = PandasTimeWindowFeatureGroup()
+        group = TimeWindowFeatureGroup()
         options = Options(
             group={
                 DefaultOptionKeys.in_features: "sales",
@@ -284,7 +284,7 @@ class TestTimeWindowInputFeatureDefaults:
 
     def test_config_declared_child_explicit_allowlist_is_preserved(self) -> None:
         """Config path: an explicit user allowlist on the source child is kept untouched."""
-        group = PandasTimeWindowFeatureGroup()
+        group = TimeWindowFeatureGroup()
         source = Feature("sales", forward_group={"keep_me"})
         options = Options(
             group={
@@ -330,7 +330,7 @@ class TestConfigPathCountErrorWording:
         [
             pytest.param(PandasGeoDistanceFeatureGroup, ["a"], id="geo_distance-below_min"),
             pytest.param(PandasGeoDistanceFeatureGroup, ["a", "b", "c"], id="geo_distance-above_max"),
-            pytest.param(PandasTimeWindowFeatureGroup, ["a", "b"], id="time_window-above_max"),
+            pytest.param(TimeWindowFeatureGroup, ["a", "b"], id="time_window-above_max"),
             pytest.param(PandasForecastingFeatureGroup, ["a", "b"], id="forecasting-above_max"),
             pytest.param(PandasEncodingFeatureGroup, ["a", "b"], id="encoding-above_max"),
         ],

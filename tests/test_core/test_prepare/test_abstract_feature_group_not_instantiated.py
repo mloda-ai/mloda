@@ -44,9 +44,8 @@ class AbstractWinnerFeatureGroup(FeatureGroup):
 
     It declares an unimplemented abstract method, so it cannot be instantiated.
     It matches the feature name via ``match_feature_group_criteria`` (never
-    instantiating itself during matching), mimicking the real
-    ``TimeWindowFeatureGroup`` base that survives resolution once its concrete
-    subclasses are dropped.
+    instantiating itself during matching), mimicking an abstract base that
+    survives resolution once its concrete subclasses are dropped.
     """
 
     @classmethod
@@ -74,8 +73,7 @@ class IsolatedAbstractAggBase(FeatureGroup):
 
     Declares an unimplemented abstract method so it cannot be instantiated. It is
     a plausible name-match for ``ISOLATED_ABSTRACT_AGG_FEATURE`` and supports all
-    frameworks (including ``PythonDictFramework``), mirroring the real abstract
-    ``TimeWindowFeatureGroup`` base from issue #646.
+    frameworks (including ``PythonDictFramework``), as in issue #646.
     """
 
     @classmethod

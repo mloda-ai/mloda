@@ -96,8 +96,8 @@ pass them by name.
 
 ### Scoping to a Feature Group
 
-When several FeatureGroups match the same name, such as the per-framework
-subclasses of a family that still ships one class per framework, narrow the resolution with the keyword-only
+When several FeatureGroups match the same name, such as a group and a subclass of it,
+narrow the resolution with the keyword-only
 `feature_group` argument. It takes a FeatureGroup subclass or its class-name
 string (the string matches the named class and its subclasses), the same forms
 as `Feature(..., feature_group=...)`:

@@ -14,8 +14,9 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow as PandasTimeWindow
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow as PyArrowTimeWindow
 
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_time_window_utils import (
     PandasTimeWindowTestDataCreator,
@@ -41,7 +42,7 @@ class TestTimeWindowPandasIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup}
+            {PandasTimeWindowTestDataCreator, TimeWindowFeatureGroup}
         )
 
         # Run the mloda with multiple time window features
@@ -74,7 +75,7 @@ class TestTimeWindowPandasIntegration:
 
     def test_chained_aggregated_source_shares_one_root_step_with_reference_time(self) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup, AggregatedFeatureGroup}
+            {PandasTimeWindowTestDataCreator, TimeWindowFeatureGroup, AggregatedFeatureGroup}
         )
         source = Feature(
             "temp_max", Options(group={"aggregation_type": "max", DefaultOptionKeys.in_features: "temperature"})
@@ -117,7 +118,7 @@ class TestTimeWindowPyArrowIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PyArrowTimeWindowTestDataCreator, PyArrowTimeWindowFeatureGroup}
+            {PyArrowTimeWindowTestDataCreator, TimeWindowFeatureGroup}
         )
 
         # Run the mloda with multiple time window features

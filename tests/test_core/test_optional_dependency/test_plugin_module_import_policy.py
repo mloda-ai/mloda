@@ -97,6 +97,7 @@ MODULE_EXTRA: dict[str, str] = {
     f"{_EXPERIMENTAL}.environment.list_directory_feature_group": "pandas",
     f"{_EXPERIMENTAL}.forecasting.pandas": "pandas",
     f"{_EXPERIMENTAL}.geo_distance.pandas": "pandas",
+    f"{_EXPERIMENTAL}.nan_safe_reduction": "numpy",
     f"{_EXPERIMENTAL}.node_centrality.pandas": "pandas",
     f"{_EXPERIMENTAL}.sklearn.encoding.base": "sklearn",
     f"{_EXPERIMENTAL}.sklearn.encoding.pandas": "sklearn",

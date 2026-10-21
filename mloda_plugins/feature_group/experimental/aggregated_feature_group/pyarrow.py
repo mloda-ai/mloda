@@ -4,7 +4,7 @@ PyArrow implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -13,33 +13,9 @@ from mloda.core.optional_dependency import loaded, require
 from mloda.provider import FeatureSet, Implementation
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-
-if TYPE_CHECKING:
-    import numpy as np
+from mloda_plugins.feature_group.experimental.nan_safe_reduction import reduce_without_nan_warning
 
 _NUMPY_REASON = "pyarrow row-wise aggregation across multiple columns"
-
-
-def _reduce_without_nan_warning(
-    stacked: np.ndarray[Any, Any],
-    degenerate_rows: np.ndarray[Any, Any],
-    reducer: Callable[[np.ndarray[Any, Any]], np.ndarray[Any, Any]],
-) -> np.ndarray[Any, Any]:
-    """Run a np.nan* row-wise reducer without ever triggering its RuntimeWarning.
-
-    Rows flagged as degenerate (e.g. all-NaN, or too few valid values for ddof=1) have their
-    NaN cells temporarily patched with 0.0 in a copy so the reducer never sees a degenerate
-    row; those rows' results are then overwritten back to NaN, matching the unpatched result.
-    """
-    if not degenerate_rows.any():
-        return reducer(stacked)
-    numpy = require("numpy", _NUMPY_REASON)
-    patched = stacked.copy()
-    nan_mask = numpy.isnan(patched)
-    patched[degenerate_rows[:, numpy.newaxis] & nan_mask] = 0.0
-    result = reducer(patched)
-    restored: np.ndarray[Any, Any] = numpy.where(degenerate_rows, numpy.nan, result)
-    return restored
 
 
 class PyArrowAggregation(Implementation):
@@ -139,11 +115,11 @@ class PyArrowAggregation(Implementation):
             elif aggregation_type in ["min", "max", "median"]:
                 all_nan_rows = np.sum(~np.isnan(stacked), axis=1) == 0
                 if aggregation_type == "min":
-                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmin(a, axis=1))
+                    result = reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmin(a, axis=1))
                 elif aggregation_type == "max":
-                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmax(a, axis=1))
+                    result = reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmax(a, axis=1))
                 else:
-                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmedian(a, axis=1))
+                    result = reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmedian(a, axis=1))
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
 

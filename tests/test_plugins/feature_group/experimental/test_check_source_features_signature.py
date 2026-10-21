@@ -12,9 +12,6 @@ from typing import Any
 import pytest
 
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
-    PandasMissingValueFeatureGroup,
-)
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
@@ -25,14 +22,6 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import (
     PandasSklearnPipelineFeatureGroup,
 )
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
-
-try:
-    from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-
-    HAS_TIME_WINDOW_PANDAS = True
-except ImportError:
-    HAS_TIME_WINDOW_PANDAS = False
 
 try:
     from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
@@ -47,18 +36,13 @@ import pandas as pd
 
 ALL_PANDAS_CLASSES = [
     PandasClusteringFeatureGroup,
-    PandasMissingValueFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
     PandasGeoDistanceFeatureGroup,
     PandasNodeCentralityFeatureGroup,
     PandasEncodingFeatureGroup,
     PandasSklearnPipelineFeatureGroup,
     PandasScalingFeatureGroup,
-    PandasTextCleaningFeatureGroup,
 ]
-
-if HAS_TIME_WINDOW_PANDAS:
-    ALL_PANDAS_CLASSES.append(PandasTimeWindowFeatureGroup)
 
 if HAS_FORECASTING_PANDAS:
     ALL_PANDAS_CLASSES.append(PandasForecastingFeatureGroup)
@@ -118,19 +102,14 @@ TOLERANT_PANDAS_CLASSES: list[type[Any]] = [
     PandasClusteringFeatureGroup,
 ]
 
-if HAS_TIME_WINDOW_PANDAS:
-    TOLERANT_PANDAS_CLASSES.append(PandasTimeWindowFeatureGroup)
-
 if HAS_FORECASTING_PANDAS:
     TOLERANT_PANDAS_CLASSES.append(PandasForecastingFeatureGroup)
 
 STRICT_PANDAS_CLASSES = [
-    PandasMissingValueFeatureGroup,
     PandasEncodingFeatureGroup,
     PandasScalingFeatureGroup,
     PandasSklearnPipelineFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
-    PandasTextCleaningFeatureGroup,
     PandasNodeCentralityFeatureGroup,
     PandasGeoDistanceFeatureGroup,
 ]

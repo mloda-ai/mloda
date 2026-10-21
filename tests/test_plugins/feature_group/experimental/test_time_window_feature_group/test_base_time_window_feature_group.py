@@ -2,16 +2,27 @@
 Tests for the TimeWindowFeatureGroup class.
 """
 
+from typing import Any
+from unittest.mock import Mock
+
+import pandas as pd
+import pyarrow as pa
 import pytest
 
+from mloda.provider import FeatureSet
+from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 from mloda.provider import FeatureChainParser
+
+REFERENCE_TIME = DefaultOptionKeys.reference_time.value
 
 
 class TestTimeWindowFeatureGroup:
@@ -153,49 +164,13 @@ class TestTimeWindowFeatureGroup:
         assert "found 2" in reason
 
         with pytest.raises(ValueError) as exc_info:
-            PandasTimeWindowFeatureGroup().input_features(Options(), FeatureName(name))
+            TimeWindowFeatureGroup().input_features(Options(), FeatureName(name))
         assert str(exc_info.value) == reason
 
     def test_input_features(self) -> None:
         """Test input_features method."""
-        from typing import Any
-        from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-
-        class ConcreteTimeWindowFeatureGroup(TimeWindowFeatureGroup):
-            @classmethod
-            def _check_reference_time_column_exists(cls, data: Any, reference_time_column: str) -> None:
-                pass
-
-            @classmethod
-            def _check_reference_time_column_is_datetime(cls, data: Any, reference_time_column: str) -> None:
-                pass
-
-            @classmethod
-            def _get_available_columns(cls, data: Any) -> set[str]:
-                return set()
-
-            @classmethod
-            def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-                pass
-
-            @classmethod
-            def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-                return data
-
-            @classmethod
-            def _perform_window_operation(
-                cls,
-                data: Any,
-                window_function: str,
-                window_size: int,
-                time_unit: str,
-                in_features: list[str],
-                time_filter_feature: str | None = None,
-            ) -> Any:
-                return None
-
         options = Options()
-        feature_group = ConcreteTimeWindowFeatureGroup()
+        feature_group = TimeWindowFeatureGroup()
 
         # Test with valid feature names
         input_features = feature_group.input_features(options, FeatureName("temperature__avg_3_day_window"))
@@ -272,89 +247,56 @@ class TestTimeWindowFeatureGroup:
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.get_reference_time_column(options)
 
-    def test_check_reference_time_column_exists_method_exists(self) -> None:
-        """Test that _check_reference_time_column_exists method can be called (verifies method rename)."""
-        from typing import Any
+    def test_window_hands_the_group_time_delta_to_perform(self) -> None:
+        df = pd.DataFrame({"x": [1.0, 2.0], DefaultOptionKeys.reference_time: pd.date_range("2023-01-01", periods=2)})
+        feature_set = FeatureSet()
+        feature_set.add(Feature("x__sum_2_hour_window"))
+        perform = Mock(return_value=[1.0, 3.0])
+        add_column = Mock(return_value="done")
 
-        class ConcreteTimeWindowFeatureGroup(TimeWindowFeatureGroup):
-            @classmethod
-            def _check_reference_time_column_exists(cls, data: Any, time_filter_feature: str) -> None:
-                # Simple implementation for testing
-                pass
+        result = TimeWindowFeatureGroup.window(
+            df,
+            feature_set,
+            perform=perform,
+            add_column=add_column,
+            columns=PandasDataFrame.extract_column_names,
+            column_semantics=pandas_type_semantics.column_semantics,
+        )
 
-            @classmethod
-            def _check_reference_time_column_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
-                pass
+        span = TimeWindowFeatureGroup._get_time_delta(2, "hour")
+        perform.assert_called_once_with(df, "sum", span, ["x"], DefaultOptionKeys.reference_time)
+        add_column.assert_called_once_with(df, "x__sum_2_hour_window", [1.0, 3.0])
+        assert result == "done"
 
-            @classmethod
-            def _get_available_columns(cls, data: Any) -> set[str]:
-                return set()
+    @pytest.mark.parametrize(
+        ("impl", "data"),
+        [
+            (PandasTimeWindow, pd.DataFrame({"b": [1], "a": [2], REFERENCE_TIME: [pd.Timestamp(0)]})),
+            (PyArrowTimeWindow, pa.table({"b": [1], "a": [2], REFERENCE_TIME: [pd.Timestamp(0)]})),
+        ],
+        ids=["pandas", "pyarrow"],
+    )
+    def test_window_raises_when_no_source_exists_and_lists_sorted_columns(self, impl: Any, data: Any) -> None:
+        feature_set = FeatureSet()
+        feature_set.add(Feature("missing__sum_2_hour_window"))
+        expected = "None of the source features ['missing'] found in data. Available columns: "
+        with pytest.raises(ValueError) as exc_info:
+            impl.calculate(TimeWindowFeatureGroup, data, feature_set)
+        assert str(exc_info.value) == expected + str(sorted(["b", "a", REFERENCE_TIME], key=str))
 
-            @classmethod
-            def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-                pass
-
-            @classmethod
-            def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-                return data
-
-            @classmethod
-            def _perform_window_operation(
-                cls,
-                data: Any,
-                window_function: str,
-                window_size: int,
-                time_unit: str,
-                in_features: list[str],
-                time_filter_feature: str | None = None,
-            ) -> Any:
-                return None
-
-        # Verify that the method can be called without error
-        concrete_fg = ConcreteTimeWindowFeatureGroup()
-        concrete_fg._check_reference_time_column_exists(None, "test_column")
-
-    def test_check_reference_time_column_is_datetime_method_exists(self) -> None:
-        """Test that _check_reference_time_column_is_datetime method can be called (verifies method rename)."""
-        from typing import Any
-
-        class ConcreteTimeWindowFeatureGroup(TimeWindowFeatureGroup):
-            @classmethod
-            def _check_reference_time_column_exists(cls, data: Any, time_filter_feature: str) -> None:
-                pass
-
-            @classmethod
-            def _check_reference_time_column_is_datetime(cls, data: Any, time_filter_feature: str) -> None:
-                # Simple implementation for testing
-                pass
-
-            @classmethod
-            def _get_available_columns(cls, data: Any) -> set[str]:
-                return set()
-
-            @classmethod
-            def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-                pass
-
-            @classmethod
-            def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-                return data
-
-            @classmethod
-            def _perform_window_operation(
-                cls,
-                data: Any,
-                window_function: str,
-                window_size: int,
-                time_unit: str,
-                in_features: list[str],
-                time_filter_feature: str | None = None,
-            ) -> Any:
-                return None
-
-        # Verify that the method can be called without error
-        concrete_fg = ConcreteTimeWindowFeatureGroup()
-        concrete_fg._check_reference_time_column_is_datetime(None, "test_column")
+    def test_window_raises_one_wording_for_a_missing_reference_time(self) -> None:
+        df = pd.DataFrame({"x": [1.0]})
+        feature_set = FeatureSet()
+        feature_set.add(Feature("x__sum_2_hour_window"))
+        with pytest.raises(ValueError, match="Reference time column 'reference_time' not found in data. Please ensure"):
+            TimeWindowFeatureGroup.window(
+                df,
+                feature_set,
+                perform=Mock(),
+                add_column=Mock(),
+                columns=PandasDataFrame.extract_column_names,
+                column_semantics=pandas_type_semantics.column_semantics,
+            )
 
     def test_has_valid_time_window_suffix_valid(self) -> None:
         """Test that _has_valid_time_window_suffix returns True for valid feature names."""

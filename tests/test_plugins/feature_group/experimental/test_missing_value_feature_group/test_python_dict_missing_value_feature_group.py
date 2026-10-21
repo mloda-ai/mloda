@@ -1,5 +1,5 @@
 """
-Tests for the PythonDictMissingValueFeatureGroup implementation.
+Tests for the PythonDictMissingValueImputation implementation.
 """
 
 import pytest
@@ -13,8 +13,9 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (
-    PythonDictMissingValueFeatureGroup,
+    PythonDictMissingValueImputation,
 )
 
 from tests.test_plugins.feature_group.experimental.test_missing_value_feature_group.missing_value_zero_row_test_mixin import (
@@ -109,43 +110,30 @@ def feature_set_grouped() -> FeatureSet:
     return feature_set
 
 
-class TestPythonDictMissingValueFeatureGroup:
-    """Tests for the PythonDictMissingValueFeatureGroup class."""
+class TestPythonDictMissingValueImputation:
+    """Tests for the PythonDictMissingValueImputation implementation."""
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PythonDictMissingValueFeatureGroup.compute_framework_rule() == {PythonDictFramework}
-
-    def test_check_source_features_exist(self, sample_data_with_missing: dict[str, Any]) -> None:
-        """Test _check_source_features_exist method."""
-        # Feature exists
-        PythonDictMissingValueFeatureGroup._check_source_features_exist(sample_data_with_missing, ["income"])
-
-        # Feature doesn't exist
-        with pytest.raises(ValueError, match="Source features not found in data"):
-            PythonDictMissingValueFeatureGroup._check_source_features_exist(sample_data_with_missing, ["nonexistent"])
-
-        # Empty data
-        with pytest.raises(ValueError, match="Data cannot be empty"):
-            PythonDictMissingValueFeatureGroup._check_source_features_exist({}, ["income"])
+        assert PythonDictMissingValueImputation.compute_framework is PythonDictFramework
 
     def test_add_result_to_data(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _add_result_to_data method."""
         result = [1, 2, 3, 4, 5]
         data_copy = _copy_columnar(sample_data_with_missing)
 
-        updated_data = PythonDictMissingValueFeatureGroup._add_result_to_data(data_copy, "test_feature", result)
+        updated_data = PythonDictMissingValueImputation._add_result_to_data(data_copy, "test_feature", result)
 
         assert updated_data["test_feature"] == result
 
         # Test mismatched lengths
         with pytest.raises(ValueError, match="Result length 3 does not match data length 5"):
-            PythonDictMissingValueFeatureGroup._add_result_to_data(data_copy, "test", [1, 2, 3])
+            PythonDictMissingValueImputation._add_result_to_data(data_copy, "test", [1, 2, 3])
 
     def test_impute_mean(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _impute_mean method."""
         values = [50000, None, 75000, None, 60000]
-        result = PythonDictMissingValueFeatureGroup._impute_mean(values)
+        result = PythonDictMissingValueImputation._impute_mean(values)
 
         # Mean of [50000, 75000, 60000] = 61666.67
         expected_mean = 61666.67
@@ -159,7 +147,7 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_impute_median(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _impute_median method."""
         values = [50000, None, 75000, None, 60000]
-        result = PythonDictMissingValueFeatureGroup._impute_median(values)
+        result = PythonDictMissingValueImputation._impute_median(values)
 
         # Median of [50000, 75000, 60000] = 60000
         assert result[1] == 60000
@@ -172,7 +160,7 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_impute_mode(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _impute_mode method."""
         values = ["A", None, "B", "A", None]
-        result = PythonDictMissingValueFeatureGroup._impute_mode(values)
+        result = PythonDictMissingValueImputation._impute_mode(values)
 
         # Mode of ["A", "B", "A"] = "A"
         assert result[1] == "A"
@@ -185,7 +173,7 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_impute_constant(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _impute_constant method."""
         values = ["A", None, "B", None, "C"]
-        result = PythonDictMissingValueFeatureGroup._impute_constant(values, "Unknown")
+        result = PythonDictMissingValueImputation._impute_constant(values, "Unknown")
 
         assert result[1] == "Unknown"
         assert result[3] == "Unknown"
@@ -197,7 +185,7 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_impute_ffill(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _impute_ffill method."""
         values = [72.5, 68.3, None, None, 70.1]
-        result = PythonDictMissingValueFeatureGroup._impute_ffill(values)
+        result = PythonDictMissingValueImputation._impute_ffill(values)
 
         assert result[0] == 72.5
         assert result[1] == 68.3
@@ -208,7 +196,7 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_impute_bfill(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _impute_bfill method."""
         values = [72.5, 68.3, None, None, 70.1]
-        result = PythonDictMissingValueFeatureGroup._impute_bfill(values)
+        result = PythonDictMissingValueImputation._impute_bfill(values)
 
         assert result[0] == 72.5
         assert result[1] == 68.3
@@ -218,7 +206,7 @@ class TestPythonDictMissingValueFeatureGroup:
 
     def test_perform_imputation_mean(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _perform_imputation method with mean imputation."""
-        result = PythonDictMissingValueFeatureGroup._perform_imputation(sample_data_with_missing, "mean", ["income"])
+        result = PythonDictMissingValueImputation._perform_imputation(sample_data_with_missing, "mean", ["income"])
 
         # Mean of [50000, 75000, 60000] = 61666.67
         expected_mean = 61666.67
@@ -232,11 +220,11 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_perform_imputation_invalid(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _perform_imputation method with invalid imputation type."""
         with pytest.raises(ValueError, match="Unsupported imputation method: invalid"):
-            PythonDictMissingValueFeatureGroup._perform_imputation(sample_data_with_missing, "invalid", ["income"])
+            PythonDictMissingValueImputation._perform_imputation(sample_data_with_missing, "invalid", ["income"])
 
     def test_perform_grouped_imputation_mean(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test _perform_grouped_imputation method with mean imputation by group."""
-        result = PythonDictMissingValueFeatureGroup._perform_grouped_imputation(
+        result = PythonDictMissingValueImputation._perform_grouped_imputation(
             sample_data_with_missing, "mean", "income", None, ["group"]
         )
 
@@ -252,9 +240,9 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_calculate_feature_single(
         self, sample_data_with_missing: dict[str, Any], feature_set_mean: FeatureSet
     ) -> None:
-        """Test calculate_feature method with a single imputation."""
+        """Test calculate method with a single imputation."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_mean)
+        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_mean)
 
         # Check that the result contains the imputed feature
         assert "income__mean_imputed" in result
@@ -270,9 +258,9 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_calculate_feature_multiple(
         self, sample_data_with_missing: dict[str, Any], feature_set_multiple: FeatureSet
     ) -> None:
-        """Test calculate_feature method with multiple imputations."""
+        """Test calculate method with multiple imputations."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_multiple)
+        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_multiple)
 
         # Check that all imputed features are present
         assert "income__mean_imputed" in result
@@ -295,9 +283,9 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_calculate_feature_constant(
         self, sample_data_with_missing: dict[str, Any], feature_set_constant: FeatureSet
     ) -> None:
-        """Test calculate_feature method with constant imputation."""
+        """Test calculate method with constant imputation."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_constant)
+        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_constant)
 
         # Check that the result contains the imputed feature
         assert "category__constant_imputed" in result
@@ -307,9 +295,9 @@ class TestPythonDictMissingValueFeatureGroup:
     def test_calculate_feature_grouped(
         self, sample_data_with_missing: dict[str, Any], feature_set_grouped: FeatureSet
     ) -> None:
-        """Test calculate_feature method with grouped imputation."""
+        """Test calculate method with grouped imputation."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set_grouped)
+        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_grouped)
 
         # Check that the result contains the imputed feature
         assert "income__mean_imputed" in result
@@ -325,26 +313,26 @@ class TestPythonDictMissingValueFeatureGroup:
         assert abs(imputed[4] - 60000) < 0.1  # Original value
 
     def test_calculate_feature_missing_source(self, sample_data_with_missing: dict[str, Any]) -> None:
-        """Test calculate_feature method with missing source feature."""
+        """Test calculate method with missing source feature."""
         feature_set = FeatureSet()
         feature_set.add(Feature("missing__mean_imputed"))
 
         data_copy = _copy_columnar(sample_data_with_missing)
         with pytest.raises(ValueError, match="Source features not found in data"):
-            PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set)
+            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set)
 
     def test_calculate_feature_constant_without_value(self, sample_data_with_missing: dict[str, Any]) -> None:
-        """Test calculate_feature method with constant imputation but no constant value."""
+        """Test calculate method with constant imputation but no constant value."""
         feature_set = FeatureSet()
         feature_set.add(Feature("category__constant_imputed"))
 
         data_copy = _copy_columnar(sample_data_with_missing)
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
-            PythonDictMissingValueFeatureGroup.calculate_feature(data_copy, feature_set)
+            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set)
 
 
 class TestPythonDictMissingValueZeroRow(PythonDictZeroRowAdapter, MissingValueZeroRowTestMixin):
-    feature_group_class = PythonDictMissingValueFeatureGroup
+    feature_group_class = PythonDictMissingValueImputation
 
 
 class TestMissingValuePythonDictIntegration:
@@ -355,7 +343,7 @@ class TestMissingValuePythonDictIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PythonDictMissingValueTestDataCreator, PythonDictMissingValueFeatureGroup}
+            {PythonDictMissingValueTestDataCreator, MissingValueFeatureGroup}
         )
 
         # Create options with constant value for constant imputation

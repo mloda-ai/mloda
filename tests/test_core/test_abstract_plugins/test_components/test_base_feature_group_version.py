@@ -25,7 +25,7 @@ from mloda.core.abstract_plugins.components.code_closure import closure_parts, d
 from mloda.core.api.plugin_docs import get_feature_group_docs
 from mloda.provider import BaseFeatureGroupVersion, FeatureGroup, FeatureSet, ThirdPartyVersionMode
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (
-    PythonDictMissingValueFeatureGroup,
+    PythonDictMissingValueImputation,
 )
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
@@ -1932,7 +1932,7 @@ class TestIgnoredFacadeReexportFallsThroughToLiveValue:
     """
 
     def test_real_case_row_count_reexported_via_mloda_user_python_dict_is_reachable(self) -> None:
-        parts = closure_parts(PythonDictMissingValueFeatureGroup, False)
+        parts = closure_parts(PythonDictMissingValueImputation, False)
         prefix = "mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils:row_count:"
         assert any(part.startswith(prefix) for part in parts), (
             "row_count, re-exported through the ignored mloda.user.python_dict facade, must be reachable"

@@ -1,68 +1,42 @@
-"""
-PyArrow implementation for time window feature groups.
-"""
+"""PyArrow time window."""
 
 from __future__ import annotations
 
-from typing import Any
 import bisect
+import datetime
+from typing import Any
 
 import pyarrow as pa
 import pyarrow.compute as pc
 
 from mloda.core.optional_dependency import require
-from mloda.provider import ComputeFramework
+from mloda.provider import FeatureSet, Implementation
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda.user.pyarrow import PyArrowTable
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, raise_null_reference_time
+from mloda_plugins.feature_group.experimental.nan_safe_reduction import (
+    reduce_without_nan_warning,
+    sample_variance_skipping_nan,
+)
 
 _NUMPY_REASON = "multi-column time-window aggregation"
 
 
-class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+class PyArrowTimeWindow(Implementation):
+    feature_group = TimeWindowFeatureGroup
+    compute_framework = PyArrowTable
 
     @classmethod
-    def _check_reference_time_column_exists(cls, data: pa.Table, reference_time_column: str) -> None:
-        """Check if the reference time column exists in the Table."""
-        if reference_time_column not in data.schema.names:
-            raise ValueError(
-                f"Reference time column '{reference_time_column}' not found in data. "
-                f"Please ensure the Table contains this column."
-            )
-
-    @classmethod
-    def _check_reference_time_column_is_datetime(cls, data: pa.Table, reference_time_column: str) -> None:
-        """Check if the reference time column is a datetime column."""
-        semantics = pyarrow_type_semantics.column_semantics(data, reference_time_column)
-        cls._validate_reference_time_column(semantics, reference_time_column)
-
-    @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> set[str]:
-        """Get the set of available column names from the Table schema."""
-        return PyArrowTable.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the Table.
-
-        Args:
-            data: The PyArrow Table
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        available_columns = cls._get_available_columns(data)
-        missing_features = [name for name in feature_names if name not in available_columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
-            )
+    def calculate(cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet) -> Any:
+        return group.window(
+            data,
+            features,
+            perform=cls._perform_window_operation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+            column_semantics=pyarrow_type_semantics.column_semantics,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
@@ -84,10 +58,9 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         cls,
         data: pa.Table,
         window_function: str,
-        window_size: int,
-        time_unit: str,
+        span: datetime.timedelta,
         in_features: list[str],
-        time_filter_feature: str | None = None,
+        time_filter_feature: str,
     ) -> pa.Array:
         """
         Perform the time window operation using PyArrow compute functions.
@@ -99,25 +72,19 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         Args:
             data: The PyArrow Table
             window_function: The type of window function to perform
-            window_size: The size of the window
-            time_unit: The time unit for the window
+            span: The window span
             in_features: List of source feature names (may be single or multiple columns)
-            time_filter_feature: The name of the time filter feature to use for time-based operations.
-                                If None, uses the value from get_reference_time_column().
+            time_filter_feature: The name of the reference time column
 
         Returns:
             The result of the window operation as a PyArrow Array
         """
-        # Use the default time filter feature if none is provided
-        if time_filter_feature is None:
-            time_filter_feature = cls.get_reference_time_column()
-
         # Get the time column
         time_column = data.column(time_filter_feature)
 
         # A null/NaT reference time has no position on the timeline; fail explicitly.
         if time_column.null_count > 0:
-            cls._raise_null_reference_time(time_filter_feature)
+            raise_null_reference_time(time_filter_feature)
 
         # Get the source columns
         source_columns = [data.column(name) for name in in_features]
@@ -135,7 +102,6 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # int64 ns since epoch is DST-safe, unit-uniform, and works for tz-aware
         # timestamps and date32/date64 too.
         sorted_times_ns = pc.take(time_column, sorted_indices).cast(pa.timestamp("ns")).cast(pa.int64()).to_pylist()
-        span = cls._get_time_delta(window_size, time_unit)
         span_ns = span.days * 86_400_000_000_000 + span.seconds * 1_000_000_000 + span.microseconds * 1_000
 
         # Create a list to store the results
@@ -169,25 +135,32 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
                     assert numpy is not None
                     np = numpy
 
-                    column_array = np.array(column_results)
-                    if window_function == "sum":
-                        results.append(np.sum(column_array))
-                    elif window_function == "min":
-                        results.append(np.min(column_array))
-                    elif window_function == "max":
-                        results.append(np.max(column_array))
-                    elif window_function in ["avg", "mean"]:
-                        results.append(np.mean(column_array))
+                    if any(v is None for v in column_results):
+                        column_array = np.array([np.nan if v is None else v for v in column_results], dtype=float)
+                    else:
+                        column_array = np.array(column_results)
+                    row = column_array.astype(float)[np.newaxis, :]
+                    all_nan = np.isnan(row).all(axis=1)
+                    nan_reducers = {
+                        "sum": np.nansum,
+                        "min": np.nanmin,
+                        "max": np.nanmax,
+                        "avg": np.nanmean,
+                        "mean": np.nanmean,
+                        "median": np.nanmedian,
+                        "first": np.nanmean,
+                        "last": np.nanmean,
+                    }
+                    if window_function in nan_reducers:
+                        reducer = nan_reducers[window_function]
+                        results.append(
+                            reduce_without_nan_warning(row, all_nan, lambda a, r=reducer: r(a, axis=1))[0]  # type: ignore[misc]
+                        )
                     elif window_function == "count":
                         results.append(np.sum(~np.isnan(column_array)))
-                    elif window_function == "std":
-                        results.append(np.std(column_array))
-                    elif window_function == "var":
-                        results.append(np.var(column_array))
-                    elif window_function == "median":
-                        results.append(np.median(column_array))
-                    elif window_function in ["first", "last"]:
-                        results.append(np.mean(column_array))  # Use mean as aggregation for first/last
+                    elif window_function in ["std", "var"]:
+                        variance = float(sample_variance_skipping_nan(column_array.astype(float)[np.newaxis, :])[0])
+                        results.append(variance if window_function == "var" else np.sqrt(variance))
                 else:
                     # Single column: use the result directly
                     results.append(column_results[0])
@@ -198,12 +171,12 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         for k, orig_pos in enumerate(sorted_idx_list):
             reordered_results[orig_pos] = results[k]
 
-        if not reordered_results:
-            # pa.array([]) infers the null type; take the type the window function yields on the empty source.
+        if all(v is None for v in reordered_results):
+            # pa.array infers the null type; take the type the window function yields on the source.
             source = sorted_sources[0]
             if window_function in ["first", "last"]:
-                return pa.array([], type=source.type)
-            return pa.array([], type=cls._window_scalar(source, window_function).type)
+                return pa.array(reordered_results, type=source.type)
+            return pa.array(reordered_results, type=cls._window_scalar(source, window_function).type)
 
         # Convert the results to a PyArrow array
         return pa.array(reordered_results)
@@ -222,9 +195,9 @@ class PyArrowTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         elif window_function == "count":
             return pc.count(window_values)
         elif window_function == "std":
-            return pc.stddev(window_values)
+            return pc.stddev(window_values, ddof=1)
         elif window_function == "var":
-            return pc.variance(window_values)
+            return pc.variance(window_values, ddof=1)
         elif window_function == "median":
             # PyArrow doesn't have a direct median function
             # We can approximate it using quantile with q=0.5

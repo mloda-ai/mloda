@@ -4,21 +4,20 @@ Base implementation for text cleaning feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMNWISE_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 
 
-class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for all text cleaning feature groups.
 
@@ -95,9 +94,6 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Hooks calculate_feature calls: _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMNWISE_HOOKS
-
     # Property mapping for configuration-based features
     PROPERTY_MAPPING = {
         CLEANING_OPERATIONS: PropertySpec(
@@ -140,29 +136,27 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return operations if operations is not None else None
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform text cleaning operations.
-
-        Processes all requested features, applying the specified cleaning operations
-        to the source features.
-
-        Args:
-            data: The input data
-            features: The feature set containing the features to process
-
-        Returns:
-            The data with the cleaned text features added
-        """
-
-        # Process each requested feature
+    def clean(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        source_text: Callable[[Any, str], Any],
+        apply: Callable[[Any, Any, str], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: check the source, validate the operations, clean in sequence, add the result."""
         for feature in features.get_sorted_features():
             operations, source_feature = cls._extract_operations_and_source_feature(feature)
 
-            # Check if source feature exists
-            cls._check_source_features_exist(data, [source_feature])
+            available = columns(data)
+            if source_feature not in available:
+                raise ValueError(
+                    f"Source features not found in data: {[source_feature]}. "
+                    f"Available columns: {sorted(available, key=str)}"
+                )
 
-            # Validate operations
             for operation in operations:
                 if operation not in cls.SUPPORTED_OPERATIONS:
                     raise ValueError(
@@ -170,44 +164,10 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, FeatureGroup):
                         f"Supported operations: {', '.join(cls.SUPPORTED_OPERATIONS.keys())}"
                     )
 
-            # Apply operations in sequence
-            result = cls._get_source_text(data, source_feature)
-
+            result = source_text(data, source_feature)
             for operation in operations:
-                result = cls._apply_operation(data, result, operation)
+                result = apply(data, result, operation)
 
-            # Add result to data
-            data = cls._add_result_to_data(data, feature.name, result)
+            data = add_column(data, feature.name, result)
 
         return data
-
-    @classmethod
-    @abstractmethod
-    def _get_source_text(cls, data: Any, feature_name: str) -> Any:
-        """
-        Get the source text from the data.
-
-        Args:
-            data: The input data
-            feature_name: The name of the feature to get
-
-        Returns:
-            The source text
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _apply_operation(cls, data: Any, text: Any, operation: str) -> Any:
-        """
-        Apply a cleaning operation to the text.
-
-        Args:
-            data: The input data (for context)
-            text: The text to clean
-            operation: The operation to apply
-
-        Returns:
-            The cleaned text
-        """
-        ...

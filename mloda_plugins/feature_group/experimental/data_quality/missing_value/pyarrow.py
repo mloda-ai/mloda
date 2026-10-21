@@ -1,6 +1,4 @@
-"""
-PyArrow implementation for missing value imputation feature groups.
-"""
+"""PyArrow missing value imputation."""
 
 from __future__ import annotations
 
@@ -9,31 +7,25 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import ComputeFramework
+from mloda.provider import FeatureSet, Implementation
 
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PyArrowMissingValueFeatureGroup(MissingValueFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PyArrowTable}
+class PyArrowMissingValueImputation(Implementation):
+    feature_group = MissingValueFeatureGroup
+    compute_framework = PyArrowTable
 
     @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> set[str]:
-        """Get the set of available column names from the Table."""
-        return PyArrowTable.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
-        """Check if the resolved source features exist in the Table."""
-        available_columns = cls._get_available_columns(data)
-        missing_features = [f for f in feature_names if f not in available_columns]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {sorted(available_columns, key=str)}"
-            )
+    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet) -> Any:
+        return group.impute(
+            data,
+            features,
+            perform=cls._perform_imputation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:

@@ -17,17 +17,10 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
-from mloda.user.python_dict import row_count
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (
-    PythonDictMissingValueFeatureGroup,
-)
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
@@ -37,10 +30,6 @@ from mloda_plugins.feature_group.experimental.node_centrality.pandas import Pand
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import PandasSklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
-from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import PythonDictTextCleaningFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.columnwise_hooks_test_mixin import (
     ADD_HOOK,
     CHECK_HOOK,
@@ -63,7 +52,7 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 
 # Lower bound only: a new experimental family adds a base.py and must not fail this sweep.
 MIN_BASE_MODULES = 12
-PANDAS_CONSUMER_COUNT = 11
+PANDAS_CONSUMER_COUNT = 8
 
 # Single source of truth for the tolerant/strict split: a strict group raises when ANY source name is
 # missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
@@ -71,35 +60,18 @@ PANDAS_CONSUMER_COUNT = 11
 STRICTNESS: dict[type[Any], bool] = {
     PandasClusteringFeatureGroup: False,
     PandasForecastingFeatureGroup: False,
-    PandasTimeWindowFeatureGroup: False,
-    PandasMissingValueFeatureGroup: True,
     PandasDimensionalityReductionFeatureGroup: True,
     PandasGeoDistanceFeatureGroup: True,
     PandasNodeCentralityFeatureGroup: True,
     PandasEncodingFeatureGroup: True,
     PandasSklearnPipelineFeatureGroup: True,
     PandasScalingFeatureGroup: True,
-    PandasTextCleaningFeatureGroup: True,
-    PyArrowTimeWindowFeatureGroup: False,
-    PyArrowMissingValueFeatureGroup: True,
-    PythonDictMissingValueFeatureGroup: True,
-    PythonDictTextCleaningFeatureGroup: True,
 }
 
 
 def sample_frame() -> pd.DataFrame:
     """Return the two-column frame every pandas hook consumer works on."""
     return pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
-
-
-def sample_table() -> pa.Table:
-    """Return the two-column table every PyArrow hook consumer works on."""
-    return pa.table({"col_a": [1, 2], "col_b": [3, 4]})
-
-
-def sample_columnar_dict() -> dict[str, list[Any]]:
-    """Return the two-column columnar dict every python-dict hook consumer works on."""
-    return {"col_a": ["one", "two"], "col_b": ["three", "four"]}
 
 
 class HooklessConsumer(FeatureChainParserMixin):
@@ -119,24 +91,6 @@ class StrictnessFromMap:
     @pytest.fixture
     def strict(self, plugin_class: Any) -> bool:
         return STRICTNESS[plugin_class]
-
-
-class PyArrowColumns:
-    """Reads column names off a PyArrow Table."""
-
-    def column_names(self, data: Any) -> list[str]:
-        return [str(name) for name in data.schema.names]
-
-
-class PythonDictColumns:
-    """Reads column names off a columnar ``dict[str, list]``, and writes row-aligned lists."""
-
-    def column_names(self, data: Any) -> list[str]:
-        return [str(name) for name in data]
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a row-aligned list, the only shape the columnar dict writer accepts."""
-        return [str(index) for index in range(row_count(sample_data))]
 
 
 @pytest.mark.parametrize("hook_name", HOOK_NAMES)
@@ -220,36 +174,12 @@ class TestPandasClusteringHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin
         return sample_frame()
 
 
-class TestPandasMissingValueHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Missing value pandas group: strict check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasMissingValueFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
 class TestPandasForecastingHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
     """Forecasting pandas group: tolerant check, plus column discovery."""
 
     @pytest.fixture
     def plugin_class(self) -> Any:
         return PandasForecastingFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasTimeWindowHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Time window pandas group: tolerant check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasTimeWindowFeatureGroup
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -336,71 +266,3 @@ class TestPandasScalingHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
     @pytest.fixture
     def sample_data(self) -> Any:
         return sample_frame()
-
-
-class TestPandasTextCleaningHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
-    """Text cleaning pandas group: strict check."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasTextCleaningFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPyArrowMissingValueHooks(StrictnessFromMap, PyArrowColumns, ColumnDiscoveryHooksTestMixin):
-    """Missing value PyArrow group: strict check, plus column discovery."""
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a row-aligned PyArrow array, the shape append_column takes."""
-        return pa.array(range(sample_data.num_rows))
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PyArrowMissingValueFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_table()
-
-
-class TestPyArrowTimeWindowHooks(StrictnessFromMap, PyArrowColumns, ColumnDiscoveryHooksTestMixin):
-    """Time window PyArrow group: tolerant check, plus column discovery."""
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a row-aligned PyArrow array, the shape append_column takes."""
-        return pa.array(range(sample_data.num_rows))
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PyArrowTimeWindowFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_table()
-
-
-class TestPythonDictMissingValueHooks(StrictnessFromMap, PythonDictColumns, ColumnDiscoveryHooksTestMixin):
-    """Missing value python-dict group: strict check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PythonDictMissingValueFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_columnar_dict()
-
-
-class TestPythonDictTextCleaningHooks(StrictnessFromMap, PythonDictColumns, ColumnwiseHooksTestMixin):
-    """Text cleaning python-dict group: strict check, no column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PythonDictTextCleaningFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_columnar_dict()

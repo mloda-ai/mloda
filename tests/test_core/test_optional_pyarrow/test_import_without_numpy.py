@@ -8,7 +8,7 @@ from tests.test_core.test_optional_pyarrow._pyarrow_blocker import run_blocked
 
 _IMPORT_BODY: str = """
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 print("OK")
 """
 
@@ -52,7 +52,8 @@ import datetime
 
 import pyarrow as pa
 
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 
 table = pa.table({
     "event_time": pa.array(
@@ -63,8 +64,8 @@ table = pa.table({
 })
 
 try:
-    PyArrowTimeWindowFeatureGroup._perform_window_operation(
-        table, "sum", 1, "second", ["a", "b"], time_filter_feature="event_time"
+    PyArrowTimeWindow._perform_window_operation(
+        table, "sum", TimeWindowFeatureGroup._get_time_delta(1, "second"), ["a", "b"], "event_time"
     )
     print("NO_RAISE")
 except ImportError as e:
@@ -79,7 +80,7 @@ except Exception as e:
 
 @pytest.mark.timeout(30)
 def test_aggregated_feature_group_imports_with_numpy_blocked() -> None:
-    """PyArrowAggregation and PyArrowTimeWindowFeatureGroup must both import without numpy installed."""
+    """PyArrowAggregation and PyArrowTimeWindow must both import without numpy installed."""
     pytest.importorskip("pyarrow")
     result = run_blocked(_IMPORT_BODY, module="numpy")
     assert result.returncode == 0, f"Import failed.\nstdout: {result.stdout}\nstderr:\n{result.stderr}"

@@ -1,17 +1,16 @@
-"""
-Pandas implementation for time window feature groups.
-"""
+"""Pandas time window."""
 
 from __future__ import annotations
 
+import datetime
 from typing import Any
 
 import numpy as np
 
-from mloda.provider import ComputeFramework
+from mloda.provider import FeatureSet, Implementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, raise_null_reference_time
 
 
 try:
@@ -20,49 +19,20 @@ except ImportError:
     pd = None
 
 
-class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PandasDataFrame}
+class PandasTimeWindow(Implementation):
+    feature_group = TimeWindowFeatureGroup
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def _check_reference_time_column_exists(cls, data: pd.DataFrame, reference_time_column: str) -> None:
-        """Check if the reference time column exists in the DataFrame."""
-        if reference_time_column not in data.columns:
-            raise ValueError(
-                f"Reference time column '{reference_time_column}' not found in data. "
-                f"Please ensure the DataFrame contains this column."
-            )
-
-    @classmethod
-    def _check_reference_time_column_is_datetime(cls, data: pd.DataFrame, reference_time_column: str) -> None:
-        """Check if the reference time column is a datetime column."""
-        semantics = pandas_type_semantics.column_semantics(data, reference_time_column)
-        cls._validate_reference_time_column(semantics, reference_time_column)
-
-    @classmethod
-    def _get_available_columns(cls, data: pd.DataFrame) -> set[str]:
-        """Get the set of available column names from the DataFrame."""
-        return PandasDataFrame.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pd.DataFrame, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the DataFrame.
-
-        Args:
-            data: The Pandas DataFrame
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        available_columns = cls._get_available_columns(data)
-        missing_features = [name for name in feature_names if name not in available_columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
-            )
+    def calculate(cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet) -> Any:
+        return group.window(
+            data,
+            features,
+            perform=cls._perform_window_operation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+            column_semantics=pandas_type_semantics.column_semantics,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: pd.DataFrame, feature_name: str, result: Any) -> pd.DataFrame:
@@ -75,10 +45,9 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         cls,
         data: pd.DataFrame,
         window_function: str,
-        window_size: int,
-        time_unit: str,
+        span: datetime.timedelta,
         in_features: list[str],
-        time_filter_feature: str | None = None,
+        time_filter_feature: str,
     ) -> Any:
         """
         Perform the time window operation using Pandas rolling window functions.
@@ -90,25 +59,19 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         Args:
             data: The Pandas DataFrame
             window_function: The type of window function to perform
-            window_size: The size of the window
-            time_unit: The time unit for the window
+            span: The window span
             in_features: List of source feature names (may be single or multiple columns)
-            time_filter_feature: The name of the time filter feature to use for time-based operations.
-                                If None, uses the value from get_reference_time_column().
+            time_filter_feature: The name of the reference time column
 
         Returns:
             The result of the window operation
         """
-        # Use the default time filter feature if none is provided
-        if time_filter_feature is None:
-            time_filter_feature = cls.get_reference_time_column()
-
         # Coerce the reference column to a proper datetime index (handles arrow
         # date32/date64 columns and keeps tz-awareness). A null/NaT reference time
         # has no position on the timeline, so fail explicitly.
         times = pd.to_datetime(data[time_filter_feature])
         if times.isna().any():
-            cls._raise_null_reference_time(time_filter_feature)
+            raise_null_reference_time(time_filter_feature)
 
         # Sort STABLY by absolute time, remembering original positions, so the
         # rolled result can be scattered back to the ORIGINAL (possibly unsorted)
@@ -127,8 +90,8 @@ class PandasTimeWindowFeatureGroup(TimeWindowFeatureGroup):
         # Time-based (not row-count) window: include rows in (t - span, t].
         # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
         # "passed window 3M is not compatible with a datetimelike index".
-        span = pd.Timedelta(cls._get_time_delta(window_size, time_unit))
-        rolling_window = selected_data.rolling(window=span, min_periods=1, closed="right")
+        span_delta = pd.Timedelta(span)
+        rolling_window = selected_data.rolling(window=span_delta, min_periods=1, closed="right")
 
         if window_function == "sum":
             result = rolling_window.sum()

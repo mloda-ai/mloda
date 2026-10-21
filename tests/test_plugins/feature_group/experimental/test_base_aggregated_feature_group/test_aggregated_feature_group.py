@@ -10,6 +10,9 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+    PythonDictFramework,
+)
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 
@@ -169,6 +172,7 @@ class TestPandasAggregation:
         assert PandasAggregation.compute_framework is PandasDataFrame
         assert PandasAggregation.feature_group is AggregatedFeatureGroup
         assert PandasDataFrame in AggregatedFeatureGroup.compute_framework_definition()
+        assert PythonDictFramework not in AggregatedFeatureGroup.compute_framework_definition()
 
     def test_perform_aggregation_sum(self, sample_dataframe: pd.DataFrame) -> None:
         """Test _perform_aggregation method with sum aggregation."""

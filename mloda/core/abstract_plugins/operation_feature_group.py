@@ -74,7 +74,6 @@ class OperationFeatureGroup(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """Run the plan's implementation, bound to this group."""
         implementation = features.implementation
         if implementation is None:
             raise ValueError(f"{cls.__name__}.calculate_feature found no implementation on the feature set.")

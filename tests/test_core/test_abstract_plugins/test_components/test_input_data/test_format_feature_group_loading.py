@@ -317,14 +317,6 @@ def _run_operation(
 
 
 class TestOperationImplementation:
-    @pytest.mark.parametrize("framework, mark", [(PandasDataFrame, 1), (PyArrowTable, 2)])
-    def test_one_group_runs_the_implementation_of_the_chosen_framework(self, framework: Any, mark: int) -> None:
-        toy = _toy_operation()
-
-        result = _run_operation(toy.OPTOY_FEATURE, framework)
-
-        assert column_values(result, toy.OPTOY_FEATURE) == [mark]
-
     def test_unpinned_run_with_two_frameworks_resolves_to_one_group(self) -> None:
         toy = _toy_operation()
 
@@ -417,14 +409,24 @@ def _op_feature(pin: Any, **kwargs: Any) -> Feature:
 
 class TestImplementationPin:
     @pytest.mark.parametrize(
-        ("pin", "mark"),
-        [("OpToyPyArrow", 2), ("OpToyPandas", 1), ("toy_class_pyarrow", 2), ("toy_class_pandas", 1)],
+        ("pin", "framework", "mark"),
+        [
+            ("OpToyPyArrow", None, 2),
+            ("OpToyPandas", None, 1),
+            ("toy_class_pyarrow", None, 2),
+            ("toy_class_pandas", None, 1),
+            (None, PandasDataFrame, 1),
+            (None, PyArrowTable, 2),
+        ],
     )
-    def test_the_pin_selects_the_implementation_that_runs(self, pin: str, mark: int) -> None:
+    def test_the_pin_selects_the_implementation_that_runs(self, pin: str | None, framework: Any, mark: int) -> None:
         toy = _toy_operation()
-        pinned: Any = {"toy_class_pyarrow": toy.OpToyPyArrow, "toy_class_pandas": toy.OpToyPandas}.get(pin, pin)
+        classes: dict[str | None, Any] = {"toy_class_pyarrow": toy.OpToyPyArrow, "toy_class_pandas": toy.OpToyPandas}
 
-        result = _run_pinned([_op_feature(pinned)])
+        if pin is None:
+            result = _run_operation(toy.OPTOY_FEATURE, framework)
+        else:
+            result = _run_pinned([_op_feature(classes.get(pin, pin))])
 
         assert column_values(result, toy.OPTOY_FEATURE) == [mark]
 

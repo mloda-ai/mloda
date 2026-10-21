@@ -871,7 +871,7 @@ class TestPlanStepImplementation:
 
         step = _explain_toy_group(ToyWorkerFG)
 
-        assert step.implementation == impl
+        assert step.implementation is impl
         assert step.implementation_path == _class_path(impl)
         assert step.implementation_path != step.compute_framework_name
         assert step.implementation_version == impl.version()
@@ -896,9 +896,9 @@ class TestPlanStepImplementation:
         )
         step = next(s for s in steps if s.step_kind == "compute")
 
-        assert step.implementation == impl
         assert step.implementation_path == _class_path(impl)
         assert step.implementation_version == impl.version()
+        assert step.implementation is impl
 
     def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
         step = _explain_toy_group(neutral_csv_group(tmp_path / "n.csv"))
@@ -965,7 +965,7 @@ class TestPlanStepImplementation:
 
         step = _explain_toy_group(group)
 
-        assert step.implementation == impl
+        assert step.implementation is impl
         assert step.implementation_version is None
         assert step.feature_group_version is None
 

@@ -14,6 +14,8 @@ import pytest
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -22,6 +24,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.implement
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
@@ -39,10 +42,6 @@ class TestAggregatedSubtypeDeclaration:
         assert declaration.key == "aggregation_type"
 
     def test_universe_matches_declared_aggregation_types(self) -> None:
-        assert AggregatedFeatureGroup.subtype_universe() == AGGREGATION_UNIVERSE
-
-    def test_pandas_implementation_serves_the_group_with_the_full_universe(self) -> None:
-        assert PandasAggregation.feature_group is AggregatedFeatureGroup
         assert AggregatedFeatureGroup.subtype_universe() == AGGREGATION_UNIVERSE
 
 
@@ -93,12 +92,18 @@ class TestAggregatedSubtypeSupportMatrix:
         assert not inspect.isabstract(AggregatedFeatureGroup)
         assert AggregatedFeatureGroup.subtype_universe() == AGGREGATION_UNIVERSE
 
+    def test_abstract_family_base_has_an_empty_matrix(self) -> None:
+        assert inspect.isabstract(TimeWindowFeatureGroup)
+        assert TimeWindowFeatureGroup.subtype_support_matrix() == {}
+
     def test_matrix_gives_every_served_framework_the_full_universe(self) -> None:
         matrix = AggregatedFeatureGroup.subtype_support_matrix()
         assert matrix, "the concrete group must have a non-empty support matrix"
         declared = {cfw.get_class_name() for cfw in AggregatedFeatureGroup.compute_framework_definition()}
         assert set(matrix) == declared
         assert {PandasDataFrame.get_class_name(), PyArrowTable.get_class_name()} <= set(matrix)
+        unserved = {f.get_class_name() for f in (PythonDictFramework, DuckDBFramework, SqliteFramework)}
+        assert not unserved & set(matrix)
         assert all(subtypes == AGGREGATION_UNIVERSE for subtypes in matrix.values())
 
     def test_implementations_are_abstract_helper_children_serving_the_group(self) -> None:

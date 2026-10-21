@@ -75,6 +75,7 @@ MIN_HOOK_CALLING_MODULES = 13
 # The expected declaration per family base, kept as a table so a changed declaration is a visible diff.
 # A family that resolves column names against the data needs the discovery hook on top of the pair.
 FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
+    AggregationImplementation: COLUMN_DISCOVERY_HOOKS,
     ClusteringFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     MissingValueFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     ForecastingFeatureGroup: COLUMN_DISCOVERY_HOOKS,
@@ -223,10 +224,8 @@ def test_family_base_declares_its_required_hooks(family: type[Any], expected: fr
     assert family.REQUIRED_COLUMNWISE_HOOKS == expected
 
 
-def test_aggregation_implementation_owns_the_discovery_declaration() -> None:
-    """The aggregation loop lives on the implementation helper, so it states the hooks; the group states none."""
-    assert AggregationImplementation.REQUIRED_COLUMNWISE_HOOKS == COLUMN_DISCOVERY_HOOKS
-    assert "REQUIRED_COLUMNWISE_HOOKS" in AggregationImplementation.__dict__
+def test_aggregation_group_states_no_hooks() -> None:
+    """The aggregation loop lives on the implementation helper (in the family table); the group states none."""
     assert AggregatedFeatureGroup.REQUIRED_COLUMNWISE_HOOKS == frozenset()
 
 

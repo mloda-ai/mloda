@@ -96,10 +96,7 @@ def serving_implementation(
     implementations: Iterable[type[Implementation]],
     stop_after: str | None = None,
 ) -> type[Implementation] | None:
-    """The implementation serving group and framework: group MRO outer, framework MRO inner, most derived wins.
-
-    The walk ends after a group class that defines the attribute named by stop_after.
-    """
+    """The most derived implementation for group and framework (group MRO outer, framework MRO inner)."""
     by_pair: dict[tuple[type, type], list[type[Implementation]]] = {}
     for impl in implementations:
         by_pair.setdefault((impl.feature_group, impl.compute_framework), []).append(impl)

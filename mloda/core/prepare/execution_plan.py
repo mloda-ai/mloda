@@ -721,7 +721,7 @@ class ExecutionPlan:
 
         buckets: list[list[tuple[Feature, list[UUID]]]] = []
         bucket_of: dict[UUID, int] = {}
-        ordered = sorted(features, key=lambda f: (str(f.name), str(f.data_type), str(f.options), str(f.uuid)))
+        ordered = sorted(features, key=lambda f: (str(f.name), str(f.data_type), stable_text(f.options), str(f.uuid)))
         for feature in ordered:
             parents = effective_parents(feature)
             for index, bucket in enumerate(buckets):

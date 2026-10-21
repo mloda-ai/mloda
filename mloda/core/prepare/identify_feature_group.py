@@ -187,6 +187,10 @@ def validate_format_pointers(
     accessible_formats = [fg for fg in accessible_plugins if issubclass(fg, FormatFeatureGroup)]
     for key in keys:
         group = loaded.get(key)
+        if group is None:
+            near = [name for name in loaded if name.casefold() == key.casefold()]
+            if len(near) == 1:
+                raise FormatPointerError(f"options key {key} names no format group; did you mean {near[0]}?")
         if group is not None and not any(key in fg.pointer_keys() for fg in accessible_formats):
             reason = excluded.get(group, _NOT_ACCESSIBLE)
             raise FormatPointerError(f"options point at {key}, but {key} is not accessible in this run: {reason}.")

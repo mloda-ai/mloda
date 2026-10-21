@@ -1243,3 +1243,14 @@ class TestUnreachablePointerRaises:
 
         assert "CsvFG" in str(exc_info.value)
         assert "JsonFG" in str(exc_info.value)
+
+    @pytest.mark.parametrize(("key", "group"), [("JsonFg", "JsonFG"), ("csvfg", "CsvFG")])
+    def test_a_case_typo_pointer_key_raises_with_a_suggestion(self, key: str, group: str) -> None:
+        csv_fg = _stock("csv_fg", "CsvFG")
+        json_fg = _stock("json_fg", "JsonFG")
+        feature = Feature("fpg_x", Options({key: "x.json"}))
+        with pytest.raises(FormatPointerError) as exc_info:
+            IdentifyFeatureGroupClass.evaluate(feature, _plugins(csv_fg, json_fg), None, None)
+
+        assert key in str(exc_info.value)
+        assert f"did you mean {group}" in str(exc_info.value)

@@ -8,7 +8,10 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data import
 from mloda.provider import FormatFeatureGroup
 from mloda.user import Credential, Feature, Options
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    ToyFormatBase,
+    ToyFormatFG,
+)
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
 
@@ -636,6 +639,10 @@ class TestOptionsWithCredentialValues:
 
         plain = Options(group={"cfg": {"a": "b"}})
         assert "'a': 'b'" in str(plain)
+
+        toy = Options(group={ToyFormatFG.get_class_name(): {"toy_col": "/raw/toy_pointer_marker.db"}})
+        assert "/raw/toy_pointer_marker.db" not in str(toy)
+        assert "toy_col" in str(toy)
 
     def test_str_redacts_a_reader_tuple_dsn_string_in_base_input_data_context(self) -> None:
         """The reserved BaseInputData reader tuple also masks a DSN string second element."""

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
@@ -113,6 +113,14 @@ def _str_option_value(value: Any) -> Any:
 
 def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
     return {k: _str_option_value(v) for k, v in d.items()}
+
+
+def _display_option_dict(d: dict[str, Any], format_group_names: Collection[str]) -> dict[str, Any]:
+    """Display-only: also redact a mapping pointer under a format group name."""
+    return {
+        k: redact_option_value(v) if isinstance(v, Mapping) and k in format_group_names else _str_option_value(v)
+        for k, v in d.items()
+    }
 
 
 def validate_forwarding_directives(
@@ -444,7 +452,13 @@ class Options:
         return self.rebuild(safe_deepcopy_dict(self.group), safe_deepcopy_dict(self.context))
 
     def __str__(self) -> str:
-        parts = f"Options(group={_str_option_dict(self.group)}, context={_str_option_dict(self.context)}"
+        from mloda.core.abstract_plugins.components.input_data.format_feature_group import concrete_format_groups
+
+        names = concrete_format_groups().keys()
+        parts = (
+            f"Options(group={_display_option_dict(self.group, names)}, "
+            f"context={_display_option_dict(self.context, names)}"
+        )
         if self.propagate_context_keys:
             parts += f", propagate_context_keys={self.propagate_context_keys}"
         if self.cascade_context_keys:

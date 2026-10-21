@@ -186,6 +186,12 @@ def _snapshot_option(key: Any, value: Any, format_group_names: Iterable[str]) ->
     return _mask_secret_keys(_safe_deepcopy(value, {}))
 
 
+def snapshot_group(group: Mapping[Any, Any]) -> dict[Any, Any]:
+    """Snapshot a group mapping with the plan-step redaction rule."""
+    names = concrete_format_groups().keys()
+    return {key: _snapshot_option(key, value, names) for key, value in group.items()}
+
+
 def build_plan_steps(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep],
     resolved_join_plan: "ResolvedJoinPlan | None" = None,
@@ -202,7 +208,6 @@ def build_plan_steps(
     replaced parents) to fill each compute step's ``specialized_from``.
     """
     replaced_by_uuid = specialized_from or {}
-    format_group_names = concrete_format_groups().keys()
     records: dict[UUID, "ResolvedJoin"] = (
         {} if resolved_join_plan is None else {record.token: record for record in resolved_join_plan.records}
     )
@@ -247,12 +252,7 @@ def build_plan_steps(
                     injected_feature_names=injected,
                     input_feature_names=input_feature_names,
                     feature_set_options=(
-                        Options(
-                            group={
-                                key: _snapshot_option(key, value, format_group_names)
-                                for key, value in step.features.options.group.items()
-                            }
-                        )
+                        Options(group=snapshot_group(step.features.options.group))
                         if step.features.options is not None
                         else None
                     ),

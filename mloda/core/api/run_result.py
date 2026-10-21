@@ -7,7 +7,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
-from mloda.core.api.plan_info import PlanStep
+from mloda.core.api.plan_info import PlanStep, snapshot_group
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -59,7 +59,7 @@ class RunResult(list[Any]):
     def frame_for(self, feature: "Feature | str") -> Any:
         """Return the frame whose step requested ``feature`` (a Feature also matches group options); else ValueError."""
         name = feature if isinstance(feature, str) else str(feature.name)
-        group = None if isinstance(feature, str) else feature.options.group
+        group = None if isinstance(feature, str) else snapshot_group(feature.options.group)
         pinned = None if isinstance(feature, str) else feature.compute_frameworks
         frames = self.frames()
         pairs = [(step, frame) for step, frame in frames if name in step.requested_feature_names]

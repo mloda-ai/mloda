@@ -118,6 +118,9 @@ def validate_forwarding_directives(
         )
 
 
+RESERVED_READER_OPTION_KEY = "BaseInputData"
+
+
 class Options:
     """
     Configuration container for features with group/context separation.

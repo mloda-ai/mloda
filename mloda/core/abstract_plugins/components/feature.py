@@ -22,7 +22,11 @@ from mloda.core.abstract_plugins.components.hashable_dict import (
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.options import Options, validate_forwarding_directives
+from mloda.core.abstract_plugins.components.options import (
+    RESERVED_READER_OPTION_KEY,
+    Options,
+    validate_forwarding_directives,
+)
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 
@@ -128,6 +132,11 @@ class Feature:
             options = {}
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
+        if RESERVED_READER_OPTION_KEY in self.options.group or RESERVED_READER_OPTION_KEY in self.options.context:
+            raise ValueError(
+                f"Option key '{RESERVED_READER_OPTION_KEY}' is reserved for the engine's reader selection; "
+                "remove it, and point at a format group with its class-name key instead."
+            )
         self.domain = self._set_domain(domain, self.options.get("domain"))
         if "domain" in self.options.group:
             # Copy first: options may be a caller-owned Options instance, not a private dict.

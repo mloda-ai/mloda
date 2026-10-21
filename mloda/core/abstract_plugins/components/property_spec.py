@@ -209,14 +209,13 @@ def element_admitted(spec: PropertySpec, element: Any, on_raise: Callable[[Excep
         try:
             return bool(validator(element))
         except Exception as exc:
-            if is_match_abort(exc):
+            if is_match_abort(exc):  # a marked abort must escape, not become a rejection
                 raise
-            # A raising validator cannot judge the value, so it is rejected; a marked abort escapes.
             on_raise(exc)
             return False
     try:
         return spec.allowed_values is not None and element in spec.allowed_values
-    # An unhashable element can never be a member, so the TypeError is a clean rejection.
+    # An unhashable element is never a member.
     except TypeError as exc:
         if is_match_abort(exc):
             raise
@@ -224,7 +223,6 @@ def element_admitted(spec: PropertySpec, element: Any, on_raise: Callable[[Excep
     except Exception as exc:
         if is_match_abort(exc):
             raise
-        # A raising membership test cannot judge the value, so it is rejected.
         on_raise(exc)
         return False
 

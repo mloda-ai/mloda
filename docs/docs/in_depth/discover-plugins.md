@@ -103,7 +103,7 @@ string (the string matches the named class and its subclasses), the same forms
 as `Feature(..., feature_group=...)`:
 
 ```python
-result = resolve_feature("sales__sum_aggr", feature_group="PandasAggregatedFeatureGroup")
+result = resolve_feature("sales__sum_aggr", feature_group="AggregatedFeatureGroup")
 ```
 
 Scoped failures append `Scoped to feature group: '<Name>'.` to `result.error`,

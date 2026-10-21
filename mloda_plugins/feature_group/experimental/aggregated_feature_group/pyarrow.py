@@ -10,10 +10,9 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from mloda.core.optional_dependency import loaded, require
-from mloda.provider import ComputeFramework
-
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
 
 if TYPE_CHECKING:
     import numpy as np
@@ -43,17 +42,15 @@ def _reduce_without_nan_warning(
     return restored
 
 
-class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
+class PyArrowAggregation(AggregationImplementation):
     """
     PyArrow implementation of aggregated feature group.
 
     Supports multiple aggregation types in a single class.
     """
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Specify that this feature group works with PyArrow."""
-        return {PyArrowTable}
+    feature_group = AggregatedFeatureGroup
+    compute_framework = PyArrowTable
 
     @classmethod
     def _get_available_columns(cls, data: pa.Table) -> set[str]:

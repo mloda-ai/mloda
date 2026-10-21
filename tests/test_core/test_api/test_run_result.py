@@ -44,14 +44,15 @@ from mloda.provider import BaseInputData, ComputeFramework, DataCreator, Feature
 from mloda.user import Feature, Options, ParallelizationMode, PlanStep, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from tests.test_core.test_abstract_plugins.test_multi_column_auto_resolution import (
     MultiColumnProducer,
     MultiColumnTestDataCreator,
 )
 from tests.test_core.test_api.test_plan_info import PlanInfoPandasSource
 
-_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, PandasAggregatedFeatureGroup})
+_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, AggregatedFeatureGroup})
 
 # A chained request: an aggregated feature over a source feature.
 _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
@@ -213,7 +214,8 @@ class TestRunResultPlan:
         assert len(aggregation_steps) == 1, f"expected one aggregation step, got {compute_steps}"
 
         aggregation = aggregation_steps[0]
-        assert aggregation.feature_group is PandasAggregatedFeatureGroup
+        assert aggregation.feature_group is AggregatedFeatureGroup
+        assert aggregation.implementation is PandasAggregation
         assert aggregation.compute_framework is PandasDataFrame
 
     def test_plan_equals_resolved_plan_of_an_equivalent_prepared_session(self) -> None:

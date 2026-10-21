@@ -1,7 +1,8 @@
 """Shared contract: a feature group's result column keeps a concrete type on zero-row input.
 
 Family mixins describe inputs as pyarrow Tables; a framework adapter converts them and reads row counts and
-column types back, so each framework's hooks are written once, not once per family."""
+column types back, so each framework's hooks are written once, not once per family.
+feature_group_class is a feature group, or an Implementation for operation families."""
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from typing import Any, ClassVar
 import numpy as np
 import pyarrow as pa
 
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature
 from mloda.user.python_dict import row_count as python_dict_row_count
@@ -28,7 +30,7 @@ class ZeroRowResultTypeTestMixin:
     """Family-agnostic hooks, a calculate helper and the typed-result assertion."""
 
     # Read by the family tests and by tests/test_plugins/test_mixin_consumer_coverage.py.
-    feature_group_class: ClassVar[type[FeatureGroup]]
+    feature_group_class: ClassVar[type[FeatureGroup] | type[Implementation]]
     untyped_column_types: ClassVar[tuple[Any, ...]]
 
     @abstractmethod
@@ -46,7 +48,10 @@ class ZeroRowResultTypeTestMixin:
     def calculate(self, table: pa.Table, feature: Feature) -> Any:
         feature_set = FeatureSet()
         feature_set.add(feature)
-        return self.feature_group_class.calculate_feature(self.from_arrow(table), feature_set)
+        data = self.from_arrow(table)
+        if issubclass(self.feature_group_class, Implementation):
+            return self.feature_group_class.calculate(self.feature_group_class.feature_group, data, feature_set)
+        return self.feature_group_class.calculate_feature(data, feature_set)
 
     def assert_typed(self, result: Any, column: str, expected_rows: int) -> None:
         assert self.row_count(result) == expected_rows

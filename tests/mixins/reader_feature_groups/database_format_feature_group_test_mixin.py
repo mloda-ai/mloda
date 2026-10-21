@@ -26,7 +26,7 @@ from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.provider import CHAIN_SEPARATOR
 from mloda.user import Credential, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import (
     FormatFeatureGroupTestMixin,
     _LoadCapture,
@@ -398,9 +398,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         mloda.run_all(
             [*columns, f"{columns[0]}{CHAIN_SEPARATOR}sum_aggr"],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {self.feature_group_class, PyArrowAggregatedFeatureGroup}
-            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, AggregatedFeatureGroup}),
             data_access_collection=self._dac_of(path),
         )
 
@@ -562,9 +560,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         result = mloda.run_all(
             [feature],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {self.feature_group_class, PyArrowAggregatedFeatureGroup}
-            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, AggregatedFeatureGroup}),
             data_access_collection=dac,
         )
         assert result[0].to_pydict()[name] == [6, 6, 6]

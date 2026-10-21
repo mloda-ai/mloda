@@ -8,7 +8,7 @@ import pytest
 
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.user import mloda
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import PluginCollector
@@ -195,7 +195,7 @@ class TestMissingValueGroupByColumnSelectiveRoot:
     )
     def test_source_shares_one_root_step_with_group_by_column(self, source: Feature, expected: list[float]) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup, PandasAggregatedFeatureGroup}
+            {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup, AggregatedFeatureGroup}
         )
         f = Feature(
             "mv",

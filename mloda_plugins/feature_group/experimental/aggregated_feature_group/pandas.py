@@ -6,17 +6,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda.provider import ComputeFramework
-
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
 
 
-class PandasAggregatedFeatureGroup(AggregatedFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Specify that this feature group works with Pandas."""
-        return {PandasDataFrame}
+class PandasAggregation(AggregationImplementation):
+    feature_group = AggregatedFeatureGroup
+    compute_framework = PandasDataFrame
+    divergent = {
+        **{op: f"skips NaN in {op}" for op in ("sum", "avg", "mean", "std", "var")},
+        "count": "does not count NaN",
+    }
 
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:

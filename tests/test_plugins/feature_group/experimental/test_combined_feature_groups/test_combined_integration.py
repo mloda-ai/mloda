@@ -9,8 +9,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
@@ -43,7 +42,7 @@ class TestCombinedFeatureGroupsPandas:
                 PandasCombinedFeatureTestDataCreator,
                 PandasMissingValueFeatureGroup,
                 PandasTimeWindowFeatureGroup,
-                PandasAggregatedFeatureGroup,
+                AggregatedFeatureGroup,
             }
         )
 
@@ -102,7 +101,7 @@ class TestCombinedFeatureGroupsPyArrow:
                 PyArrowCombinedFeatureTestDataCreator,
                 PyArrowMissingValueFeatureGroup,
                 PyArrowTimeWindowFeatureGroup,
-                PyArrowAggregatedFeatureGroup,
+                AggregatedFeatureGroup,
             }
         )
 

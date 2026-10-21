@@ -31,6 +31,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     missing_columnwise_hooks,
 )
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
@@ -74,7 +75,6 @@ MIN_HOOK_CALLING_MODULES = 13
 # The expected declaration per family base, kept as a table so a changed declaration is a visible diff.
 # A family that resolves column names against the data needs the discovery hook on top of the pair.
 FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
-    AggregatedFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     ClusteringFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     MissingValueFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     ForecastingFeatureGroup: COLUMN_DISCOVERY_HOOKS,
@@ -89,6 +89,12 @@ FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
 }
 
 FAMILY_IDS = [family.__name__ for family in FAMILY_REQUIREMENTS]
+
+# Receivers whose hook calls count: a group classmethod (cls/self) or the group handed to an implementation.
+HOOK_RECEIVERS = ("cls", "self", "group")
+
+# Families whose hook calls moved to an implementation helper: the declaration lives there, not on the base.
+DECLARING_CLASS: dict[type[Any], type[Any]] = {AggregatedFeatureGroup: AggregationImplementation}
 
 
 def _module_name_of(path: Path) -> str:
@@ -106,7 +112,7 @@ def _hooks_called_in(path: Path) -> set[str]:
         func = node.func
         if not isinstance(func, ast.Attribute) or func.attr not in HOOK_NAMES:
             continue
-        if isinstance(func.value, ast.Name) and func.value.id in ("cls", "self"):
+        if isinstance(func.value, ast.Name) and func.value.id in HOOK_RECEIVERS:
             called.add(func.attr)
     return called
 
@@ -137,7 +143,8 @@ def _owning_family(path: Path, declarations: dict[Path, type[Any]]) -> type[Any]
     for directory in path.parents:
         family = declarations.get(directory)
         if family is not None:
-            return family
+            owner: type[Any] = DECLARING_CLASS.get(family, family)
+            return owner
         if directory == SCAN_ROOT:
             break
     return None
@@ -216,6 +223,19 @@ def test_family_base_declares_its_required_hooks(family: type[Any], expected: fr
     assert family.REQUIRED_COLUMNWISE_HOOKS == expected
 
 
+def test_aggregation_implementation_owns_the_discovery_declaration() -> None:
+    """The aggregation loop lives on the implementation helper, so it states the hooks; the group states none."""
+    assert AggregationImplementation.REQUIRED_COLUMNWISE_HOOKS == COLUMN_DISCOVERY_HOOKS
+    assert "REQUIRED_COLUMNWISE_HOOKS" in AggregationImplementation.__dict__
+    assert AggregatedFeatureGroup.REQUIRED_COLUMNWISE_HOOKS == frozenset()
+
+
+def test_aggregation_implementation_declaration_matches_the_hooks_its_module_calls() -> None:
+    """Anti-drift: the helper's declaration equals the hooks implementation.py calls on the group."""
+    module_path = Path(inspect.getfile(AggregationImplementation))
+    assert set(AggregationImplementation.REQUIRED_COLUMNWISE_HOOKS) == _hooks_called_in(module_path)
+
+
 @pytest.mark.parametrize("family", list(FAMILY_REQUIREMENTS), ids=FAMILY_IDS)
 def test_family_base_owns_its_declaration(family: type[Any]) -> None:
     """The declaration sits in the family's own class body, not inherited from a sibling or the mixin."""
@@ -286,7 +306,7 @@ def test_no_family_module_calls_a_hook_its_base_does_not_declare() -> None:
 @pytest.mark.parametrize("plugin_class", list(STRICTNESS), ids=[cls.__name__ for cls in STRICTNESS])
 def test_shipped_family_class_declares_a_requirement_it_implements(plugin_class: type[Any]) -> None:
     """Precondition for the sweep below: every shipped class is framework-bound and carries a requirement."""
-    assert "compute_framework_rule" in plugin_class.__dict__, (
+    assert "compute_framework_rule" in plugin_class.__dict__ or "compute_framework" in plugin_class.__dict__, (
         f"{plugin_class.__name__} is not framework-bound, so it is no implementation to check"
     )
     assert plugin_class.REQUIRED_COLUMNWISE_HOOKS, f"{plugin_class.__name__} inherits an empty requirement"

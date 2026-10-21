@@ -45,7 +45,7 @@ class AbstractWinnerFeatureGroup(FeatureGroup):
     It declares an unimplemented abstract method, so it cannot be instantiated.
     It matches the feature name via ``match_feature_group_criteria`` (never
     instantiating itself during matching), mimicking the real
-    ``AggregatedFeatureGroup`` base that survives resolution once its concrete
+    ``TimeWindowFeatureGroup`` base that survives resolution once its concrete
     subclasses are dropped.
     """
 
@@ -75,7 +75,7 @@ class IsolatedAbstractAggBase(FeatureGroup):
     Declares an unimplemented abstract method so it cannot be instantiated. It is
     a plausible name-match for ``ISOLATED_ABSTRACT_AGG_FEATURE`` and supports all
     frameworks (including ``PythonDictFramework``), mirroring the real abstract
-    ``AggregatedFeatureGroup`` base from issue #646.
+    ``TimeWindowFeatureGroup`` base from issue #646.
     """
 
     @classmethod
@@ -329,7 +329,7 @@ class TestAbstractFeatureGroupNotSelectedByResolution:
         )
 
 
-class TestAbstractAggregatedFeatureGroupIntegration:
+class TestAbstractFamilyBaseIntegration:
     """Integration repro of issue #646 via mlodaAPI.run_all."""
 
     def test_abstract_aggregated_base_raises_clean_value_error(self) -> None:

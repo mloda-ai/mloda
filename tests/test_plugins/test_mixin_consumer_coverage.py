@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.provider import BaseFilterEngine
 from mloda.provider import BaseMaskEngine
 from mloda.user import PluginLoader
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import FilterEngineTestMixin
@@ -47,7 +47,7 @@ class MixinContract:
 
 CONTRACTS: tuple[MixinContract, ...] = (
     MixinContract(
-        AggregatedFeatureGroup,
+        AggregationImplementation,
         AggregatedZeroRowTestMixin,
         "feature_group_class",
         (

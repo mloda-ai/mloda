@@ -47,7 +47,9 @@ from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
 
 
 class MockComputeFramework(ComputeFramework):
@@ -613,8 +615,7 @@ def test_base_name_string_scope_with_differing_framework_siblings_stays_ambiguou
     """Rival subclasses on DIFFERENT compute frameworks stay ambiguous under a base-name scope.
 
     The realistic multi-framework shape: two concrete per-framework siblings of one
-    family base (as PandasAggregatedFeatureGroup and PyArrowAggregatedFeatureGroup
-    are), both enabled. The subclass preference drops the concrete base, but the siblings are
+    family base, both enabled. The subclass preference drops the concrete base, but the siblings are
     unrelated by inheritance, so resolution must raise instead of silently choosing one.
     """
     framework_sibling_one = type("ScopeFrameworkSiblingOne", (_DupNameBase,), {})
@@ -805,31 +806,37 @@ class ScopePythonAggregationSource(FeatureGroup):
         return {"scope_python_sales": [10, 20, 30, 40]}
 
 
-def test_end2end_python_feature_abstract_family_base_scope_resolves_to_pandas_subclass() -> None:
-    """Characterization: Feature(feature_group="AggregatedFeatureGroup") runs on the Pandas subclass.
+def test_end2end_python_feature_aggregation_group_scope_runs_the_pandas_implementation() -> None:
+    """Feature(feature_group="AggregatedFeatureGroup") is the concrete group and runs its Pandas implementation.
 
-    The allowlist enables only the source and the concrete Pandas member, so the
-    scoped abstract base is genuinely not a key of accessible_plugins. Naming it
-    must still reach the concrete subclass through the MRO walk and compute the
-    aggregation, without the caller hard-coding a framework-specific leaf class.
+    The family base is concrete now: it is a key of accessible_plugins itself, one group served by an
+    Implementation per framework, so the scope needs no MRO walk to a framework-specific leaf class.
     """
-    assert inspect.isabstract(AggregatedFeatureGroup), "the scoped family base must stay abstract"
+    assert not inspect.isabstract(AggregatedFeatureGroup), "the aggregation group is concrete"
 
     feature = Feature("scope_python_sales__sum_aggr", feature_group=AggregatedFeatureGroup.get_class_name())
+    plugin_collector = PluginCollector.enabled_feature_groups({ScopePythonAggregationSource, AggregatedFeatureGroup})
 
-    results = list(
-        mloda.run_all(
-            [feature],
-            compute_frameworks=[PandasDataFrame],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {ScopePythonAggregationSource, PandasAggregatedFeatureGroup}
-            ),
-        )
-    )
+    results = list(mloda.run_all([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector))
 
     aggregated = [df for df in results if "scope_python_sales__sum_aggr" in df.columns]
     assert len(aggregated) == 1
     assert aggregated[0]["scope_python_sales__sum_aggr"].iloc[0] == 100
+
+    steps = mloda.explain([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+    aggregation = next(step for step in steps if step.feature_group is AggregatedFeatureGroup)
+    assert aggregation.implementation is PandasAggregation
+
+
+def test_abstract_family_base_scope_resolves_to_the_enabled_subclass() -> None:
+    """Characterization: naming a still-abstract family base reaches its concrete subclass through the MRO walk."""
+    assert inspect.isabstract(TimeWindowFeatureGroup), "the scoped family base must stay abstract"
+    accessible_plugins: FeatureGroupEnvironmentMapping = {PandasTimeWindowFeatureGroup: {PandasDataFrame}}
+    feature = Feature("scope_price__sum_7_day_window", feature_group=TimeWindowFeatureGroup.get_class_name())
+
+    winner, _frameworks = next(iter(evaluate_or_raise(feature, accessible_plugins).identified.items()))
+
+    assert winner is PandasTimeWindowFeatureGroup
 
 
 class ScopePythonAggregationSourceB(FeatureGroup):
@@ -866,7 +873,7 @@ def test_end2end_one_declared_child_shared_by_two_consumers(path: str) -> None:
             ],
             compute_frameworks=[PandasDataFrame],
             plugin_collector=PluginCollector.enabled_feature_groups(
-                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, PandasAggregatedFeatureGroup}
+                {ScopePythonAggregationSource, ScopePythonAggregationSourceB, AggregatedFeatureGroup}
             ),
         )
     )
@@ -900,7 +907,7 @@ class DomainAbortRival(StubFeatureGroup):
 
 def _abort_candidates() -> FeatureGroupEnvironmentMapping:
     return {
-        PandasAggregatedFeatureGroup: {PandasDataFrame},
+        AggregatedFeatureGroup: {PandasDataFrame},
         ScopeAbortRival: {MockComputeFramework},
         DomainAbortRival: {MockComputeFramework},
     }

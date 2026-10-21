@@ -24,7 +24,7 @@ from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import FormatFeatureGroupTestMixin
 
 if TYPE_CHECKING:
@@ -326,9 +326,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         mloda.run_all(
             [*columns, f"{columns[0]}{CHAIN_SEPARATOR}sum_aggr"],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {self.feature_group_class, PyArrowAggregatedFeatureGroup}
-            ),
+            plugin_collector=PluginCollector.enabled_feature_groups({self.feature_group_class, AggregatedFeatureGroup}),
             data_access_collection=DataAccessCollection(files={"cache_handle": str(path)}),
         )
 

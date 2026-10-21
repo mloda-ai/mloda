@@ -961,7 +961,7 @@ class TestFeatureGroupInfoClaimRoutes:
         assert len(infos["ToyFormatFG"].claim_routes) == 1
 
     def test_non_format_group_has_no_claim_routes(self) -> None:
-        infos = get_feature_group_docs(name="PandasAggregatedFeatureGroup")
+        infos = get_feature_group_docs(name="AggregatedFeatureGroup")
 
         assert infos
         assert all(tuple(info.claim_routes) == () for info in infos)
@@ -1005,7 +1005,7 @@ class TestFeatureGroupInfoSuffixes:
         assert self._suffixes("SqliteFG") == ()
 
     def test_plain_feature_group_has_no_suffixes(self) -> None:
-        infos = get_feature_group_docs(name="PandasAggregatedFeatureGroup")
+        infos = get_feature_group_docs(name="AggregatedFeatureGroup")
 
         assert infos
         assert all(info.suffixes == () for info in infos)

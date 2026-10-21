@@ -14,7 +14,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 
@@ -69,7 +69,7 @@ class TestComplexEncodingChaining:
                 ComplexEncodingTestDataCreator,
                 PandasEncodingFeatureGroup,
                 PandasScalingFeatureGroup,
-                PandasAggregatedFeatureGroup,
+                AggregatedFeatureGroup,
             }
         )
 

@@ -14,7 +14,6 @@ from mloda.provider import BaseInputData, ComputeFramework, DataCreator, Default
 from mloda.user import Feature, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
 
 # The cfa_ prefix keeps these names unique repo-wide.
 CFA_SOURCE = "cfa_sales"
@@ -38,7 +37,7 @@ class CfaRoot(FeatureGroup):
         return pd.DataFrame({CFA_SOURCE: [1, 2, 3], CFA_FILTER_COLUMN: [1, 2, 3]})
 
 
-_CFA_ENABLED = PluginCollector.enabled_feature_groups({CfaRoot, PandasAggregatedFeatureGroup})
+_CFA_ENABLED = PluginCollector.enabled_feature_groups({CfaRoot, AggregatedFeatureGroup})
 
 
 def _planned() -> GlobalFilter:
@@ -72,7 +71,7 @@ def test_the_filter_attaches_to_the_config_created_feature() -> None:
     attached = {
         str(name): sorted(single.name for single in stored)
         for (group, name), stored in global_filter.collection.items()
-        if group is PandasAggregatedFeatureGroup
+        if group is AggregatedFeatureGroup
     }
     assert attached == {CFA_HOST: [CFA_FILTER_COLUMN]}, f"the filter must reach the aggregation step: {attached!r}"
 

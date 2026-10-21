@@ -8,7 +8,7 @@ from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import (
-    PolarsLazyAggregatedFeatureGroup,
+    PolarsLazyAggregation,
 )
 
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
@@ -93,27 +93,27 @@ def feature_set_multiple() -> FeatureSet:
 
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")
-class TestPolarsLazyAggregatedFeatureGroup:
-    """Tests for the PolarsLazyAggregatedFeatureGroup class."""
+class TestPolarsLazyAggregation:
+    """Tests for the PolarsLazyAggregation class."""
 
     def test_compute_framework_rule(self) -> None:
         """Test compute_framework_rule method."""
-        assert PolarsLazyAggregatedFeatureGroup.compute_framework_rule() == {PolarsLazyDataFrame}
+        assert PolarsLazyAggregation.compute_framework is PolarsLazyDataFrame
 
     def test_check_source_features_exist_valid(self, sample_lazy_dataframe: Any) -> None:
         """Test _check_source_features_exist with valid feature."""
         # Should not raise an exception
-        PolarsLazyAggregatedFeatureGroup._check_source_features_exist(sample_lazy_dataframe, ["sales"])
-        PolarsLazyAggregatedFeatureGroup._check_source_features_exist(sample_lazy_dataframe, ["price"])
+        PolarsLazyAggregation._check_source_features_exist(sample_lazy_dataframe, ["sales"])
+        PolarsLazyAggregation._check_source_features_exist(sample_lazy_dataframe, ["price"])
 
     def test_check_source_features_exist_invalid(self, sample_lazy_dataframe: Any) -> None:
         """Test _check_source_features_exist with invalid feature."""
         with pytest.raises(ValueError, match="None of the source features"):
-            PolarsLazyAggregatedFeatureGroup._check_source_features_exist(sample_lazy_dataframe, ["missing"])
+            PolarsLazyAggregation._check_source_features_exist(sample_lazy_dataframe, ["missing"])
 
     def test_perform_aggregation_sum(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with sum aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "sum", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "sum", ["sales"])
 
         # The result should be a Polars expression
         assert hasattr(result_expr, "alias")  # Polars expressions have alias method
@@ -124,60 +124,60 @@ class TestPolarsLazyAggregatedFeatureGroup:
 
     def test_perform_aggregation_min(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with min aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "min", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "min", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_min")).collect()
         assert result_df["test_min"][0] == 100  # Min of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_max(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with max aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "max", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "max", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_max")).collect()
         assert result_df["test_max"][0] == 500  # Max of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_avg(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with avg aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "avg", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "avg", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_avg")).collect()
         assert result_df["test_avg"][0] == 300  # Avg of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_mean(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with mean aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "mean", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "mean", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_mean")).collect()
         assert result_df["test_mean"][0] == 300  # Mean of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_count(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with count aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "count", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "count", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_count")).collect()
         assert result_df["test_count"][0] == 5  # Count of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_std(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with std aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "std", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "std", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_std")).collect()
         assert abs(result_df["test_std"][0] - 158.11) < 0.1  # Std of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_var(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with var aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "var", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "var", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_var")).collect()
         assert abs(result_df["test_var"][0] - 25000) < 0.1  # Var of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_median(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with median aggregation."""
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "median", ["sales"])
+        result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "median", ["sales"])
         result_df = sample_lazy_dataframe.with_columns(result_expr.alias("test_median")).collect()
         assert result_df["test_median"][0] == 300  # Median of [100, 200, 300, 400, 500]
 
     def test_perform_aggregation_invalid(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with invalid aggregation type."""
         with pytest.raises(ValueError, match="Unsupported aggregation type: invalid"):
-            PolarsLazyAggregatedFeatureGroup._perform_aggregation(sample_lazy_dataframe, "invalid", ["sales"])
+            PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "invalid", ["sales"])
 
     def test_calculate_feature_single(self, sample_lazy_dataframe: Any, feature_set_sum: FeatureSet) -> None:
         """Test calculate_feature method with a single aggregation."""
-        result = PolarsLazyAggregatedFeatureGroup.calculate_feature(sample_lazy_dataframe, feature_set_sum)
+        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set_sum)
 
         # The result should still be a LazyFrame
         assert hasattr(result, "collect_schema")
@@ -199,7 +199,7 @@ class TestPolarsLazyAggregatedFeatureGroup:
 
     def test_calculate_feature_multiple(self, sample_lazy_dataframe: Any, feature_set_multiple: FeatureSet) -> None:
         """Test calculate_feature method with multiple aggregations."""
-        result = PolarsLazyAggregatedFeatureGroup.calculate_feature(sample_lazy_dataframe, feature_set_multiple)
+        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set_multiple)
 
         # The result should still be a LazyFrame
         assert hasattr(result, "collect_schema")
@@ -231,7 +231,7 @@ class TestPolarsLazyAggregatedFeatureGroup:
         feature_set.add(Feature("missing__sum_aggr"))
 
         with pytest.raises(ValueError, match="None of the source features"):
-            PolarsLazyAggregatedFeatureGroup.calculate_feature(sample_lazy_dataframe, feature_set)
+            PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set)
 
     def test_calculate_feature_invalid_aggregation(self, sample_lazy_dataframe: Any) -> None:
         """Test calculate_feature method with invalid aggregation type."""
@@ -244,20 +244,20 @@ class TestPolarsLazyAggregatedFeatureGroup:
             feature_set.add(Feature("sales__min_aggr"))
 
             with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
-                PolarsLazyAggregatedFeatureGroup.calculate_feature(sample_lazy_dataframe, feature_set)
+                PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set)
         finally:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
 
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")
-class TestPolarsLazyAggregatedFeatureGroupMultiColumnDdofAndNullSkip:
+class TestPolarsLazyAggregationMultiColumnDdofAndNullSkip:
     """Pins ddof=1 with null-skip semantics for row-wise std/var against pandas .std/.var(axis=1, skipna=True)."""
 
     def test_perform_aggregation_std_multi_column_matches_pandas_skipna_ddof1(
         self, multi_source_lazy_dataframe_with_null: Any
     ) -> None:
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(
+        result_expr = PolarsLazyAggregation._perform_aggregation(
             multi_source_lazy_dataframe_with_null, "std", ["metrics~0", "metrics~1", "metrics~2"]
         )
         result_df = multi_source_lazy_dataframe_with_null.with_columns(result_expr.alias("test_std")).collect()
@@ -274,7 +274,7 @@ class TestPolarsLazyAggregatedFeatureGroupMultiColumnDdofAndNullSkip:
     def test_perform_aggregation_var_multi_column_matches_pandas_skipna_ddof1(
         self, multi_source_lazy_dataframe_with_null: Any
     ) -> None:
-        result_expr = PolarsLazyAggregatedFeatureGroup._perform_aggregation(
+        result_expr = PolarsLazyAggregation._perform_aggregation(
             multi_source_lazy_dataframe_with_null, "var", ["metrics~0", "metrics~1", "metrics~2"]
         )
         result_df = multi_source_lazy_dataframe_with_null.with_columns(result_expr.alias("test_var")).collect()
@@ -291,7 +291,7 @@ class TestPolarsLazyAggregatedFeatureGroupMultiColumnDdofAndNullSkip:
 
 @pytest.mark.skipif(pl is None, reason="Polars not available")
 class TestPolarsLazyAggregatedZeroRow(PolarsLazyZeroRowAdapter, AggregatedZeroRowTestMixin):
-    feature_group_class = PolarsLazyAggregatedFeatureGroup
+    feature_group_class = PolarsLazyAggregation
     unsupported_multi_column_aggregations = {"median": "Median aggregation across multiple columns is not supported"}
 
 
@@ -304,7 +304,7 @@ class TestPolarsLazyAggregationIntegration:
 
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PolarsLazyAggregatedTestDataCreator, PolarsLazyAggregatedFeatureGroup}
+            {PolarsLazyAggregatedTestDataCreator, AggregatedFeatureGroup}
         )
 
         # Run the mloda with multiple aggregation features
@@ -338,7 +338,7 @@ class TestPolarsLazyAggregationIntegration:
 
         # Enable the necessary feature groups
         _plugin_collector = PluginCollector.enabled_feature_groups(
-            {PolarsLazyAggregatedTestDataCreator, PolarsLazyAggregatedFeatureGroup}
+            {PolarsLazyAggregatedTestDataCreator, AggregatedFeatureGroup}
         )
 
         # Create a larger dataset to better test lazy evaluation
@@ -353,7 +353,7 @@ class TestPolarsLazyAggregationIntegration:
         feature_set.add(Feature("sales__sum_aggr"))
         feature_set.add(Feature("price__avg_aggr"))
 
-        result = PolarsLazyAggregatedFeatureGroup.calculate_feature(lazy_frame, feature_set)
+        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, lazy_frame, feature_set)
 
         # The result should still be a LazyFrame (not collected)
         assert hasattr(result, "collect_schema")

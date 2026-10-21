@@ -190,19 +190,19 @@ class TestAggregationTypesDoNotDrift:
         pandas = pytest.importorskip("pandas")
 
         from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
-            PandasAggregatedFeatureGroup,
+            PandasAggregation,
         )
 
         data = pandas.DataFrame({"value": [1.0, 2.0, 3.0, 4.0]})
 
         def resolve(aggregation_type: str) -> Any:
-            result = PandasAggregatedFeatureGroup._perform_aggregation(data, aggregation_type, ["value"])
+            result = PandasAggregation._perform_aggregation(data, aggregation_type, ["value"])
             return (aggregation_type, _scalar(result))
 
         # Signatures include the type itself, so this asserts reachability rather than
         # distinctness; avg/mean are declared synonyms and would otherwise collide.
         assert_values_reach_distinct_branches(
-            feature_group="PandasAggregatedFeatureGroup",
+            feature_group="AggregatedFeatureGroup",
             key="aggregation_type",
             declared=AggregatedFeatureGroup.AGGREGATION_TYPES,
             resolve=resolve,
@@ -213,12 +213,12 @@ class TestAggregationTypesDoNotDrift:
         pandas = pytest.importorskip("pandas")
 
         from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
-            PandasAggregatedFeatureGroup,
+            PandasAggregation,
         )
 
         data = pandas.DataFrame({"value": [1.0, 2.0, 3.0, 4.0]})
-        avg = PandasAggregatedFeatureGroup._perform_aggregation(data, "avg", ["value"])
-        mean = PandasAggregatedFeatureGroup._perform_aggregation(data, "mean", ["value"])
+        avg = PandasAggregation._perform_aggregation(data, "avg", ["value"])
+        mean = PandasAggregation._perform_aggregation(data, "mean", ["value"])
 
         assert _scalar(avg) == _scalar(mean)
 

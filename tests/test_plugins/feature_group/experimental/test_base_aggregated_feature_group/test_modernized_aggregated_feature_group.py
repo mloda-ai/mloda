@@ -2,34 +2,11 @@
 Tests for the modernized AggregatedFeatureGroup with configuration-based approach.
 """
 
-from typing import Any
-
-
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda.provider import DefaultOptionKeys
-
-
-class ConcreteAggregatedFeatureGroupForTest(AggregatedFeatureGroup):
-    """Concrete subclass for testing base class methods."""
-
-    @classmethod
-    def _get_available_columns(cls, data: Any) -> set[str]:
-        return set()
-
-    @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        pass
-
-    @classmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        return data
-
-    @classmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
-        return None
 
 
 class TestModernizedAggregatedFeatureGroup:
@@ -148,7 +125,7 @@ class TestModernizedAggregatedFeatureGroup:
 
         options = Options(context={DefaultOptionKeys.in_features: frozenset([source_feature])})
 
-        feature_group = ConcreteAggregatedFeatureGroupForTest()
+        feature_group = AggregatedFeatureGroup()
         input_features = feature_group.input_features(options, FeatureName("placeholder"))
 
         assert input_features == {source_feature}

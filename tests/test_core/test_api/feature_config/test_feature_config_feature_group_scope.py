@@ -27,8 +27,7 @@ from mloda.user import PluginCollector
 from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 
 
 # ---------------------------------------------------------------------------
@@ -649,13 +648,13 @@ def test_end2end_scoped_config_feature_resolves_to_source_b() -> None:
 
 
 # ---------------------------------------------------------------------------
-# End to end: a config names an ABSTRACT family base and reaches the concrete
-# per-framework subclass (issue #682)
+# End to end: a config names the aggregation group and reaches the implementation
+# of the active compute framework
 #
 # A config can only carry a class-name STRING. Naming the framework-agnostic
-# family base "AggregatedFeatureGroup" must resolve to the concrete
-# PandasAggregatedFeatureGroup for the active compute framework, so the config
-# stays free of a compute-framework-specific leaf class name.
+# group "AggregatedFeatureGroup" must run the PandasAggregation implementation for
+# the active compute framework, so the config stays free of a framework-specific
+# class name.
 # ---------------------------------------------------------------------------
 
 
@@ -671,35 +670,25 @@ class ConfigScopeAggregationSource(FeatureGroup):
         return {"config_scope_sales": [10, 20, 30, 40]}
 
 
-def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass() -> None:
-    """A config scoped to 'AggregatedFeatureGroup' runs on the Pandas subclass.
+def test_end2end_config_aggregation_group_scope_runs_the_pandas_implementation() -> None:
+    """A config scoped to 'AggregatedFeatureGroup' runs its Pandas implementation.
 
-    The allowlist keeps the whole family accessible, which is the situation a real
-    config user is in: the scoped abstract base itself, plus a rival concrete
-    sibling for another framework. The base drops out because it cannot be
-    instantiated, the PyArrow sibling because its framework is not enabled.
+    The group is one concrete FeatureGroup served by an Implementation per framework; the
+    PyArrow and Polars implementations drop out because their frameworks are not enabled.
     """
     config_str = '[{"name": "config_scope_sales__mean_aggr", "feature_group": "AggregatedFeatureGroup"}]'
+    plugin_collector = PluginCollector.enabled_feature_groups({ConfigScopeAggregationSource, AggregatedFeatureGroup})
 
     features = load_features_from_config(config_str, format="json")
-    results = list(
-        mloda.run_all(
-            features,
-            compute_frameworks=[PandasDataFrame],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {
-                    ConfigScopeAggregationSource,
-                    AggregatedFeatureGroup,
-                    PandasAggregatedFeatureGroup,
-                    PyArrowAggregatedFeatureGroup,
-                }
-            ),
-        )
-    )
+    results = list(mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector))
 
     aggregated = [df for df in results if "config_scope_sales__mean_aggr" in df.columns]
     assert len(aggregated) == 1
     assert aggregated[0]["config_scope_sales__mean_aggr"].iloc[0] == 25.0
+
+    steps = mloda.explain(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+    aggregation = next(step for step in steps if step.feature_group is AggregatedFeatureGroup)
+    assert aggregation.implementation is PandasAggregation
 
 
 # ---------------------------------------------------------------------------

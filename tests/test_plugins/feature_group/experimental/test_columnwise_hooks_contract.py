@@ -22,11 +22,11 @@ import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.user.python_dict import row_count
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import (
-    PolarsLazyAggregatedFeatureGroup,
+    PolarsLazyAggregation,
 )
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
@@ -82,7 +82,7 @@ PANDAS_CONSUMER_COUNT = 12
 # missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
 # and test_strictness_map_agrees_with_signature_lists pins it against the signature suite's lists.
 STRICTNESS: dict[type[Any], bool] = {
-    PandasAggregatedFeatureGroup: False,
+    PandasAggregation: False,
     PandasClusteringFeatureGroup: False,
     PandasForecastingFeatureGroup: False,
     PandasTimeWindowFeatureGroup: False,
@@ -94,8 +94,8 @@ STRICTNESS: dict[type[Any], bool] = {
     PandasSklearnPipelineFeatureGroup: True,
     PandasScalingFeatureGroup: True,
     PandasTextCleaningFeatureGroup: True,
-    PolarsLazyAggregatedFeatureGroup: False,
-    PyArrowAggregatedFeatureGroup: False,
+    PolarsLazyAggregation: False,
+    PyArrowAggregation: False,
     PyArrowTimeWindowFeatureGroup: False,
     PyArrowMissingValueFeatureGroup: True,
     PythonDictMissingValueFeatureGroup: True,
@@ -229,7 +229,7 @@ class TestPandasAggregatedHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin
 
     @pytest.fixture
     def plugin_class(self) -> Any:
-        return PandasAggregatedFeatureGroup
+        return PandasAggregation
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -390,7 +390,7 @@ class TestPolarsLazyAggregatedHooks(StrictnessFromMap, ColumnDiscoveryHooksTestM
 
     @pytest.fixture
     def plugin_class(self) -> Any:
-        return PolarsLazyAggregatedFeatureGroup
+        return PolarsLazyAggregation
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -408,7 +408,7 @@ class TestPyArrowAggregatedHooks(StrictnessFromMap, PyArrowColumns, ColumnDiscov
 
     @pytest.fixture
     def plugin_class(self) -> Any:
-        return PyArrowAggregatedFeatureGroup
+        return PyArrowAggregation
 
     @pytest.fixture
     def sample_data(self) -> Any:

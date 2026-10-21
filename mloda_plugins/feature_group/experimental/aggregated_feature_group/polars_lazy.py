@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda.provider import ComputeFramework
-
 from mloda.user.polars import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
 
 try:
     import polars as pl
@@ -17,7 +16,7 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
+class PolarsLazyAggregation(AggregationImplementation):
     """
     Polars Lazy implementation of aggregated feature group.
 
@@ -25,10 +24,12 @@ class PolarsLazyAggregatedFeatureGroup(AggregatedFeatureGroup):
     aggregation operations through query planning and deferred execution.
     """
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Specify that this feature group works with Polars Lazy DataFrames."""
-        return {PolarsLazyDataFrame}
+    feature_group = AggregatedFeatureGroup
+    compute_framework = PolarsLazyDataFrame
+    divergent = {
+        "median": "sorts NaN as the largest value in median",
+        "max": "propagates NaN in multi-column max",
+    }
 
     @classmethod
     def _get_available_columns(cls, data: Any) -> set[str]:

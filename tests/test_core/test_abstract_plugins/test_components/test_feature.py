@@ -9,7 +9,7 @@ from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
@@ -292,18 +292,22 @@ def test_typed_helper_required_declarations_are_validated() -> None:
         Feature.double_of("subject_token", required_declarations={1: None})  # type: ignore[dict-item]
 
 
-class FeatureMatchReaderA(BaseInputData):
-    """Reader stub for input_data_match identity tests."""
+class FeatureMatchReaderA(ToyFormatBase):
+    """Format group stub for input_data_match identity tests."""
 
 
-class FeatureMatchReaderB(BaseInputData):
-    """Second reader stub, same name and options but another source kind."""
+class FeatureMatchReaderB(ToyFormatBase):
+    """Second format group stub, same name and options but another source kind."""
 
 
-def _matched(reader: type[BaseInputData], access: Any) -> Feature:
+def _matched(reader: type[ToyFormatBase], access: Any) -> Feature:
     feature = Feature("feature_match_col", options={"opt": 1})
     feature.input_data_match = (reader, access)
     return feature
+
+
+def _source(name: str) -> SourceMatch:
+    return SourceMatch(source=name, access={name: 1})
 
 
 def test_input_data_match_defaults_to_none() -> None:
@@ -311,9 +315,9 @@ def test_input_data_match_defaults_to_none() -> None:
 
 
 def test_features_matched_to_different_sources_are_not_equal() -> None:
-    assert _matched(FeatureMatchReaderA, {"alpha": 1}) != _matched(FeatureMatchReaderA, {"beta": 1})
-    assert _matched(FeatureMatchReaderA, {"alpha": 1}) != _matched(FeatureMatchReaderB, {"alpha": 1})
-    assert _matched(FeatureMatchReaderA, {"alpha": 1}) != Feature("feature_match_col", options={"opt": 1})
+    assert _matched(FeatureMatchReaderA, _source("alpha")) != _matched(FeatureMatchReaderA, _source("beta"))
+    assert _matched(FeatureMatchReaderA, _source("alpha")) != _matched(FeatureMatchReaderB, _source("alpha"))
+    assert _matched(FeatureMatchReaderA, _source("alpha")) != Feature("feature_match_col", options={"opt": 1})
 
 
 def test_features_differing_only_in_a_secret_value_are_equal() -> None:
@@ -324,7 +328,7 @@ def test_features_differing_only_in_a_secret_value_are_equal() -> None:
 
 
 def test_hash_differs_between_sources() -> None:
-    assert hash(_matched(FeatureMatchReaderA, {"alpha": 1})) != hash(_matched(FeatureMatchReaderA, {"beta": 1}))
+    assert hash(_matched(FeatureMatchReaderA, _source("alpha"))) != hash(_matched(FeatureMatchReaderA, _source("beta")))
 
 
 def test_similarity_hash_includes_the_full_pair() -> None:
@@ -335,18 +339,18 @@ def test_similarity_hash_includes_the_full_pair() -> None:
     assert one.base_similarity_hash() != two.base_similarity_hash()
 
 
-class IdentityCountingReader4412(BaseInputData):
+class IdentityCountingReader4412(ToyFormatBase):
     calls = 0
 
     @classmethod
-    def data_access_identity(cls, data_access: Any) -> str:
+    def data_access_identity(cls, match: SourceMatch) -> str:
         cls.calls += 1
-        return f"counted:{data_access}"
+        return f"counted:{match.source}"
 
 
-class IdentityRaisingReader4412(BaseInputData):
+class IdentityRaisingReader4412(ToyFormatBase):
     @classmethod
-    def data_access_identity(cls, data_access: Any) -> str:
+    def data_access_identity(cls, match: SourceMatch) -> str:
         raise RuntimeError("identity boom")
 
 

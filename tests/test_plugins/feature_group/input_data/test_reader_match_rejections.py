@@ -17,7 +17,7 @@ they must stay inert for every other test's inputs.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -27,10 +27,22 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError, IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
-from mloda.provider import BaseInputData, ComputeFramework, FeatureGroup, FeatureSet
+from mloda.provider import (
+    BaseInputData,
+    ClaimRoute,
+    ComputeFramework,
+    FeatureGroup,
+    FeatureSet,
+    NamePolicy,
+    SourceMatch,
+)
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from tests.helpers.suffix_file_reader import SuffixFileReader
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    ToyFormatBase,
+    toy_dac,
+)
 
 
 FEATURE_NAME_REJ727 = "rej727_column"
@@ -67,6 +79,16 @@ class Rej727NoIntrospectionReader(SuffixFileReader):
     @classmethod
     def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
         return {FEATURE_NAME_REJ727: [1]}
+
+
+class Rej727ToyFormatFG(ToyFormatBase):
+    """Format group serving only rej727_column from toy sources; inert for every other name."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("rej727", NamePolicy.CHECKED, True),)
+
+    @classmethod
+    def columns(cls, match: SourceMatch) -> list[str]:
+        return [column for column in match.access if column == FEATURE_NAME_REJ727]
 
 
 class Rej727FileFG(FeatureGroup):
@@ -204,18 +226,16 @@ class TestEngineHarvestsReaderRejection:
         assert message is not None
         assert f"  - {Rej727FileFG.__name__} (input data): {elimination.reason}" in message
 
-    def test_nested_input_names_its_chain_and_drops_the_did_you_mean_hint(self, tmp_path: Path) -> None:
+    def test_nested_input_names_its_chain_and_drops_the_did_you_mean_hint(self) -> None:
         """An unresolvable input two levels down names the chain and skips the hint beside an input_data decline."""
-        file_path = _write_csv(tmp_path / f"nested{FILE_SUFFIX_REJ727}", "other_a,other_b")
-
         with pytest.raises(FeatureResolutionError) as excinfo:
             mloda.prepare(
                 ["rej727_net_spend"],
                 compute_frameworks=[PandasDataFrame],
                 plugin_collector=PluginCollector.enabled_feature_groups(
-                    {Rej727FileFG, Rej727NetSpend, Rej727LineValue}
+                    {Rej727ToyFormatFG, Rej727NetSpend, Rej727LineValue}
                 ),
-                data_access_collection=DataAccessCollection(files={file_path}),
+                data_access_collection=toy_dac(rej727_handle={"other_a": [1]}),
             )
 
         lines = str(excinfo.value).split("\n")
@@ -223,7 +243,7 @@ class TestEngineHarvestsReaderRejection:
             f"No feature groups found for feature name: '{FEATURE_NAME_REJ727}' "
             "(needed by rej727_net_spend -> rej727_line_value)."
         )
-        assert any(line.startswith(f"  - {Rej727FileFG.__name__} (input data):") for line in lines)
+        assert any(line.startswith(f"  - {Rej727ToyFormatFG.__name__} (input data):") for line in lines)
         assert not any(line.startswith("Did you mean") for line in lines)
 
     def test_matching_header_identifies_and_pins_the_reader_pair(self, tmp_path: Path) -> None:

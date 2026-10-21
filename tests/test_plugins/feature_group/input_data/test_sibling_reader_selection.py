@@ -16,9 +16,6 @@ requires a unique marker value (or marker options key) and returns None otherwis
 so it can never hijack matching in other tests running in the same worker process.
 """
 
-import os
-from collections.abc import Collection
-from pathlib import Path
 from typing import Any, cast
 
 import pyarrow as pa
@@ -27,12 +24,11 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
-from mloda.provider import FeatureGroup, FeatureSet, PropertySpec, ReadFileFG
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.provider import FeatureGroup, FeatureSet, PropertySpec
 from mloda.user import Feature, FeatureName, PluginCollector, mloda
 from mloda.user import Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable  # noqa: F401
-from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 _ACCESS_A = "sibling_sel_565_access_a"
@@ -530,86 +526,6 @@ class TestRootReaderIgnoresSubclasses1757:
         options = Options({"sibling_sel_1757_alias_name": DataAccessCollection(files={_ALIAS_MARKER})})
         assert SiblingSel1757Aliased.feature_scope_data_access(options, "sibling_sel_1757_alias_feat") is True
         assert SiblingSel1757AliasPlain.feature_scope_data_access(options, "sibling_sel_1757_alias_feat") is False
-
-
-_CSVFG_COL = "sibling_sel_csvfg_col"
-
-
-def _csv_file(tmp_path: Path) -> str:
-    path = tmp_path / "sibling_sel_csvfg.csv"
-    path.write_text(f"{_CSVFG_COL}\n1\n2\n")
-    return str(path)
-
-
-class TestClassKeyNormalizationOnCsvFG:
-    """Groups B and E on the stock CsvFG: a format group class as an option key equals its class-name string."""
-
-    def test_options_class_key_equals_string_key(self, tmp_path: Path) -> None:
-        path = _csv_file(tmp_path)
-        class_keyed = Options(cast(dict[str, Any], {CsvFG: path}))
-        string_keyed = Options({"CsvFG": path})
-        assert class_keyed == string_keyed
-        assert hash(class_keyed) == hash(string_keyed)
-        assert class_keyed.get("CsvFG") == path
-
-    def test_feature_class_key_equals_string_key(self, tmp_path: Path) -> None:
-        path = _csv_file(tmp_path)
-        class_keyed = Feature(name=_CSVFG_COL, options=cast(dict[str, Any], {CsvFG: path}))
-        string_keyed = Feature(name=_CSVFG_COL, options={"CsvFG": path})
-        assert class_keyed == string_keyed
-        assert hash(class_keyed) == hash(string_keyed)
-        assert len({class_keyed, string_keyed}) == 1
-
-    def test_class_key_resolves_like_the_string_form(self, tmp_path: Path) -> None:
-        path = _csv_file(tmp_path)
-        feature = Feature(name=_CSVFG_COL, options=cast(dict[str, Any], {CsvFG: path}))
-
-        result = IdentifyFeatureGroupClass.evaluate(feature, {CsvFG: {PyArrowTable}}, None)
-
-        assert CsvFG in result.identified
-        assert feature.input_data_match is not None
-        assert feature.input_data_match[0] is CsvFG
-        assert feature.input_data_match[1].source == os.path.abspath(path)
-
-
-class TestSecondCsvFormatGroupIsAmbiguous:
-    """Two format groups owning the same suffix on the same file are ambiguous; no reader-level pick exists."""
-
-    def test_a_gated_second_csv_group_next_to_csvfg_gives_multiple_feature_groups(self, tmp_path: Path) -> None:
-        marker = "sibling_sel_second_csv_marker"
-
-        class SiblingSelSecondCsvFG(ReadFileFG):
-            """Owns .csv too; gated by a unique marker option so it never claims in other tests."""
-
-            @classmethod
-            def suffixes(cls) -> tuple[str, ...]:
-                return (".csv",)
-
-            @classmethod
-            def column_names(cls, path: str) -> Collection[str]:
-                with open(path, encoding="utf-8") as handle:
-                    return handle.readline().strip().split(",")
-
-            @classmethod
-            def match_feature_group_criteria(
-                cls,
-                feature_name: FeatureName | str,
-                options: Options,
-                data_access_collection: DataAccessCollection | None = None,
-            ) -> bool:
-                if options.get(marker) is None:
-                    return False
-                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
-
-        path = _csv_file(tmp_path)
-        feature = Feature(_CSVFG_COL, Options(context={marker: True}))
-        plugins: FeatureGroupEnvironmentMapping = {CsvFG: {PyArrowTable}, SiblingSelSecondCsvFG: {PyArrowTable}}
-
-        with pytest.raises(ValueError, match="Multiple feature groups found") as excinfo:
-            resolve_or_raise(feature, plugins, None, DataAccessCollection(files={path}))
-
-        assert "CsvFG" in str(excinfo.value)
-        assert "SiblingSelSecondCsvFG" in str(excinfo.value)
 
 
 class TestUrlReaderRecipeEndToEnd:

@@ -58,7 +58,7 @@ import json
 import sqlite3
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Literal, get_args, get_origin
+from typing import Any, ClassVar, Literal, get_args, get_origin
 from uuid import UUID, uuid4
 
 import numpy as np
@@ -78,17 +78,21 @@ from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import (
     BaseFeatureGroupVersion,
     BaseInputData,
+    ClaimRoute,
     ComputeFramework,
     DataCreator,
     FeatureGroup,
     FeatureSet,
     Implementation,
+    NamePolicy,
+    SourceMatch,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
     ToyWorkerPythonDict,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    ToyFormatBase,
     neutral_csv_group,
     toy_dac,
 )
@@ -1259,6 +1263,20 @@ class PlanInfoIntAccessFG(FeatureGroup):
         return {PythonDictFramework}
 
 
+class PlanInfoTypeNameIdentityFormat(ToyFormatBase):
+    """Format group serving only its unique name whose identity is the type name of the match."""
+
+    CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("plan_info_type_name", NamePolicy.CHECKED, True),)
+
+    @classmethod
+    def columns(cls, match: SourceMatch) -> list[str]:
+        return [column for column in match.access if column == "plan_info_type_name_col"]
+
+    @classmethod
+    def data_access_identity(cls, match: SourceMatch) -> str:
+        return type(match).__name__
+
+
 class TestPlanStepDataAccessIdentity:
     """The reader match stays inside the plan; data_access_identity is computed at plan build and never compared."""
 
@@ -1488,6 +1506,17 @@ class TestPlanStepDataAccessIdentity:
         )
         step = next(s for s in explained if s.step_kind == "compute")
         assert step.data_access_identity == "int"
+        assert step.data_access_identity_is_fallback is True
+
+    def test_a_format_group_identity_naming_no_source_is_flagged_as_fallback(self) -> None:
+        pointer = {PlanInfoTypeNameIdentityFormat.__name__: {"plan_info_type_name_col": [1]}}
+        explained = mloda.explain(
+            [Feature("plan_info_type_name_col", options=pointer)],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({PlanInfoTypeNameIdentityFormat}),
+        )
+        step = next(s for s in explained if s.step_kind == "compute")
+        assert step.data_access_identity == "SourceMatch"
         assert step.data_access_identity_is_fallback is True
 
 

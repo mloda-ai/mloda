@@ -1,5 +1,5 @@
 from typing import Any
-from mloda.provider import BaseInputData, FeatureGroup
+from mloda.provider import DataCreator, FeatureGroup
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import FeatureName
@@ -61,14 +61,9 @@ class TestDynamicFeatureGroupFactory:
         assert issubclass(DynamicTestFeatureGroup, FeatureGroup)
 
     def test_dynamic_feature_group_creator_with_input_data_feature_group(self) -> None:
-        class MockReadFile(BaseInputData):
-            @classmethod
-            def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-                return "mock_data"
-
         # Example property dictionary
         properties: dict[str, Any] = {
-            "input_data": lambda: MockReadFile(),
+            "input_data": lambda: DataCreator({"test_file_feature"}),
             "calculate_feature": lambda cls, data, features: f"Calculated with {cls.__name__} and {data}",
             "match_feature_group_criteria": lambda cls, feature_name, options, data_access_collection: (
                 feature_name == FeatureName("test_file_feature")
@@ -86,7 +81,7 @@ class TestDynamicFeatureGroupFactory:
         assert not DynamicTestFeatureGroup.match_feature_group_criteria(FeatureName("other_feature"), options)
 
         # Test input data
-        assert isinstance(DynamicTestFeatureGroup.input_data(), MockReadFile)
+        assert isinstance(DynamicTestFeatureGroup.input_data(), DataCreator)
 
         # Test calculate feature
         features = FeatureSet()

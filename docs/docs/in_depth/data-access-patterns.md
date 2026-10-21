@@ -131,7 +131,7 @@ Rules for format group authors:
 
 `ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically; a custom group only needs this for its own decline points.
 
-A pinned group is final: when it declines, neither another group nor the DataAccessCollection serves the feature. Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name.
+A `feature_group=` scope is final: only the scoped group is a candidate. A class-name pointer is final against other format groups and the DataAccessCollection. When the pointed group aborts (missing column, unreadable file, `column_to_file` miss, refusal), it yields only to a candidate that computes the feature from input features. When it only declines (a pointer value of the wrong type, a foreign file suffix, invalid credentials, a PROPERTY_MAPPING value or required-key failure, or no source found), a plain FeatureGroup that claims the name by its own rules still serves it. Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name.
 
 ## MatchData Pattern
 

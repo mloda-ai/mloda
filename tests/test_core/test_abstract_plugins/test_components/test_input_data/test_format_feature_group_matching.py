@@ -203,6 +203,32 @@ class TestPointedGroupValueFailureIsNotADecline:
         assert _claims(feature, None, _ValueCheckedFG)
 
 
+class _PlainRootColFG(FeatureGroup):
+    """Plain root (non-format) group claiming COL by its own rules."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {COL}
+
+    @classmethod
+    def input_features(cls, options: Options, feature_name: FeatureName) -> None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
+class TestPointedDeclineLetsAPlainRootGroupClaim:
+    def test_plain_root_group_wins_when_the_pointed_group_vetoes_a_value(self) -> None:
+        """Characterizes today's behavior (#2098): a pointed decline is not final."""
+        options = Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: _BAD_VALUE})
+        result = _identify(Feature(COL, options), None, _ValueCheckedFG, _PlainRootColFG)
+
+        assert set(result.identified) == {_PlainRootColFG}
+        assert _ValueCheckedFG in result.eliminations
+
+
 class TestPointedMissingColumnText:
     def test_fix_text_is_one_sentence_without_the_ambiguity_fix(self) -> None:
         feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))

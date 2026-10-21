@@ -224,6 +224,8 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         for dac in (DataAccessCollection(files={"gone_file": uri}), None):
             group = None if dac is not None else {name: uri}
             result = self._evaluate(self._feature(name, group), dac)
+            if dac is not None:
+                assert result.eliminations[self.feature_group_class].reason
             assert all("hunter2" not in elimination.reason for elimination in result.eliminations.values())
         with pytest.raises(ValueError) as exc_info:
             self._resolve(self._feature(name, {name: uri}), None)

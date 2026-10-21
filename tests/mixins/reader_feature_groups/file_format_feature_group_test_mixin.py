@@ -618,6 +618,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
     ) -> None:
         dac = DataAccessCollection(files={self._userinfo_uri()})
         assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
+        assert rejection_window
         assert all("hunter2" not in rejection.reason for rejection in rejection_window.values())
         self._assert_uri_password_hidden(Feature(self.missing_column), dac, rejection_window)
 

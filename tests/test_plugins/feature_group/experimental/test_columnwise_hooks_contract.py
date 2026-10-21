@@ -17,17 +17,11 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.user.python_dict import row_count
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (
-    PythonDictMissingValueFeatureGroup,
-)
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
@@ -61,7 +55,7 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 
 # Lower bound only: a new experimental family adds a base.py and must not fail this sweep.
 MIN_BASE_MODULES = 12
-PANDAS_CONSUMER_COUNT = 10
+PANDAS_CONSUMER_COUNT = 9
 
 # Single source of truth for the tolerant/strict split: a strict group raises when ANY source name is
 # missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
@@ -69,7 +63,6 @@ PANDAS_CONSUMER_COUNT = 10
 STRICTNESS: dict[type[Any], bool] = {
     PandasClusteringFeatureGroup: False,
     PandasForecastingFeatureGroup: False,
-    PandasMissingValueFeatureGroup: True,
     PandasDimensionalityReductionFeatureGroup: True,
     PandasGeoDistanceFeatureGroup: True,
     PandasNodeCentralityFeatureGroup: True,
@@ -77,8 +70,6 @@ STRICTNESS: dict[type[Any], bool] = {
     PandasSklearnPipelineFeatureGroup: True,
     PandasScalingFeatureGroup: True,
     PandasTextCleaningFeatureGroup: True,
-    PyArrowMissingValueFeatureGroup: True,
-    PythonDictMissingValueFeatureGroup: True,
     PythonDictTextCleaningFeatureGroup: True,
 }
 
@@ -86,11 +77,6 @@ STRICTNESS: dict[type[Any], bool] = {
 def sample_frame() -> pd.DataFrame:
     """Return the two-column frame every pandas hook consumer works on."""
     return pd.DataFrame({"col_a": [1, 2], "col_b": [3, 4]})
-
-
-def sample_table() -> pa.Table:
-    """Return the two-column table every PyArrow hook consumer works on."""
-    return pa.table({"col_a": [1, 2], "col_b": [3, 4]})
 
 
 def sample_columnar_dict() -> dict[str, list[Any]]:
@@ -115,13 +101,6 @@ class StrictnessFromMap:
     @pytest.fixture
     def strict(self, plugin_class: Any) -> bool:
         return STRICTNESS[plugin_class]
-
-
-class PyArrowColumns:
-    """Reads column names off a PyArrow Table."""
-
-    def column_names(self, data: Any) -> list[str]:
-        return [str(name) for name in data.schema.names]
 
 
 class PythonDictColumns:
@@ -210,18 +189,6 @@ class TestPandasClusteringHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin
     @pytest.fixture
     def plugin_class(self) -> Any:
         return PandasClusteringFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
-class TestPandasMissingValueHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Missing value pandas group: strict check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasMissingValueFeatureGroup
 
     @pytest.fixture
     def sample_data(self) -> Any:
@@ -332,34 +299,6 @@ class TestPandasTextCleaningHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
     @pytest.fixture
     def sample_data(self) -> Any:
         return sample_frame()
-
-
-class TestPyArrowMissingValueHooks(StrictnessFromMap, PyArrowColumns, ColumnDiscoveryHooksTestMixin):
-    """Missing value PyArrow group: strict check, plus column discovery."""
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a row-aligned PyArrow array, the shape append_column takes."""
-        return pa.array(range(sample_data.num_rows))
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PyArrowMissingValueFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_table()
-
-
-class TestPythonDictMissingValueHooks(StrictnessFromMap, PythonDictColumns, ColumnDiscoveryHooksTestMixin):
-    """Missing value python-dict group: strict check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PythonDictMissingValueFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_columnar_dict()
 
 
 class TestPythonDictTextCleaningHooks(StrictnessFromMap, PythonDictColumns, ColumnwiseHooksTestMixin):

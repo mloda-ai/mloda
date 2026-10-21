@@ -133,8 +133,9 @@ def test_end2end_chained_features() -> None:
 
     # Import sklearn feature groups needed for chained features
     from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
-        PandasMissingValueFeatureGroup,
+        PandasMissingValueImputation as PandasMissingValueImputation,
     )
 
     # Create a JSON config with chained features
@@ -161,7 +162,7 @@ def test_end2end_chained_features() -> None:
 
     # Enable the necessary feature groups
     plugin_collector = PluginCollector.enabled_feature_groups(
-        {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, PandasMissingValueFeatureGroup}
+        {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, MissingValueFeatureGroup}
     )
 
     # Run mloda with the features
@@ -195,8 +196,9 @@ def test_end2end_chained_name_with_root_in_features_names_the_direct_sources() -
     """A chained name with the root source as in_features contradicts the name; the error names the direct sources."""
     pytest.importorskip("sklearn")
     from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
+    from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
     from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
-        PandasMissingValueFeatureGroup,
+        PandasMissingValueImputation as PandasMissingValueImputation,
     )
 
     config_str = json.dumps(
@@ -208,7 +210,7 @@ def test_end2end_chained_name_with_root_in_features_names_the_direct_sources() -
     )
     features = load_features_from_config(config_str, format="json")
     plugin_collector = PluginCollector.enabled_feature_groups(
-        {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, PandasMissingValueFeatureGroup}
+        {ChainedFeatureTestDataCreator, PandasScalingFeatureGroup, MissingValueFeatureGroup}
     )
 
     with pytest.raises(ValueError) as exc_info:

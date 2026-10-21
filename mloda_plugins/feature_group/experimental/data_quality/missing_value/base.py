@@ -4,15 +4,14 @@ Base implementation for missing value imputation feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
@@ -20,7 +19,7 @@ from mloda.user import FeatureName, Options
 from mloda_plugins.feature_group.experimental.key_features import with_key_features
 
 
-class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for all missing value imputation feature groups.
 
@@ -167,9 +166,6 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
-
     PROPERTY_MAPPING = {
         IMPUTATION_METHOD: PropertySpec(
             "Imputation method to apply",
@@ -260,74 +256,40 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return cls._extract_operation_and_source_feature(feature, cls._extract_imputation_method, "imputation method")
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform missing value imputation.
-
-        Processes all requested features, determining the imputation method
-        and source feature from either string parsing or configuration-based options.
-
-        Adds the imputed results directly to the input data structure.
-        """
-
-        # Process each requested feature
+    def impute(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, list[str], Any, list[str] | None], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: resolve each feature's sources, check them, run perform, add the result."""
         for feature in features.get_sorted_features():
             imputation_method, source_feature = cls._extract_imputation_method_and_source_feature(feature)
 
-            # Resolve multi-column features automatically
-            # If source_feature is "onehot_encoded__product", this discovers
-            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
-            available_columns = cls._get_available_columns(data)
-            resolved_columns = cls.resolve_multi_column_feature(source_feature, available_columns)
+            available = columns(data)
+            resolved_columns = cls.resolve_multi_column_feature(source_feature, available)
 
             constant_value = feature.options.get("constant_value")
             group_by_features = feature.options.get("group_by_features")
 
-            cls._check_source_features_exist(data, resolved_columns)
+            cls._require_columns(available, resolved_columns)
+            for group_feature in group_by_features or []:
+                cls._require_columns(available, [group_feature])
 
-            # Validate group by features if provided
-            if group_by_features:
-                for group_feature in group_by_features:
-                    cls._check_source_features_exist(data, [group_feature])
-
-            # Validate constant value is provided for constant imputation
             if imputation_method == "constant" and constant_value is None:
                 raise ValueError("Constant value must be provided for constant imputation method")
 
-            # Apply the appropriate imputation function
-            result = cls._perform_imputation(
-                data, imputation_method, resolved_columns, constant_value, group_by_features
-            )
-
-            # Add the result to the data
-            data = cls._add_result_to_data(data, feature.name, result)
+            result = perform(data, imputation_method, resolved_columns, constant_value, group_by_features)
+            data = add_column(data, feature.name, result)
         return data
 
     @classmethod
-    @abstractmethod
-    def _perform_imputation(
-        cls,
-        data: Any,
-        imputation_method: str,
-        in_features: list[str],
-        constant_value: Any | None = None,
-        group_by_features: list[str] | None = None,
-    ) -> Any:
-        """
-        Method to perform the imputation. Should be implemented by subclasses.
-
-        Supports both single-column and multi-column imputation:
-        - Single column: [feature_name] - imputes values within the column
-        - Multi-column: [feature~0, feature~1, ...] - imputes across columns
-
-        Args:
-            data: The input data
-            imputation_method: The type of imputation to perform
-            in_features: List of resolved source feature names to impute
-            constant_value: The constant value to use for imputation (if method is 'constant')
-            group_by_features: Optional list of features to group by before imputation
-
-        Returns:
-            The result of the imputation
-        """
-        ...
+    def _require_columns(cls, available: set[str], names: list[str]) -> None:
+        missing = [name for name in names if name not in available]
+        if missing:
+            raise ValueError(
+                f"Source features not found in data: {missing}. Available columns: {sorted(available, key=str)}"
+            )

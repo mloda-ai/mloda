@@ -1,6 +1,16 @@
+import inspect
 from typing import Any
+from unittest.mock import Mock
 
+import pandas as pd
+import pyarrow as pa
 import pytest
+
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.provider import FeatureSet
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 
@@ -11,33 +21,27 @@ from mloda.provider import DefaultOptionKeys
 
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda.provider import FeatureChainParser
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueImputation
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueImputation
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (
+    PythonDictMissingValueImputation,
+)
+
+IMPLEMENTATIONS = [PandasMissingValueImputation, PyArrowMissingValueImputation, PythonDictMissingValueImputation]
+FRAMEWORKS = [PandasDataFrame, PyArrowTable, PythonDictFramework]
+IMPL_DATA = [
+    (PandasMissingValueImputation, lambda: pd.DataFrame({"b": [1.0], "a": [2.0]})),
+    (PyArrowMissingValueImputation, lambda: pa.table({"b": [1.0], "a": [2.0]})),
+    (PythonDictMissingValueImputation, lambda: {"b": [1.0], "a": [2.0]}),
+]
+IMPL_IDS = ["pandas", "pyarrow", "python_dict"]
+SOURCE_ERROR = "Source features not found in data: {missing}. Available columns: ['a', 'b']"
 
 
-class ConcreteMissingValueFeatureGroup(MissingValueFeatureGroup):
-    """Minimal concrete implementation for testing base class methods."""
-
-    @classmethod
-    def _get_available_columns(cls, data: Any) -> set[str]:
-        return set()
-
-    @classmethod
-    def _check_source_features_exist(cls, data: Any, feature_names: list[str]) -> None:
-        pass
-
-    @classmethod
-    def _add_result_to_data(cls, data: Any, feature_name: str, result: Any) -> Any:
-        return data
-
-    @classmethod
-    def _perform_imputation(
-        cls,
-        data: Any,
-        imputation_method: str,
-        in_features: list[str],
-        constant_value: Any | None = None,
-        group_by_features: list[str] | None = None,
-    ) -> Any:
-        return data
+def _feature_set(name: str, **context: Any) -> FeatureSet:
+    feature_set = FeatureSet()
+    feature_set.add(Feature(name, options=Options(context=context)))
+    return feature_set
 
 
 class TestMissingValueFeatureGroup:
@@ -111,7 +115,7 @@ class TestMissingValueFeatureGroup:
     def test_input_features(self) -> None:
         """Test input_features method."""
         options = Options()
-        feature_group = ConcreteMissingValueFeatureGroup()
+        feature_group = MissingValueFeatureGroup()
 
         # Test with valid feature names
         input_features = feature_group.input_features(options, FeatureName("income__mean_imputed"))
@@ -144,7 +148,7 @@ class TestMissingValueFeatureGroup:
     )
     def test_input_features_declare_group_by_columns(self, group_by: Any, expected: set[str]) -> None:
         options = Options(context={"group_by_features": group_by})
-        result = ConcreteMissingValueFeatureGroup().input_features(options, FeatureName("income__mean_imputed"))
+        result = MissingValueFeatureGroup().input_features(options, FeatureName("income__mean_imputed"))
         assert result is not None
         assert {str(f.name) for f in result} == expected
         assert len(result) == len(expected)
@@ -192,7 +196,7 @@ class TestMissingValueFeatureGroup:
             group={"imputation_method": "mean"},
             context={DefaultOptionKeys.in_features: frozenset([source]), "group_by_features": ["region"]},
         )
-        result = ConcreteMissingValueFeatureGroup().input_features(options, FeatureName("x"))
+        result = MissingValueFeatureGroup().input_features(options, FeatureName("x"))
         assert result is not None
         by_name = {str(f.name): f for f in result}
         assert set(by_name) == {source_name, "region"}
@@ -201,3 +205,89 @@ class TestMissingValueFeatureGroup:
         assert dict(by_name["region"].options.context) == expected_context
         if not expected_group and not expected_context:
             assert by_name["region"] == Feature("region")
+
+    def test_group_is_concrete_and_its_implementations_serve_it(self) -> None:
+        assert not inspect.isabstract(MissingValueFeatureGroup)
+        for implementation, framework in zip(IMPLEMENTATIONS, FRAMEWORKS):
+            assert implementation.__bases__ == (Implementation,)
+            assert implementation.feature_group is MissingValueFeatureGroup
+            assert implementation.compute_framework is framework
+            assert not inspect.isabstract(implementation)
+            assert not hasattr(implementation, "_get_available_columns")
+            assert not hasattr(implementation, "_check_source_features_exist")
+            assert framework in MissingValueFeatureGroup.compute_framework_definition()
+
+    @pytest.mark.parametrize("impl", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_calculate_delegates_to_the_group_it_is_handed(self, impl: Any) -> None:
+        group = Mock()
+        data = object()
+        feature_set = _feature_set("income__mean_imputed")
+
+        result = impl.calculate(group, data, feature_set)
+
+        group.impute.assert_called_once_with(
+            data,
+            feature_set,
+            perform=impl._perform_imputation,
+            add_column=impl._add_result_to_data,
+            columns=impl.compute_framework.extract_column_names,
+        )
+        assert result is group.impute.return_value
+
+    def test_python_dict_calculate_rejects_empty_data_before_the_group(self) -> None:
+        group = Mock()
+        with pytest.raises(ValueError, match="Data cannot be empty"):
+            PythonDictMissingValueImputation.calculate(group, {}, _feature_set("income__mean_imputed"))
+        group.impute.assert_not_called()
+
+    @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
+    def test_impute_source_check_comes_first_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
+        feature_set = _feature_set("missing__mean_imputed", group_by_features=["g1", "g2"])
+        with pytest.raises(ValueError) as exc_info:
+            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set)
+        assert str(exc_info.value) == SOURCE_ERROR.format(missing=["missing"])
+
+    @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
+    def test_impute_names_one_missing_group_by_feature_per_error(self, impl: Any, make_data: Any) -> None:
+        feature_set = _feature_set("a__mean_imputed", group_by_features=["g1", "g2"])
+        with pytest.raises(ValueError) as exc_info:
+            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set)
+        assert str(exc_info.value) == SOURCE_ERROR.format(missing=["g1"])
+
+    @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
+    def test_impute_checks_the_constant_after_the_columns(self, impl: Any, make_data: Any) -> None:
+        with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
+            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("a__constant_imputed"))
+        with pytest.raises(ValueError, match="Source features not found in data"):
+            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("zzz__constant_imputed"))
+
+    def test_impute_reports_all_missing_resolved_names_in_one_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        resolved = Mock(return_value=["x~0", "x~1", "a"])
+        monkeypatch.setattr(MissingValueFeatureGroup, "resolve_multi_column_feature", resolved)
+        perform = Mock()
+        add_column = Mock()
+        with pytest.raises(ValueError) as exc_info:
+            MissingValueFeatureGroup.impute(
+                object(),
+                _feature_set("x__mean_imputed"),
+                perform=perform,
+                add_column=add_column,
+                columns=Mock(return_value={"b", "a"}),
+            )
+        assert str(exc_info.value) == SOURCE_ERROR.format(missing=["x~0", "x~1"])
+        perform.assert_not_called()
+        add_column.assert_not_called()
+
+    def test_impute_hands_the_resolved_arguments_to_perform_and_add_column(self) -> None:
+        data = object()
+        perform = Mock(return_value="result")
+        add_column = Mock(return_value="done")
+        feature_set = _feature_set("a__constant_imputed", constant_value=0, group_by_features=["b"])
+
+        result = MissingValueFeatureGroup.impute(
+            data, feature_set, perform=perform, add_column=add_column, columns=Mock(return_value={"a", "b"})
+        )
+
+        perform.assert_called_once_with(data, "constant", ["a"], 0, ["b"])
+        add_column.assert_called_once_with(data, "a__constant_imputed", "result")
+        assert result == "done"

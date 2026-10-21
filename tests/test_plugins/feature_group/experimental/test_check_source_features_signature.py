@@ -12,9 +12,6 @@ from typing import Any
 import pytest
 
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
-    PandasMissingValueFeatureGroup,
-)
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.pandas import (
     PandasDimensionalityReductionFeatureGroup,
 )
@@ -40,7 +37,6 @@ import pandas as pd
 
 ALL_PANDAS_CLASSES = [
     PandasClusteringFeatureGroup,
-    PandasMissingValueFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
     PandasGeoDistanceFeatureGroup,
     PandasNodeCentralityFeatureGroup,
@@ -112,7 +108,6 @@ if HAS_FORECASTING_PANDAS:
     TOLERANT_PANDAS_CLASSES.append(PandasForecastingFeatureGroup)
 
 STRICT_PANDAS_CLASSES = [
-    PandasMissingValueFeatureGroup,
     PandasEncodingFeatureGroup,
     PandasScalingFeatureGroup,
     PandasSklearnPipelineFeatureGroup,

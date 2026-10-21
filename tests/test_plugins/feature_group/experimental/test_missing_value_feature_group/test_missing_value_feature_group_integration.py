@@ -17,7 +17,9 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
+    PandasMissingValueImputation as PandasMissingValueImputation,
+)
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import FeatureSet
 
@@ -43,7 +45,7 @@ class TestMissingValueFeatureGroupIntegration:
         """Test integration with mloda using the parser."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}
+            {MissingValueParserTestDataCreator, MissingValueFeatureGroup}
         )
 
         f1 = Feature(
@@ -104,7 +106,7 @@ class TestMissingValueFeatureGroupIntegration:
         """Test integration with mloda using constant imputation."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {MissingValueParserTestDataCreator, PandasMissingValueFeatureGroup}
+            {MissingValueParserTestDataCreator, MissingValueFeatureGroup}
         )
 
         # Create a feature with constant imputation
@@ -163,7 +165,7 @@ class GroupedMissingValueDataCreator(MissingValueParserTestDataCreator):
 class TestMissingValueGroupByColumnSelectiveRoot:
     def test_grouped_mean_imputation_behind_column_selective_root(self) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup}
+            {GroupedMissingValueDataCreator, MissingValueFeatureGroup}
         )
         f = Feature(
             "income__mean_imputed",
@@ -198,7 +200,7 @@ class TestMissingValueGroupByColumnSelectiveRoot:
     )
     def test_source_shares_one_root_step_with_group_by_column(self, source: Feature, expected: list[float]) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {GroupedMissingValueDataCreator, PandasMissingValueFeatureGroup, AggregatedFeatureGroup}
+            {GroupedMissingValueDataCreator, MissingValueFeatureGroup, AggregatedFeatureGroup}
         )
         f = Feature(
             "mv",

@@ -225,7 +225,7 @@ since ordered time columns are intrinsic to the operation.
 
 ### Operation Groups: one group, one Implementation per framework
 
-An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup` and `TimeWindowFeatureGroup` are built this way; the other core families still use one class per framework for now.
+An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup`, `TimeWindowFeatureGroup` and `MissingValueFeatureGroup` are built this way; the other core families still use one class per framework for now.
 
 ```py
 class MyOperation(OperationFeatureGroup):
@@ -245,7 +245,7 @@ class PandasMyOperation(Implementation):
 - **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature.
 - **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "skips NaN in sum"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: a NaN-free column still prefers the matching implementation. Polars `max` is declared divergent because its multi-column form propagates NaN.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
-- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate` or `window` call inside each implementation's `calculate`.
+- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window` or `impute` call inside each implementation's `calculate`.
 
 ### Choosing among implementations
 
@@ -270,6 +270,7 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 
 - `PandasAggregatedFeatureGroup`, `PyArrowAggregatedFeatureGroup` and `PolarsLazyAggregatedFeatureGroup` are replaced by `AggregatedFeatureGroup` with `PandasAggregation`, `PyArrowAggregation` and `PolarsLazyAggregation`.
 - The Pandas and PyArrow time window feature group classes are replaced by `TimeWindowFeatureGroup` with `PandasTimeWindow` and `PyArrowTimeWindow`.
+- The Pandas, PyArrow and PythonDict missing value feature group classes are replaced by `MissingValueFeatureGroup` with `PandasMissingValueImputation`, `PyArrowMissingValueImputation` and `PythonDictMissingValueImputation`.
 - PyArrow `std` and `var` windows now use the sample statistic (ddof=1) like Pandas, so a one-row window is null.
 - `feature_group="PandasAggregatedFeatureGroup"` becomes `implementation="PandasAggregation"`, or `compute_framework=PandasDataFrame`.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.

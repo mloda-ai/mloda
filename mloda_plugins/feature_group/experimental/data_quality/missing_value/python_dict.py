@@ -8,13 +8,13 @@ import statistics
 from collections import Counter
 from typing import Any
 
-from mloda.provider import ComputeFramework
+from mloda.provider import FeatureSet, Implementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
+class PythonDictMissingValueImputation(Implementation):
     """
     PythonDict implementation for missing value imputation feature groups.
 
@@ -22,30 +22,20 @@ class PythonDictMissingValueFeatureGroup(MissingValueFeatureGroup):
     data structures to perform missing value imputation without external dependencies.
     """
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PythonDictFramework}
+    feature_group = MissingValueFeatureGroup
+    compute_framework = PythonDictFramework
 
     @classmethod
-    def _get_available_columns(cls, data: dict[str, list[Any]]) -> set[str]:
-        """Get the set of available column names from the data."""
-        return PythonDictFramework.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: dict[str, list[Any]], feature_names: list[str]) -> None:
-        """Check if the resolved source features exist in the data."""
+    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
-
-        # Get all available features
-        available_features = cls._get_available_columns(data)
-
-        # Check which features are missing
-        missing_features = [f for f in feature_names if f not in available_features]
-        if missing_features:
-            raise ValueError(
-                f"Source features not found in data: {missing_features}. Available columns: {sorted(available_features, key=str)}"
-            )
+        return group.impute(
+            data,
+            features,
+            perform=cls._perform_imputation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(

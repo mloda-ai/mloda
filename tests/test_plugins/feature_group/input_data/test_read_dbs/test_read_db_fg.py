@@ -146,12 +146,15 @@ def _match(credentials: Any, table: str | None = "toy_table") -> SourceMatch:
 
 
 class TestReadDBFGBase:
-    def test_it_is_an_abstract_format_group_exported_from_the_provider_without_its_table_carrier(self) -> None:
+    def test_it_is_an_abstract_format_group_exported_from_the_provider_with_its_access_carriers(self) -> None:
         assert provider.ReadDBFG is ReadDBFG
         assert "ReadDBFG" in provider.__all__
         assert issubclass(ReadDBFG, FormatFeatureGroup)
         assert inspect.isabstract(ReadDBFG)
-        assert not hasattr(provider, "DBTable")
+        assert provider.DBTable is DBTable
+        assert provider.DBQuery is DBQuery
+        assert "DBTable" in provider.__all__
+        assert "DBQuery" in provider.__all__
 
     def test_the_provider_hooks_are_abstract_and_the_inherited_ones_are_not(self) -> None:
         required = {

@@ -197,3 +197,42 @@ class TestJsonDocumentFGDocumentSuffixes:
         result = IdentifyFeatureGroupClass.evaluate(feature, {group: {PyArrowTable}}, None, dac)
         assert group not in result.identified
         assert not [e for e in result.eliminations.values() if "raised TypeError" in e.reason]
+
+
+def _extra_spec() -> PropertySpec:
+    return PropertySpec("An extra declared key.", default=None, context=True)
+
+
+class TestOwnPropertyMappingIsMergedOverTheBase:
+    def test_a_plain_mixin_first_in_the_bases_keeps_the_mixin_and_base_keys(self) -> None:
+        mixin: Any = type("RodMixin", (), {"PROPERTY_MAPPING": {"mixin_key": _extra_spec()}})
+        child: Any = type("RodMixinFG", (mixin, ReadFileFG), {"PROPERTY_MAPPING": {"own_key": _extra_spec()}})
+        assert child.declared_option_keys() == {"mixin_key", "own_key", "data_access_handle", "document_suffixes"}
+
+    @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG, ReadDBFG])
+    def test_an_own_extra_key_keeps_every_base_key(self, base: Any) -> None:
+        child: Any = type("RodExtraKeyFG", (base,), {"PROPERTY_MAPPING": {"rod_extra": _extra_spec()}})
+        assert child.declared_option_keys() == base.declared_option_keys() | {"rod_extra"}
+        assert "rod_extra" not in base.declared_option_keys()
+
+    @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG])
+    def test_an_own_key_overrides_the_base_key(self, base: Any) -> None:
+        own = _extra_spec()
+        child: Any = type("RodOverrideKeyFG", (base,), {"PROPERTY_MAPPING": {"data_access_handle": own}})
+        assert child.PROPERTY_MAPPING["data_access_handle"] is own
+
+    def test_the_inherited_handle_check_still_rejects_a_non_str_handle(self) -> None:
+        child: Any = type("RodHandleCheckFG", (ReadFileFG,), {"PROPERTY_MAPPING": {"rod_extra": _extra_spec()}})
+        assert not child.passes_option_declarations(Options(context={"data_access_handle": 5}))
+        assert child.passes_option_declarations(Options(context={"data_access_handle": "h"}))
+
+    def test_a_parent_query_text_spec_survives_a_child_with_its_own_mapping(self) -> None:
+        custom = PropertySpec("Custom query.", default="select 1", context=True)
+        routes = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)
+        parent: Any = type(
+            "RodQueryParentDB", (ReadDBFG,), {"CLAIM_ROUTES": routes, "PROPERTY_MAPPING": {"query_text": custom}}
+        )
+        child: Any = type("RodQueryChildDB", (parent,), {"PROPERTY_MAPPING": {"rod_extra": _extra_spec()}})
+        assert parent.PROPERTY_MAPPING["query_text"] is custom
+        assert child.PROPERTY_MAPPING["query_text"] is custom
+        assert child.declared_option_keys() == parent.declared_option_keys() | {"rod_extra"}

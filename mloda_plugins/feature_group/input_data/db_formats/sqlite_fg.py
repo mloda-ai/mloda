@@ -6,11 +6,9 @@ from collections.abc import Collection, Hashable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
-from mloda.core.abstract_plugins.components.data_types import DataType
-from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
 from mloda.core.optional_dependency import require
-from mloda.provider import Implementation, ReadDBFG
+from mloda.provider import DBTable, Implementation, ReadDBFG, SourceMatch
+from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -59,7 +57,7 @@ class SqliteFG(ReadDBFG):
         return [row[1] for row in connection.execute(f"PRAGMA table_info({quote_ident(table)});")]
 
     @classmethod
-    def _select(cls, connection: Any, table: str, features: Any) -> tuple[list[str], list[Any]]:
+    def select_rows(cls, connection: Any, table: str, features: Any) -> tuple[list[str], list[Any]]:
         names = ", ".join(quote_ident(name) for name in sorted(features.get_all_names()))
         query = f"select {names} from {quote_ident(table)};"  # nosec B608 - every identifier is quoted
         cursor = connection.execute(query)
@@ -68,7 +66,7 @@ class SqliteFG(ReadDBFG):
     @classmethod
     def produce_rows(cls, connection: Any, table: str, features: Any) -> Any:
         pa = require("pyarrow", "reading SQLite into a pyarrow table")
-        column_names, rows = cls._select(connection, table, features)
+        column_names, rows = cls.select_rows(connection, table, features)
         data_types = {feature.name: feature.data_type for feature in features.features}
         fields = []
         for index, name in enumerate(column_names):
@@ -114,7 +112,7 @@ def _load_dict(group: type[SqliteFG], match: SourceMatch, features: Any) -> dict
     access = cast(DBTable, match.access)
     connection = group.get_connection(access.credentials)
     try:
-        column_names, rows = group._select(connection, cast(str, access.table), features)
+        column_names, rows = group.select_rows(connection, cast(str, access.table), features)
     finally:
         group.close_connection(connection)
     return {name: [row[index] for row in rows] for index, name in enumerate(column_names)}

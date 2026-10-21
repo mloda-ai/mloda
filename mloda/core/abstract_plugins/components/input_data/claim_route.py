@@ -25,6 +25,16 @@ class ClaimRoute:
     searched: bool
     required_options: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.source_kind, str) or not self.source_kind:
+            raise TypeError(f"ClaimRoute.source_kind must be a non-empty str, got {self.source_kind!r}")
+        if not isinstance(self.names, NamePolicy):
+            raise TypeError(f"ClaimRoute.names must be a NamePolicy, got {self.names!r}")
+        if not isinstance(self.searched, bool):
+            raise TypeError(f"ClaimRoute.searched must be a bool, got {self.searched!r}")
+        if not isinstance(self.required_options, tuple) or not all(isinstance(o, str) for o in self.required_options):
+            raise TypeError(f"ClaimRoute.required_options must be a tuple of str, got {self.required_options!r}")
+
 
 @dataclass(frozen=True)
 class SourceMatch:

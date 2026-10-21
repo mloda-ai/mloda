@@ -241,13 +241,16 @@ class TestProviderHooks:
         assert "toyfmt-secret-1234" not in reason
         assert "token=***" in reason
 
-    def test_a_marked_abort_from_suffixes_escapes_matching(self) -> None:
+    def test_a_marked_abort_from_suffixes_escapes_matching(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Function-local group: a module-level one raising from suffixes() would break every other test's discovery."""
 
         def suffixes(cls: Any) -> tuple[str, ...]:
             raise escalate_match_abort(NotImplementedError("toy doc marked abort"))
 
-        group: Any = type("ToyMarkedAbortSuffixDocFG", (ReadDocumentFG,), {"suffixes": classmethod(suffixes)})
+        group: Any = type(
+            "ToyMarkedAbortSuffixDocFG", (ReadDocumentFG,), {"suffixes": classmethod(lambda cls: (".toy",))}
+        )
+        monkeypatch.setattr(group, "suffixes", classmethod(suffixes))
         dac = DataAccessCollection(files={"toy": "/path/to/doc.toy"})
 
         with pytest.raises(NotImplementedError) as excinfo:

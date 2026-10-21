@@ -4,10 +4,8 @@ import io
 from collections.abc import Collection
 from typing import Any
 
-from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.optional_dependency import require
-from mloda.provider import Implementation, ReadFileFG
+from mloda.provider import Implementation, ReadFileFG, SourceMatch, is_match_abort
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,

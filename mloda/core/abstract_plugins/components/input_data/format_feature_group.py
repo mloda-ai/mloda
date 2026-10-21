@@ -4,7 +4,7 @@ import difflib
 import inspect
 import types
 from abc import abstractmethod
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
@@ -110,7 +110,20 @@ class FormatFeatureGroup(FeatureGroup):
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = ()
 
+    @classmethod
+    def _merge_property_mapping(cls) -> None:
+        own = cls.__dict__.get("PROPERTY_MAPPING")
+        if isinstance(own, Mapping):
+            merged: dict[Any, Any] = {}
+            for klass in reversed(cls.__mro__[1:]):
+                mapping = klass.__dict__.get("PROPERTY_MAPPING")
+                if isinstance(mapping, Mapping):
+                    merged.update(mapping)
+            merged.update(own)
+            cls.PROPERTY_MAPPING = merged
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
+        cls._merge_property_mapping()
         super().__init_subclass__(**kwargs)
         for route in cls.__dict__.get("CLAIM_ROUTES", ()):
             if route.names is NamePolicy.OPEN and route.searched:

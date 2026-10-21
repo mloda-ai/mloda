@@ -3,9 +3,8 @@
 from collections.abc import Collection
 from typing import Any
 
-from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.optional_dependency import require
-from mloda.provider import ComputeFramework, Implementation, ReadFileFG
+from mloda.provider import ComputeFramework, Implementation, ReadFileFG, SourceMatch
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
@@ -41,7 +40,7 @@ class OrcFG(ReadFileFG):
 
     @classmethod
     def count_rows(cls, match: SourceMatch, compute_framework: type[ComputeFramework]) -> int | None:
-        if cls._overrides_load_neutral(OrcFG):
+        if cls.overrides_load_neutral(OrcFG):
             return None
         pyarrow_orc = require("pyarrow.orc", "reading ORC files")
         nrows: int = pyarrow_orc.ORCFile(match.access).nrows

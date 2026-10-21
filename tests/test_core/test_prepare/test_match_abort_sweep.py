@@ -174,6 +174,10 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
         "real edge, collided verdict: it swallows nothing itself; the str.join name collides with the runner's join"
     ),
+    ("mloda/core/abstract_plugins/components/declared_attributes.py", "read_declared_attributes"): (
+        "real edge, collided verdict: it swallows nothing itself; its str.__str__ call collides with Link.__str__, "
+        "which renders discriminators through safe_field"
+    ),
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,

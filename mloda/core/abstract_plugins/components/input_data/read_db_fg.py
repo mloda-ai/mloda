@@ -379,6 +379,8 @@ class ReadDBFG(FormatFeatureGroup):
 
     @classmethod
     def _hidden_source(cls, match: SourceMatch) -> str:
+        if isinstance(match.access, DBQuery):
+            return match.source
         return cls.database_identity(match.access.credentials)
 
     @classmethod
@@ -399,10 +401,9 @@ class ReadDBFG(FormatFeatureGroup):
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
             what = "one database" if len(identities) > 1 else "one credential handle"
             return f"select {what} with data_access_handle{hint}, or point {name} at one credential."
-        table = cast(DBTable, matches[0].access).table
         return (
             f"point {name} at one table with options={{{name!r}: "
-            f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}={table!r})}}, "
+            f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}=<table>)}}, "
             f"or set {cls.TABLE_KEY} on the credential."
         )
 

@@ -536,8 +536,12 @@ class TestTwoLoginsOnOneSource:
         with pytest.raises(ValueError) as excinfo:
             resolve_or_raise(feature, plugins, None, _two_logins())
         message = str(excinfo.value)
-        assert "@admin_h" in message
-        assert "@analyst_h" in message
+        assert "credential handles: 'admin_h', 'analyst_h'" in message
+        if group is ToyRoleDB:
+            assert "@admin_h" not in message
+            assert "@analyst_h" not in message
+            assert "(2 sources)" in message
+            assert "toy_table" not in message
         assert "data_access_handle" in message
         assert "select one credential handle" in message
         assert "select one database" not in message

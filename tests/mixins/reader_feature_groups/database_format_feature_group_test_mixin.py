@@ -214,19 +214,37 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     # missing columns, tables and ambiguity
 
-    def test_db_two_tables_with_the_column_abort_naming_both_and_the_fix_without_any_secret(self) -> None:
-        path = self._make("two_tables", {"table_a": {self.present_column: [1]}, "table_b": {self.present_column: [2]}})
-        dac = self._dac_of(path, password=SECRET)
+    @pytest.mark.parametrize("mode", ["unpointed", "pointed", "handle"])
+    def test_db_two_tables_with_the_column_abort_names_tables_only_when_narrowed_and_has_no_secret(
+        self, mode: str
+    ) -> None:
+        path = self._make(
+            "two_tables", {"toyfmt_tbl_a": {self.present_column: [1]}, "toyfmt_tbl_b": {self.present_column: [2]}}
+        )
+        credential = self.make_credential(path, password=SECRET)
+        dac: DataAccessCollection | None = DataAccessCollection(credentials={"handle_0": credential})
+        feature = Feature(self.present_column)
+        if mode == "pointed":
+            feature, dac = self._pointed(self.present_column, credential), None
+        elif mode == "handle":
+            feature = Feature(self.present_column, Options({HANDLE_OPTION: "handle_0"}))
         with pytest.raises(ValueError) as exc_info:
-            self._resolve(Feature(self.present_column), dac)
+            self._resolve(feature, dac)
         message = str(exc_info.value)
-        assert self._source_of(path, "table_a") in message
-        assert self._source_of(path, "table_b") in message
         assert self._group_name() in message
-        assert "table_name" in message
+        assert "table_name=<table>" in message
         assert self.credential_key in message
         assert "narrow with a data_access_handle or column_to_file." not in message
         assert SECRET not in message
+        if mode == "unpointed":
+            assert "(2 sources)" in message
+            assert self.identity_of(path) in message
+            assert "toyfmt_tbl_a" not in message
+            assert "toyfmt_tbl_b" not in message
+        else:
+            assert self._source_of(path, "toyfmt_tbl_a") in message
+            assert self._source_of(path, "toyfmt_tbl_b") in message
+            assert "(2 sources)" not in message
 
     def test_db_two_databases_with_the_column_abort_naming_both_and_the_handle_fix_without_any_secret(self) -> None:
         other = self._make("second_db", {"second_table": {self.present_column: [1]}})
@@ -239,8 +257,10 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         with pytest.raises(ValueError) as exc_info:
             self._resolve(Feature(self.present_column), dac)
         message = str(exc_info.value)
-        assert self.expected_source in message
-        assert self._source_of(other, "second_table") in message
+        assert self.identity_of(self.own_path) in message
+        assert self.identity_of(other) in message
+        assert OWN_TABLE not in message
+        assert "second_table" not in message
         assert "data_access_handle" in message
         assert "select one database" in message
         assert "db_a" in message

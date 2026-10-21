@@ -34,6 +34,7 @@ from mloda_plugins.feature_group.experimental.sklearn.scaling.base import Scalin
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 
 # PROPERTY_MAPPING keys for the throwaway feature group, one per default edge under test.
@@ -375,3 +376,68 @@ class TestOptionsWithDefaultsHonorsExplicitNone:
         """B3: absent stays absent; an opted-in key that is not present at all still gets its concrete default."""
         view = _options_with_defaults(_make_explicit_none_probe_fg(), Options())
         assert view.get(EN_KEY, "callsite") == "ctx_val"
+
+
+class TestReadOption:
+    """FeatureGroup.read_option reads a declared key (defaults and bindings applied) and raises on an undeclared one.
+
+    Each test binds only results to locals (or builds the class inside ``pytest.raises``), so the throwaway
+    FeatureGroup stays a transient and the module's autouse no-leak guard still passes.
+    """
+
+    @pytest.mark.parametrize("key", ["owd_typo", "in_features"])
+    def test_undeclared_key_raises_naming_key_and_class(self, key: str) -> None:
+        """An undeclared (or engine) key raises ValueError naming the key and the class."""
+        with pytest.raises(ValueError, match=key) as excinfo:
+            _make_probe_fg().read_option(key, Options(context={key: "v"}))
+        assert "ProbeDefaultsFeatureGroup" in str(excinfo.value)
+
+    def test_group_without_property_mapping_raises(self) -> None:
+        """A group with no PROPERTY_MAPPING declares nothing, so any key raises."""
+
+        class NoMappingFeatureGroup(FeatureGroup):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        with pytest.raises(ValueError, match="NoMappingFeatureGroup"):
+            NoMappingFeatureGroup.read_option("anything", Options())
+
+    def test_present_value_is_returned(self) -> None:
+        """A present value is returned over the declared default."""
+        value = _make_probe_fg().read_option(CTX_KEY, Options(context={CTX_KEY: "explicit"}))
+        assert value == "explicit"
+
+    @pytest.mark.parametrize(
+        ("key", "expected"),
+        [(CTX_KEY, "ctx_val"), (GRP_KEY, "grp_val"), (NONE_KEY, None), (REQ_KEY, None)],
+    )
+    def test_absent_key_returns_declared_default_or_none(self, key: str, expected: Any) -> None:
+        """An absent key returns its declared default; no-default and required keys return None."""
+        value = _make_probe_fg().read_option(key, Options())
+        assert value == expected
+
+    def test_explicit_none_with_allow_explicit_none_returns_none(self) -> None:
+        """An explicit None is returned as None when the spec opts in."""
+        value = _make_explicit_none_probe_fg().read_option(EN_KEY, Options(context={EN_KEY: None}))
+        assert value is None
+
+    def test_explicit_none_without_flag_returns_default(self) -> None:
+        """An explicit None without the opt-in yields the declared default."""
+        value = _make_probe_fg().read_option(CTX_KEY, Options(context={CTX_KEY: None}))
+        assert value == "ctx_val"
+
+    def test_feature_name_binding_beats_default(self) -> None:
+        """With feature_name, the name-bound value is returned instead of the default."""
+        value = _make_two_keys_fg().read_option("owd_first", Options(), "x__op_q_b")
+        assert value == "q"
+
+    def test_without_feature_name_default_is_returned(self) -> None:
+        """Without feature_name no binding applies, so the default is returned."""
+        value = _make_two_keys_fg().read_option("owd_first", Options())
+        assert value == "a"
+
+    def test_format_group_inherited_key_is_declared(self) -> None:
+        """A key inherited through a FormatFeatureGroup's merged PROPERTY_MAPPING reads without raising."""
+        value = CsvFG.read_option("data_access_handle", Options({"data_access_handle": "h"}))
+        assert value == "h"

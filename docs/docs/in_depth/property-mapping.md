@@ -412,6 +412,8 @@ required-presence and `required_when` checks and is seen by membership, `element
 graph_type = feature.options.get("graph_type", "spring")  # explicit value; else the spec default; else "spring"
 ```
 
+Plugin code can read a declared key with `cls.read_option(key, options, feature_name)`, which raises for an undeclared key and fills the declared default or name-bound value; engine keys such as `in_features` still go through `options.get`.
+
 ## Parameter classification
 
 There is no `group` field: a group parameter is `context=False`.

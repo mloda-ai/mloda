@@ -330,7 +330,20 @@ class TestOperationImplementation:
 
         result = _run_operation(toy.OPTOY_FEATURE)
 
-        assert column_values(result, toy.OPTOY_FEATURE) in ([toy.PANDAS_MARK], [toy.PYARROW_MARK])
+        assert column_values(result, toy.OPTOY_FEATURE) == [toy.PYARROW_MARK]
+
+    def test_a_matching_implementation_is_preferred_to_a_divergent_one_listed_first(self) -> None:
+        toy = _toy_operation()
+
+        steps = mloda.explain(
+            [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"})],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+        )
+        step = next(s for s in steps if s.step_kind == "compute")
+
+        assert step.compute_framework_name == "PyArrowTable"
+        assert step.compute_framework_reason == "prefers a matching version"
 
     def test_a_subclass_group_is_served_by_the_parent_implementation_with_the_subclass_as_group(self) -> None:
         toy = _toy_operation()
@@ -415,7 +428,9 @@ class TestImplementationPin:
 
         assert column_values(result, toy.OPTOY_FEATURE) == [mark]
 
-    def test_naming_a_parent_implementation_lets_a_subclass_implementation_serve(self, make_implementation: Any) -> None:
+    def test_naming_a_parent_implementation_lets_a_subclass_implementation_serve(
+        self, make_implementation: Any
+    ) -> None:
         toy = _toy_operation()
         make_implementation(
             toy.OpToyFG,
@@ -433,8 +448,14 @@ class TestImplementationPin:
         ("pin", "expected"),
         [
             ("OpToyChainPyArrow", [("INNER", "OpToyChainPyArrow"), ("OUTER", "OpToyChainPyArrow")]),
-            (["OpToyChainPandas", "OpToyChainPyArrow"], [("INNER", "OpToyChainPandas"), ("OUTER", "OpToyChainPyArrow")]),
-            (["OpToyChainPyArrow", "OpToyChainPandas"], [("INNER", "OpToyChainPyArrow"), ("OUTER", "OpToyChainPandas")]),
+            (
+                ["OpToyChainPandas", "OpToyChainPyArrow"],
+                [("INNER", "OpToyChainPandas"), ("OUTER", "OpToyChainPyArrow")],
+            ),
+            (
+                ["OpToyChainPyArrow", "OpToyChainPandas"],
+                [("INNER", "OpToyChainPyArrow"), ("OUTER", "OpToyChainPandas")],
+            ),
         ],
         ids=["one_name_pins_both", "inner_pandas_outer_pyarrow", "inner_pyarrow_outer_pandas"],
     )

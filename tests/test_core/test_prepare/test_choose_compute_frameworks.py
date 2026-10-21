@@ -2,11 +2,12 @@
 Graphs are built by hand; no run or Engine is involved.
 """
 
+import gc
 import inspect
 import itertools
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -18,7 +19,11 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.provider import OperationFeatureGroup, SubtypeDeclaration, property_spec
 from mloda.core.prepare import choose_compute_frameworks
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
 from mloda.core.prepare.graph.graph import Graph
@@ -43,6 +48,9 @@ SAVES_TWO = "saves 2 conversions"
 SAVES_THREE = "saves 3 conversions"
 SAVES_FIVE = "saves 5 conversions"
 CONVERTS_LATER = "converts later"
+PREFERS_MATCHING = "prefers a matching version"
+SUM_DIFFERS = "skips NaN in sum"
+SUM_TAG = "; runs a version that differs: " + SUM_DIFFERS
 
 _PROBE = Path(__file__).with_name("choose_probe.py")
 _PROBE_EXPECTED = {
@@ -101,6 +109,56 @@ class ChooserLayerFG(FeatureGroup):
     pass
 
 
+OP_KEY = "chooser_op_kind"
+
+
+class ChooserOpFG(OperationFeatureGroup):
+    SUBTYPES = SubtypeDeclaration(key=OP_KEY)
+    PROPERTY_MAPPING = {
+        OP_KEY: property_spec("Chooser toy kind.", strict=True, allowed_values={"sum": "Sum", "median": "Median"}),
+    }
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).startswith("chooser_op_")
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class ChooserOpPandas(Implementation):
+    feature_group = ChooserOpFG
+    compute_framework = PandasDataFrame
+    divergent = {"sum": SUM_DIFFERS}
+
+    @classmethod
+    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+        return data
+
+
+class ChooserOpPyArrow(Implementation):
+    feature_group = ChooserOpFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+        return data
+
+
+OP_IMPLEMENTATIONS = [ChooserOpPandas, ChooserOpPyArrow]
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _collect_local_classes() -> Iterator[None]:
+    yield
+    gc.collect()
+
+
 class _Net:
     """Hand-built plan input: graph, FG buckets, link occurrences and filter ties."""
 
@@ -111,13 +169,14 @@ class _Net:
         self.features: list[Feature] = []
         self.occurrences: list[tuple[Link, UUID, UUID, UUID]] = []
         self.ties: list[tuple[UUID, UUID]] = []
+        self.implementations: list[type[Implementation]] | None = None
 
     def add(
         self,
         fg: type[FeatureGroup],
         name: str,
         allowed: set[type[ComputeFramework]] | None,
-        options: dict[str, Any] | None = None,
+        options: dict[str, Any] | Options | None = None,
         data_type: DataType | None = None,
         pinned: bool = False,
         requested: bool = False,
@@ -158,6 +217,7 @@ class _Net:
         chooser_class: type[ChooseComputeFrameworks] = ChooseComputeFrameworks,
         output_framework: type[ComputeFramework] | None = None,
     ) -> ChooseComputeFrameworks:
+        extra: dict[str, Any] = {} if self.implementations is None else {"implementations": self.implementations}
         return chooser_class(
             self.graph,
             self.nodes,
@@ -165,6 +225,7 @@ class _Net:
             self.ties,
             dict(positions) if positions else {},
             output_framework=output_framework,
+            **extra,
         )
 
     def choose(
@@ -869,6 +930,8 @@ def test_the_reason_texts_are_the_pinned_lock_contract() -> None:
     assert choose_compute_frameworks.LIST_ORDER == LIST_ORDER
     assert choose_compute_frameworks.DEFAULT_ORDER == DEFAULT_ORDER
     assert choose_compute_frameworks.CONVERTS_LATER == CONVERTS_LATER
+    assert choose_compute_frameworks.PREFERS_MATCHING == PREFERS_MATCHING
+    assert choose_compute_frameworks.DIFFERS == "runs a version that differs"
     assert choose_compute_frameworks.saves_conversions(1) == SAVES_ONE
     assert choose_compute_frameworks.saves_conversions(2) == SAVES_TWO
     assert choose_compute_frameworks.saves_conversions(7) == "saves 7 conversions"
@@ -962,6 +1025,50 @@ def _reason_mixed_depth_block(net: _Net) -> list[Feature]:
     return [mid]
 
 
+def _op(net: _Net, name: str, allowed: set[type[ComputeFramework]], kind: str = "sum", **kwargs: Any) -> Feature:
+    net.implementations = OP_IMPLEMENTATIONS
+    return net.add(ChooserOpFG, name, allowed, Options(context={OP_KEY: kind}), **kwargs)
+
+
+def _reason_prefers_matching(net: _Net) -> list[Feature]:
+    return [_op(net, "chooser_op_free", {P, A})]
+
+
+def _reason_prefers_matching_over_a_conversion(net: _Net) -> list[Feature]:
+    source = net.add(ChooserRootFG, "chooser_op_source", {P})
+    block = _op(net, "chooser_op_costly", {P, A})
+    net.edge(source, block)
+    return [block]
+
+
+def _reason_only_allowed_divergent(net: _Net) -> list[Feature]:
+    return [_op(net, "chooser_op_only", {P})]
+
+
+def _reason_pinned_divergent(net: _Net) -> list[Feature]:
+    return [_op(net, "chooser_op_pinned", {P}, pinned=True)]
+
+
+def _reason_matching_kind_is_not_divergent(net: _Net) -> list[Feature]:
+    return [_op(net, "chooser_op_median", {P, A}, kind="median")]
+
+
+def _reason_rules_force_divergent(net: _Net) -> list[Feature]:
+    left = net.add(ChooserLeftFG, "chooser_op_rules_left", {P})
+    right = net.add(ChooserRightFG, "chooser_op_rules_right", {A})
+    child = _op(net, "chooser_op_rules_child", {P, D})
+    net.join(_link(Link.right, ChooserLeftFG, ChooserRightFG), left, right, child)
+    return [child]
+
+
+def _reason_mixed_members_only_divergent(net: _Net) -> list[Feature]:
+    return [_op(net, "chooser_op_sum_member", {P}), _op(net, "chooser_op_median_member", {P}, kind="median")]
+
+
+def _reason_mixed_members_prefer_matching(net: _Net) -> list[Feature]:
+    return [_op(net, "chooser_op_sum_member", {P, A}), _op(net, "chooser_op_median_member", {P, A}, kind="median")]
+
+
 @pytest.mark.parametrize(
     ("build", "positions", "output", "expected", "frameworks"),
     [
@@ -977,6 +1084,14 @@ def _reason_mixed_depth_block(net: _Net) -> list[Feature]:
         (_reason_non_db_converts_at_the_end, {A: 0}, A, [CONVERTS_LATER], [P]),
         (_reason_fan_in_no_signal, {A: 0}, None, [LIST_ORDER], [A]),
         (_reason_mixed_depth_block, None, None, [CONVERTS_LATER], [D]),
+        (_reason_prefers_matching, None, None, [PREFERS_MATCHING], [A]),
+        (_reason_prefers_matching_over_a_conversion, None, None, [PREFERS_MATCHING], [A]),
+        (_reason_only_allowed_divergent, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
+        (_reason_pinned_divergent, None, None, [PINNED + SUM_TAG], [P]),
+        (_reason_matching_kind_is_not_divergent, None, None, [DEFAULT_ORDER], [P]),
+        (_reason_rules_force_divergent, None, None, [RULES + SUM_TAG], [P]),
+        (_reason_mixed_members_only_divergent, None, None, [ONLY_ALLOWED + SUM_TAG] * 2, [P, P]),
+        (_reason_mixed_members_prefer_matching, None, None, [PREFERS_MATCHING] * 2, [A, A]),
     ],
     ids=[
         "pinned",
@@ -991,6 +1106,14 @@ def _reason_mixed_depth_block(net: _Net) -> list[Feature]:
         "non_db_converts_at_the_end",
         "fan_in_no_signal",
         "mixed_depth_block",
+        "prefers_matching",
+        "prefers_matching_over_a_conversion",
+        "only_allowed_divergent",
+        "pinned_divergent",
+        "matching_kind_is_not_divergent",
+        "rules_force_divergent",
+        "mixed_members_only_divergent",
+        "mixed_members_prefer_matching",
     ],
 )
 def test_the_reason_names_why_the_framework_was_chosen(
@@ -1009,6 +1132,26 @@ def test_the_reason_names_why_the_framework_was_chosen(
     for feature, framework in zip(judged, frameworks):
         if framework is not None:
             assert feature.chosen_compute_framework is framework
+
+
+def test_an_implementation_pin_keeps_the_divergent_framework_and_tags_the_reason() -> None:
+    net = _Net()
+    block = _op(net, "chooser_op_impl_pinned", {P, A})
+    chooser = ChooseComputeFrameworks(
+        net.graph,
+        net.nodes,
+        net.occurrences,
+        net.ties,
+        {},
+        pin_frameworks={block.uuid: frozenset({P})},
+        pinned={block.uuid},
+        implementations=OP_IMPLEMENTATIONS,
+    )
+
+    chooser.choose()
+
+    assert block.chosen_compute_framework is P
+    assert block.chosen_compute_framework_reason == PINNED + SUM_TAG
 
 
 def test_a_child_on_the_swapped_side_of_one_inner_link_reports_rules() -> None:
@@ -1089,6 +1232,26 @@ def test_a_thirty_block_component_with_a_tied_optimum_solves_quickly(
     assert net.conversions() == 3
     for index, framework in pins.items():
         assert layers[index].chosen_compute_framework is framework
+
+
+@pytest.mark.parametrize("positions", [{A: 0, D: 1}, None], ids=["list_order", "no_positions"])
+def test_an_empty_implementations_collection_reproduces_passing_none(
+    positions: dict[type[ComputeFramework], int] | None,
+) -> None:
+    outcomes = []
+    for implementations in (None, list[type[Implementation]]()):
+        net = _Net()
+        net.implementations = implementations
+        pins: dict[int, type[ComputeFramework]] = {0: A, 10: D, 20: A, 29: D}
+        layers = [
+            net.add(ChooserLayerFG, "layer", {pins[i]} if i in pins else {P, A, D}, {"layer": i}) for i in range(30)
+        ]
+        for parent, child in zip(layers, layers[1:]):
+            net.edge(parent, child)
+        net.choose(positions)
+        outcomes.append([(f.chosen_compute_framework, f.chosen_compute_framework_reason) for f in layers])
+
+    assert outcomes[0] == outcomes[1]
 
 
 # --- search scale (F2) -----------------------------------------------------------------------------------

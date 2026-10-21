@@ -258,6 +258,7 @@ class Engine:
             connected=self._connected_frameworks(),
             pin_frameworks=pin_frameworks,
             pinned=pinned,
+            implementations=self.implementations,
         )
         resolver.create_initial_queue()
 

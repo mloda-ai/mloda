@@ -19,7 +19,7 @@ from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, FormatFeatureGroup, NamePolicy, SourceMatch
-from mloda.user import Feature, FeatureName, GlobalFilter, Options, ParallelizationMode, PluginCollector, mloda
+from mloda.user import Feature, FeatureName, GlobalFilter, Index, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     TOY_KEY,
@@ -737,6 +737,22 @@ class TestScopeAndFilter:
 
         assert session is not None
         assert any(f"Filter feature '{_COL_F}' matched no feature group" in r.getMessage() for r in caplog.records)
+
+    def test_a_kept_key_column_cannot_bypass_the_refusing_gate(self) -> None:
+        feature = Feature(_COL_A, index=Index((_COL_F,)), keep_index=True)
+
+        with pytest.raises((ValueError, PermissionError, FeatureResolutionError)) as raised:
+            result = mloda.run_all(
+                [feature],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=_ENABLED,
+                parallelization_modes={ParallelizationMode.SYNC},
+                data_access_collection=_global_access(False),
+                function_extender={_ImdColumnGate()},
+            )
+            assert _COL_F not in result[0].column_names
+
+        assert not isinstance(raised.value, AssertionError)
 
     @_BY_KIND
     def test_a_plan_without_its_own_extender_does_not_inherit_an_outer_probe_scope(self, kind: _Kind) -> None:

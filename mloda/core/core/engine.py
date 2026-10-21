@@ -232,7 +232,8 @@ class Engine:
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
-        self._load_result_index_columns()
+        with reader_probe_scope(probe_scope):
+            self._load_result_index_columns()
 
         if self.global_filter:
             self.global_filter.warn_on_unmatched_filters()
@@ -733,19 +734,25 @@ class Engine:
                 if not self.resolved_input_feature_names.get(current):
                     roots[current] = owners[current]
                 todo.extend(self.feature_link_parents.get(current, ()))
+            visited = {str(owners[u][1].name) for u in seen}
+            ordered = sorted(roots.values(), key=lambda gr: (format_feature_group_class(gr[0]), str(gr[1].name)))
             for column in feature.result_index_columns:
-                provided = False
-                for group, root in roots.values():
-                    if str(root.name) == column:
-                        provided = True
-                    elif call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched:
-                        provided = True
-                        self._create_and_add_index_feature(group, group(), root, None, Index((column,)))
-                if not provided:
+                if column in visited:
+                    continue
+                match = next(
+                    (
+                        (group, root)
+                        for group, root in ordered
+                        if call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched
+                    ),
+                    None,
+                )
+                if match is None:
                     raise ValueError(
                         f"Feature '{feature.name}' keeps index column '{column}', but no input feature group "
-                        f"provides it."
+                        f"provides it; the column must be matched by one of the feature's root input feature groups."
                     )
+                self._create_and_add_index_feature(match[0], match[0](), match[1], None, Index((column,)))
 
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""

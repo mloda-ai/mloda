@@ -12,7 +12,17 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
-from mloda.user import DataAccessCollection, Feature, FeatureName, Index, Options, PluginCollector, mloda
+from mloda.user import (
+    DataAccessCollection,
+    Feature,
+    FeatureName,
+    Index,
+    JoinSpec,
+    Link,
+    Options,
+    PluginCollector,
+    mloda,
+)
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -80,11 +90,13 @@ def _as_dict(kind: str, frame: Any) -> dict[str, list[Any]]:
     return {str(n): _values(kind, frame, str(n)) for n in names}
 
 
-def _source(kind: str, indexes: list[Index] | None) -> type[FeatureGroup]:
+def _source(kind: str, indexes: list[Index] | None, data: dict[str, list[int]] | None = None) -> type[FeatureGroup]:
+    cols = DATA if data is None else data
+
     class KiSource(FeatureGroup):
         @classmethod
         def input_data(cls) -> BaseInputData | None:
-            return DataCreator(supports_features=set(DATA))
+            return DataCreator(supports_features=set(cols))
 
         @classmethod
         def index_columns(cls) -> list[Index] | None:
@@ -96,7 +108,7 @@ def _source(kind: str, indexes: list[Index] | None) -> type[FeatureGroup]:
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            return _frame(kind, {n: DATA[n] for n in features.get_all_names()})
+            return _frame(kind, {n: cols[n] for n in features.get_all_names()})
 
     return KiSource
 
@@ -127,11 +139,35 @@ def _derived(kind: str, name: str, inputs: set[Feature], how: str = "keep") -> t
             if how == "drop":
                 data = _keep_rows(kind, data, [v > 5 for v in _values(kind, data, "ki_val")])
                 return _with(kind, data, name, [v * 2 for v in _values(kind, data, "ki_val")])
-            if how == "combo":
-                vals = [a + b for a, b in zip(_values(kind, data, "ki_val"), _values(kind, data, KEY2))]
             return _with(kind, data, name, vals)
 
     return KiDerived
+
+
+def _summing(kind: str, name: str, inputs: list[str]) -> type[FeatureGroup]:
+    class KiSum(FeatureGroup):
+        @classmethod
+        def match_feature_group_criteria(
+            cls,
+            feature_name: FeatureName | str,
+            options: Options,
+            data_access_collection: DataAccessCollection | None = None,
+        ) -> bool:
+            return str(feature_name) == name
+
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {Feature(i) for i in inputs}
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            return {_fw(kind)}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            vals = [sum(row) for row in zip(*(_values(kind, data, i) for i in inputs))]
+            return _with(kind, data, name, vals)
+
+    return KiSum
 
 
 def _run(kind: str, features: list[Any], groups: set[type[FeatureGroup]], **kwargs: Any) -> list[Any]:
@@ -202,11 +238,33 @@ class TestKeepIndex:
     def test_earlier_request_subtree_already_uses_the_feature(self, kind: str, keep_first: bool) -> None:
         src = _source(kind, [Index((KEY,))])
         der = _derived(kind, "ki_doubled", {Feature("ki_val")})
-        top = _derived(kind, "ki_top", {Feature("ki_doubled")}, how="top")
+        top = _derived(kind, "ki_top", {Feature("ki_doubled")})
         keep = Feature("ki_doubled", index=Index((KEY,)), keep_index=True)
         reqs: list[Any] = [keep, "ki_top"] if keep_first else ["ki_top", keep]
         res = _dicts(kind, _run(kind, reqs, {src, der, top}))
         assert any(d.get(KEY) == [1, 2, 3] and "ki_doubled" in d for d in res)
+
+    def test_shared_key_column_across_a_link_comes_back_once(self, kind: str) -> None:
+        a = _source(kind, [Index(("ki_lid",))], {"ki_lid": [1, 2, 3], "ki_lk": [9, 8, 7], "ki_la": [1, 1, 1]})
+        b = _source(kind, [Index(("ki_lid",))], {"ki_lid": [1, 2, 3], "ki_lk": [9, 8, 7], "ki_lb": [2, 2, 2]})
+        der = _summing(kind, "ki_ab", ["ki_la", "ki_lb"])
+        link = Link.inner(JoinSpec(a, Index(("ki_lid",))), JoinSpec(b, Index(("ki_lid",))))
+        f = Feature("ki_ab", index=Index(("ki_lk",)), keep_index=True)
+        res = _run(kind, [f], {a, b, der}, links={link})
+        assert len(res) == 1
+        names = list(res[0].columns if kind != "pyarrow" else res[0].column_names)
+        assert names.count("ki_lk") == 1
+        assert _as_dict(kind, res[0])["ki_lk"] == [9, 8, 7]
+
+    def test_key_column_computed_by_a_non_root_input(self, kind: str) -> None:
+        src = _source(kind, None, {"ki_did": [1, 2, 3], "ki_dv": [5, 6, 7]})
+        bucket = _summing(kind, "ki_bucket", ["ki_did"])
+        vb = _summing(kind, "ki_vb", ["ki_dv", "ki_bucket"])
+        f = Feature("ki_vb", index=Index(("ki_bucket",)), keep_index=True)
+        res = _dicts(kind, _run(kind, [f], {src, bucket, vb}))
+        assert len(res) == 1
+        assert res[0]["ki_bucket"] == [1, 2, 3]
+        assert res[0]["ki_vb"] == [6, 8, 10]
 
     def test_reused_feature_instance_leaves_no_stale_key(self, kind: str) -> None:
         src = _source(kind, [Index((KEY,))])

@@ -18,7 +18,18 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, FormatFeatureGroup, NamePolicy, SourceMatch
-from mloda.user import Feature, FeatureName, GlobalFilter, Index, Options, ParallelizationMode, PluginCollector, mloda
+from mloda.user import (
+    Feature,
+    FeatureName,
+    GlobalFilter,
+    Index,
+    JoinSpec,
+    Link,
+    Options,
+    ParallelizationMode,
+    PluginCollector,
+    mloda,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     TOY_KEY,
@@ -623,6 +634,31 @@ class TestScopeAndFilter:
             assert _COL_F not in result[0].column_names
 
         assert not isinstance(raised.value, AssertionError)
+
+    @pytest.mark.parametrize(("key", "refused"), [(_COL_F, True), (_COL_G, False)], ids=["refused", "allowed"])
+    def test_a_link_index_column_cannot_bypass_the_refusing_gate(self, key: str, refused: bool) -> None:
+        link = Link.inner(
+            left=JoinSpec(ImdMatchGateFormat, Index((key,))),
+            right=JoinSpec(ImdMatchPlainGroup, Index((_COL_P,))),
+        )
+        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchPlainGroup})
+
+        def plan() -> Any:
+            return mloda.prepare(
+                [Feature(_COL_A)],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=enabled,
+                links={link},
+                parallelization_modes={ParallelizationMode.SYNC},
+                data_access_collection=_global_access(),
+                function_extender={_ImdColumnGate()},
+            )
+
+        if refused:
+            with pytest.raises(ValueError, match=_COL_F):
+                plan()
+        else:
+            assert plan() is not None
 
     @_BY_KIND
     def test_a_plan_without_its_own_extender_does_not_inherit_an_outer_probe_scope(self, kind: _Kind) -> None:

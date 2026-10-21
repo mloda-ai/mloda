@@ -10,7 +10,13 @@ import pytest
 
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import contained_raise_log_level
-from mloda.provider import NO_DEFAULT, PropertySpec, PropertyValidationError, validate_property_values
+from mloda.provider import (
+    NO_DEFAULT,
+    escalate_match_abort,
+    PropertySpec,
+    PropertyValidationError,
+    validate_property_values,
+)
 from tests.test_core.test_abstract_plugins.test_components.feature_chainer.test_property_mapping_sequence_unpacking import (
     CONTAINERS,
     EMPTY_CONTAINERS,
@@ -265,6 +271,14 @@ class TestSecretHygiene:
         assert SECRET not in str(exc.value)
         assert exc.value.__context__ is None
         assert SECRET not in caplog.text
+
+    def test_marked_abort_from_element_validator_propagates(self) -> None:
+        def validator(_: Any) -> bool:
+            raise escalate_match_abort(ValueError("marked"))
+
+        with pytest.raises(ValueError, match="marked") as exc:
+            validate_property_values({"k": "a"}, _strict(element_validator=validator), closed_world=True)
+        assert not isinstance(exc.value, PropertyValidationError)
 
     def test_raising_required_when_predicate_does_not_leak(self, caplog: pytest.LogCaptureFixture) -> None:
         def predicate(_: Any) -> bool:

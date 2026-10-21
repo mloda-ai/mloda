@@ -113,14 +113,18 @@ class FormatFeatureGroup(FeatureGroup):
 
     @classmethod
     def _merge_property_mapping(cls) -> None:
+        has_own = "PROPERTY_MAPPING" in cls.__dict__
         own = cls.__dict__.get("PROPERTY_MAPPING")
-        if isinstance(own, Mapping):
-            merged: dict[Any, Any] = {}
-            for klass in reversed(cls.__mro__[1:]):
-                mapping = klass.__dict__.get("PROPERTY_MAPPING")
-                if isinstance(mapping, Mapping):
-                    merged.update(mapping)
-            merged.update(own)
+        if has_own and not isinstance(own, Mapping):
+            raise TypeError(
+                f"{cls.__name__}.PROPERTY_MAPPING must be a mapping of PropertySpec, got {type(own).__name__}."
+            )
+        merged: dict[Any, Any] = {}
+        for klass in reversed(cls.__mro__):
+            mapping = klass.__dict__.get("PROPERTY_MAPPING")
+            if isinstance(mapping, Mapping):
+                merged.update(mapping)
+        if has_own or (merged and merged != cls.PROPERTY_MAPPING):
             cls.PROPERTY_MAPPING = merged
 
     def __init_subclass__(cls, **kwargs: Any) -> None:

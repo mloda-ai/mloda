@@ -192,3 +192,27 @@ class TestWellFormedSpecsStillDefine:
             )
             is False
         )
+
+
+class TestPropertyMappingMustBeAMappingOfSpecs:
+    """A non-mapping PROPERTY_MAPPING raises a TypeError naming the class, never an AttributeError."""
+
+    def test_a_list_mapping_raises_a_type_error_naming_the_class(self) -> None:
+        with pytest.raises(TypeError, match="Shape694ListMappingFeatureGroup.*mapping of PropertySpec"):
+
+            class Shape694ListMappingFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+                PROPERTY_MAPPING = ["k"]  # type: ignore[assignment]
+
+                @classmethod
+                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                    return data
+
+    def test_a_none_mapping_stays_valid(self) -> None:
+        class Shape694NoneMappingFeatureGroup(FeatureGroup):
+            PROPERTY_MAPPING = None
+
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        assert Shape694NoneMappingFeatureGroup.PROPERTY_MAPPING is None

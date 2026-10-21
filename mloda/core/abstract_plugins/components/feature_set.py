@@ -149,20 +149,23 @@ class FeatureSet:
         self.features.discard(feature)
 
     def materialize_option_defaults(self, feature_group: "type[FeatureGroup]") -> None:
-        """Rebind every feature's options (and self.options) through feature_group.options_with_defaults,
-        memoized by Options identity so aliases stay aliased; identity no-op without concrete defaults (#796).
-        Precondition: same-named features distinguished only by an explicitly-set default value collapse
-        when the default fills their twin, and that raises. The engine canonicalizes default-equivalent
-        twins at intake, so the raise is a defensive invariant for direct API use."""
+        """Rebind every feature's options through feature_group.options_with_defaults plus the values its
+        name binds, memoized by (Options identity, bindings) so aliases stay aliased. self.options takes a
+        feature's entry only when every feature sharing that source resolved to the same entry.
+        Same-named twins that collapse once a default fills one of them raise (defensive for direct API use)."""
         # The memo holds a strong reference to each source Options so its id cannot be recycled mid-loop.
-        memo: dict[int, tuple[Options, Options]] = {}
+        memo: dict[tuple[int, tuple[tuple[str, str], ...]], tuple[Options, Options]] = {}
+        entries_by_source: dict[int, list[Options]] = {}
         rebound = False
         for feature in self.features:
             source = feature.options
-            entry = memo.get(id(source))
+            bindings = feature_group.name_bindings(feature.name)
+            key = (id(source), tuple(sorted(bindings.items())))
+            entry = memo.get(key)
             if entry is None:
-                entry = (source, feature_group.options_with_defaults(source))
-                memo[id(source)] = entry
+                entry = (source, feature_group.options_with_defaults(source, bindings))
+                memo[key] = entry
+            entries_by_source.setdefault(id(source), []).append(entry[1])
             if entry[1] is not source:
                 feature.options = entry[1]
                 rebound = True
@@ -182,9 +185,9 @@ class FeatureSet:
             self.features = rebuilt
         options_before = self.options
         if self.options is not None:
-            entry_for_options = memo.get(id(self.options))
-            if entry_for_options is not None:
-                self.options = entry_for_options[1]
+            resolved = entries_by_source.get(id(self.options))
+            if resolved is not None and all(entry is resolved[0] for entry in resolved):
+                self.options = resolved[0]
             else:
                 self.options = feature_group.options_with_defaults(self.options)
 

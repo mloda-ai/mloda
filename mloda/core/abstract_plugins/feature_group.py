@@ -261,29 +261,50 @@ class FeatureGroup(ABC):
 
     @final
     @classmethod
-    def options_with_defaults(cls, options: Options) -> Options:
+    def name_bindings(cls, feature_name: FeatureName | str) -> dict[str, str]:
+        """Option values the feature name binds (captured text); empty without prefix patterns."""
+        patterns = FeatureChainParser.prefix_patterns_of(cls)
+        if not patterns:
+            return {}
+        resolution = safe_field(
+            lambda: FeatureChainParser.resolve_name(feature_name, patterns, cls.PROPERTY_MAPPING),
+            None,
+        )
+        if resolution is None:
+            return {}
+        return dict(resolution.bindings)
+
+    @final
+    @classmethod
+    def options_with_defaults(
+        cls, options: Options, bindings: dict[str, str] | None = None, *, fill_bindings: bool = True
+    ) -> Options:
         """Return an Options with every absent PROPERTY_MAPPING key that declares a concrete default
-        materialized from its spec (context or group per the spec); present values are never overridden (#766)."""
+        materialized from its spec (context or group per the spec); present values are never overridden.
+        A key in bindings never gets a default; with fill_bindings an absent one gets its bound value."""
         mapping = cls.PROPERTY_MAPPING or {}
+        bindings = bindings or {}
         memo: dict[int, Any] = {}
         fills_group: dict[str, Any] = {}
         fills_context: dict[str, Any] = {}
         for key, spec in mapping.items():
-            # An opted-in spec honors an explicit None: presence, not non-None-ness, gates the fill (#768).
+            # An opted-in spec honors an explicit None: presence, not non-None-ness, gates the fill.
             present = option_key_is_present(spec, key, options)
             if present:
                 continue
-            if is_no_default(spec.default) or spec.default is None:
-                continue
-            # Isolate the class-level default so a compute-time mutation cannot corrupt the spec (mirrors
-            # inherit_from). Fill where the key already sits (present-as-None), else per the spec's
-            # classification, so the constructed Options never lands the same key in both group and context.
-            value = _isolate_forwarded_value(spec.default, memo)
-            if key in options.group:
-                fills_group[key] = value
-            elif key in options.context:
-                fills_context[key] = value
-            elif spec.context:
+            if key in bindings:
+                if not fill_bindings:
+                    continue
+                value = bindings[key]
+                to_context = key not in options.group
+            else:
+                if is_no_default(spec.default) or spec.default is None:
+                    continue
+                # Isolate the class-level default so a compute-time mutation cannot corrupt the spec.
+                value = _isolate_forwarded_value(spec.default, memo)
+                to_context = key not in options.group and (key in options.context or bool(spec.context))
+            # Fill where the key already sits (present-as-None), else per the spec's classification.
+            if to_context:
                 fills_context[key] = value
             else:
                 fills_group[key] = value

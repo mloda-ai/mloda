@@ -20,7 +20,7 @@ from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import PropertySpec
+from mloda.provider import FeatureChainParserMixin, PropertySpec
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -97,6 +97,25 @@ def _make_explicit_none_probe_fg() -> type[FeatureGroup]:
             return data
 
     return ExplicitNoneProbeFeatureGroup
+
+
+def _make_two_keys_fg() -> type[FeatureGroup]:
+    """A throwaway pattern group whose name binds the keys ``owd_first`` and ``owd_second``."""
+
+    class OwdTwoKeysFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+        PREFIX_PATTERN = r".*__op_(?P<owd_first>[a-z])_(?P<owd_second>[a-z])$"
+        MIN_IN_FEATURES = 1
+        MAX_IN_FEATURES = 1
+        PROPERTY_MAPPING = {
+            "owd_first": PropertySpec("First bound key.", context=True, default="a"),
+            "owd_second": PropertySpec("Second bound key.", context=True, default="a"),
+        }
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return data
+
+    return OwdTwoKeysFeatureGroup
 
 
 class TestOptionsWithDefaultsMechanism:
@@ -314,6 +333,39 @@ class TestOptionsGetDefaultPrecedence:
         """An explicit None is unset to options_with_defaults, so the concrete spec default still applies."""
         view = _options_with_defaults(_make_probe_fg(), Options(context={CTX_KEY: None}))
         assert view.get(CTX_KEY, "callsite") == "ctx_val"
+
+    def test_bound_key_gets_bound_value_not_default(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"})
+        assert view.get("owd_first") == "q"
+        assert view.get("owd_second") == "a"
+
+    def test_bound_value_lands_in_context(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"})
+        assert view.context.get("owd_first") == "q"
+        assert "owd_first" not in view.group
+
+    def test_fill_bindings_false_leaves_bound_key_absent(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"}, fill_bindings=False)
+        assert "owd_first" not in view.context
+        assert "owd_first" not in view.group
+        assert view.get("owd_second") == "a"
+
+    def test_own_explicit_value_beats_binding(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(context={"owd_first": "q"}), {"owd_first": "z"})
+        assert view.get("owd_first") == "q"
+
+    def test_absent_unbound_key_still_gets_default(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"})
+        assert view.get("owd_second") == "a"
+
+    def test_name_bindings_returns_captures_for_matching_name(self) -> None:
+        assert _make_two_keys_fg().name_bindings("x__op_q_b") == {"owd_first": "q", "owd_second": "b"}
+
+    def test_name_bindings_empty_for_non_matching_name(self) -> None:
+        assert _make_two_keys_fg().name_bindings("plain_name") == {}
+
+    def test_name_bindings_empty_for_class_without_pattern(self) -> None:
+        assert _make_probe_fg().name_bindings("x__op_q_b") == {}
 
 
 class TestOptionsWithDefaultsHonorsExplicitNone:

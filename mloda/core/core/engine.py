@@ -112,7 +112,7 @@ class Engine:
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
         # Intake materialization memo: the strong source reference keeps its id stable, so features
         # sharing one pre-default Options share one effective Options.
-        self._intake_options_memo: dict[tuple[type[FeatureGroup], int], tuple[Options, Options]] = {}
+        self._intake_options_memo: dict[tuple[type[FeatureGroup], int, frozenset[str]], tuple[Options, Options]] = {}
         # Declared (pre-default) options per surviving feature uuid, for default-equivalent merge warnings.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
@@ -737,12 +737,17 @@ class Engine:
         check_cascade: bool = False,
     ) -> bool:
         # Materialize declared defaults at intake: default-equivalent twins become equal and merge
-        # via the duplicate path below; identity no-op without concrete defaults.
+        # via the duplicate path below; identity no-op without concrete defaults. A key the name binds
+        # gets no default here and is filled at the compute boundary, so identity never changes.
         declared_options = feature.options
-        memo_key = (feature_group_class, id(declared_options))
+        bindings = feature_group_class.name_bindings(feature.name)
+        memo_key = (feature_group_class, id(declared_options), frozenset(bindings))
         entry = self._intake_options_memo.get(memo_key)
         if entry is None:
-            entry = (declared_options, feature_group_class.options_with_defaults(declared_options))
+            entry = (
+                declared_options,
+                feature_group_class.options_with_defaults(declared_options, bindings, fill_bindings=False),
+            )
             self._intake_options_memo[memo_key] = entry
         feature.options = entry[1]
         feature_collection = self.feature_group_collection[feature_group_class]

@@ -409,22 +409,27 @@ A declared default is metadata until the resolved feature group materializes it.
 with a concrete declared default is filled from its spec (into context or group per the spec).
 A present value is never overridden, even a falsy `0`/`False`/`""`. `NO_DEFAULT` and
 `default=None` fill nothing. A strict default is already validated at construction, so the
-materialized value is not re-checked.
+materialized value is not re-checked. A key the feature name binds never receives a declared default;
+`FeatureGroup.name_bindings(name)` returns those bound values (the captured text, a `str`).
 
 The framework applies this at two sites. At feature **intake**
 (`Engine.add_feature_to_collection`) a feature's options are rebound through
 `options_with_defaults` as it enters the collection. At the **compute boundary**
 `run_calculate_feature` materializes the declared defaults into the `FeatureSet` before
 `calculate_feature` and any calculate-feature extender run, so a plugin reads `feature.options`
-directly. `options_with_defaults` remains for pre-materialization contexts (e.g. `resolve_subtype`
+directly. The same step also materializes the name-bound value (into context, or into group only when
+the key already sits there as `None`) for keys still absent, before `calculate_feature` and its extenders.
+Intake fills no bound value, so feature identity does not change: a name-only request and the same name
+with an agreeing explicit option are the same feature exactly as before (a context option merges, a group
+option stays its own feature). `options_with_defaults` remains for pre-materialization contexts (e.g. `resolve_subtype`
 internals) and for read sites the framework hands pre-default options, `input_features` above all.
 
 For an engine-driven request intake has already run, so the compute-boundary call is an idempotent
 no-op. It carries the work only for direct `FeatureSet` use that bypasses the engine, and there the
 collapsing twins raise instead of merging.
 
-A materialized default is never a declared option, so it never conflicts with a name-bound value:
-the name-agreement check reads the caller's own keys only.
+A materialized default or bound value is never a declared option, so it never conflicts with a
+name-bound value: the name-agreement check reads the caller's own keys only.
 
 Both sites run *after* resolution, so materialization never changes **resolution matching** (filter
 matching runs after intake and does observe materialized values, see below). It does change
@@ -444,7 +449,8 @@ Which stage sees which view of the options:
 | --- | --- |
 | Parse, bind, resolution match, resolve (subtype resolution applies defaults internally) | declared (pre-default) |
 | `input_features()` and child option inheritance | declared (pre-default) |
-| Splitting, planning, filter matching, `validate_input_features`, compute | effective (post-default) |
+| Splitting, planning, filter matching, `validate_input_features` | effective (post-default, no name-bound values) |
+| Compute (`calculate_feature` and its extenders) | effective (post-default, name-bound values filled) |
 
 The last row assumes intake has run, which is every engine-driven request. On the direct `FeatureSet`
 path the safety net materializes inside `run_calculate_feature`, which is after
@@ -462,8 +468,8 @@ graph_type = feature.options.get("graph_type")  # the declared default when the 
 `Options.get(key, default)` reads dict-style: a present key returns its stored value (even a falsy
 `0`/`False`/`""`), and the call-site `default` is returned only when the key is absent from both
 group and context. Because the framework has already materialized any declared default before
-`calculate_feature` runs, reading it back gives a three-level precedence, an explicit caller value
-first, then the declared spec default, then the call-site `default`. (Subtlety: materialization fills
+`calculate_feature` runs, reading it back gives a four-level precedence: the caller's own explicit value (which must agree with
+the name), then the name-bound value, then the declared spec default, then the call-site `default`. (Subtlety: materialization fills
 any key whose value `is None`, so an explicit `None` is replaced by a concrete spec default, while the
 other falsy values `0`/`False`/`""` are kept. That "None means absent" rule is the default; a spec
 opts a single key out with `allow_explicit_none=True`, after which an explicit `None` overrides even a

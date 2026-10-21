@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import DataCreator, PropertySpec
+from mloda.provider import DataCreator, FeatureChainParserMixin, PropertySpec
 from mloda.user import FeatureName, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -479,6 +479,69 @@ def test_shared_options_stay_aliased_through_intake() -> None:
         assert payload["options_identities"] == 1, (
             f"intake must keep the shared Options instance aliased across both features: {payload!r}"
         )
+
+
+IDC_BOUND_A = "idc_bound_a"  # name-bound keys of the pattern probe
+IDC_BOUND_B = "idc_bound_b"
+IDC_BOUND_CHILD = "idc_bound_child"
+
+
+def _make_bound_pattern_fg(seen: dict[str, Any], bound_context: bool = True) -> type[FeatureGroup]:
+    """A pattern consumer binding IDC_BOUND_A from its name, with a declared default on both keys."""
+
+    class IdcBoundPatternFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+        PREFIX_PATTERN = r".*__idcop_(?P<idc_bound_a>[a-z])$"
+        MIN_IN_FEATURES = 1
+        MAX_IN_FEATURES = 1
+        PROPERTY_MAPPING = {
+            IDC_BOUND_A: PropertySpec("Bound key.", context=bound_context, default="a"),
+            IDC_BOUND_B: PropertySpec("Unbound key.", context=True, default="b"),
+        }
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            for feature in features.features:
+                seen[str(feature.name)] = (feature.options.get(IDC_BOUND_A), feature.options.get(IDC_BOUND_B))
+            return {str(feature.name): data[IDC_BOUND_CHILD] for feature in features.features}
+
+    return IdcBoundPatternFeatureGroup
+
+
+def _make_bound_child_fg(seen: dict[str, Any]) -> type[FeatureGroup]:
+    class IdcBoundChildFeatureGroup(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> DataCreator:
+            return DataCreator({IDC_BOUND_CHILD})
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            for feature in features.features:
+                seen["child"] = feature.options.get(IDC_BOUND_A)
+            return {IDC_BOUND_CHILD: [1]}
+
+    return IdcBoundChildFeatureGroup
+
+
+def _run_bound(bound_context: bool = True) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
+    parent = _make_bound_pattern_fg(seen, bound_context)
+    child = _make_bound_child_fg(seen)
+    mloda.run_all(
+        [Feature(f"{IDC_BOUND_CHILD}__idcop_q")],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({parent, child}),
+    )
+    return seen
+
+
+def test_name_bound_key_gets_no_default_at_intake_while_unbound_key_does() -> None:
+    seen = _run_bound()
+    assert seen[f"{IDC_BOUND_CHILD}__idcop_q"] == ("q", "b")
+
+
+def test_child_does_not_inherit_name_bound_key() -> None:
+    seen = _run_bound(bound_context=False)
+    assert seen["child"] is None
 
 
 def test_non_default_equivalent_twins_do_not_merge(caplog: pytest.LogCaptureFixture) -> None:

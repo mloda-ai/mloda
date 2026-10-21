@@ -20,19 +20,34 @@ import importlib
 import inspect
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
 import mloda.provider
+from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     COLUMN_DISCOVERY_HOOKS,
     COLUMNWISE_HOOKS,
     FeatureChainParserMixin,
     missing_columnwise_hooks,
 )
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.provider import FeatureSet
+from mloda.user import Feature
+from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueImputation
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueImputation
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.python_dict import (
+    PythonDictMissingValueImputation,
+)
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import DimensionalityReductionFeatureGroup
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.geo_distance.base import GeoDistanceFeatureGroup
@@ -41,7 +56,11 @@ from mloda_plugins.feature_group.experimental.sklearn.encoding.base import Encod
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
+from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaning
+from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import PythonDictTextCleaning
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 from tests.test_plugins.feature_group.experimental.columnwise_hooks_test_mixin import (
     ADD_HOOK,
     CHECK_HOOK,
@@ -206,13 +225,113 @@ def test_mixin_requires_no_hook_by_default() -> None:
     assert FeatureChainParserMixin.REQUIRED_COLUMNWISE_HOOKS == frozenset()
 
 
-@pytest.mark.parametrize(
-    "group",
-    [AggregatedFeatureGroup, TimeWindowFeatureGroup, MissingValueFeatureGroup, TextCleaningFeatureGroup],
-    ids=lambda g: g.__name__,
-)
+def _perform(name: str) -> Any:
+    return lambda impl: getattr(impl, name)
+
+
+def _kwargs(**extra: Any) -> dict[str, Any]:
+    spec: dict[str, Any] = {
+        "add_column": _perform("_add_result_to_data"),
+        "columns": lambda impl: impl.compute_framework.extract_column_names,
+    }
+    spec.update(extra)
+    return spec
+
+
+_ABSENT_OLD_HOOKS = ("_get_available_columns", "_check_source_features_exist")
+
+# (group, implementations, loop method name, feature name, expected keyword callables per implementation)
+OPERATION_FAMILIES: dict[str, tuple[type[Any], list[type[Any]], str, str, list[dict[str, Any]]]] = {
+    "aggregation": (
+        AggregatedFeatureGroup,
+        [PandasAggregation, PyArrowAggregation, PolarsLazyAggregation],
+        "aggregate",
+        "sales__sum_aggr",
+        [_kwargs(perform=_perform("_perform_aggregation"))] * 3,
+    ),
+    "time_window": (
+        TimeWindowFeatureGroup,
+        [PandasTimeWindow, PyArrowTimeWindow],
+        "window",
+        "temperature__avg_3_day_window",
+        [
+            _kwargs(
+                perform=_perform("_perform_window_operation"),
+                column_semantics=lambda _impl: pandas_type_semantics.column_semantics,
+            ),
+            _kwargs(
+                perform=_perform("_perform_window_operation"),
+                column_semantics=lambda _impl: pyarrow_type_semantics.column_semantics,
+            ),
+        ],
+    ),
+    "missing_value": (
+        MissingValueFeatureGroup,
+        [PandasMissingValueImputation, PyArrowMissingValueImputation, PythonDictMissingValueImputation],
+        "impute",
+        "income__mean_imputed",
+        [_kwargs(perform=_perform("_perform_imputation"))] * 3,
+    ),
+    "text_cleaning": (
+        TextCleaningFeatureGroup,
+        [PandasTextCleaning, PythonDictTextCleaning],
+        "clean",
+        "text__cleaned_text",
+        [_kwargs(source_text=_perform("_get_source_text"), apply=_perform("_apply_operation"))] * 2,
+    ),
+}
+
+OPERATION_GROUPS = [(family[0]) for family in OPERATION_FAMILIES.values()]
+GROUP_IDS = list(OPERATION_FAMILIES)
+IMPLEMENTATION_CASES = [
+    pytest.param(name, impl, id=f"{name}-{impl.__name__}")
+    for name, family in OPERATION_FAMILIES.items()
+    for impl in family[1]
+]
+DELEGATION_CASES = [
+    pytest.param(name, impl, family[4][index], id=f"{name}-{impl.__name__}")
+    for name, family in OPERATION_FAMILIES.items()
+    for index, impl in enumerate(family[1])
+]
+
+
+@pytest.mark.parametrize("group", OPERATION_GROUPS, ids=GROUP_IDS)
 def test_operation_group_declares_no_hooks(group: type[Any]) -> None:
     assert group.REQUIRED_COLUMNWISE_HOOKS == frozenset()
+
+
+@pytest.mark.parametrize("group", OPERATION_GROUPS, ids=GROUP_IDS)
+def test_operation_group_is_concrete(group: type[Any]) -> None:
+    assert not inspect.isabstract(group)
+
+
+@pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)
+def test_implementation_serves_its_group(name: str, impl: type[Any]) -> None:
+    group = OPERATION_FAMILIES[name][0]
+    assert impl.__bases__ == (Implementation,)
+    assert impl.feature_group is group
+    assert not inspect.isabstract(impl)
+    for hook in _ABSENT_OLD_HOOKS:
+        assert not hasattr(impl, hook)
+    assert impl.compute_framework in group.compute_framework_definition()
+    group_part = f"{group.__module__}:{group.__name__}:"
+    assert any(part.startswith(group_part) for part in closure_parts(impl, include_dependencies=False))
+
+
+@pytest.mark.parametrize(("name", "impl", "expected"), DELEGATION_CASES)
+def test_calculate_delegates_to_the_group_it_is_handed(name: str, impl: type[Any], expected: dict[str, Any]) -> None:
+    _group, _impls, loop, feature_name, _specs = OPERATION_FAMILIES[name]
+    group = Mock()
+    data = {"a": [1]}
+    feature_set = FeatureSet()
+    feature_set.add(Feature(feature_name))
+
+    result = impl.calculate(group, data, feature_set)
+
+    getattr(group, loop).assert_called_once_with(
+        data, feature_set, **{key: resolve(impl) for key, resolve in expected.items()}
+    )
+    assert result is getattr(group, loop).return_value
 
 
 @pytest.mark.parametrize(("family", "expected"), list(FAMILY_REQUIREMENTS.items()), ids=FAMILY_IDS)

@@ -2,7 +2,6 @@
 Tests for the TimeWindowFeatureGroup class.
 """
 
-import inspect
 from typing import Any
 from unittest.mock import Mock
 
@@ -11,11 +10,8 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import FeatureSet
-from mloda.core.abstract_plugins.implementation import Implementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
-from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -250,39 +246,6 @@ class TestTimeWindowFeatureGroup:
         options.add_to_group(DefaultOptionKeys.reference_time, 123)  # Not a string
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.get_reference_time_column(options)
-
-    def test_group_is_concrete_and_its_implementations_serve_it(self) -> None:
-        assert not inspect.isabstract(TimeWindowFeatureGroup)
-        for implementation in (PandasTimeWindow, PyArrowTimeWindow):
-            assert implementation.__bases__ == (Implementation,)
-            assert implementation.feature_group is TimeWindowFeatureGroup
-            assert not inspect.isabstract(implementation)
-            assert not hasattr(implementation, "_get_available_columns")
-            assert not hasattr(implementation, "_check_source_features_exist")
-        assert PandasDataFrame in TimeWindowFeatureGroup.compute_framework_definition()
-        assert PyArrowTable in TimeWindowFeatureGroup.compute_framework_definition()
-
-    @pytest.mark.parametrize(
-        ("impl", "semantics"),
-        [(PandasTimeWindow, pandas_type_semantics), (PyArrowTimeWindow, pyarrow_type_semantics)],
-    )
-    def test_calculate_delegates_to_the_group_it_is_handed(self, impl: Any, semantics: Any) -> None:
-        group = Mock()
-        data = object()
-        feature_set = FeatureSet()
-        feature_set.add(Feature("temperature__avg_3_day_window"))
-
-        result = impl.calculate(group, data, feature_set)
-
-        group.window.assert_called_once_with(
-            data,
-            feature_set,
-            perform=impl._perform_window_operation,
-            add_column=impl._add_result_to_data,
-            columns=impl.compute_framework.extract_column_names,
-            column_semantics=semantics.column_semantics,
-        )
-        assert result is group.window.return_value
 
     def test_window_hands_the_group_time_delta_to_perform(self) -> None:
         df = pd.DataFrame({"x": [1.0, 2.0], DefaultOptionKeys.reference_time: pd.date_range("2023-01-01", periods=2)})

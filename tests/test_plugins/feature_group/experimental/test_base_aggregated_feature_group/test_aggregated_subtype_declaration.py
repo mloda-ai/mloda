@@ -12,7 +12,6 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
@@ -99,8 +98,7 @@ class TestAggregatedBehaviorNeutral:
 class TestAggregatedSubtypeSupportMatrix:
     """The group is concrete and its matrix comes from the implementations, one entry per served framework."""
 
-    def test_group_is_concrete_and_declares_the_universe(self) -> None:
-        assert not inspect.isabstract(AggregatedFeatureGroup)
+    def test_group_declares_the_universe(self) -> None:
         assert AggregatedFeatureGroup.subtype_universe() == AGGREGATION_UNIVERSE
 
     def test_abstract_family_base_has_an_empty_matrix(self) -> None:
@@ -116,17 +114,6 @@ class TestAggregatedSubtypeSupportMatrix:
         unserved = {f.get_class_name() for f in (PythonDictFramework, DuckDBFramework, SqliteFramework)}
         assert not unserved & set(matrix)
         assert all(subtypes == AGGREGATION_UNIVERSE for subtypes in matrix.values())
-
-    def test_implementations_are_direct_implementation_subclasses_serving_the_group(self) -> None:
-        group_part = "mloda_plugins.feature_group.experimental.aggregated_feature_group.base:AggregatedFeatureGroup:"
-        for implementation in (PandasAggregation, PyArrowAggregation, PolarsLazyAggregation):
-            assert implementation.__bases__ == (Implementation,)
-            assert implementation.feature_group is AggregatedFeatureGroup
-            assert not inspect.isabstract(implementation)
-            assert not hasattr(implementation, "_get_available_columns")
-            assert not hasattr(implementation, "_check_source_features_exist")
-            parts = closure_parts(implementation, include_dependencies=False)
-            assert any(part.startswith(group_part) for part in parts)
 
 
 _NAN = float("nan")

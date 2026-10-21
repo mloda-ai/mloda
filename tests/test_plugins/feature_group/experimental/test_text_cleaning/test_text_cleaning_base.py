@@ -2,14 +2,12 @@
 Tests for the TextCleaningFeatureGroup base class.
 """
 
-import inspect
 from typing import Any
 from unittest.mock import Mock, call
 
 import pandas as pd
 import pytest
 
-from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -97,35 +95,6 @@ class TestTextCleaningFeatureGroupBase:
         assert input_features is not None
         assert len(input_features) == 1
         assert next(iter(input_features)).name == "sum_aggr__sales"
-
-    def test_group_is_concrete_and_its_implementations_serve_it(self) -> None:
-        assert not inspect.isabstract(TextCleaningFeatureGroup)
-        for implementation, framework in zip(IMPLEMENTATIONS, FRAMEWORKS):
-            assert implementation.__bases__ == (Implementation,)
-            assert implementation.feature_group is TextCleaningFeatureGroup
-            assert implementation.compute_framework is framework
-            assert not inspect.isabstract(implementation)
-            assert not hasattr(implementation, "_get_available_columns")
-            assert not hasattr(implementation, "_check_source_features_exist")
-            assert framework in TextCleaningFeatureGroup.compute_framework_definition()
-
-    @pytest.mark.parametrize("impl", IMPLEMENTATIONS, ids=IMPL_IDS)
-    def test_calculate_delegates_to_the_group_it_is_handed(self, impl: Any) -> None:
-        group = Mock()
-        data = object()
-        feature_set = _feature_set("text__cleaned_text", "normalize")
-
-        result = impl.calculate(group, data, feature_set)
-
-        group.clean.assert_called_once_with(
-            data,
-            feature_set,
-            source_text=impl._get_source_text,
-            apply=impl._apply_operation,
-            add_column=impl._add_result_to_data,
-            columns=impl.compute_framework.extract_column_names,
-        )
-        assert result is group.clean.return_value
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
     def test_clean_source_check_is_strict_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:

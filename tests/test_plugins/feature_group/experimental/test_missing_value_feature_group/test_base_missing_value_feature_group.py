@@ -1,4 +1,3 @@
-import inspect
 from typing import Any
 from unittest.mock import Mock
 
@@ -6,7 +5,6 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -205,34 +203,6 @@ class TestMissingValueFeatureGroup:
         assert dict(by_name["region"].options.context) == expected_context
         if not expected_group and not expected_context:
             assert by_name["region"] == Feature("region")
-
-    def test_group_is_concrete_and_its_implementations_serve_it(self) -> None:
-        assert not inspect.isabstract(MissingValueFeatureGroup)
-        for implementation, framework in zip(IMPLEMENTATIONS, FRAMEWORKS):
-            assert implementation.__bases__ == (Implementation,)
-            assert implementation.feature_group is MissingValueFeatureGroup
-            assert implementation.compute_framework is framework
-            assert not inspect.isabstract(implementation)
-            assert not hasattr(implementation, "_get_available_columns")
-            assert not hasattr(implementation, "_check_source_features_exist")
-            assert framework in MissingValueFeatureGroup.compute_framework_definition()
-
-    @pytest.mark.parametrize("impl", IMPLEMENTATIONS, ids=IMPL_IDS)
-    def test_calculate_delegates_to_the_group_it_is_handed(self, impl: Any) -> None:
-        group = Mock()
-        data = object()
-        feature_set = _feature_set("income__mean_imputed")
-
-        result = impl.calculate(group, data, feature_set)
-
-        group.impute.assert_called_once_with(
-            data,
-            feature_set,
-            perform=impl._perform_imputation,
-            add_column=impl._add_result_to_data,
-            columns=impl.compute_framework.extract_column_names,
-        )
-        assert result is group.impute.return_value
 
     def test_python_dict_calculate_rejects_empty_data_before_the_group(self) -> None:
         group = Mock()

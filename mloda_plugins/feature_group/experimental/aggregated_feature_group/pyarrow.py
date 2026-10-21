@@ -137,30 +137,35 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
             # values for std/var (ddof=1 needs >=2). Route those through the helper, which
             # patches just the degenerate rows so the warning never fires, instead of
             # suppressing it process-wide via warnings.catch_warnings().
+            # sum/avg/mean/std/var/count skip only null cells, so a genuine NaN propagates (count
+            # counts it); the null mask comes from Arrow, not from the NaN-cast values.
+            null_mask = np.column_stack([col.is_null().to_numpy(zero_copy_only=False) for col in columns])
+            valid_counts = np.sum(~null_mask, axis=1)
+            zeroed = np.where(null_mask, 0, stacked)
+
             if aggregation_type == "sum":
-                result = np.nansum(stacked, axis=1)
+                result = zeroed.sum(axis=1)
             elif aggregation_type == "count":
-                result = np.sum(~np.isnan(stacked), axis=1)
-            elif aggregation_type in ["min", "max", "avg", "mean", "median"]:
+                result = valid_counts
+            elif aggregation_type in ["avg", "mean", "std", "var"]:
+                row_sums = zeroed.sum(axis=1)
+                means = np.full(row_sums.shape, np.nan)
+                np.divide(row_sums, valid_counts, out=means, where=valid_counts > 0)
+                if aggregation_type in ["avg", "mean"]:
+                    result = means
+                else:
+                    squares = np.where(null_mask, 0.0, stacked - means[:, np.newaxis]) ** 2
+                    variances = np.full(row_sums.shape, np.nan)
+                    np.divide(squares.sum(axis=1), valid_counts - 1, out=variances, where=valid_counts >= 2)
+                    result = variances if aggregation_type == "var" else np.sqrt(variances)
+            elif aggregation_type in ["min", "max", "median"]:
                 all_nan_rows = np.sum(~np.isnan(stacked), axis=1) == 0
                 if aggregation_type == "min":
                     result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmin(a, axis=1))
                 elif aggregation_type == "max":
                     result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmax(a, axis=1))
-                elif aggregation_type in ["avg", "mean"]:
-                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmean(a, axis=1))
                 else:
                     result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmedian(a, axis=1))
-            elif aggregation_type in ["std", "var"]:
-                under_two_valid_rows = np.sum(~np.isnan(stacked), axis=1) < 2
-                if aggregation_type == "std":
-                    result = _reduce_without_nan_warning(
-                        stacked, under_two_valid_rows, lambda a: np.nanstd(a, axis=1, ddof=1)
-                    )
-                else:
-                    result = _reduce_without_nan_warning(
-                        stacked, under_two_valid_rows, lambda a: np.nanvar(a, axis=1, ddof=1)
-                    )
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
 

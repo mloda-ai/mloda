@@ -1,3 +1,5 @@
+import math
+
 import pyarrow as pa
 import pandas as pd
 import pytest
@@ -82,6 +84,19 @@ def multi_source_table_with_null() -> pa.Table:
         {
             "metrics~0": pa.array([1.0, 2.0, None, 4.0], type=pa.float64()),
             "metrics~1": pa.array([10.0, 20.0, 30.0, 40.0], type=pa.float64()),
+        }
+    )
+
+
+@pytest.fixture
+def multi_source_table_with_nan_and_null() -> pa.Table:
+    """Row 0 holds a genuine NaN, row 1 holds a null, row 2 is clean."""
+    nan = float("nan")
+    return pa.table(
+        {
+            "metrics~0": pa.array([1.0, 2.0, 4.0], type=pa.float64()),
+            "metrics~1": pa.array([nan, None, 6.0], type=pa.float64()),
+            "metrics~2": pa.array([3.0, 5.0, 8.0], type=pa.float64()),
         }
     )
 
@@ -333,6 +348,42 @@ class TestPyArrowAggregatedFeatureGroupDdofAndNullSkip:
                 f"row {row_index}: expected a skip-null sum, got NaN (null propagated instead of skipped)"
             )
             assert abs(result[row_index] - expected[row_index]) < 1e-9
+
+    @pytest.mark.parametrize(
+        "agg_type, row0_nan, row0_value, row1, row2",
+        [
+            ("sum", True, None, 7.0, 18.0),
+            ("avg", True, None, 3.5, 6.0),
+            ("mean", True, None, 3.5, 6.0),
+            ("count", False, 3, 2, 3),
+            ("std", True, None, 4.5**0.5, 2.0),
+            ("var", True, None, 4.5, 4.0),
+            ("min", False, 1.0, 2.0, 4.0),
+            ("max", False, 3.0, 5.0, 8.0),
+            ("median", False, 2.0, 3.5, 6.0),
+        ],
+    )
+    def test_perform_aggregation_multi_column_nan_vs_null_contract(
+        self,
+        multi_source_table_with_nan_and_null: pa.Table,
+        agg_type: str,
+        row0_nan: bool,
+        row0_value: float | None,
+        row1: float,
+        row2: float,
+    ) -> None:
+        """Nulls are skipped; NaN propagates in sum/avg/mean/std/var, counts in count, is skipped by min/max/median."""
+        result = PyArrowAggregatedFeatureGroup._perform_aggregation(
+            multi_source_table_with_nan_and_null, agg_type, ["metrics~0", "metrics~1", "metrics~2"]
+        )
+
+        if row0_nan:
+            assert math.isnan(result[0])
+        else:
+            assert not math.isnan(result[0])
+            assert abs(result[0] - row0_value) < 1e-9
+        assert abs(result[1] - row1) < 1e-9
+        assert abs(result[2] - row2) < 1e-9
 
     def test_perform_aggregation_count_multi_column_excludes_null_without_crashing(
         self, multi_source_table_with_null: pa.Table

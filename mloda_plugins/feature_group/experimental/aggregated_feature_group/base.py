@@ -4,22 +4,21 @@ Base implementation for aggregated feature groups.
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
-from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import (
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMN_DISCOVERY_HOOKS
+from mloda.provider import OperationFeatureGroup
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
 from mloda.provider import SubtypeDeclaration
 
 
-class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for all aggregated feature groups.
 
@@ -39,6 +38,9 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     - `std`: Standard deviation of values
     - `var`: Variance of values
     - `median`: Median value
+
+    Reference contract: null is skipped; NaN propagates in sum, avg, mean, std, var; count counts
+    every non-null value including NaN; min, max and median skip NaN.
 
     ## Feature Creation Methods
 
@@ -109,9 +111,6 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
 
-    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
-
     # Property mapping for configuration-based feature creation
     PROPERTY_MAPPING = {
         AGGREGATION_TYPE: PropertySpec(
@@ -161,56 +160,24 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
         return aggregation_type in cls.AGGREGATION_TYPES
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform aggregations.
-
-        Processes all requested features, determining the aggregation type
-        and source feature from either string parsing or configuration-based options.
-
-        Supports multi-column features by using resolve_multi_column_feature() to
-        automatically discover columns matching the pattern feature_name~N.
-
-        Adds the aggregated results directly to the input data structure.
-        """
-        # Process each requested feature
+    def aggregate(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, list[str]], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: resolve each feature's source columns, run perform, add the result with add_column."""
         for feature in features.get_sorted_features():
             aggregation_type, source_feature_name = cls._extract_aggr_and_source_feature(feature)
-
-            # Resolve multi-column features automatically
-            # If source_feature_name is "onehot_encoded__product", this discovers
-            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
-            available_columns = cls._get_available_columns(data)
-            resolved_columns = cls.resolve_multi_column_feature(source_feature_name, available_columns)
-
-            # Check that resolved columns exist
-            cls._check_source_features_exist(data, resolved_columns)
-
+            available = columns(data)
+            resolved = cls.resolve_multi_column_feature(source_feature_name, available)
+            if not any(name in available for name in resolved):
+                listing = sorted(available, key=str)
+                raise ValueError(f"None of the source features {resolved} found in data. Available columns: {listing}")
             if aggregation_type not in cls.AGGREGATION_TYPES:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
-
-            result = cls._perform_aggregation(data, aggregation_type, resolved_columns)
-
-            data = cls._add_result_to_data(data, feature.name, result)
-
+            data = add_column(data, feature.name, perform(data, aggregation_type, resolved))
         return data
-
-    @classmethod
-    @abstractmethod
-    def _perform_aggregation(cls, data: Any, aggregation_type: str, in_features: list[str]) -> Any:
-        """
-        Method to perform the aggregation. Should be implemented by subclasses.
-
-        Supports both single-column and multi-column aggregation:
-        - Single column: [feature_name] - aggregates values within the column
-        - Multi-column: [feature~0, feature~1, ...] - aggregates across columns
-
-        Args:
-            data: The input data
-            aggregation_type: The type of aggregation to perform
-            in_features: List of resolved source feature names to aggregate
-
-        Returns:
-            The result of the aggregation
-        """
-        ...

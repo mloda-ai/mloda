@@ -16,7 +16,9 @@ from mloda.user import mloda
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 
@@ -188,7 +190,7 @@ class TestResolveOperationRunAll:
     def test_string_based_feature_via_run_all(self) -> None:
         """String-based aggregation feature resolves correctly through the engine."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ResolveOperationTestDataCreator, PandasAggregatedFeatureGroup}
+            {ResolveOperationTestDataCreator, AggregatedFeatureGroup}
         )
 
         results = mloda.run_all(
@@ -204,7 +206,7 @@ class TestResolveOperationRunAll:
     def test_config_based_feature_via_run_all(self) -> None:
         """Config-based aggregation feature resolves correctly through the engine."""
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {ResolveOperationTestDataCreator, PandasAggregatedFeatureGroup}
+            {ResolveOperationTestDataCreator, AggregatedFeatureGroup}
         )
 
         feature = Feature(

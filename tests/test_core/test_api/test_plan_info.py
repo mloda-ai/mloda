@@ -53,6 +53,7 @@ claim is registry-wide, so generic names like ``sales`` would leak into every ot
 import ast
 import copy
 import dataclasses
+import importlib
 import itertools
 import json
 import sqlite3
@@ -124,7 +125,8 @@ from mloda.user import (
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
@@ -482,8 +484,8 @@ class PlanInfoPointerConsumer(FeatureGroup):
         return {cls.get_class_name()}
 
 
-_AGGREGATION_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, PandasAggregatedFeatureGroup})
-_TRANSFORM_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoArrowSource, PandasAggregatedFeatureGroup})
+_AGGREGATION_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, AggregatedFeatureGroup})
+_TRANSFORM_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoArrowSource, AggregatedFeatureGroup})
 _NEVER_EXECUTES_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoNeverExecutes})
 _JOIN_PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoLeftSource, PlanInfoRightSource, PlanInfoJoinConsumer})
 _CROSS_JOIN_PLUGINS = PluginCollector.enabled_feature_groups(
@@ -501,6 +503,10 @@ _SPECIALIZED_PLUGINS = PluginCollector.enabled_feature_groups(
 
 # The chained request from the issue: an aggregated feature over a source feature.
 _CHAINED_FEATURES: list[Feature | str] = ["plan_info_sales__mean_aggr"]
+# Pinned to the Pandas implementation: with PyArrow enabled too, the free request would run on PyArrow.
+_PANDAS_CHAINED_FEATURES: list[Feature | str] = [
+    Feature("plan_info_sales__mean_aggr", implementation=PandasAggregation)
+]
 
 
 def _prepare_chained_session() -> mlodaAPI:
@@ -595,7 +601,7 @@ class TestPlanStepDataclass:
         step = PlanStep(
             step_kind="compute",
             feature_names=("plan_info_sales__mean_aggr",),
-            feature_group=PandasAggregatedFeatureGroup,
+            feature_group=AggregatedFeatureGroup,
             compute_framework=PandasDataFrame,
             source_feature_group=None,
             source_compute_framework=None,
@@ -673,13 +679,13 @@ class TestPlanStepDataclass:
         step = PlanStep(
             step_kind="transform",
             feature_names=(),
-            feature_group=PandasAggregatedFeatureGroup,
+            feature_group=AggregatedFeatureGroup,
             compute_framework=PandasDataFrame,
             source_feature_group=PlanInfoArrowSource,
             source_compute_framework=PyArrowTable,
         )
 
-        assert step.feature_group_name == "PandasAggregatedFeatureGroup"
+        assert step.feature_group_name == "AggregatedFeatureGroup"
         assert step.compute_framework_name == "PandasDataFrame"
         assert step.source_feature_group_name == "PlanInfoArrowSource"
         assert step.source_compute_framework_name == "PyArrowTable"
@@ -780,7 +786,7 @@ class TestPlanStepInputFeatureNamesField:
         return PlanStep(
             step_kind="compute",
             feature_names=("plan_info_sales__mean_aggr",),
-            feature_group=PandasAggregatedFeatureGroup,
+            feature_group=AggregatedFeatureGroup,
             compute_framework=PandasDataFrame,
             source_feature_group=None,
             source_compute_framework=None,
@@ -874,6 +880,26 @@ class TestPlanStepImplementation:
         assert step.implementation_specialized_from == ()
         assert step.feature_group_version == ToyWorkerFG.version()
 
+    @pytest.mark.parametrize(
+        "framework_name, impl_name", [("PandasDataFrame", "OpToyPandas"), ("PyArrowTable", "OpToyPyArrow")]
+    )
+    def test_an_operation_step_reports_the_serving_implementation(self, framework_name: str, impl_name: str) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        impl: Any = getattr(toy, impl_name)
+
+        steps = mloda.explain(
+            [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework=framework_name)],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+        )
+        step = next(s for s in steps if s.step_kind == "compute")
+
+        assert step.implementation_path == _class_path(impl)
+        assert step.implementation_version == impl.version()
+        assert step.implementation is impl
+
     def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
         step = _explain_toy_group(neutral_csv_group(tmp_path / "n.csv"))
 
@@ -914,10 +940,11 @@ class TestPlanStepImplementation:
     ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
         parent = make_implementation(group, PythonDictFramework, name="PlanInfoEqualImpl")
-        make_implementation(group, PythonDictFramework, base=parent, name="PlanInfoOtherImpl")
+        child = make_implementation(group, PythonDictFramework, base=parent, name="PlanInfoOtherImpl")
         step = _explain_toy_group(group)
         other = parent
 
+        assert issubclass(child, parent)
         assert dataclasses.replace(step, implementation=other) != step
         assert dataclasses.replace(step, implementation_specialized_from=()) != step
         assert (
@@ -947,7 +974,7 @@ class TestPlanStepImplementation:
         self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        make_implementation(group, PythonDictFramework, name="PlanInfoUnhashableImpl")
+        impl = make_implementation(group, PythonDictFramework, name="PlanInfoUnhashableImpl")
 
         def boom(cls: Any, target_class: Any) -> str:
             raise OSError("no source")
@@ -956,6 +983,7 @@ class TestPlanStepImplementation:
 
         step = _explain_toy_group(group)
 
+        assert step.implementation is impl
         assert step.implementation_hash == "unavailable"
         assert step.implementation_version is None
         assert len(plan_structure_hash([step])) == 64
@@ -969,7 +997,7 @@ class TestPlanStepInputFeatureEdgesField:
         return PlanStep(
             step_kind="compute",
             feature_names=("plan_info_sales__mean_aggr",),
-            feature_group=PandasAggregatedFeatureGroup,
+            feature_group=AggregatedFeatureGroup,
             compute_framework=PandasDataFrame,
             source_feature_group=None,
             source_compute_framework=None,
@@ -1420,10 +1448,12 @@ class TestResolvedPlanForChainedFeature:
 
         # The concrete aggregation implementation on the selected framework.
         assert aggregation_step.feature_names == ("plan_info_sales__mean_aggr",)
-        assert aggregation_step.feature_group is PandasAggregatedFeatureGroup
+        assert aggregation_step.feature_group is AggregatedFeatureGroup
         assert aggregation_step.compute_framework is PandasDataFrame
 
-        assert aggregation_step.feature_group_name == "PandasAggregatedFeatureGroup"
+        assert aggregation_step.feature_group_name == "AggregatedFeatureGroup"
+        assert aggregation_step.implementation is PandasAggregation
+        assert aggregation_step.implementation_path == _class_path(PandasAggregation)
         assert aggregation_step.compute_framework_name == "PandasDataFrame"
 
         assert all(step.specialized_from == () for step in plan)
@@ -1463,7 +1493,7 @@ class TestResolvedPlanForChainedFeature:
         plan = _prepare_chained_session().resolved_plan()
 
         groups = [step.feature_group for step in plan if step.step_kind == "compute"]
-        assert groups.index(PlanInfoPandasSource) < groups.index(PandasAggregatedFeatureGroup)
+        assert groups.index(PlanInfoPandasSource) < groups.index(AggregatedFeatureGroup)
 
 
 # ---------------------------------------------------------------------------
@@ -1611,7 +1641,7 @@ class TestExplain:
 
         assert isinstance(explained, list)
         assert all(isinstance(step, PlanStep) for step in explained)
-        assert [step.feature_group for step in explained] == [PlanInfoPandasSource, PandasAggregatedFeatureGroup]
+        assert [step.feature_group for step in explained] == [PlanInfoPandasSource, AggregatedFeatureGroup]
 
     def test_explain_reports_the_parent_a_subclass_winner_replaced(self) -> None:
         explained = mlodaAPI.explain(
@@ -1864,7 +1894,7 @@ class TestTransformStepMapping:
 
     def test_transform_step_maps_from_and_to_group_and_framework(self) -> None:
         session = mloda.prepare(
-            ["plan_info_arrow_sales__mean_aggr"],
+            [Feature("plan_info_arrow_sales__mean_aggr", implementation=PandasAggregation)],
             compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=_TRANSFORM_PLUGINS,
         )
@@ -1878,7 +1908,7 @@ class TestTransformStepMapping:
 
         # transform: feature_group/compute_framework are the destination, source_* the origin.
         assert transform.feature_names == ()
-        assert transform.feature_group is PandasAggregatedFeatureGroup
+        assert transform.feature_group is AggregatedFeatureGroup
         assert transform.compute_framework is PandasDataFrame
         assert transform.source_feature_group is PlanInfoArrowSource
         assert transform.source_compute_framework is PyArrowTable
@@ -1886,10 +1916,12 @@ class TestTransformStepMapping:
 
         assert transform.source_feature_group_name == "PlanInfoArrowSource"
         assert transform.source_compute_framework_name == "PyArrowTable"
+        assert plan[-1].step_kind == "compute"
+        assert plan[-1].implementation is PandasAggregation
 
     def test_transform_step_sits_between_its_compute_steps(self) -> None:
         session = mloda.prepare(
-            ["plan_info_arrow_sales__mean_aggr"],
+            [Feature("plan_info_arrow_sales__mean_aggr", implementation=PandasAggregation)],
             compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=_TRANSFORM_PLUGINS,
         )
@@ -2165,7 +2197,7 @@ class TestRequestedAndInjectedForChainedFeature:
     def test_aggregation_step_features_are_all_requested(self) -> None:
         plan = _prepare_chained_session().resolved_plan()
 
-        aggregation_step = next(step for step in plan if step.feature_group is PandasAggregatedFeatureGroup)
+        aggregation_step = next(step for step in plan if step.feature_group is AggregatedFeatureGroup)
 
         assert aggregation_step.requested_feature_names == aggregation_step.feature_names
         assert aggregation_step.requested_feature_names == ("plan_info_sales__mean_aggr",)
@@ -2438,7 +2470,7 @@ class TestInputFeatureNamesForChainedFeature:
     def test_derived_step_reports_the_source_feature_it_declares(self) -> None:
         plan = _prepare_chained_session().resolved_plan()
 
-        aggregation_step = next(step for step in plan if step.feature_group is PandasAggregatedFeatureGroup)
+        aggregation_step = next(step for step in plan if step.feature_group is AggregatedFeatureGroup)
 
         assert aggregation_step.input_feature_names == ("plan_info_sales",)
         assert aggregation_step.input_feature_edges == {"plan_info_sales__mean_aggr": ("plan_info_sales",)}
@@ -2591,7 +2623,7 @@ class TestPlanStepResultFramework:
     @staticmethod
     def _chained_plan(**options: Any) -> list[PlanStep]:
         return mloda.explain(
-            _CHAINED_FEATURES,
+            _PANDAS_CHAINED_FEATURES,
             compute_frameworks=[PandasDataFrame, PyArrowTable],
             plugin_collector=_AGGREGATION_PLUGINS,
             **options,
@@ -2641,7 +2673,7 @@ class TestPlanStepResultFramework:
             plan = self._chained_plan(output_framework="PyArrowTable")
         else:
             session = mloda.prepare(
-                _CHAINED_FEATURES,
+                _PANDAS_CHAINED_FEATURES,
                 compute_frameworks=[PandasDataFrame, PyArrowTable],
                 plugin_collector=_AGGREGATION_PLUGINS,
                 output_framework="PyArrowTable",

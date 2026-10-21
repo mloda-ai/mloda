@@ -18,6 +18,10 @@ Contract under test (to be implemented by the Green agent):
 All tests are written to FAIL until the feature exists.
 """
 
+import importlib
+from typing import Any
+
+import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
@@ -26,6 +30,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.user import PluginCollector, mloda
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise, identify_winner
 
@@ -362,3 +367,77 @@ class TestComputeFrameworkCapabilityHook:
         assert DualDeclaringFG_782.get_class_name() not in suggestion_line, (
             f"the 'Did you mean' suggestion must not echo the already-named eliminated candidate, got: {error_message}"
         )
+
+
+def _toy_operation() -> Any:
+    """Imported lazily so a missing OperationFeatureGroup fails only the tests that need it."""
+    return importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
+
+
+class TestOperationImplementationCapability:
+    """An Implementation's supported and accepts remove its framework at match time."""
+
+    @pytest.mark.parametrize(
+        "kind, extra, expected",
+        [
+            ("sum", {}, {"PandasDataFrame", "PyArrowTable"}),
+            ("median", {}, {"PandasDataFrame"}),
+            ("sum", {"optoy_pandas_off": "1"}, {"PyArrowTable"}),
+            ("median", {"optoy_pandas_off": "1"}, set()),
+        ],
+    )
+    def test_supported_and_accepts_narrow_the_frameworks(
+        self, kind: str, extra: dict[str, str], expected: set[str]
+    ) -> None:
+        toy = _toy_operation()
+        feature = Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: kind, **extra})
+        frameworks = {toy.PandasDataFrame, toy.PyArrowTable}
+        plugins: FeatureGroupEnvironmentMapping = {toy.OpToyFG: frameworks}
+
+        if expected:
+            _, winners = identify_winner(feature=feature, accessible_plugins=plugins)
+            assert {fw.get_class_name() for fw in winners} == expected
+            return
+        with pytest.raises(ValueError) as exc_info:
+            evaluate_or_raise(feature=feature, accessible_plugins=plugins)
+        elimination = exc_info.value.result.eliminations[toy.OpToyFG]  # type: ignore[attr-defined]
+        assert elimination.stage == "capability"
+
+    @pytest.mark.parametrize(
+        ("child_accepts", "parent_options", "succeeds"),
+        [(False, {}, True), (True, {"optoy_pandas_off": "1"}, False)],
+        ids=["disabled_child_rejects_over_accepting_parent", "disabled_child_accepts_over_rejecting_parent"],
+    )
+    def test_a_disabled_implementation_does_not_decide_the_capability(
+        self, make_implementation: Any, child_accepts: bool, parent_options: dict[str, str], succeeds: bool
+    ) -> None:
+        toy = _toy_operation()
+        child = make_implementation(
+            toy.OpToyFG,
+            toy.PandasDataFrame,
+            lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [toy.PANDAS_MARK]}),
+            base=toy.OpToyPandas,
+        )
+        child.accepts = classmethod(lambda cls, feature_name, options: child_accepts)
+        collector = PluginCollector.enabled_feature_groups({toy.OpToyFG})
+        collector.add_disabled_implementation_classes({child})
+        feature = Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum", **parent_options})
+
+        def run() -> list[Any]:
+            return mloda.run_all([feature], compute_frameworks=[toy.PandasDataFrame], plugin_collector=collector)
+
+        if succeeds:
+            assert run()
+            return
+        with pytest.raises(ValueError):
+            run()
+
+    def test_subtype_support_matrix_reads_the_implementations(self) -> None:
+        toy = _toy_operation()
+
+        matrix = toy.OpToyFG.subtype_support_matrix()
+        assert matrix["PandasDataFrame"] == frozenset({"sum", "median"})
+        assert matrix["PyArrowTable"] == frozenset({"sum"})
+        assert "PythonDictFramework" not in matrix

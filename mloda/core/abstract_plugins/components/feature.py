@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import copy
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -123,6 +123,7 @@ class Feature:
         inherit_context_keys: frozenset[str] | set[str] | list[str] | tuple[str, ...] = frozenset(),
         required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
         keep_index: bool = False,
+        implementation: str | type | Sequence[str | type] | None = None,
     ):
         if options is None:
             options = {}
@@ -141,6 +142,9 @@ class Feature:
         self.framework_pinned = cf is not None
         self.chosen_compute_framework: type[ComputeFramework] | None = None
         self.chosen_compute_framework_reason: str | None = None
+
+        # Names of the Implementation classes this request pins; part of eq/hash since it changes what runs.
+        self.implementation_pin = self._normalize_implementation_pin(implementation)
 
         self.data_type = None
         if data_type is not None:
@@ -470,6 +474,7 @@ class Feature:
             and self.domain == other.domain
             and (not include_compute_frameworks or self.compute_frameworks == other.compute_frameworks)
             and self.data_type == other.data_type
+            and self.implementation_pin == other.implementation_pin
             and self._child_options_key() == other._child_options_key()
             and self._input_data_match_key() == other._input_data_match_key()
         )
@@ -494,10 +499,36 @@ class Feature:
                 self.domain,
                 compute_frameworks_hashable,
                 self.data_type,
+                self.implementation_pin,
                 self._child_options_key(),
                 self._input_data_match_key(),
             )
         )
+
+    @staticmethod
+    def _normalize_implementation_pin(
+        implementation: str | type | Sequence[str | type] | None,
+    ) -> tuple[str, ...] | None:
+        if implementation is None:
+            return None
+        items = (
+            implementation
+            if isinstance(implementation, Sequence) and not isinstance(implementation, str)
+            else [implementation]
+        )
+        if len(items) == 0:
+            raise ValueError("An implementation pin needs at least one name or Implementation class.")
+        names: list[str] = []
+        for item in items:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, type):
+                names.append(f"{item.__module__}:{item.__qualname__}")
+            else:
+                raise TypeError(
+                    f"An implementation pin must be a name or an Implementation class, got {type(item).__name__}."
+                )
+        return tuple(names)
 
     @property
     def input_data_match(self) -> tuple[DataAccessReader, Any] | None:

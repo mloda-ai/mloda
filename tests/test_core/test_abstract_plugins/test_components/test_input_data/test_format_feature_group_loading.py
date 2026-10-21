@@ -1,13 +1,18 @@
 """FormatFeatureGroup loaders, neutral fallback and the describe_columns/count_rows tools."""
 
 import gc
+import importlib
+from abc import abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.options import Options
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -34,6 +39,13 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
 )
 
 SENTINEL = [{"toyfmt_ld": 111}, {"toyfmt_ld": 222}]
+
+
+def _toy_operation() -> Any:
+    """Imported lazily so a missing OperationFeatureGroup fails only the tests that need it."""
+    return importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
 
 
 def _run(group: type, frameworks: Any = None, column: str = "toyfmt_ld") -> list[Any]:
@@ -205,16 +217,25 @@ class TestImplementationDefinition:
         with pytest.raises(TypeError, match="feature_group" if missing != "compute_framework" else "compute_framework"):
             type("_Missing", (Implementation,), attributes)
 
-    def test_feature_group_must_be_a_format_feature_group(self) -> None:
-        with pytest.raises(TypeError, match="feature_group"):
+    @pytest.mark.parametrize("kind", ["plain", "format", "operation"])
+    def test_feature_group_must_be_a_format_or_operation_feature_group(
+        self, kind: str, make_implementation: Any
+    ) -> None:
+        if kind == "plain":
+            with pytest.raises(TypeError, match="feature_group"):
 
-            class _PlainGroup(Implementation):
-                feature_group = FeatureGroup
-                compute_framework = PythonDictFramework
+                class _PlainGroup(Implementation):
+                    feature_group = FeatureGroup
+                    compute_framework = PythonDictFramework
 
-                @classmethod
-                def calculate(cls, *args: Any) -> Any:
-                    return None
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            return
+        group = ToyFormatFG if kind == "format" else _toy_operation().OpToyFG
+        impl = make_implementation(group, PythonDictFramework, _sentinel)
+        assert impl in loaded_implementations()
 
     def test_compute_framework_must_be_a_compute_framework(self) -> None:
         with pytest.raises(TypeError, match="compute_framework"):
@@ -233,8 +254,341 @@ class TestImplementationDefinition:
 
         sibling = make_implementation(ToyFormatFG, PythonDictFramework, _sentinel)
 
+        class _HelperBase(Implementation):
+            @classmethod
+            def calculate(cls, *args: Any) -> Any:
+                return None
+
+            @classmethod
+            @abstractmethod
+            def hook(cls) -> Any: ...
+
+        class _HelperPythonDict(_HelperBase):
+            feature_group = ToyDeclaredFG
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def hook(cls) -> Any:
+                return None
+
+        class _HelperPyArrow(_HelperBase):
+            feature_group = ToyDeclaredFG
+            compute_framework = PyArrowTable
+
+            @classmethod
+            def hook(cls) -> Any:
+                return None
+
         assert sibling in loaded_implementations()
         assert _IntermediateBase not in loaded_implementations()
+        assert _HelperBase not in loaded_implementations()
+        assert {_HelperPythonDict, _HelperPyArrow} <= set(loaded_implementations())
+        assert PreFilterPlugins({PythonDictFramework, PyArrowTable}).implementations is not None
+        del _HelperPythonDict, _HelperPyArrow, _HelperBase
+        gc.collect()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _collect_local_classes() -> Iterator[None]:
+    yield
+    gc.collect()
+
+
+def _run_operation(
+    feature_name: str,
+    framework: Any = None,
+    group: Any = None,
+    disabled: Any = (),
+    kind: str = "sum",
+) -> list[Any]:
+    toy = _toy_operation()
+    feature = Feature(
+        feature_name,
+        {toy.OPTOY_KEY: kind},
+        compute_framework=None if framework is None else framework.get_class_name(),
+    )
+    collector = PluginCollector.enabled_feature_groups({group or toy.OpToyFG})
+    collector.add_disabled_implementation_classes(set(disabled))
+    return mloda.run_all(
+        [feature],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=collector,
+    )
+
+
+class TestOperationImplementation:
+    def test_unpinned_run_with_two_frameworks_resolves_to_one_group(self) -> None:
+        toy = _toy_operation()
+
+        result = _run_operation(toy.OPTOY_FEATURE)
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [toy.PYARROW_MARK]
+
+    def test_a_matching_implementation_is_preferred_to_a_divergent_one_listed_first(self) -> None:
+        toy = _toy_operation()
+
+        steps = mloda.explain(
+            [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"})],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+        )
+        step = next(s for s in steps if s.step_kind == "compute")
+
+        assert step.compute_framework_name == "PyArrowTable"
+        assert step.compute_framework_reason == "prefers a matching version"
+
+    def test_a_subclass_group_is_served_by_the_parent_implementation_with_the_subclass_as_group(self) -> None:
+        toy = _toy_operation()
+        toy.OpToyPandas.served_by.clear()
+
+        result = _run_operation(toy.OPTOY_CHILD_FEATURE, PandasDataFrame, group=toy.OpToyChildFG)
+
+        assert column_values(result, toy.OPTOY_CHILD_FEATURE) == [toy.PANDAS_MARK]
+        assert toy.OpToyPandas.served_by == [toy.OpToyChildFG]
+
+    def test_an_operation_group_without_an_implementation_is_never_a_candidate(self) -> None:
+        toy = _toy_operation()
+
+        assert toy.OpToyBareFG.compute_framework_definition() == set()
+        with pytest.raises(ValueError):
+            _run_operation(toy.OPTOY_BARE_FEATURE, group=toy.OpToyBareFG)
+
+    def test_a_framework_without_an_implementation_is_not_in_the_definition(self, make_implementation: Any) -> None:
+        toy = _toy_operation()
+
+        definition = toy.OpToyFG.compute_framework_definition()
+        assert {PandasDataFrame, PyArrowTable} <= definition
+        assert PythonDictFramework not in definition
+        dict_impl = make_implementation(toy.OpToyFG, PythonDictFramework, _sentinel)
+        assert PythonDictFramework in toy.OpToyFG.compute_framework_definition()
+        assert dict_impl.feature_group is toy.OpToyFG
+
+    def test_a_disabled_implementation_removes_its_framework_from_the_run(self) -> None:
+        toy = _toy_operation()
+
+        result = _run_operation(toy.OPTOY_FEATURE, disabled={toy.OpToyPyArrow})
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [toy.PANDAS_MARK]
+        with pytest.raises(ValueError):
+            _run_operation(toy.OPTOY_FEATURE, PyArrowTable, disabled={toy.OpToyPyArrow})
+
+    def test_divergence_reports_the_declared_reason_for_its_subtype_only(self) -> None:
+        toy = _toy_operation()
+        sum_options = Options({toy.OPTOY_KEY: "sum"})
+        median_options = Options({toy.OPTOY_KEY: "median"})
+
+        assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, sum_options) == "skips NaN in sum"
+        assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, median_options) is None
+
+
+INNER = "optoy_chain_src__optoy_chain"
+OUTER = "optoy_chain_src__optoy_chain__optoy_chain"
+
+
+def _run_pinned(
+    features: list[Feature],
+    groups: Any = None,
+    frameworks: Any = (PandasDataFrame, PyArrowTable),
+    disabled: Any = (),
+) -> list[Any]:
+    toy = _toy_operation()
+    collector = PluginCollector.enabled_feature_groups(groups or {toy.OpToyFG})
+    collector.add_disabled_implementation_classes(set(disabled))
+    return mloda.run_all(features, compute_frameworks=list(frameworks), plugin_collector=collector)
+
+
+def _run_chain(features: list[Feature], **kwargs: Any) -> list[Any]:
+    toy = _toy_operation()
+    toy.CHAIN_LOG.clear()
+    return _run_pinned(features, groups={toy.OpToyChainSourceFG, toy.OpToyChainFG}, **kwargs)
+
+
+def _op_feature(pin: Any, **kwargs: Any) -> Feature:
+    toy = _toy_operation()
+    return Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, implementation=pin, **kwargs)
+
+
+class TestImplementationPin:
+    @pytest.mark.parametrize(
+        ("pin", "framework", "mark"),
+        [
+            ("OpToyPyArrow", None, 2),
+            ("OpToyPandas", None, 1),
+            ("toy_class_pyarrow", None, 2),
+            ("toy_class_pandas", None, 1),
+            (None, PandasDataFrame, 1),
+            (None, PyArrowTable, 2),
+        ],
+    )
+    def test_the_pin_selects_the_implementation_that_runs(self, pin: str | None, framework: Any, mark: int) -> None:
+        toy = _toy_operation()
+        classes: dict[str | None, Any] = {"toy_class_pyarrow": toy.OpToyPyArrow, "toy_class_pandas": toy.OpToyPandas}
+
+        if pin is None:
+            result = _run_operation(toy.OPTOY_FEATURE, framework)
+        else:
+            result = _run_pinned([_op_feature(classes.get(pin, pin))])
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [mark]
+
+    def test_naming_a_parent_implementation_lets_a_subclass_implementation_serve(
+        self, make_implementation: Any
+    ) -> None:
+        toy = _toy_operation()
+        plus = make_implementation(
+            toy.OpToyFG,
+            PandasDataFrame,
+            lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [77]}),
+            base=toy.OpToyPandas,
+            name="OpToyPandasPlus",
+        )
+
+        result = _run_pinned([_op_feature("OpToyPandas")])
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [77]
+        assert issubclass(plus, toy.OpToyPandas)
+
+    @pytest.mark.parametrize(
+        ("pin", "expected"),
+        [
+            ("OpToyChainPyArrow", [("INNER", "OpToyChainPyArrow"), ("OUTER", "OpToyChainPyArrow")]),
+            (
+                ["OpToyChainPandas", "OpToyChainPyArrow"],
+                [("INNER", "OpToyChainPandas"), ("OUTER", "OpToyChainPyArrow")],
+            ),
+            (
+                ["OpToyChainPyArrow", "OpToyChainPandas"],
+                [("INNER", "OpToyChainPyArrow"), ("OUTER", "OpToyChainPandas")],
+            ),
+        ],
+        ids=["one_name_pins_both", "inner_pandas_outer_pyarrow", "inner_pyarrow_outer_pandas"],
+    )
+    def test_a_chain_pins_by_input_ancestry_order(self, pin: Any, expected: list[tuple[str, str]]) -> None:
+        _run_chain([Feature(OUTER, implementation=pin)])
+
+        toy = _toy_operation()
+        names = {"INNER": INNER, "OUTER": OUTER}
+        assert toy.CHAIN_LOG == [(names[step], impl) for step, impl in expected]
+
+    @pytest.mark.parametrize(
+        ("case", "needle"),
+        [
+            ("unknown", "NoSuchImpl"),
+            ("disabled", "OpToyPyArrow"),
+            ("framework_not_enabled", "OpToyPyArrow"),
+            ("keys_no_group_of_chain", "OpToyChainPandas"),
+            ("conflicts_with_compute_framework", "OpToyPyArrow"),
+            ("too_many_names", "OpToyChainPandas"),
+            ("format_group_overrides_load_neutral", "FmtParentImpl"),
+        ],
+    )
+    def test_a_bad_pin_raises_implementation_pin_error_naming_step_and_class(
+        self, case: str, needle: str, tmp_path: Path, make_implementation: Any
+    ) -> None:
+        from mloda.provider import ImplementationPinError
+
+        toy = _toy_operation()
+        assert issubclass(ImplementationPinError, ValueError)
+        feature_name = toy.OPTOY_FEATURE
+        with pytest.raises(ImplementationPinError) as caught:
+            if case == "unknown":
+                _run_pinned([_op_feature("NoSuchImpl")])
+            elif case == "disabled":
+                _run_pinned([_op_feature("OpToyPyArrow")], disabled={toy.OpToyPyArrow})
+            elif case == "framework_not_enabled":
+                _run_pinned([_op_feature("OpToyPyArrow")], frameworks=(PandasDataFrame,))
+            elif case == "keys_no_group_of_chain":
+                _run_pinned([_op_feature("OpToyChainPandas")])
+            elif case == "conflicts_with_compute_framework":
+                _run_pinned([_op_feature("OpToyPyArrow", compute_framework="PandasDataFrame")])
+            elif case == "format_group_overrides_load_neutral":
+                feature_name = "toyfmt_ld"
+                parent = neutral_csv_group(tmp_path / "n.csv")
+                parent_impl = make_implementation(parent, PythonDictFramework, _sentinel, name="FmtParentImpl")
+
+                class _Child(parent):  # type: ignore[valid-type, misc]
+                    @classmethod
+                    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+                        return super().load_neutral(match, features)
+
+                mloda.run_all(
+                    [Feature("toyfmt_ld", implementation=parent_impl)],
+                    compute_frameworks=[PythonDictFramework],
+                    plugin_collector=PluginCollector.enabled_feature_groups({_Child}),
+                    data_access_collection=toy_dac(h1={"toyfmt_ld": [1, 2]}),
+                )
+            else:
+                feature_name = OUTER
+                _run_chain([Feature(OUTER, implementation=["OpToyChainPandas"] * 3)])
+
+        assert feature_name in str(caught.value)
+        assert needle in str(caught.value)
+
+    def test_two_requests_pinning_a_shared_step_differently_raise_naming_both(self) -> None:
+        from mloda.provider import ImplementationPinError
+
+        features = [
+            Feature(OUTER, implementation="OpToyChainPandas"),
+            Feature(INNER, implementation="OpToyChainPyArrow"),
+        ]
+
+        with pytest.raises(ImplementationPinError) as caught:
+            _run_chain(features)
+
+        assert OUTER in str(caught.value)
+        assert INNER in str(caught.value)
+
+    def test_a_parent_and_a_subclass_pin_resolving_to_one_serving_class_do_not_conflict(
+        self, make_implementation: Any
+    ) -> None:
+        toy = _toy_operation()
+
+        def serve(group: Any, data: Any, features: Any) -> Any:
+            for name in sorted(features.get_all_names()):
+                toy.CHAIN_LOG.append((name, "OpToyChainPandasPlus"))
+                data[name] = toy.PANDAS_MARK
+            return data
+
+        plus = make_implementation(
+            toy.OpToyChainFG, PandasDataFrame, serve, base=toy.OpToyChainPandas, name="OpToyChainPandasPlus"
+        )
+
+        _run_chain(
+            [
+                Feature(OUTER, implementation="OpToyChainPandas"),
+                Feature(INNER, implementation="OpToyChainPandasPlus"),
+            ]
+        )
+
+        assert toy.CHAIN_LOG == [(INNER, "OpToyChainPandasPlus"), (OUTER, "OpToyChainPandasPlus")]
+        assert plus.__name__ == "OpToyChainPandasPlus"
+
+    def test_a_class_pin_resolves_although_another_loaded_implementation_shares_its_name(
+        self, make_implementation: Any
+    ) -> None:
+        toy = _toy_operation()
+        twin = make_implementation(
+            toy.OpToyFG,
+            PandasDataFrame,
+            lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [77]}),
+            base=toy.OpToyPandas,
+            name="OpToyPyArrow",
+        )
+
+        result = _run_pinned([_op_feature(toy.OpToyPyArrow)])
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [toy.PYARROW_MARK]
+        assert twin is not toy.OpToyPyArrow
+
+    def test_the_pin_does_not_reach_the_input_or_a_non_pinned_sibling(self) -> None:
+        toy = _toy_operation()
+        sibling = Feature(toy.OPTOY_CHAIN_SRC)
+
+        result = _run_chain([Feature(INNER, implementation="OpToyChainPyArrow"), sibling])
+
+        assert toy.CHAIN_LOG == [(INNER, "OpToyChainPyArrow")]
+        assert sibling.implementation_pin is None
+        assert column_values(result, toy.OPTOY_CHAIN_SRC) == [1, 2, 3]
 
 
 class TestFrameworkSubclassImplementation:

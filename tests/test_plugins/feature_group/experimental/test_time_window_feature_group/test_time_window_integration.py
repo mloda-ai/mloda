@@ -7,7 +7,10 @@ from mloda.provider import DefaultOptionKeys
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import Options
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -71,7 +74,7 @@ class TestTimeWindowPandasIntegration:
 
     def test_chained_aggregated_source_shares_one_root_step_with_reference_time(self) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup, PandasAggregatedFeatureGroup}
+            {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup, AggregatedFeatureGroup}
         )
         source = Feature(
             "temp_max", Options(group={"aggregation_type": "max", DefaultOptionKeys.in_features: "temperature"})

@@ -30,7 +30,7 @@ from collections.abc import Iterator
 
 from mloda.core.abstract_plugins.components import base_feature_group_version
 from mloda.core.abstract_plugins.components.code_closure import closure_parts, dependency_entry
-from mloda.user import Options, PluginCollector, mloda
+from mloda.user import Feature, Options, PluginCollector, mloda
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     neutral_csv_group,
     toy_dac,
@@ -43,7 +43,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 
 class _MainLike:
@@ -69,7 +69,7 @@ def _compute_step(**overrides: object) -> PlanStep:
     step = PlanStep(
         step_kind="compute",
         feature_names=("lock_io_value",),
-        feature_group=PandasAggregatedFeatureGroup,
+        feature_group=AggregatedFeatureGroup,
         compute_framework=PandasDataFrame,
         source_feature_group=None,
         source_compute_framework=None,
@@ -82,9 +82,9 @@ def _join_step(**overrides: object) -> PlanStep:
     step = PlanStep(
         step_kind="join",
         feature_names=(),
-        feature_group=PandasAggregatedFeatureGroup,
+        feature_group=AggregatedFeatureGroup,
         compute_framework=PandasDataFrame,
-        source_feature_group=PandasAggregatedFeatureGroup,
+        source_feature_group=AggregatedFeatureGroup,
         source_compute_framework=PyArrowTable,
         join_type="inner",
         join_destination_side="left",
@@ -96,9 +96,9 @@ def _transform_step() -> PlanStep:
     return PlanStep(
         step_kind="transform",
         feature_names=(),
-        feature_group=PandasAggregatedFeatureGroup,
+        feature_group=AggregatedFeatureGroup,
         compute_framework=PandasDataFrame,
-        source_feature_group=PandasAggregatedFeatureGroup,
+        source_feature_group=AggregatedFeatureGroup,
         source_compute_framework=PyArrowTable,
     )
 
@@ -262,6 +262,25 @@ def test_explain_writes_the_serving_implementation_and_its_dependency_free_hash_
     else:
         assert record["implementation"] == "neutral"
         assert record["implementation_hash"] is None
+    check_plan_lock(steps, lock)
+
+
+def test_an_operation_group_step_round_trips_its_serving_implementation(tmp_path: Path) -> None:
+    toy = importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
+    lock = tmp_path / "plan.lock"
+    steps = mloda.explain(
+        [Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework="PyArrowTable")],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyFG}),
+    )
+
+    write_plan_lock(steps, lock)
+
+    record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
+    assert record["implementation"] == _impl_path(toy.OpToyPyArrow)
+    assert record["implementation_hash"] == _dependency_free_hash(toy.OpToyPyArrow)
     check_plan_lock(steps, lock)
 
 
@@ -562,7 +581,7 @@ def test_plan_content_hash_is_a_sha256_hex_and_differs_from_the_structure_hash()
     assert digest == plan_content_hash(_content_plan())
     # Pinned: the content hash includes the implementation fields, so adding them re-pinned this value; any later
     # change to the hashed content must re-pin it deliberately.
-    assert digest == "c81c29c74911d4f9706e87f1fc81c27cd5a65eaa08b5f90ebe9234d6f986df15"
+    assert digest == "62f9a6790421ab2966b13bf8f47acabed346aa22b4910f7ca7eb5820f3bd4c63"
 
 
 def test_plan_content_hash_ignores_run_ids_and_reason_text() -> None:

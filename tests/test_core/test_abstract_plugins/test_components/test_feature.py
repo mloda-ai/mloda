@@ -450,3 +450,50 @@ def test_absorb_result_index_columns_from_empty_twin_keeps_survivor() -> None:
     survivor.absorb_result_index_columns(twin)
 
     assert survivor.result_index_columns == ("a",)
+
+
+class _PinNamedImpl:
+    pass
+
+
+@pytest.mark.parametrize(
+    ("pin", "expected"),
+    [
+        (None, None),
+        ("OpA", ("OpA",)),
+        (_PinNamedImpl, (f"{_PinNamedImpl.__module__}:{_PinNamedImpl.__qualname__}",)),
+        (["OpA", _PinNamedImpl], ("OpA", f"{_PinNamedImpl.__module__}:{_PinNamedImpl.__qualname__}")),
+        (("OpA", "OpB"), ("OpA", "OpB")),
+        ("pkg.mod:Outer.OpA", ("pkg.mod:Outer.OpA",)),
+    ],
+    ids=["none", "name", "class", "mixed_list", "tuple", "module_qualname"],
+)
+def test_implementation_pin_is_normalized_to_a_tuple_of_names(pin: Any, expected: tuple[str, ...] | None) -> None:
+    feature = Feature("impl_pin_feature", implementation=pin)
+
+    assert feature.implementation_pin == expected
+    assert "implementation" not in feature.options.group
+    assert "implementation" not in feature.options.context
+
+
+@pytest.mark.parametrize("pin", [[], 5, [5], ["OpA", 5]], ids=["empty_list", "int", "int_list", "mixed"])
+def test_a_malformed_implementation_pin_raises_naming_the_type(pin: Any) -> None:
+    with pytest.raises((TypeError, ValueError)) as caught:
+        Feature("impl_pin_bad_feature", implementation=pin)
+
+    assert not isinstance(caught.value, AttributeError)
+    if pin != []:
+        assert "int" in str(caught.value)
+
+
+def test_the_implementation_pin_is_part_of_equality_and_hash_and_survives_copy() -> None:
+    plain = Feature("impl_pin_eq_feature")
+    pinned = Feature("impl_pin_eq_feature", implementation="OpA")
+    other = Feature("impl_pin_eq_feature", implementation="OpB")
+
+    assert plain != pinned
+    assert pinned != other
+    assert pinned == Feature("impl_pin_eq_feature", implementation=["OpA"])
+    assert hash(pinned) == hash(Feature("impl_pin_eq_feature", implementation=["OpA"]))
+    assert len({plain, pinned, other}) == 3
+    assert copy.copy(pinned).implementation_pin == ("OpA",)

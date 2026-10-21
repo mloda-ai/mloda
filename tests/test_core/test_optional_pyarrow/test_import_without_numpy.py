@@ -7,7 +7,7 @@ import pytest
 from tests.test_core.test_optional_pyarrow._pyarrow_blocker import run_blocked
 
 _IMPORT_BODY: str = """
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
 print("OK")
 """
@@ -17,11 +17,11 @@ import sys
 
 import pyarrow as pa
 
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 
 table = pa.table({"a": [1.0, 2.0, 3.0]})
-result = PyArrowAggregatedFeatureGroup._perform_aggregation(table, "sum", ["a"])
-out = PyArrowAggregatedFeatureGroup._add_result_to_data(table, "agg", result)
+result = PyArrowAggregation._perform_aggregation(table, "sum", ["a"])
+out = PyArrowAggregation._add_result_to_data(table, "agg", result)
 
 assert out.column("agg").to_pylist() == [6.0, 6.0, 6.0], f"unexpected result: {out.column('agg').to_pylist()}"
 assert "numpy" not in sys.modules, "single-column aggregation must not import numpy"
@@ -31,12 +31,12 @@ print("OK")
 _AGGREGATED_MULTI_COLUMN_BODY: str = """
 import pyarrow as pa
 
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 
 table = pa.table({"a": [1.0, 2.0, 3.0], "b": [3.0, 2.0, 1.0]})
 
 try:
-    PyArrowAggregatedFeatureGroup._perform_aggregation(table, "sum", ["a", "b"])
+    PyArrowAggregation._perform_aggregation(table, "sum", ["a", "b"])
     print("NO_RAISE")
 except ImportError as e:
     if "mloda[numpy]" in str(e):
@@ -79,7 +79,7 @@ except Exception as e:
 
 @pytest.mark.timeout(30)
 def test_aggregated_feature_group_imports_with_numpy_blocked() -> None:
-    """PyArrowAggregatedFeatureGroup and PyArrowTimeWindowFeatureGroup must both import without numpy installed."""
+    """PyArrowAggregation and PyArrowTimeWindowFeatureGroup must both import without numpy installed."""
     pytest.importorskip("pyarrow")
     result = run_blocked(_IMPORT_BODY, module="numpy")
     assert result.returncode == 0, f"Import failed.\nstdout: {result.stdout}\nstderr:\n{result.stderr}"

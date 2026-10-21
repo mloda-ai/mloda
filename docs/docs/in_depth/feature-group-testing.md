@@ -27,10 +27,10 @@ Test that your feature group correctly extracts source features from feature nam
 **Example:**
 ```python
 from mloda.user import Feature, FeatureName, Options
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 # Test extracting source features from a feature name
-input_features = PandasAggregatedFeatureGroup().input_features(Options(), FeatureName("sales__sum_aggr"))
+input_features = AggregatedFeatureGroup().input_features(Options(), FeatureName("sales__sum_aggr"))
 assert Feature("sales") in input_features
 ```
 
@@ -45,12 +45,13 @@ Test that your feature group correctly transforms input data into output feature
 import pandas as pd
 from mloda.user import Feature
 from mloda.provider import FeatureSet
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 
 # Test calculation with sample data
 sample_data = pd.DataFrame({"sales": [10.0, 20.0, 30.0]})
 feature_set = FeatureSet()
 feature_set.add(Feature("sales__sum_aggr"))
-result = PandasAggregatedFeatureGroup.calculate_feature(sample_data, feature_set)
+result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set)
 assert "sales__sum_aggr" in result.columns
 ```
 
@@ -67,14 +68,14 @@ options = Options(context={
     "aggregation_type": "sum",
     "in_features": "sales"
 })
-assert PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", options)
+assert AggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", options)
 
 # Assert the negative too, or the test passes on a name the group never claims; collect the recorded reason
 with collect_match_rejections() as reasons:
-    assert not PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", Options(context={
+    assert not AggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", Options(context={
         "aggregation_type": "not_an_aggregation"
     }))
-assert "not_an_aggregation" in reasons["PandasAggregatedFeatureGroup"].reason
+assert "not_an_aggregation" in reasons["AggregatedFeatureGroup"].reason
 ```
 
 ### 5. Integration with mloda API

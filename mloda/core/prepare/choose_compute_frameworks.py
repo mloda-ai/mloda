@@ -5,7 +5,7 @@ splitting into independent parts once assigned blocks separate them.
 
 from itertools import combinations
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from typing import Any, NamedTuple
 from uuid import UUID
@@ -16,6 +16,8 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.abstract_plugins.implementation import Implementation, serving_implementation
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.prepare.declared_sides import (
     narrow_by_right_index,
     one_framework_members_reason,
@@ -29,7 +31,7 @@ Framework = type[ComputeFramework]
 Values = tuple[Framework, ...]
 
 
-Cost = tuple[int, int]
+Cost = tuple[int, int, int]
 
 
 class _Block(NamedTuple):
@@ -67,6 +69,8 @@ RULES = "rules exclude preferred frameworks"
 LIST_ORDER = "your list order"
 DEFAULT_ORDER = "default order"
 CONVERTS_LATER = "converts later"
+PREFERS_MATCHING = "prefers a matching version"
+DIFFERS = "runs a version that differs"
 
 
 def saves_conversions(count: int) -> str:
@@ -187,7 +191,16 @@ class ChooseComputeFrameworks:
         output_framework: Framework | None = None,
         dropped: Mapping[UUID, frozenset[Framework]] | None = None,
         connected: Mapping[Framework, Any] | None = None,
+        pin_frameworks: Mapping[UUID, frozenset[Framework]] | None = None,
+        pinned: set[UUID] | None = None,
+        implementations: Iterable[type[Implementation]] | None = None,
     ) -> None:
+        self.implementations = list(implementations or ())
+        self._differs: list[dict[Framework, tuple[str, ...]]] = []
+        self._penalty: list[dict[Framework, int]] = []
+        self._free: dict[int, Framework] = {}
+        self.pin_frameworks = pin_frameworks or {}
+        self.pinned = pinned or set()
         self.output_framework = output_framework
         self.dropped = dropped or {}
         self.connected: Mapping[Framework, Any] = connected or {}
@@ -208,6 +221,11 @@ class ChooseComputeFrameworks:
         blocks = self._blocks()
         owner = {f.uuid: i for i, block in enumerate(blocks) for f in block.features}
         blocks, borrowed = self._regain_dropped(blocks, owner)
+        self._differs = [self._block_differs(block) for block in blocks]
+        self._penalty = [
+            {} if self._is_pinned(block) else {fw: 1 for fw, found in differs.items() if found}
+            for block, differs in zip(blocks, self._differs)
+        ]
         rules = self._rules(blocks, owner) + borrowed
         groups = self._cost_groups(blocks, owner)
         depth = self._feature_depths()
@@ -222,12 +240,41 @@ class ChooseComputeFrameworks:
         touching, steps = self._component_indexes(len(blocks), rules, groups)
         for order in self._search_orders(len(blocks), linked):
             assignment, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
+            self._free = {}
+            if any(self._penalty[i] for i in assignment):
+                penalty, self._penalty = self._penalty, [{} for _ in self._penalty]
+                self._free, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
+                self._penalty = penalty
             for index, framework in assignment.items():
                 reason = self._reason(blocks, touching, steps, assignment, index)
                 for feature in blocks[index].features:
                     feature.chosen_compute_framework = framework
                     feature.chosen_compute_framework_reason = reason
         self._require_all_chosen()
+
+    def _split_by_pin(self, group: Iterable[Feature]) -> list[list[Feature]]:
+        """Features pinned to different framework sets cannot share a block."""
+        parts: dict[frozenset[Framework] | None, list[Feature]] = {}
+        for feature in group:
+            parts.setdefault(self.pin_frameworks.get(feature.uuid), []).append(feature)
+        return list(parts.values())
+
+    def _block_differs(self, block: _Block) -> dict[Framework, tuple[str, ...]]:
+        """Per framework, the declared divergences of the implementations serving the block's features."""
+        if not self.implementations or not issubclass(block.fg, OperationFeatureGroup):
+            return {}
+        result: dict[Framework, tuple[str, ...]] = {}
+        for framework in block.domain:
+            impl = serving_implementation(block.fg, framework, self.implementations)
+            if impl is None:
+                continue
+            found = {impl.divergence(block.fg, str(f.name), f.options) for f in block.features} - {None}
+            if found:
+                result[framework] = tuple(sorted(r for r in found if r is not None))
+        return result
+
+    def _is_pinned(self, block: _Block) -> bool:
+        return any(f.framework_pinned or f.uuid in self.pinned for f in block.features)
 
     def _component_indexes(
         self, count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
@@ -252,9 +299,13 @@ class ChooseComputeFrameworks:
     def _blocks(self) -> list[_Block]:
         keyed: list[tuple[tuple[object, ...], _Block]] = []
         for fg, features in self.nodes.items():
-            for group in ExecutionPlan.group_features_by_compute_framework_and_options(set(features)).values():
+            grouped = ExecutionPlan.group_features_by_compute_framework_and_options(set(features)).values()
+            for group in (part for whole in grouped for part in self._split_by_pin(whole)):
                 members = tuple(sorted(group, key=lambda f: (str(f.name), stable_text(f.options))))
-                domain = tuple(sorted(members[0].compute_frameworks or (), key=self.rank))
+                allowed = set(members[0].compute_frameworks or ())
+                if members[0].uuid in self.pin_frameworks:
+                    allowed &= self.pin_frameworks[members[0].uuid]
+                domain = tuple(sorted(allowed, key=self.rank))
                 if not domain:
                     FeatureValidator.validate_compute_frameworks_resolved(
                         members[0].compute_frameworks, str(members[0].name)
@@ -326,7 +377,7 @@ class ChooseComputeFrameworks:
     ) -> tuple[list[set[Framework]], list[set[Framework]], list[set[Framework]]]:
         """Domains with regained frameworks, what each block gained, and which gains came from the DAC."""
         lost = [frozenset().union(*(self.dropped.get(f.uuid, frozenset()) for f in b.features)) for b in blocks]
-        pinned = [any(f.framework_pinned for f in b.features) for b in blocks]
+        pinned = [self._is_pinned(b) for b in blocks]
         domains = [set(block.domain) for block in blocks]
         gained: list[set[Framework]] = [set() for _ in blocks]
         via_dac: list[set[Framework]] = [set() for _ in blocks]
@@ -385,16 +436,17 @@ class ChooseComputeFrameworks:
 
     def _transform_cost(self, depth: int, costs: list[int]) -> Cost:
         """Conversions of one transform step, then how early they happen."""
-        return (sum(costs), sum(costs) * (self._horizon - depth))
+        return (0, sum(costs), sum(costs) * (self._horizon - depth))
 
     def _final_cost(self, block: _Block, framework: Framework, index: int) -> Cost:
         output = self.output_framework
+        divergent = self._penalty[index].get(framework, 0)
         if output is None or not self._requested(block) or framework is output:
-            return (0, 0)
+            return (divergent, 0, 0)
         if framework.expected_data_framework() is output.expected_data_framework():
-            return (0, 0)
+            return (divergent, 0, 0)
         cost = conversion_cost(framework, output)
-        return (cost, cost * (self._horizon - self._final_depth[index] - 1))
+        return (divergent, cost, cost * (self._horizon - self._final_depth[index] - 1))
 
     def _step_depths(
         self, blocks: list[_Block], owner: dict[UUID, int], depth: dict[UUID, int]
@@ -772,10 +824,12 @@ class ChooseComputeFrameworks:
         """Why one block runs on its framework: pin, sole option, rules, order, or conversions saved."""
         block = blocks[index]
         chosen = assignment[index]
-        if any(feature.framework_pinned for feature in block.features):
-            return PINNED
+        found = self._differs[index].get(chosen, ())
+        suffix = f"; {DIFFERS}: {', '.join(found)}" if found else ""
+        if self._is_pinned(block):
+            return PINNED + suffix
         if len(block.domain) == 1:
-            return ONLY_ALLOWED
+            return ONLY_ALLOWED + suffix
         touching = touching_by_block[index]
         steps = steps_by_block[index]
 
@@ -796,23 +850,30 @@ class ChooseComputeFrameworks:
                 for parent, kids, depth in steps
             ]
             final = self._final_cost(block, at(index), index)
-            return (sum(c[0] for c in costs) + final[0], sum(c[1] for c in costs) + final[1])
+            return (
+                sum(c[0] for c in costs) + final[0],
+                sum(c[1] for c in costs) + final[1],
+                sum(c[2] for c in costs) + final[2],
+            )
 
         alternatives = [fw for fw in block.domain if fw is not chosen and feasible(fw)]
         if not alternatives:
-            return RULES
+            return RULES + suffix
         chosen_rank = self.rank(chosen)
         earlier = [fw for fw in alternatives if self.rank(fw) < chosen_rank]
-        if not earlier:
-            return self._order_reason(chosen, alternatives[0])
         base = step_cost(None)
+        free = self._free.get(index)
+        if free is not None and free is not chosen and not found and self._differs[index].get(free):
+            return PREFERS_MATCHING
+        if not earlier:
+            return self._order_reason(chosen, alternatives[0]) + suffix
         costs = {fw: step_cost(fw) for fw in earlier}
-        delta = min(c[0] for c in costs.values()) - base[0]
+        delta = min(c[1] for c in costs.values()) - base[1]
         if delta > 0:
-            return saves_conversions(delta)
-        if all(c[1] > base[1] for c in costs.values() if c[0] == base[0]):
-            return CONVERTS_LATER
-        return self._order_reason(chosen, earlier[0])
+            return saves_conversions(delta) + suffix
+        if all(c[2] > base[2] for c in costs.values() if c[1] == base[1]):
+            return CONVERTS_LATER + suffix
+        return self._order_reason(chosen, earlier[0]) + suffix
 
     def _solve(
         self,
@@ -831,13 +892,13 @@ class ChooseComputeFrameworks:
 
         def step_cost(parent: int, children: set[int], depth: int) -> Cost:
             if parent not in assigned:
-                return (0, 0)
+                return (0, 0, 0)
             moved = {assigned[c] for c in children if c in assigned and assigned[c] is not assigned[parent]}
             return self._transform_cost(depth, [conversion_cost(assigned[parent], target) for target in moved])
 
         def total(indices: Sequence[tuple[int, set[int], int]]) -> Cost:
             costs = [step_cost(*step) for step in indices]
-            return (sum(c[0] for c in costs), sum(c[1] for c in costs))
+            return (sum(c[0] for c in costs), sum(c[1] for c in costs), sum(c[2] for c in costs))
 
         def narrow(index: int, current: dict[int, list[Framework]]) -> dict[int, list[Framework]] | None:
             """Forward check: values of the one block still open in a rule must be supported by the assignment."""
@@ -931,7 +992,7 @@ class ChooseComputeFrameworks:
                 return _Frame(index, at, total(steps[index]), iter(current[index]), current, cost, cuts[index], [])
 
             frames: list[_Frame] = []
-            root = open_frame(0, start, (0, 0))
+            root = open_frame(0, start, (0, 0, 0))
             if root is not None:
                 frames.append(root)
             while frames:
@@ -950,7 +1011,11 @@ class ChooseComputeFrameworks:
                     continue
                 after = total(steps[index])
                 final = self._final_cost(blocks[index], value, index)
-                new_cost = (cost[0] + after[0] - before[0] + final[0], cost[1] + after[1] - before[1] + final[1])
+                new_cost = (
+                    cost[0] + after[0] - before[0] + final[0],
+                    cost[1] + after[1] - before[1] + final[1],
+                    cost[2] + after[2] - before[2] + final[2],
+                )
                 incumbent = best_cost[0]
                 if incumbent is not None and not new_cost < incumbent:
                     continue
@@ -963,7 +1028,7 @@ class ChooseComputeFrameworks:
                     sub, sub_cost = solved
                     assigned.update(sub)
                     fixed.extend(sub)
-                    new_cost = (new_cost[0] + sub_cost[0], new_cost[1] + sub_cost[1])
+                    new_cost = (new_cost[0] + sub_cost[0], new_cost[1] + sub_cost[1], new_cost[2] + sub_cost[2])
                 if not feasible or (incumbent is not None and not new_cost < incumbent):
                     continue
                 frame = open_frame(at + 1, narrowed, new_cost)

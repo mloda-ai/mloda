@@ -74,7 +74,6 @@ MIN_HOOK_CALLING_MODULES = 13
 # The expected declaration per family base, kept as a table so a changed declaration is a visible diff.
 # A family that resolves column names against the data needs the discovery hook on top of the pair.
 FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
-    AggregatedFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     ClusteringFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     MissingValueFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     ForecastingFeatureGroup: COLUMN_DISCOVERY_HOOKS,
@@ -208,6 +207,10 @@ def test_column_discovery_hooks_constant_adds_the_discovery_hook() -> None:
 def test_mixin_requires_no_hook_by_default() -> None:
     """The mixin itself declares no requirement, so an ordinary parse-only feature group is unaffected."""
     assert FeatureChainParserMixin.REQUIRED_COLUMNWISE_HOOKS == frozenset()
+
+
+def test_aggregation_group_declares_no_hooks() -> None:
+    assert AggregatedFeatureGroup.REQUIRED_COLUMNWISE_HOOKS == frozenset()
 
 
 @pytest.mark.parametrize(("family", "expected"), list(FAMILY_REQUIREMENTS.items()), ids=FAMILY_IDS)

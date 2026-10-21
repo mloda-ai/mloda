@@ -10,8 +10,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from mloda.core.optional_dependency import loaded, require
-from mloda.provider import ComputeFramework
-
+from mloda.provider import FeatureSet, Implementation
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
@@ -43,41 +42,25 @@ def _reduce_without_nan_warning(
     return restored
 
 
-class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
+class PyArrowAggregation(Implementation):
     """
     PyArrow implementation of aggregated feature group.
 
     Supports multiple aggregation types in a single class.
     """
 
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        """Specify that this feature group works with PyArrow."""
-        return {PyArrowTable}
+    feature_group = AggregatedFeatureGroup
+    compute_framework = PyArrowTable
 
     @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> set[str]:
-        """Get the set of available column names from the Table schema."""
-        return PyArrowTable.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the Table.
-
-        Args:
-            data: The PyArrow Table
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        available_columns = cls._get_available_columns(data)
-        missing_features = [name for name in feature_names if name not in available_columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
-            )
+    def calculate(cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet) -> Any:
+        return group.aggregate(
+            data,
+            features,
+            perform=cls._perform_aggregation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:
@@ -131,36 +114,36 @@ class PyArrowAggregatedFeatureGroup(AggregatedFeatureGroup):
                 arrays = [col.to_numpy() for col in columns]
             stacked = np.column_stack(arrays)
 
-            # np.nansum and the count below never warn on an all-NaN row (nansum returns 0,
-            # count is not nan-aware). The other reducers warn on rows they can't skipna
-            # over: an all-NaN row for min/max/mean/median, or a row with fewer than 2 valid
-            # values for std/var (ddof=1 needs >=2). Route those through the helper, which
-            # patches just the degenerate rows so the warning never fires, instead of
-            # suppressing it process-wide via warnings.catch_warnings().
+            # Reducers run on the null mask below; degenerate rows are patched so numpy never warns.
+            # sum/avg/mean/std/var/count skip only null cells, so a genuine NaN propagates (count
+            # counts it); the null mask comes from Arrow, not from the NaN-cast values.
+            null_mask = np.column_stack([col.is_null().to_numpy(zero_copy_only=False) for col in columns])
+            valid_counts = np.sum(~null_mask, axis=1)
+            zeroed = np.where(null_mask, 0, stacked)
+
             if aggregation_type == "sum":
-                result = np.nansum(stacked, axis=1)
+                result = zeroed.sum(axis=1)
             elif aggregation_type == "count":
-                result = np.sum(~np.isnan(stacked), axis=1)
-            elif aggregation_type in ["min", "max", "avg", "mean", "median"]:
+                result = valid_counts
+            elif aggregation_type in ["avg", "mean", "std", "var"]:
+                row_sums = zeroed.sum(axis=1)
+                means = np.full(row_sums.shape, np.nan)
+                np.divide(row_sums, valid_counts, out=means, where=valid_counts > 0)
+                if aggregation_type in ["avg", "mean"]:
+                    result = means
+                else:
+                    squares = np.where(null_mask, 0.0, stacked - means[:, np.newaxis]) ** 2
+                    variances = np.full(row_sums.shape, np.nan)
+                    np.divide(squares.sum(axis=1), valid_counts - 1, out=variances, where=valid_counts >= 2)
+                    result = variances if aggregation_type == "var" else np.sqrt(variances)
+            elif aggregation_type in ["min", "max", "median"]:
                 all_nan_rows = np.sum(~np.isnan(stacked), axis=1) == 0
                 if aggregation_type == "min":
                     result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmin(a, axis=1))
                 elif aggregation_type == "max":
                     result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmax(a, axis=1))
-                elif aggregation_type in ["avg", "mean"]:
-                    result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmean(a, axis=1))
                 else:
                     result = _reduce_without_nan_warning(stacked, all_nan_rows, lambda a: np.nanmedian(a, axis=1))
-            elif aggregation_type in ["std", "var"]:
-                under_two_valid_rows = np.sum(~np.isnan(stacked), axis=1) < 2
-                if aggregation_type == "std":
-                    result = _reduce_without_nan_warning(
-                        stacked, under_two_valid_rows, lambda a: np.nanstd(a, axis=1, ddof=1)
-                    )
-                else:
-                    result = _reduce_without_nan_warning(
-                        stacked, under_two_valid_rows, lambda a: np.nanvar(a, axis=1, ddof=1)
-                    )
             else:
                 raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
 

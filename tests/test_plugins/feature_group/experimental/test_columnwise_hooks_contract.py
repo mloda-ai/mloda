@@ -22,11 +22,6 @@ import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.user.python_dict import row_count
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import (
-    PolarsLazyAggregatedFeatureGroup,
-)
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
@@ -58,14 +53,6 @@ from tests.test_plugins.feature_group.experimental.test_check_source_features_si
     TOLERANT_PANDAS_CLASSES,
 )
 
-try:
-    import polars as pl
-
-    POLARS_AVAILABLE = True
-except ImportError:
-    POLARS_AVAILABLE = False
-    pl = None  # type: ignore
-
 HOOK_NAMES: tuple[str, ...] = (DISCOVERY_HOOK, CHECK_HOOK, ADD_HOOK)
 
 # Anchor the scan root to the repo layout via __file__, not the cwd: a cwd-relative root makes the
@@ -76,13 +63,12 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 
 # Lower bound only: a new experimental family adds a base.py and must not fail this sweep.
 MIN_BASE_MODULES = 12
-PANDAS_CONSUMER_COUNT = 12
+PANDAS_CONSUMER_COUNT = 11
 
 # Single source of truth for the tolerant/strict split: a strict group raises when ANY source name is
 # missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
 # and test_strictness_map_agrees_with_signature_lists pins it against the signature suite's lists.
 STRICTNESS: dict[type[Any], bool] = {
-    PandasAggregatedFeatureGroup: False,
     PandasClusteringFeatureGroup: False,
     PandasForecastingFeatureGroup: False,
     PandasTimeWindowFeatureGroup: False,
@@ -94,8 +80,6 @@ STRICTNESS: dict[type[Any], bool] = {
     PandasSklearnPipelineFeatureGroup: True,
     PandasScalingFeatureGroup: True,
     PandasTextCleaningFeatureGroup: True,
-    PolarsLazyAggregatedFeatureGroup: False,
-    PyArrowAggregatedFeatureGroup: False,
     PyArrowTimeWindowFeatureGroup: False,
     PyArrowMissingValueFeatureGroup: True,
     PythonDictMissingValueFeatureGroup: True,
@@ -222,18 +206,6 @@ def test_no_base_module_declares_a_hook_in_source() -> None:
     assert visited >= MIN_BASE_MODULES, (
         f"sweep visited only {visited} base.py files under {SCAN_ROOT}: the sweep root is wrong or the glob broke"
     )
-
-
-class TestPandasAggregatedHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Aggregated pandas group: tolerant check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasAggregatedFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
 
 
 class TestPandasClusteringHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
@@ -376,43 +348,6 @@ class TestPandasTextCleaningHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
     @pytest.fixture
     def sample_data(self) -> Any:
         return sample_frame()
-
-
-class TestPolarsLazyAggregatedHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Aggregated Polars lazy group: tolerant check, plus column discovery on the lazy schema."""
-
-    def column_names(self, data: Any) -> list[str]:
-        return [str(name) for name in data.collect_schema().names()]
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a Polars expression, the only shape the lazy writer accepts."""
-        return pl.col("col_a")
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PolarsLazyAggregatedFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        if not POLARS_AVAILABLE:
-            pytest.skip("Polars not available")
-        return pl.LazyFrame({"col_a": [1, 2], "col_b": [3, 4]})
-
-
-class TestPyArrowAggregatedHooks(StrictnessFromMap, PyArrowColumns, ColumnDiscoveryHooksTestMixin):
-    """Aggregated PyArrow group: tolerant check, plus column discovery."""
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a scalar, which the aggregated writer broadcasts over the rows."""
-        return 1
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PyArrowAggregatedFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_table()
 
 
 class TestPyArrowMissingValueHooks(StrictnessFromMap, PyArrowColumns, ColumnDiscoveryHooksTestMixin):

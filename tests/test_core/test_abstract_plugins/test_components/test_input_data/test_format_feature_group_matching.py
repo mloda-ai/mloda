@@ -23,7 +23,8 @@ from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMat
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_parquet
 from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
@@ -41,6 +42,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 COL = "toyfmt_col"
+_AGGREGATION_IMPLEMENTATIONS = (PyArrowAggregation,)  # loaded by import, serves AggregatedFeatureGroup on PyArrow
 
 
 def _plugins(*groups: type) -> FeatureGroupEnvironmentMapping:
@@ -445,22 +447,20 @@ class TestPointingIsExplicitOnly:
     @pytest.mark.parametrize("fg", [ToyFormatFG, ToyOpenFG])
     def test_handle_on_a_derived_feature_resolves_to_the_aggregation(self, fg: type) -> None:
         feature = Feature(self.DERIVED, Options(group={"data_access_handle": "h1"}))
-        result = evaluate_or_raise(
-            feature, _plugins(fg, PyArrowAggregatedFeatureGroup), None, toy_dac(h1={COL: [1, 2]})
-        )
+        result = evaluate_or_raise(feature, _plugins(fg, AggregatedFeatureGroup), None, toy_dac(h1={COL: [1, 2]}))
 
-        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+        assert set(result.identified) == {AggregatedFeatureGroup}
 
     def test_required_option_route_does_not_escalate_a_missing_column(self) -> None:
         feature = Feature(self.DERIVED, Options({"toyfmt_required": "yes"}))
         result = evaluate_or_raise(
             feature,
-            _plugins(ToyRequiredOptionFG, PyArrowAggregatedFeatureGroup),
+            _plugins(ToyRequiredOptionFG, AggregatedFeatureGroup),
             None,
             toy_dac(h1={COL: [1]}),
         )
 
-        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+        assert set(result.identified) == {AggregatedFeatureGroup}
 
 
 _DERIVED = "toyfmt_col__sum_aggr"
@@ -486,9 +486,9 @@ class TestPointedGroupDefersToAComputingCandidate:
     @pytest.mark.parametrize("fg", [ToyFormatFG, ToyRequiredOptionFG])
     def test_class_name_key_on_a_derived_feature_resolves_to_the_aggregation(self, fg: type) -> None:
         feature = Feature(self.DERIVED, Options({fg.__name__: {COL: [1, 2]}, "toyfmt_required": "yes"}))
-        result = evaluate_or_raise(feature, _plugins(fg, PyArrowAggregatedFeatureGroup), None, None)
+        result = evaluate_or_raise(feature, _plugins(fg, AggregatedFeatureGroup), None, None)
 
-        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+        assert set(result.identified) == {AggregatedFeatureGroup}
         elimination = result.eliminations[fg]
         assert elimination.stage == "input_data"
         assert "is in none of the sources" in elimination.reason
@@ -496,8 +496,8 @@ class TestPointedGroupDefersToAComputingCandidate:
     @pytest.mark.parametrize(
         ("name", "groups", "dac"),
         [
-            ("toyfmt_unclaimed", (ToyFormatFG, PyArrowAggregatedFeatureGroup), None),
-            (_DERIVED, (ToyFormatFG, _PlainClaimsDerived, PyArrowAggregatedFeatureGroup), None),
+            ("toyfmt_unclaimed", (ToyFormatFG, AggregatedFeatureGroup), None),
+            (_DERIVED, (ToyFormatFG, _PlainClaimsDerived, AggregatedFeatureGroup), None),
         ],
         ids=["no_other_claimant", "another_reader_survives"],
     )
@@ -515,11 +515,11 @@ class TestPointedGroupDefersToAComputingCandidate:
             compute_framework=_ToyUnservedFramework.get_class_name(),
         )
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyFormatFG, PyArrowAggregatedFeatureGroup), None, None)
+            evaluate_or_raise(feature, _plugins(ToyFormatFG, AggregatedFeatureGroup), None, None)
 
         result = exc_info.value.result
         assert result.identified == {}
-        assert result.eliminations[PyArrowAggregatedFeatureGroup].stage == "framework_pin"
+        assert result.eliminations[AggregatedFeatureGroup].stage == "framework_pin"
 
     def test_pointed_reader_aborts_when_the_other_claimant_input_features_raises(self) -> None:
         feature = Feature("toyfmt_typo_probe", Options({"ToyFormatFG": {COL: [1]}}))
@@ -560,48 +560,44 @@ class TestOpenClaimDefersToAComputingCandidate:
     def test_open_group_declaring_the_derived_name_does_not_step_aside(self) -> None:
         feature = Feature(_DERIVED, Options({"_OpenDeclaringDerivedFG": {COL: [1, 2]}}))
         with pytest.raises(ValueError, match="Multiple feature groups found"):
-            evaluate_or_raise(feature, _plugins(_OpenDeclaringDerivedFG, PyArrowAggregatedFeatureGroup), None, None)
+            evaluate_or_raise(feature, _plugins(_OpenDeclaringDerivedFG, AggregatedFeatureGroup), None, None)
 
     def _open_feature(self, name: str, **kwargs: Any) -> Feature:
         return Feature(name, Options({"ToyOpenFG": {COL: [1, 2]}}), **kwargs)
 
     @pytest.mark.parametrize("name", [_DERIVED, "toyfmt_col__sum_aggr__max_aggr"], ids=["derived", "chained"])
     def test_pointed_open_group_steps_aside_for_the_aggregation(self, name: str) -> None:
-        result = evaluate_or_raise(
-            self._open_feature(name), _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None
-        )
+        result = evaluate_or_raise(self._open_feature(name), _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
-        assert set(result.identified) == {PyArrowAggregatedFeatureGroup}
+        assert set(result.identified) == {AggregatedFeatureGroup}
         elimination = result.eliminations[ToyOpenFG]
         assert elimination.stage == "input_data"
-        assert "PyArrowAggregatedFeatureGroup" in elimination.reason
+        assert "AggregatedFeatureGroup" in elimination.reason
         assert "feature_group=" in elimination.reason
         assert "ToyOpenFG" in elimination.reason
 
     def test_computing_candidate_eliminated_later_still_masks_the_open_claim(self) -> None:
         feature = self._open_feature(self.DERIVED, compute_framework=_ToyUnservedFramework.get_class_name())
         with pytest.raises(FeatureResolutionError) as exc_info:
-            evaluate_or_raise(feature, _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None)
+            evaluate_or_raise(feature, _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
         result = exc_info.value.result
         assert result.identified == {}
-        assert result.eliminations[PyArrowAggregatedFeatureGroup].stage == "framework_pin"
+        assert result.eliminations[AggregatedFeatureGroup].stage == "framework_pin"
 
     def test_feature_group_scope_lets_the_open_group_claim_the_derived_name(self) -> None:
         feature = self._open_feature(self.DERIVED, feature_group=ToyOpenFG)
-        result = evaluate_or_raise(feature, _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None)
+        result = evaluate_or_raise(feature, _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
         assert set(result.identified) == {ToyOpenFG}
 
     def test_another_plain_claimant_still_makes_the_name_ambiguous(self) -> None:
-        groups = (ToyOpenFG, _PlainClaimsDerived, PyArrowAggregatedFeatureGroup)
+        groups = (ToyOpenFG, _PlainClaimsDerived, AggregatedFeatureGroup)
         with pytest.raises(ValueError, match="Multiple feature groups found"):
             evaluate_or_raise(self._open_feature(self.DERIVED), _plugins(*groups), None, None)
 
     def test_open_route_on_a_leaf_name_still_claims(self) -> None:
-        result = evaluate_or_raise(
-            self._open_feature(COL), _plugins(ToyOpenFG, PyArrowAggregatedFeatureGroup), None, None
-        )
+        result = evaluate_or_raise(self._open_feature(COL), _plugins(ToyOpenFG, AggregatedFeatureGroup), None, None)
 
         assert set(result.identified) == {ToyOpenFG}
 
@@ -875,7 +871,7 @@ class TestMatchesAreSharedWithinOneRun:
         mloda.run_all(
             ["toyfmt_cache_a", "toyfmt_cache_b", self.DERIVED],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({_CachedColumnsFG, PyArrowAggregatedFeatureGroup}),
+            plugin_collector=PluginCollector.enabled_feature_groups({_CachedColumnsFG, AggregatedFeatureGroup}),
             data_access_collection=toy_dac(hcache={"toyfmt_cache_a": [1, 2], "toyfmt_cache_b": [3, 4]}),
         )
 

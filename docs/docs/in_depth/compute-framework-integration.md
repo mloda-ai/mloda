@@ -80,6 +80,8 @@ runnable:
 
 ### Declaring capability per subtype
 
+This section covers ordinary feature groups; operation groups declare it on their implementations (`supported`).
+
 Families with multiple subtypes declare per-backend capability as data
 instead of a hand-written `supports_compute_framework`.
 
@@ -126,7 +128,7 @@ subtypes and features without one stay open.
 
 **The data steward** audits capability via `subtype_support_matrix()`
 (supported subtypes per framework from `compute_framework_definition()`;
-empty for abstract bases) and `get_feature_group_docs()` (`subtype_key`,
+empty for abstract bases; for an operation group read from its implementations) and `get_feature_group_docs()` (`subtype_key`,
 `subtypes`, `parametric_subtypes`, `subtype_support`, `subtype_error`). A
 hand-overridden `supports_compute_framework` yields no declared matrix; the
 misfit surfaces as `subtype_error`.
@@ -221,57 +223,56 @@ opts in but forgets the hook raises a clear error rather than silently skipping
 validation. As-of joins always require `_column_semantics` regardless of the flag,
 since ordered time columns are intrinsic to the operation.
 
-### Framework-Specific Implementations
+### Operation Groups: one group, one Implementation per framework
 
-Feature groups follow a layered architecture:
-- Base class defines the interface and common functionality
-- Framework-specific classes implement the actual calculations
-
-```
-FeatureGroup
-  └── BaseFeatureGroup (e.g., SegmentationFeatureGroup)
-        ├── PandasImplementation
-        ├── PyArrowImplementation
-        └── PythonDictFrameworkImplementation
-```
-
-## Implementation Pattern
-
-### 1. Base Class
-
-The base class defines the interface and common functionality:
+An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup` is built this way; the other core families still use one class per framework for now.
 
 ```py
-class MyFeatureGroup(FeatureGroup):
-    """Base class for MyFeatureGroup."""
-    
-    def input_features(self, options, feature_name):
-        # Common logic for extracting input features
-        
+class MyOperation(OperationFeatureGroup):
+    ...  # naming, PROPERTY_MAPPING, input_features
+
+class PandasMyOperation(Implementation):
+    feature_group = MyOperation
+    compute_framework = PandasDataFrame
+
     @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-        raise NotImplementedError()
+    def calculate(cls, group, data, features):
+        ...  # group is the matched feature group class
 ```
 
-### 2. Framework-Specific Implementation
+- **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
+- **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.
+- **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature.
+- **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "skips NaN in sum"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: a NaN-free column still prefers the matching implementation. Polars `max` is declared divergent because its multi-column form propagates NaN.
+- **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
+- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate` call inside each implementation's `calculate`.
 
-Each framework-specific implementation:
-- Specifies which compute frameworks it supports
-- Implements the calculation logic for that framework
+### Choosing among implementations
+
+When several frameworks can run a step, the choice order is: frameworks the step must run on (pins, a single allowed framework), then an implementation that matches the reference contract before one that differs, then fewer conversions, then converting later, then the run's `compute_frameworks` list order, then the default order. The recorded reason says what happened:
+
+- `prefers a matching version`: a divergent implementation was skipped although it would otherwise have won.
+- `<reason>; runs a version that differs: skips NaN in sum`: the step runs a divergent implementation (only option, pinned, or no matching alternative).
+
+### Pinning an implementation
 
 ```py
-class PandasMyFeatureGroup(MyFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        """Define supported compute frameworks."""
-        return {PandasDataFrame}
-    
-    @classmethod
-    def calculate_feature(cls, data, features):
-        """Implement calculation using pandas."""
-        # Pandas-specific implementation
+Feature("sales__sum_aggr", implementation="PandasAggregation")
+Feature("sales__sum_aggr", implementation=PandasAggregation)
+Feature("x__sum_aggr__max_aggr", implementation=["PandasAggregation", "PyArrowAggregation"])
 ```
+
+`implementation=` takes a class name (or `module:qualname`), an `Implementation` class, or a list of either. One entry pins every step of that group in the feature's chain; a list of N entries pins N steps of the same group in input order (inner step first). The pin is part of the feature's identity and is not passed to input features. In a feature config use the `implementation` key. Pinned steps get the reason `pinned`.
+
+An unknown name, a name shared by two loaded classes, an implementation that is disabled, denied or whose framework is unavailable, one that conflicts with `compute_framework=`, a wrong entry count, or two requests pinning one step differently raises `ImplementationPinError` (a `ValueError`) naming the feature and the class.
+
+### Migrating from per-framework classes
+
+- `PandasAggregatedFeatureGroup`, `PyArrowAggregatedFeatureGroup` and `PolarsLazyAggregatedFeatureGroup` are replaced by `AggregatedFeatureGroup` with `PandasAggregation`, `PyArrowAggregation` and `PolarsLazyAggregation`.
+- `feature_group="PandasAggregatedFeatureGroup"` becomes `implementation="PandasAggregation"`, or `compute_framework=PandasDataFrame`.
+- A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
+- With Pandas and PyArrow both enabled, a sum now runs on PyArrow (it matches the reference contract; Pandas skips NaN) and may add a conversion. Pin `implementation="PandasAggregation"` to keep the old behaviour.
+- A provider customizes an aggregation implementation by overriding `_perform_aggregation` or `_add_result_to_data` on an implementation subclass, and the loop by overriding `aggregate` on a group subclass.
 
 ## Framework Selection Process
 

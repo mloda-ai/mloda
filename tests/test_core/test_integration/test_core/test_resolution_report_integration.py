@@ -1,7 +1,7 @@
 """End-to-end integration test for ``session.resolution_report()`` (issue #811).
 
 This exercises the shipped feature through the public API with real plugins and the real
-PandasDataFrame compute framework: shipped ``PandasAggregatedFeatureGroup`` aggregations chain
+PandasDataFrame compute framework: shipped ``AggregatedFeatureGroup`` aggregations chain
 off raw columns produced by a ``DataCreator`` source, so the report captures both the requested
 aggregations (``requested=True``) and their derived source columns (``requested=False``).
 
@@ -17,7 +17,9 @@ from mloda.provider import DefaultOptionKeys
 from mloda.user import Feature, Options, PluginCollector, ResolutionRecord, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -51,7 +53,7 @@ def _prepared_session() -> mlodaAPI:
         AVG_FEATURE,
         Options(context={AggregatedFeatureGroup.AGGREGATION_TYPE: "avg", DefaultOptionKeys.in_features: REVENUE_COL}),
     )
-    plugins = PluginCollector.enabled_feature_groups({ResReportE2ESource_811, PandasAggregatedFeatureGroup})
+    plugins = PluginCollector.enabled_feature_groups({ResReportE2ESource_811, AggregatedFeatureGroup})
     return mloda.prepare([f_sum, f_avg], compute_frameworks=[PandasDataFrame], plugin_collector=plugins)
 
 
@@ -81,13 +83,13 @@ class TestResolutionReportEndToEnd_811:
         assert all(isinstance(record, ResolutionRecord) for record in report_after)
         assert all(isinstance(record.result, EvaluationResult) for record in report_after)
 
-        # Each requested aggregation resolves to the shipped PandasAggregatedFeatureGroup.
+        # Each requested aggregation resolves to the shipped AggregatedFeatureGroup.
         for requested_name in (SUM_FEATURE, AVG_FEATURE):
             matches = [record for record in report_after if record.feature_name == requested_name]
             assert len(matches) == 1, f"expected exactly one record for {requested_name}"
             assert matches[0].requested is True
             assert matches[0].result.failure_kind is None
-            assert PandasAggregatedFeatureGroup in matches[0].result.identified
+            assert AggregatedFeatureGroup in matches[0].result.identified
 
         # Each derived source column resolves (requested=False) to our DataCreator source.
         for source_name in (SALES_COL, REVENUE_COL):

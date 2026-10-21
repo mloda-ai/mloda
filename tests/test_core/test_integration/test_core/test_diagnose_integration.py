@@ -1,7 +1,7 @@
 """End-to-end integration test for ``mlodaAPI.diagnose()`` (issue #812).
 
 Exercises the non-raising preflight through the public API with real plugins and the real
-PandasDataFrame compute framework: shipped ``PandasAggregatedFeatureGroup`` aggregations chain off raw
+PandasDataFrame compute framework: shipped ``AggregatedFeatureGroup`` aggregations chain off raw
 columns produced by a ``DataCreator`` source. A fully resolvable request yields a complete diagnosis;
 adding an unknown feature name projects a resolution-failure diagnosis instead of raising, and that
 projection equals the raising path's ``FeatureResolutionError``.
@@ -25,7 +25,9 @@ from mloda.provider import DefaultOptionKeys
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
@@ -50,7 +52,7 @@ class DiagE2ESource_812(ATestDataCreator):
         }
 
 
-_PLUGINS = PluginCollector.enabled_feature_groups({DiagE2ESource_812, PandasAggregatedFeatureGroup})
+_PLUGINS = PluginCollector.enabled_feature_groups({DiagE2ESource_812, AggregatedFeatureGroup})
 
 
 def _sum_feature() -> Feature:
@@ -94,13 +96,13 @@ class TestDiagnoseEndToEnd_812:
         assert all(isinstance(record, ResolutionRecord) for record in diagnosis.records)
         assert all(isinstance(record.result, EvaluationResult) for record in diagnosis.records)
 
-        # Each requested aggregation resolves to the shipped PandasAggregatedFeatureGroup.
+        # Each requested aggregation resolves to the shipped AggregatedFeatureGroup.
         for requested_name in (SUM_FEATURE, AVG_FEATURE):
             matches = [record for record in diagnosis.records if record.feature_name == requested_name]
             assert len(matches) == 1, f"expected exactly one record for {requested_name}"
             assert matches[0].requested is True
             assert matches[0].result.failure_kind is None
-            assert PandasAggregatedFeatureGroup in matches[0].result.identified
+            assert AggregatedFeatureGroup in matches[0].result.identified
 
         # Each derived source column resolves (requested=False) to our DataCreator source.
         for source_name in (SALES_COL, REVENUE_COL):

@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data import
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.prepare.declared_sides import (
@@ -3512,6 +3513,8 @@ Available join types:
                     feature_set.implementation = feature_group.select_implementation(
                         cf, input_data_match[1], self.implementations
                     )
+                elif issubclass(feature_group, OperationFeatureGroup):
+                    feature_set.implementation = feature_group.select_implementation(cf, self.implementations)
 
                 feature_group_step = FeatureGroupStep(
                     feature_group,

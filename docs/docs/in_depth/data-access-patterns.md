@@ -131,7 +131,12 @@ Rules for format group authors:
 
 `ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically; a custom group only needs this for its own decline points.
 
-A `feature_group=` scope is final: only the scoped group is a candidate. A class-name pointer is final against other format groups and the DataAccessCollection. When the pointed group aborts (missing column, unreadable file, `column_to_file` miss, refusal), it yields only to a candidate that computes the feature from input features. When it only declines (a pointer value of the wrong type, a foreign file suffix, invalid credentials, a PROPERTY_MAPPING value or required-key failure, or no source found), a plain FeatureGroup that claims the name by its own rules still serves it. Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name.
+A `feature_group=` scope is final: only the scoped group and its subclasses are candidates. A class-name pointer is final against other format groups and the DataAccessCollection. A pointed group can end its match in two ways:
+
+- It aborts, for example on a `query_text` it cannot serve, a refusal at INPUT_DATA_MATCH, or a missing column. These aborts are deferred: they yield to a candidate that computes the feature from input features, or to a subclass of the pointed group that takes it over. The several-sources ambiguity abort is not deferred and always raises.
+- It declines, for example on a PROPERTY_MAPPING value or required-key failure, no source found, or a name the group does not declare. A plain FeatureGroup that claims the name by its own rules still serves it.
+
+Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name.
 
 ## MatchData Pattern
 

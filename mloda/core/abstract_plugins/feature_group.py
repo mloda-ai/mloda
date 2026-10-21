@@ -313,7 +313,7 @@ class FeatureGroup(ABC):
     @classmethod
     def read_option(cls, key: str, options: Options, feature_name: FeatureName | str | None = None) -> Any:
         """A declared key's value (present option, else name-bound value, else default); raises if undeclared."""
-        if key not in cls.declared_option_keys():
+        if key not in (cls.PROPERTY_MAPPING or {}):
             raise ValueError(f"{cls.__name__} reads option '{key}', which its PROPERTY_MAPPING does not declare.")
         bindings = cls.name_bindings(feature_name) if feature_name is not None else None
         return cls.options_with_defaults(options, bindings).get(key)

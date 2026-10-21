@@ -170,23 +170,25 @@ class TestMatchDataOptionWriteConflictAbortsTheMatch:
         assert GLOBAL_ACCESS not in snapshot.escaped
 
 
-RESERVED_KEY_TOKEN = "tok_opaque_value_2099"
+OPAQUE_OPTION_VALUE = "tok_opaque_value"
 
 
 class TestUserSuppliedReservedReaderKeyIsRejected:
+    """A user-supplied reserved reader key is rejected at Feature construction without echoing its value."""
+
     @pytest.mark.parametrize(
         "options",
         [
-            {"BaseInputData": RESERVED_KEY_TOKEN},
-            Options(group={"BaseInputData": RESERVED_KEY_TOKEN}),
-            Options(context={"BaseInputData": RESERVED_KEY_TOKEN}),
+            {"BaseInputData": OPAQUE_OPTION_VALUE},
+            Options(group={"BaseInputData": OPAQUE_OPTION_VALUE}),
+            Options(context={"BaseInputData": OPAQUE_OPTION_VALUE}),
         ],
         ids=["dict", "group", "context"],
     )
     def test_feature_construction_rejects_reserved_key(self, options: Any) -> None:
         with pytest.raises(ValueError) as excinfo:
-            Feature("col_2099", options=options)
+            Feature("col", options=options)
 
         message = str(excinfo.value)
         assert "BaseInputData" in message
-        assert RESERVED_KEY_TOKEN not in message
+        assert OPAQUE_OPTION_VALUE not in message

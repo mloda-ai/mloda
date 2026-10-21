@@ -12,6 +12,7 @@ Group 3 (``resolve_subtype`` delegating to this mechanism) is already pinned by
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -399,19 +400,30 @@ class TestReadOption:
         with pytest.raises(ValueError, match="NoMappingFeatureGroup"):
             NoMappingFeatureGroup.read_option("anything", Options())
 
-    def test_present_value_is_returned(self) -> None:
-        """A present value is returned over the declared default."""
-        value = _make_probe_fg().read_option(CTX_KEY, Options(context={CTX_KEY: "explicit"}))
-        assert value == "explicit"
-
     @pytest.mark.parametrize(
-        ("key", "expected"),
-        [(CTX_KEY, "ctx_val"), (GRP_KEY, "grp_val"), (NONE_KEY, None), (REQ_KEY, None)],
+        ("factory", "key", "options", "expected"),
+        [
+            (_make_probe_fg, CTX_KEY, Options(context={CTX_KEY: "explicit"}), "explicit"),
+            (_make_probe_fg, CTX_KEY, Options(), "ctx_val"),
+            (_make_probe_fg, GRP_KEY, Options(), "grp_val"),
+            (_make_probe_fg, NONE_KEY, Options(), None),
+            (_make_probe_fg, REQ_KEY, Options(), None),
+            (_make_two_keys_fg, "owd_first", Options(), "a"),
+        ],
+        ids=[
+            "present",
+            "absent-ctx-default",
+            "absent-group-default",
+            "absent-no-default",
+            "absent-required",
+            "no-name",
+        ],
     )
-    def test_absent_key_returns_declared_default_or_none(self, key: str, expected: Any) -> None:
-        """An absent key returns its declared default; no-default and required keys return None."""
-        value = _make_probe_fg().read_option(key, Options())
-        assert value == expected
+    def test_read_option_returns_value_or_default(
+        self, factory: Callable[[], type[FeatureGroup]], key: str, options: Options, expected: Any
+    ) -> None:
+        """A present value wins; an absent key yields its declared default or None; no name means no binding."""
+        assert factory().read_option(key, options) == expected
 
     def test_explicit_none_with_allow_explicit_none_returns_none(self) -> None:
         """An explicit None is returned as None when the spec opts in."""
@@ -427,11 +439,6 @@ class TestReadOption:
         """With feature_name, the name-bound value is returned instead of the default."""
         value = _make_two_keys_fg().read_option("owd_first", Options(), "x__op_q_b")
         assert value == "q"
-
-    def test_without_feature_name_default_is_returned(self) -> None:
-        """Without feature_name no binding applies, so the default is returned."""
-        value = _make_two_keys_fg().read_option("owd_first", Options())
-        assert value == "a"
 
     def test_format_group_inherited_key_is_declared(self) -> None:
         """A key inherited through a FormatFeatureGroup's merged PROPERTY_MAPPING reads without raising."""

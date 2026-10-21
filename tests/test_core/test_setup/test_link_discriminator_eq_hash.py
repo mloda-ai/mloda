@@ -276,7 +276,7 @@ class TestLinkStr:
 
     @pytest.mark.parametrize(
         "discriminator",
-        [{"password": "hunter2"}, {"dsn": "postgresql://user:hunter2@host/db"}],
+        [{"password": "hunter2"}, {"dsn": "postgresql://user:hunter2@host/db"}],  # nosec B105
         ids=["secret_key", "credential_value"],
     )
     def test_masks_secrets(self, discriminator: dict[str, Any]) -> None:

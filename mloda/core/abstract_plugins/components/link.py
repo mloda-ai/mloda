@@ -309,8 +309,7 @@ class Link:
             if not discriminator:
                 raise ValueError(
                     f"Link.from_features: the {side} feature's group options do not differ from the {other}'s, "
-                    f"so no {side}_discriminator can tell the {side} node apart. Set a distinguishing option on "
-                    "each feature or pass discriminators to Link directly."
+                    f"so there is no {side}_discriminator. Give the features differing options."
                 )
         return cls(
             jointype, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator

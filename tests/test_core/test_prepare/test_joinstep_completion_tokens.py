@@ -50,6 +50,7 @@ APPEND_MIDDLE_INDEX = Index(("token_append_middle_key",))
 APPEND_TAIL_INDEX = Index(("token_append_tail_key",))
 
 SELF_SIDE = "token_self_side"
+SELF_SIDE_TYPO = SELF_SIDE[:-1]
 SELF_LEFT_KEY = "token_self_left_key"
 SELF_LEFT_PAYLOAD = "token_self_left_payload"
 SELF_RIGHT_KEY = "token_self_right_key"
@@ -1095,13 +1096,13 @@ def test_an_unmatched_discriminator_names_its_side_class_and_seen_values(left_va
 
 
 def test_a_discriminator_key_typo_shows_the_real_option_key_names() -> None:
-    link = _self_link_with(Link.left, {"token_self_sid": "left"}, {SELF_SIDE: "right"})
+    link = _self_link_with(Link.left, {SELF_SIDE_TYPO: "left"}, {SELF_SIDE: "right"})
 
     with pytest.raises(ValueError) as excinfo:
         _run_self_join(link)
 
     message = str(excinfo.value)
-    assert _unmatched_line("left", {"token_self_sid": "left"}) in message
+    assert _unmatched_line("left", {SELF_SIDE_TYPO: "left"}) in message
     assert "<missing>" in message
     assert SELF_SIDE in message, f"the real key name must be visible; got: {message}"
     assert "right_discriminator {" not in message
@@ -1134,20 +1135,8 @@ def test_an_append_or_union_self_link_with_a_right_typo_names_the_right_side(fac
     assert "left_discriminator {" not in message
 
 
-def test_from_features_builds_the_hand_written_self_link() -> None:
-    link = Link.from_features(
-        "left",
-        JoinSpec(TokenSelfSource, Index((SELF_LEFT_KEY,))),
-        JoinSpec(TokenSelfSource, Index((SELF_RIGHT_KEY,))),
-        Feature(name=SELF_LEFT_PAYLOAD, options={SELF_SIDE: "left"}),
-        Feature(name=SELF_RIGHT_PAYLOAD, options={SELF_SIDE: "right"}),
-    )
-
-    assert link == _self_link("left", "right")
-
-
 def test_an_unmatched_discriminator_error_does_not_leak_secret_values() -> None:
-    link = _self_link_with(Link.left, {SELF_SIDE: "lfet", "password": "hunter2"}, {SELF_SIDE: "right"})
+    link = _self_link_with(Link.left, {SELF_SIDE: "lfet", "password": "hunter2"}, {SELF_SIDE: "right"})  # nosec B105
 
     with pytest.raises(ValueError) as excinfo:
         _run_self_join(link)

@@ -427,7 +427,26 @@ class TestSqliteUnionResultTypes:
         assert arrow.schema.field("loose").type == pa.string()
         assert arrow.num_rows == 0
 
-    def test_hinted_relations_keep_their_types(self, connection: sqlite3.Connection, index_obj: Index) -> None:
+    @pytest.mark.parametrize("integer_first", [True, False], ids=["integer_first", "text_first"])
+    def test_integer_against_text_column_is_string_in_both_side_orders(
+        self, connection: sqlite3.Connection, integer_first: bool
+    ) -> None:
+        connection.execute("CREATE TABLE ints (idx INTEGER, mixed INTEGER)")
+        connection.execute("CREATE TABLE texts (idx INTEGER, mixed TEXT)")
+        engine = SqliteMergeEngine(connection)
+        index = Index(("idx",))
+        ints, texts = SqliteRelation(connection, "ints"), SqliteRelation(connection, "texts")
+        left, right = (ints, texts) if integer_first else (texts, ints)
+        result = engine.merge_union(left, right, index, index)
+        by_name = dict(zip(result.columns, result.types, strict=True))
+        arrow = result.to_arrow_table()
+        assert by_name["mixed"] == pa.string()
+        assert arrow.schema.field("mixed").type == pa.string()
+        assert arrow.num_rows == 0
+
+    def test_hinted_int_float_and_string_columns_keep_their_types(
+        self, connection: sqlite3.Connection, index_obj: Index
+    ) -> None:
         left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1], "v": [1.5]}))
         right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [2], "w": ["a"]}))
         result = SqliteMergeEngine(connection).merge_union(left, right, index_obj, index_obj)

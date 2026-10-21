@@ -41,15 +41,25 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         left_ref = quote_ident(left_data.table_name)
         right_ref = quote_ident(right_data.table_name)
         sql = f" SELECT {left_proj} FROM {left_ref} {union_keyword} SELECT {right_proj} FROM {right_ref} "  # nosec
-        left_types = dict(zip(left_data.columns, left_data._affinity_types()))
-        right_types = dict(zip(right_data.columns, right_data._affinity_types()))
+        left_types = dict(zip(left_data.columns, left_data._affinity_types(), strict=True))
+        right_types = dict(zip(right_data.columns, right_data._affinity_types(), strict=True))
         fallback = [
-            _compatible_arrow_type(left_types[c], right_types[c])
+            self._union_column_type(left_types[c], right_types[c])
             if c in left_types and c in right_types
             else (left_types[c] if c in left_types else right_types[c])
             for c in sorted(set(left_types) | set(right_types))
         ]
         return self._execute_sql(sql, fallback_types=fallback)
+
+    @staticmethod
+    def _union_column_type(left: pa.DataType | None, right: pa.DataType | None) -> pa.DataType | None:
+        """Equal types keep the type, an int/float mix widens, any other mix is string (side-order independent)."""
+        if left is None or right is None or left == right:
+            return _compatible_arrow_type(left, right)
+        numeric = (pa.types.is_integer, pa.types.is_floating)
+        if any(f(left) for f in numeric) and any(f(right) for f in numeric):
+            return _compatible_arrow_type(left, right)
+        return pa.string()
 
     def merge_asof(
         self,

@@ -13,6 +13,9 @@ from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import Pand
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.pandas import PandasEncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 from mloda_plugins.feature_group.experimental.geo_distance.pandas import PandasGeoDistanceFeatureGroup
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 

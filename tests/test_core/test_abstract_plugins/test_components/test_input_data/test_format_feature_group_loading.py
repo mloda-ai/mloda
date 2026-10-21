@@ -359,8 +359,9 @@ class TestOperationImplementation:
         definition = toy.OpToyFG.compute_framework_definition()
         assert {PandasDataFrame, PyArrowTable} <= definition
         assert PythonDictFramework not in definition
-        make_implementation(toy.OpToyFG, PythonDictFramework, _sentinel)
+        dict_impl = make_implementation(toy.OpToyFG, PythonDictFramework, _sentinel)
         assert PythonDictFramework in toy.OpToyFG.compute_framework_definition()
+        assert dict_impl.feature_group is toy.OpToyFG
 
     def test_a_disabled_implementation_removes_its_framework_from_the_run(self) -> None:
         toy = _toy_operation()
@@ -434,7 +435,7 @@ class TestImplementationPin:
         self, make_implementation: Any
     ) -> None:
         toy = _toy_operation()
-        make_implementation(
+        plus = make_implementation(
             toy.OpToyFG,
             PandasDataFrame,
             lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [77]}),
@@ -445,6 +446,7 @@ class TestImplementationPin:
         result = _run_pinned([_op_feature("OpToyPandas")])
 
         assert column_values(result, toy.OPTOY_FEATURE) == [77]
+        assert issubclass(plus, toy.OpToyPandas)
 
     @pytest.mark.parametrize(
         ("pin", "expected"),
@@ -547,7 +549,7 @@ class TestImplementationPin:
                 data[name] = toy.PANDAS_MARK
             return data
 
-        make_implementation(
+        plus = make_implementation(
             toy.OpToyChainFG, PandasDataFrame, serve, base=toy.OpToyChainPandas, name="OpToyChainPandasPlus"
         )
 
@@ -559,12 +561,13 @@ class TestImplementationPin:
         )
 
         assert toy.CHAIN_LOG == [(INNER, "OpToyChainPandasPlus"), (OUTER, "OpToyChainPandasPlus")]
+        assert plus.__name__ == "OpToyChainPandasPlus"
 
     def test_a_class_pin_resolves_although_another_loaded_implementation_shares_its_name(
         self, make_implementation: Any
     ) -> None:
         toy = _toy_operation()
-        make_implementation(
+        twin = make_implementation(
             toy.OpToyFG,
             PandasDataFrame,
             lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [77]}),
@@ -575,6 +578,7 @@ class TestImplementationPin:
         result = _run_pinned([_op_feature(toy.OpToyPyArrow)])
 
         assert column_values(result, toy.OPTOY_FEATURE) == [toy.PYARROW_MARK]
+        assert twin is not toy.OpToyPyArrow
 
     def test_the_pin_does_not_reach_the_input_or_a_non_pinned_sibling(self) -> None:
         toy = _toy_operation()

@@ -9,6 +9,9 @@ import pytest
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.user import mloda
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 from mloda.user import Feature
 from mloda.user import Options
 from mloda.user import PluginCollector

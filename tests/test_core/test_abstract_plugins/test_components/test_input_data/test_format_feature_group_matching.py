@@ -24,6 +24,7 @@ from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_parquet
 from tests.mixins.reader_feature_groups.lazy_format_group import load_group
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
@@ -41,6 +42,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 
 COL = "toyfmt_col"
+_AGGREGATION_IMPLEMENTATIONS = (PyArrowAggregation,)  # loaded by import, serves AggregatedFeatureGroup on PyArrow
 
 
 def _plugins(*groups: type) -> FeatureGroupEnvironmentMapping:

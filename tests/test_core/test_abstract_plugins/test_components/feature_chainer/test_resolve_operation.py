@@ -16,6 +16,9 @@ from mloda.user import mloda
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 from mloda.provider import DefaultOptionKeys, PropertySpec
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 

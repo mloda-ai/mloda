@@ -940,10 +940,11 @@ class TestPlanStepImplementation:
     ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
         parent = make_implementation(group, PythonDictFramework, name="PlanInfoEqualImpl")
-        make_implementation(group, PythonDictFramework, base=parent, name="PlanInfoOtherImpl")
+        child = make_implementation(group, PythonDictFramework, base=parent, name="PlanInfoOtherImpl")
         step = _explain_toy_group(group)
         other = parent
 
+        assert issubclass(child, parent)
         assert dataclasses.replace(step, implementation=other) != step
         assert dataclasses.replace(step, implementation_specialized_from=()) != step
         assert (
@@ -973,7 +974,7 @@ class TestPlanStepImplementation:
         self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        make_implementation(group, PythonDictFramework, name="PlanInfoUnhashableImpl")
+        impl = make_implementation(group, PythonDictFramework, name="PlanInfoUnhashableImpl")
 
         def boom(cls: Any, target_class: Any) -> str:
             raise OSError("no source")
@@ -982,6 +983,7 @@ class TestPlanStepImplementation:
 
         step = _explain_toy_group(group)
 
+        assert step.implementation is impl
         assert step.implementation_hash == "unavailable"
         assert step.implementation_version is None
         assert len(plan_structure_hash([step])) == 64

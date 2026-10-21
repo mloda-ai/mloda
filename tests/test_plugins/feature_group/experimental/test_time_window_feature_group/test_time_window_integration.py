@@ -8,6 +8,9 @@ from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable

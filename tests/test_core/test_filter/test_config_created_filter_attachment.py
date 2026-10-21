@@ -14,6 +14,9 @@ from mloda.provider import BaseInputData, ComputeFramework, DataCreator, Default
 from mloda.user import Feature, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
+    PandasAggregation as PandasAggregation,
+)
 
 # The cfa_ prefix keeps these names unique repo-wide.
 CFA_SOURCE = "cfa_sales"

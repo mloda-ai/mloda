@@ -15,7 +15,10 @@ from mloda.provider import FeatureSet, Implementation
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, raise_null_reference_time
-from mloda_plugins.feature_group.experimental.nan_safe_reduction import sample_variance_skipping_nan
+from mloda_plugins.feature_group.experimental.nan_safe_reduction import (
+    reduce_without_nan_warning,
+    sample_variance_skipping_nan,
+)
 
 _NUMPY_REASON = "multi-column time-window aggregation"
 
@@ -136,23 +139,28 @@ class PyArrowTimeWindow(Implementation):
                         column_array = np.array([np.nan if v is None else v for v in column_results], dtype=float)
                     else:
                         column_array = np.array(column_results)
-                    if window_function == "sum":
-                        results.append(np.sum(column_array))
-                    elif window_function == "min":
-                        results.append(np.min(column_array))
-                    elif window_function == "max":
-                        results.append(np.max(column_array))
-                    elif window_function in ["avg", "mean"]:
-                        results.append(np.mean(column_array))
+                    row = column_array.astype(float)[np.newaxis, :]
+                    all_nan = np.isnan(row).all(axis=1)
+                    nan_reducers = {
+                        "sum": np.nansum,
+                        "min": np.nanmin,
+                        "max": np.nanmax,
+                        "avg": np.nanmean,
+                        "mean": np.nanmean,
+                        "median": np.nanmedian,
+                        "first": np.nanmean,
+                        "last": np.nanmean,
+                    }
+                    if window_function in nan_reducers:
+                        reducer = nan_reducers[window_function]
+                        results.append(
+                            reduce_without_nan_warning(row, all_nan, lambda a, r=reducer: r(a, axis=1))[0]  # type: ignore[misc]
+                        )
                     elif window_function == "count":
                         results.append(np.sum(~np.isnan(column_array)))
                     elif window_function in ["std", "var"]:
                         variance = float(sample_variance_skipping_nan(column_array.astype(float)[np.newaxis, :])[0])
                         results.append(variance if window_function == "var" else np.sqrt(variance))
-                    elif window_function == "median":
-                        results.append(np.median(column_array))
-                    elif window_function in ["first", "last"]:
-                        results.append(np.mean(column_array))  # Use mean as aggregation for first/last
                 else:
                     # Single column: use the result directly
                     results.append(column_results[0])
@@ -163,12 +171,12 @@ class PyArrowTimeWindow(Implementation):
         for k, orig_pos in enumerate(sorted_idx_list):
             reordered_results[orig_pos] = results[k]
 
-        if not reordered_results:
-            # pa.array([]) infers the null type; take the type the window function yields on the empty source.
+        if all(v is None for v in reordered_results):
+            # pa.array infers the null type; take the type the window function yields on the source.
             source = sorted_sources[0]
             if window_function in ["first", "last"]:
-                return pa.array([], type=source.type)
-            return pa.array([], type=cls._window_scalar(source, window_function).type)
+                return pa.array(reordered_results, type=source.type)
+            return pa.array(reordered_results, type=cls._window_scalar(source, window_function).type)
 
         # Convert the results to a PyArrow array
         return pa.array(reordered_results)

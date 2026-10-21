@@ -276,7 +276,7 @@ class TestTimeWindowFeatureGroup:
         ],
         ids=["pandas", "pyarrow"],
     )
-    def test_window_source_check_is_tolerant_and_lists_sorted_columns(self, impl: Any, data: Any) -> None:
+    def test_window_raises_when_no_source_exists_and_lists_sorted_columns(self, impl: Any, data: Any) -> None:
         feature_set = FeatureSet()
         feature_set.add(Feature("missing__sum_2_hour_window"))
         expected = "None of the source features ['missing'] found in data. Available columns: "

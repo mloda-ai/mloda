@@ -8,9 +8,8 @@ infrastructure, never plugins, and stay out. Registration is idempotent, happens
 the sys.modules cache path too (import-order and import-history independent), and
 never picks up ad-hoc subclasses defined outside loaded plugin modules.
 
-All scopes used here import without optional dependencies (python_dict, sqlite,
-and geo_distance with pandas and numpy). The autouse conftest fixture restores the default registry
-around every test, so clearing it inside a test is safe.
+The scopes used here (python_dict, sqlite, geo_distance) need no optional dependency beyond pandas and numpy.
+The autouse conftest fixture restores the default registry around every test, so clearing it inside a test is safe.
 """
 
 import gc

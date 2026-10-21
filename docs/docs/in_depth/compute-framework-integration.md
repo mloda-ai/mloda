@@ -274,12 +274,12 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
-- Framework differences not declared yet: only Pandas imputes NaN (the others impute null only), `mode` ties differ, a PyArrow time window propagates NaN in `sum` and `avg` and counts it in `count`, and PythonDict text cleaning turns NaN into `"nan"` (Pandas gives `""`).
-- PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null.
-- `feature_group="PandasAggregatedFeatureGroup"` becomes `implementation="PandasAggregation"`, or `compute_framework=PandasDataFrame`.
+- Framework differences not declared yet: only Pandas imputes NaN (the others impute null only), `mode` ties differ, a single-column PyArrow time window propagates NaN in `sum`, `avg`/`mean`, `std` and `var` (Pandas skips it) and counts it in `count`, and PythonDict text cleaning turns NaN into `"nan"` (Pandas gives `""`).
+- PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.
+- `feature_group="<old per-framework class>"` becomes `implementation="<implementation>"`, or `compute_framework=...`, for every moved family.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
 - With Pandas and PyArrow both enabled, a sum now runs on PyArrow (it matches the reference contract; Pandas skips NaN) and may add a conversion. Pin `implementation="PandasAggregation"` to keep the old behaviour.
-- A provider customizes an aggregation implementation by overriding `_perform_aggregation` or `_add_result_to_data` on an implementation subclass, and the loop by overriding `aggregate` on a group subclass.
+- A provider customizes an implementation by overriding its methods (for example `_perform_aggregation`, `_perform_window_operation`, `_perform_imputation`, `_apply_operation`) on an implementation subclass, and the loop by overriding the group's loop (`aggregate`, `window`, `impute`, `clean`) on a group subclass.
 
 ## Framework Selection Process
 

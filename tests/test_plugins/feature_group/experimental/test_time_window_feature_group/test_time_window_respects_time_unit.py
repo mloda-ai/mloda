@@ -182,3 +182,42 @@ def test_std_and_var_use_ddof_one_on_both_frameworks(
     result = implementation._perform_window_operation(data, window_function, span, list(columns), REFERENCE_TIME)
 
     assert _nulls_as_nan(result) == pytest.approx(_expected_sample_stat(window_function, columns), nan_ok=True)
+
+
+@pytest.mark.parametrize("window_function", ["std", "var"])
+def test_pyarrow_all_single_row_windows_keep_float64_type(window_function: str) -> None:
+    """Every window holds one row: the result is all null but still float64, not the null type."""
+    times = pd.to_datetime(["2023-01-01", "2023-01-05", "2023-01-09"])
+    table = pa.Table.from_pandas(pd.DataFrame({"a": [1.0, 2.0, 4.0], REFERENCE_TIME: times}))
+    span = TimeWindowFeatureGroup._get_time_delta(1, "day")
+
+    result = PyArrowTimeWindow._perform_window_operation(table, window_function, span, ["a"], REFERENCE_TIME)
+
+    assert result.type == pa.float64()
+    assert result.to_pylist() == [None, None, None]
+
+
+@pytest.mark.parametrize("window_function", ["sum", "min", "max", "avg", "median", "first", "last"])
+def test_multi_column_window_skips_all_null_column_like_pandas(window_function: str) -> None:
+    """A column whose window is all null is skipped when aggregating across columns, as in Pandas."""
+    nan = float("nan")
+    df = pd.DataFrame(
+        {
+            "a": [1.0, 2.0, 4.0, 8.0, 16.0, 32.0],
+            "b": [nan, nan, nan, 7.0, 11.0, 13.0],
+            REFERENCE_TIME: _MINUTE_TIMES,
+        }
+    )
+    span = TimeWindowFeatureGroup._get_time_delta(3, "hour")
+    columns = ["a", "b"]
+
+    expected = _nulls_as_nan(
+        PandasTimeWindow._perform_window_operation(df, window_function, span, columns, REFERENCE_TIME)
+    )
+    actual = _nulls_as_nan(
+        PyArrowTimeWindow._perform_window_operation(
+            pa.Table.from_pandas(df), window_function, span, columns, REFERENCE_TIME
+        )
+    )
+
+    assert actual == pytest.approx(expected, nan_ok=True)

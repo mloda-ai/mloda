@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
+
+import pytest
 
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, JoinSpec, Link, Options, ParallelizationMode, PluginCollector, mloda
@@ -96,13 +99,28 @@ class SclkrHubJoinedFG(FeatureGroup):
         return {PyArrowTable}
 
 
-def test_same_class_link_with_distinct_keys_joins_election_and_region() -> None:
-    link = Link.inner(
+def _hand_written_link() -> Link:
+    return Link.inner(
         JoinSpec(SclkrSourceFG, "sclkr_nr"),
         JoinSpec(SclkrSourceFG, "sclkr_code"),
         left_discriminator={"sclkr_source": "election"},
         right_discriminator={"sclkr_source": "region"},
     )
+
+
+def _from_features_link() -> Link:
+    return Link.from_features(
+        "inner",
+        JoinSpec(SclkrSourceFG, "sclkr_nr"),
+        JoinSpec(SclkrSourceFG, "sclkr_code"),
+        Feature("sclkr_votes", options={"sclkr_source": "election"}),
+        Feature("sclkr_pop", options={"sclkr_source": "region"}),
+    )
+
+
+@pytest.mark.parametrize("build_link", [_hand_written_link, _from_features_link], ids=["hand_written", "from_features"])
+def test_same_class_link_with_distinct_keys_joins_election_and_region(build_link: Callable[[], Link]) -> None:
+    link = build_link()
 
     results = mloda.run_all(
         [Feature(SclkrJoinedFG.get_class_name())],

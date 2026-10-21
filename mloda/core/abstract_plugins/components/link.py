@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import FrozenInstanceError, dataclass
 from datetime import timedelta
 from enum import Enum
 from uuid import uuid4
-from typing import Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
-
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_hashable
+from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys, redact_option_value
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
+from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
+
+if TYPE_CHECKING:
+    from mloda.core.abstract_plugins.components.feature import Feature
 
 
 class JoinType(Enum):
@@ -178,6 +183,9 @@ class Link:
         The _on methods require feature groups to have index_columns() defined.
         Use left_index/right_index to select which index when multiple are available.
 
+        **Same-class factory** - discriminators derived from the features' differing group options:
+            - Link.from_features(jointype, left_joinspec, right_joinspec, left_feature, right_feature)
+
         **Star factory** - joins every spoke to a shared-index hub:
             - Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id")
             - Link.star(HubFG, SpokeAFG, index_column="row_id", jointype=JoinType.LEFT)
@@ -265,7 +273,52 @@ class Link:
         self.uuid = uuid4()
 
     def __str__(self) -> str:
-        return f"{self.jointype.value} {self.left_feature_group.get_class_name()} {self.left_index} {self.right_feature_group.get_class_name()} {self.right_index} {self.uuid}"
+        text = f"{self.jointype.value} {self.left_feature_group.get_class_name()} {self.left_index} {self.right_feature_group.get_class_name()} {self.right_index} {self.uuid}"
+        for side, discriminator in (("left", self.left_discriminator), ("right", self.right_discriminator)):
+            if discriminator is not None:
+                text += f" {side}_discriminator={self._masked_discriminator(discriminator)}"
+        return text
+
+    @staticmethod
+    def _masked_discriminator(discriminator: dict[str, Any]) -> str:
+        """Dict-style text of the discriminator, secrets masked, unreprable values shown by type name."""
+        items = [
+            f"{key!r}: {safe_field(lambda: repr(redact_option_value(value)), type(value).__name__)}"
+            for key, value in _mask_secret_keys(discriminator).items()
+        ]
+        return "{" + ", ".join(items) + "}"
+
+    @classmethod
+    def from_features(
+        cls,
+        jointype: JoinType | str,
+        left: JoinSpec,
+        right: JoinSpec,
+        left_feature: Feature,
+        right_feature: Feature,
+    ) -> "Link":
+        """Link whose discriminators are the group options that differ between the two features."""
+        left_group = left_feature.options.group
+        right_group = right_feature.options.group
+        differing = [
+            key
+            for key in dict.fromkeys([*left_group, *right_group])
+            if key not in left_group or key not in right_group or not _deep_equal(left_group[key], right_group[key])
+        ]
+        left_discriminator = {key: deepcopy(left_group[key]) for key in differing if key in left_group}
+        right_discriminator = {key: deepcopy(right_group[key]) for key in differing if key in right_group}
+        for side, other, discriminator in (
+            ("left", "right", left_discriminator),
+            ("right", "left", right_discriminator),
+        ):
+            if not discriminator:
+                raise ValueError(
+                    f"Link.from_features: the {side} feature's group options do not differ from the {other}'s, "
+                    f"so there is no {side}_discriminator. Give the features differing options (context options are ignored)."
+                )
+        return cls(
+            jointype, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+        )
 
     @classmethod
     def _from_specs(

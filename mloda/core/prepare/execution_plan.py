@@ -488,12 +488,12 @@ class ExecutionPlan:
 
         fw_execution_plan = self.handle_append_or_union_joinstep(fw_execution_plan)
 
-        self.expand_link_tokens(fw_execution_plan, link_trekker)
+        self.expand_link_tokens(fw_execution_plan, link_trekker, graph)
 
         return fw_execution_plan
 
     def expand_link_tokens(
-        self, fw_execution_plan: list[JoinStep | FeatureGroupStep], link_trekker: LinkTrekker
+        self, fw_execution_plan: list[JoinStep | FeatureGroupStep], link_trekker: LinkTrekker, graph: Graph
     ) -> None:
         """Replace each waited-on link uuid with its JoinSteps; a consumer step keeps only the joins recording it."""
         consumers_by_token: dict[UUID, frozenset[UUID]] = {r.token: r.consumers for r in self.planned_records}
@@ -518,7 +518,7 @@ class ExecutionPlan:
             for link_uuid in required_links:
                 produced = joinstep_uuids.get(link_uuid)
                 if not produced:
-                    raise ValueError(self._no_joinstep_for_link_error(links_by_uuid.get(link_uuid, link_uuid)))
+                    raise ValueError(self._no_joinstep_for_link_error(links_by_uuid.get(link_uuid, link_uuid), graph))
                 own = (
                     {t for t in produced if consumers_by_token.get(t, frozenset()) & step.get_uuids()}
                     if isinstance(step, FeatureGroupStep)
@@ -534,11 +534,38 @@ class ExecutionPlan:
             step.required_uuids.update(expanded)
 
     @staticmethod
-    def _no_joinstep_for_link_error(link: Link | UUID) -> str:
+    def _discriminator_miss_lines(link: Link, graph: Graph) -> list[str]:
+        """One line per side whose discriminator matches no node of that side's feature group."""
+        lines: list[str] = []
+        for side, group, discriminator in (
+            ("left", link.left_feature_group, link.left_discriminator),
+            ("right", link.right_feature_group, link.right_discriminator),
+        ):
+            if discriminator is None:
+                continue
+            nodes = [n for n in graph.nodes.values() if issubclass(n.feature_group_class, group)]
+            if any(Link.matches_discriminator(discriminator, n.feature.options) for n in nodes):
+                continue
+            seen: set[str] = set()
+            for node in nodes:
+                options = node.feature.options
+                values = {key: options.get(key) if key in options else "<missing>" for key in discriminator}
+                seen.add(f"{Link._masked_discriminator(values)} (keys: {sorted(map(str, options.keys()))})")
+            name = group.get_class_name()
+            lines.append(
+                f"{side}_discriminator {Link._masked_discriminator(discriminator)} matched no {name} node; "
+                f"options seen on {name} nodes: {', '.join(sorted(seen)) or 'none'}"
+            )
+        return lines
+
+    @staticmethod
+    def _no_joinstep_for_link_error(link: Link | UUID, graph: Graph) -> str:
         """A link a step waits for that planned no join step is a configuration problem, not a bug."""
+        miss_lines = ExecutionPlan._discriminator_miss_lines(link, graph) if isinstance(link, Link) else []
         return (
             f"No join step was planned for a link that a step of the plan waits for: {link}\n"
-            "Possible causes:\n"
+            + "".join(f"{line}\n" for line in miss_lines)
+            + "Possible causes:\n"
             "  - The left_discriminator or right_discriminator values match none of the features' options.\n"
             "  - The left compute framework of the link is not the compute framework of the child feature.\n"
             "Resolution: align the discriminator values with the options you set on the features, and declare "
@@ -3277,13 +3304,14 @@ Available join types:
                 raise ValueError(
                     f"Could not resolve left/right UUIDs for APPEND/UNION join.\n"
                     f"link={link_fw[0]}, left_uuids={left_uuids}, right_uuids={right_uuids}\n"
-                    "Possible causes:\n"
+                    + "".join(f"{line}\n" for line in self._discriminator_miss_lines(link_fw[0], graph))
+                    + "Possible causes:\n"
                     "  - The index was not set for the append or union Link.\n"
                     "  - The features are not unique (Link hash alone does not distinguish them).\n"
                     "Resolution: Set distinct options on each feature to make them unique, "
                     "or ensure each side of the Link has an explicit index.\n"
-                    f"Please report this issue at https://github.com/mloda-ai/mloda/issues "
-                    f"if the problem persists."
+                    "Please report this issue at https://github.com/mloda-ai/mloda/issues "
+                    "if the problem persists."
                 )
             if unique_solution_counter > 0:
                 return (left_uuids, right_uuids)

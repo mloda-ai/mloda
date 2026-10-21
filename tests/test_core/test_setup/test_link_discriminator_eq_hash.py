@@ -11,10 +11,13 @@ See Also:
 
 from typing import Any
 
+import pytest
+
 from mloda.provider import FeatureGroup
+from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Index
-from mloda.user import JoinSpec, Link
+from mloda.user import JoinSpec, JoinType, Link
 from mloda.user import Options
 
 
@@ -153,3 +156,155 @@ class TestLinkDiscriminatorEqHash:
         assert hash(link_1) == hash(link_2)
         assert link_1 != link_3
         assert len({link_1, link_2, link_3}) == 2
+
+
+# ============================================================================
+# Link.from_features and str(link)
+# ============================================================================
+def _specs() -> tuple[JoinSpec, JoinSpec]:
+    return JoinSpec(DiscriminatorFG, "id"), JoinSpec(DiscriminatorFG, "id")
+
+
+def _hand_written(left_disc: dict[str, Any], right_disc: dict[str, Any]) -> Link:
+    left, right = _specs()
+    return Link("inner", left, right, left_discriminator=left_disc, right_discriminator=right_disc)
+
+
+class TestLinkFromFeatures:
+    def test_equals_hand_written_link_with_same_hash(self) -> None:
+        left, right = _specs()
+        built = Link.from_features(
+            "inner", left, right, Feature(name="a", options={"side": "l"}), Feature(name="b", options={"side": "r"})
+        )
+        expected = _hand_written({"side": "l"}, {"side": "r"})
+        assert built == expected
+        assert hash(built) == hash(expected)
+
+    def test_jointype_enum_and_str_forms_agree(self) -> None:
+        left, right = _specs()
+        lf, rf = Feature(name="a", options={"side": "l"}), Feature(name="b", options={"side": "r"})
+        assert Link.from_features(JoinType.INNER, left, right, lf, rf) == Link.from_features(
+            "inner", left, right, lf, rf
+        )
+
+    def test_shared_equal_keys_are_dropped(self) -> None:
+        left, right = _specs()
+        built = Link.from_features(
+            "inner",
+            left,
+            right,
+            Feature(name="a", options={"shared": "x", "side": "l"}),
+            Feature(name="b", options={"shared": "x", "side": "r"}),
+        )
+        assert built.left_discriminator == {"side": "l"}
+        assert built.right_discriminator == {"side": "r"}
+
+    @pytest.mark.parametrize(
+        "left_opts, right_opts, expected_left, expected_right",
+        [
+            ({"side": "l", "extra": 1}, {"side": "r"}, {"side": "l", "extra": 1}, {"side": "r"}),
+            ({"side": "l"}, {"side": "r", "extra": 1}, {"side": "l"}, {"side": "r", "extra": 1}),
+            ({"files": ["a", "b"]}, {"files": ["a", "c"]}, {"files": ["a", "b"]}, {"files": ["a", "c"]}),
+            ({"cfg": {"k": 1}}, {"cfg": {"k": 2}}, {"cfg": {"k": 1}}, {"cfg": {"k": 2}}),
+        ],
+        ids=["left_only_key", "right_only_key", "list_value", "dict_value"],
+    )
+    def test_differing_keys_land_on_their_side(
+        self,
+        left_opts: dict[str, Any],
+        right_opts: dict[str, Any],
+        expected_left: dict[str, Any],
+        expected_right: dict[str, Any],
+    ) -> None:
+        left, right = _specs()
+        built = Link.from_features(
+            "inner", left, right, Feature(name="a", options=left_opts), Feature(name="b", options=right_opts)
+        )
+        assert built.left_discriminator == expected_left
+        assert built.right_discriminator == expected_right
+
+    def test_differing_context_key_is_ignored(self) -> None:
+        left, right = _specs()
+        lf = Feature(name="a", options=Options(group={"side": "l"}, context={"note": "x"}))
+        rf = Feature(name="b", options=Options(group={"side": "r"}, context={"note": "y"}))
+        built = Link.from_features("inner", left, right, lf, rf)
+        assert built.left_discriminator == {"side": "l"}
+        assert built.right_discriminator == {"side": "r"}
+
+    def test_context_only_difference_raises(self) -> None:
+        left, right = _specs()
+        lf = Feature(name="a", options=Options(group={"side": "s"}, context={"note": "x"}))
+        rf = Feature(name="b", options=Options(group={"side": "s"}, context={"note": "y"}))
+        with pytest.raises(ValueError, match="context options are ignored"):
+            Link.from_features("inner", left, right, lf, rf)
+
+    def test_mutating_a_list_option_afterwards_does_not_change_the_link(self) -> None:
+        left, right = _specs()
+        files = ["a", "b"]
+        link = Link.from_features(
+            "inner",
+            left,
+            right,
+            Feature(name="a", options={"files": files}),
+            Feature(name="b", options={"files": ["c"]}),
+        )
+        before = hash(link)
+        files.append("z")
+        assert link.left_discriminator == {"files": ["a", "b"]}
+        assert hash(link) == before
+
+    @pytest.mark.parametrize(
+        "left_opts, right_opts, side",
+        [
+            ({"side": "s"}, {"side": "s", "extra": 1}, "left"),
+            ({"side": "s", "extra": 1}, {"side": "s"}, "right"),
+        ],
+        ids=["left_empty", "right_empty"],
+    )
+    def test_empty_side_raises_naming_it(
+        self, left_opts: dict[str, Any], right_opts: dict[str, Any], side: str
+    ) -> None:
+        left, right = _specs()
+        with pytest.raises(ValueError, match=side):
+            Link.from_features(
+                "inner", left, right, Feature(name="a", options=left_opts), Feature(name="b", options=right_opts)
+            )
+
+
+class _BrokenRepr:
+    def __repr__(self) -> str:
+        raise RuntimeError("no repr")
+
+
+class TestLinkStr:
+    def test_a_raising_value_repr_does_not_break_str(self) -> None:
+        link = _hand_written({"table": _BrokenRepr()}, {"table": "items"})
+        text = str(link)
+        assert "left_discriminator=" in text
+        assert "_BrokenRepr" in text
+
+    def test_includes_discriminators(self) -> None:
+        link = _hand_written({"table": "orders"}, {"table": "items"})
+        text = str(link)
+        assert "left_discriminator=" in text
+        assert "right_discriminator=" in text
+        assert "'orders'" in text
+        assert "'items'" in text
+
+    def test_without_discriminators_keeps_the_old_format(self) -> None:
+        left, right = _specs()
+        link = Link.inner(left, right)
+        expected = (
+            f"{link.jointype.value} {DiscriminatorFG.get_class_name()} {link.left_index} "
+            f"{DiscriminatorFG.get_class_name()} {link.right_index} {link.uuid}"
+        )
+        assert str(link) == expected
+
+    @pytest.mark.parametrize(
+        "discriminator",
+        [{"password": "hunter2"}, {"dsn": "postgresql://user:hunter2@host/db"}],  # nosec B105
+        ids=["secret_key", "credential_value"],
+    )
+    def test_masks_secrets(self, discriminator: dict[str, Any]) -> None:
+        link = _hand_written(discriminator, {"table": "items"})
+        assert "hunter2" not in str(link)

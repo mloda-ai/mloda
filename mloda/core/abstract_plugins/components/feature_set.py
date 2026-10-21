@@ -149,10 +149,8 @@ class FeatureSet:
         self.features.discard(feature)
 
     def materialize_option_defaults(self, feature_group: "type[FeatureGroup]") -> None:
-        """Rebind every feature's options through feature_group.options_with_defaults plus the values its
-        name binds, memoized by (Options identity, bindings) so aliases stay aliased. self.options takes a
-        feature's entry only when every feature sharing that source resolved to the same entry.
-        Same-named twins that collapse once a default fills one of them raise (defensive for direct API use)."""
+        """Rebind every feature's options through options_with_defaults plus the values its name binds,
+        keeping aliased Options aliased. Same-named twins that collapse once a default fills one raise."""
         # The memo holds a strong reference to each source Options so its id cannot be recycled mid-loop.
         memo: dict[tuple[int, tuple[tuple[str, str], ...]], tuple[Options, Options]] = {}
         entries_by_source: dict[int, list[Options]] = {}

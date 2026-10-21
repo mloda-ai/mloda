@@ -417,16 +417,16 @@ The framework applies this at two sites. At feature **intake**
 `options_with_defaults` as it enters the collection. At the **compute boundary**
 `run_calculate_feature` materializes the declared defaults into the `FeatureSet` before
 `calculate_feature` and any calculate-feature extender run, so a plugin reads `feature.options`
-directly. The same step also materializes the name-bound value (into context, or into group only when
-the key already sits there as `None`) for keys still absent, before `calculate_feature` and its extenders.
-Intake fills no bound value, so feature identity does not change: a name-only request and the same name
-with an agreeing explicit option are the same feature exactly as before (a context option merges, a group
-option stays its own feature). `options_with_defaults` remains for pre-materialization contexts (e.g. `resolve_subtype`
-internals) and for read sites the framework hands pre-default options, `input_features` above all.
+directly. The same step also fills the name-bound value for keys still absent (into context, or into
+group only when the key already sits there as `None`). Intake fills no bound value, so feature identity
+is unchanged: a name-only request and the same name with an agreeing explicit option are the same
+feature (a context option merges, a group option stays its own feature). `options_with_defaults`
+remains for pre-materialization contexts (e.g. `resolve_subtype` internals) and for read sites the
+framework hands pre-default options, `input_features` above all.
 
-For an engine-driven request intake has already run, so the compute-boundary call is an idempotent
-no-op. It carries the work only for direct `FeatureSet` use that bypasses the engine, and there the
-collapsing twins raise instead of merging.
+For an engine-driven request, intake has already filled the declared defaults, so only name-bound
+values are added at the compute boundary. Direct `FeatureSet` use that bypasses the engine gets both
+there, and collapsing twins raise instead of merging.
 
 A materialized default or bound value is never a declared option, so it never conflicts with a
 name-bound value: the name-agreement check reads the caller's own keys only.
@@ -452,7 +452,7 @@ Which stage sees which view of the options:
 | Splitting, planning, filter matching, `validate_input_features` | effective (post-default, no name-bound values) |
 | Compute (`calculate_feature` and its extenders) | effective (post-default, name-bound values filled) |
 
-The last row assumes intake has run, which is every engine-driven request. On the direct `FeatureSet`
+The splitting row assumes intake has run, which is every engine-driven request. On the direct `FeatureSet`
 path the safety net materializes inside `run_calculate_feature`, which is after
 `validate_input_features`, not before it.
 
@@ -468,10 +468,10 @@ graph_type = feature.options.get("graph_type")  # the declared default when the 
 `Options.get(key, default)` reads dict-style: a present key returns its stored value (even a falsy
 `0`/`False`/`""`), and the call-site `default` is returned only when the key is absent from both
 group and context. Because the framework has already materialized any declared default before
-`calculate_feature` runs, reading it back gives a four-level precedence: the caller's own explicit value (which must agree with
-the name), then the name-bound value, then the declared spec default, then the call-site `default`. (Subtlety: materialization fills
-any key whose value `is None`, so an explicit `None` is replaced by a concrete spec default, while the
-other falsy values `0`/`False`/`""` are kept. That "None means absent" rule is the default; a spec
+`calculate_feature` runs, reading it back gives a four-level precedence: the caller's explicit value
+(which must agree with the name), then the name-bound value, then the declared spec default, then the
+call-site `default`. (Subtlety: materialization fills any key whose value `is None`, so an explicit
+`None` is replaced by a concrete spec default, while the other falsy values `0`/`False`/`""` are kept. That "None means absent" rule is the default; a spec
 opts a single key out with `allow_explicit_none=True`, after which an explicit `None` overrides even a
 concrete default and is honored across the match-time value mechanisms: it counts as present for the
 required-presence and `required_when` checks and is seen by membership, `element_validator`, and

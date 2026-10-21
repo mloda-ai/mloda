@@ -20,7 +20,7 @@ from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.provider import FeatureChainParserMixin, PropertySpec
+from mloda.provider import PropertySpec
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -33,6 +33,7 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway feature group, one per default edge under test.
@@ -101,21 +102,9 @@ def _make_explicit_none_probe_fg() -> type[FeatureGroup]:
 
 def _make_two_keys_fg() -> type[FeatureGroup]:
     """A throwaway pattern group whose name binds the keys ``owd_first`` and ``owd_second``."""
-
-    class OwdTwoKeysFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-        PREFIX_PATTERN = r".*__op_(?P<owd_first>[a-z])_(?P<owd_second>[a-z])$"
-        MIN_IN_FEATURES = 1
-        MAX_IN_FEATURES = 1
-        PROPERTY_MAPPING = {
-            "owd_first": PropertySpec("First bound key.", context=True, default="a"),
-            "owd_second": PropertySpec("Second bound key.", context=True, default="a"),
-        }
-
-        @classmethod
-        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            return data
-
-    return OwdTwoKeysFeatureGroup
+    return make_name_bound_fg(
+        "Owd", __name__, "op", ("owd_first", "owd_second"), defaults={"owd_first": "a", "owd_second": "a"}
+    )
 
 
 class TestOptionsWithDefaultsMechanism:
@@ -357,6 +346,10 @@ class TestOptionsGetDefaultPrecedence:
     def test_absent_unbound_key_still_gets_default(self) -> None:
         view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"})
         assert view.get("owd_second") == "a"
+
+
+class TestNameBindings:
+    """FeatureGroup.name_bindings returns the named captures of the group's name pattern."""
 
     def test_name_bindings_returns_captures_for_matching_name(self) -> None:
         assert _make_two_keys_fg().name_bindings("x__op_q_b") == {"owd_first": "q", "owd_second": "b"}

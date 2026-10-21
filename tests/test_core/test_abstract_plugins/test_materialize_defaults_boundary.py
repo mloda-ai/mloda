@@ -31,9 +31,10 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
-from mloda.provider import DataCreator, FeatureChainParserMixin, PropertySpec
+from mloda.provider import DataCreator, PropertySpec
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_source_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway probes; the mdb_ prefix keeps them unique to this module.
@@ -164,53 +165,24 @@ MDB_FIRST = "mdb_first"
 MDB_SECOND = "mdb_second"
 
 
-def _make_two_keys_fg(with_defaults: bool, seen: dict[str, tuple[Any, Any]]) -> type[FeatureGroup]:
-    """A throwaway pattern group binding two keys from the name; records the observed options in ``seen``."""
-    default = "a"
-
-    class MdbTwoKeysFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-        PREFIX_PATTERN = r".*__mdbop_(?P<mdb_first>[a-z])_(?P<mdb_second>[a-z])$"
-        MIN_IN_FEATURES = 1
-        MAX_IN_FEATURES = 1
-        PROPERTY_MAPPING = {
-            MDB_FIRST: PropertySpec("First bound key.", context=True, default=default)
-            if with_defaults
-            else PropertySpec("First bound key.", context=True),
-            MDB_SECOND: PropertySpec("Second bound key.", context=True, default=default)
-            if with_defaults
-            else PropertySpec("Second bound key.", context=True),
-        }
-
-        @classmethod
-        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            out: dict[str, Any] = {}
-            for feature in features.features:
-                seen[str(feature.name)] = (feature.options.get(MDB_FIRST), feature.options.get(MDB_SECOND))
-                out[str(feature.name)] = data["mdb_src"]
-            return out
-
-    return MdbTwoKeysFeatureGroup
-
-
-def _make_two_keys_source_fg() -> type[FeatureGroup]:
-    class MdbTwoKeysSourceFeatureGroup(FeatureGroup):
-        @classmethod
-        def input_data(cls) -> DataCreator:
-            return DataCreator({"mdb_src"})
-
-        @classmethod
-        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-            return {"mdb_src": [1, 2]}
-
-    return MdbTwoKeysSourceFeatureGroup
+def _make_two_keys_fg(with_defaults: bool, seen: dict[str, Any]) -> type[FeatureGroup]:
+    return make_name_bound_fg(
+        "Mdb",
+        __name__,
+        "mdbop",
+        (MDB_FIRST, MDB_SECOND),
+        defaults={MDB_FIRST: "a", MDB_SECOND: "a"} if with_defaults else None,
+        seen=seen,
+        input_column="mdb_src",
+    )
 
 
 def _run_two_keys(
     with_defaults: bool, name: str, options: Options | None = None, extender: Extender | None = None
-) -> dict[str, tuple[Any, Any]]:
-    seen: dict[str, tuple[Any, Any]] = {}
+) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
     fg = _make_two_keys_fg(with_defaults, seen)
-    source = _make_two_keys_source_fg()
+    source = make_source_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
     mloda.run_all(
         [Feature(name, options if options is not None else Options())],
         compute_frameworks=[PythonDictFramework],

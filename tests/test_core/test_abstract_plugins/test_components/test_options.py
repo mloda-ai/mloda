@@ -539,7 +539,7 @@ class TestOptionsGetInFeaturesFalsyValue:
         message = self._message(Options(group={IN_FEATURES: ""}))
         assert f"'{IN_FEATURES}'" in message, message
         assert "DefaultOptionKeys" not in message, message
-        assert "str" in message, message
+        assert "is set to a falsy str" in message, message
         assert f"is set to {''!r}" not in message, message
 
 
@@ -551,7 +551,7 @@ class TestOptionsGetInFeaturesUnresolvableTruthyValue:
             Options(context={IN_FEATURES: value}).get_in_features()
         return str(excinfo.value)
 
-    @pytest.mark.parametrize("value", [424242, {"token": "sk-secret-9"}], ids=["int", "dict"])
+    @pytest.mark.parametrize("value", [424242, {"token": "sk-secret-9"}], ids=["int", "dict"])  # nosec B105
     def test_unsupported_type_message_names_the_type_not_the_value(self, value: Any) -> None:
         """The unsupported-type message describes the value by type and never prints it."""
         message = self._message(value)

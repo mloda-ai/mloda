@@ -12,7 +12,8 @@ from mloda.user import PluginCollector
 from mloda.user import GlobalFilter
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import DefaultOptionKeys
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow as PandasTimeWindow
 
 
 class TestTimeWindowWithGlobalFilter:
@@ -91,7 +92,7 @@ class TestTimeWindowWithGlobalFilter:
         )
 
         # Enable the necessary feature groups
-        plugin_collector = PluginCollector.enabled_feature_groups({TestTimeDataCreator, PandasTimeWindowFeatureGroup})
+        plugin_collector = PluginCollector.enabled_feature_groups({TestTimeDataCreator, TimeWindowFeatureGroup})
 
         # Run the mloda with time window features and the global filter
         result = mloda.run_all(
@@ -189,7 +190,7 @@ class TestTimeWindowWithGlobalFilter:
         custom_time_filter = "event_timestamp"
 
         # Create a custom time window feature group that uses the custom time filter
-        class CustomTimeWindowFeatureGroup(PandasTimeWindowFeatureGroup):
+        class CustomTimeWindowFeatureGroup(TimeWindowFeatureGroup):
             # Override the default time filter feature name
             DEFAULT_TIME_FILTER_FEATURE = custom_time_filter
 

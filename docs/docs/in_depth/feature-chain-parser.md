@@ -271,7 +271,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 Override when you need to add additional input features (e.g., time filter):
 
 ```py
-class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
+class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, OperationFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         # The mixin resolves sources from the name or from in_features; add the extras.
         sources = super().input_features(options, feature_name) or set()

@@ -2,6 +2,7 @@
 
 import inspect
 import math
+from abc import abstractmethod
 from collections.abc import Callable
 import statistics
 from typing import Any
@@ -14,6 +15,7 @@ import pytest
 from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.provider import SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
@@ -25,11 +27,19 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 
 AGGREGATION_UNIVERSE = frozenset(AggregatedFeatureGroup.AGGREGATION_TYPES)
+
+
+class AbstractOperationBase(OperationFeatureGroup):
+    """A test-local abstract family base."""
+
+    @classmethod
+    @abstractmethod
+    def _family_hook(cls) -> str:
+        """Abstract hook that makes this base abstract."""
 
 
 class TestAggregatedSubtypeDeclaration:
@@ -94,8 +104,8 @@ class TestAggregatedSubtypeSupportMatrix:
         assert AggregatedFeatureGroup.subtype_universe() == AGGREGATION_UNIVERSE
 
     def test_abstract_family_base_has_an_empty_matrix(self) -> None:
-        assert inspect.isabstract(TimeWindowFeatureGroup)
-        assert TimeWindowFeatureGroup.subtype_support_matrix() == {}
+        assert inspect.isabstract(AbstractOperationBase)
+        assert AbstractOperationBase.subtype_support_matrix() == {}
 
     def test_matrix_gives_every_served_framework_the_full_universe(self) -> None:
         matrix = AggregatedFeatureGroup.subtype_support_matrix()

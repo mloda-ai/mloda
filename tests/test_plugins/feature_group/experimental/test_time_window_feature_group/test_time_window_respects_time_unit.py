@@ -13,6 +13,8 @@ time unit observable.
 
 from __future__ import annotations
 
+import math
+import statistics
 from typing import Any
 
 import pandas as pd
@@ -20,8 +22,9 @@ import pyarrow as pa
 import pytest
 
 from mloda.provider import DefaultOptionKeys
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 
 
 REFERENCE_TIME = DefaultOptionKeys.reference_time
@@ -55,19 +58,19 @@ def _as_floats(result: Any) -> list[float]:
 
 def test_pandas_sum_hour_window_is_time_based_not_row_count() -> None:
     """sum_3_hour_window must sum all rows within 3h, not just the last 3 rows."""
-    result = PandasTimeWindowFeatureGroup._perform_window_operation(
-        _minute_dataframe(), "sum", 3, "hour", ["value"], REFERENCE_TIME
+    result = PandasTimeWindow._perform_window_operation(
+        _minute_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "hour"), ["value"], REFERENCE_TIME
     )
     assert _as_floats(result) == pytest.approx(EXPECTED_SUM_3_HOUR)
 
 
 def test_pandas_time_unit_changes_result() -> None:
     """3_second and 3_hour must differ on identical data (time_unit matters)."""
-    hour = PandasTimeWindowFeatureGroup._perform_window_operation(
-        _minute_dataframe(), "sum", 3, "hour", ["value"], REFERENCE_TIME
+    hour = PandasTimeWindow._perform_window_operation(
+        _minute_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "hour"), ["value"], REFERENCE_TIME
     )
-    second = PandasTimeWindowFeatureGroup._perform_window_operation(
-        _minute_dataframe(), "sum", 3, "second", ["value"], REFERENCE_TIME
+    second = PandasTimeWindow._perform_window_operation(
+        _minute_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "second"), ["value"], REFERENCE_TIME
     )
     assert _as_floats(hour) == pytest.approx(EXPECTED_SUM_3_HOUR)
     assert _as_floats(second) == pytest.approx(EXPECTED_SUM_3_SECOND)
@@ -76,8 +79,8 @@ def test_pandas_time_unit_changes_result() -> None:
 
 def test_pyarrow_sum_hour_window_is_time_based_not_row_count() -> None:
     """PyArrow must match the pandas time-based result for sum_3_hour_window."""
-    result = PyArrowTimeWindowFeatureGroup._perform_window_operation(
-        _minute_table(), "sum", 3, "hour", ["value"], REFERENCE_TIME
+    result = PyArrowTimeWindow._perform_window_operation(
+        _minute_table(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "hour"), ["value"], REFERENCE_TIME
     )
     assert _as_floats(result) == pytest.approx(EXPECTED_SUM_3_HOUR)
 
@@ -92,13 +95,21 @@ def test_pyarrow_sum_hour_window_is_time_based_not_row_count() -> None:
 def test_pandas_and_pyarrow_agree_time_based(window_function: str, expected: list[float]) -> None:
     """Both backends must produce the same time-based result on sub-daily data."""
     pandas_result = _as_floats(
-        PandasTimeWindowFeatureGroup._perform_window_operation(
-            _minute_dataframe(), window_function, 3, "hour", ["value"], REFERENCE_TIME
+        PandasTimeWindow._perform_window_operation(
+            _minute_dataframe(),
+            window_function,
+            TimeWindowFeatureGroup._get_time_delta(3, "hour"),
+            ["value"],
+            REFERENCE_TIME,
         )
     )
     pyarrow_result = _as_floats(
-        PyArrowTimeWindowFeatureGroup._perform_window_operation(
-            _minute_table(), window_function, 3, "hour", ["value"], REFERENCE_TIME
+        PyArrowTimeWindow._perform_window_operation(
+            _minute_table(),
+            window_function,
+            TimeWindowFeatureGroup._get_time_delta(3, "hour"),
+            ["value"],
+            REFERENCE_TIME,
         )
     )
     assert pandas_result == pytest.approx(expected)
@@ -114,12 +125,60 @@ def test_month_and_year_units_run_to_completion(time_unit: str) -> None:
     df = pd.DataFrame({"value": values, REFERENCE_TIME: dates})
     table = pa.Table.from_pandas(df)
 
-    pandas_result = PandasTimeWindowFeatureGroup._perform_window_operation(
-        df.copy(), "sum", 3, time_unit, ["value"], REFERENCE_TIME
+    pandas_result = PandasTimeWindow._perform_window_operation(
+        df.copy(), "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
     )
-    pyarrow_result = PyArrowTimeWindowFeatureGroup._perform_window_operation(
-        table, "sum", 3, time_unit, ["value"], REFERENCE_TIME
+    pyarrow_result = PyArrowTimeWindow._perform_window_operation(
+        table, "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
     )
 
     assert len(_as_floats(pandas_result)) == len(values)
     assert len(_as_floats(pyarrow_result)) == len(values)
+
+
+def _sample_stat(function: str, values: list[float]) -> float:
+    if len(values) < 2:
+        return float("nan")
+    variance = statistics.variance(values)
+    return variance if function == "var" else math.sqrt(variance)
+
+
+def _expected_sample_stat(function: str, columns: dict[str, list[float]]) -> list[float]:
+    """Cumulative (span wider than the data) ddof=1 statistic; multi-column reduces the per-column results."""
+    rows = len(next(iter(columns.values())))
+    expected = []
+    for row in range(rows):
+        per_column = [_sample_stat(function, values[: row + 1]) for values in columns.values()]
+        if len(columns) == 1:
+            expected.append(per_column[0])
+        else:
+            expected.append(_sample_stat(function, [v for v in per_column if not math.isnan(v)]))
+    return expected
+
+
+def _nulls_as_nan(result: Any) -> list[float]:
+    values = result.to_pylist() if hasattr(result, "to_pylist") else list(result)
+    return [float("nan") if v is None else float(v) for v in values]
+
+
+@pytest.mark.parametrize("implementation", [PandasTimeWindow, PyArrowTimeWindow])
+@pytest.mark.parametrize("window_function", ["std", "var"])
+@pytest.mark.parametrize(
+    "columns",
+    [
+        {"a": [1.0, 2.0, 4.0, 8.0, 16.0, 32.0]},
+        {"a": [1.0, 2.0, 4.0, 8.0, 16.0, 32.0], "b": [2.0, 3.0, 5.0, 7.0, 11.0, 13.0]},
+    ],
+    ids=["single_column", "multi_column"],
+)
+def test_std_and_var_use_ddof_one_on_both_frameworks(
+    implementation: Any, window_function: str, columns: dict[str, list[float]]
+) -> None:
+    """A one-value window is NaN (Pandas) or null (PyArrow), and wider windows use the sample statistic."""
+    df = pd.DataFrame({**columns, REFERENCE_TIME: _MINUTE_TIMES})
+    data = df if implementation is PandasTimeWindow else pa.Table.from_pandas(df)
+    span = TimeWindowFeatureGroup._get_time_delta(3, "hour")
+
+    result = implementation._perform_window_operation(data, window_function, span, list(columns), REFERENCE_TIME)
+
+    assert _nulls_as_nan(result) == pytest.approx(_expected_sample_stat(window_function, columns), nan_ok=True)

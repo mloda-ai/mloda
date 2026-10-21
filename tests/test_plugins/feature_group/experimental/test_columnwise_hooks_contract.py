@@ -39,8 +39,6 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.pandas import Pan
 from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import PandasScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.python_dict import PythonDictTextCleaningFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
 from tests.test_plugins.feature_group.experimental.columnwise_hooks_test_mixin import (
     ADD_HOOK,
     CHECK_HOOK,
@@ -63,7 +61,7 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 
 # Lower bound only: a new experimental family adds a base.py and must not fail this sweep.
 MIN_BASE_MODULES = 12
-PANDAS_CONSUMER_COUNT = 11
+PANDAS_CONSUMER_COUNT = 10
 
 # Single source of truth for the tolerant/strict split: a strict group raises when ANY source name is
 # missing, a tolerant one only when NONE of them exists. Every strict fixture below reads this map,
@@ -71,7 +69,6 @@ PANDAS_CONSUMER_COUNT = 11
 STRICTNESS: dict[type[Any], bool] = {
     PandasClusteringFeatureGroup: False,
     PandasForecastingFeatureGroup: False,
-    PandasTimeWindowFeatureGroup: False,
     PandasMissingValueFeatureGroup: True,
     PandasDimensionalityReductionFeatureGroup: True,
     PandasGeoDistanceFeatureGroup: True,
@@ -80,7 +77,6 @@ STRICTNESS: dict[type[Any], bool] = {
     PandasSklearnPipelineFeatureGroup: True,
     PandasScalingFeatureGroup: True,
     PandasTextCleaningFeatureGroup: True,
-    PyArrowTimeWindowFeatureGroup: False,
     PyArrowMissingValueFeatureGroup: True,
     PythonDictMissingValueFeatureGroup: True,
     PythonDictTextCleaningFeatureGroup: True,
@@ -244,18 +240,6 @@ class TestPandasForecastingHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixi
         return sample_frame()
 
 
-class TestPandasTimeWindowHooks(StrictnessFromMap, ColumnDiscoveryHooksTestMixin):
-    """Time window pandas group: tolerant check, plus column discovery."""
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PandasTimeWindowFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_frame()
-
-
 class TestPandasDimensionalityReductionHooks(StrictnessFromMap, ColumnwiseHooksTestMixin):
     """Dimensionality reduction pandas group: strict check, and one result expands to per-dimension columns."""
 
@@ -360,22 +344,6 @@ class TestPyArrowMissingValueHooks(StrictnessFromMap, PyArrowColumns, ColumnDisc
     @pytest.fixture
     def plugin_class(self) -> Any:
         return PyArrowMissingValueFeatureGroup
-
-    @pytest.fixture
-    def sample_data(self) -> Any:
-        return sample_table()
-
-
-class TestPyArrowTimeWindowHooks(StrictnessFromMap, PyArrowColumns, ColumnDiscoveryHooksTestMixin):
-    """Time window PyArrow group: tolerant check, plus column discovery."""
-
-    def make_result(self, sample_data: Any) -> Any:
-        """Return a row-aligned PyArrow array, the shape append_column takes."""
-        return pa.array(range(sample_data.num_rows))
-
-    @pytest.fixture
-    def plugin_class(self) -> Any:
-        return PyArrowTimeWindowFeatureGroup
 
     @pytest.fixture
     def sample_data(self) -> Any:

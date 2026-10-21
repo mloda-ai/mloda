@@ -28,13 +28,6 @@ from mloda_plugins.feature_group.experimental.sklearn.scaling.pandas import Pand
 from mloda_plugins.feature_group.experimental.text_cleaning.pandas import PandasTextCleaningFeatureGroup
 
 try:
-    from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-
-    HAS_TIME_WINDOW_PANDAS = True
-except ImportError:
-    HAS_TIME_WINDOW_PANDAS = False
-
-try:
     from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecastingFeatureGroup
 
     HAS_FORECASTING_PANDAS = True
@@ -56,9 +49,6 @@ ALL_PANDAS_CLASSES = [
     PandasScalingFeatureGroup,
     PandasTextCleaningFeatureGroup,
 ]
-
-if HAS_TIME_WINDOW_PANDAS:
-    ALL_PANDAS_CLASSES.append(PandasTimeWindowFeatureGroup)
 
 if HAS_FORECASTING_PANDAS:
     ALL_PANDAS_CLASSES.append(PandasForecastingFeatureGroup)
@@ -117,9 +107,6 @@ def test_pandas_plugin_is_concrete(cls: Any) -> None:
 TOLERANT_PANDAS_CLASSES: list[type[Any]] = [
     PandasClusteringFeatureGroup,
 ]
-
-if HAS_TIME_WINDOW_PANDAS:
-    TOLERANT_PANDAS_CLASSES.append(PandasTimeWindowFeatureGroup)
 
 if HAS_FORECASTING_PANDAS:
     TOLERANT_PANDAS_CLASSES.append(PandasForecastingFeatureGroup)

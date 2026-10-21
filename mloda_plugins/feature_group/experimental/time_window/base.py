@@ -5,16 +5,14 @@ Base implementation for time window feature groups.
 from __future__ import annotations
 
 import datetime
-from abc import abstractmethod
-from typing import Any, cast
+from typing import Any, Callable, cast
 
-from mloda.provider import FeatureGroup
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParser,
     FeatureChainParserMixin,
 )
-from mloda.provider import COLUMN_DISCOVERY_HOOKS
 from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
@@ -24,7 +22,7 @@ from mloda_plugins.feature_group.experimental.key_features import with_key_featu
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
 
 
-class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
+class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, OperationFeatureGroup):
     """
     Base class for all time window feature groups.
 
@@ -129,9 +127,6 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
     # In-feature configuration for FeatureChainParserMixin
     MIN_IN_FEATURES = 1
     MAX_IN_FEATURES = 1
-
-    # Hooks calculate_feature calls: _get_available_columns, _check_source_features_exist, _add_result_to_data.
-    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         """Source features from the shared resolution plus the reference-time feature."""
@@ -280,30 +275,20 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
         else:
             raise ValueError(f"Unsupported time unit: {time_unit}")
 
-    @classmethod
-    def _raise_null_reference_time(cls, reference_time_column: str) -> None:
-        """Raise a uniform ValueError when the reference time column contains null/NaT values."""
-        raise ValueError(
-            f"Reference time column '{reference_time_column}' contains null values. "
-            f"Time window operations require non-null reference times."
-        )
-
     # match_feature_group_criteria() inherited from FeatureChainParserMixin
 
     @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        """
-        Perform time window operations.
-
-        Processes all requested features, determining the window function, window size,
-        time unit, and source feature from each feature name.
-
-        Supports multi-column features by using resolve_multi_column_feature() to
-        automatically discover columns matching the pattern feature_name~N.
-
-        Adds the time window results directly to the input data structure.
-        """
-
+    def window(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, datetime.timedelta, list[str], str], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+        column_semantics: Callable[[Any, str], Any],
+    ) -> Any:
+        """Shared loop: validate the reference time, resolve each feature's sources, run perform, add the result."""
         _options = None
         for feature in features.get_sorted_features():
             if _options:
@@ -313,91 +298,32 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Featur
 
         reference_time_column = cls.get_reference_time_column(_options)
 
-        cls._check_reference_time_column_exists(data, reference_time_column)
+        if reference_time_column not in columns(data):
+            raise ValueError(
+                f"Reference time column '{reference_time_column}' not found in data. "
+                f"Please ensure the data contains this column."
+            )
+        cls._validate_reference_time_column(column_semantics(data, reference_time_column), reference_time_column)
 
-        cls._check_reference_time_column_is_datetime(data, reference_time_column)
-
-        # Process each requested feature
         for feature in features.get_sorted_features():
             window_function, window_size, time_unit, in_features = cls._extract_time_window_params_and_source_features(
                 feature
             )
-
-            # Resolve multi-column features automatically
-            # If in_features is "onehot_encoded__product", this discovers
-            # ["onehot_encoded__product~0", "onehot_encoded__product~1", ...]
-            available_columns = cls._get_available_columns(data)
-            resolved_columns = cls.resolve_multi_column_feature(in_features, available_columns)
-
-            # Check that resolved columns exist
-            cls._check_source_features_exist(data, resolved_columns)
-
-            result = cls._perform_window_operation(
-                data, window_function, window_size, time_unit, resolved_columns, reference_time_column
-            )
-
-            data = cls._add_result_to_data(data, feature.name, result)
+            available = columns(data)
+            resolved = cls.resolve_multi_column_feature(in_features, available)
+            if not any(name in available for name in resolved):
+                listing = sorted(available, key=str)
+                raise ValueError(f"None of the source features {resolved} found in data. Available columns: {listing}")
+            span = cls._get_time_delta(window_size, time_unit)
+            result = perform(data, window_function, span, resolved, reference_time_column)
+            data = add_column(data, feature.name, result)
 
         return data
 
-    @classmethod
-    @abstractmethod
-    def _check_reference_time_column_exists(cls, data: Any, reference_time_column: str) -> None:
-        """
-        Check if the reference time column exists in the data.
 
-        Args:
-            data: The input data
-            reference_time_column: The name of the reference time column
-
-        Raises:
-            ValueError: If the reference time column does not exist in the data
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _check_reference_time_column_is_datetime(cls, data: Any, reference_time_column: str) -> None:
-        """
-        Check if the reference time column is a datetime column.
-
-        Args:
-            data: The input data
-            reference_time_column: The name of the reference time column
-
-        Raises:
-            ValueError: If the reference time column is not a datetime column
-        """
-        ...
-
-    @classmethod
-    @abstractmethod
-    def _perform_window_operation(
-        cls,
-        data: Any,
-        window_function: str,
-        window_size: int,
-        time_unit: str,
-        in_features: list[str],
-        time_filter_feature: str | None = None,
-    ) -> Any:
-        """
-        Method to perform the time window operation. Should be implemented by subclasses.
-
-        Supports both single-column and multi-column window operations:
-        - Single column: [feature_name] - performs window operation on the column
-        - Multi-column: [feature~0, feature~1, ...] - performs window operation across columns
-
-        Args:
-            data: The input data
-            window_function: The type of window function to perform
-            window_size: The size of the window
-            time_unit: The time unit for the window
-            in_features: List of resolved source feature names to perform window operation on
-            time_filter_feature: The name of the time filter feature to use for time-based operations.
-                                If None, uses the value from get_reference_time_column().
-
-        Returns:
-            The result of the window operation
-        """
-        ...
+def raise_null_reference_time(reference_time_column: str) -> None:
+    """Raise a uniform ValueError when the reference time column contains null/NaT values."""
+    raise ValueError(
+        f"Reference time column '{reference_time_column}' contains null values. "
+        f"Time window operations require non-null reference times."
+    )

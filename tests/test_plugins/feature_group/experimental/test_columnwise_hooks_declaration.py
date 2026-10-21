@@ -69,7 +69,7 @@ CONTRACT_SYMBOLS = (
 
 # Lower bounds only, so a broken glob or a wrong root cannot make the widened sweeps pass vacuously.
 MIN_EXPERIMENTAL_MODULES = 40
-MIN_HOOK_CALLING_MODULES = 13
+MIN_HOOK_CALLING_MODULES = 15
 
 # The expected declaration per family base, kept as a table so a changed declaration is a visible diff.
 # A family that resolves column names against the data needs the discovery hook on top of the pair.
@@ -77,7 +77,6 @@ FAMILY_REQUIREMENTS: dict[type[Any], frozenset[str]] = {
     ClusteringFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     MissingValueFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     ForecastingFeatureGroup: COLUMN_DISCOVERY_HOOKS,
-    TimeWindowFeatureGroup: COLUMN_DISCOVERY_HOOKS,
     DimensionalityReductionFeatureGroup: COLUMNWISE_HOOKS,
     GeoDistanceFeatureGroup: COLUMNWISE_HOOKS,
     NodeCentralityFeatureGroup: COLUMNWISE_HOOKS,
@@ -209,8 +208,9 @@ def test_mixin_requires_no_hook_by_default() -> None:
     assert FeatureChainParserMixin.REQUIRED_COLUMNWISE_HOOKS == frozenset()
 
 
-def test_aggregation_group_declares_no_hooks() -> None:
-    assert AggregatedFeatureGroup.REQUIRED_COLUMNWISE_HOOKS == frozenset()
+@pytest.mark.parametrize("group", [AggregatedFeatureGroup, TimeWindowFeatureGroup], ids=lambda g: g.__name__)
+def test_operation_group_declares_no_hooks(group: type[Any]) -> None:
+    assert group.REQUIRED_COLUMNWISE_HOOKS == frozenset()
 
 
 @pytest.mark.parametrize(("family", "expected"), list(FAMILY_REQUIREMENTS.items()), ids=FAMILY_IDS)

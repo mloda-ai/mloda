@@ -10,7 +10,7 @@ from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow as PandasTimeWindow
 from mloda.provider import DefaultOptionKeys
 
 import pandas as pd
@@ -38,7 +38,7 @@ class TestTimeWindowFeatureParserIntegration:
         """Test integration with mloda using the parser."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {TimeWindowParserTestDataCreator, PandasTimeWindowFeatureGroup}
+            {TimeWindowParserTestDataCreator, TimeWindowFeatureGroup}
         )
 
         f1 = Feature(
@@ -100,7 +100,7 @@ class TestTimeWindowFeatureParserIntegration:
         """Test integration with mloda using different time units."""
         # Enable the necessary feature groups
         plugin_collector = PluginCollector.enabled_feature_groups(
-            {TimeWindowParserTestDataCreator, PandasTimeWindowFeatureGroup}
+            {TimeWindowParserTestDataCreator, TimeWindowFeatureGroup}
         )
 
         # Create features with different time units

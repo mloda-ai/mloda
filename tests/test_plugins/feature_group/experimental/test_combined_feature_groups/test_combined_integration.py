@@ -13,10 +13,14 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
     PandasAggregation as PandasAggregation,
 )
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import (
+    PyArrowAggregation as PyArrowAggregation,
+)
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import PandasMissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow as PandasTimeWindow
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow as PyArrowTimeWindow
 
 from tests.test_plugins.feature_group.experimental.test_combined_feature_groups.test_combined_utils import (
     PandasCombinedFeatureTestDataCreator,
@@ -44,7 +48,7 @@ class TestCombinedFeatureGroupsPandas:
             {
                 PandasCombinedFeatureTestDataCreator,
                 PandasMissingValueFeatureGroup,
-                PandasTimeWindowFeatureGroup,
+                TimeWindowFeatureGroup,
                 AggregatedFeatureGroup,
             }
         )
@@ -103,7 +107,7 @@ class TestCombinedFeatureGroupsPyArrow:
             {
                 PyArrowCombinedFeatureTestDataCreator,
                 PyArrowMissingValueFeatureGroup,
-                PyArrowTimeWindowFeatureGroup,
+                TimeWindowFeatureGroup,
                 AggregatedFeatureGroup,
             }
         )

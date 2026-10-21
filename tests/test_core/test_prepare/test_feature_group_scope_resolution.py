@@ -48,11 +48,6 @@ from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import Parqu
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_time_window_utils import (
-    PandasTimeWindowTestDataCreator,
-)
 
 
 class MockComputeFramework(ComputeFramework):
@@ -831,31 +826,45 @@ def test_end2end_python_feature_aggregation_group_scope_runs_the_pandas_implemen
     assert aggregation.implementation is PandasAggregation
 
 
-def test_abstract_family_base_scope_resolves_to_the_enabled_subclass() -> None:
-    """Characterization: naming a still-abstract family base reaches its concrete subclass through the MRO walk."""
-    assert inspect.isabstract(TimeWindowFeatureGroup), "the scoped family base must stay abstract"
-    accessible_plugins: FeatureGroupEnvironmentMapping = {PandasTimeWindowFeatureGroup: {PandasDataFrame}}
-    feature = Feature("scope_price__sum_7_day_window", feature_group=TimeWindowFeatureGroup.get_class_name())
+class ScopeE2EAbstractFamilyBase(FeatureGroup):
+    """Abstract family base that reads its name from the data creator of its concrete member."""
 
-    winner, _frameworks = next(iter(evaluate_or_raise(feature, accessible_plugins).identified.items()))
+    @classmethod
+    @abstractmethod
+    def _family_hook(cls) -> str:
+        """Abstract hook that makes this base abstract."""
 
-    assert winner is PandasTimeWindowFeatureGroup
+
+class ScopeE2EConcreteFamilyMember(ScopeE2EAbstractFamilyBase):
+    """The concrete member: a data creator for one feature name."""
+
+    @classmethod
+    def _family_hook(cls) -> str:
+        return "concrete"
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator(supports_features={"scope_e2e_token"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"scope_e2e_token": [1, 2]}
 
 
 def test_end2end_abstract_family_base_scope_runs_the_enabled_subclass() -> None:
-    """End to end: naming the abstract TimeWindowFeatureGroup runs its enabled Pandas subclass."""
-    assert inspect.isabstract(TimeWindowFeatureGroup), "the scoped family base must stay abstract"
-    name = "temperature__avg_3_day_window"
-    feature = Feature(name, feature_group=TimeWindowFeatureGroup.get_class_name())
+    """End to end: naming a test-local abstract family base runs its enabled concrete member."""
+    assert inspect.isabstract(ScopeE2EAbstractFamilyBase), "the scoped family base must stay abstract"
+    name = "scope_e2e_token"
+    feature = Feature(name, feature_group=ScopeE2EAbstractFamilyBase.get_class_name())
     plugin_collector = PluginCollector.enabled_feature_groups(
-        {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup}
+        {ScopeE2EAbstractFamilyBase, ScopeE2EConcreteFamilyMember}
     )
 
     results = list(mloda.run_all([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector))
 
     assert len([df for df in results if name in df.columns]) == 1
     steps = mloda.explain([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
-    assert any(step.feature_group is PandasTimeWindowFeatureGroup for step in steps)
+    assert any(step.feature_group is ScopeE2EConcreteFamilyMember for step in steps)
 
 
 class ScopePythonAggregationSourceB(FeatureGroup):

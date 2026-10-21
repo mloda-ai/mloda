@@ -28,8 +28,8 @@ from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
-from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 
 
 REFERENCE_TIME = DefaultOptionKeys.reference_time
@@ -103,12 +103,12 @@ def test_unsorted_input_end_to_end_alignment(window_function: str) -> None:
 
     pandas_fs = FeatureSet()
     pandas_fs.add(Feature(feature_name))
-    pandas_out = PandasTimeWindowFeatureGroup.calculate_feature(_unsorted_dataframe(), pandas_fs)
+    pandas_out = PandasTimeWindow.calculate(TimeWindowFeatureGroup, _unsorted_dataframe(), pandas_fs)
     pandas_result = _as_floats(pandas_out[feature_name].tolist())
 
     pyarrow_fs = FeatureSet()
     pyarrow_fs.add(Feature(feature_name))
-    pyarrow_out = PyArrowTimeWindowFeatureGroup.calculate_feature(_unsorted_table(), pyarrow_fs)
+    pyarrow_out = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, _unsorted_table(), pyarrow_fs)
     pyarrow_result = _as_floats(pyarrow_out.column(feature_name))
 
     assert pandas_result == pytest.approx(expected)
@@ -151,13 +151,13 @@ def test_dst_transition_uses_absolute_time() -> None:
     expected = _reference(utc_times, _DST_VALUES, _DST_SPAN, "sum")
 
     pandas_result = _as_floats(
-        PandasTimeWindowFeatureGroup._perform_window_operation(
-            _dst_dataframe(), "sum", 1, "hour", ["value"], REFERENCE_TIME
+        PandasTimeWindow._perform_window_operation(
+            _dst_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(1, "hour"), ["value"], REFERENCE_TIME
         )
     )
     pyarrow_result = _as_floats(
-        PyArrowTimeWindowFeatureGroup._perform_window_operation(
-            _dst_table(), "sum", 1, "hour", ["value"], REFERENCE_TIME
+        PyArrowTimeWindow._perform_window_operation(
+            _dst_table(), "sum", TimeWindowFeatureGroup._get_time_delta(1, "hour"), ["value"], REFERENCE_TIME
         )
     )
 
@@ -185,12 +185,14 @@ def test_month_and_year_window_values(time_unit: str) -> None:
     table = pa.Table.from_pandas(df)
 
     pandas_result = _as_floats(
-        PandasTimeWindowFeatureGroup._perform_window_operation(
-            df.copy(), "sum", 3, time_unit, ["value"], REFERENCE_TIME
+        PandasTimeWindow._perform_window_operation(
+            df.copy(), "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
         )
     )
     pyarrow_result = _as_floats(
-        PyArrowTimeWindowFeatureGroup._perform_window_operation(table, "sum", 3, time_unit, ["value"], REFERENCE_TIME)
+        PyArrowTimeWindow._perform_window_operation(
+            table, "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
+        )
     )
 
     assert pandas_result == pytest.approx(expected)
@@ -214,7 +216,9 @@ def test_pyarrow_narrow_window_value() -> None:
     table = pa.Table.from_pandas(pd.DataFrame({"value": list(_NARROW_VALUES), REFERENCE_TIME: _NARROW_DATES}))
 
     pyarrow_result = _as_floats(
-        PyArrowTimeWindowFeatureGroup._perform_window_operation(table, "sum", 3, "second", ["value"], REFERENCE_TIME)
+        PyArrowTimeWindow._perform_window_operation(
+            table, "sum", TimeWindowFeatureGroup._get_time_delta(3, "second"), ["value"], REFERENCE_TIME
+        )
     )
     assert pyarrow_result == pytest.approx(expected)
 
@@ -240,13 +244,11 @@ def _null_pyarrow() -> pa.Table:
 @pytest.mark.parametrize(
     "cls,data_factory",
     [
-        (PandasTimeWindowFeatureGroup, _null_pandas),
-        (PyArrowTimeWindowFeatureGroup, _null_pyarrow),
+        (PandasTimeWindow, _null_pandas),
+        (PyArrowTimeWindow, _null_pyarrow),
     ],
 )
-def test_null_reference_time_raises_value_error(
-    cls: type[TimeWindowFeatureGroup], data_factory: Callable[[], Any]
-) -> None:
+def test_null_reference_time_raises_value_error(cls: Any, data_factory: Callable[[], Any]) -> None:
     """A null/NaT reference time must raise a clear ValueError on both backends.
 
     Pins the pyarrow defect: it raises TypeError (``None - timedelta``) instead
@@ -255,4 +257,4 @@ def test_null_reference_time_raises_value_error(
     feature_set = FeatureSet()
     feature_set.add(Feature("value__sum_3_hour_window"))
     with pytest.raises(ValueError):
-        cls.calculate_feature(data_factory(), feature_set)
+        cls.calculate(TimeWindowFeatureGroup, data_factory(), feature_set)

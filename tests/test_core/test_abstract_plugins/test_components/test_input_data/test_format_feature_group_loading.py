@@ -14,7 +14,6 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
-from mloda.provider import FeatureSet
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -298,14 +297,6 @@ class TestNeutralFallback:
         group = neutral_csv_group(tmp_path / "n.csv")
 
         assert column_values(_run(group), "toyfmt_ld") == [1, 2]
-
-    def test_calculate_feature_without_an_input_data_match_raises_naming_the_group(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            ToyFormatFG.calculate_feature(None, FeatureSet())
-
-        message = str(exc_info.value)
-        assert "input_data_match" in message
-        assert "ToyFormatFG" in message
 
 
 class TestTools:

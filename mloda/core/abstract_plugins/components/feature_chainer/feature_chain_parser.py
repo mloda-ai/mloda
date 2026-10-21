@@ -205,7 +205,7 @@ class FeatureChainParser:
             # Fallback to membership check.
             try:
                 is_member = found_property_val in property_value
-            # Swallows: an element whose comparison raises (e.g. unhashable) is not a member, a clean rejection.
+            # Swallows: any membership failure (unhashable value, raising __eq__) is a clean rejection.
             except Exception as exc:
                 if contained_raise_log_level(exc) == logging.DEBUG:
                     logger.debug(
@@ -215,7 +215,7 @@ class FeatureChainParser:
                         found_property_val,
                     )
                 else:
-                    # Type only: the message may carry the raw value, which stays out of WARNING logs.
+                    # Type only: the message may carry the raw value.
                     logger.warning(
                         "membership check for '%s' raised %s; treating value as rejected.",
                         property_name,

@@ -5,7 +5,6 @@ from typing import Literal
 
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.abstract_plugins.components.match_rejection import (
-    INPUT_DATA_OWNED_STAGE,
     INPUT_DATA_STAGE,
     NAME_STAGE,
 )
@@ -44,7 +43,7 @@ def rejection_elimination_stage(recorded_stage: str) -> EliminationStage:
     """The elimination stage a recorded rejection's free-form stage hint maps onto."""
     # Only the input-data and name hints are engine-known; every other hint is provider text this side never
     # validates, so it falls back. Shared, so the two seams cannot drift into two taxonomies.
-    if recorded_stage in (INPUT_DATA_STAGE, INPUT_DATA_OWNED_STAGE):
+    if recorded_stage == INPUT_DATA_STAGE:
         return "input_data"
     if recorded_stage == NAME_STAGE:
         return "name"

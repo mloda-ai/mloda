@@ -1,5 +1,5 @@
-"""Per-candidate match-rejection window shared by feature-group matching and input-data reader selection.
-Neutral home so reader code does not depend on the feature-chainer module."""
+"""Per-candidate match-rejection window shared by feature-group matching and input-data source selection.
+Neutral home so format group code does not depend on the feature-chainer module."""
 
 from __future__ import annotations
 
@@ -23,9 +23,7 @@ class MatchRejection:
     refusal: Exception | None = field(default=None, compare=False, repr=False)
 
 
-# The owned stage marks a veto recorded while the user explicitly addressed the reader.
 INPUT_DATA_STAGE = "input_data"
-INPUT_DATA_OWNED_STAGE = "input_data_owned"
 
 # The candidate refused the feature name itself, not an option value.
 NAME_STAGE = "name"
@@ -83,18 +81,6 @@ def match_rejection_owners() -> frozenset[str]:
     if reasons is None:
         return frozenset()
     return frozenset(reasons)
-
-
-def restamp_match_rejections_since(known_owners: frozenset[str], from_stage: str, to_stage: str) -> None:
-    """Re-stamp owners recorded after the snapshot whose stage is exactly from_stage; no-op outside a window."""
-    # Scoping by snapshot delta, not by owner name, covers whatever name an inner delegation stamped.
-    reasons = MATCH_REJECTION_REASONS.get()
-    if reasons is None:
-        return
-    for owner_name, rejection in list(reasons.items()):
-        if owner_name in known_owners or rejection.stage != from_stage:
-            continue
-        reasons[owner_name] = MatchRejection(rejection.reason, to_stage, rejection.candidates, rejection.refusal)
 
 
 def drop_match_rejections_since(known_owners: frozenset[str]) -> None:

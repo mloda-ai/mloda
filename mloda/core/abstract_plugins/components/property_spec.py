@@ -1,4 +1,4 @@
-"""The shared PROPERTY_MAPPING / READER_OPTIONS spec type.
+"""The PROPERTY_MAPPING spec type.
 
 ``PropertySpec`` is the typed, frozen spec and IS the contract: construction enforces every
 invariant (issue #694). ``property_spec`` is a thin builder kept for its authoring surface;
@@ -73,7 +73,7 @@ AllowedValues = Mapping[Any, str] | tuple[Any, ...] | list[Any] | set[Any] | fro
 
 @dataclass(frozen=True)
 class PropertySpec:
-    """Typed, frozen option spec, shared by PROPERTY_MAPPING and READER_OPTIONS."""
+    """Typed, frozen option spec, the value type of PROPERTY_MAPPING."""
 
     explanation: str
     allowed_values: AllowedValues | None = None
@@ -88,9 +88,9 @@ class PropertySpec:
     # outside match-time name capture (parsed from the name by the plugin, or supplied downstream).
     # It does NOT change config-path requiredness.
     deferred_binding: bool = False
-    # Marks a reader-surface key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
+    # Marks a key the framework writes rather than the user; rejected on the PROPERTY_MAPPING surface.
     framework_set: bool = False
-    # Reader-only: rejects a list/tuple/set/frozenset value outright instead of unpacking it element-wise.
+    # Rejects a list/tuple/set/frozenset value outright instead of unpacking it element-wise.
     scalar_only: bool = False
     # Names what the match_guard accepts, for the rejection reason.
     expected: str | None = None
@@ -192,7 +192,7 @@ class PropertySpec:
         if self.scalar_only and isinstance(self.default, (list, tuple, set, frozenset)):
             raise ValueError(
                 f"{prefix}: scalar_only=True with a {type(self.default).__name__} default {self.default!r}; "
-                f"reader_option() would return the collection the flag rejects."
+                f"the default is a collection the flag rejects."
             )
 
         if self.element_validator is not None:

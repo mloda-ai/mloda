@@ -1,4 +1,4 @@
-"""Tests wiring ExtenderHook.INPUT_DATA_LOAD into BaseInputData.load().
+"""Tests wiring ExtenderHook.INPUT_DATA_LOAD into dispatch_input_data_load().
 
 Covers ComputeFramework.current(), HookContext population (inherited identity fields plus
 data_access_identity/format/dataset_version), the no-extender baseline, deny-before-load /
@@ -15,7 +15,6 @@ import sqlite3
 import threading
 from pathlib import Path, PurePosixPath
 from collections.abc import Mapping
-from types import MappingProxyType
 from typing import Any, cast
 
 import pytest
@@ -342,14 +341,6 @@ def _build_calc_context(compute_framework_name: str = "stub", **overrides: Any) 
     return HookContext(**fields)
 
 
-class _DirectLoadReader(BaseInputData):
-    """Legacy reader behind the BaseInputData default identity tests."""
-
-    @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -> Any:
-        return [1, 2, 3]
-
-
 class _DirectLoader:
     """Minimal loader whose load_data returns a fixed 3-element list, for direct dispatch_input_data_load calls."""
 
@@ -383,21 +374,6 @@ def _load(loader: type[_DirectLoader], data_access: Any, features: FeatureSet) -
         identity=lambda: loader.data_access_identity(data_access),
         data_access_format=loader.data_access_name,
     )
-
-
-def _identity_of(data_access: Any) -> str:
-    extender = _InputDataLoadCapturingExtender()
-    cfw = ComputeFramework(function_extender={extender})
-    reader = _DirectLoadReader()
-    features = FeatureSet()
-
-    with cfw.activate(), _build_calc_context().activate():
-        BaseInputData._load_data_via_hook(reader, data_access, features)
-
-    assert extender.captured is not None
-    identity = extender.captured.data_access_identity
-    assert identity is not None
-    return identity
 
 
 class TestDataAccessIdentityHidesDictCredentialValues:
@@ -499,321 +475,6 @@ class TestSqliteFGSources:
         assert [match.source for match in sources] == [f"{db}::orders"]
         assert "hunter2" not in repr(sources[0])
         assert "alice" not in repr(sources[0])
-
-
-class TestDataAccessIdentityDefaultDenyForSchemeLessAndPathValues:
-    """None of these values is a Mapping, a fullmatching URI, or an existing local path, so each resolves to
-    its type name only."""
-
-    @pytest.mark.parametrize(
-        ("value", "secret"),
-        [
-            pytest.param("https://host/p?email=a@b.com/x&sig=S", None, id="at-sign-in-query-fails-uri-shape"),
-            pytest.param(
-                "postgresql://host/db?user=u&password=p@ss/word",
-                None,
-                id="secret-with-at-and-slash-in-query-fails-uri-shape",
-            ),
-            pytest.param("https://host:8080/a@b/c", None, id="at-sign-in-path-fails-uri-shape"),
-            pytest.param("https://u:p@host/a@b/c", None, id="at-sign-in-path-with-userinfo-fails-uri-shape"),
-            pytest.param("https://host:/a@b/c", None, id="empty-port-at-sign-in-path-fails-uri-shape"),
-            pytest.param("postgresql://u:pa]/ss@host/db", None, id="bracket-in-userinfo-fails-uri-shape"),
-            pytest.param("https://host/p#a@b", None, id="at-sign-in-fragment-fails-uri-shape"),
-            pytest.param("postgresql://u:pa/ss@host/db", None, id="slash-in-userinfo-fails-uri-shape"),
-            pytest.param("postgresql://u:pa?ss@host/db", None, id="question-mark-in-userinfo-fails-uri-shape"),
-            pytest.param("postgresql://u:pa#ss@host/db", None, id="hash-in-userinfo-fails-uri-shape"),
-            pytest.param("http://[::1]/x@y", None, id="ipv6-host-at-sign-in-path-fails-uri-shape"),
-            pytest.param("https://host/p;user=alice/x", None, id="uri-with-plain-connection-key-fails-uri-shape"),
-            pytest.param(
-                "s3://bucket/a;db=main/part.parquet", None, id="s3-uri-with-plain-connection-key-fails-uri-shape"
-            ),
-            pytest.param(
-                "s3://bucket/key with space password=hunter2", "hunter2", id="space-in-uri-path-fails-uri-shape"
-            ),
-            pytest.param("postgresql://host/db\npassword=hunter2", "hunter2", id="newline-in-uri-path-fails-uri-shape"),
-            pytest.param("https://host/db&password=hunter2", "hunter2", id="ampersand-in-uri-path-fails-uri-shape"),
-            pytest.param("s3://bucket/path;password=hunter2", "hunter2", id="semicolon-in-uri-path-fails-uri-shape"),
-            pytest.param(
-                "jdbc:sqlserver://host:1433;databaseName=db;user=a;password=hunter2",
-                "hunter2",
-                id="jdbc-sqlserver-semicolons-fail-uri-shape",
-            ),
-            pytest.param(
-                "jdbc:db2://host:50000/DB:user=u;password=hunter2;", "hunter2", id="jdbc-db2-semicolon-terminated"
-            ),
-            pytest.param(
-                "JDBC:db2://host:50000/DB:password=hunter2", "hunter2", id="upper-case-jdbc-prefix-fails-uri-shape"
-            ),
-            pytest.param(
-                "mongodb://host/db:password=hunter2", "hunter2", id="non-jdbc-colon-then-equals-in-path-segment"
-            ),
-            pytest.param(
-                "https://host/a/db:password=hunter2/x.csv",
-                "hunter2",
-                id="non-jdbc-colon-then-equals-in-mid-path-segment",
-            ),
-            pytest.param("s3://bucket/a:b=c/part.parquet", None, id="s3-colon-then-equals-in-path-segment"),
-            pytest.param("alice:hunter2://host/db", "hunter2", id="colon-before-scheme-separator-is-not-a-scheme"),
-            pytest.param("mongodb://u:p@h1:27017,h2:27017/db", None, id="comma-separated-host-list-fails-uri-shape"),
-            pytest.param("postgresql://u:12/ss@host/db", "ss", id="colon-digit-slash-in-userinfo-fails-uri-shape"),
-            pytest.param(
-                "postgresql://u:12?ss@host/db", "ss", id="colon-digit-question-mark-in-userinfo-fails-uri-shape"
-            ),
-            pytest.param("https://tok/en@host/x", "en", id="slash-in-userinfo-before-at-sign-fails-uri-shape"),
-            pytest.param("host=localhost user=alice password=hunter2", "hunter2", id="libpq-keywords"),
-            pytest.param("DRIVER={ODBC};UID=alice;PWD=hunter2", "hunter2", id="odbc-keywords"),
-            pytest.param("user:hunter2@host/db", "hunter2", id="userinfo-scheme-less"),
-            pytest.param("user:pw@host/db?token=hunter2", "hunter2", id="scheme-less-userinfo-query-secret"),
-            pytest.param("user:pw@host/db#token=hunter2", "hunter2", id="scheme-less-userinfo-fragment-secret"),
-            pytest.param("host=localhost password='hunter 2'", "hunter 2", id="libpq-quoted-value"),
-            pytest.param(
-                "DRIVER={ODBC Driver 17};UID=alice;PWD={hun;ter2}", "hun;ter2", id="odbc-braces-with-separator"
-            ),
-            pytest.param("Host=a HOST=b", "=b", id="mixed-case-duplicate-keys"),
-            pytest.param("password=hunter2", "hunter2", id="single-known-key"),
-            pytest.param(
-                "DRIVER={x};Server=https://host;PWD=secret",
-                "secret",
-                id="keyword-string-containing-scheme-separator",
-            ),
-            pytest.param("user:p@ss@host/db", "p@ss", id="at-sign-in-userinfo-password"),
-            pytest.param("user:p@ss/word@host/db", "ss/word", id="at-sign-and-slash-in-password"),
-            pytest.param("dbname=x user=y", "=y", id="dbname-and-user"),
-            pytest.param("password = hunter2 host = localhost", "hunter2", id="whitespace-around-equals"),
-            pytest.param("password= hunter2 host =localhost", "hunter2", id="uneven-whitespace-around-equals"),
-            pytest.param("dbname = mydb password = hunter2 port = 5432", "hunter2", id="spaced-dbname-password-port"),
-            pytest.param("PWD={x; secret1 host=y};UID=a", "secret1", id="odbc-brace-value-with-fake-key"),
-            pytest.param("user = alice password = hunter2", "hunter2", id="spaced-user-password"),
-            pytest.param(
-                "host=h password=correct horse=battery", "horse", id="unrecognized-key-after-secret-not-printed"
-            ),
-            pytest.param("host=h password='my pass=word'", "my pass=word", id="quoted-value-with-key-fragment"),
-            pytest.param("pass=hunter2", "hunter2", id="secret-key-pass"),
-            pytest.param("sslpassword=hunter2", "hunter2", id="secret-key-sslpassword"),
-            pytest.param("key=abc", "abc", id="secret-key-key"),
-            pytest.param("access_key=abc secret_key=def", "abc", id="secret-keys-access-secret"),
-            pytest.param("aws_secret_access_key=hunter2", "hunter2", id="secret-key-aws-secret-access"),
-            pytest.param("client_secret=x client_id=abc", "abc", id="client-id-not-printed"),
-            pytest.param("account_key=hunter2", "hunter2", id="secret-key-account-key"),
-            pytest.param("auth_token=hunter2", "hunter2", id="secret-key-auth-token"),
-            pytest.param("credentials=hunter2", "hunter2", id="secret-key-credentials"),
-            pytest.param("sas=hunter2", "hunter2", id="secret-key-sas"),
-            pytest.param("service-account-key=hunter2", "hunter2", id="secret-key-with-dashes"),
-            pytest.param("host=/var/run/postgresql user=alice password=hunter2", "hunter2", id="host-value-is-a-path"),
-            pytest.param("u:p/w@host/db", "p/w", id="slash-in-userinfo-password"),
-            pytest.param("u:p w@host/db", "p w", id="space-in-userinfo-password"),
-            pytest.param("u:p\\w@host/db", "p\\w", id="backslash-in-userinfo-password"),
-            pytest.param(":hunter2@host/db", "hunter2", id="empty-user-userinfo"),
-            pytest.param(Path("host=localhost password=hunter2"), "hunter2", id="path-object-keywords"),
-            pytest.param(Path("user:hunter2@host/db"), "hunter2", id="path-object-userinfo"),
-            pytest.param(PurePosixPath("s3://alice:hunter2@bucket/key"), "hunter2", id="pure-posix-path-uri"),
-            pytest.param("user:pw@host/db%3Ftoken=hunter2", "hunter2", id="userinfo-percent-encoded-question-mark"),
-            pytest.param(
-                "host.com/db%3Fx password=hunter2",
-                "hunter2",
-                id="percent-encoded-question-mark-then-keyword-scan-guard",
-            ),
-            pytest.param("notes:2024@work.txt", None, id="userinfo-lookalike"),
-            pytest.param("user=alice.csv", None, id="file-name-starting-with-connection-key"),
-            pytest.param(
-                "host.com/db?config=password:hunter2", "hunter2", id="secret-value-under-unrecognized-key-now-hidden"
-            ),
-            pytest.param(
-                "host.com/db%253Fpassword=hunter2", "hunter2", id="double-percent-encoded-question-mark-now-hidden"
-            ),
-            pytest.param("password%3Dhunter2", "hunter2", id="percent-encoded-pair-without-anchor-now-hidden"),
-            pytest.param(
-                "host.com/db%3Bpassword=hunter2", "hunter2", id="percent-encoded-semicolon-without-anchor-now-hidden"
-            ),
-            pytest.param(
-                "host.com/db?user=alice&password=hunter2", "hunter2", id="scheme-less-query-secret-drops-whole-query"
-            ),
-            pytest.param("localhost:5432/db?password=hunter2", "hunter2", id="scheme-less-query-secret-with-port"),
-            pytest.param("host.com/db#password=hunter2", "hunter2", id="scheme-less-fragment-secret"),
-            pytest.param(
-                "host.com/db?  password=hunter2",
-                "hunter2",
-                id="scheme-less-query-secret-with-whitespace-after-delimiter",
-            ),
-            pytest.param("host.com/db%3Fpassword=hunter2", "hunter2", id="percent-encoded-question-mark-secret"),
-            pytest.param(
-                "host.com/db%3fpassword=hunter2", "hunter2", id="percent-encoded-lower-case-question-mark-secret"
-            ),
-            pytest.param("host.com/db?password%3Dhunter2", "hunter2", id="percent-encoded-equals-in-query-secret"),
-            pytest.param("host.com/db%23password=hunter2", "hunter2", id="percent-encoded-hash-secret"),
-            pytest.param(
-                "host.com/db?a=1%26password=hunter2", "hunter2", id="percent-encoded-ampersand-in-query-secret"
-            ),
-            pytest.param("host.com/db?%20password=hunter2", "hunter2", id="percent-encoded-leading-space-secret"),
-            pytest.param("host.com/db?pass%77ord=hunter2", "hunter2", id="percent-encoded-key-letter-secret"),
-            pytest.param(
-                "host.com/db?x password=hunter2", "hunter2", id="scheme-less-query-secret-after-space-separated-param"
-            ),
-            pytest.param(
-                "host.com/db#x password=hunter2",
-                "hunter2",
-                id="scheme-less-fragment-secret-after-space-separated-param",
-            ),
-            pytest.param(
-                "host.com/db?a=1 token=hunter2", "hunter2", id="scheme-less-query-secret-space-separated-token-key"
-            ),
-            pytest.param("host.com/db?x\tpassword=hunter2", "hunter2", id="scheme-less-query-secret-tab-separated"),
-            pytest.param("host.com/db?x,password=hunter2", "hunter2", id="scheme-less-query-secret-comma-separated"),
-            pytest.param("host.com/db?x+password=hunter2", "hunter2", id="scheme-less-query-secret-plus-separated"),
-            pytest.param(
-                "host.com/db?x%20password=hunter2",
-                "hunter2",
-                id="scheme-less-query-secret-percent-encoded-space-separated",
-            ),
-            pytest.param("host.com/db?jwt=hunter2", "hunter2", id="scheme-less-query-secret-key-jwt"),
-            pytest.param("host.com/db?p=hunter2", "hunter2", id="scheme-less-query-secret-key-p"),
-            pytest.param("host.com/db?sessionid=hunter2", "hunter2", id="scheme-less-query-secret-key-sessionid"),
-            pytest.param(
-                "host.com/db?redirect=https://x&password=y",
-                "password=y",
-                id="embedded-scheme-in-query-is-not-misrouted-to-the-uri-branch",
-            ),
-            pytest.param(
-                "host.com/db?a=1;password=2", "password=2", id="semicolon-bounded-secret-after-question-mark-anchor"
-            ),
-            pytest.param(
-                "host.com/db?a=1&b=2;password=3",
-                "password=3",
-                id="semicolon-bounded-secret-after-ampersand-then-question-mark-anchor",
-            ),
-            pytest.param("host.com/db;password=hunter2", "hunter2", id="semicolon-bounded-secret-with-no-anchor"),
-            pytest.param("some/path/user=alice.csv", None, id="ordinary-path-with-connection-key-lookalike"),
-            pytest.param("data/q?a/report=2024.csv", None, id="query-lookalike-path"),
-            pytest.param(
-                "Data Source=srv;User Id=alice;Password=hunter2", "hunter2", id="semicolon-separated-keyword-string"
-            ),
-            pytest.param("/srv/a;host=b", None, id="absolute-path-with-semicolon-key"),
-            pytest.param("C:\\data;user=1", None, id="windows-path-with-semicolon-key"),
-            pytest.param("host.com/db?limit=10", None, id="scheme-less-query-with-non-secret-key"),
-            pytest.param("data/plain.csv", None, id="relative-path"),
-            pytest.param("user=42/part.parquet", None, id="connection-key-lookalike-path"),
-            pytest.param("/data/year=2024/part.parquet", None, id="hive-path"),
-            pytest.param("report=2024.csv", None, id="unknown-key-file-name"),
-            pytest.param("a=1 b=2", None, id="unknown-keys"),
-            pytest.param("year=2024 month=01", None, id="unknown-keys-partition-like"),
-            pytest.param("", None, id="empty-string"),
-            pytest.param("C:\\dir\\a@b", None, id="windows-backslash-path"),
-            pytest.param("C:/a@b", None, id="windows-forward-slash-path"),
-            pytest.param("me@work.txt", None, id="email-like"),
-            pytest.param("alice@host/db", None, id="username-only-userinfo"),
-            pytest.param("/mnt/share/my db=main.csv", None, id="path-with-space-and-key"),
-            pytest.param("/var/log/app db=1.log", None, id="path-with-space-and-db-key"),
-            pytest.param(Path("data/plain.csv"), None, id="plain-path-object"),
-            pytest.param("data/file%3Fname.csv", None, id="percent-encoded-question-mark-in-file-name"),
-            pytest.param("host.com/db%3Flimit=10", None, id="percent-encoded-question-mark-with-non-secret-key"),
-        ],
-    )
-    def test_type_name_only_hides_any_secret(self, value: Any, secret: str | None) -> None:
-        identity = _identity_of(value)
-        assert identity == type(value).__name__
-        if secret is not None:
-            assert secret not in identity
-
-    def test_long_string_without_equals_returns_quickly(self) -> None:
-        value = "a " * 20000
-        assert _identity_of(value) == "str"
-
-
-class _SecretBearingAccess:
-    """Object whose repr and str both carry a secret."""
-
-    def __repr__(self) -> str:
-        return "SecretBearingAccess(password=hunter2)"
-
-    __str__ = __repr__
-
-
-class TestDataAccessIdentityOfNonStringValues:
-    """Mappings are identified by sorted keys; any other non-str, including every PurePath, by type name only."""
-
-    @pytest.mark.parametrize(
-        ("value", "expected"),
-        [
-            pytest.param(
-                MappingProxyType({"user": "alice", "password": "hunter2"}),  # nosec B105
-                "{password, user}",
-                id="mapping-proxy-key-names-only",
-            ),
-            pytest.param(_SecretBearingAccess(), "_SecretBearingAccess", id="arbitrary-object-type-name"),
-            pytest.param(b"postgresql://u:hunter2@host/db", "bytes", id="bytes-type-name"),
-            pytest.param(["postgresql://u:hunter2@host/db"], "list", id="list-type-name"),
-            pytest.param(Path("data/plain.csv"), type(Path("data/plain.csv")).__name__, id="plain-path-type-name"),
-        ],
-    )
-    def test_identity_of_non_string_value(self, value: Any, expected: str) -> None:
-        assert _identity_of(value) == expected
-
-
-_LOCAL_PATH_CASES: tuple[tuple[str, str], ...] = (
-    ("plain.csv", "plain-file"),
-    ("user=42/part.parquet", "connection-key-lookalike-dir"),
-    ("year=2024/part.parquet", "hive-style-dir"),
-    ("report=2024.csv", "unknown-key-file-name"),
-    ("a@b", "at-sign-in-name"),
-    ("me@work.txt", "email-like-name"),
-    ("my db=main.csv", "space-and-key-in-name"),
-    ("a;host=b", "semicolon-key-in-name"),
-    ("q?a/report=2024.csv", "query-lookalike-dir"),
-    ("file%3Fname.csv", "percent-encoded-question-mark-in-name"),
-    ("notes:2024@work.txt", "userinfo-lookalike-name"),
-    ("user=alice.csv", "file-name-starting-with-connection-key"),
-)
-
-
-class TestDataAccessIdentityOfExistingLocalPaths:
-    """An existing local file or directory is published as given, for both the str and the Path form;
-    the same name under a missing parent falls back to the type name."""
-
-    @pytest.mark.parametrize(
-        "relative", [pytest.param(relative, id=case_id) for relative, case_id in _LOCAL_PATH_CASES]
-    )
-    def test_existing_file_is_published_as_given(self, tmp_path: Path, relative: str) -> None:
-        path = tmp_path / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("x", encoding="utf-8")
-
-        assert _identity_of(str(path)) == str(path)
-        assert _identity_of(path) == str(path)
-
-    def test_existing_directory_is_published_as_given(self, tmp_path: Path) -> None:
-        directory = tmp_path / "user=42"
-        directory.mkdir()
-
-        assert _identity_of(str(directory)) == str(directory)
-        assert _identity_of(directory) == str(directory)
-
-    @pytest.mark.parametrize(
-        "relative", [pytest.param(relative, id=case_id) for relative, case_id in _LOCAL_PATH_CASES]
-    )
-    def test_same_name_under_a_missing_parent_is_the_type_name(self, tmp_path: Path, relative: str) -> None:
-        path = tmp_path / "missing" / relative
-        assert _identity_of(str(path)) == "str"
-        assert _identity_of(path) == type(path).__name__
-
-
-class TestDataAccessIdentityRegressionGuardForReportedLeak:
-    """A credential-shaped value must never come back verbatim from any reader's data_access_identity."""
-
-    @pytest.mark.parametrize("reader", [BaseInputData, _DirectLoadReader])
-    @pytest.mark.parametrize(
-        ("value", "secret"),
-        [
-            pytest.param("u:hunter2@fileserver/share/notes.txt", "hunter2", id="userinfo-scheme-less-file-path"),
-            pytest.param("host=h password=hunter2 notes.txt", "hunter2", id="keyword-string-with-file-name"),
-            pytest.param(PurePosixPath("s3://alice:hunter2@bucket/key.csv"), "hunter2", id="pure-posix-path-uri"),
-        ],
-    )
-    def test_credential_shaped_value_never_comes_back_verbatim(
-        self, reader: type[BaseInputData], value: Any, secret: str
-    ) -> None:
-        identity = reader.data_access_identity(value)
-        assert identity == type(value).__name__
-        assert secret not in identity
 
 
 class TestFormatGroupIdentityNeverEchoesTheAccess:
@@ -1372,9 +1033,6 @@ class TestFallbackDataAccessIdentityIsFlagged:
 
 class TestInputDataLoadHookCarriesReaderClassAndDeclaredAttributes:
     """INPUT_DATA_LOAD carries the concrete reader class and the READER's declared attributes."""
-
-    def test_reader_default_declared_attributes_is_empty_mapping(self) -> None:
-        assert BaseInputData.declared_attributes(None) == {}
 
     def test_direct_load_carries_reader_class_and_scalar_declarations(self) -> None:
         context = _direct_load_context(_DeclaringReader)

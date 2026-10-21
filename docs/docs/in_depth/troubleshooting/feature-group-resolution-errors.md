@@ -49,7 +49,7 @@ except FeatureResolutionError as err:
     # err.result carries the per-candidate elimination facts (an EvaluationResult)
 ```
 
-When an INPUT_DATA_MATCH extender refused the candidate readers, `err.refusals` holds its exceptions, so an access refusal can be told apart from a missing plugin (see [Extender](../../chapter1/extender.md)).
+When an INPUT_DATA_MATCH extender refused the candidate format groups, `err.refusals` holds its exceptions, so an access refusal can be told apart from a missing plugin (see [Extender](../../chapter1/extender.md)).
 
 To inspect a request without catching an exception, use the non-raising
 surfaces: `resolve_feature` for a single name (above), or `mlodaAPI.diagnose(...)`,
@@ -81,14 +81,14 @@ Each line names a candidate the matcher considered and dropped: the first gate t
 | --- | --- | --- |
 | `option value` | The group declined an option value in the request. | Fix the value the reason names. |
 | `feature name` | The group refused the requested feature name itself, for example an unknown output part. | Request a name the group serves; the reason may list them. |
-| `input data` | The input-data gate declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
+| `input data` | An INPUT_DATA_MATCH extender or a format group declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
 | `match hook` | The group's match hook raised; the error is contained and quoted. | Fix the plugin bug it names. |
 | `domain` | The group declares a different domain than the request. | Align the requested domain ([domain solution below](#3-use-domains-to-separate-feature-groups)). |
 | `scope` | The group is outside the requested `feature_group` scope. | Widen or correct the scope ([scope solution below](#4-scope-a-feature-to-one-source-shared-keys-across-sources)). |
 | `compute framework` | None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run, or no compute framework plugin is loaded in the process at all (a run reports that case up front as a `SetupConfigurationError` instead; only `resolve_feature` shows it as this elimination). | Enable a framework the group supports; if none is loaded, import a compute framework plugin or call `PluginLoader.all()`. |
 | `compute framework pin` | The `Feature` pins `compute_frameworks` to one that is not among the group's supported set for this run. | Change or drop the pin. |
 | `links` | No index column of the group matches the run's links. | Align the run's links with the group's index. |
-| `declarations` | A consumer's input or a requested feature requires a declared attribute that the candidate or its reader does not declare, or declares with another value. | Provide a candidate or reader that declares the attribute the reason names. |
+| `declarations` | A consumer's input or a requested feature requires a declared attribute that the candidate does not declare, or declares with another value. | Provide a candidate that declares the attribute the reason names. |
 
 A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`.
 

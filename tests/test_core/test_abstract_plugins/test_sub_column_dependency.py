@@ -31,7 +31,7 @@ from mloda.user import FeatureName
 from mloda.user import FeatureResolutionError
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import (
-    INPUT_DATA_OWNED_STAGE,
+    INPUT_DATA_STAGE,
     has_match_rejection,
     record_match_rejection,
 )
@@ -1421,7 +1421,7 @@ class _OptionSensitiveParts(FeatureGroup):
 
 
 class _GroupOptionGroup(FeatureGroup):
-    """Full name writes a group option and records an owned-stage rejection; the base needs both absent."""
+    """Full name writes a group option and records an input-data rejection; the base needs both absent."""
 
     OUTPUT_PARTS = ("value",)
 
@@ -1434,13 +1434,13 @@ class _GroupOptionGroup(FeatureGroup):
         cls, feature_name: Any, options: Options, data_access_collection: Any = None
     ) -> bool:
         if str(feature_name) == "ga~value":
-            options.add_to_group("owned_flag", 1)
-            record_match_rejection(cls.get_class_name(), "owned veto", INPUT_DATA_OWNED_STAGE)
+            options.add_to_group("rejected_flag", 1)
+            record_match_rejection(cls.get_class_name(), "input data veto", INPUT_DATA_STAGE)
             return False
         return (
             str(feature_name) == "ga"
-            and "owned_flag" not in options.group
-            and not has_match_rejection(INPUT_DATA_OWNED_STAGE)
+            and "rejected_flag" not in options.group
+            and not has_match_rejection(INPUT_DATA_STAGE)
         )
 
 
@@ -1490,7 +1490,7 @@ class TestPartProbeIsolation:
 
         assert outcome.matched is True
         assert outcome.part == ("ga", "value")
-        assert "owned_flag" not in options.group
+        assert "rejected_flag" not in options.group
 
     def test_output_parts_does_not_see_the_full_call_option_write(self) -> None:
         outcome = probe_match_criteria(_OptionSensitiveParts, "gd~value", Options({}), None, resolve_parts=True)

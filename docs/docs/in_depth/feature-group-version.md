@@ -71,7 +71,7 @@ class DependencyAgnostic(FeatureGroup):
 - Data and configuration files the code reads.
 - Source edited after import in a long-lived process. The hash reads the source files the first time it runs for a class, then caches the result for that class object.
 
-Imports are never executed to close these gaps: `version()` runs during computation, and importing a module can register new feature groups or readers mid-run.
+Imports are never executed to close these gaps: `version()` runs during computation, and importing a module can register new feature groups mid-run.
 
 ### Code reached by reflection
 

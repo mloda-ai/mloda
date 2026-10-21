@@ -167,7 +167,7 @@ features = [
 mloda.run_all(features, compute_frameworks=["PyArrowTable"], data_access_collection=dac)
 ```
 
-The key works across the file, document, and database readers on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.
+The key works across the file, document, and database format groups on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.
 
 !!! note "Connections are resolved once per engine, not per feature"
     `ComputeFramework.pick_connection_from_dac` runs at engine setup, not on the per-request path. A single CFW therefore binds a single connection per session. If you need two features in the same session to bind different connections of the same CFW, that is currently out of scope (tracked separately); use a single `data_access_handle` on the DAC's matching connections, or split the run.
@@ -198,7 +198,7 @@ DataAccessCollection(
 )
 ```
 
-For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong reader, missing column), the feature is declined rather than falling back to another file. When no registered reader anywhere owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.
+For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong format group, missing column), the feature is declined rather than falling back to another file. When no file format group owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.
 
 See [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the full example.
 
@@ -221,5 +221,5 @@ Named handles collapse that bug class to one invariant: *if the registry has mor
 ## Related
 
 - [(Feature) data](access-feature-data.md): overview of data access in mloda.
-- [Data Access Patterns](data-access-patterns.md): `BaseInputData` vs `MatchData`.
+- [Data Access Patterns](data-access-patterns.md): format FeatureGroups and `MatchData`.
 - [Framework Connection Object](framework-connection-object.md): stateful connection lifecycle.

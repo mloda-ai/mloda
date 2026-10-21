@@ -11,14 +11,16 @@ from typing import Any, cast
 import pytest
 
 import mloda.provider as provider
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
-from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.provider import FormatFeatureGroup, ReadFileFG
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.core.prepare.identify_feature_group import (
+    FeatureResolutionError,
+    IdentifyFeatureGroupClass,
+    resolve_or_raise,
+)
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -29,6 +31,7 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PythonDictAdapter,
 )
 from tests.mixins.reader_feature_groups.file_format_feature_group_test_mixin import FileFormatFeatureGroupTestMixin
+from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_file_format_group import (
     SAMPLE_SIZE,
     TOY_SUFFIX,
@@ -197,19 +200,27 @@ class TestSampleListing:
 
 
 class TestPinnedFileOwnedBySomeFileGroup:
+    """A pin to a file whose suffix no file format group owns is named in the resolution failure, once."""
+
+    UNOWNED_FRAGMENT = "has a suffix no registered reader owns"
+
     def _dac(self, path: Path, column: str) -> DataAccessCollection:
         return DataAccessCollection(files={"pinned": str(path)}, column_to_file={column: "pinned"})
 
-    def _unowned_pin_reasons(self, window: dict[str, MatchRejection]) -> list[str]:
-        return [r.reason for r in window.values() if "no registered reader owns" in r.reason]
+    def _unowned_pin_reasons(self, result: Any) -> list[str]:
+        return [e.reason for e in result.eliminations.values() if self.UNOWNED_FRAGMENT in e.reason]
 
-    def test_a_pin_to_a_file_group_suffix_records_no_unowned_pin(
-        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
-    ) -> None:
+    def test_a_pin_to_a_file_group_suffix_records_no_unowned_pin(self, tmp_path: Path) -> None:
         path = tmp_path / f"pinned{TOY_SUFFIX}"
         write_toy_file(path, {"toyfmt_g6_col": [1]})
-        BaseInputData._record_unowned_pin(self._dac(path, "toyfmt_g6_col"), ["toyfmt_g6_col"])
-        assert self._unowned_pin_reasons(rejection_window) == []
+        plugins: Any = {ToyFileFormatFG: {PyArrowTable}, CsvFG: {PyArrowTable}}
+
+        result = IdentifyFeatureGroupClass.evaluate(
+            Feature("toyfmt_g6_col"), plugins, None, self._dac(path, "toyfmt_g6_col")
+        )
+
+        assert ToyFileFormatFG in result.identified
+        assert self._unowned_pin_reasons(result) == []
 
     @pytest.mark.parametrize(
         "module,name,suffix",
@@ -221,21 +232,26 @@ class TestPinnedFileOwnedBySomeFileGroup:
         ],
     )
     def test_a_pin_to_a_document_group_suffix_records_no_unowned_pin(
-        self, tmp_path: Path, rejection_window: dict[str, MatchRejection], module: str, name: str, suffix: str
+        self, tmp_path: Path, module: str, name: str, suffix: str
     ) -> None:
-        load_document_group(module, name)
+        group = load_document_group(module, name)
         path = tmp_path / f"pinned{suffix}"
         path.write_text("toyfmt_g6_doc\n", encoding="utf-8")
-        BaseInputData._record_unowned_pin(self._dac(path, name), [name])
-        assert self._unowned_pin_reasons(rejection_window) == []
+        plugins: Any = {group: {PyArrowTable}, ToyFileFormatFG: {PyArrowTable}}
 
-    def test_a_pin_to_a_suffix_nobody_owns_still_records_it(
-        self, tmp_path: Path, rejection_window: dict[str, MatchRejection]
-    ) -> None:
-        path = tmp_path / "pinned.toyfmtnobody"
+        result = IdentifyFeatureGroupClass.evaluate(Feature(name), plugins, None, self._dac(path, name))
+
+        assert self._unowned_pin_reasons(result) == []
+
+    def test_a_pin_to_a_suffix_nobody_owns_is_named_once_in_the_resolution_failure(self, tmp_path: Path) -> None:
+        path = tmp_path / "pinned.toyfmtunowned9"
         path.write_text("toyfmt_g6_other\n1\n")
-        BaseInputData._record_unowned_pin(self._dac(path, "toyfmt_g6_other"), ["toyfmt_g6_other"])
-        assert len(self._unowned_pin_reasons(rejection_window)) == 1
+        plugins: Any = {ToyFileFormatFG: {PyArrowTable}, CsvFG: {PyArrowTable}}
+
+        with pytest.raises(FeatureResolutionError) as excinfo:
+            evaluate_or_raise(Feature("toyfmt_g6_other"), plugins, None, self._dac(path, "toyfmt_g6_other"))
+
+        assert str(excinfo.value).count(self.UNOWNED_FRAGMENT) == 1
 
 
 class TestAbstractReadFileFGWithAPin:

@@ -25,8 +25,8 @@ from mloda.core.abstract_plugins.components.feature_chainer import feature_chain
 from mloda.core.abstract_plugins.components.match_rejection import (
     MATCH_REJECTION_REASONS,
     MatchRejection,
+    has_match_rejection,
     record_match_rejection,
-    restamp_match_rejections_since,
 )
 from mloda.provider import collect_match_rejections
 from tests.docs_corpus import REPO_ROOT
@@ -145,15 +145,23 @@ class TestRefusalField:
 
         assert recording_window["RefusalOwner"].refusal is refusal
 
-    def test_restamp_keeps_the_refusal(self, recording_window: dict[str, Any]) -> None:
-        refusal = PermissionError("no clearance")
-        record_match_rejection("RestampOwner", "refused", stage="input_data", refusal=refusal)
 
-        restamp_match_rejections_since(frozenset(), "input_data", "input_data_owned")
+class TestHasMatchRejection:
+    """The helper reports whether the ACTIVE window holds a rejection with the exact stage."""
 
-        stored = recording_window["RestampOwner"]
-        assert stored.stage == "input_data_owned"
-        assert stored.refusal is refusal
+    def test_no_active_window_reports_false(self) -> None:
+        assert MATCH_REJECTION_REASONS.get() is None
+        assert has_match_rejection("input_data") is False
+
+    def test_a_window_holding_only_a_foreign_stage_reports_false(self, recording_window: dict[str, Any]) -> None:
+        record_match_rejection("HasRejectionOwner", "a reason")
+
+        assert has_match_rejection("input_data") is False
+
+    def test_a_window_holding_an_input_data_rejection_reports_true(self, recording_window: dict[str, Any]) -> None:
+        record_match_rejection("HasRejectionOwner", "a reason", stage="input_data")
+
+        assert has_match_rejection("input_data") is True
 
 
 class TestProviderExport:

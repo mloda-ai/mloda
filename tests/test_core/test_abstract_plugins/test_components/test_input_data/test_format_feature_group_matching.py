@@ -17,6 +17,7 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
     FormatPointerError,
 )
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
 from mloda.provider import FeatureGroup, FeatureSet
@@ -171,6 +172,35 @@ class TestPointedButMissingAborts:
         assert _claims(Feature(COL), dac, ToyOtherFormatFG)
         with pytest.raises(ValueError, match="ToyFormatFG"):
             evaluate_or_raise(feature, _plugins(ToyFormatFG, ToyOtherFormatFG), None, dac)
+
+
+_VALUE_KEY = "toyfmt_mode"
+_BAD_VALUE = "toyfmt_bad_mode"
+
+
+class _ValueCheckedFG(ToyFormatFG):
+    """A pointed-at format group whose later PROPERTY_MAPPING value check can fail."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+        _VALUE_KEY: PropertySpec("Mode", allowed_values={"good": "Good mode"}, context=True, strict_validation=True),
+    }
+
+
+class TestPointedGroupValueFailureIsNotADecline:
+    def test_later_value_failure_is_reported_not_a_source_decline(self) -> None:
+        feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: _BAD_VALUE}))
+        result = _identify(feature, None, _ValueCheckedFG)
+
+        assert result.identified == {}
+        elimination = result.eliminations[_ValueCheckedFG]
+        assert elimination.stage == "value_rejection"
+        assert f"'{_BAD_VALUE}' not found in mapping for '{_VALUE_KEY}'" in elimination.reason
+        assert "matched nothing" not in elimination.reason
+
+    def test_a_valid_value_still_claims(self) -> None:
+        feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: "good"}))
+
+        assert _claims(feature, None, _ValueCheckedFG)
 
 
 class TestPointedMissingColumnText:

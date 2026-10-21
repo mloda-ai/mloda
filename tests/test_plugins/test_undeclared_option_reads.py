@@ -6,42 +6,31 @@ If ``foo`` is in no declaration (issue os-004 / mloda#775), that promise is undo
 unvalidated. This sweep resolves each read to its key and flags any key that no shipped plugin
 declares, accepting only a narrow allowlist of genuinely engine-internal and genuinely dynamic reads.
 
-The check spans TWO declaration surfaces and is deliberately GLOBAL across both: a key passes when
-SOME shipped FeatureGroup declares it in ``PROPERTY_MAPPING`` or SOME shipped reader declares it in
-``READER_OPTIONS``. Readers need their own surface because their keys are consumed at reader-selection
-time, before the framework materializes any ``PROPERTY_MAPPING`` default. Per-group owning-surface
-attribution is out of scope for this sweep.
+The check is deliberately GLOBAL: a key passes when SOME shipped FeatureGroup declares it in
+``PROPERTY_MAPPING``. Per-group attribution is out of scope for this sweep.
 
 Scope notes:
 
-* ``SCAN_ROOT`` is the whole ``mloda_plugins/feature_group`` tree, ``input_data`` readers included;
+* ``SCAN_ROOT`` is the whole ``mloda_plugins/feature_group`` tree, ``input_data`` format groups included;
   the allowlist paths below are written relative to it.
 * ``reference_time`` is a ``DefaultOptionKeys`` member yet is NOT treated as framework-reserved here.
   The time-based groups expose it as a user-overridable column option, so os-004 reclassifies it as a
   key those groups must DECLARE. The remaining ``DefaultOptionKeys`` values stay framework-reserved.
-
-Subclass-leak policy: this module NEEDS a leaked test-tree ``BaseInputData`` subclass to stay reachable
-through ``__subclasses__()`` mid-test, because that is what proves the module-prefix filter in
-``reader_declared_union`` really excludes it; the probe is built inside a helper and reclaimed by the
-module teardown gc pass, and it is never a final reader, so it cannot reach reader selection.
 """
 
 from __future__ import annotations
 
 import ast
-import gc
 from collections.abc import Iterator
 from pathlib import Path
-from typing import ClassVar, NamedTuple
+from typing import NamedTuple
 
 import pytest
 
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-from mloda.provider import DefaultOptionKeys, ReadDBFG, ReadDocumentFG, ReadFileFG
+from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.encoding.base import EncodingFeatureGroup
 from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import SklearnPipelineFeatureGroup
@@ -61,12 +50,11 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 # reads entirely.
 _OPTIONS_ACCESSORS = frozenset({"get_singular_option_from_options", "get_options", "options_with_defaults"})
 _OPTIONS_RECEIVER_NAMES = frozenset({"options", "option"})
-_READ_METHODS = frozenset({"get", "get_options_key", "reader_option"})
+_READ_METHODS = frozenset({"get", "get_options_key"})
 # Reads whose receiver is never options-like, so they are recognized by method name alone: get_options_key
-# is a FeatureSet method (receiver features/self) and reader_option is a BaseInputData classmethod
-# (receiver cls) taking the key FIRST and the Options second. Both names are distinctive enough to carry
-# the match on their own, and both take the key as their first positional argument.
-_METHOD_NAME_ONLY_READS = frozenset({"get_options_key", "reader_option"})
+# is a FeatureSet method (receiver features/self). The name is distinctive enough to carry the match on its
+# own, and it takes the key as its first positional argument.
+_METHOD_NAME_ONLY_READS = frozenset({"get_options_key"})
 
 # DefaultOptionKeys.<member> resolves to the member's string value. Built from the enum so it cannot drift.
 _DEFAULT_OPTION_KEY_MEMBERS: dict[str, str] = {member.name: member.value for member in DefaultOptionKeys}
@@ -95,41 +83,12 @@ ALLOWED_DYNAMIC_READS: dict[tuple[str, str], tuple[str, str]] = {
     ),
 }
 
-# Keys that ONLY the READER_OPTIONS surface declares: no PROPERTY_MAPPING and no framework key covers them, so
-# they are the probe for whether the union really reaches READER_OPTIONS. "BaseInputData" is the reserved key
-# the framework itself writes.
-READER_ONLY_KEYS: frozenset[str] = frozenset({"BaseInputData"})
-
-# Declared by the throwaway reader below, never by shipped code.
-_PROBE_READER_KEY = "uor_leaked_test_tree_probe_key"
-
 
 @pytest.fixture(scope="module", autouse=True)
 def _load_all_plugins() -> Iterator[None]:
-    """Load every shipped plugin so the declared unions enumerate the full plugin set.
-
-    The teardown gc pass reclaims the throwaway reader this module builds: a test-local
-    ``BaseInputData`` subclass sits in reference cycles, so it would otherwise linger in
-    ``BaseInputData.__subclasses__()`` where other tests enumerate readers.
-    """
+    """Load every shipped plugin so the declared union enumerates the full plugin set."""
     PluginLoader().all()
     yield
-    gc.collect()
-    gc.collect()
-
-
-def _make_leaked_reader_probe() -> type[BaseInputData]:
-    """A throwaway reader declaring one distinctive key, built here so it stays collectable.
-
-    It deliberately does not override ``load_data``, so no feature group ever returns it.
-    """
-
-    class UorLeakedTestTreeReaderProbe(BaseInputData):
-        READER_OPTIONS: ClassVar[dict[str, PropertySpec]] = {
-            _PROBE_READER_KEY: PropertySpec("Test-tree only; must never reach the declared union.", default=None),
-        }
-
-    return UorLeakedTestTreeReaderProbe
 
 
 class _Read(NamedTuple):
@@ -348,39 +307,6 @@ def property_mapping_declared_union() -> frozenset[str]:
     return frozenset(keys)
 
 
-def reader_surface_probe_union() -> frozenset[str]:
-    """The PROPERTY_MAPPING union without the file, database and document format groups, which declare the reader keys.
-
-    ``ReadFileFG``, ``ReadDBFG`` and ``ReadDocumentFG`` declare ``data_access_handle`` (the file and document groups
-    also ``document_suffixes``) in their PROPERTY_MAPPING, so the full union no longer tells the reader surface apart.
-    """
-    keys: set[str] = set()
-    for cls in get_all_subclasses(FeatureGroup):
-        if cls.__module__.startswith("mloda_plugins") and not issubclass(cls, (ReadFileFG, ReadDBFG, ReadDocumentFG)):
-            keys |= set(cls.declared_option_keys())
-    return frozenset(keys)
-
-
-def reader_declared_union() -> frozenset[str]:
-    """Every READER_OPTIONS key declared by ``BaseInputData`` or a shipped reader subclass.
-
-    Filtered by module prefix for the same reason as the PROPERTY_MAPPING side, with one extra prefix:
-    ``BaseInputData`` itself lives under ``mloda.core`` and is what declares the reserved
-    ``"BaseInputData"`` key, so the filter admits ``mloda.core`` while still excluding ``tests.*``.
-    """
-    readers: list[type[BaseInputData]] = [BaseInputData, *get_all_subclasses(BaseInputData)]
-    keys: set[str] = set()
-    for cls in readers:
-        if cls.__module__.startswith(("mloda_plugins", "mloda.core")):
-            keys |= set(cls.declared_reader_option_keys())
-    return frozenset(keys)
-
-
-def declared_union() -> frozenset[str]:
-    """Both declaration surfaces: a key passes when EITHER a FeatureGroup or a reader declares it."""
-    return property_mapping_declared_union() | reader_declared_union()
-
-
 def test_no_undeclared_static_option_reads() -> None:
     """No shipped feature_group plugin reads an Options key that nothing declares (outside the narrow allowlist)."""
     assert SCAN_ROOT.exists(), SCAN_ROOT
@@ -390,14 +316,13 @@ def test_no_undeclared_static_option_reads() -> None:
     assert _count_reads(SCAN_ROOT) >= 17, "scan found too few reads; SCAN_ROOT is likely misconfigured"
     violations = find_violations(
         SCAN_ROOT,
-        declared_union(),
+        property_mapping_declared_union(),
         FRAMEWORK_KEYS,
         ALLOWED_LITERAL_KEYS,
         ALLOWED_DYNAMIC_READS,
     )
     assert violations == [], (
-        "Undeclared option reads (declare the key in the plugin's PROPERTY_MAPPING or READER_OPTIONS):\n"
-        + "\n".join(violations)
+        "Undeclared option reads (declare the key in the plugin's PROPERTY_MAPPING):\n" + "\n".join(violations)
     )
 
 
@@ -424,40 +349,16 @@ def test_allowlist_paths_are_relative_to_the_scan_root() -> None:
 
 def test_literal_allowlist_is_load_bearing() -> None:
     """Drop the literal allowlist and its one key is flagged, so the entry (and its path) really matches."""
-    violations = find_violations(SCAN_ROOT, declared_union(), FRAMEWORK_KEYS, {}, ALLOWED_DYNAMIC_READS)
+    violations = find_violations(
+        SCAN_ROOT, property_mapping_declared_union(), FRAMEWORK_KEYS, {}, ALLOWED_DYNAMIC_READS
+    )
 
     assert any("'initial_requested_data'" in v for v in violations), violations
 
 
-@pytest.mark.parametrize("key", sorted(READER_ONLY_KEYS))
-def test_declared_union_recognizes_reader_declarations(key: str) -> None:
-    """The union covers the READER_OPTIONS surface, not just PROPERTY_MAPPING."""
-    assert key in reader_declared_union()
-    assert key in declared_union()
-
-
-@pytest.mark.parametrize("key", sorted(READER_ONLY_KEYS))
-def test_reader_keys_are_attributable_to_the_reader_surface_alone(key: str) -> None:
-    """No PROPERTY_MAPPING outside the file, database and document format groups covers these, nor a framework key."""
-    assert key not in reader_surface_probe_union()
-    assert key not in FRAMEWORK_KEYS
-
-
-def test_the_format_groups_declare_the_match_time_reader_keys() -> None:
+def test_the_format_groups_declare_the_match_time_keys() -> None:
     """The handle and document_suffixes keys now come from the shipped format groups' PROPERTY_MAPPING."""
     assert {"data_access_handle", "document_suffixes"} <= property_mapping_declared_union()
-    assert {"data_access_handle", "document_suffixes"} <= declared_union()
-
-
-def test_reader_union_ignores_readers_declared_in_the_test_tree() -> None:
-    """A leaked test-tree reader is visible through __subclasses__() yet cannot widen the union."""
-    probe = _make_leaked_reader_probe()
-
-    assert _PROBE_READER_KEY in probe.declared_reader_option_keys()
-    reachable = {key for cls in get_all_subclasses(BaseInputData) for key in cls.declared_reader_option_keys()}
-    assert _PROBE_READER_KEY in reachable, "probe is unreachable, so the module-prefix filter is untested here"
-    assert _PROBE_READER_KEY not in reader_declared_union()
-    assert _PROBE_READER_KEY not in declared_union()
 
 
 def test_scanner_resolves_a_read_behind_options_with_defaults(tmp_path: Path) -> None:
@@ -488,50 +389,6 @@ def test_scanner_resolves_a_direct_read_off_options_with_defaults(tmp_path: Path
     violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
 
     assert any("undeclared_x" in v for v in violations), violations
-
-
-def test_scanner_flags_reader_option(tmp_path: Path) -> None:
-    """``cls.reader_option('k', options)`` is recognized by method name, with the KEY as first argument."""
-    source = (
-        "class Foo:\n"
-        "    @classmethod\n"
-        "    def f(cls, options):\n"
-        "        return cls.reader_option('undeclared_x', options)\n"
-    )
-    (tmp_path / "mod.py").write_text(source)
-
-    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
-
-    assert any("undeclared_x" in v for v in violations), violations
-    assert find_violations(tmp_path, frozenset({"undeclared_x"}), frozenset(), {}, {}) == []
-
-
-def test_scanner_reads_the_first_positional_argument_of_reader_option(tmp_path: Path) -> None:
-    """The key is the FIRST argument: the Options in second position is never mistaken for the key."""
-    source = (
-        "class Foo:\n"
-        "    @classmethod\n"
-        "    def f(cls, options):\n"
-        "        return cls.reader_option('undeclared_x', options)\n"
-    )
-    (tmp_path / "mod.py").write_text(source)
-
-    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
-
-    assert len(violations) == 1, violations
-    assert "'undeclared_x'" in violations[0], violations[0]
-    assert "dynamic" not in violations[0], violations[0]
-
-
-def test_scanner_ignores_reader_option_default(tmp_path: Path) -> None:
-    """``reader_option_default(key)`` consults no Options, so it is not an Options read.
-
-    The recognition is an exact method-name match, so the longer sibling name does not match.
-    """
-    source = "class Foo:\n    @classmethod\n    def f(cls):\n        return cls.reader_option_default('undeclared_x')\n"
-    (tmp_path / "mod.py").write_text(source)
-
-    assert find_violations(tmp_path, frozenset(), frozenset(), {}, {}) == []
 
 
 def test_scanner_flags_new_undeclared_literal_read(tmp_path: Path) -> None:

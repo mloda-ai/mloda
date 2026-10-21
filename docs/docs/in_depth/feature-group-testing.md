@@ -18,7 +18,7 @@ assert ClusteringFeatureGroup.match_feature_group_criteria("customer_behavior__c
 assert not ClusteringFeatureGroup.match_feature_group_criteria("invalid_name", Options())
 ```
 
-The reader veto gate reads the per-candidate rejection window, so a bare direct call does not exercise it; wrap one call in `collect_match_rejections()` to exercise it and read the reasons (see section 4), and full engine-shaped assertions go through `IdentifyFeatureGroupClass.evaluate`.
+A bare direct call records nothing; wrap one call in `collect_match_rejections()` to read the reasons it recorded (see section 4), and full engine-shaped assertions go through `IdentifyFeatureGroupClass.evaluate`.
 
 ### 2. Input Feature Extraction
 

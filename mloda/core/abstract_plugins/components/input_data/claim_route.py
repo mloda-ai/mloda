@@ -45,10 +45,9 @@ class SourceMatch:
 
 
 if TYPE_CHECKING:
-    from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
     from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 
-    DataAccessReader = type[BaseInputData] | type[FormatFeatureGroup]
+    DataAccessReader = type[FormatFeatureGroup]
 else:
     DataAccessReader = type
 
@@ -82,6 +81,30 @@ def open_claim_scope() -> Iterator[list[bool]]:
         yield flag
     finally:
         _OPEN_CLAIM.reset(token)
+
+
+_REPORTED_PINS: ContextVar[set[str] | None] = ContextVar("mloda_reported_pins", default=None)
+
+
+def first_report_of_pin(path: str) -> bool:
+    """True the first time path is reported within pin_report_scope, and always outside one."""
+    reported = _REPORTED_PINS.get()
+    if reported is None:
+        return True
+    if path in reported:
+        return False
+    reported.add(path)
+    return True
+
+
+@contextmanager
+def pin_report_scope(reported: set[str]) -> Iterator[None]:
+    """Share one reported-pins set across the candidates of a single resolution."""
+    token = _REPORTED_PINS.set(reported)
+    try:
+        yield
+    finally:
+        _REPORTED_PINS.reset(token)
 
 
 def current_feature_group_scope() -> Any:

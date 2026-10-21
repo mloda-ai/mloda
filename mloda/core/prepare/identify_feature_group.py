@@ -28,18 +28,13 @@ from mloda.core.prepare.resolution_failure_renderer import (
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.declared_attributes import (
-    DeclarationRequirement,
-    declaration_requirement_scope,
-)
-from mloda.core.abstract_plugins.components.input_data.base_input_data import (
-    RESERVED_READER_OPTION_KEY,
-    BaseInputData,
-)
+from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
+from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     DataAccessReader,
     feature_group_scope,
     open_claim_scope,
+    pin_report_scope,
 )
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     FormatFeatureGroup,
@@ -238,6 +233,7 @@ class IdentifyFeatureGroupClass:
     _deferred_aborts: dict[type[FeatureGroup], Exception]
     _input_data_matches: dict[type[FeatureGroup], tuple[DataAccessReader, Any]]
     _open_claims: set[type[FeatureGroup]]
+    _reported_pins: set[str]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -260,6 +256,7 @@ class IdentifyFeatureGroupClass:
         self._deferred_aborts = {}
         self._input_data_matches = {}
         self._open_claims = set()
+        self._reported_pins = set()
         self._data_access_collection = data_access_collection
 
     @classmethod
@@ -653,10 +650,9 @@ class IdentifyFeatureGroupClass:
             # this reads it back for a criteria-FAILING candidate only; a matched/winning/abstract candidate is
             # never probed. Recorded regardless of domain or of the overall outcome (a sibling may win).
             try:
-                with declaration_requirement_scope(requirement):
-                    criteria_matched = self._filter_feature_group_by_criteria(
-                        feature_group, feature, data_access_collection
-                    )
+                criteria_matched = self._filter_feature_group_by_criteria(
+                    feature_group, feature, data_access_collection
+                )
             except Exception as exc:  # noqa: BLE001  (only a marked abort of a gated-out candidate is absorbed)
                 if not is_match_abort(exc):
                     raise
@@ -961,7 +957,11 @@ class IdentifyFeatureGroupClass:
         Mark-or-contain policy: see call_match_hook.
         """
         options = feature.options._fork()
-        with feature_group_scope(feature.feature_group_scope), open_claim_scope() as open_claim:
+        with (
+            feature_group_scope(feature.feature_group_scope),
+            open_claim_scope() as open_claim,
+            pin_report_scope(self._reported_pins),
+        ):
             probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection, True)
         if probe.matched and open_claim:
             self._open_claims |= {feature_group}
@@ -975,8 +975,6 @@ class IdentifyFeatureGroupClass:
                 if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
                     # A pair the candidate inherited rather than wrote.
                     self._input_data_matches[feature_group] = cast(tuple[DataAccessReader, Any], written)
-                elif isinstance(written[0], type) and issubclass(written[0], BaseInputData):
-                    self._input_data_matches[feature_group] = BaseInputData._wrap_scoped_access(written, options)
                 else:
                     self._input_data_matches[feature_group] = written
         if probe.value_rejection is not None:

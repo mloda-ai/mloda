@@ -61,11 +61,11 @@ MATCH_PATH_MODULES: dict[str, str] = {
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser.py": "the parsing that matcher runs",
     "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py": "the required_when guard",
     "mloda/core/abstract_plugins/components/property_spec.py": "the matcher reads the spec sentinel",
-    "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "reader matching",
-    "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped reader probe",
-    "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api reader's match hook",
+    "mloda/core/abstract_plugins/components/input_data/base_input_data.py": "the input-data matches hook",
+    "mloda/core/abstract_plugins/components/input_data/reader_probe.py": "the extender-wrapped format group probe",
+    "mloda/core/abstract_plugins/components/input_data/api/api_input_data.py": "the api input data match hook",
     "mloda/core/abstract_plugins/components/input_data/creator/data_creator.py": "the data-creator match hook",
-    "mloda/core/abstract_plugins/components/match_data/match_data.py": "reader selection during matching",
+    "mloda/core/abstract_plugins/components/match_data/match_data.py": "match data selection during matching",
 }
 
 for _module in MATCH_PATH_MODULES:
@@ -83,9 +83,8 @@ SEEDS: dict[str, str] = {
 # Raising functions OUTSIDE the declared modules that the match path calls; the decision is recorded here
 # instead of at the raise. Resolution is by name, so an entry can be a name COLLISION, not a call edge.
 _CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
-_BUILTIN_ALL_COLLISION = "name collision: the builtin all(), not PluginLoader.all"
 _DECIDED_ABOVE_BY_READER_SELECTION = (
-    "decided above by the marked raise in both add_base_input_data_to_options callers; this write only "
+    "decided above by the marked raise in MatchData.add_base_input_data_to_options; this write only "
     "ever reaches an absent key"
 )
 _MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
@@ -98,17 +97,11 @@ _ADOPT_COLLISION = (
     "real edge, collided verdict: Options._adopt copies a successful part-match fork back; its dict.update and "
     "dict.clear names collide with a raising, swallowing update() elsewhere"
 )
-_MERGED_DECLARATION_RAISES = (
-    "real edge: own_declaration's ValueError for a malformed declaration; __init_subclass__ already "
-    "validates every class in the MRO at definition time, so this walk cannot raise for a class that "
-    "reached match time"
-)
 _VALIDATE_PROPERTY_SPEC_RAISES = (
-    "real edge: validate_property_spec's ValueError for a malformed or reader-only spec on the FEATURE_GROUP "
+    "real edge: validate_property_spec's ValueError for a malformed or inapplicable spec on the FEATURE_GROUP "
     "surface, reached via _require_spec's public entry point for a caller-supplied mapping that never passed "
     "the class-definition check; that candidate's own defect, so the seam reads it as a non-match"
 )
-_MERGED_DECLARATION_SWALLOWS_DIRECT = "name collision: dict.update inside merged_declaration, not a real swallow"
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
@@ -119,8 +112,7 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "marked aborts"
     ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
-        "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_reader or "
-        "probe_format_group"
+        "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_format_group"
     ),
     ("mloda/core/abstract_plugins/hook_context.py", "__post_init__"): (
         "validates the framework-built HookContext fields; raises only on a framework bug"
@@ -128,17 +120,12 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/declared_attributes.py", "read_declared_attributes"): (
         "read inside safe_field, so a raising reader declaration degrades to None"
     ),
-    ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/options.py", "add_to_group"): _DECIDED_ABOVE_BY_READER_SELECTION,
     ("mloda/core/abstract_plugins/components/options.py", "_fork"): _FORK_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "_adopt"): _ADOPT_COLLISION,
     ("mloda/core/abstract_plugins/components/options.py", "get_in_features"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _BUILTIN_ALL_COLLISION,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
-    ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
-        "real edge, collided verdict: it raises nothing itself; the set.add / set.update names do"
-    ),
     ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
         "real edge, collided verdict: it raises nothing itself; the str.join name collides with the runner's join"
     ),
@@ -146,14 +133,7 @@ RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "real edge, collided verdict: it raises nothing itself; warn_once_for's own try/except degrades any "
         "failure to 'not seen', and the WeakSet/set add() name collides with an unrelated raising add() elsewhere"
     ),
-    ("mloda/core/abstract_plugins/components/declared_attributes.py", "unmet_reason"): (
-        "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
-        "a rejection with a reason"
-    ),
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
-    ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (
-        _MERGED_DECLARATION_RAISES
-    ),
     ("mloda/core/abstract_plugins/components/declaration_surface.py", "validate_property_spec"): (
         _VALIDATE_PROPERTY_SPEC_RAISES
     ),
@@ -191,24 +171,12 @@ SWALLOWING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
         "guards a single str(exc) call and degrades to the exception's type name; a plugin-owned __str__ "
         "must not escape the seam that is rendering the exception's own message"
     ),
-    ("mloda/core/abstract_plugins/components/utils.py", "get_all_subclasses"): (
-        "real edge, collided verdict: it swallows nothing itself; the set.add / set.update names do"
-    ),
     ("mloda/core/abstract_plugins/components/match_rejection.py", "context_forwarding_remedy"): (
         "real edge, collided verdict: it swallows nothing itself; the str.join name collides with the runner's join"
     ),
-    ("mloda/core/abstract_plugins/components/options.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
     ("mloda/core/abstract_plugins/components/feature.py", "__init__"): _CANDIDATE_OWN_DECLARATION,
-    ("mloda/core/abstract_plugins/plugin_loader/plugin_loader.py", "all"): _BUILTIN_ALL_COLLISION,
     ("mloda/core/abstract_plugins/components/link.py", "matches"): _MATCHES_COLLISION,
-    ("mloda/core/abstract_plugins/components/declared_attributes.py", "unmet_reason"): (
-        "the plan-time declarations read of a consumer requirement; its raises are contained per reader, "
-        "a rejection with a reason"
-    ),
     ("mloda/core/runtime/run.py", "join"): _JOIN_COLLISION,
-    ("mloda/core/abstract_plugins/components/declaration_surface.py", "merged_declaration"): (
-        _MERGED_DECLARATION_SWALLOWS_DIRECT
-    ),
 }
 
 _ESCALATION = "escalate_match_abort"
@@ -1057,11 +1025,9 @@ def test_the_reachable_walk_does_not_collapse() -> None:
 
 def test_known_escalations_are_enumerated() -> None:
     """Canary: the escalations that exist today are all seen, so a silently empty sweep cannot pass."""
-    base_input_data = "mloda/core/abstract_plugins/components/input_data/base_input_data.py"
     match_data = "mloda/core/abstract_plugins/components/match_data/match_data.py"
     mixin = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py"
     expected = {
-        (base_input_data, "add_base_input_data_to_options"),
         (match_data, "add_base_input_data_to_options"),
         (mixin, "_validate_forwarded_name_mismatch"),
     }
@@ -1069,8 +1035,8 @@ def test_known_escalations_are_enumerated() -> None:
     marked = {(site.module, site.function) for site in _of_kind("marked")}
 
     assert expected <= marked, f"known escalations missing from the sweep: {sorted(expected - marked)}"
-    # Vacuity floor, not a target: 19 sites today, so removing one stays a legitimate change.
-    assert len(sweep().sites) >= 15, f"sweep enumerated only {len(sweep().sites)} raise sites; it is not walking"
+    # Vacuity floor, not a target: 12 sites today, so removing one stays a legitimate change.
+    assert len(sweep().sites) >= 9, f"sweep enumerated only {len(sweep().sites)} raise sites; it is not walking"
 
 
 _RAISE_CASES = [

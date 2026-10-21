@@ -1,49 +1,13 @@
-# Data Access Patterns: BaseInputData vs MatchData
+# Data Access Patterns: Format FeatureGroups and MatchData
 
 ## Overview
 
-mloda provides two distinct but complementary patterns for data access: **BaseInputData** and **MatchData**. While they may appear similar at first glance, they serve different purposes and are used in different contexts within the framework.
+mloda reads data through **format FeatureGroups** (files, documents, databases and custom sources). **MatchData** is a separate, narrow pattern for feature groups that need framework connection objects. `BaseInputData` is only the marker base of `DataCreator` and `ApiInputData`, the return type of `input_data()`; it carries no reader behavior.
 
-This document clarifies the differences between these concepts and their respective use cases. For practical examples of data access methods, see [Data Access Overview](access-feature-data.md).
+For practical examples of data access methods, see [Data Access Overview](access-feature-data.md).
 
-## BaseInputData Pattern
+## Data Sources
 
-### Purpose
-BaseInputData is the **legacy reader base** for feature groups that are not format FeatureGroups. Files, documents and databases are read by format FeatureGroups (see below), not through BaseInputData.
-
-### Key Characteristics
-- **Data Loading Focus**: Primarily concerned with how to load data from various sources
-- **Feature Group Integration**: Used by feature groups through the `input_data()` method
-- **Inheritance-Based**: Concrete implementations inherit from BaseInputData
-- **Scope Management**: Supports both global and feature-specific data access scopes
-- **Non-format Usage**: Used by groups such as `DataCreator` and `ApiInputData` that are not format FeatureGroups
-
-### Use Cases
-- Reading files, documents and databases (through format FeatureGroups)
-- Connecting to databases
-- Creating synthetic/test data
-- Loading data from APIs
-- Managing data dependencies between features
-
-For detailed examples of these use cases, see the [data access documentation](access-feature-data.md).
-
-### Example Implementation
-```py
-from typing import Any
-
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
-
-class SyntheticFeature(FeatureGroup):
-    @classmethod
-    def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"synthetic"})
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return {"synthetic": [1, 2, 3]}
-```
-
-### Common Implementations
 - **Format FeatureGroups**: one FeatureGroup per source format, claiming features through `CLAIM_ROUTES` instead of `input_data()`:
     - `ReadFileFG` with `CsvFG`, `ParquetFG`, `JsonFG`, `FeatherFG`, `OrcFG` (see [access-feature-data](access-feature-data.md#global-scope-data-access))
     - `ReadDBFG` with `SqliteFG`
@@ -51,7 +15,7 @@ class SyntheticFeature(FeatureGroup):
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
 
-### Writing a format FeatureGroup
+## Writing a format FeatureGroup
 
 Subclass the base that fits your source and write only what it asks for. The base owns the matching: claim routes, source discovery, pointers, `data_access_handle`, `column_to_file`, per-run caching, ambiguity and missing-column errors, and the extender hook around the load.
 
@@ -86,7 +50,7 @@ A format group can also describe its data through `declared_attributes`, see [De
 
 A format group's own `PROPERTY_MAPPING` is merged over the base declarations: own keys win and base keys cannot be dropped. Class definition is checked: a `ClaimRoute` with a wrongly typed field, a file or document route whose `source_kind` is not `"file"` or `"folder"`, and `suffixes()` that does not return a non-empty tuple of non-empty strings all raise `TypeError`. A concrete group's `suffixes()` runs at class definition.
 
-Override `data_access_identity` to publish a richer identity than the default. Run the contract mixins in mloda's `tests/mixins/reader_feature_groups/` against your group; they pin the behavior every format group shares.
+A format group reports `match.source` as its `data_access_identity`; override it to publish a richer identity. Run the contract mixins in mloda's `tests/mixins/reader_feature_groups/` against your group; they pin the behavior every format group shares.
 
 CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib reader behind PythonDict follows it. Types are inferred per column: null tokens (pyarrow's default set, e.g. `NA`, `NaN`, `null`) become `None` in an int/float/bool column but stay literal text in a string column, a column of only empty cells and/or null tokens is all-`None`, and an int column with a value outside signed int64 range degrades entirely to float.
 
@@ -117,7 +81,7 @@ The matched pair lives on `Feature.input_data_match`, never in the options, and 
 
 ### Non-file sources such as HTTP
 
-Write a plain `FeatureGroup` that claims a feature only when it is pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`), under the pointed-only route of the format FeatureGroup matcher contract. `govdata` is the example. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
+Write a `FormatFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 
 ### Resolution of a pointed group vs feature-group resolution
 
@@ -160,14 +124,14 @@ Rules for format group authors:
 - Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature. Plain non-matches (wrong suffix, invalid credentials) stay silent.
 - Never raise to decline: a hook that raises anything but `OSError`, `ValueError` or `ImportError` from `column_names` (or an unmarked `NotImplementedError` where a base documents it) ends matching for that candidate. A raise marked with `escalate_match_abort` propagates. Record, then return a falsy value.
 - Recording outside an engine-opened window is a no-op, so groups stay usable standalone. In tests, use `collect_match_rejections` (see [Feature Group Matching](feature-group-matching.md)).
-- Recorded reasons are discarded at the enclosing candidate level: when the group ultimately matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.
+- Recorded reasons are discarded at the enclosing candidate level: when the group ultimately matches, or when the feature group matches by another rule. Only a decline surfaces them.
 - Name the group and the concrete source in the reason, as the example does. The first recording per owner wins, so a later reason under a name already used in the same window is dropped; only the missing-column summary replaces a reason the same group recorded during its own probe.
 - A `ReadFileFG` subclass whose `column_names` raises `NotImplementedError` is eliminated for every feature name. One that raises `ImportError` declines any name, with a recorded reason. A file pinned with `column_to_file` aborts with a missing-column message ("column ... is in none of the sources", or "could not list the columns of any of its sources" when none can list). A `ReadDocumentFG` subclass declines any name other than its three declared names.
 - In `ReadFileFG` matching, an unpinned file whose columns cannot be read (`OSError`, `ValueError`) is declined with a recorded reason, so a shipped file group needs the file to be readable when features resolve. A pinned or pointed file that cannot be read aborts with the missing-column error instead of falling back to another file.
 
 `ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically; a custom group only needs this for its own decline points.
 
-A veto recorded while the user explicitly addressed the group (an option key equal to its `data_access_name()`) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time. A content decline on that path gates the same way: if the addressed group records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. A pinned group is final: when it declines, neither another group nor the DataAccessCollection serves the feature. Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.
+A pinned group is final: when it declines, neither another group nor the DataAccessCollection serves the feature. Since group options forward to input features, a pointer on a derived feature binds its inputs too (see [Resolution errors](troubleshooting/feature-group-resolution-errors.md#pointers-on-derived-features)). A pinned group that matches nothing without a recorded reason is reported under its own name.
 
 ## MatchData Pattern
 
@@ -219,40 +183,14 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 
 ### Connection Forwarding
 - The connection value forwards to input features like any other option, including across a same-class chain (an upstream feature resolved by the same MatchData class as its consumer).
-- Both entry points (`global_scope_data_access` and `feature_scope_data_access`) mark the class-name key non-forwarded for pickling, without blocking normal option flow.
+- Both MatchData entry points (`global_scope_data_access` and `feature_scope_data_access`) mark the class-name key non-forwarded for pickling, without blocking normal option flow.
 - Pickling an `Options` with a marked key (multiprocessing preflight or a worker handoff) drops that key from the snapshot, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs even though the connection itself can't be pickled. In-process reads are unaffected.
 
-## Key Differences
-
-| Aspect | BaseInputData | MatchData |
-|--------|---------------|-----------|
-| **Primary Purpose** | Legacy data loading for non-format groups | Connection object matching for stateful frameworks |
-| **When Used** | Non-format feature groups that load data | Only feature groups requiring framework connection objects |
-| **Scope** | Legacy reader base (format FeatureGroups read files, documents, databases) | Specialized for stateful compute frameworks |
-| **Usage Pattern** | `input_data()` method in feature groups | Multiple inheritance: `FeatureGroup, MatchData` |
-| **Connection Dependency** | Works with or without connections | Specifically designed for connection objects |
-| **Framework Support** | All compute frameworks | Only stateful frameworks (DuckDB, database connections) |
-
-## How They Work Together
-
-BaseInputData and MatchData serve **different purposes** and are used in **different scenarios**:
-
-### BaseInputData Workflow
-1. **Feature groups** define their data loading strategy via `input_data()` method
-2. **BaseInputData implementations** handle the actual data loading
-3. Works with **all compute frameworks** (stateful and stateless)
-
-### MatchData Workflow (Connection-Specific)
-1. **Only used** when feature groups need **framework connection objects**
-2. **MatchData** determines which connection object to use for stateful frameworks
-3. **Only applies** to specific compute frameworks like DuckDB that require persistent connections
-
-### Combined Usage Example
+## Combined Usage Example
 ```py
 class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        # BaseInputData for general data loading
         return DataCreator({"analytics_input"})
 
     @classmethod
@@ -264,7 +202,6 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
             return framework_connection_object
         return None
 ```
-
 ## Practical Examples
 
 ### Scenario 1: Standard File Processing (Format FeatureGroup Only)
@@ -276,16 +213,16 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 Feature("id", options={"CsvFG": "data/people.csv"})
 ```
 
-### Scenario 2: DuckDB Analytics (BaseInputData + MatchData)
+### Scenario 2: DuckDB Analytics (DataCreator + MatchData)
 
 **Use Case**: Analytics with DuckDB requiring connection objects
-**Pattern**: Both BaseInputData and MatchData are needed
+**Pattern**: `DataCreator` supplies the data and MatchData matches the connection
 
 ```py
 class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"analytics_input"})  # BaseInputData for data creation
+        return DataCreator({"analytics_input"})
 
     @classmethod
     def match_data_access(cls, ...):
@@ -295,22 +232,22 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 
 For database connection patterns, see [Framework Connection Object](framework-connection-object.md).
 
-### Scenario 3: In-Memory Processing (BaseInputData Only)
+### Scenario 3: In-Memory Processing (DataCreator Only)
 
 **Use Case**: Creating synthetic data with Pandas
-**Pattern**: Only BaseInputData is needed
+**Pattern**: Only `DataCreator` is needed
 
 ```py
 class SyntheticDataFeature(FeatureGroup):
     @classmethod
     def input_data(cls) -> BaseInputData | None:
-        return DataCreator({"synthetic_data"})  # BaseInputData for data creation
+        return DataCreator({"synthetic_data"})
 ```
 
 ## Integration with Other Concepts
 
 ### Compute Frameworks
-- **BaseInputData**: Works with all compute frameworks
+- **Format FeatureGroups and `DataCreator`**: work with all compute frameworks
 - **MatchData**: Only works with stateful frameworks requiring connection objects
 
 For more information, see:
@@ -325,21 +262,20 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Best Practices
 
-### When to Use BaseInputData Only
+### When to Use Format FeatureGroups or DataCreator Only
 - Working with stateless compute frameworks (Pandas, PyArrow, Polars)
-- Runtime data injection and synthetic data (files and databases use format FeatureGroups)
-- mloda data injection
-- Synthetic data generation
+- Files, documents and databases (format FeatureGroups)
+- Runtime data injection (`ApiInputData`) and synthetic data (`DataCreator`)
 - Most standard data processing scenarios
 
-### When to Use BaseInputData + MatchData
+### When to Add MatchData
 - Working with stateful compute frameworks (DuckDB)
 - Database connections requiring persistent state
 - Connection pooling scenarios
 - When framework connection objects are required
 
 ### Design Considerations
-- **BaseInputData**: Focus on robust data loading, error handling, and performance
+- **Format FeatureGroups**: Focus on robust source discovery, error handling, and performance
 - **MatchData**: Focus on accurate connection matching and state management
 - **Integration**: Use MatchData only when framework connection objects are actually needed
 
@@ -353,20 +289,6 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Summary
 
-BaseInputData and MatchData serve **different and specialized roles** in mloda's data access architecture:
-
-- **BaseInputData** is the **legacy reader base** for non-format feature groups; format FeatureGroups are the reader path
-- **MatchData** is a **specialized pattern** for connection object matching - only used by feature groups that require framework connection objects
-
-**Key Understanding:**
-- **Non-format feature groups** that load data use BaseInputData
-- **MatchData is only needed** when working with stateful compute frameworks like DuckDB
-- **They are not alternatives** - they solve different problems in different contexts
-
-Understanding this distinction is crucial for:
-- Choosing the right pattern for your use case
-- Implementing feature groups correctly
-- Working with stateful vs stateless compute frameworks
-- Leveraging mloda's connection management capabilities
-
-This separation allows mloda to provide both data loading (BaseInputData) and specialized connection management (MatchData) while keeping the complexity contained to only those scenarios that actually need it.
+- **Format FeatureGroups** are the way mloda reads files, documents, databases and custom sources
+- **MatchData** is a specialized pattern for connection object matching, only used by feature groups that require framework connection objects
+- They are not alternatives: they solve different problems in different contexts

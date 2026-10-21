@@ -33,8 +33,8 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
-from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway feature group, one per default edge under test.
@@ -379,11 +379,7 @@ class TestOptionsWithDefaultsHonorsExplicitNone:
 
 
 class TestReadOption:
-    """FeatureGroup.read_option reads a declared key (defaults and bindings applied) and raises on an undeclared one.
-
-    Each test binds only results to locals (or builds the class inside ``pytest.raises``), so the throwaway
-    FeatureGroup stays a transient and the module's autouse no-leak guard still passes.
-    """
+    """FeatureGroup.read_option reads a declared key (defaults and bindings applied) and raises on an undeclared one."""
 
     @pytest.mark.parametrize("key", ["owd_typo", "in_features"])
     def test_undeclared_key_raises_naming_key_and_class(self, key: str) -> None:

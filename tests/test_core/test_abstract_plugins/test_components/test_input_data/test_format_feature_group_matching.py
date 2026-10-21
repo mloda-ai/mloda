@@ -186,23 +186,6 @@ class _ValueCheckedFG(ToyFormatFG):
     }
 
 
-class TestPointedGroupValueFailureIsNotADecline:
-    def test_later_value_failure_is_reported_not_a_source_decline(self) -> None:
-        feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: _BAD_VALUE}))
-        result = _identify(feature, None, _ValueCheckedFG)
-
-        assert result.identified == {}
-        elimination = result.eliminations[_ValueCheckedFG]
-        assert elimination.stage == "value_rejection"
-        assert f"'{_BAD_VALUE}' not found in mapping for '{_VALUE_KEY}'" in elimination.reason
-        assert "matched nothing" not in elimination.reason
-
-    def test_a_valid_value_still_claims(self) -> None:
-        feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: "good"}))
-
-        assert _claims(feature, None, _ValueCheckedFG)
-
-
 class _PlainRootColFG(FeatureGroup):
     """Plain root (non-format) group claiming COL by its own rules."""
 
@@ -219,9 +202,24 @@ class _PlainRootColFG(FeatureGroup):
         return data
 
 
-class TestPointedDeclineLetsAPlainRootGroupClaim:
+class TestPointedGroupValueFailureIsNotADecline:
+    def test_later_value_failure_is_reported_not_a_source_decline(self) -> None:
+        feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: _BAD_VALUE}))
+        result = _identify(feature, None, _ValueCheckedFG)
+
+        assert result.identified == {}
+        elimination = result.eliminations[_ValueCheckedFG]
+        assert elimination.stage == "value_rejection"
+        assert f"'{_BAD_VALUE}' not found in mapping for '{_VALUE_KEY}'" in elimination.reason
+        assert "matched nothing" not in elimination.reason
+
+    def test_a_valid_value_still_claims(self) -> None:
+        feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: "good"}))
+
+        assert _claims(feature, None, _ValueCheckedFG)
+
     def test_plain_root_group_wins_when_the_pointed_group_vetoes_a_value(self) -> None:
-        """Characterizes today's behavior (#2098): a pointed decline is not final."""
+        """A pointed decline is not final: a plain root group claiming the name wins."""
         options = Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: _BAD_VALUE})
         result = _identify(Feature(COL, options), None, _ValueCheckedFG, _PlainRootColFG)
 

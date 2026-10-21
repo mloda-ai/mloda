@@ -22,7 +22,11 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.match_cache import _RUN_MATCH_CACHE, run_match_cache
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
+from mloda.core.prepare.identify_feature_group import (
+    FeatureResolutionError,
+    IdentifyFeatureGroupClass,
+    resolve_or_raise,
+)
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, MatchRejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import FormatFeatureGroup, ReadDBFG
@@ -764,7 +768,7 @@ class TestQueryRoute:
 
     def test_a_group_without_the_route_aborts_pointed_on_query_text(self) -> None:
         feature = Feature("toy_a", options={"ToyBaseDB": {KEY: "a"}, "query_text": "SELECT 1"})
-        with pytest.raises(ValueError, match="query_text is set, but ToyBaseDB lists no query route"):
+        with pytest.raises(FeatureResolutionError, match="query_text is set, but ToyBaseDB lists no query route"):
             resolve_or_raise(feature, {ToyBaseDB: {PythonDictFramework}}, None, None)
         assert ToyBaseDB.created == []
 

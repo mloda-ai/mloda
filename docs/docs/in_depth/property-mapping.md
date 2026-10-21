@@ -74,7 +74,7 @@ does not understand can be absorbed silently.
 | --- | --- | --- | --- | --- |
 | Author time | `mypy --strict` | The field exists and its declared type fits: `strict_validaton=True` (typo), `strict_validation=1`, `allowed_values=5` | The constructor call | mypy error at the spec literal. Without mypy: an unknown field is a `TypeError`; a wrong type falls through to the row below |
 | Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation`, `framework_set` and `scalar_only` are real bools; the validators are callable; `element_validator` and `scalar_only` each imply strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules; `expected` is a non-empty str and needs a `match_guard` | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
-| Class definition (`FeatureGroup.__init_subclass__`) | Spec type | Every spec IS a `PropertySpec` | Every value in the mapping | `ValueError` naming the class and the key |
+| Class definition (`FeatureGroup.__init_subclass__`) | Mapping and spec type | The mapping is `None` or a Mapping (a format group's must be a Mapping, mixins included); every spec IS a `PropertySpec` | The mapping, then every value in it | `TypeError` naming the class for a non-mapping; `ValueError` naming the class and the key for a bad spec |
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`) |
@@ -87,7 +87,7 @@ does not understand can be absorbed silently.
 | Class definition (mixin) | Missing-`in_features` diagnostic | A dict `PROPERTY_MAPPING` declares no `in_features` key while `MIN_IN_FEATURES >= 1`, and the group inherits `input_features` and the matcher | The class | `logger.warning`, silenced by `MIN_IN_FEATURES = 0` or an `in_features` key |
 
 A spec is constructed inside the class body, so its own rules fire before the class exists.
-Class definition is left with exactly one rule: the type itself. Within `__post_init__` the
+Class definition is left with the type rules alone. Within `__post_init__` the
 declared-default check runs last, after the shape rules, because it calls the validators the
 shape rules just certified: a non-callable `element_validator` would otherwise be blamed on
 the default.

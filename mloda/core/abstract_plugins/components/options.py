@@ -78,13 +78,21 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any], leaf: Callable[[A
 
 
 def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
-    """Format group class keys normalize to data_access_name() so both documented key forms
-    (class object and class-name string) share one identity."""
+    """Format group class keys normalize to the class name, legacy reader class keys to
+    data_access_name(), so both documented key forms share one identity."""
     if not any(isinstance(k, type) for k in d):
         return d
-    return {
-        (k.data_access_name() if isinstance(k, type) and hasattr(k, "data_access_name") else k): v for k, v in d.items()
-    }
+    return {_normalize_class_key(k): v for k, v in d.items()}
+
+
+def _normalize_class_key(k: Any) -> Any:
+    if not isinstance(k, type):
+        return k
+    if hasattr(k, "pointer_keys"):
+        return k.__name__
+    if hasattr(k, "data_access_name"):
+        return k.data_access_name()
+    return k
 
 
 def _is_reader_tuple(value: Any) -> bool:

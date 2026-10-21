@@ -168,16 +168,66 @@ class TestRequiredOptionRoute:
         assert _claims(feature, toy_dac(h1={COL: [1]}), ToyRequiredOptionFG)
 
 
+class _ToyAliasFG(ToyFormatFG):
+    """Format group whose data_access_name() is an alias distinct from its class name."""
+
+    @classmethod
+    def data_access_name(cls) -> str:
+        return "toyfmt_alias"
+
+
+class TestAliasedGroupPointing:
+    @pytest.mark.parametrize(
+        ("key", "pointed"),
+        [("_ToyAliasFG", True), (_ToyAliasFG, True), ("toyfmt_alias", False)],
+        ids=["class_name_string", "class_object", "alias_string"],
+    )
+    def test_only_the_class_name_forms_point_an_aliasing_group(self, key: Any, pointed: bool) -> None:
+        feature = Feature(COL, Options({key: {COL: [1]}}))
+
+        assert _claims(feature, None, _ToyAliasFG) is pointed
+        assert _ToyAliasFG.is_pointed(COL, feature.options, None) is pointed
+
+
 class TestPointedButMissingAborts:
     def test_class_name_key_source_lacking_the_column_raises(self) -> None:
         feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
         message = str(exc_info.value)
         assert "ToyFormatFG" in message
         assert "scoped:toy" in message
         assert COL in message
         assert "other" in message
+        error = exc_info.value
+        assert isinstance(error, ValueError)
+        assert error.feature_name == COL
+        assert error.result.identified == {}
+        elimination = error.result.eliminations[ToyFormatFG]
+        assert elimination.stage == "input_data"
+        assert elimination.reason in message
+
+    def test_pointed_missing_column_through_run_all_raises_feature_resolution_error(self) -> None:
+        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        with pytest.raises(FeatureResolutionError, match="ToyFormatFG"):
+            mloda.run_all(
+                [feature],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=PluginCollector.enabled_feature_groups({ToyFormatFG}),
+            )
+
+    def test_pointed_missing_column_is_projected_by_diagnose(self) -> None:
+        feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
+        diagnosis = mloda.diagnose(
+            [feature],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyFormatFG}),
+        )
+        assert diagnosis.complete is False
+        assert diagnosis.feature_name == COL
+        assert diagnosis.message is not None
+        assert "ToyFormatFG" in diagnosis.message
+        assert "other" in diagnosis.message
 
     def test_handle_alone_narrows_but_does_not_escalate_a_missing_column(self) -> None:
         feature = Feature(COL, Options({"data_access_handle": "h1"}))
@@ -190,7 +240,7 @@ class TestPointedButMissingAborts:
         feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
         dac = toy_dac(h1={COL: [1]})
         assert _claims(Feature(COL), dac, ToyOtherFormatFG)
-        with pytest.raises(ValueError, match="ToyFormatFG"):
+        with pytest.raises(FeatureResolutionError, match="ToyFormatFG"):
             evaluate_or_raise(feature, _plugins(ToyFormatFG, ToyOtherFormatFG), None, dac)
 
 
@@ -386,7 +436,7 @@ class TestTwoPointedGroups:
 class TestPointedMissingColumnText:
     def test_fix_text_is_one_sentence_without_the_ambiguity_fix(self) -> None:
         feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
         message = str(exc_info.value)
         assert "column_to_file" not in message
@@ -395,7 +445,7 @@ class TestPointedMissingColumnText:
     def test_long_column_list_is_truncated_to_twenty_names(self) -> None:
         columns = {f"toyfmt_c{i:02d}": [i] for i in range(25)}
         feature = Feature(COL, Options({"ToyFormatFG": columns}))
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
         message = str(exc_info.value)
         assert "toyfmt_c00" in message
@@ -415,14 +465,14 @@ class TestBoundedScrubbedMissingColumnText:
 
     def test_pointed_column_names_are_scrubbed_before_they_are_listed(self) -> None:
         feature = Feature(COL, Options({"ToyFormatFG": {"token=toyfmt-secret-1234": [1]}}))
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
         assert "toyfmt-secret-1234" not in str(exc_info.value)
 
     def test_pointed_column_names_are_clipped(self) -> None:
         long_name = "toyfmt_long_" + "x" * 100
         feature = Feature(COL, Options({"ToyFormatFG": {long_name: [1]}}))
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(FeatureResolutionError) as exc_info:
             evaluate_or_raise(feature, _plugins(ToyFormatFG), None, None)
         assert long_name not in str(exc_info.value)
         assert long_name[:40] in str(exc_info.value)
@@ -608,12 +658,12 @@ class TestScopePointingRefinement:
 
     def test_concrete_ancestor_scope_still_points_and_aborts_on_missing_column(self) -> None:
         feature = Feature(COL, feature_group=ToyFormatFG)
-        with pytest.raises(ValueError, match="h1:toy"):
+        with pytest.raises(FeatureResolutionError, match="h1:toy"):
             evaluate_or_raise(feature, _plugins(ToyFormatSubFG), None, toy_dac(h1={"other": [1]}))
 
     def test_scope_naming_the_candidate_itself_points(self) -> None:
         feature = Feature(COL, feature_group=_MidLacksColumn)
-        with pytest.raises(ValueError, match="h1:toy"):
+        with pytest.raises(FeatureResolutionError, match="h1:toy"):
             evaluate_or_raise(feature, _plugins(_MidLacksColumn), None, toy_dac(h1={COL: [1]}))
 
 
@@ -683,7 +733,7 @@ class TestPointedGroupDefersToAComputingCandidate:
         self, name: str, groups: tuple[type, ...], dac: DataAccessCollection | None
     ) -> None:
         feature = Feature(name, Options({"ToyFormatFG": {COL: [1]}, "toyfmt_required": "yes"}))
-        with pytest.raises(ValueError, match=rf"column '{name}' is in none of the sources of ToyFormatFG"):
+        with pytest.raises(FeatureResolutionError, match=rf"column '{name}' is in none of the sources of ToyFormatFG"):
             evaluate_or_raise(feature, _plugins(*groups), None, dac)
 
     def test_computing_candidate_eliminated_later_still_counts_as_computed(self) -> None:
@@ -701,7 +751,9 @@ class TestPointedGroupDefersToAComputingCandidate:
 
     def test_pointed_reader_aborts_when_the_other_claimant_input_features_raises(self) -> None:
         feature = Feature("toyfmt_typo_probe", Options({"ToyFormatFG": {COL: [1]}}))
-        with pytest.raises(ValueError, match="column 'toyfmt_typo_probe' is in none of the sources of ToyFormatFG"):
+        with pytest.raises(
+            FeatureResolutionError, match="column 'toyfmt_typo_probe' is in none of the sources of ToyFormatFG"
+        ):
             evaluate_or_raise(feature, _plugins(ToyFormatFG, _RaisingInputsFG), None, None)
 
     def test_strictness_holds_per_deferring_group_despite_another_groups_takeover(self) -> None:
@@ -713,7 +765,7 @@ class TestPointedGroupDefersToAComputingCandidate:
             _TakeoverChildFG: {PyArrowTable},
             _ComputingColFG: {_ToyUnservedFramework},
         }
-        with pytest.raises(ValueError, match="is in none of the sources of ToyOtherFormatFG"):
+        with pytest.raises(FeatureResolutionError, match="is in none of the sources of ToyOtherFormatFG"):
             evaluate_or_raise(feature, plugins, None, None)
 
     def test_pointed_parent_defers_to_its_surviving_subclass(self) -> None:

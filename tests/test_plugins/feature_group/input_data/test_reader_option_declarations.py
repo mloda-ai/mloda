@@ -204,10 +204,15 @@ def _extra_spec() -> PropertySpec:
 
 
 class TestOwnPropertyMappingIsMergedOverTheBase:
-    def test_a_plain_mixin_first_in_the_bases_keeps_the_mixin_and_base_keys(self) -> None:
+    @pytest.mark.parametrize("own_mapping", [True, False])
+    def test_a_plain_mixin_first_in_the_bases_keeps_the_mixin_and_base_keys(self, own_mapping: bool) -> None:
         mixin: Any = type("RodMixin", (), {"PROPERTY_MAPPING": {"mixin_key": _extra_spec()}})
-        child: Any = type("RodMixinFG", (mixin, ReadFileFG), {"PROPERTY_MAPPING": {"own_key": _extra_spec()}})
-        assert child.declared_option_keys() == {"mixin_key", "own_key", "data_access_handle", "document_suffixes"}
+        body: dict[str, Any] = {"PROPERTY_MAPPING": {"own_key": _extra_spec()}} if own_mapping else {}
+        child: Any = type("RodMixinFG", (mixin, ReadFileFG), body)
+        expected = {"mixin_key", "data_access_handle", "document_suffixes"} | ({"own_key"} if own_mapping else set())
+        assert child.declared_option_keys() == expected
+        assert not child.passes_option_declarations(Options(context={"data_access_handle": 5}))
+        assert child.passes_option_declarations(Options(context={"data_access_handle": "h"}))
 
     @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG, ReadDBFG])
     def test_an_own_extra_key_keeps_every_base_key(self, base: Any) -> None:
@@ -220,6 +225,17 @@ class TestOwnPropertyMappingIsMergedOverTheBase:
         own = _extra_spec()
         child: Any = type("RodOverrideKeyFG", (base,), {"PROPERTY_MAPPING": {"data_access_handle": own}})
         assert child.PROPERTY_MAPPING["data_access_handle"] is own
+
+    @pytest.mark.parametrize("own_mapping", [True, False])
+    def test_a_diamond_takes_each_key_from_the_first_class_in_the_mro_that_declares_it(self, own_mapping: bool) -> None:
+        own = _extra_spec()
+        a: Any = type("RodDiamondA", (ReadFileFG,), {"PROPERTY_MAPPING": {"a_key": _extra_spec()}})
+        b: Any = type("RodDiamondB", (ReadFileFG,), {"PROPERTY_MAPPING": {"data_access_handle": own}})
+        body: dict[str, Any] = {"PROPERTY_MAPPING": {"c_key": _extra_spec()}} if own_mapping else {}
+        c: Any = type("RodDiamondC", (a, b), body)
+        assert c.PROPERTY_MAPPING["data_access_handle"] is own
+        assert {"a_key"} | ReadFileFG.declared_option_keys() <= c.declared_option_keys()
+        assert ("c_key" in c.declared_option_keys()) == own_mapping
 
     def test_the_inherited_handle_check_still_rejects_a_non_str_handle(self) -> None:
         child: Any = type("RodHandleCheckFG", (ReadFileFG,), {"PROPERTY_MAPPING": {"rod_extra": _extra_spec()}})
@@ -236,3 +252,25 @@ class TestOwnPropertyMappingIsMergedOverTheBase:
         assert parent.PROPERTY_MAPPING["query_text"] is custom
         assert child.PROPERTY_MAPPING["query_text"] is custom
         assert child.declared_option_keys() == parent.declared_option_keys() | {"rod_extra"}
+
+
+class TestFormatGroupPropertyMappingMustBeAMappingOfSpecs:
+    @pytest.mark.parametrize("bad", [None, ["k"]], ids=["none", "list"])
+    @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG, ReadDBFG])
+    def test_a_non_mapping_own_value_raises_a_type_error_naming_the_class(self, base: Any, bad: Any) -> None:
+        with pytest.raises(TypeError, match="RodBadMappingFG.*PROPERTY_MAPPING must be a mapping of PropertySpec"):
+            type("RodBadMappingFG", (base,), {"PROPERTY_MAPPING": bad})
+
+    @pytest.mark.parametrize("base", [ReadFileFG, ReadDocumentFG, ReadDBFG])
+    def test_a_non_mapping_mixin_value_raises_a_type_error_naming_the_defined_class(self, base: Any) -> None:
+        mixin: Any = type("RodListMixin", (), {"PROPERTY_MAPPING": ["k"]})
+        with pytest.raises(TypeError, match="RodListMixinFG.*PROPERTY_MAPPING must be a mapping of PropertySpec"):
+            type("RodListMixinFG", (mixin, base), {})
+
+    @pytest.mark.parametrize("own", [False, True], ids=["no_own_mapping", "own_mapping"])
+    def test_a_mixin_with_a_none_mapping_is_not_an_error_and_keeps_the_base_keys(self, own: bool) -> None:
+        mixin: Any = type("RodNoneMixin", (), {"PROPERTY_MAPPING": None})
+        body: dict[str, Any] = {"PROPERTY_MAPPING": {"own_key": _extra_spec()}} if own else {}
+        child: Any = type("RodNoneMixinFG", (mixin, ReadFileFG), body)
+        expected = ReadFileFG.declared_option_keys() | ({"own_key"} if own else set())
+        assert child.declared_option_keys() == expected

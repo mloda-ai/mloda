@@ -4,8 +4,11 @@ from typing import Any
 
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
+from mloda.provider import FormatFeatureGroup
 from mloda.user import Credential, Feature, Options
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
 
@@ -642,3 +645,33 @@ class TestOptionsWithCredentialValues:
         text = str(options)
         assert "cred_marker_q7" not in text
         assert "BaseInputData" in text
+
+
+class TestOptionsClassKeyNormalization:
+    def test_format_group_class_key_normalizes_to_its_class_name_not_its_alias(self) -> None:
+        aliased: Any = type(
+            "_ToyfmtAliasKeyFG", (ToyFormatBase,), {"data_access_name": classmethod(lambda cls: "toyfmt_k")}
+        )
+
+        options = Options({aliased: {"x": 1}})
+
+        assert "_ToyfmtAliasKeyFG" in options.group
+        assert "toyfmt_k" not in options.group
+        del aliased
+
+    def test_the_abstract_format_group_base_class_is_a_valid_key(self) -> None:
+        key: Any = FormatFeatureGroup
+        options = Options({key: {"x": 1}})
+
+        assert "FormatFeatureGroup" in options.group
+
+    def test_legacy_reader_class_key_still_normalizes_to_data_access_name(self) -> None:
+        reader: Any = type(
+            "_ToyfmtLegacyReader", (ApiInputData,), {"data_access_name": classmethod(lambda cls: "toyfmt_l")}
+        )
+
+        options = Options({reader: {"x": 1}})
+
+        assert "toyfmt_l" in options.group
+        assert "_ToyfmtLegacyReader" not in options.group
+        del reader

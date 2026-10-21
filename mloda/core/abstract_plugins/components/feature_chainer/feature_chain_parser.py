@@ -277,6 +277,10 @@ class FeatureChainParser:
         shared with the match-time entry points."""
         if property_mapping is None:
             return
+        if not isinstance(property_mapping, Mapping):
+            raise TypeError(
+                f"{owner_name}.PROPERTY_MAPPING must be a mapping of PropertySpec, got {type(property_mapping).__name__}."
+            )
 
         for key, spec in property_mapping.items():
             cls._require_spec(owner_name, key, spec)

@@ -89,7 +89,7 @@ def _normalize_class_key(k: Any) -> Any:
     if not isinstance(k, type):
         return k
     if hasattr(k, "pointer_keys"):
-        return k.pointer_keys()[0]
+        return k.__name__
     if hasattr(k, "data_access_name"):
         return k.data_access_name()
     return k

@@ -110,6 +110,7 @@ class FormatFeatureGroup(FeatureGroup):
     """A FeatureGroup that claims features of one source format through its CLAIM_ROUTES."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = ()
+    _DECLARED_PROPERTY_MAPPING: ClassVar[Mapping[Any, Any] | None] = None  # raw own declaration, pre-merge
 
     @classmethod
     def _merge_property_mapping(cls) -> None:
@@ -121,9 +122,20 @@ class FormatFeatureGroup(FeatureGroup):
             )
         merged: dict[Any, Any] = {}
         for klass in reversed(cls.__mro__):
-            mapping = klass.__dict__.get("PROPERTY_MAPPING")
-            if isinstance(mapping, Mapping):
-                merged.update(mapping)
+            if klass is cls and has_own:
+                mapping = own
+            elif "_DECLARED_PROPERTY_MAPPING" in klass.__dict__:
+                mapping = klass.__dict__["_DECLARED_PROPERTY_MAPPING"]
+            else:
+                mapping = klass.__dict__.get("PROPERTY_MAPPING")
+            if mapping is None:
+                continue
+            if not isinstance(mapping, Mapping):
+                raise TypeError(
+                    f"{cls.__name__}.PROPERTY_MAPPING must be a mapping of PropertySpec, got {type(mapping).__name__}."
+                )
+            merged.update(mapping)
+        cls._DECLARED_PROPERTY_MAPPING = own if has_own else None
         if has_own or (merged and merged != cls.PROPERTY_MAPPING):
             cls.PROPERTY_MAPPING = merged
 

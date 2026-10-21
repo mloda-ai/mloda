@@ -239,10 +239,10 @@ Fix it with one of:
 
 ### Column missing from every source
 
-The group owns sources but none has the column. Unpointed, this is a decline recorded in the near-miss block; once the feature is pointed at the group (by a pointer or `feature_group=`), it aborts:
+The group owns sources but none has the column. Unpointed, this is a decline recorded in the near-miss block; once the feature is pointed at the group (by a pointer or `feature_group=`), it aborts. Every pointed decline (a missing column, a source refused at `INPUT_DATA_MATCH`, a pointed `query_text` without a query route) raises `FeatureResolutionError` with the group's reason, its `result.eliminations` holding the group under stage `input_data`:
 
 ```text
-ValueError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; did you mean 'id'?; request a column a source has or point at another source.
+FeatureResolutionError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; did you mean 'id'?; request a column a source has or point at another source.
 ```
 
 Check the spelling, request a column a source has, or point at the source that has it. Columns and a close-match suggestion appear only when the group was pointed or a `data_access_handle` narrows the search; otherwise only the sources are named, and a database is named by its identity only, once, without its table names. At most five sources are described, then "and N more". A source whose columns cannot be read shows `<source>: <reason>`. If no source can list its columns, the message says so. A folder entry that links outside its folder is skipped; add it as a files handle or point at it.

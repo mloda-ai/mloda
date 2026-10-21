@@ -234,6 +234,7 @@ class IdentifyFeatureGroupClass:
     _input_data_matches: dict[type[FeatureGroup], tuple[DataAccessReader, Any]]
     _open_claims: set[type[FeatureGroup]]
     _reported_pins: set[str]
+    _partial_records: Sequence[ResolutionRecord]
 
     def __init__(self, data_access_collection: DataAccessCollection | None = None) -> None:
         self._criteria_matched_feature_groups = set()
@@ -257,6 +258,7 @@ class IdentifyFeatureGroupClass:
         self._input_data_matches = {}
         self._open_claims = set()
         self._reported_pins = set()
+        self._partial_records = ()
         self._data_access_collection = data_access_collection
 
     @classmethod
@@ -281,6 +283,7 @@ class IdentifyFeatureGroupClass:
         data_access_collection: DataAccessCollection | None = None,
         *,
         excluded: Mapping[type[FeatureGroup], str] | None = None,
+        partial_records: Sequence[ResolutionRecord] = (),
     ) -> tuple[EvaluationResult, tuple[Exception, ...]]:
         """evaluate plus the extender refusals of the refused candidates, kept out of the result."""
         refusals: tuple[Exception, ...] = ()
@@ -289,6 +292,7 @@ class IdentifyFeatureGroupClass:
         validate_single_framework_pin(feature)
         validate_format_pointers(feature, accessible_plugins, excluded, data_access_collection)
         self = cls(data_access_collection)
+        self._partial_records = partial_records
         try:
             identified = self._filter_loop(feature, accessible_plugins, links, data_access_collection)
             # A single survivor means every dropped candidate is its ancestor (issubclass is transitive).
@@ -807,7 +811,23 @@ class IdentifyFeatureGroupClass:
         ]
         for fg in remaining:
             if not computing or any(not issubclass(survivor, fg) for survivor in reading):
-                raise escalate_match_abort(self._deferred_aborts[fg])
+                abort = self._deferred_aborts[fg]
+                refusal = abort.__cause__
+                raise escalate_match_abort(
+                    FeatureResolutionError(
+                        safe_exc_str(abort),
+                        str(feature.name),
+                        EvaluationResult(
+                            identified={},
+                            criteria_matched=self._criteria_matched_feature_groups,
+                            abstract_matched=self._abstract_matched_feature_groups,
+                            candidate_frameworks=self._candidate_frameworks,
+                            eliminations=self._eliminations,
+                        ),
+                        partial_records=self._partial_records,
+                        refusals=(refusal,) if isinstance(refusal, Exception) else (),
+                    )
+                )
 
     def _computing_groups(
         self, feature: Feature, excluding: frozenset[type[FeatureGroup]] = frozenset()
@@ -1074,7 +1094,7 @@ def resolve_or_raise(
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed FeatureResolutionError on failure."""
     result, refusals = IdentifyFeatureGroupClass._evaluate(
-        feature, accessible_plugins, links, data_access_collection, excluded=excluded
+        feature, accessible_plugins, links, data_access_collection, excluded=excluded, partial_records=partial_records
     )
     message = render_resolution_failure(result, feature)
     if message is not None:

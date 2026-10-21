@@ -314,9 +314,9 @@ def _plan(
 
 
 def _refusal_error(kind: _Kind, scope: str) -> tuple[type[Exception], str]:
-    """A refused pointed format group aborts the match (a ValueError); everything else fails resolution."""
+    """A refused pointed format group and every other refusal fail resolution."""
     if kind.is_format and scope == "pinned":
-        return ValueError, _REFUSED
+        return FeatureResolutionError, _REFUSED
     return FeatureResolutionError, "no clearance"
 
 

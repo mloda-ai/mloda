@@ -412,3 +412,43 @@ class TestSqliteMergeEngineMultiIndex(MultiIndexMergeEngineTestBase):
             self._connection = sqlite3.connect(":memory:")
             self._connection.create_function("REGEXP", 2, _regexp)
         return self._connection
+
+
+class TestSqliteUnionResultTypes:
+    def test_typeless_column_on_one_side_stays_string_with_zero_rows(self, connection: sqlite3.Connection) -> None:
+        connection.execute("CREATE TABLE lhs (idx INTEGER, loose)")
+        connection.execute("CREATE TABLE rhs (idx INTEGER, other TEXT)")
+        engine = SqliteMergeEngine(connection)
+        index = Index(("idx",))
+        result = engine.merge_union(SqliteRelation(connection, "lhs"), SqliteRelation(connection, "rhs"), index, index)
+        by_name = dict(zip(result.columns, result.types, strict=True))
+        arrow = result.to_arrow_table()
+        assert by_name["loose"] == pa.string()
+        assert arrow.schema.field("loose").type == pa.string()
+        assert arrow.num_rows == 0
+
+    @pytest.mark.parametrize("integer_first", [True, False], ids=["integer_first", "text_first"])
+    def test_integer_against_text_column_is_string_in_both_side_orders(
+        self, connection: sqlite3.Connection, integer_first: bool
+    ) -> None:
+        connection.execute("CREATE TABLE ints (idx INTEGER, mixed INTEGER)")
+        connection.execute("CREATE TABLE texts (idx INTEGER, mixed TEXT)")
+        engine = SqliteMergeEngine(connection)
+        index = Index(("idx",))
+        ints, texts = SqliteRelation(connection, "ints"), SqliteRelation(connection, "texts")
+        left, right = (ints, texts) if integer_first else (texts, ints)
+        result = engine.merge_union(left, right, index, index)
+        by_name = dict(zip(result.columns, result.types, strict=True))
+        arrow = result.to_arrow_table()
+        assert by_name["mixed"] == pa.string()
+        assert arrow.schema.field("mixed").type == pa.string()
+        assert arrow.num_rows == 0
+
+    def test_hinted_int_float_and_string_columns_keep_their_types(
+        self, connection: sqlite3.Connection, index_obj: Index
+    ) -> None:
+        left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1], "v": [1.5]}))
+        right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [2], "w": ["a"]}))
+        result = SqliteMergeEngine(connection).merge_union(left, right, index_obj, index_obj)
+        by_name = dict(zip(result.columns, result.types, strict=True))
+        assert by_name == {"idx": pa.int64(), "v": pa.float64(), "w": pa.string()}

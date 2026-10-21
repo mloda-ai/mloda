@@ -17,7 +17,11 @@ from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     pick_helper_column_name,
     quote_ident,
 )
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation, _next_table_name
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
+    SqliteRelation,
+    _compatible_arrow_type,
+    _next_table_name,
+)
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sample import sample_string_values
 
 try:
@@ -37,7 +41,25 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         left_ref = quote_ident(left_data.table_name)
         right_ref = quote_ident(right_data.table_name)
         sql = f" SELECT {left_proj} FROM {left_ref} {union_keyword} SELECT {right_proj} FROM {right_ref} "  # nosec
-        return self._execute_sql(sql)
+        left_types = dict(zip(left_data.columns, left_data._affinity_types(), strict=True))
+        right_types = dict(zip(right_data.columns, right_data._affinity_types(), strict=True))
+        fallback = [
+            self._union_column_type(left_types[c], right_types[c])
+            if c in left_types and c in right_types
+            else (left_types[c] if c in left_types else right_types[c])
+            for c in sorted(set(left_types) | set(right_types))
+        ]
+        return self._execute_sql(sql, fallback_types=fallback)
+
+    @staticmethod
+    def _union_column_type(left: pa.DataType | None, right: pa.DataType | None) -> pa.DataType | None:
+        """Equal types keep the type, an int/float mix widens, any other mix is string (side-order independent)."""
+        if left is None or right is None or left == right:
+            return _compatible_arrow_type(left, right)
+        numeric = (pa.types.is_integer, pa.types.is_floating)
+        if any(f(left) for f in numeric) and any(f(right) for f in numeric):
+            return _compatible_arrow_type(left, right)
+        return pa.string()
 
     def merge_asof(
         self,
@@ -108,7 +130,10 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
             f"LEFT JOIN {right_ref} AS R ON {on_clause}"
             f") WHERE {rn} = 1"
         )
-        return self._execute_sql(sql)
+        left_types = dict(zip(left_data.columns, left_data._affinity_types()))
+        right_types = dict(zip(right_data.columns, right_data._affinity_types()))
+        fallback = [left_types[c] for c in left_cols] + [right_types[c] for c in right_extra]
+        return self._execute_sql(sql, fallback_types=fallback)
 
     def validate_asof_time_columns(
         self, left_data: Any, right_data: Any, asof_config: AsOfJoinConfig
@@ -169,13 +194,19 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         types = [pa.float64() if c == column else t for c, t in zip(data.columns, data.types)]
         return self._execute_sql(f"SELECT {projection} FROM {table_ref}", types=types)  # nosec
 
-    def _execute_sql(self, sql: str, types: Sequence[pa.DataType | None] | None = None) -> Any:
+    def _execute_sql(
+        self,
+        sql: str,
+        types: Sequence[pa.DataType | None] | None = None,
+        *,
+        fallback_types: Sequence[pa.DataType] | None = None,
+    ) -> Any:
         if self.framework_connection is None:
             raise ValueError("Framework connection is not set.")
         conn: sqlite3.Connection = self.framework_connection
         new_table = _next_table_name()
         conn.execute(f"CREATE TEMP VIEW {quote_ident(new_table)} AS {sql}")  # nosec
-        return SqliteRelation(conn, new_table, _is_view=True, _types=types)
+        return SqliteRelation(conn, new_table, _is_view=True, _types=types, _fallback_types=fallback_types)
 
     def _set_alias(self, data: Any, alias: str) -> Any:
         return data.set_alias(alias)

@@ -152,6 +152,16 @@ def test_every_imported_key_keeps_its_own_category() -> None:
     assert UFD_CONTEXT_KEY not in unified.group, f"a context key must not leak into group: {unified!s}"
 
 
+def test_a_key_the_host_name_binds_is_not_copied_into_the_filter_feature() -> None:
+    """A name-bound value belongs to the host's name, not to a shared configuration; other keys still flow."""
+    host = Options(context={UFD_CONTEXT_KEY: "q", UFD_GROUP_KEY: UFD_HOST_VALUE})
+
+    unified = GlobalFilter().unify_options(host, Options(), frozenset({UFD_CONTEXT_KEY}))
+
+    assert UFD_CONTEXT_KEY not in unified, f"a name-bound key must not be copied: {unified!s}"
+    assert unified.get(UFD_GROUP_KEY) == UFD_HOST_VALUE, f"other host keys must still flow: {unified!s}"
+
+
 def test_a_non_forwarded_marked_key_propagates_its_mark_onto_filter_options() -> None:
     """A key both in feat_options.group and feat_options.non_forwarded_group_keys must, once copied
     into filter_options, also mark that key non-forwarded on filter_options."""

@@ -34,6 +34,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import DataCreator, PropertySpec
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_source_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway probes; the mdb_ prefix keeps them unique to this module.
@@ -160,6 +161,37 @@ def _make_unit_no_defaults_fg() -> type[FeatureGroup]:
     return MdbUnitNoDefaultsFeatureGroup
 
 
+MDB_FIRST = "mdb_first"
+MDB_SECOND = "mdb_second"
+
+
+def _make_two_keys_fg(with_defaults: bool, seen: dict[str, Any]) -> type[FeatureGroup]:
+    return make_name_bound_fg(
+        "Mdb",
+        __name__,
+        "mdbop",
+        (MDB_FIRST, MDB_SECOND),
+        defaults={MDB_FIRST: "a", MDB_SECOND: "a"} if with_defaults else None,
+        seen=seen,
+        input_column="mdb_src",
+    )
+
+
+def _run_two_keys(
+    with_defaults: bool, name: str, options: Options | None = None, extender: Extender | None = None
+) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
+    fg = _make_two_keys_fg(with_defaults, seen)
+    source = make_source_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+    mloda.run_all(
+        [Feature(name, options if options is not None else Options())],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+        function_extender={extender} if extender is not None else None,
+    )
+    return seen
+
+
 def _single_row(frame: Any, column: str) -> Any:
     """Extract the single payload row, tolerant of columnar dict or list-of-row-dicts results."""
     if isinstance(frame, dict):
@@ -224,6 +256,34 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         assert observed["sibling"] == SIBLING_DEFAULT, f"sibling default not materialized: {observed!r}"
         assert observed["en"] is None, f"opted-in explicit None was overwritten by the default: {observed!r}"
 
+    @pytest.mark.parametrize("with_defaults", [True, False], ids=["declared_defaults", "no_defaults"])
+    def test_name_bound_values_reach_calculate_feature(self, with_defaults: bool) -> None:
+        name = "mdb_src__mdbop_q_b"
+        seen = _run_two_keys(with_defaults, name)
+        assert seen[name] == ("q", "b")
+
+    @pytest.mark.parametrize("with_defaults", [True, False], ids=["declared_defaults", "no_defaults"])
+    def test_name_only_twin_and_agreeing_context_twin_merge_into_one_feature(self, with_defaults: bool) -> None:
+        name = "mdb_src__mdbop_q_b"
+        seen: dict[str, Any] = {}
+        fg = _make_two_keys_fg(with_defaults, seen)
+        source = make_source_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+        results = mloda.run_all(
+            [Feature(name), Feature(name, Options(context={MDB_FIRST: "q"}))],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+        )
+        assert len(results) == 1
+        frame = results[0]
+        columns = list(frame.keys()) if isinstance(frame, dict) else list(frame[0].keys())
+        assert columns == [name]
+        assert seen[name] == ("q", "b")
+
+    def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
+        name = "mdb_src__mdbop_q_b"
+        seen = _run_two_keys(True, name, Options(context={MDB_FIRST: "q"}))
+        assert seen[name] == ("q", "b")
+
 
 class _CapturingExtender(Extender):
     """Captures the ``features`` argument flowing through FEATURE_GROUP_CALCULATE_FEATURE."""
@@ -262,6 +322,16 @@ class TestExtenderPathObservesMaterializedOptions:
         assert observed_ctx == [CTX_DEFAULT], f"extender saw pre-default context options: {observed_ctx!r}"
         assert observed_grp == [GRP_DEFAULT], f"extender saw pre-default group options: {observed_grp!r}"
 
+    @pytest.mark.parametrize("with_defaults", [True, False], ids=["declared_defaults", "no_defaults"])
+    def test_extender_sees_name_bound_values(self, with_defaults: bool) -> None:
+        extender = _CapturingExtender()
+        name = "mdb_src__mdbop_q_b"
+        _run_two_keys(with_defaults, name, extender=extender)
+        observed = [
+            (f.options.get(MDB_FIRST), f.options.get(MDB_SECOND)) for c in extender.captured for f in c.features
+        ]
+        assert ("q", "b") in observed
+
 
 class TestFeatureSetMaterializeOptionDefaults:
     """Unit contract of FeatureSet.materialize_option_defaults (RED: the method does not exist yet)."""
@@ -297,6 +367,68 @@ class TestFeatureSetMaterializeOptionDefaults:
         assert feature_a.options is feature_b.options, "aliased Options diverged during materialization"
         assert feature_a.options.get(MDB_GRP_KEY) == GRP_DEFAULT
         assert feature_a.options is not shared, "the fill must rebind to a new Options, not mutate in place"
+
+    def test_bound_values_fill_context_ahead_of_defaults(self) -> None:
+        feature = Feature("mdb_src__mdbop_q_b")
+        feature_set = FeatureSet([feature])
+        hash_before = hash(feature)
+
+        feature_set.materialize_option_defaults(_make_two_keys_fg(True, {}))
+
+        assert feature.options.context.get(MDB_FIRST) == "q"
+        assert feature.options.context.get(MDB_SECOND) == "b"
+        assert MDB_FIRST not in feature.options.group
+        assert hash(feature) == hash_before
+
+    def test_shared_options_with_different_names_each_get_own_bindings(self) -> None:
+        shared = Options()
+        feature_a = Feature("mdb_src__mdbop_q_b", shared)
+        feature_b = Feature("mdb_src__mdbop_r_c", shared)
+        feature_set = FeatureSet([feature_a, feature_b])
+
+        feature_set.materialize_option_defaults(_make_two_keys_fg(True, {}))
+
+        assert (feature_a.options.get(MDB_FIRST), feature_a.options.get(MDB_SECOND)) == ("q", "b")
+        assert (feature_b.options.get(MDB_FIRST), feature_b.options.get(MDB_SECOND)) == ("r", "c")
+
+    def test_feature_set_options_hold_no_bound_value_and_no_default_for_bound_keys_when_aliasing_features_disagree(
+        self,
+    ) -> None:
+        shared = Options()
+        feature_set = FeatureSet([Feature("mdb_src__mdbop_q_b", shared), Feature("mdb_src__mdbop_r_c", shared)])
+
+        feature_set.materialize_option_defaults(_make_two_keys_fg(True, {}))
+
+        assert feature_set.options is not None
+        assert MDB_FIRST not in feature_set.options.context
+        assert MDB_FIRST not in feature_set.options.group
+        assert MDB_SECOND not in feature_set.options.context
+        assert MDB_SECOND not in feature_set.options.group
+
+    def test_intake_filled_bound_values_keep_the_declared_input_feature_memo(self) -> None:
+        feature = Feature("mdb_src__mdbop_q_b", Options(context={MDB_FIRST: "q", MDB_SECOND: "b"}))
+        feature_set = FeatureSet([feature])
+        # A set-level Options that never saw the fill (aliasing features disagreed before intake).
+        feature_set.options = Options()
+        feature_set.declared_input_features_resolved = True
+        feature_set.declared_input_feature_names = frozenset({"mdb_src"})
+
+        feature_set.materialize_option_defaults(_make_two_keys_fg(True, {}))
+
+        assert feature_set.declared_input_features_resolved is True
+        assert feature_set.declared_input_feature_names == frozenset({"mdb_src"})
+
+    def test_unbound_names_keep_aliasing_and_defaults(self) -> None:
+        shared = Options()
+        feature_a = Feature("mdb_plain_a", shared)
+        feature_b = Feature("mdb_plain_b", shared)
+        feature_set = FeatureSet([feature_a, feature_b])
+
+        feature_set.materialize_option_defaults(_make_two_keys_fg(True, {}))
+
+        assert feature_a.options is feature_b.options
+        assert feature_a.options.get(MDB_FIRST) == "a"
+        assert feature_set.options is feature_a.options
 
     def test_no_concrete_defaults_is_identity_noop(self) -> None:
         """A feature group without concrete defaults leaves every Options object identical (is)."""

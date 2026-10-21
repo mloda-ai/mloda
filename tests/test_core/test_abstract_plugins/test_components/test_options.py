@@ -521,10 +521,11 @@ class TestOptionsGetInFeaturesFalsyValue:
         assert "DefaultOptionKeys" not in message, message
 
     @pytest.mark.parametrize("falsy", ["", 0, {}], ids=["empty_str", "zero_int", "empty_dict"])
-    def test_present_falsy_value_message_shows_the_value(self, falsy: Any) -> None:
-        """The falsy-value message carries the offending value, which the absent-key message cannot."""
+    def test_present_falsy_value_message_names_the_type_not_the_value(self, falsy: Any) -> None:
+        """The falsy-value message describes the value by type and never prints its repr."""
         message = self._message(Options(context={IN_FEATURES: falsy}))
-        assert repr(falsy) in message, message
+        assert type(falsy).__name__ in message, message
+        assert f"is set to {falsy!r}" not in message, message
 
     @pytest.mark.parametrize("falsy", ["", 0, {}], ids=["empty_str", "zero_int", "empty_dict"])
     def test_present_falsy_value_message_differs_from_absent_key_message(self, falsy: Any) -> None:
@@ -533,12 +534,13 @@ class TestOptionsGetInFeaturesFalsyValue:
         present = self._message(Options(context={IN_FEATURES: falsy}))
         assert present != absent, present
 
-    def test_falsy_value_in_group_is_reported_the_same_way(self) -> None:
+    def test_falsy_value_in_group_is_described_by_type_not_value(self) -> None:
         """The distinction holds for a group key too, not only a context key."""
         message = self._message(Options(group={IN_FEATURES: ""}))
         assert f"'{IN_FEATURES}'" in message, message
         assert "DefaultOptionKeys" not in message, message
-        assert repr("") in message, message
+        assert "is set to a falsy str" in message, message
+        assert f"is set to {''!r}" not in message, message
 
 
 class TestOptionsGetInFeaturesUnresolvableTruthyValue:
@@ -549,11 +551,14 @@ class TestOptionsGetInFeaturesUnresolvableTruthyValue:
             Options(context={IN_FEATURES: value}).get_in_features()
         return str(excinfo.value)
 
-    @pytest.mark.parametrize("value", [5, {"a": 1}], ids=["int", "dict"])
-    def test_unsupported_type_message_shows_the_value(self, value: Any) -> None:
-        """The unsupported-type message carries the offending value, not only its type."""
+    @pytest.mark.parametrize("value", [424242, {"token": "sk-secret-9"}], ids=["int", "dict"])  # nosec B105
+    def test_unsupported_type_message_names_the_type_not_the_value(self, value: Any) -> None:
+        """The unsupported-type message describes the value by type and never prints it."""
         message = self._message(value)
-        assert repr(value) in message, message
+        assert type(value).__name__ in message, message
+        assert repr(value) not in message, message
+        assert "424242" not in message, message
+        assert "sk-secret-9" not in message, message
 
     @pytest.mark.parametrize("value", [5, {"a": 1}], ids=["int", "dict"])
     def test_unsupported_type_message_still_shows_the_type(self, value: Any) -> None:

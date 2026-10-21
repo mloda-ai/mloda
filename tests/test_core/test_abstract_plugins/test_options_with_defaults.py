@@ -33,6 +33,7 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway feature group, one per default edge under test.
@@ -97,6 +98,13 @@ def _make_explicit_none_probe_fg() -> type[FeatureGroup]:
             return data
 
     return ExplicitNoneProbeFeatureGroup
+
+
+def _make_two_keys_fg() -> type[FeatureGroup]:
+    """A throwaway pattern group whose name binds the keys ``owd_first`` and ``owd_second``."""
+    return make_name_bound_fg(
+        "Owd", __name__, "op", ("owd_first", "owd_second"), defaults={"owd_first": "a", "owd_second": "a"}
+    )
 
 
 class TestOptionsWithDefaultsMechanism:
@@ -314,6 +322,39 @@ class TestOptionsGetDefaultPrecedence:
         """An explicit None is unset to options_with_defaults, so the concrete spec default still applies."""
         view = _options_with_defaults(_make_probe_fg(), Options(context={CTX_KEY: None}))
         assert view.get(CTX_KEY, "callsite") == "ctx_val"
+
+    def test_bound_key_gets_bound_value_not_default(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"})
+        assert view.get("owd_first") == "q"
+        assert view.get("owd_second") == "a"
+
+    def test_bound_value_lands_in_context(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"})
+        assert view.context.get("owd_first") == "q"
+        assert "owd_first" not in view.group
+
+    def test_fill_bindings_false_leaves_bound_key_absent(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"}, fill_bindings=False)
+        assert "owd_first" not in view.context
+        assert "owd_first" not in view.group
+        assert view.get("owd_second") == "a"
+
+    def test_own_explicit_value_beats_binding(self) -> None:
+        view = _make_two_keys_fg().options_with_defaults(Options(context={"owd_first": "q"}), {"owd_first": "z"})
+        assert view.get("owd_first") == "q"
+
+
+class TestNameBindings:
+    """FeatureGroup.name_bindings returns the named captures of the group's name pattern."""
+
+    def test_name_bindings_returns_captures_for_matching_name(self) -> None:
+        assert _make_two_keys_fg().name_bindings("x__op_q_b") == {"owd_first": "q", "owd_second": "b"}
+
+    def test_name_bindings_empty_for_non_matching_name(self) -> None:
+        assert _make_two_keys_fg().name_bindings("plain_name") == {}
+
+    def test_name_bindings_empty_for_class_without_pattern(self) -> None:
+        assert _make_probe_fg().name_bindings("x__op_q_b") == {}
 
 
 class TestOptionsWithDefaultsHonorsExplicitNone:

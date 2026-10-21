@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreator, PropertySpec
 from mloda.user import FeatureName, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_source_fg
 
 
 # PROPERTY_MAPPING keys for the throwaway probes; the idc_ prefix keeps them unique to this module.
@@ -479,6 +480,38 @@ def test_shared_options_stay_aliased_through_intake() -> None:
         assert payload["options_identities"] == 1, (
             f"intake must keep the shared Options instance aliased across both features: {payload!r}"
         )
+
+
+IDC_BOUND_A = "idc_bound_a"  # name-bound keys of the pattern probe
+IDC_BOUND_B = "idc_bound_b"
+IDC_BOUND_CHILD = "idc_bound_child"
+
+
+def _run_bound(bound_context: bool = True) -> dict[str, Any]:
+    seen: dict[str, Any] = {}
+    parent = make_name_bound_fg(
+        "IdcBound",
+        __name__,
+        "idcop",
+        (IDC_BOUND_A,),
+        (IDC_BOUND_B,),
+        defaults={IDC_BOUND_A: "a", IDC_BOUND_B: "b"},
+        seen=seen,
+        input_column=IDC_BOUND_CHILD,
+        bound_context=bound_context,
+    )
+    child = make_source_fg("IdcBound", __name__, IDC_BOUND_CHILD, [1], seen=seen, observe_key=IDC_BOUND_A)
+    mloda.run_all(
+        [Feature(f"{IDC_BOUND_CHILD}__idcop_q")],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({parent, child}),
+    )
+    return seen
+
+
+def test_child_does_not_inherit_name_bound_key() -> None:
+    seen = _run_bound(bound_context=False)
+    assert seen["child"] is None
 
 
 def test_non_default_equivalent_twins_do_not_merge(caplog: pytest.LogCaptureFixture) -> None:

@@ -19,7 +19,7 @@ import pytest
 import mloda.provider as provider
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.abstract_plugins.components.input_data.match_cache import _RUN_MATCH_CACHE, run_match_cache
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
@@ -423,14 +423,34 @@ class TestCatalogCache:
             ToyBaseDB.columns(second)
         assert len(ToyBaseDB.list_calls) == 2
 
-    def test_secrets_with_an_identical_redacted_repr_still_read_two_catalogs_in_one_run(self) -> None:
-        first = _match({KEY: "a", "password": _OpaqueSecret("one")})  # nosec B105
-        second = _match({KEY: "a", "password": _OpaqueSecret("two")})  # nosec B105
+    @pytest.mark.parametrize("secret_type", [_OpaqueSecret, _MutableOpaqueSecret])
+    def test_secrets_with_an_identical_redacted_repr_still_read_two_catalogs_in_one_run(
+        self, secret_type: type
+    ) -> None:
+        first = _match({KEY: "a", "password": secret_type("one")})  # nosec B105
+        second = _match({KEY: "a", "password": secret_type("two")})  # nosec B105
         assert repr(first.access.credentials["password"]) == repr(second.access.credentials["password"])
         with run_match_cache():
             ToyBaseDB.columns(first)
             ToyBaseDB.columns(second)
         assert len(ToyBaseDB.list_calls) == 2
+
+    def test_credentials_differing_only_in_the_preset_table_read_two_catalogs_in_one_run(self) -> None:
+        first = _match({KEY: "a", ToyBaseDB.TABLE_KEY: "t1"})
+        second = _match({KEY: "a", ToyBaseDB.TABLE_KEY: "t2"})
+        with run_match_cache():
+            ToyBaseDB.columns(first)
+            ToyBaseDB.columns(second)
+        assert len(ToyBaseDB.list_calls) == 2
+
+    def test_the_run_cache_keys_carry_no_credential_value(self) -> None:
+        with run_match_cache():
+            ToyBaseDB.columns(_match({KEY: "a", "password": _ADMIN_SECRET}))
+            cache = _RUN_MATCH_CACHE.get()
+            assert cache
+            for key in cache:
+                assert _ADMIN_SECRET not in str(key)
+                assert _ADMIN_SECRET not in repr(key)
 
     def test_equal_but_distinct_credential_objects_read_one_catalog_in_a_run(self) -> None:
         first = _match({KEY: "a", "password": "toyfmt-secret-one", "options": {"x": [1]}})  # nosec B105

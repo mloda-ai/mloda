@@ -306,6 +306,120 @@ class TestUserinfoUriPlanIdentity:
         gc.collect()
 
 
+class TestFileSourceUriProjection:
+    """`_source` projects a URI path to a credential-free source and keeps the raw path as access."""
+
+    def test_drops_userinfo_query_and_fragment_and_keeps_a_percent_encoded_path(self) -> None:
+        source = ToyFileFormatFG._source
+        uri = f"s3://alice:hunter2@bucket/my%20file{TOY_SUFFIX}?token=t#frag"  # nosec B105
+        match = source(uri)
+        assert match.source == f"s3://bucket/my%20file{TOY_SUFFIX}"
+        assert match.access == uri
+        first = source(f"s3://u:hunter2@bucket/a%2Fb{TOY_SUFFIX}").source  # nosec B105
+        second = source(f"s3://u:hunter2@bucket/a%2Fc{TOY_SUFFIX}").source  # nosec B105
+        assert first != second
+
+    @pytest.mark.parametrize(
+        "template,expected",
+        [
+            ("s3://AKIA:ab/hunter2@bucket/x{s}", "s3://bucket/x{s}"),  # nosec B105
+            ("s3://u:hun#ter2@bucket/x{s}", "s3://bucket/x{s}"),  # nosec B105
+            ("s3://u:hun?ter2@bucket/x{s}", "s3://bucket/x{s}"),  # nosec B105
+            ("s3://tok@bucket/x{s}", "s3://bucket/x{s}"),
+            ("s3://bucket/a@b{s}", "s3://bucket/a@b{s}"),
+            ("s3://bucket:9000/x{s}", "s3://bucket:9000/x{s}"),
+            ("abfss://cont@acct.dfs.core.windows.net/a%20b{s}", "abfss://cont@acct.dfs.core.windows.net/a%20b{s}"),
+            ("simplecache::s3://tok@bucket/x{s}", "simplecache::s3://bucket/x{s}"),
+            ("s3://bucket]/x{s}", "s3://bucket]/x{s}"),
+            ("s3://[bad/x{s}", "s3://[bad/x{s}"),
+        ],
+        ids=[
+            "slash-in-password",
+            "hash-in-password",
+            "question-in-password",
+            "user-only",
+            "at-in-path",
+            "port",
+            "azure",
+            "chained",
+            "bad-bracket-host",
+            "open-bracket-host",
+        ],
+    )
+    def test_userinfo_with_url_delimiters(self, template: str, expected: str) -> None:
+        path = template.format(s=TOY_SUFFIX)
+        match = ToyFileFormatFG._source(path)
+        assert match.source == expected.format(s=TOY_SUFFIX)
+        assert match.access == path
+
+
+class TestUriSourceCollision:
+    """Two handles with one credential-free source but different raw paths get `source@handle` sources."""
+
+    COLUMN = "toyfmt_collision_col"
+
+    def _group(self) -> type[ToyFileFormatFG]:
+        column = self.COLUMN
+
+        class ToyfmtCollisionFG(ToyFileFormatFG):
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                if str(feature_name) != column:
+                    return False
+                return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
+
+            @classmethod
+            def columns(cls, match: Any) -> Collection[str] | None:
+                return [column]
+
+            @classmethod
+            def has_column(cls, match: Any, column_name: str) -> bool | None:
+                return column_name == column
+
+        return ToyfmtCollisionFG
+
+    def test_find_sources_suffixes_each_colliding_source_with_its_handle(self) -> None:
+        group = self._group()
+        dac = DataAccessCollection(
+            files={"a": f"s3://alice:pw1@b/x{TOY_SUFFIX}", "b": f"s3://bob:pw2@b/x{TOY_SUFFIX}"}  # nosec B105
+        )
+        matches = group.find_sources(group.CLAIM_ROUTES[0], self.COLUMN, Options(), dac)
+        assert sorted(match.source for match in matches) == [f"s3://b/x{TOY_SUFFIX}@a", f"s3://b/x{TOY_SUFFIX}@b"]
+        assert {match.access for match in matches} == {
+            f"s3://alice:pw1@b/x{TOY_SUFFIX}",  # nosec B105
+            f"s3://bob:pw2@b/x{TOY_SUFFIX}",  # nosec B105
+        }
+        del matches, group
+        gc.collect()
+
+    def test_a_single_handle_keeps_the_unsuffixed_source(self) -> None:
+        group = self._group()
+        dac = DataAccessCollection(files={"a": f"s3://alice:pw1@b/x{TOY_SUFFIX}"})  # nosec B105
+        matches = group.find_sources(group.CLAIM_ROUTES[0], self.COLUMN, Options(), dac)
+        assert [match.source for match in matches] == [f"s3://b/x{TOY_SUFFIX}"]
+        del matches, group
+        gc.collect()
+
+    def test_the_ambiguity_abort_names_both_suffixed_sources_without_the_passwords(self) -> None:
+        group = self._group()
+        dac = DataAccessCollection(
+            files={"a": f"s3://alice:pw1@b/x{TOY_SUFFIX}", "b": f"s3://bob:pw2@b/x{TOY_SUFFIX}"}  # nosec B105
+        )
+        plugins: Any = {group: {PyArrowTable}}
+        with pytest.raises(ValueError) as excinfo:
+            evaluate_or_raise(Feature(self.COLUMN), plugins, None, dac)
+        text = str(excinfo.value)
+        assert "several sources" in text
+        assert f"s3://b/x{TOY_SUFFIX}@a" in text
+        assert f"s3://b/x{TOY_SUFFIX}@b" in text
+        assert "pw1" not in text
+        assert "pw2" not in text
+        del excinfo, plugins, group
+        gc.collect()
+
+
 class TestAbstractReadFileFGWithAPin:
     """A column_to_file pin must not make the abstract ReadFileFG raise from its match hook."""
 

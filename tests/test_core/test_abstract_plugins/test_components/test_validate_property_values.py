@@ -239,6 +239,22 @@ class TestSecretHygiene:
         assert exc.value.__context__ is None
         assert SECRET not in caplog.text
 
+    @pytest.mark.parametrize(
+        "spec_kwargs",
+        [{"allowed_values": ("public",)}, {"element_validator": _raise_with_value}],
+        ids=["non_member", "validator_raises"],
+    )
+    def test_list_wrapped_value_never_leaks(
+        self, spec_kwargs: dict[str, Any], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(PropertyValidationError) as exc:
+                validate_property_values({"k": [SECRET]}, _strict(**spec_kwargs), closed_world=True)
+        assert SECRET not in str(exc.value)
+        assert exc.value.__cause__ is None
+        assert exc.value.__context__ is None
+        assert SECRET not in caplog.text
+
     @pytest.mark.parametrize("allowed", [("a",), {"a"}], ids=["tuple", "set"])
     def test_raising_eq_membership_is_rejected_and_does_not_leak(
         self, allowed: Any, caplog: pytest.LogCaptureFixture

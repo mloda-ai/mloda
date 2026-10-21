@@ -4,9 +4,8 @@ import inspect
 import os
 from abc import abstractmethod
 from typing import Any, ClassVar, cast
-from urllib.parse import urlsplit
 
-from mloda.core.abstract_plugins.components.credential_scrub import _drop_free_text_userinfo, scrub_credentials
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials, strip_uri_userinfo
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, SourceMatch, first_report_of_pin
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
@@ -146,14 +145,29 @@ class _FileSourceFG(FormatFeatureGroup):
                         stage=INPUT_DATA_STAGE,
                     )
         if is_file_route:
-            return [cls._source(path) for path in files if cls._owns(path, excluded)]
+            return cls._disambiguate([path for path in files if cls._owns(path, excluded)], dac)
         return [match for folder in folders for match in cls._folder_entries(folder, excluded)]
+
+    @classmethod
+    def _disambiguate(cls, paths: list[str], dac: DataAccessCollection) -> list[SourceMatch]:
+        """Suffix `@<handle>` on sources that several distinct accesses share."""
+        matches = [cls._source(path) for path in paths]
+        accesses: dict[str, set[Any]] = {}
+        for match in matches:
+            accesses.setdefault(match.source, set()).add(match.access)
+        handle_of: dict[str, str] = {}
+        for handle, path in dac.files.items():
+            handle_of.setdefault(path, handle)
+        return [
+            SourceMatch(f"{match.source}@{handle_of[path]}", match.access) if len(accesses[match.source]) > 1 else match
+            for path, match in zip(paths, matches)
+        ]
 
     @staticmethod
     def _source(path: str) -> SourceMatch:
         if "://" in path:
-            parts = urlsplit(_drop_free_text_userinfo(path))
-            return SourceMatch(source=scrub_credentials(f"{parts.scheme}://{parts.netloc}") + parts.path, access=path)
+            source = strip_uri_userinfo(path).partition("?")[0].partition("#")[0]
+            return SourceMatch(source=source, access=path)
         return SourceMatch(source=os.path.abspath(path), access=path)
 
     @staticmethod

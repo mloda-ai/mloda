@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.input_data.match_cache import run_ma
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.implementation import loaded_implementations
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -570,48 +571,17 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         return f"s3://alice:hunter2@bucket/{stem}{self._suffix()}"  # nosec B105
 
     def _assert_uri_password_hidden(
-        self, feature: Feature, dac: DataAccessCollection | None, window: dict[str, MatchRejection]
+        self,
+        feature: Feature,
+        dac: DataAccessCollection | None,
+        window: dict[str, MatchRejection],
+        error: type[Exception],
     ) -> None:
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(error) as exc_info:
             self._resolve(feature, dac)
         assert "hunter2" not in str(exc_info.value)
-        assert "s3:/" not in str(exc_info.value).replace("s3://", "")
+        assert f"s3://bucket/x{self._suffix()}" in str(exc_info.value)
         assert all("hunter2" not in rejection.reason for rejection in window.values())
-
-    def test_file_source_drops_userinfo_and_keeps_a_percent_encoded_path(self) -> None:
-        source = self.feature_group_class._source
-        uri = f"s3://alice:hunter2@bucket/my%20file{self._suffix()}?token=t#frag"  # nosec B105
-        match = source(uri)
-        assert match.source == f"s3://bucket/my%20file{self._suffix()}"
-        assert match.access == uri
-        first = source(f"s3://u:hunter2@bucket/a%2Fb{self._suffix()}").source  # nosec B105
-        second = source(f"s3://u:hunter2@bucket/a%2Fc{self._suffix()}").source  # nosec B105
-        assert first != second
-
-    @pytest.mark.parametrize(
-        "template,expected",
-        [
-            ("s3://AKIA:ab/hunter2@bucket/x{s}", "s3://bucket/x{s}"),  # nosec B105
-            ("s3://u:hun#ter2@bucket/x{s}", "s3://bucket/x{s}"),  # nosec B105
-            ("s3://u:hun?ter2@bucket/x{s}", "s3://bucket/x{s}"),  # nosec B105
-            ("s3://tok@bucket/x{s}", "s3://bucket/x{s}"),
-            ("s3://bucket/a@b{s}", "s3://bucket/a@b{s}"),
-            ("s3://bucket:9000/x{s}", "s3://bucket:9000/x{s}"),
-            ("abfss://cont@acct.dfs.core.windows.net/a%20b{s}", "abfss://cont@acct.dfs.core.windows.net/a%20b{s}"),
-        ],
-        ids=[
-            "slash-in-password",
-            "hash-in-password",
-            "question-in-password",
-            "user-only",
-            "at-in-path",
-            "port",
-            "azure",
-        ],
-    )
-    def test_file_source_userinfo_with_url_delimiters(self, template: str, expected: str) -> None:
-        suffix = self._suffix()
-        assert self.feature_group_class._source(template.format(s=suffix)).source == expected.format(s=suffix)
 
     def test_file_a_userinfo_uri_in_a_files_handle_never_leaks_the_password(
         self, rejection_window: dict[str, MatchRejection]
@@ -620,13 +590,13 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert not self.feature_group_class.match_feature_group_criteria(self.missing_column, self._options(), dac)
         assert rejection_window
         assert all("hunter2" not in rejection.reason for rejection in rejection_window.values())
-        self._assert_uri_password_hidden(Feature(self.missing_column), dac, rejection_window)
+        self._assert_uri_password_hidden(Feature(self.missing_column), dac, rejection_window, FeatureResolutionError)
 
     def test_file_a_userinfo_uri_pointer_never_leaks_the_password(
         self, rejection_window: dict[str, MatchRejection]
     ) -> None:
         feature = Feature(self.missing_column, Options({self._group_name(): self._userinfo_uri()}))
-        self._assert_uri_password_hidden(feature, None, rejection_window)
+        self._assert_uri_password_hidden(feature, None, rejection_window, ValueError)
 
     def test_file_a_userinfo_uri_column_to_file_pin_never_leaks_the_password(
         self, rejection_window: dict[str, MatchRejection]
@@ -634,7 +604,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         dac = DataAccessCollection(
             files={"pin_uri": self._userinfo_uri()}, column_to_file={self.missing_column: "pin_uri"}
         )
-        self._assert_uri_password_hidden(Feature(self.missing_column), dac, rejection_window)
+        self._assert_uri_password_hidden(Feature(self.missing_column), dac, rejection_window, ValueError)
 
     @pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symlinks need POSIX")
     def test_file_a_missing_column_summary_still_says_folder_entries_were_skipped(

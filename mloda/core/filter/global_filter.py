@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.property_spec import is_no_default
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value
+from mloda.core.abstract_plugins.components.options import Options, _isolate_forwarded_value, reject_reserved_reader_key
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -357,6 +357,7 @@ class GlobalFilter:
         `filter` must be one of this GlobalFilter's declared filters or a per-match copy of one: the drop ledger
         keys on its uuid.
         """
+        reject_reserved_reader_key(filter.filter_feature.options)
         with feature_group_scope(None, contain_aborts=True):
             probe = probe_match_criteria(
                 feature_group,

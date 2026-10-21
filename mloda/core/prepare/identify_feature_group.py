@@ -273,7 +273,7 @@ class IdentifyFeatureGroupClass:
         *,
         excluded: Mapping[type[FeatureGroup], str] | None = None,
     ) -> EvaluationResult:
-        """Run the matching/filter logic without raising, returning a structured result."""
+        """Run the matching/filter logic returning a structured result; only request misuse raises."""
         return cls._evaluate(feature, accessible_plugins, links, data_access_collection, excluded=excluded)[0]
 
     @classmethod

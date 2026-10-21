@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
+from mloda.user import FilterType, GlobalFilter, SingleFilter
 
 
 MATCH_DATA_FEATURE = "option_write_match_data_feat_932"
@@ -217,6 +218,17 @@ class TestUserSuppliedReservedReaderKeyIsRejected:
 
         with pytest.raises(ValueError) as excinfo:
             IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
+
+        message = str(excinfo.value)
+        assert "BaseInputData" in message
+        assert OPAQUE_OPTION_VALUE not in message
+
+    def test_global_filter_criteria_rejects_key_added_after_construction(self) -> None:
+        single_filter = SingleFilter(Feature("col"), FilterType.EQUAL, {"value": 1})
+        single_filter.filter_feature.options.add_to_group("BaseInputData", (OPAQUE_OPTION_VALUE, OPAQUE_OPTION_VALUE))
+
+        with pytest.raises(ValueError) as excinfo:
+            GlobalFilter().criteria(FeatureGroup, single_filter, None)
 
         message = str(excinfo.value)
         assert "BaseInputData" in message

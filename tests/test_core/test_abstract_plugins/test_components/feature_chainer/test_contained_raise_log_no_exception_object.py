@@ -133,7 +133,7 @@ class TestParserElementValidatorRaiseLogsNoExceptionObject:
         assert "raised " in messages[0], f"the message must still read as a contained raise: {messages[0]}"
         assert CLR975_VALUE not in messages[0], f"the raw value stays out of WARNING logs: {messages[0]}"
 
-    def test_warning_class_message_only_recoverable_at_debug(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_validator_echoing_value_keeps_it_out_of_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         def echoing_validator(value: Any) -> bool:
             raise Clr975Exploded(f"cannot judge {value}")
 

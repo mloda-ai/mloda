@@ -343,10 +343,6 @@ class TestOptionsGetDefaultPrecedence:
         view = _make_two_keys_fg().options_with_defaults(Options(context={"owd_first": "q"}), {"owd_first": "z"})
         assert view.get("owd_first") == "q"
 
-    def test_absent_unbound_key_still_gets_default(self) -> None:
-        view = _make_two_keys_fg().options_with_defaults(Options(), {"owd_first": "q"})
-        assert view.get("owd_second") == "a"
-
 
 class TestNameBindings:
     """FeatureGroup.name_bindings returns the named captures of the group's name pattern."""

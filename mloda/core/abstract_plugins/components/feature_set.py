@@ -155,14 +155,6 @@ class FeatureSet:
         memo: dict[tuple[int, tuple[tuple[str, str], ...]], tuple[Options, Options]] = {}
         entries_by_source: dict[int, list[Options]] = {}
         rebound = False
-        defaults_only: dict[int, Options] = {}
-
-        def fills_default(source: Options) -> bool:
-            if id(source) not in defaults_only:
-                defaults_only[id(source)] = feature_group.options_with_defaults(source)
-            return defaults_only[id(source)] is not source
-
-        defaults_filled = False
         for feature in self.features:
             source = feature.options
             bindings = feature_group.name_bindings(feature.name)
@@ -175,7 +167,6 @@ class FeatureSet:
             if entry[1] is not source:
                 feature.options = entry[1]
                 rebound = True
-                defaults_filled = defaults_filled or fills_default(source)
         if rebound:
             # Only GROUP fills change Feature hashes (Options.__hash__ is group-only); a comprehension rehashes,
             # set(self.features) would reuse stale stored hashes. The rebuild also surfaces twin collapses loudly.
@@ -196,12 +187,11 @@ class FeatureSet:
             if resolved is not None and all(entry is resolved[0] for entry in resolved):
                 self.options = resolved[0]
             else:
-                self.options = feature_group.options_with_defaults(self.options)
+                # Aliasing features disagree: fill defaults only, never a default for a bound key.
+                bindings = feature_group.name_bindings(self.name_of_one_feature) if self.name_of_one_feature else {}
+                self.options = feature_group.options_with_defaults(self.options, bindings, fill_bindings=False)
 
-        if self.options is not options_before and options_before is not None:
-            defaults_filled = defaults_filled or fills_default(options_before)
-        # A declared-default fill can change what input_features declares; a name binding cannot.
-        if defaults_filled:
+        if rebound or self.options is not options_before:
             self.declared_input_features_resolved = False
             self.declared_input_feature_names = None
             self.declared_input_feature_edges = None

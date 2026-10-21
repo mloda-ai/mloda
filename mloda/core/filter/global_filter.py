@@ -187,7 +187,9 @@ class GlobalFilter:
             _filter = deepcopy(filter)
             # Host keys imported below are never the filter feature's own declaration.
             _filter.filter_feature.options.lock_own_keys()
-            _filter.filter_feature.options = self.unify_options(feat.options, _filter.filter_feature.options)
+            _filter.filter_feature.options = self.unify_options(
+                feat.options, _filter.filter_feature.options, frozenset(feature_group.name_bindings(feat.name))
+            )
 
             # An out-of-scope candidate is skipped silently: never probed, no elimination recorded.
             if self.feature_group_scope(_filter, feature_group) is False:
@@ -263,19 +265,22 @@ class GlobalFilter:
         name, module = _candidate_sort_key(feature_group)
         return -_STAGE_DEPTH.get(elimination.stage, 0), name, module
 
-    def unify_options(self, feat_options: Options, filter_options: Options) -> Options:
-        """Add the host options the filter feature omits, never rewriting a declared value. Layered on that repair,
-        a best-effort detachment of each imported value: the container spine is rebuilt and a Feature leaf copied,
-        as far as ``_isolate_forwarded_value`` reaches. ``rehash_stored_filters`` covers the Features it misses."""
+    def unify_options(
+        self, feat_options: Options, filter_options: Options, host_bound_keys: frozenset[str] = frozenset()
+    ) -> Options:
+        """Add the host options the filter feature omits, except the host's name-bound keys, never rewriting a
+        declared value. Layered on that repair, a best-effort detachment of each imported value: the container spine
+        is rebuilt and a Feature leaf copied, as far as ``_isolate_forwarded_value`` reaches. ``rehash_stored_filters``
+        covers the Features it misses."""
         memo: dict[int, Any] = {}
         # Preserve each key's category so context keys do not leak into group (issue #712).
         for key, value in feat_options.group.items():
-            if key not in filter_options:
+            if key not in filter_options and key not in host_bound_keys:
                 filter_options.add_to_group(key, _isolate_forwarded_value(value, memo, _copy_feature_leaf))
                 if key in feat_options.non_forwarded_group_keys:
                     filter_options.mark_non_forwarded(key)
         for key, value in feat_options.context.items():
-            if key not in filter_options:
+            if key not in filter_options and key not in host_bound_keys:
                 filter_options.add_to_context(key, _isolate_forwarded_value(value, memo, _copy_feature_leaf))
         return filter_options
 

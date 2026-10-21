@@ -331,8 +331,9 @@ class Options:
 
         if not val:
             if DefaultOptionKeys.in_features in self:
+                shown = "None" if val is None else f"a falsy {type(val).__name__}"
                 raise ValueError(
-                    f"The key '{DefaultOptionKeys.in_features}' is set to a falsy {type(val).__name__}, which resolves to no input features."
+                    f"The key '{DefaultOptionKeys.in_features}' is set to {shown}, which resolves to no input features."
                 )
             raise ValueError(
                 f"Input features not found in options. Please ensure that the key '{DefaultOptionKeys.in_features}' is set."

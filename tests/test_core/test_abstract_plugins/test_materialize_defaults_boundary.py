@@ -262,6 +262,23 @@ class TestRuntimeDefaultMaterializationEndToEnd:
         seen = _run_two_keys(with_defaults, name)
         assert seen[name] == ("q", "b")
 
+    @pytest.mark.parametrize("with_defaults", [True, False], ids=["declared_defaults", "no_defaults"])
+    def test_name_only_twin_and_agreeing_context_twin_merge_into_one_feature(self, with_defaults: bool) -> None:
+        name = "mdb_src__mdbop_q_b"
+        seen: dict[str, Any] = {}
+        fg = _make_two_keys_fg(with_defaults, seen)
+        source = make_source_fg("MdbTwoKeys", __name__, "mdb_src", [1, 2])
+        results = mloda.run_all(
+            [Feature(name), Feature(name, Options(context={MDB_FIRST: "q"}))],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({fg, source}),
+        )
+        assert len(results) == 1
+        frame = results[0]
+        columns = list(frame.keys()) if isinstance(frame, dict) else list(frame[0].keys())
+        assert columns == [name]
+        assert seen[name] == ("q", "b")
+
     def test_explicit_option_agreeing_with_name_is_observed(self) -> None:
         name = "mdb_src__mdbop_q_b"
         seen = _run_two_keys(True, name, Options(context={MDB_FIRST: "q"}))
@@ -374,15 +391,32 @@ class TestFeatureSetMaterializeOptionDefaults:
         assert (feature_a.options.get(MDB_FIRST), feature_a.options.get(MDB_SECOND)) == ("q", "b")
         assert (feature_b.options.get(MDB_FIRST), feature_b.options.get(MDB_SECOND)) == ("r", "c")
 
-    def test_feature_set_options_fall_back_to_defaults_when_aliasing_features_disagree(self) -> None:
+    def test_feature_set_options_hold_no_bound_value_and_no_default_for_bound_keys_when_aliasing_features_disagree(
+        self,
+    ) -> None:
         shared = Options()
         feature_set = FeatureSet([Feature("mdb_src__mdbop_q_b", shared), Feature("mdb_src__mdbop_r_c", shared)])
 
         feature_set.materialize_option_defaults(_make_two_keys_fg(True, {}))
 
         assert feature_set.options is not None
-        assert feature_set.options.get(MDB_FIRST) == "a"
-        assert feature_set.options.get(MDB_SECOND) == "a"
+        assert MDB_FIRST not in feature_set.options.context
+        assert MDB_FIRST not in feature_set.options.group
+        assert MDB_SECOND not in feature_set.options.context
+        assert MDB_SECOND not in feature_set.options.group
+
+    def test_intake_filled_bound_values_keep_the_declared_input_feature_memo(self) -> None:
+        feature = Feature("mdb_src__mdbop_q_b", Options(context={MDB_FIRST: "q", MDB_SECOND: "b"}))
+        feature_set = FeatureSet([feature])
+        # A set-level Options that never saw the fill (aliasing features disagreed before intake).
+        feature_set.options = Options()
+        feature_set.declared_input_features_resolved = True
+        feature_set.declared_input_feature_names = frozenset({"mdb_src"})
+
+        feature_set.materialize_option_defaults(_make_two_keys_fg(True, {}))
+
+        assert feature_set.declared_input_features_resolved is True
+        assert feature_set.declared_input_feature_names == frozenset({"mdb_src"})
 
     def test_unbound_names_keep_aliasing_and_defaults(self) -> None:
         shared = Options()

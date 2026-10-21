@@ -296,6 +296,7 @@ class FeatureGroup(ABC):
                 if not fill_bindings:
                     continue
                 value = bindings[key]
+                # Context, not group: the Options hash is group-only, so a bound fill never changes identity.
                 to_context = key not in options.group
             else:
                 if is_no_default(spec.default) or spec.default is None:

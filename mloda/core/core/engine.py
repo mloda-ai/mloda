@@ -112,7 +112,9 @@ class Engine:
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
         # Intake materialization memo: the strong source reference keeps its id stable, so features
         # sharing one pre-default Options share one effective Options.
-        self._intake_options_memo: dict[tuple[type[FeatureGroup], int, frozenset[str]], tuple[Options, Options]] = {}
+        self._intake_options_memo: dict[
+            tuple[type[FeatureGroup], int, tuple[tuple[str, str], ...]], tuple[Options, Options]
+        ] = {}
         # Declared (pre-default) options per surviving feature uuid, for default-equivalent merge warnings.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
@@ -737,16 +739,15 @@ class Engine:
         check_cascade: bool = False,
     ) -> bool:
         # Materialize declared defaults at intake: default-equivalent twins become equal and merge
-        # via the duplicate path below; identity no-op without concrete defaults. A key the name binds
-        # gets no default here and is filled at the compute boundary, so identity never changes.
+        # via the duplicate path below; name-bound values fill too (into context); identity no-op otherwise.
         declared_options = feature.options
         bindings = feature_group_class.name_bindings(feature.name)
-        memo_key = (feature_group_class, id(declared_options), frozenset(bindings))
+        memo_key = (feature_group_class, id(declared_options), tuple(sorted(bindings.items())))
         entry = self._intake_options_memo.get(memo_key)
         if entry is None:
             entry = (
                 declared_options,
-                feature_group_class.options_with_defaults(declared_options, bindings, fill_bindings=False),
+                feature_group_class.options_with_defaults(declared_options, bindings),
             )
             self._intake_options_memo[memo_key] = entry
         feature.options = entry[1]
@@ -807,7 +808,7 @@ class Engine:
             return
         logger.warning(
             f"Feature '{feature.name}' was requested twice with default-equivalent options: the requests "
-            f"differ only in explicitly-set declared defaults and merged into one feature at intake. "
+            f"differ only in explicitly-set declared defaults or name-bound values and merged into one feature at intake. "
             f"Deduplicate the request; dependency declaration follows the first-listed request."
         )
 

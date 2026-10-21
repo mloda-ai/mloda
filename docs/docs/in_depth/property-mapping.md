@@ -414,19 +414,19 @@ materialized value is not re-checked. A key the feature name binds never receive
 
 The framework applies this at two sites. At feature **intake**
 (`Engine.add_feature_to_collection`) a feature's options are rebound through
-`options_with_defaults` as it enters the collection. At the **compute boundary**
-`run_calculate_feature` materializes the declared defaults into the `FeatureSet` before
-`calculate_feature` and any calculate-feature extender run, so a plugin reads `feature.options`
-directly. The same step also fills the name-bound value for keys still absent (into context, or into
-group only when the key already sits there as `None`). Intake fills no bound value, so feature identity
-is unchanged: a name-only request and the same name with an agreeing explicit option are the same
-feature (a context option merges, a group option stays its own feature). `options_with_defaults`
-remains for pre-materialization contexts (e.g. `resolve_subtype` internals) and for read sites the
-framework hands pre-default options, `input_features` above all.
+`options_with_defaults` as it enters the collection, which fills declared defaults together with the
+name-bound value for keys still absent (bound values go into context, or into group only when the key
+already sits there as `None`). At the **compute boundary** `run_calculate_feature` repeats the step on
+the `FeatureSet` before `calculate_feature` and any calculate-feature extender run, so a plugin reads
+`feature.options` directly. Bound fills go to context because the `Options` hash is group-only: a name-only
+request and the same name with an agreeing explicit context option merge into one feature at intake,
+while an explicit group option stays its own feature. `options_with_defaults` remains for
+pre-materialization contexts (e.g. `resolve_subtype` internals) and for read sites the framework hands
+pre-default options, `input_features` above all.
 
-For an engine-driven request, intake has already filled the declared defaults, so only name-bound
-values are added at the compute boundary. Direct `FeatureSet` use that bypasses the engine gets both
-there, and collapsing twins raise instead of merging.
+For an engine-driven request, intake has already filled everything, so the compute-boundary call is a
+no-op. Direct `FeatureSet` use that bypasses the engine gets the fill there, and collapsing twins raise
+instead of merging.
 
 A materialized default or bound value is never a declared option, so it never conflicts with a
 name-bound value: the name-agreement check reads the caller's own keys only.
@@ -435,7 +435,7 @@ Both sites run *after* resolution, so materialization never changes **resolution
 matching runs after intake and does observe materialized values, see below). It does change
 how features **group**: intake materialization deliberately canonicalizes default-equivalent twins,
 so a feature that passes a declared default explicitly and one that omits it become equal and merge
-into a single feature (with a warning naming the duplicated request) instead of computing twice.
+into a single feature (with a warning naming the duplicated request; twins differing only in a name-bound value merge the same way) instead of computing twice.
 
 One consequence for authors: `input_features` is called with the DECLARED, pre-default options (the
 engine stashes them before intake rebinds, and a child inherits the same pre-default options), so a
@@ -449,8 +449,7 @@ Which stage sees which view of the options:
 | --- | --- |
 | Parse, bind, resolution match, resolve (subtype resolution applies defaults internally) | declared (pre-default) |
 | `input_features()` and child option inheritance | declared (pre-default) |
-| Splitting, planning, filter matching, `validate_input_features` | effective (post-default, no name-bound values) |
-| Compute (`calculate_feature` and its extenders) | effective (post-default, name-bound values filled) |
+| Splitting, planning, filter matching, `validate_input_features`, compute (`calculate_feature` and its extenders) | effective (post-default, name-bound values filled) |
 
 The splitting row assumes intake has run, which is every engine-driven request. On the direct `FeatureSet`
 path the safety net materializes inside `run_calculate_feature`, which is after
@@ -459,7 +458,8 @@ path the safety net materializes inside `run_calculate_feature`, which is after
 Filter matching is the one place the same classmethod sees both views: `GlobalFilter` calls
 `match_feature_group_criteria` again after intake, passing the filter feature's own options
 enriched from the resolved feature's effective ones (`unify_options`), so a key the filter feature
-omits arrives materialized where feature resolution saw it declared.
+omits arrives materialized where feature resolution saw it declared. A key the host's name binds is not
+copied into the filter feature: that value belongs to the host's name, not to a shared configuration.
 
 ```py
 graph_type = feature.options.get("graph_type")  # the declared default when the caller omitted it

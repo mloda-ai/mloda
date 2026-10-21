@@ -18,7 +18,7 @@ assert ClusteringFeatureGroup.match_feature_group_criteria("customer_behavior__c
 assert not ClusteringFeatureGroup.match_feature_group_criteria("invalid_name", Options())
 ```
 
-The reader veto gate reads the engine's per-candidate rejection window, so a direct `match_feature_group_criteria` call without an active window does not exercise it; engine-shaped assertions go through `IdentifyFeatureGroupClass.evaluate`.
+The reader veto gate reads the per-candidate rejection window, so a bare direct call does not exercise it; wrap one call in `collect_match_rejections()` to exercise it and read the reasons (see section 4), and full engine-shaped assertions go through `IdentifyFeatureGroupClass.evaluate`.
 
 ### 2. Input Feature Extraction
 
@@ -60,6 +60,8 @@ Test that your feature group correctly parses features from configuration option
 
 **Example:**
 ```python
+from mloda.provider import collect_match_rejections
+
 # Test that the options a request carries are enough for the feature group to match
 options = Options(context={
     "aggregation_type": "sum",
@@ -67,10 +69,12 @@ options = Options(context={
 })
 assert PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", options)
 
-# Assert the negative too, or the test passes on a name the group never claims
-assert not PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", Options(context={
-    "aggregation_type": "not_an_aggregation"
-}))
+# Assert the negative too, or the test passes on a name the group never claims; collect the recorded reason
+with collect_match_rejections() as reasons:
+    assert not PandasAggregatedFeatureGroup.match_feature_group_criteria("sales__sum_aggr", Options(context={
+        "aggregation_type": "not_an_aggregation"
+    }))
+assert "not_an_aggregation" in reasons["PandasAggregatedFeatureGroup"].reason
 ```
 
 ### 5. Integration with mloda API

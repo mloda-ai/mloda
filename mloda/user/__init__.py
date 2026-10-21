@@ -25,7 +25,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.domain import Domain
 
 # Link & Index
-from mloda.core.abstract_plugins.components.link import Link, JoinType, JoinSpec
+from mloda.core.abstract_plugins.components.link import Link, JoinType, JoinSpec, AsOfJoinConfig
 from mloda.core.abstract_plugins.components.index.index import Index
 
 # Filtering
@@ -95,6 +95,7 @@ __all__ = [
     "Link",
     "JoinType",
     "JoinSpec",
+    "AsOfJoinConfig",
     "Index",
     # Filtering
     "GlobalFilter",

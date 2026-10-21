@@ -184,7 +184,7 @@ class Link:
         Use left_index/right_index to select which index when multiple are available.
 
         **Same-class factory** - discriminators derived from the features' differing group options:
-            - Link.from_features(jointype, left_joinspec, right_joinspec, left_feature, right_feature)
+            - Link.from_features(jointype, left_joinspec, right_joinspec, left_feature, right_feature[, asof_config=AsOfJoinConfig(...)])
 
         **Star factory** - joins every spoke to a shared-index hub:
             - Link.star(HubFG, SpokeAFG, SpokeBFG, index_column="row_id")
@@ -296,8 +296,15 @@ class Link:
         right: JoinSpec,
         left_feature: Feature,
         right_feature: Feature,
+        *,
+        asof_config: AsOfJoinConfig | None = None,
     ) -> "Link":
         """Link whose discriminators are the group options that differ between the two features."""
+        jointype = JoinType(jointype) if isinstance(jointype, str) else jointype
+        if jointype == JoinType.ASOF and asof_config is None:
+            raise ValueError("Link.from_features: an ASOF join requires asof_config.")
+        if jointype != JoinType.ASOF and asof_config is not None:
+            raise ValueError("Link.from_features: asof_config is only valid with an ASOF jointype.")
         left_group = left_feature.options.group
         right_group = right_feature.options.group
         differing = [
@@ -317,7 +324,12 @@ class Link:
                     f"so there is no {side}_discriminator. Give the features differing options (context options are ignored)."
                 )
         return cls(
-            jointype, left, right, left_discriminator=left_discriminator, right_discriminator=right_discriminator
+            jointype,
+            left,
+            right,
+            left_discriminator=left_discriminator,
+            right_discriminator=right_discriminator,
+            asof_config=asof_config,
         )
 
     @classmethod

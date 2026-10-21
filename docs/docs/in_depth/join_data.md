@@ -267,6 +267,11 @@ link = Link("inner", left, right,
             left_discriminator={"side": "left"},
             right_discriminator={"side": "right"})
 
+# Option 3: Derive the discriminators from the two features
+link = Link.from_features("inner", left, right,
+                          Feature("age", options={"side": "left"}),
+                          Feature("age", options={"side": "right"}))
+
 # 2. Tag features with matching options
 # Feature names reference the feature from the feature group
 features = {
@@ -274,6 +279,8 @@ features = {
     Feature("age", options={"side": "right"}),
 }
 ```
+
+`Link.from_features` uses the group options whose values differ between the two features as discriminators, and raises an error if a side has none. A discriminator that matches no node is reported with its side and the options seen on that feature group's nodes.
 
 The execution planner validates that the discriminator key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
 

@@ -1056,3 +1056,103 @@ def test_plain_hop_whose_source_framework_class_is_shared_but_data_is_disjoint_g
         f"the hop's source data is disjoint from the unrelated join's own source/destination, so it "
         f"must be credited; got owed_tokens={plain_hop.owed_tokens}"
     )
+
+
+# Side-specific planning error for a discriminator that matches no node.
+
+
+def _unmatched_line(side: str, discriminator: dict[str, Any]) -> str:
+    return f"{side}_discriminator {discriminator!r} matched no TokenSelfSource node; options seen on TokenSelfSource nodes: "
+
+
+def _self_link_with(factory: Callable[..., Link], left_disc: dict[str, Any], right_disc: dict[str, Any]) -> Link:
+    return factory(
+        JoinSpec(TokenSelfSource, Index((SELF_LEFT_KEY,))),
+        JoinSpec(TokenSelfSource, Index((SELF_RIGHT_KEY,))),
+        left_discriminator=left_disc,
+        right_discriminator=right_disc,
+    )
+
+
+@pytest.mark.parametrize(
+    "left_value, right_value",
+    [("lfet", "right"), ("left", "rihgt"), ("lfet", "rihgt")],
+    ids=["left_typo", "right_typo", "both_typo"],
+)
+def test_an_unmatched_discriminator_names_its_side_class_and_seen_values(left_value: str, right_value: str) -> None:
+    link = _self_link(left_value, right_value)
+
+    with pytest.raises(ValueError) as excinfo:
+        _run_self_join(link)
+
+    message = str(excinfo.value)
+    left_line = _unmatched_line("left", {SELF_SIDE: left_value})
+    right_line = _unmatched_line("right", {SELF_SIDE: right_value})
+    assert (left_line in message) == (left_value != "left"), message
+    assert (right_line in message) == (right_value != "right"), message
+    assert "'left'" in message and "'right'" in message, f"the seen values must be listed; got: {message}"
+    assert "matched no TokenSelfSource node" in message
+
+
+def test_a_discriminator_key_typo_shows_the_real_option_key_names() -> None:
+    link = _self_link_with(Link.left, {"token_self_sid": "left"}, {SELF_SIDE: "right"})
+
+    with pytest.raises(ValueError) as excinfo:
+        _run_self_join(link)
+
+    message = str(excinfo.value)
+    assert _unmatched_line("left", {"token_self_sid": "left"}) in message
+    assert "<missing>" in message
+    assert SELF_SIDE in message, f"the real key name must be visible; got: {message}"
+    assert "right_discriminator {" not in message
+
+
+class TokenIndexedSelfConsumer(TokenSelfConsumer):
+    """Self consumer whose input features carry the indexes an APPEND/UNION link binds to."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature(name=SELF_LEFT_PAYLOAD, options={SELF_SIDE: "left"}, index=Index((SELF_LEFT_KEY,))),
+            Feature(name=SELF_RIGHT_PAYLOAD, options={SELF_SIDE: "right"}, index=Index((SELF_RIGHT_KEY,))),
+        }
+
+
+@pytest.mark.parametrize("factory", [Link.append, Link.union], ids=["append", "union"])
+def test_an_append_or_union_self_link_with_a_right_typo_names_the_right_side(factory: Callable[..., Link]) -> None:
+    link = _self_link_with(factory, {SELF_SIDE: "left"}, {SELF_SIDE: "rihgt"})
+
+    with pytest.raises(ValueError) as excinfo:
+        mloda.run_all(
+            [Feature(name=TokenIndexedSelfConsumer.get_class_name())],
+            links={link},
+            compute_frameworks=["PyArrowTable"],
+            plugin_collector=PluginCollector.enabled_feature_groups({TokenSelfSource, TokenIndexedSelfConsumer}),
+        )
+
+    message = str(excinfo.value)
+    assert _unmatched_line("right", {SELF_SIDE: "rihgt"}) in message, message
+    assert "left_discriminator {" not in message
+
+
+def test_from_features_builds_the_hand_written_self_link() -> None:
+    link = Link.from_features(
+        "left",
+        JoinSpec(TokenSelfSource, Index((SELF_LEFT_KEY,))),
+        JoinSpec(TokenSelfSource, Index((SELF_RIGHT_KEY,))),
+        Feature(name=SELF_LEFT_PAYLOAD, options={SELF_SIDE: "left"}),
+        Feature(name=SELF_RIGHT_PAYLOAD, options={SELF_SIDE: "right"}),
+    )
+
+    assert link == _self_link("left", "right")
+
+
+def test_an_unmatched_discriminator_error_does_not_leak_secret_values() -> None:
+    link = _self_link_with(Link.left, {SELF_SIDE: "lfet", "password": "hunter2"}, {SELF_SIDE: "right"})
+
+    with pytest.raises(ValueError) as excinfo:
+        _run_self_join(link)
+
+    message = str(excinfo.value)
+    assert "hunter2" not in message
+    assert "left_discriminator" in message
+    assert "matched no TokenSelfSource node" in message

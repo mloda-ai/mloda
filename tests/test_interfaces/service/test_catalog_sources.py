@@ -15,7 +15,7 @@ from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import small_feature_group_walk
 from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
 
-# Building the catalog loads every plugin and enumerates all FeatureGroups; a cold run can exceed 10s.
+# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
 
 LOAD = "PluginLoader.all"

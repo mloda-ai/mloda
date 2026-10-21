@@ -43,7 +43,7 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
 
-# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
 
 
@@ -723,7 +723,7 @@ def test_resolve_feature_filters_unrelated_conflicts_from_candidates() -> None:
 def test_get_feature_group_docs_with_allow_redefinition_does_not_raise() -> None:
     """``get_feature_group_docs`` must route through dedup so that a Jupyter-style
     different-source redefinition does not surface as an unhandled ``ValueError``
-    when the user passes ``PluginCollector().set_allow_redefinition()``.
+    when the user passes a collector with ``set_allow_redefinition()`` (scoped to the redefinition pair and an anchor).
 
     Result list will not include the test class (``plugin_docs.py`` filters out
     ``__module__ == "__main__"``); the contract under test is that the dedup code
@@ -793,7 +793,7 @@ def test_get_feature_group_docs_degrades_gracefully_on_redef_conflict_without_fl
 # ---------------------------------------------------------------------------
 def test_get_feature_group_docs_filter_runs_before_dedup() -> None:
     """The plugin_collector identity filter must run BEFORE dedup so that a stale
-    class ref passed via disabled_feature_groups({stale}) eliminates the conflict
+    class ref disabled on a scoped collector (enabled pair plus anchor, stale disabled) eliminates the conflict
     before dedup sees it. Mirrors test_disabled_feature_groups_filter_runs_before_dedup
     (for PreFilterPlugins) at the plugin_docs entry point.
     """

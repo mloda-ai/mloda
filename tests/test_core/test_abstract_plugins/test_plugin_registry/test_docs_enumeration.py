@@ -34,7 +34,7 @@ from mloda.core.api.plugin_docs import (
     get_feature_group_docs,
 )
 
-# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
 
 
@@ -49,11 +49,6 @@ def _reap_pending_dead_plugin_classes() -> None:
     for the duration of each test.
     """
     gc.collect()
-
-
-def _only(*classes: type[FeatureGroup]) -> PluginCollector:
-    """Collector enabling just the given test doubles."""
-    return PluginCollector.enabled_feature_groups(set(classes))
 
 
 class TestPublicRegistryExports:
@@ -187,7 +182,7 @@ class TestDocsFallbackNonRegression:
         class _DocsEnumFallbackFG(FeatureGroup):
             """Unregistered local feature group; the subclass walk must still find it."""
 
-        names = [fg.name for fg in get_feature_group_docs(plugin_collector=_only(_DocsEnumFallbackFG))]
+        names = [fg.name for fg in get_feature_group_docs(name="_DocsEnumFallbackFG")]
         assert "_DocsEnumFallbackFG" in names
 
     def test_default_docs_are_union_of_registry_and_subclass_walk(self) -> None:
@@ -202,12 +197,7 @@ class TestDocsFallbackNonRegression:
 
         registry_register(_DocsEnumUnionRegisteredFG)
 
-        names = [
-            fg.name
-            for fg in get_feature_group_docs(
-                plugin_collector=_only(_DocsEnumUnionRegisteredFG, _DocsEnumUnionUnregisteredFG)
-            )
-        ]
+        names = [fg.name for fg in get_feature_group_docs(name="_DocsEnumUnion")]
         assert "_DocsEnumUnionRegisteredFG" in names
         assert "_DocsEnumUnionUnregisteredFG" in names
 
@@ -220,7 +210,7 @@ class TestDocsFallbackNonRegression:
 
         registry_register(_DocsEnumOnceFG)
 
-        names = [fg.name for fg in get_feature_group_docs(plugin_collector=_only(_DocsEnumOnceFG))]
+        names = [fg.name for fg in get_feature_group_docs(name="_DocsEnumOnceFG")]
         assert names.count("_DocsEnumOnceFG") == 1, (
             "a class that is both registered and subclass-reachable must not be documented twice"
         )

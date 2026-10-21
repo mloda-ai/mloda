@@ -24,7 +24,7 @@ from mloda.user import PluginLoader
 from tests.helpers.docs_scope import shipped_feature_groups_collector
 from tests.helpers.plugin_stubs import make_raising_fg
 
-# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
 
 SAFE_FIELD_LOGGER = "mloda.core.abstract_plugins.components.utils"

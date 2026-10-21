@@ -31,3 +31,14 @@ def small_feature_group_walk(
         return get_all_subclasses(base)
 
     return walk
+
+
+def shipped_feature_group_walk() -> Callable[[type], set[type]]:
+    """Stub for the docs walk: shipped groups looked up at call time for FeatureGroup, the real walk otherwise."""
+
+    def walk(base: type) -> set[type]:
+        if base is FeatureGroup:
+            return set(shipped_feature_groups())
+        return get_all_subclasses(base)
+
+    return walk

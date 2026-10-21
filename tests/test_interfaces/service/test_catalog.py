@@ -28,7 +28,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from tests.helpers.docs_scope import small_feature_group_walk
 from tests.helpers.plugin_stubs import StubFeatureGroup
 
-# Catalog.build enumerates FeatureGroups; a cold cache under xdist load can exceed the default timeout.
+# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
 
 SECRET = "s3://user:pw@host/x"  # nosec B105

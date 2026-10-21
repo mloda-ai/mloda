@@ -18,8 +18,7 @@ import pytest
 import mloda.interfaces.cli.main as cli_main
 import mloda.interfaces.mcp.main as mcp_main
 from mloda.interfaces.service.config import Settings, load_settings
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from tests.helpers.docs_scope import shipped_feature_groups, small_feature_group_walk
+from tests.helpers.docs_scope import shipped_feature_group_walk
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -284,7 +283,7 @@ class TestServe:
             runs.append((self, transport))
 
         monkeypatch.setattr(mcpserver.MCPServer, "run", fake_run)
-        walk = small_feature_group_walk(*shipped_feature_groups(), AggregatedFeatureGroup)
+        walk = shipped_feature_group_walk()
         monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
         settings = load_settings(_config(tmp_path), ENV)
 

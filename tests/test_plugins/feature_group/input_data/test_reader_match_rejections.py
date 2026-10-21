@@ -1,10 +1,7 @@
-"""Engine handling of recorded match rejections (issue #727).
+"""Engine handling of recorded match rejections.
 
-A nested unresolvable input names its chain and drops the did-you-mean hint beside an input_data decline. A stage
-string the engine does not know falls back to ``value_rejection`` without crashing the run.
-
-All names carry a ``rej727`` marker: the groups defined here become global subclasses discovered
-process-wide, so under pytest-xdist they must stay inert for every other test's inputs.
+A nested unresolvable input names its chain and drops the did-you-mean hint beside an input_data decline; an
+unknown stage string falls back to ``value_rejection``. All names carry a ``rej727`` marker to stay inert for other tests.
 """
 
 from __future__ import annotations

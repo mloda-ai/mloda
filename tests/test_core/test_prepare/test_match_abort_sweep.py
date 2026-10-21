@@ -1035,7 +1035,7 @@ def test_known_escalations_are_enumerated() -> None:
     marked = {(site.module, site.function) for site in _of_kind("marked")}
 
     assert expected <= marked, f"known escalations missing from the sweep: {sorted(expected - marked)}"
-    # Vacuity floor, not a target: 12 sites today, so removing one stays a legitimate change.
+    # Vacuity floor, not a target.
     assert len(sweep().sites) >= 9, f"sweep enumerated only {len(sweep().sites)} raise sites; it is not walking"
 
 

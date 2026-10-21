@@ -213,6 +213,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         feature1.initial_requested_data = True
 
         mock_features = Mock(spec=FeatureSet)
+        mock_features.get_result_index_columns.return_value = {}
         mock_features.get_initial_requested_features.return_value = {feature1.name}
 
         manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid)
@@ -227,6 +228,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
 
         mock_cfw = Mock(spec=ComputeFramework)
         mock_features = Mock(spec=FeatureSet)
+        mock_features.get_result_index_columns.return_value = {}
         mock_features.get_initial_requested_features.return_value = set()
 
         manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid)
@@ -244,12 +246,13 @@ class TestDataLifecycleManagerAddToResultDataCollection:
 
         feature_name = Mock(spec=FeatureName)
         mock_features = Mock(spec=FeatureSet)
+        mock_features.get_result_index_columns.return_value = {}
         mock_features.get_initial_requested_features.return_value = {feature_name}
 
         with patch.object(manager, "get_result_data", return_value={"feature1": [1, 2, 3]}) as mock_get_result:
             manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid)
 
-            mock_get_result.assert_called_once_with(mock_cfw, {feature_name}, None)
+            mock_get_result.assert_called_once_with(mock_cfw, {feature_name}, None, result_index_columns={})
 
     def test_add_to_result_data_collection_passes_location(self) -> None:
         """Should pass location to get_result_data when provided."""
@@ -260,12 +263,13 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         mock_cfw = Mock(spec=ComputeFramework)
         feature_name = Mock(spec=FeatureName)
         mock_features = Mock(spec=FeatureSet)
+        mock_features.get_result_index_columns.return_value = {}
         mock_features.get_initial_requested_features.return_value = {feature_name}
 
         with patch.object(manager, "get_result_data", return_value={"feature1": [1, 2, 3]}) as mock_get_result:
             manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid, location=location)
 
-            mock_get_result.assert_called_once_with(mock_cfw, {feature_name}, location)
+            mock_get_result.assert_called_once_with(mock_cfw, {feature_name}, location, result_index_columns={})
 
     def test_add_to_result_data_collection_handles_none_result(self) -> None:
         """Should not add to collection when get_result_data returns None."""
@@ -275,6 +279,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         mock_cfw = Mock(spec=ComputeFramework)
         feature_name = Mock(spec=FeatureName)
         mock_features = Mock(spec=FeatureSet)
+        mock_features.get_result_index_columns.return_value = {}
         mock_features.get_initial_requested_features.return_value = {feature_name}
 
         with patch.object(manager, "get_result_data", return_value=None):
@@ -544,6 +549,62 @@ class TestDataLifecycleManagerOutputFramework:
         assert result.column_names == ["feature1"]
 
 
+class TestDataLifecycleManagerKeepIndex:
+    """Kept key columns join the selection; a missing one raises."""
+
+    @staticmethod
+    def _arrow_cfw(data: Any) -> PyArrowTable:
+        cfw = PyArrowTable()
+        cfw.data = data
+        return cfw
+
+    def test_add_to_result_data_collection_passes_kept_columns(self) -> None:
+        manager = DataLifecycleManager()
+        feature_name = Mock(spec=FeatureName)
+        mock_features = Mock(spec=FeatureSet)
+        mock_features.get_initial_requested_features.return_value = {feature_name}
+        mock_features.get_result_index_columns.return_value = {"feature1": ("id",)}
+
+        with patch.object(manager, "get_result_data", return_value={"feature1": [1]}) as mock_get_result:
+            manager.add_to_result_data_collection(Mock(spec=ComputeFramework), mock_features, uuid4())
+
+        assert mock_get_result.call_args.kwargs["result_index_columns"] == {"feature1": ("id",)}
+
+    def test_kept_columns_are_added_to_the_selection(self) -> None:
+        cfw = self._arrow_cfw(pa.table({"feature1": [1, 2], "id": [7, 8], "other": [0, 0]}))
+
+        result = DataLifecycleManager().get_result_data(
+            cfw, [FeatureName("feature1")], result_index_columns={"feature1": ("id",)}
+        )
+
+        assert set(result.column_names) == {"feature1", "id"}
+        assert result["id"].to_pylist() == [7, 8]
+
+    def test_without_kept_columns_selection_is_unchanged(self) -> None:
+        cfw = self._arrow_cfw(pa.table({"feature1": [1, 2], "id": [7, 8]}))
+
+        result = DataLifecycleManager().get_result_data(cfw, [FeatureName("feature1")])
+
+        assert result.column_names == ["feature1"]
+
+    def test_missing_kept_column_raises_naming_feature_and_column(self) -> None:
+        cfw = self._arrow_cfw(pa.table({"feature1": [1, 2]}))
+
+        with pytest.raises(ValueError, match=r"feature1.*id|id.*feature1"):
+            DataLifecycleManager().get_result_data(
+                cfw, [FeatureName("feature1")], result_index_columns={"feature1": ("id",)}
+            )
+
+    def test_schema_less_result_skips_the_check(self) -> None:
+        cfw = self._arrow_cfw(pa.table({}))
+
+        result = DataLifecycleManager().get_result_data(
+            cfw, [FeatureName("feature1")], result_index_columns={"feature1": ("id",)}
+        )
+
+        assert result.num_columns == 0
+
+
 class TestDataLifecycleManagerGetResults:
     """Test getting all collected results."""
 
@@ -661,10 +722,12 @@ class TestDataLifecycleManagerIntegration:
         # Add results
         feature_name1 = Mock(spec=FeatureName)
         features1 = Mock(spec=FeatureSet)
+        features1.get_result_index_columns.return_value = {}
         features1.get_initial_requested_features.return_value = {feature_name1}
 
         feature_name2 = Mock(spec=FeatureName)
         features2 = Mock(spec=FeatureSet)
+        features2.get_result_index_columns.return_value = {}
         features2.get_initial_requested_features.return_value = {feature_name2}
 
         manager.add_to_result_data_collection(mock_cfw1, features1, step_uuid1)
@@ -725,10 +788,12 @@ class TestDataLifecycleManagerIntegration:
 
         feature_name1 = Mock(spec=FeatureName)
         features1 = Mock(spec=FeatureSet)
+        features1.get_result_index_columns.return_value = {}
         features1.get_initial_requested_features.return_value = {feature_name1}
 
         feature_name2 = Mock(spec=FeatureName)
         features2 = Mock(spec=FeatureSet)
+        features2.get_result_index_columns.return_value = {}
         features2.get_initial_requested_features.return_value = {feature_name2}
 
         # Add results with different locations

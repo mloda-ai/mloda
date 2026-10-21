@@ -64,6 +64,8 @@ class Feature:
         initial_requested_data (bool): Whether the data was initially requested.
         link (Link | None): The link associated with the feature.
         index (Index | None): The index associated with the feature.
+        keep_index (bool): Keep the key columns (index, else the group's index_columns) next to this requested
+            feature in its result frame; excluded from identity.
         feature_group_scope (str | type[FeatureGroup] | None): Read by feature resolution and filter
             matching; excluded from identity.
         required_declarations (dict[str, str | int | float | bool | None] | None): Declared attributes a
@@ -120,6 +122,7 @@ class Feature:
         forward_group_exclude: frozenset[str] | set[str] | list[str] | tuple[str, ...] | None = None,
         inherit_context_keys: frozenset[str] | set[str] | list[str] | tuple[str, ...] = frozenset(),
         required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
+        keep_index: bool = False,
     ):
         if options is None:
             options = {}
@@ -158,7 +161,12 @@ class Feature:
 
         # LINK and INDEX are excluded from equality and hash, because this way, we can define a single feature of a group with these properties.
         self.link = link
-        self.index = index  # Index is a feature currently only used for append/union features.
+        self.index = index  # Key of the feature: join side binding and the columns keep_index returns.
+
+        # Excluded from equality and hash like index.
+        self.keep_index = keep_index
+        # Engine-stamped key columns kept in the result frame; not in eq/hash.
+        self.result_index_columns: tuple[str, ...] = ()
 
         # feature_group_scope is read by feature resolution and by filter matching,
         # excluded from equality and hash like link/index.
@@ -245,6 +253,10 @@ class Feature:
                 self.result_parts |= other.result_parts
             else:
                 self.result_parts = None
+
+    def absorb_result_index_columns(self, other: Feature) -> None:
+        """Union a merged twin's kept key columns in, order kept."""
+        self.result_index_columns += tuple(c for c in other.result_index_columns if c not in self.result_index_columns)
 
     @staticmethod
     def _normalize_allowlist(

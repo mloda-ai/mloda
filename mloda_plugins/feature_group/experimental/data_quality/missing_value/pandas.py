@@ -1,6 +1,4 @@
-"""
-Pandas implementation for missing value imputation feature groups.
-"""
+"""Pandas missing value imputation."""
 
 from __future__ import annotations
 

@@ -1,6 +1,4 @@
-"""
-PythonDict implementation for text cleaning feature groups.
-"""
+"""PythonDict text cleaning."""
 
 from __future__ import annotations
 
@@ -27,13 +25,7 @@ except ImportError:
 
 
 class PythonDictTextCleaning(Implementation):
-    """
-    PythonDict implementation for text cleaning feature groups.
-
-    This implementation uses pure Python operations on columnar ``dict[str, list[Any]]``
-    data structures to perform text cleaning operations without external dependencies
-    (except optional NLTK).
-    """
+    """PythonDict text cleaning."""
 
     feature_group = TextCleaningFeatureGroup
     compute_framework = PythonDictFramework

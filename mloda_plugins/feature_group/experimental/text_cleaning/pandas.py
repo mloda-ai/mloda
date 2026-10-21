@@ -1,6 +1,4 @@
-"""
-Pandas implementation for text cleaning feature groups.
-"""
+"""Pandas text cleaning."""
 
 from __future__ import annotations
 

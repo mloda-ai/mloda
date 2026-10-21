@@ -269,15 +269,13 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 ### Migrating from per-framework classes
 
 - `PandasAggregatedFeatureGroup`, `PyArrowAggregatedFeatureGroup` and `PolarsLazyAggregatedFeatureGroup` are replaced by `AggregatedFeatureGroup` with `PandasAggregation`, `PyArrowAggregation` and `PolarsLazyAggregation`.
-- The Pandas and PyArrow time window feature group classes are replaced by `TimeWindowFeatureGroup` with `PandasTimeWindow` and `PyArrowTimeWindow`.
-- The Pandas, PyArrow and PythonDict missing value feature group classes are replaced by `MissingValueFeatureGroup` with `PandasMissingValueImputation`, `PyArrowMissingValueImputation` and `PythonDictMissingValueImputation`.
-- The Pandas and PythonDict text cleaning feature group classes are replaced by `TextCleaningFeatureGroup` with `PandasTextCleaning` and `PythonDictTextCleaning`.
+- The per-framework time window, missing value and text cleaning classes are replaced by `TimeWindowFeatureGroup` (`PandasTimeWindow`, `PyArrowTimeWindow`), `MissingValueFeatureGroup` (`PandasMissingValueImputation`, `PyArrowMissingValueImputation`, `PythonDictMissingValueImputation`) and `TextCleaningFeatureGroup` (`PandasTextCleaning`, `PythonDictTextCleaning`).
 - Implementations are found by import: import the implementation modules or call `PluginLoader.all()`.
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
-- Framework differences not declared yet: missing value fills NaN only on Pandas, `mode` ties resolve differently (Pandas takes the smallest value, PyArrow and PythonDict the first seen), a PyArrow time window lets NaN through `sum` and `avg` and counts it, and text cleaning turns a missing value into `""` on Pandas while PythonDict does so for `None` but turns NaN into `"nan"`.
-- PyArrow `std` and `var` windows now use the sample statistic (ddof=1) like Pandas, so a one-row window is null.
+- Framework differences not declared yet: only Pandas imputes NaN (the others impute null only), `mode` ties differ, a PyArrow time window propagates NaN in `sum` and `avg` and counts it in `count`, and PythonDict text cleaning turns NaN into `"nan"` (Pandas gives `""`).
+- PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null.
 - `feature_group="PandasAggregatedFeatureGroup"` becomes `implementation="PandasAggregation"`, or `compute_framework=PandasDataFrame`.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
 - With Pandas and PyArrow both enabled, a sum now runs on PyArrow (it matches the reference contract; Pandas skips NaN) and may add a conversion. Pin `implementation="PandasAggregation"` to keep the old behaviour.

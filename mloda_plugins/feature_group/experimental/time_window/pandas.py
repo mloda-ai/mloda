@@ -1,6 +1,4 @@
-"""
-Pandas implementation for time window feature groups.
-"""
+"""Pandas time window."""
 
 from __future__ import annotations
 

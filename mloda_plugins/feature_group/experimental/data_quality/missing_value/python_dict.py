@@ -1,6 +1,4 @@
-"""
-PythonDict implementation for missing value imputation feature groups.
-"""
+"""PythonDict missing value imputation."""
 
 from __future__ import annotations
 
@@ -15,12 +13,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.base im
 
 
 class PythonDictMissingValueImputation(Implementation):
-    """
-    PythonDict implementation for missing value imputation feature groups.
-
-    This implementation uses pure Python operations on columnar ``dict[str, list[Any]]``
-    data structures to perform missing value imputation without external dependencies.
-    """
+    """PythonDict missing value imputation."""
 
     feature_group = MissingValueFeatureGroup
     compute_framework = PythonDictFramework

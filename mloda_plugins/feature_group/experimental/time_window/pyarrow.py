@@ -1,6 +1,4 @@
-"""
-PyArrow implementation for time window feature groups.
-"""
+"""PyArrow time window."""
 
 from __future__ import annotations
 

@@ -1,6 +1,4 @@
-"""
-PyArrow implementation for missing value imputation feature groups.
-"""
+"""PyArrow missing value imputation."""
 
 from __future__ import annotations
 

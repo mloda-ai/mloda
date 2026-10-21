@@ -130,8 +130,19 @@ class TestRegisteredOnlyDocsFiltering:
         registry = PluginRegistry.default()
         registry.clear()
 
-        default_names = [fg.name for fg in get_feature_group_docs()]
-        explicit_names = [fg.name for fg in get_feature_group_docs(registered_only=False)]
+        # A GC pass between the two walks can drop dead test-local subclasses and make the
+        # otherwise-identical calls disagree. Collect first, then hold the subclass graph stable
+        # for the comparison instead of depending on when another test's garbage is reclaimed.
+        gc.collect()
+        gc_was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            default_names = [fg.name for fg in get_feature_group_docs()]
+            explicit_names = [fg.name for fg in get_feature_group_docs(registered_only=False)]
+        finally:
+            if gc_was_enabled:
+                gc.enable()
+
         assert default_names == explicit_names
 
     def test_compute_framework_docs_registered_only_filters_to_registry(self) -> None:

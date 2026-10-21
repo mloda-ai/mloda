@@ -32,7 +32,7 @@ from mloda.user import FeatureResolutionError
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
-    has_match_rejection,
+    MATCH_REJECTION_REASONS,
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.validators.datatype_validator import DataTypeMismatchError
@@ -955,6 +955,11 @@ class MeasureConsumer(FeatureGroup):
         return {PandasDataFrame}
 
 
+def _has_input_data_rejection() -> bool:
+    reasons = MATCH_REJECTION_REASONS.get()
+    return reasons is not None and any(r.stage == INPUT_DATA_STAGE for r in reasons.values())
+
+
 @pytest.fixture(autouse=True)
 def _reset_measure_state() -> None:
     MeasureProducer.calls = 0
@@ -1437,11 +1442,7 @@ class _GroupOptionGroup(FeatureGroup):
             options.add_to_group("rejected_flag", 1)
             record_match_rejection(cls.get_class_name(), "input data veto", INPUT_DATA_STAGE)
             return False
-        return (
-            str(feature_name) == "ga"
-            and "rejected_flag" not in options.group
-            and not has_match_rejection(INPUT_DATA_STAGE)
-        )
+        return str(feature_name) == "ga" and "rejected_flag" not in options.group and not _has_input_data_rejection()
 
 
 class _OwnReasonGroup(FeatureGroup):

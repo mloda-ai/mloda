@@ -93,14 +93,6 @@ def drop_match_rejections_since(known_owners: frozenset[str]) -> None:
             del reasons[owner_name]
 
 
-def has_match_rejection(stage: str) -> bool:
-    """True iff the active window holds a rejection with exactly this stage; False without an active window."""
-    reasons = MATCH_REJECTION_REASONS.get()
-    if reasons is None:
-        return False
-    return any(rejection.stage == stage for rejection in reasons.values())
-
-
 def context_forwarding_remedy(context: bool, keys: list[str] | None = None) -> str:
     """Remedy clause for an absent-option reason; empty for context=False keys. `keys` names them instead of "it"."""
     if not context:

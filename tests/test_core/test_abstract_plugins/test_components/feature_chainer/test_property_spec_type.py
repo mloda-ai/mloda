@@ -5,7 +5,7 @@ tests the type in isolation: construction defaults, immutability, ``allowed_valu
 normalization, the flag and callable shape rules, the strict-needs-a-value-space invariant,
 the ``NO_DEFAULT`` optionality sentinel and the declared-default rule (issue #530 semantics).
 The one consumer touched here is the spec-shape rule: the public parser entry point rejects a
-non-``PropertySpec`` and a reader-surface ``framework_set=True`` spec (#949).
+non-``PropertySpec``.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
-from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec, is_positive_int
+from mloda.core.abstract_plugins.components.property_spec import NO_DEFAULT, PropertySpec
 from mloda.core.abstract_plugins.components.options import Options
 
 
@@ -326,20 +326,6 @@ class TestParserEntryPointRequiresPropertySpec:
         with pytest.raises(ValueError, match="not a PropertySpec"):
             FeatureChainParser.validate_property_mapping_defaults("SomeOwner", property_mapping)
 
-    def test_match_configuration_rejects_a_framework_set_spec(self) -> None:
-        """A ``framework_set=True`` spec handed straight to the matcher raises naming the key (#949)."""
-        property_mapping = {"pst949_reader_key": PropertySpec("Reader-surface key.", default=None, framework_set=True)}
-
-        with pytest.raises(ValueError) as exc_info:
-            FeatureChainParser.match_configuration_feature_chain_parser(
-                "any_feature", Options(context={"pst949_reader_key": "x"}), property_mapping
-            )
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "pst949_reader_key" in message
-        assert "framework_set" in message
-
 
 class TestDeclaredDefault:
     """The declared-default rule (issue #530 semantics) applies only under strict."""
@@ -402,109 +388,3 @@ class TestDeclaredDefault:
         """The same holds for a non-Mapping value space: membership decides, and it rejects."""
         with pytest.raises(ValueError, match="(?i)default"):
             PropertySpec("x", allowed_values=("a",), strict_validation=True, default={"a": 1})
-
-
-class TestPropertySpecFrameworkSetField:
-    """The one spec type carries the reader-surface ``framework_set`` flag."""
-
-    def test_framework_set_defaults_to_false(self) -> None:
-        """A plain spec is user-set: ``framework_set`` is False unless declared."""
-        assert PropertySpec("x").framework_set is False
-
-    def test_framework_set_true_constructs(self) -> None:
-        """Marking a spec framework-written is a plain field, not a construction error."""
-        assert PropertySpec("x", default=None, framework_set=True).framework_set is True
-
-    def test_framework_set_is_frozen(self) -> None:
-        """Assigning the field raises ``dataclasses.FrozenInstanceError`` like every other field."""
-        spec = PropertySpec("x", default=None, framework_set=True)
-
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            setattr(spec, "framework_set", False)
-
-    def test_framework_set_participates_in_value_equality(self) -> None:
-        """Two specs differing only in ``framework_set`` are unequal; equal fields stay equal."""
-        assert PropertySpec("x", default=None, framework_set=True) != PropertySpec("x", default=None)
-        assert PropertySpec("x", default=None, framework_set=True) == PropertySpec(
-            "x", default=None, framework_set=True
-        )
-
-    @pytest.mark.parametrize("non_bool", ["yes", 1, None])
-    def test_non_bool_framework_set_rejected_at_construction(self, non_bool: Any) -> None:
-        """A non-bool is a ``ValueError`` naming the field, like the other bool fields."""
-        with pytest.raises(ValueError) as exc_info:
-            _spec("x", framework_set=non_bool)
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "framework_set" in message
-        assert "bool" in message
-
-
-class TestPropertySpecScalarOnlyField:
-    """The one spec type carries the reader-surface ``scalar_only`` flag (#1154)."""
-
-    def test_scalar_only_defaults_to_false(self) -> None:
-        """A plain spec admits a list/tuple/set/frozenset element-wise unless declared otherwise."""
-        assert PropertySpec("x").scalar_only is False
-
-    def test_scalar_only_true_constructs_with_strict_validation(self) -> None:
-        """Marking a spec scalar-only is a plain field, paired with its required strict_validation."""
-        spec = PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
-
-        assert spec.scalar_only is True
-
-    def test_scalar_only_is_frozen(self) -> None:
-        """Assigning the field raises ``dataclasses.FrozenInstanceError`` like every other field."""
-        spec = PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
-
-        with pytest.raises(dataclasses.FrozenInstanceError):
-            setattr(spec, "scalar_only", False)
-
-    def test_scalar_only_participates_in_value_equality(self) -> None:
-        """Two specs differing only in ``scalar_only`` are unequal; equal fields stay equal."""
-        assert PropertySpec(
-            "x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3
-        ) != PropertySpec("x", element_validator=is_positive_int, strict_validation=True, default=3)
-        assert PropertySpec(
-            "x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3
-        ) == PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
-
-    @pytest.mark.parametrize("non_bool", ["yes", 1, None])
-    def test_non_bool_scalar_only_rejected_at_construction(self, non_bool: Any) -> None:
-        """A non-bool is a ``ValueError`` naming the field, like the other bool fields."""
-        with pytest.raises(ValueError) as exc_info:
-            _spec("x", scalar_only=non_bool)
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "scalar_only" in message
-        assert "bool" in message
-
-    def test_scalar_only_without_strict_validation_rejected_at_construction(self) -> None:
-        """``scalar_only=True`` can never be enforced without ``strict_validation=True``, mirroring ``element_validator``."""
-        with pytest.raises(ValueError) as exc_info:
-            PropertySpec("x", scalar_only=True)
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "scalar_only" in message
-        assert "strict_validation" in message
-
-    def test_scalar_only_true_rejects_a_collection_default_at_construction(self) -> None:
-        """``scalar_only=True`` rejects a collection outright, so its OWN declared default must be a scalar too."""
-        with pytest.raises(ValueError) as exc_info:
-            PropertySpec(
-                "x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=[3, 5]
-            )
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "scalar_only" in message
-        assert "default" in message
-
-    def test_scalar_only_true_with_a_scalar_default_constructs_fine(self) -> None:
-        """Control: scalar_only only rejects a COLLECTION default; a plain scalar default still constructs."""
-        spec = PropertySpec("x", element_validator=is_positive_int, strict_validation=True, scalar_only=True, default=3)
-
-        assert spec.default == 3

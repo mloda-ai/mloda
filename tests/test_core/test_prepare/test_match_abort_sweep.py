@@ -98,7 +98,7 @@ _ADOPT_COLLISION = (
     "dict.clear names collide with a raising, swallowing update() elsewhere"
 )
 _VALIDATE_PROPERTY_SPEC_RAISES = (
-    "real edge: validate_property_spec's ValueError for a malformed or inapplicable spec on the FEATURE_GROUP "
+    "real edge: validate_property_spec's ValueError for a non-PropertySpec value on the FEATURE_GROUP "
     "surface, reached via _require_spec's public entry point for a caller-supplied mapping that never passed "
     "the class-definition check; that candidate's own defect, so the seam reads it as a non-match"
 )

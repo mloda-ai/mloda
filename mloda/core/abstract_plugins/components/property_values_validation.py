@@ -53,8 +53,6 @@ def _rejection(key: str, spec: PropertySpec, value: Any, options: Options) -> st
 
     if not spec.strict_validation:
         return None
-    if spec.scalar_only and isinstance(value, (list, tuple, set, frozenset)):
-        return "must be a scalar, not a collection"
 
     def log_check_raise(exc: Exception) -> None:
         _log_raise(key, "value check", exc)
@@ -80,8 +78,6 @@ def validate_property_values(
 
     options = Options(group=dict(values))
     for key, spec in mapping.items():
-        if spec.framework_set:
-            continue
         reason = _rejection(key, spec, values.get(key), options)
         if reason is not None:
             raise PropertyValidationError(key, reason)

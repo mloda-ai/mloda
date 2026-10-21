@@ -47,8 +47,7 @@ same fields, its keyword is `strict=` (which sets `strict_validation`), and it k
 declaration readable. `PropertySpec` is the lower-level form: it is the type the builder
 returns and the type the schema is validated against, so reach for it directly when you need
 the class itself (subclassing, `isinstance` checks, or constructing a spec programmatically).
-The builder does not accept `framework_set` or `scalar_only`; a spec needing those must be
-constructed as `PropertySpec(...)` directly. Both are exported from `mloda.provider`.
+Both are exported from `mloda.provider`.
 
 ```python
 from mloda.provider import property_spec
@@ -73,7 +72,7 @@ does not understand can be absorbed silently.
 | Moment | Mechanism | Checks | Receives | On failure |
 | --- | --- | --- | --- | --- |
 | Author time | `mypy --strict` | The field exists and its declared type fits: `strict_validaton=True` (typo), `strict_validation=1`, `allowed_values=5` | The constructor call | mypy error at the spec literal. Without mypy: an unknown field is a `TypeError`; a wrong type falls through to the row below |
-| Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation`, `framework_set` and `scalar_only` are real bools; the validators are callable; `element_validator` and `scalar_only` each imply strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules; `expected` is a non-empty str and needs a `match_guard` | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
+| Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation` is a real bool; the validators are callable; `element_validator` implies strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules; `expected` is a non-empty str and needs a `match_guard` | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
 | Class definition (`FeatureGroup.__init_subclass__`) | Mapping and spec type | The mapping is `None` or a Mapping (a format group's must be a Mapping, mixins included); every spec IS a `PropertySpec` | The mapping, then every value in it | `TypeError` naming the class for a non-mapping; `ValueError` naming the class and the key for a bad spec |
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
@@ -144,7 +143,7 @@ and `reason`) on the first failure.
 
 - It checks required presence, `required_when`, and strict values.
 - `required_when` runs only when the key is absent.
-- Ignored: `framework_set` keys, `match_guard`, `deferred_binding`, and `context`.
+- Ignored: `match_guard`, `deferred_binding`, and `context`. A caller that must reject a collection checks the value's shape itself.
 - `closed_world=True` rejects undeclared keys; `False` ignores them.
 - Defaults are never applied: `required_when` receives an `Options` of the raw values, unlike on a feature group.
 - Errors and logs never contain a value.
@@ -196,6 +195,8 @@ The two callables differ on both axes, which is what their names say:
   `strict_validation=True` the guard means "this value is wrong", so its rejection is reported to
   the user instead of failing silently. Declaring `expected` reports the rejection too, even on a
   non-strict spec, with a message naming what the guard accepts instead of the generic strict text.
+
+A key that must reject a collection outright uses a `match_guard` on the raw value (as `HANDLE_SPEC` does).
 
 Both run on both match paths, so declaring both on one spec is about **what** is judged, not
 about where: `element_validator` judges each element and produces the message, while

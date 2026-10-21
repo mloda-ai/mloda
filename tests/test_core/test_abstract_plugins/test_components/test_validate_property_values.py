@@ -126,15 +126,6 @@ class TestSequenceUnpacking:
         validate_property_values({"k": "abc"}, _strict(allowed_values=("abc",)), closed_world=True)
 
 
-class TestScalarOnly:
-    def test_rejects_collection(self) -> None:
-        with pytest.raises(PropertyValidationError):
-            validate_property_values({"k": ["a"]}, _strict(scalar_only=True, allowed_values=("a",)), closed_world=True)
-
-    def test_accepts_scalar(self) -> None:
-        validate_property_values({"k": "a"}, _strict(scalar_only=True, allowed_values=("a",)), closed_world=True)
-
-
 class TestNonStrict:
     def test_never_validates_value(self) -> None:
         mapping = {"k": PropertySpec("k", allowed_values=("a",), default=None)}
@@ -191,12 +182,6 @@ class TestRequiredWhen:
             validate_property_values({}, mapping, closed_world=True)
 
 
-class TestFrameworkSetKeys:
-    def test_absent_framework_set_key_is_skipped(self) -> None:
-        mapping = {"k": PropertySpec("k", framework_set=True, default=NO_DEFAULT)}
-        validate_property_values({}, mapping, closed_world=True)
-
-
 class TestRequiredWhenPresentKey:
     def test_predicate_not_called_when_key_present(self) -> None:
         calls: list[Any] = []
@@ -242,15 +227,13 @@ class TestSecretHygiene:
             {"allowed_values": ("public",)},
             {"element_validator": _reject_all},
             {"element_validator": _raise_with_value},
-            {"scalar_only": True, "allowed_values": (SECRET,)},
         ],
-        ids=["non_member", "validator_reject", "validator_raises", "scalar_only"],
+        ids=["non_member", "validator_reject", "validator_raises"],
     )
     def test_value_never_leaks(self, spec_kwargs: dict[str, Any], caplog: pytest.LogCaptureFixture) -> None:
-        value: Any = [SECRET] if "scalar_only" in spec_kwargs else SECRET
         with caplog.at_level(logging.DEBUG):
             with pytest.raises(PropertyValidationError) as exc:
-                validate_property_values({"k": value}, _strict(**spec_kwargs), closed_world=True)
+                validate_property_values({"k": SECRET}, _strict(**spec_kwargs), closed_world=True)
         assert SECRET not in str(exc.value)
         assert exc.value.__cause__ is None
         assert exc.value.__context__ is None

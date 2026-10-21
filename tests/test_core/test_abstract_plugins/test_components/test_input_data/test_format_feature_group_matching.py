@@ -1,6 +1,7 @@
 """FormatFeatureGroup class-definition rule, claim-route matching, pointing, ambiguity and plan identity."""
 
 import gc
+import logging
 from abc import abstractmethod
 from collections.abc import Collection
 from pathlib import Path
@@ -19,7 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
+from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, ReadFileFG, SourceMatch
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -55,6 +56,12 @@ def _claims(feature: Feature, dac: DataAccessCollection | None, group: type) -> 
     return group in _identify(feature, dac, group).identified
 
 
+class _BadSpecMixin:
+    """Plain mixin whose PROPERTY_MAPPING holds a non-PropertySpec value."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, Any]] = {"toyfmt_bad": 42}
+
+
 class TestClassDefinitionRule:
     def test_open_searched_route_raises(self) -> None:
         with pytest.raises(TypeError):
@@ -73,6 +80,17 @@ class TestClassDefinitionRule:
 
     def test_group_without_routes_never_claims(self) -> None:
         assert not _claims(Feature(COL), toy_dac(h1={COL: [1]}), ToyFormatBase)
+
+    @pytest.mark.parametrize("own_mapping", [False, True], ids=["inherited_only", "own_mapping_merged"])
+    def test_a_non_spec_value_from_a_plain_mixin_raises_at_definition(self, own_mapping: bool) -> None:
+        attributes: dict[str, Any] = {"PROPERTY_MAPPING": {"toyfmt_ok": PropertySpec("ok", default=None)}}
+        with pytest.raises(ValueError) as exc_info:
+            type("ToyfmtBadMixinReadFile", (_BadSpecMixin, ReadFileFG), attributes if own_mapping else {})
+        message = str(exc_info.value)
+        del exc_info
+        gc.collect()
+
+        assert "ToyfmtBadMixinReadFile.PROPERTY_MAPPING['toyfmt_bad'] is a int, not a PropertySpec" in message
 
 
 class TestCheckedNames:
@@ -201,6 +219,135 @@ class TestPointedGroupValueFailureIsNotADecline:
         feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: "good"}))
 
         assert _claims(feature, None, _ValueCheckedFG)
+
+
+_REQ_KEY = "toyfmt_req"
+_COND_KEY = "toyfmt_cond"
+_EQ_KEY = "toyfmt_eq"
+_EQ_SECRET = "toyfmt-s3cr3t"  # nosec B105
+
+
+class _ReqMixin:
+    """Plain mixin holding a required key and a required_when key."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+        _REQ_KEY: PropertySpec("Required"),
+        _COND_KEY: PropertySpec("Conditional", default=None, required_when=lambda options: True),
+    }
+
+
+class _ReqViaMixinFG(_ReqMixin, ToyFormatFG):
+    """Declares its own mapping, so the mixin keys reach it through the merge."""
+
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {"toyfmt_opt": PropertySpec("Optional", default=None)}
+
+
+class _ElementValidatedFG(ToyFormatFG):
+    PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
+        _VALUE_KEY: PropertySpec(
+            "Mode",
+            allowed_values={"a": "A"},
+            context=True,
+            strict_validation=True,
+            element_validator=lambda value: value == "b",
+        ),
+    }
+
+
+class _RaisingEqValue:
+    """Hashable value whose equality check raises with a secret in the message."""
+
+    def __init__(self, error: type[Exception]) -> None:
+        self.error = error
+
+    def __eq__(self, other: object) -> bool:
+        raise self.error(f"leak {_EQ_SECRET}")
+
+    def __hash__(self) -> int:
+        return 1
+
+
+def _eq_group(name: str, allowed: tuple[Any, ...]) -> type:
+    spec = PropertySpec("Eq", allowed_values=allowed, context=True, strict_validation=True)
+    return type(name, (ToyFormatFG,), {"PROPERTY_MAPPING": {_EQ_KEY: spec}})
+
+
+_EQ_ELEMENT_GROUPS: dict[type[Exception], type] = {
+    ValueError: _eq_group("_EqElementValueErrorFG", (_RaisingEqValue(ValueError),)),
+    RuntimeError: _eq_group("_EqElementRuntimeErrorFG", (_RaisingEqValue(RuntimeError),)),
+}
+_EqValueFG = _eq_group("_EqValueFG", ("a",))
+
+
+class TestPropertyMappingMatching:
+    @pytest.mark.parametrize("absent", [_REQ_KEY, _COND_KEY])
+    def test_mixin_keys_decline_when_absent_and_claim_when_present(self, absent: str) -> None:
+        keys = {_REQ_KEY: "x", _COND_KEY: "y"}
+        pointer = {"_ReqViaMixinFG": {COL: [1]}}
+
+        assert _claims(Feature(COL, Options({**pointer, **keys})), None, _ReqViaMixinFG)
+
+        del keys[absent]
+        result = _identify(Feature(COL, Options({**pointer, **keys})), None, _ReqViaMixinFG)
+        assert result.identified == {}
+        assert _ReqViaMixinFG in result.eliminations
+
+    def test_a_value_the_element_validator_accepts_claims_despite_the_allowed_values(self) -> None:
+        feature = Feature(COL, Options({"_ElementValidatedFG": {COL: [1]}, _VALUE_KEY: "b"}))
+
+        assert _claims(feature, None, _ElementValidatedFG)
+
+    def test_a_value_the_element_validator_rejects_is_a_value_rejection(self) -> None:
+        feature = Feature(COL, Options({"_ElementValidatedFG": {COL: [1]}, _VALUE_KEY: "a"}))
+        result = _identify(feature, None, _ElementValidatedFG)
+
+        assert result.identified == {}
+        assert result.eliminations[_ElementValidatedFG].stage == "value_rejection"
+
+    @pytest.mark.parametrize("error", [ValueError, RuntimeError])
+    @pytest.mark.parametrize("direction", ["element_raises", "value_raises"])
+    def test_a_raising_eq_in_the_membership_check_is_a_clean_rejection(
+        self, error: type[Exception], direction: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        group, value = (
+            (_EQ_ELEMENT_GROUPS[error], "a") if direction == "element_raises" else (_EqValueFG, _RaisingEqValue(error))
+        )
+        feature = Feature(COL, Options({group.__name__: {COL: [1]}, _EQ_KEY: value}))
+
+        result = _identify(feature, None, group)
+
+        assert result.identified == {}
+        elimination = result.eliminations[group]
+        assert elimination.stage == "value_rejection"
+        assert _EQ_SECRET not in elimination.reason
+        warnings = [record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING]
+        assert not any(_EQ_SECRET in message for message in warnings)
+
+
+class TestTwoPointedGroups:
+    OPTIONS = {"_ValueCheckedFG": {COL: [1]}, "ToyOtherFormatFG": {COL: [2]}}
+
+    @pytest.mark.parametrize(
+        "order",
+        [(_ValueCheckedFG, ToyOtherFormatFG), (ToyOtherFormatFG, _ValueCheckedFG)],
+        ids=["vetoed_first", "vetoed_last"],
+    )
+    def test_the_vetoed_group_leaves_the_other_groups_pair_recorded(self, order: tuple[type, type]) -> None:
+        feature = Feature(COL, Options({**self.OPTIONS, _VALUE_KEY: _BAD_VALUE}))
+
+        result = _identify(feature, None, *order)
+
+        assert set(result.identified) == {ToyOtherFormatFG}
+        pair = feature.input_data_match
+        assert pair is not None
+        assert pair[0] is ToyOtherFormatFG
+        assert pair[1].access == {COL: [2]}
+
+    def test_two_valid_pointed_groups_are_ambiguous(self) -> None:
+        feature = Feature(COL, Options({**self.OPTIONS, _VALUE_KEY: "good"}))
+
+        with pytest.raises(ValueError, match="Multiple feature groups"):
+            evaluate_or_raise(feature, _plugins(_ValueCheckedFG, ToyOtherFormatFG), None, None)
 
 
 class TestPointedMissingColumnText:
@@ -611,7 +758,9 @@ class TestPointedRoutesDeclineWithReason:
         result = _identify(Feature(COL, feature_group=ToyFormatFG), None, ToyFormatFG)
 
         assert result.identified == {}
-        assert result.eliminations[ToyFormatFG].stage == "input_data"
+        elimination = result.eliminations[ToyFormatFG]
+        assert elimination.stage == "input_data"
+        assert "ToyFormatFG was pointed at but found no source for 'toyfmt_col'" in elimination.reason
 
     def test_pointed_declared_route_with_an_undeclared_name_records_a_rejection(self) -> None:
         feature = Feature("toyfmt_undeclared", feature_group=ToyDeclaredFG)

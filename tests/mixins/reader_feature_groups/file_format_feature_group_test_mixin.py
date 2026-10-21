@@ -316,6 +316,12 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         assert self._claims(Feature(self.present_column), dac)
         assert not [p for p in names + samples if p.endswith(FOREIGN_SUFFIX)]
 
+    def test_file_foreign_credentials_stay_silent(self, rejection_window: dict[str, MatchRejection]) -> None:
+        assert not self.feature_group_class.match_feature_group_criteria(
+            self.present_column, Options(), self.foreign_dac()
+        )
+        assert self._group_name() not in rejection_window
+
     # per-run cache
 
     def test_file_one_run_lists_the_file_at_most_once_per_listing_kind(self, monkeypatch: pytest.MonkeyPatch) -> None:

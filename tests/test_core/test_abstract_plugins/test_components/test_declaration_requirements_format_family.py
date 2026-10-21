@@ -345,6 +345,38 @@ class TestWrittenPairIsPerCandidate:
         assert result.eliminations[DeclDerivedDepthFG].stage == "declarations"
 
 
+class TestNonOwnerFormatGroupIsEliminatedAtInputData:
+    """A sibling format group lacking the column is eliminated by its source, not by the declaration."""
+
+    @pytest.mark.parametrize(
+        ("options", "dac", "reason"),
+        [
+            (None, DEPTH_DAC, "is in none of the sources"),
+            (
+                {DeclScaledDepthFormat.__name__: {DEPTH: [1], JOIN_KEY: [1]}},
+                None,
+                f"options point at {DeclScaledDepthFormat.__name__}",
+            ),
+        ],
+        ids=["global", "pointed"],
+    )
+    def test_the_non_owner_is_eliminated_at_input_data(
+        self, options: dict[str, Any] | None, dac: DataAccessCollection | None, reason: str
+    ) -> None:
+        requesting = Feature(DEPTH, options=options, required_declarations={"scale": None})
+        mapping: FeatureGroupEnvironmentMapping = {
+            DeclScaledDepthFormat: {PyArrowTable},
+            DeclLonelyFormat: {PyArrowTable},
+        }
+
+        result = IdentifyFeatureGroupClass.evaluate(requesting, mapping, None, dac)
+
+        assert set(result.identified) == {DeclScaledDepthFormat}
+        elimination = result.eliminations[DeclLonelyFormat]
+        assert elimination.stage == "input_data"
+        assert reason in elimination.reason
+
+
 class TestTopLevelRequestRequirement:
     """A requiring Feature passed straight to run_all is checked like a consumer's input."""
 

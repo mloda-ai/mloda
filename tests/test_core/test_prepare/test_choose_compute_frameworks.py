@@ -1041,6 +1041,13 @@ def _reason_prefers_matching_over_a_conversion(net: _Net) -> list[Feature]:
     return [block]
 
 
+def _reason_matching_listed_first_without_changing_the_outcome(net: _Net) -> list[Feature]:
+    source = net.add(ChooserRootFG, "chooser_op_dict_source", {D})
+    block = _op(net, "chooser_op_listed_first", {P, A})
+    net.edge(source, block)
+    return [block]
+
+
 def _reason_only_allowed_divergent(net: _Net) -> list[Feature]:
     return [_op(net, "chooser_op_only", {P})]
 
@@ -1086,6 +1093,13 @@ def _reason_mixed_members_prefer_matching(net: _Net) -> list[Feature]:
         (_reason_mixed_depth_block, None, None, [CONVERTS_LATER], [D]),
         (_reason_prefers_matching, None, None, [PREFERS_MATCHING], [A]),
         (_reason_prefers_matching_over_a_conversion, None, None, [PREFERS_MATCHING], [A]),
+        (
+            _reason_matching_listed_first_without_changing_the_outcome,
+            {A: 0, P: 1, D: 2},
+            None,
+            [LIST_ORDER],
+            [A],
+        ),
         (_reason_only_allowed_divergent, None, None, [ONLY_ALLOWED + SUM_TAG], [P]),
         (_reason_pinned_divergent, None, None, [PINNED + SUM_TAG], [P]),
         (_reason_matching_kind_is_not_divergent, None, None, [DEFAULT_ORDER], [P]),
@@ -1108,6 +1122,7 @@ def _reason_mixed_members_prefer_matching(net: _Net) -> list[Feature]:
         "mixed_depth_block",
         "prefers_matching",
         "prefers_matching_over_a_conversion",
+        "matching_listed_first_does_not_change_the_outcome",
         "only_allowed_divergent",
         "pinned_divergent",
         "matching_kind_is_not_divergent",

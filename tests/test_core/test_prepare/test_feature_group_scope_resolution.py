@@ -50,6 +50,9 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
+from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_time_window_utils import (
+    PandasTimeWindowTestDataCreator,
+)
 
 
 class MockComputeFramework(ComputeFramework):
@@ -837,6 +840,22 @@ def test_abstract_family_base_scope_resolves_to_the_enabled_subclass() -> None:
     winner, _frameworks = next(iter(evaluate_or_raise(feature, accessible_plugins).identified.items()))
 
     assert winner is PandasTimeWindowFeatureGroup
+
+
+def test_end2end_abstract_family_base_scope_runs_the_enabled_subclass() -> None:
+    """End to end: naming the abstract TimeWindowFeatureGroup runs its enabled Pandas subclass."""
+    assert inspect.isabstract(TimeWindowFeatureGroup), "the scoped family base must stay abstract"
+    name = "temperature__avg_3_day_window"
+    feature = Feature(name, feature_group=TimeWindowFeatureGroup.get_class_name())
+    plugin_collector = PluginCollector.enabled_feature_groups(
+        {PandasTimeWindowTestDataCreator, PandasTimeWindowFeatureGroup}
+    )
+
+    results = list(mloda.run_all([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector))
+
+    assert len([df for df in results if name in df.columns]) == 1
+    steps = mloda.explain([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+    assert any(step.feature_group is PandasTimeWindowFeatureGroup for step in steps)
 
 
 class ScopePythonAggregationSourceB(FeatureGroup):

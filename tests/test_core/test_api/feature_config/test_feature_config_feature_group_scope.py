@@ -28,6 +28,12 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindowFeatureGroup
+from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_time_window_utils import (
+    PandasTimeWindowTestDataCreator,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -691,6 +697,30 @@ def test_end2end_config_aggregation_group_scope_runs_the_pandas_implementation()
     assert aggregation.implementation is PandasAggregation
 
 
+def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass() -> None:
+    """A config scoped to the abstract 'TimeWindowFeatureGroup' runs the Pandas subclass.
+
+    The base drops out because it cannot be instantiated, the PyArrow sibling because its framework is not enabled.
+    """
+    name = "temperature__avg_3_day_window"
+    config_str = '[{"name": "%s", "feature_group": "TimeWindowFeatureGroup"}]' % name
+    plugin_collector = PluginCollector.enabled_feature_groups(
+        {
+            PandasTimeWindowTestDataCreator,
+            TimeWindowFeatureGroup,
+            PandasTimeWindowFeatureGroup,
+            PyArrowTimeWindowFeatureGroup,
+        }
+    )
+
+    features = load_features_from_config(config_str, format="json")
+    results = list(mloda.run_all(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector))
+
+    assert len([df for df in results if name in df.columns]) == 1
+    steps = mloda.explain(features, compute_frameworks=[PandasDataFrame], plugin_collector=plugin_collector)
+    assert any(step.feature_group is PandasTimeWindowFeatureGroup for step in steps)
+
+
 # ---------------------------------------------------------------------------
 # Implementation pin: the "implementation" key sits next to "feature_group"
 # ---------------------------------------------------------------------------
@@ -716,3 +746,19 @@ def test_feature_config_carries_the_implementation_and_the_schema_advertises_it(
 
     assert config.implementation == ["OpA"]
     assert "implementation" in feature_config_schema()["properties"]
+
+
+@pytest.mark.parametrize("raw", ["[]", "5", "[5]"], ids=["empty_list", "int", "int_list"])
+def test_loader_rejects_a_malformed_implementation_value(raw: str) -> None:
+    config_str = '[{"name": "shared_token", "implementation": %s}]' % raw
+
+    with pytest.raises((TypeError, ValueError)):
+        load_features_from_config(config_str)
+
+
+def test_a_nested_in_features_dict_rejects_the_implementation_key() -> None:
+    config_str = """[{"name": "outer_feature", "options": {"in_features": {
+        "name": "shared_token", "implementation": "OpA", "options": {"in_features": "age"}}}}]"""
+
+    with pytest.raises(ValueError, match="implementation"):
+        load_features_from_config(config_str)

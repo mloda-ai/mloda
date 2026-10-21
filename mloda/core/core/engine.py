@@ -36,6 +36,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
+from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.prepare.resolve_implementation_pins import ResolveImplementationPins
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.runtime.run import ExecutionOrchestrator
@@ -126,7 +127,7 @@ class Engine:
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        with run_match_cache():
+        with run_match_cache(), accessible_implementations(self.implementations):
             self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
@@ -245,7 +246,10 @@ class Engine:
         graph_builder.build_graph_from_feature_links()
         graph = graph_builder.graph
 
-        pin_frameworks, pinned = ResolveImplementationPins(graph, self.implementations).resolve()
+        pin_frameworks: dict[UUID, frozenset[type[ComputeFramework]]] = {}
+        pinned: set[UUID] = set()
+        if any(node.feature.implementation_pin is not None for node in graph.nodes.values()):
+            pin_frameworks, pinned = ResolveImplementationPins(graph, self.implementations).resolve()
 
         # resolve graph into a queue
         resolver = ResolveGraph(

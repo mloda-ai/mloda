@@ -31,9 +31,9 @@ class OperationFeatureGroup(FeatureGroup):
 
     @classmethod
     def _implemented_frameworks(cls) -> set[type[ComputeFramework]] | None:
-        from mloda.core.abstract_plugins.implementation import loaded_implementations, serving_implementation
+        from mloda.core.abstract_plugins.implementation import current_implementations, serving_implementation
 
-        implementations = loaded_implementations()
+        implementations = current_implementations()
         return {
             framework
             for framework in get_all_subclasses(ComputeFramework)
@@ -42,9 +42,9 @@ class OperationFeatureGroup(FeatureGroup):
 
     @classmethod
     def _implemented_subtype_matrix(cls) -> dict[str, frozenset[str]]:
-        from mloda.core.abstract_plugins.implementation import loaded_implementations, serving_implementation
+        from mloda.core.abstract_plugins.implementation import current_implementations, serving_implementation
 
-        implementations = loaded_implementations()
+        implementations = current_implementations()
         universe = cls.subtype_universe()
         matrix: dict[str, frozenset[str]] = {}
         for framework in cls.compute_framework_definition():
@@ -61,9 +61,9 @@ class OperationFeatureGroup(FeatureGroup):
         compute_framework: type[ComputeFramework],
     ) -> bool:
         """The serving implementation's supported subtypes and accepts decide, after the SUBTYPES gate."""
-        from mloda.core.abstract_plugins.implementation import loaded_implementations, serving_implementation
+        from mloda.core.abstract_plugins.implementation import current_implementations, serving_implementation
 
-        impl = serving_implementation(cls, compute_framework, loaded_implementations())
+        impl = serving_implementation(cls, compute_framework, current_implementations())
         if impl is None or not super().supports_compute_framework(feature_name, options, compute_framework):
             return False
         if impl.supported is not None:

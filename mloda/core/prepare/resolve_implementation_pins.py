@@ -6,6 +6,8 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations, serving_implementation
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
 from mloda.core.prepare.graph.graph import Graph
 
@@ -37,9 +39,14 @@ class ResolveImplementationPins:
                 continue
             for step, impl in self._assign(uuid, pin):
                 feature = self.graph.nodes[step].feature
+                served = self._allowed(step, impl)
                 for other, other_impl, other_request in seen:
                     twin = self.graph.nodes[other].feature
-                    if other_impl is not impl and twin.name == feature.name and twin.options == feature.options:
+                    if (
+                        twin.name == feature.name
+                        and twin.options == feature.options
+                        and self._allowed(other, other_impl) != served
+                    ):
                         raise ImplementationPinError(
                             f"Step {feature.name} is pinned to {other_impl.__name__} by request {other_request} "
                             f"and to {impl.__name__} by request {node.feature.name}."
@@ -113,14 +120,18 @@ class ResolveImplementationPins:
             assigned.extend(zip(ordered, impls))
         return assigned
 
+    def _serving(self, group: type[FeatureGroup], framework: Framework) -> type[Implementation] | None:
+        stop_after = "load_neutral" if issubclass(group, FormatFeatureGroup) else None
+        return serving_implementation(group, framework, self.accessible, stop_after=stop_after)
+
     def _allowed(self, uuid: UUID, impl: type[Implementation]) -> frozenset[Framework]:
         node = self.graph.nodes[uuid]
         feature = node.feature
+        group = node.feature_group_class
         serves = {
             fw
             for fw in feature.compute_frameworks or ()
-            if (served := serving_implementation(node.feature_group_class, fw, self.accessible)) is not None
-            and issubclass(served, impl)
+            if (served := self._serving(group, fw)) is not None and issubclass(served, impl)
         }
         if not serves:
             reason = (

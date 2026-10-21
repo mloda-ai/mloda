@@ -516,7 +516,19 @@ class Feature:
             if isinstance(implementation, Sequence) and not isinstance(implementation, str)
             else [implementation]
         )
-        return tuple(item if isinstance(item, str) else item.__name__ for item in items)
+        if len(items) == 0:
+            raise ValueError("An implementation pin needs at least one name or Implementation class.")
+        names: list[str] = []
+        for item in items:
+            if isinstance(item, str):
+                names.append(item)
+            elif isinstance(item, type):
+                names.append(f"{item.__module__}:{item.__qualname__}")
+            else:
+                raise TypeError(
+                    f"An implementation pin must be a name or an Implementation class, got {type(item).__name__}."
+                )
+        return tuple(names)
 
     @property
     def input_data_match(self) -> tuple[DataAccessReader, Any] | None:

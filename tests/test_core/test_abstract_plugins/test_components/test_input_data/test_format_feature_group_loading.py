@@ -477,9 +477,12 @@ class TestImplementationPin:
             ("keys_no_group_of_chain", "OpToyChainPandas"),
             ("conflicts_with_compute_framework", "OpToyPyArrow"),
             ("too_many_names", "OpToyChainPandas"),
+            ("format_group_overrides_load_neutral", "FmtParentImpl"),
         ],
     )
-    def test_a_bad_pin_raises_implementation_pin_error_naming_step_and_class(self, case: str, needle: str) -> None:
+    def test_a_bad_pin_raises_implementation_pin_error_naming_step_and_class(
+        self, case: str, needle: str, tmp_path: Path, make_implementation: Any
+    ) -> None:
         from mloda.provider import ImplementationPinError
 
         toy = _toy_operation()
@@ -496,6 +499,22 @@ class TestImplementationPin:
                 _run_pinned([_op_feature("OpToyChainPandas")])
             elif case == "conflicts_with_compute_framework":
                 _run_pinned([_op_feature("OpToyPyArrow", compute_framework="PandasDataFrame")])
+            elif case == "format_group_overrides_load_neutral":
+                feature_name = "toyfmt_ld"
+                parent = neutral_csv_group(tmp_path / "n.csv")
+                parent_impl = make_implementation(parent, PythonDictFramework, _sentinel, name="FmtParentImpl")
+
+                class _Child(parent):  # type: ignore[valid-type, misc]
+                    @classmethod
+                    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+                        return super().load_neutral(match, features)
+
+                mloda.run_all(
+                    [Feature("toyfmt_ld", implementation=parent_impl)],
+                    compute_frameworks=[PythonDictFramework],
+                    plugin_collector=PluginCollector.enabled_feature_groups({_Child}),
+                    data_access_collection=toy_dac(h1={"toyfmt_ld": [1, 2]}),
+                )
             else:
                 feature_name = OUTER
                 _run_chain([Feature(OUTER, implementation=["OpToyChainPandas"] * 3)])
@@ -516,6 +535,46 @@ class TestImplementationPin:
 
         assert OUTER in str(caught.value)
         assert INNER in str(caught.value)
+
+    def test_a_parent_and_a_subclass_pin_resolving_to_one_serving_class_do_not_conflict(
+        self, make_implementation: Any
+    ) -> None:
+        toy = _toy_operation()
+
+        def serve(group: Any, data: Any, features: Any) -> Any:
+            for name in sorted(features.get_all_names()):
+                toy.CHAIN_LOG.append((name, "OpToyChainPandasPlus"))
+                data[name] = toy.PANDAS_MARK
+            return data
+
+        make_implementation(
+            toy.OpToyChainFG, PandasDataFrame, serve, base=toy.OpToyChainPandas, name="OpToyChainPandasPlus"
+        )
+
+        _run_chain(
+            [
+                Feature(OUTER, implementation="OpToyChainPandas"),
+                Feature(INNER, implementation="OpToyChainPandasPlus"),
+            ]
+        )
+
+        assert toy.CHAIN_LOG == [(INNER, "OpToyChainPandasPlus"), (OUTER, "OpToyChainPandasPlus")]
+
+    def test_a_class_pin_resolves_although_another_loaded_implementation_shares_its_name(
+        self, make_implementation: Any
+    ) -> None:
+        toy = _toy_operation()
+        make_implementation(
+            toy.OpToyFG,
+            PandasDataFrame,
+            lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [77]}),
+            base=toy.OpToyPandas,
+            name="OpToyPyArrow",
+        )
+
+        result = _run_pinned([_op_feature(toy.OpToyPyArrow)])
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [toy.PYARROW_MARK]
 
     def test_the_pin_does_not_reach_the_input_or_a_non_pinned_sibling(self) -> None:
         toy = _toy_operation()

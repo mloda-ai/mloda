@@ -198,6 +198,7 @@ class ChooseComputeFrameworks:
         self.implementations = list(implementations or ())
         self._differs: list[dict[Framework, tuple[str, ...]]] = []
         self._penalty: list[dict[Framework, int]] = []
+        self._free: dict[int, Framework] = {}
         self.pin_frameworks = pin_frameworks or {}
         self.pinned = pinned or set()
         self.output_framework = output_framework
@@ -239,6 +240,11 @@ class ChooseComputeFrameworks:
         touching, steps = self._component_indexes(len(blocks), rules, groups)
         for order in self._search_orders(len(blocks), linked):
             assignment, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
+            self._free = {}
+            if any(self._penalty[i] for i in assignment):
+                penalty, self._penalty = self._penalty, [{} for _ in self._penalty]
+                self._free, _ = self._solve(blocks, order, rules, linked, domains, touching, steps)
+                self._penalty = penalty
             for index, framework in assignment.items():
                 reason = self._reason(blocks, touching, steps, assignment, index)
                 for feature in blocks[index].features:
@@ -856,10 +862,8 @@ class ChooseComputeFrameworks:
         chosen_rank = self.rank(chosen)
         earlier = [fw for fw in alternatives if self.rank(fw) < chosen_rank]
         base = step_cost(None)
-        if not found and any(
-            self._differs[index].get(fw) and (self.rank(fw) < chosen_rank or step_cost(fw)[1] <= base[1])
-            for fw in alternatives
-        ):
+        free = self._free.get(index)
+        if free is not None and free is not chosen and not found and self._differs[index].get(free):
             return PREFERS_MATCHING
         if not earlier:
             return self._order_reason(chosen, alternatives[0]) + suffix

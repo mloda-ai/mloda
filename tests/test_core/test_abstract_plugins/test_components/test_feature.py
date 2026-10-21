@@ -461,8 +461,8 @@ class _PinNamedImpl:
     [
         (None, None),
         ("OpA", ("OpA",)),
-        (_PinNamedImpl, ("_PinNamedImpl",)),
-        (["OpA", _PinNamedImpl], ("OpA", "_PinNamedImpl")),
+        (_PinNamedImpl, (f"{_PinNamedImpl.__module__}:{_PinNamedImpl.__qualname__}",)),
+        (["OpA", _PinNamedImpl], ("OpA", f"{_PinNamedImpl.__module__}:{_PinNamedImpl.__qualname__}")),
         (("OpA", "OpB"), ("OpA", "OpB")),
         ("pkg.mod:Outer.OpA", ("pkg.mod:Outer.OpA",)),
     ],
@@ -474,6 +474,16 @@ def test_implementation_pin_is_normalized_to_a_tuple_of_names(pin: Any, expected
     assert feature.implementation_pin == expected
     assert "implementation" not in feature.options.group
     assert "implementation" not in feature.options.context
+
+
+@pytest.mark.parametrize("pin", [[], 5, [5], ["OpA", 5]], ids=["empty_list", "int", "int_list", "mixed"])
+def test_a_malformed_implementation_pin_raises_naming_the_type(pin: Any) -> None:
+    with pytest.raises((TypeError, ValueError)) as caught:
+        Feature("impl_pin_bad_feature", implementation=pin)
+
+    assert not isinstance(caught.value, AttributeError)
+    if pin != []:
+        assert "int" in str(caught.value)
 
 
 def test_the_implementation_pin_is_part_of_equality_and_hash_and_survives_copy() -> None:

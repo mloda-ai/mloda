@@ -13,11 +13,12 @@ from mloda.provider import ComputeFramework, FeatureSet
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import Options
-from mloda.user import PluginCollector
+from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from mloda.provider import DefaultOptionKeys
 
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import column_values
@@ -26,6 +27,7 @@ from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCr
 
 @pytest.fixture(autouse=True, scope="module")
 def _collect_local_classes() -> Iterator[None]:
+    PluginLoader.all()
     yield
     gc.collect()
 

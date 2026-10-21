@@ -3,7 +3,9 @@
 import inspect
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
@@ -113,3 +115,24 @@ def serving_implementation(
 def loaded_implementations() -> list[type[Implementation]]:
     """Concrete loaded Implementation classes naming a valid pair (a rejected subclass lingers until collected)."""
     return [impl for impl in get_all_subclasses(Implementation) if _is_concrete(impl) and _names_a_pair(impl)]
+
+
+_ACCESSIBLE: ContextVar[frozenset[type[Implementation]] | None] = ContextVar(
+    "mloda_accessible_implementations", default=None
+)
+
+
+@contextmanager
+def accessible_implementations(implementations: Iterable[type[Implementation]]) -> Iterator[None]:
+    """Make the run's accessible implementations current for capability checks inside the block."""
+    token = _ACCESSIBLE.set(frozenset(implementations))
+    try:
+        yield
+    finally:
+        _ACCESSIBLE.reset(token)
+
+
+def current_implementations() -> Iterable[type[Implementation]]:
+    """The accessible implementations of the run being planned, else every loaded one."""
+    accessible = _ACCESSIBLE.get()
+    return loaded_implementations() if accessible is None else accessible

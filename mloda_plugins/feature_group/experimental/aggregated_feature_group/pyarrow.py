@@ -128,12 +128,7 @@ class PyArrowAggregation(AggregationImplementation):
                 arrays = [col.to_numpy() for col in columns]
             stacked = np.column_stack(arrays)
 
-            # np.nansum and the count below never warn on an all-NaN row (nansum returns 0,
-            # count is not nan-aware). The other reducers warn on rows they can't skipna
-            # over: an all-NaN row for min/max/mean/median, or a row with fewer than 2 valid
-            # values for std/var (ddof=1 needs >=2). Route those through the helper, which
-            # patches just the degenerate rows so the warning never fires, instead of
-            # suppressing it process-wide via warnings.catch_warnings().
+            # Reducers run on the null mask below; degenerate rows are patched so numpy never warns.
             # sum/avg/mean/std/var/count skip only null cells, so a genuine NaN propagates (count
             # counts it); the null mask comes from Arrow, not from the NaN-cast values.
             null_mask = np.column_stack([col.is_null().to_numpy(zero_copy_only=False) for col in columns])

@@ -544,18 +544,30 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
 
     # names
 
-    def test_db_a_chain_shaped_name_resolves_to_the_aggregation_only(self) -> None:
+    @pytest.mark.parametrize("variant", ["unpointed", "query_and_pointer", "query_only"])
+    def test_db_a_chain_shaped_name_resolves_to_the_aggregation_only(self, variant: str) -> None:
         column = f"{self.present_column}_agg"
+        name = f"{column}{CHAIN_SEPARATOR}sum_aggr"
         path = self._make("agg_db", {"agg_table": {column: [1, 2, 3]}})
+        dac: DataAccessCollection | None = self._dac_of(path)
+        feature: Feature | str = name
+        if variant != "unpointed":
+            self._require_query_route()
+            query = self.query_for("agg_table", [column])
+            if variant == "query_and_pointer":
+                feature = self._query_feature(name, query, self.make_credential(path))
+                dac = None
+            else:
+                feature = self._query_feature(name, query)
         result = mloda.run_all(
-            [f"{column}{CHAIN_SEPARATOR}sum_aggr"],
+            [feature],
             compute_frameworks=[PyArrowTable],
             plugin_collector=PluginCollector.enabled_feature_groups(
                 {self.feature_group_class, PyArrowAggregatedFeatureGroup}
             ),
-            data_access_collection=self._dac_of(path),
+            data_access_collection=dac,
         )
-        assert result[0].to_pydict()[f"{column}{CHAIN_SEPARATOR}sum_aggr"] == [6, 6, 6]
+        assert result[0].to_pydict()[name] == [6, 6, 6]
 
     # loading
 

@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     SourceMatch,
     aborts_are_contained,
     current_feature_group_scope,
+    note_open_claim,
 )
 from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_format_group
 from mloda.core.abstract_plugins.components.match_rejection import (
@@ -340,9 +341,10 @@ class FormatFeatureGroup(FeatureGroup):
         base_name: str,
         options: Options,
         data_access_collection: DataAccessCollection | None,
-    ) -> tuple[dict[str, SourceMatch], dict[str, SourceMatch], bool]:
+    ) -> tuple[dict[str, SourceMatch], dict[str, SourceMatch], bool, frozenset[str]]:
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, SourceMatch] = {}
+        firm: set[str] = set()
         undeclared = False
         for route in routes:
             for match in cls.find_sources(route, name, options, data_access_collection):
@@ -350,11 +352,15 @@ class FormatFeatureGroup(FeatureGroup):
                     seen[match.source] = match
                     if cls.has_column(match, base_name):
                         fitting[match.source] = match
-                elif route.names is NamePolicy.OPEN or cls._declared_name(base_name):
+                        firm.add(match.source)
+                elif route.names is NamePolicy.OPEN:
                     fitting[match.source] = match
+                elif cls._declared_name(base_name):
+                    fitting[match.source] = match
+                    firm.add(match.source)
                 else:
                     undeclared = True
-        return fitting, seen, undeclared
+        return fitting, seen, undeclared, frozenset(fitting) - firm
 
     @classmethod
     def _matches_by_default_rules(
@@ -394,6 +400,7 @@ class FormatFeatureGroup(FeatureGroup):
         fitting: dict[str, SourceMatch] = {}
         seen: dict[str, SourceMatch] = {}
         undeclared = False
+        open_only: frozenset[str] = frozenset()
         known_owners = match_rejection_owners()
         if selected:
             outcome = probe_format_group(
@@ -412,7 +419,7 @@ class FormatFeatureGroup(FeatureGroup):
                     )
                 record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE, refusal=outcome.error)
                 return False
-            fitting, seen, undeclared = outcome.result
+            fitting, seen, undeclared, open_only = outcome.result
         if query_declined:
             if fitting or seen:
                 replace_probe_match_rejection(cls.get_class_name(), query_reason, known_owners, stage=INPUT_DATA_STAGE)
@@ -432,6 +439,8 @@ class FormatFeatureGroup(FeatureGroup):
             )
         if len(fitting) == 1:
             options.add_to_group(RESERVED_READER_OPTION_KEY, (cls, next(iter(fitting.values()))))
+            if open_only:
+                note_open_claim()
             return True
         if seen:
             show_columns = pointed or isinstance(options.get(HANDLE_OPTION), str)

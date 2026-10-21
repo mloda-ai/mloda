@@ -82,7 +82,7 @@ A format group can also describe its data through `declared_attributes`, see [De
     assert not is_valid_credentials({"host": "db", "password": "secret"})
     ```
 
-- **ReadDBFG query route**: opt in with `CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)` and implement `produce_query_rows(connection, query_text, features)`. A query-only group lists just `(ReadDBFG.QUERY_ROUTE,)` and stubs the table hooks. The source is a hash of the query text, so textually different queries are different sources. Without a pointer the route claims any name for each matching credential in the DataAccessCollection, and it switches off the table route for that feature.
+- **ReadDBFG query route**: opt in with `CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)` and implement `produce_query_rows(connection, query_text, features)`. A query-only group lists just `(ReadDBFG.QUERY_ROUTE,)` and stubs the table hooks. The source is a hash of the query text, so textually different queries are different sources. Without a pointer the route claims any leaf name for each matching credential in the DataAccessCollection, and it switches off the table route for that feature. A derived name such as `price__sum_aggr` goes to the group that computes it; `feature_group=<Group>` overrides that.
 
 A format group's own `PROPERTY_MAPPING` is merged over the base declarations: own keys win and base keys cannot be dropped. Class definition is checked: a `ClaimRoute` with a wrongly typed field, a file or document route whose `source_kind` is not `"file"` or `"folder"`, and `suffixes()` that does not return a non-empty tuple of non-empty strings all raise `TypeError`. A concrete group's `suffixes()` runs at class definition.
 

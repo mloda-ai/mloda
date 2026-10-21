@@ -63,6 +63,27 @@ def aborts_are_contained() -> bool:
     return _CONTAIN_ABORTS.get()
 
 
+_OPEN_CLAIM: ContextVar[list[bool] | None] = ContextVar("mloda_open_claim", default=None)
+
+
+def note_open_claim() -> None:
+    """Record that the candidate being matched claimed through an open route alone; a no-op outside open_claim_scope."""
+    flag = _OPEN_CLAIM.get()
+    if flag is not None:
+        flag[:] = [True]
+
+
+@contextmanager
+def open_claim_scope() -> Iterator[list[bool]]:
+    """Collect whether the candidate matched inside the block claimed through an open route alone."""
+    flag: list[bool] = []
+    token = _OPEN_CLAIM.set(flag)
+    try:
+        yield flag
+    finally:
+        _OPEN_CLAIM.reset(token)
+
+
 def current_feature_group_scope() -> Any:
     """The feature_group= scope of the request being probed, or None."""
     return _FEATURE_GROUP_SCOPE.get()

@@ -32,7 +32,6 @@ from mloda.core.abstract_plugins.components.data_access_collection import (
     DataAccessCollection,
 )
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
-from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
     DataAccessReader,
     feature_group_scope,
@@ -45,7 +44,7 @@ from mloda.core.abstract_plugins.components.input_data.format_feature_group impo
     concrete_format_groups,
 )
 from mloda.core.abstract_plugins.components.domain import Domain
-from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.options import Options, reject_reserved_reader_key
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.components.match_hook import probe_match_criteria
@@ -290,6 +289,7 @@ class IdentifyFeatureGroupClass:
     ) -> tuple[EvaluationResult, tuple[Exception, ...]]:
         """evaluate plus the extender refusals of the refused candidates, kept out of the result."""
         refusals: tuple[Exception, ...] = ()
+        reject_reserved_reader_key(feature.options)
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
@@ -746,7 +746,7 @@ class IdentifyFeatureGroupClass:
                 continue
 
             if requirement is not None:
-                reader = self._written_reader(feature_group, feature.options.group)
+                reader = self._written_reader(feature_group)
                 unmet = requirement.unmet_reason((reader or feature_group).__name__, reader)
                 if unmet is not None:
                     self._record_elimination(feature_group, "declarations", unmet)
@@ -893,11 +893,9 @@ class IdentifyFeatureGroupClass:
         consumer = feature.resolving_consumer or f"request for '{feature.name}'"
         return DeclarationRequirement(consumer, required, feature_group, self._declarations)
 
-    def _written_reader(self, feature_group: type[FeatureGroup], original_group: dict[str, Any]) -> type | None:
+    def _written_reader(self, feature_group: type[FeatureGroup]) -> type | None:
         """The reader of the (ReaderClass, data_access) pair this candidate's criteria match wrote, if it wrote one."""
         matched = self._input_data_matches.get(feature_group)
-        if matched is original_group.get(RESERVED_READER_OPTION_KEY):
-            return None
         return cast("type | None", matched[0]) if matched else None
 
     def _record_elimination(self, feature_group: type[FeatureGroup], stage: EliminationStage, reason: str) -> None:
@@ -999,11 +997,7 @@ class IdentifyFeatureGroupClass:
             if probe.part is not None:
                 self._output_parts[feature_group] = probe.part
             if written is not None:
-                if written is feature.options.group.get(RESERVED_READER_OPTION_KEY):
-                    # A pair the candidate inherited rather than wrote.
-                    self._input_data_matches[feature_group] = cast(tuple[DataAccessReader, Any], written)
-                else:
-                    self._input_data_matches[feature_group] = written
+                self._input_data_matches[feature_group] = written
         if probe.value_rejection is not None:
             exc = probe.value_rejection
             # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.

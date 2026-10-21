@@ -1,7 +1,7 @@
 """Option-write conflicts stay loud: MatchData selection escalates instead of containing them as a non-match.
 
 ``MatchData.add_base_input_data_to_options`` decides on presence, and reports class and type names only.
-A user-supplied reserved reader key is rejected when the Feature is constructed.
+A user-supplied reserved reader key is rejected at Feature construction and at resolution.
 """
 
 import gc
@@ -174,7 +174,7 @@ OPAQUE_OPTION_VALUE = "tok_opaque_value"
 
 
 class TestUserSuppliedReservedReaderKeyIsRejected:
-    """A user-supplied reserved reader key is rejected at Feature construction without echoing its value."""
+    """A user-supplied reserved reader key is rejected at construction and at resolution without echoing its value."""
 
     @pytest.mark.parametrize(
         "options",
@@ -188,6 +188,35 @@ class TestUserSuppliedReservedReaderKeyIsRejected:
     def test_feature_construction_rejects_reserved_key(self, options: Any) -> None:
         with pytest.raises(ValueError) as excinfo:
             Feature("col", options=options)
+
+        message = str(excinfo.value)
+        assert "BaseInputData" in message
+        assert OPAQUE_OPTION_VALUE not in message
+
+    @staticmethod
+    def _add_to_group(feature: Feature) -> None:
+        feature.options.add_to_group("BaseInputData", OPAQUE_OPTION_VALUE)
+
+    @staticmethod
+    def _add_to_context(feature: Feature) -> None:
+        feature.options.add_to_context("BaseInputData", OPAQUE_OPTION_VALUE)
+
+    @staticmethod
+    def _reassign_options(feature: Feature) -> None:
+        feature.options = Options(group={"BaseInputData": OPAQUE_OPTION_VALUE})
+
+    @pytest.mark.parametrize(
+        "smuggle",
+        [_add_to_group, _add_to_context, _reassign_options],
+        ids=["add_to_group", "add_to_context", "reassign_options"],
+    )
+    def test_resolution_rejects_key_added_after_construction(self, smuggle: Callable[[Feature], None]) -> None:
+        feature = Feature("col")
+        smuggle(feature)
+        plugins: FeatureGroupEnvironmentMapping = {}
+
+        with pytest.raises(ValueError) as excinfo:
+            IdentifyFeatureGroupClass.evaluate(feature, plugins, None)
 
         message = str(excinfo.value)
         assert "BaseInputData" in message

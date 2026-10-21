@@ -148,6 +148,27 @@ class TestRequiredOptionRoute:
         assert _claims(feature, toy_dac(h1={COL: [1]}), ToyRequiredOptionFG)
 
 
+class _ToyAliasFG(ToyFormatFG):
+    """Format group whose data_access_name() is an alias distinct from its class name."""
+
+    @classmethod
+    def data_access_name(cls) -> str:
+        return "toyfmt_alias"
+
+
+class TestAliasedGroupPointing:
+    @pytest.mark.parametrize(
+        ("key", "pointed"),
+        [("_ToyAliasFG", True), (_ToyAliasFG, True), ("toyfmt_alias", False)],
+        ids=["class_name_string", "class_object", "alias_string"],
+    )
+    def test_only_the_class_name_forms_point_an_aliasing_group(self, key: Any, pointed: bool) -> None:
+        feature = Feature(COL, Options({key: {COL: [1]}}))
+
+        assert _claims(feature, None, _ToyAliasFG) is pointed
+        assert _ToyAliasFG.is_pointed(COL, feature.options, None) is pointed
+
+
 class TestPointedButMissingAborts:
     def test_class_name_key_source_lacking_the_column_raises(self) -> None:
         feature = Feature(COL, Options({"ToyFormatFG": {"other": [1]}}))

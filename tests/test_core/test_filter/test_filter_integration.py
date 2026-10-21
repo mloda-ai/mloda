@@ -19,6 +19,7 @@ from mloda.user import ParallelizationMode
 from mloda.provider import FeatureGroup
 from mloda.user import Feature
 from mloda.user import Features
+from mloda.user import Index
 from mloda.provider import FeatureSet
 from mloda.provider import ComputeFramework
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
@@ -64,6 +65,29 @@ class GlobalFilterFromDifferentColumnTest(GlobalFilterBasicTest):
                     raise ValueError("Filter should not lead to automatic requested data.")
 
         return pa.table({"GlobalFilterFromDifferentColumn1": [1, 2, 3], "GlobalFilterFromDifferentColumn2": [1, 2, 3]})
+
+
+class GlobalFilterKeepIndexDerivedTest(FeatureGroup):
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == cls.get_class_name()
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("GlobalFilterFromDifferentColumn1")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        doubled = pa.array([v * 2 for v in data["GlobalFilterFromDifferentColumn1"].to_pylist()])
+        return data.append_column(cls.get_class_name(), doubled)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
 
 
 class GlobalFilterHasDifferentNameTest(GlobalFilterBasicTest):
@@ -128,12 +152,25 @@ class TestGlobalFilter:
             assert single_feature.filter_feature.name == global_filter_test_basic
             assert next(iter(global_filter.filters)).uuid == single_feature.uuid
 
+    @pytest.mark.parametrize("shape", ["plain", "keep_root", "keep_derived"])
     def test_global_filter_filter_requests_other_column(
-        self, modes: set[ParallelizationMode], flight_server: Any
+        self, modes: set[ParallelizationMode], flight_server: Any, shape: str
     ) -> None:
         base_feature_name = "GlobalFilterFromDifferentColumn"
+        key = Index((f"{base_feature_name}2",))
 
-        features = self.get_features([f"{base_feature_name}1"])
+        if shape == "keep_root":
+            features = Features(
+                [Feature(f"{base_feature_name}1", index=key, keep_index=True, initial_requested_data=True)]
+            )
+            expected = {f"{base_feature_name}1": [1], f"{base_feature_name}2": [1]}
+        elif shape == "keep_derived":
+            derived = GlobalFilterKeepIndexDerivedTest.get_class_name()
+            features = Features([Feature(derived, index=key, keep_index=True, initial_requested_data=True)])
+            expected = {derived: [2], f"{base_feature_name}2": [1]}
+        else:
+            features = self.get_features([f"{base_feature_name}1"])
+            expected = {f"{base_feature_name}1": [1]}
 
         global_filter = GlobalFilter()
 
@@ -148,9 +185,10 @@ class TestGlobalFilter:
             features, parallelization_modes=modes, flight_server=flight_server, global_filter=global_filter
         )
 
-        for result in runner.get_result():
-            res = result.to_pydict()
-            assert res == {"GlobalFilterFromDifferentColumn1": [1]}
+        results = runner.get_result()
+        assert len(results) == 1
+        for result in results:
+            assert result.to_pydict() == expected
 
     def test_global_filter_filter_has_different_name(self, modes: set[ParallelizationMode], flight_server: Any) -> None:
         base_feature_name = "GlobalFilterHasDifferentName"

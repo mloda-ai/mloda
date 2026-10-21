@@ -12,6 +12,7 @@ Group 3 (``resolve_subtype`` delegating to this mechanism) is already pinned by
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -33,6 +34,7 @@ from mloda_plugins.feature_group.experimental.sklearn.pipeline.base import Sklea
 from mloda_plugins.feature_group.experimental.sklearn.scaling.base import ScalingFeatureGroup
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg
 
 
@@ -375,3 +377,70 @@ class TestOptionsWithDefaultsHonorsExplicitNone:
         """B3: absent stays absent; an opted-in key that is not present at all still gets its concrete default."""
         view = _options_with_defaults(_make_explicit_none_probe_fg(), Options())
         assert view.get(EN_KEY, "callsite") == "ctx_val"
+
+
+class TestReadOption:
+    """FeatureGroup.read_option reads a declared key (defaults and bindings applied) and raises on an undeclared one."""
+
+    @pytest.mark.parametrize("key", ["owd_typo", "in_features"])
+    def test_undeclared_key_raises_naming_key_and_class(self, key: str) -> None:
+        """An undeclared (or engine) key raises ValueError naming the key and the class."""
+        with pytest.raises(ValueError, match=key) as excinfo:
+            _make_probe_fg().read_option(key, Options(context={key: "v"}))
+        assert "ProbeDefaultsFeatureGroup" in str(excinfo.value)
+
+    def test_group_without_property_mapping_raises(self) -> None:
+        """A group with no PROPERTY_MAPPING declares nothing, so any key raises."""
+
+        class NoMappingFeatureGroup(FeatureGroup):
+            @classmethod
+            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+                return data
+
+        with pytest.raises(ValueError, match="NoMappingFeatureGroup"):
+            NoMappingFeatureGroup.read_option("anything", Options())
+
+    @pytest.mark.parametrize(
+        ("factory", "key", "options", "expected"),
+        [
+            (_make_probe_fg, CTX_KEY, Options(context={CTX_KEY: "explicit"}), "explicit"),
+            (_make_probe_fg, CTX_KEY, Options(), "ctx_val"),
+            (_make_probe_fg, GRP_KEY, Options(), "grp_val"),
+            (_make_probe_fg, NONE_KEY, Options(), None),
+            (_make_probe_fg, REQ_KEY, Options(), None),
+            (_make_two_keys_fg, "owd_first", Options(), "a"),
+        ],
+        ids=[
+            "present",
+            "absent-ctx-default",
+            "absent-group-default",
+            "absent-no-default",
+            "absent-required",
+            "no-name",
+        ],
+    )
+    def test_read_option_returns_value_or_default(
+        self, factory: Callable[[], type[FeatureGroup]], key: str, options: Options, expected: Any
+    ) -> None:
+        """A present value wins; an absent key yields its declared default or None; no name means no binding."""
+        assert factory().read_option(key, options) == expected
+
+    def test_explicit_none_with_allow_explicit_none_returns_none(self) -> None:
+        """An explicit None is returned as None when the spec opts in."""
+        value = _make_explicit_none_probe_fg().read_option(EN_KEY, Options(context={EN_KEY: None}))
+        assert value is None
+
+    def test_explicit_none_without_flag_returns_default(self) -> None:
+        """An explicit None without the opt-in yields the declared default."""
+        value = _make_probe_fg().read_option(CTX_KEY, Options(context={CTX_KEY: None}))
+        assert value == "ctx_val"
+
+    def test_feature_name_binding_beats_default(self) -> None:
+        """With feature_name, the name-bound value is returned instead of the default."""
+        value = _make_two_keys_fg().read_option("owd_first", Options(), "x__op_q_b")
+        assert value == "q"
+
+    def test_format_group_inherited_key_is_declared(self) -> None:
+        """A key inherited through a FormatFeatureGroup's merged PROPERTY_MAPPING reads without raising."""
+        value = CsvFG.read_option("data_access_handle", Options({"data_access_handle": "h"}))
+        assert value == "h"

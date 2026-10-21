@@ -188,6 +188,22 @@ class _ValueCheckedFG(ToyFormatFG):
     }
 
 
+class _PlainRootColFG(FeatureGroup):
+    """Plain root (non-format) group claiming COL by its own rules."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {COL}
+
+    @classmethod
+    def input_features(cls, options: Options, feature_name: FeatureName) -> None:
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+
 class TestPointedGroupValueFailureIsNotADecline:
     def test_later_value_failure_is_reported_not_a_source_decline(self) -> None:
         feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: _BAD_VALUE}))
@@ -203,6 +219,14 @@ class TestPointedGroupValueFailureIsNotADecline:
         feature = Feature(COL, Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: "good"}))
 
         assert _claims(feature, None, _ValueCheckedFG)
+
+    def test_plain_root_group_wins_when_the_pointed_group_vetoes_a_value(self) -> None:
+        """A pointed decline is not final: a plain root group claiming the name wins."""
+        options = Options({"_ValueCheckedFG": {COL: [1]}, _VALUE_KEY: _BAD_VALUE})
+        result = _identify(Feature(COL, options), None, _ValueCheckedFG, _PlainRootColFG)
+
+        assert set(result.identified) == {_PlainRootColFG}
+        assert _ValueCheckedFG in result.eliminations
 
 
 class TestPointedMissingColumnText:

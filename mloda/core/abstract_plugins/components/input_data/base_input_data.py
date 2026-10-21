@@ -8,13 +8,15 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, GateBypassError, _invoke_extender
 from mloda.core.abstract_plugins.hook_context import HookContext, input_data_load_gate_scopes_active, instrument
-from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.options import (
+    RESERVED_READER_OPTION_KEY as RESERVED_READER_OPTION_KEY,
+    Options,
+)
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.declared_attributes import read_declared_attributes
 
 logger = logging.getLogger(__name__)
 
-RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 _REMOVED_HOOKS = ("match_subclass_data_access", "load_data", "READER_OPTIONS", "init_reader", "match_data_access")
 

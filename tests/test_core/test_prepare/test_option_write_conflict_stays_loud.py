@@ -1,6 +1,7 @@
-"""An option-write conflict during MatchData selection escalates instead of being contained as a non-match.
+"""Option-write conflicts stay loud: MatchData selection escalates instead of containing them as a non-match.
 
 ``MatchData.add_base_input_data_to_options`` decides on presence, and reports class and type names only.
+A user-supplied reserved reader key is rejected when the Feature is constructed.
 """
 
 import gc
@@ -8,6 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, TypeVar
+
+import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -165,3 +168,27 @@ class TestMatchDataOptionWriteConflictAbortsTheMatch:
 
         assert snapshot.escaped is not None
         assert GLOBAL_ACCESS not in snapshot.escaped
+
+
+OPAQUE_OPTION_VALUE = "tok_opaque_value"
+
+
+class TestUserSuppliedReservedReaderKeyIsRejected:
+    """A user-supplied reserved reader key is rejected at Feature construction without echoing its value."""
+
+    @pytest.mark.parametrize(
+        "options",
+        [
+            {"BaseInputData": OPAQUE_OPTION_VALUE},
+            Options(group={"BaseInputData": OPAQUE_OPTION_VALUE}),
+            Options(context={"BaseInputData": OPAQUE_OPTION_VALUE}),
+        ],
+        ids=["dict", "group", "context"],
+    )
+    def test_feature_construction_rejects_reserved_key(self, options: Any) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            Feature("col", options=options)
+
+        message = str(excinfo.value)
+        assert "BaseInputData" in message
+        assert OPAQUE_OPTION_VALUE not in message

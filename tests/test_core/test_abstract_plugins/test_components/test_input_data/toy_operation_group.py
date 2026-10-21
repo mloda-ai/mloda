@@ -10,7 +10,16 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.implementation import Implementation
-from mloda.provider import OperationFeatureGroup, SubtypeDeclaration, property_spec
+from mloda.provider import (
+    BaseInputData,
+    ComputeFramework,
+    DataCreator,
+    FeatureGroup,
+    FeatureSet,
+    OperationFeatureGroup,
+    SubtypeDeclaration,
+    property_spec,
+)
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -90,3 +99,64 @@ class OpToyPyArrow(Implementation):
     def calculate(cls, group: Any, data: Any, features: Any) -> Any:
         cls.served_by.append(group)
         return pa.table({OPTOY_FEATURE: [PYARROW_MARK], OPTOY_CHILD_FEATURE: [PYARROW_MARK]})
+
+
+OPTOY_CHAIN_SRC = "optoy_chain_src"
+OPTOY_CHAIN_SUFFIX = "__optoy_chain"
+CHAIN_LOG: list[tuple[str, str]] = []
+
+
+class OpToyChainSourceFG(FeatureGroup):
+    """Pandas-only source for the chain toy."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({OPTOY_CHAIN_SRC})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return pd.DataFrame({OPTOY_CHAIN_SRC: [1, 2, 3]})
+
+
+class OpToyChainFG(OperationFeatureGroup):
+    """Operation group whose feature `<src>__optoy_chain` takes `<src>` as input."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith(OPTOY_CHAIN_SUFFIX)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature(str(feature_name)[: -len(OPTOY_CHAIN_SUFFIX)])}
+
+
+class OpToyChainPandas(Implementation):
+    feature_group = OpToyChainFG
+    compute_framework = PandasDataFrame
+
+    @classmethod
+    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+        for name in sorted(features.get_all_names()):
+            CHAIN_LOG.append((name, cls.__name__))
+            data[name] = PANDAS_MARK
+        return data
+
+
+class OpToyChainPyArrow(Implementation):
+    feature_group = OpToyChainFG
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+        for name in sorted(features.get_all_names()):
+            CHAIN_LOG.append((name, cls.__name__))
+            data = data.append_column(name, pa.array([PYARROW_MARK] * data.num_rows))
+        return data

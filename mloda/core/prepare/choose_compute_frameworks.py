@@ -5,7 +5,7 @@ splitting into independent parts once assigned blocks separate them.
 
 from itertools import combinations
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import partial
 from typing import Any, NamedTuple
 from uuid import UUID
@@ -187,7 +187,11 @@ class ChooseComputeFrameworks:
         output_framework: Framework | None = None,
         dropped: Mapping[UUID, frozenset[Framework]] | None = None,
         connected: Mapping[Framework, Any] | None = None,
+        pin_frameworks: Mapping[UUID, frozenset[Framework]] | None = None,
+        pinned: set[UUID] | None = None,
     ) -> None:
+        self.pin_frameworks = pin_frameworks or {}
+        self.pinned = pinned or set()
         self.output_framework = output_framework
         self.dropped = dropped or {}
         self.connected: Mapping[Framework, Any] = connected or {}
@@ -229,6 +233,16 @@ class ChooseComputeFrameworks:
                     feature.chosen_compute_framework_reason = reason
         self._require_all_chosen()
 
+    def _split_by_pin(self, group: Iterable[Feature]) -> list[list[Feature]]:
+        """Features pinned to different framework sets cannot share a block."""
+        parts: dict[frozenset[Framework] | None, list[Feature]] = {}
+        for feature in group:
+            parts.setdefault(self.pin_frameworks.get(feature.uuid), []).append(feature)
+        return list(parts.values())
+
+    def _is_pinned(self, block: _Block) -> bool:
+        return any(f.framework_pinned or f.uuid in self.pinned for f in block.features)
+
     def _component_indexes(
         self, count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
     ) -> tuple[dict[int, list[_Rule]], dict[int, list[tuple[int, set[int], int]]]]:
@@ -252,9 +266,13 @@ class ChooseComputeFrameworks:
     def _blocks(self) -> list[_Block]:
         keyed: list[tuple[tuple[object, ...], _Block]] = []
         for fg, features in self.nodes.items():
-            for group in ExecutionPlan.group_features_by_compute_framework_and_options(set(features)).values():
+            grouped = ExecutionPlan.group_features_by_compute_framework_and_options(set(features)).values()
+            for group in (part for whole in grouped for part in self._split_by_pin(whole)):
                 members = tuple(sorted(group, key=lambda f: (str(f.name), stable_text(f.options))))
-                domain = tuple(sorted(members[0].compute_frameworks or (), key=self.rank))
+                allowed = set(members[0].compute_frameworks or ())
+                if members[0].uuid in self.pin_frameworks:
+                    allowed &= self.pin_frameworks[members[0].uuid]
+                domain = tuple(sorted(allowed, key=self.rank))
                 if not domain:
                     FeatureValidator.validate_compute_frameworks_resolved(
                         members[0].compute_frameworks, str(members[0].name)
@@ -326,7 +344,7 @@ class ChooseComputeFrameworks:
     ) -> tuple[list[set[Framework]], list[set[Framework]], list[set[Framework]]]:
         """Domains with regained frameworks, what each block gained, and which gains came from the DAC."""
         lost = [frozenset().union(*(self.dropped.get(f.uuid, frozenset()) for f in b.features)) for b in blocks]
-        pinned = [any(f.framework_pinned for f in b.features) for b in blocks]
+        pinned = [self._is_pinned(b) for b in blocks]
         domains = [set(block.domain) for block in blocks]
         gained: list[set[Framework]] = [set() for _ in blocks]
         via_dac: list[set[Framework]] = [set() for _ in blocks]
@@ -772,7 +790,7 @@ class ChooseComputeFrameworks:
         """Why one block runs on its framework: pin, sole option, rules, order, or conversions saved."""
         block = blocks[index]
         chosen = assignment[index]
-        if any(feature.framework_pinned for feature in block.features):
+        if self._is_pinned(block):
             return PINNED
         if len(block.domain) == 1:
             return ONLY_ALLOWED

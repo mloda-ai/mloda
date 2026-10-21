@@ -700,3 +700,30 @@ def test_end2end_config_abstract_family_base_scope_resolves_to_pandas_subclass()
     aggregated = [df for df in results if "config_scope_sales__mean_aggr" in df.columns]
     assert len(aggregated) == 1
     assert aggregated[0]["config_scope_sales__mean_aggr"].iloc[0] == 25.0
+
+
+# ---------------------------------------------------------------------------
+# Implementation pin: the "implementation" key sits next to "feature_group"
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [('"OpToyPyArrow"', ("OpToyPyArrow",)), ('["OpA", "OpB"]', ("OpA", "OpB"))],
+    ids=["string", "list"],
+)
+def test_loader_forwards_the_implementation_key_to_the_feature(raw: str, expected: tuple[str, ...]) -> None:
+    config_str = '[{"name": "shared_token", "implementation": %s}]' % raw
+
+    result = load_features_from_config(config_str)
+
+    assert isinstance(result[0], Feature)
+    assert result[0].implementation_pin == expected
+    assert "implementation" not in result[0].options.group
+
+
+def test_feature_config_carries_the_implementation_and_the_schema_advertises_it() -> None:
+    config = FeatureConfig(name="shared_token", implementation=["OpA"])
+
+    assert config.implementation == ["OpA"]
+    assert "implementation" in feature_config_schema()["properties"]

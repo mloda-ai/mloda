@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
@@ -372,6 +373,136 @@ class TestOperationImplementation:
 
         assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, sum_options) == "skips NaN in sum"
         assert toy.OpToyPandas.divergence(toy.OpToyFG, toy.OPTOY_FEATURE, median_options) is None
+
+
+INNER = "optoy_chain_src__optoy_chain"
+OUTER = "optoy_chain_src__optoy_chain__optoy_chain"
+
+
+def _run_pinned(
+    features: list[Feature],
+    groups: Any = None,
+    frameworks: Any = (PandasDataFrame, PyArrowTable),
+    disabled: Any = (),
+) -> list[Any]:
+    toy = _toy_operation()
+    collector = PluginCollector.enabled_feature_groups(groups or {toy.OpToyFG})
+    collector.add_disabled_implementation_classes(set(disabled))
+    return mloda.run_all(features, compute_frameworks=list(frameworks), plugin_collector=collector)
+
+
+def _run_chain(features: list[Feature], **kwargs: Any) -> list[Any]:
+    toy = _toy_operation()
+    toy.CHAIN_LOG.clear()
+    return _run_pinned(features, groups={toy.OpToyChainSourceFG, toy.OpToyChainFG}, **kwargs)
+
+
+def _op_feature(pin: Any, **kwargs: Any) -> Feature:
+    toy = _toy_operation()
+    return Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"}, implementation=pin, **kwargs)
+
+
+class TestImplementationPin:
+    @pytest.mark.parametrize(
+        ("pin", "mark"),
+        [("OpToyPyArrow", 2), ("OpToyPandas", 1), ("toy_class_pyarrow", 2), ("toy_class_pandas", 1)],
+    )
+    def test_the_pin_selects_the_implementation_that_runs(self, pin: str, mark: int) -> None:
+        toy = _toy_operation()
+        pinned: Any = {"toy_class_pyarrow": toy.OpToyPyArrow, "toy_class_pandas": toy.OpToyPandas}.get(pin, pin)
+
+        result = _run_pinned([_op_feature(pinned)])
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [mark]
+
+    def test_naming_a_parent_implementation_lets_a_subclass_implementation_serve(self, make_implementation: Any) -> None:
+        toy = _toy_operation()
+        make_implementation(
+            toy.OpToyFG,
+            PandasDataFrame,
+            lambda g, m, f: pd.DataFrame({toy.OPTOY_FEATURE: [77]}),
+            base=toy.OpToyPandas,
+            name="OpToyPandasPlus",
+        )
+
+        result = _run_pinned([_op_feature("OpToyPandas")])
+
+        assert column_values(result, toy.OPTOY_FEATURE) == [77]
+
+    @pytest.mark.parametrize(
+        ("pin", "expected"),
+        [
+            ("OpToyChainPyArrow", [("INNER", "OpToyChainPyArrow"), ("OUTER", "OpToyChainPyArrow")]),
+            (["OpToyChainPandas", "OpToyChainPyArrow"], [("INNER", "OpToyChainPandas"), ("OUTER", "OpToyChainPyArrow")]),
+            (["OpToyChainPyArrow", "OpToyChainPandas"], [("INNER", "OpToyChainPyArrow"), ("OUTER", "OpToyChainPandas")]),
+        ],
+        ids=["one_name_pins_both", "inner_pandas_outer_pyarrow", "inner_pyarrow_outer_pandas"],
+    )
+    def test_a_chain_pins_by_input_ancestry_order(self, pin: Any, expected: list[tuple[str, str]]) -> None:
+        _run_chain([Feature(OUTER, implementation=pin)])
+
+        toy = _toy_operation()
+        names = {"INNER": INNER, "OUTER": OUTER}
+        assert toy.CHAIN_LOG == [(names[step], impl) for step, impl in expected]
+
+    @pytest.mark.parametrize(
+        ("case", "needle"),
+        [
+            ("unknown", "NoSuchImpl"),
+            ("disabled", "OpToyPyArrow"),
+            ("framework_not_enabled", "OpToyPyArrow"),
+            ("keys_no_group_of_chain", "OpToyChainPandas"),
+            ("conflicts_with_compute_framework", "OpToyPyArrow"),
+            ("too_many_names", "OpToyChainPandas"),
+        ],
+    )
+    def test_a_bad_pin_raises_implementation_pin_error_naming_step_and_class(self, case: str, needle: str) -> None:
+        from mloda.provider import ImplementationPinError
+
+        toy = _toy_operation()
+        assert issubclass(ImplementationPinError, ValueError)
+        feature_name = toy.OPTOY_FEATURE
+        with pytest.raises(ImplementationPinError) as caught:
+            if case == "unknown":
+                _run_pinned([_op_feature("NoSuchImpl")])
+            elif case == "disabled":
+                _run_pinned([_op_feature("OpToyPyArrow")], disabled={toy.OpToyPyArrow})
+            elif case == "framework_not_enabled":
+                _run_pinned([_op_feature("OpToyPyArrow")], frameworks=(PandasDataFrame,))
+            elif case == "keys_no_group_of_chain":
+                _run_pinned([_op_feature("OpToyChainPandas")])
+            elif case == "conflicts_with_compute_framework":
+                _run_pinned([_op_feature("OpToyPyArrow", compute_framework="PandasDataFrame")])
+            else:
+                feature_name = OUTER
+                _run_chain([Feature(OUTER, implementation=["OpToyChainPandas"] * 3)])
+
+        assert feature_name in str(caught.value)
+        assert needle in str(caught.value)
+
+    def test_two_requests_pinning_a_shared_step_differently_raise_naming_both(self) -> None:
+        from mloda.provider import ImplementationPinError
+
+        features = [
+            Feature(OUTER, implementation="OpToyChainPandas"),
+            Feature(INNER, implementation="OpToyChainPyArrow"),
+        ]
+
+        with pytest.raises(ImplementationPinError) as caught:
+            _run_chain(features)
+
+        assert OUTER in str(caught.value)
+        assert INNER in str(caught.value)
+
+    def test_the_pin_does_not_reach_the_input_or_a_non_pinned_sibling(self) -> None:
+        toy = _toy_operation()
+        sibling = Feature(toy.OPTOY_CHAIN_SRC)
+
+        result = _run_chain([Feature(INNER, implementation="OpToyChainPyArrow"), sibling])
+
+        assert toy.CHAIN_LOG == [(INNER, "OpToyChainPyArrow")]
+        assert sibling.implementation_pin is None
+        assert column_values(result, toy.OPTOY_CHAIN_SRC) == [1, 2, 3]
 
 
 class TestFrameworkSubclassImplementation:

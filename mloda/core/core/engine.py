@@ -36,6 +36,7 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
+from mloda.core.prepare.resolve_implementation_pins import ResolveImplementationPins
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
@@ -244,6 +245,8 @@ class Engine:
         graph_builder.build_graph_from_feature_links()
         graph = graph_builder.graph
 
+        pin_frameworks, pinned = ResolveImplementationPins(graph, self.implementations).resolve()
+
         # resolve graph into a queue
         resolver = ResolveGraph(
             graph,
@@ -253,6 +256,8 @@ class Engine:
             output_framework=self.output_framework,
             connection_dropped=self.connection_dropped,
             connected=self._connected_frameworks(),
+            pin_frameworks=pin_frameworks,
+            pinned=pinned,
         )
         resolver.create_initial_queue()
 

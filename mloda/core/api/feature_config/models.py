@@ -79,6 +79,7 @@ class FeatureConfig:
     cascade_context_keys: list[str] | None = None
     column_index: int | None = None
     feature_group: str | None = field(default=None, metadata={"nested": True})
+    implementation: str | list[str] | None = None
 
     def __post_init__(self) -> None:
         """Validate the invariants shared by the top-level and the nested feature dict."""
@@ -233,6 +234,12 @@ def feature_config_schema() -> dict[str, Any]:
             "cascade_context_keys": {"type": "array", "items": {"type": "string"}},
             "column_index": {"type": "integer", "minimum": 0},
             "feature_group": {"type": "string", "minLength": 1},
+            "implementation": {
+                "oneOf": [
+                    {"type": "string", "minLength": 1},
+                    {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+                ]
+            },
         },
         "required": ["name"],
         "additionalProperties": False,

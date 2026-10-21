@@ -171,7 +171,12 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                         if item.cascade_context_keys
                         else None,
                     )
-                    feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
+                    feature = Feature(
+                        name=feature_name,
+                        options=options,
+                        feature_group=item.feature_group,
+                        implementation=item.implementation,
+                    )
                     features.append(feature)
                 # Check if in_features exists and create Options accordingly
                 elif item.in_features:
@@ -179,12 +184,22 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                     processed_options = process_nested_features(item.options, "options")
                     source_value = tuple(item.in_features)
                     options = Options(group=processed_options, context={DefaultOptionKeys.in_features: source_value})
-                    feature = Feature(name=feature_name, options=options, feature_group=item.feature_group)
+                    feature = Feature(
+                        name=feature_name,
+                        options=options,
+                        feature_group=item.feature_group,
+                        implementation=item.implementation,
+                    )
                     features.append(feature)
                 else:
                     # Process nested features in options before creating Feature
                     processed_options = process_nested_features(item.options, "options")
-                    feature = Feature(name=feature_name, options=processed_options, feature_group=item.feature_group)
+                    feature = Feature(
+                        name=feature_name,
+                        options=processed_options,
+                        feature_group=item.feature_group,
+                        implementation=item.implementation,
+                    )
                     features.append(feature)
         else:
             raise ValueError(f"Unexpected config item type: {type(item)}")

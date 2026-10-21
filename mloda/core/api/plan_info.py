@@ -95,10 +95,9 @@ class PlanStep:
     ``implementation_path``: its ``module:qualname``, "neutral" for a format group step without one, else None.
     ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
     ``implementation_hash`` is the first-party code closure hash, never dependency versions ("unavailable" when
-    hashing fails). ``feature_group_hash``: the serving group's first-party closure hash, set only when an inherited
-    implementation serves a strict subclass group ("unavailable" when hashing fails).
-    ``implementation_version``, ``implementation_hash``, ``feature_group_version``, ``feature_group_hash``: excluded
-    from equality.
+    hashing fails). ``feature_group_hash``: the group's code hash, set only when an inherited implementation serves a
+    subclass group. ``implementation_version``, ``implementation_hash``, ``feature_group_version``,
+    ``feature_group_hash``: excluded from equality.
     """
 
     step_kind: Literal["compute", "join", "transform"]

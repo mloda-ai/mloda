@@ -26,7 +26,7 @@ from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
 from mloda.user import PluginCollector, PluginLoader
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from tests.helpers.docs_scope import small_feature_group_walk
+from tests.helpers.docs_scope import shipped_feature_groups, small_feature_group_walk
 from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
 
 if sys.version_info >= (3, 11):
@@ -621,7 +621,7 @@ class TestBuildServices:
             return original_all(force_reload=force_reload)
 
         monkeypatch.setattr(PluginLoader, "all", classmethod(spy_all))
-        walk = small_feature_group_walk(AggregatedFeatureGroup)
+        walk = small_feature_group_walk(*shipped_feature_groups(), AggregatedFeatureGroup)
         monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
 
         catalog, _, _ = build_services(self._settings(tmp_path), env=ENV, plugin_collector=None)

@@ -192,7 +192,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **implementation** (`type[Implementation] | None`): the `Implementation` serving a compute step, None otherwise.
 - **implementation_path** (`str | None`, property): its `module:qualname`, `"neutral"` for a format group step loaded without one, None otherwise.
 - **implementation_version** / **implementation_hash** / **feature_group_version** (`str | None`): `Implementation.version()`, its code-closure hash (`"unavailable"` when hashing fails) and the group's `version()`. Excluded from equality.
-- **feature_group_hash** (`str | None`): the serving group's code-closure hash, set only when an inherited implementation serves a strict subclass group (`"unavailable"` when hashing fails). Excluded from equality.
+- **feature_group_hash** (`str | None`): the group's code hash, set only when an inherited implementation serves a subclass group (`"unavailable"` if hashing fails). Excluded from equality.
 - **implementation_specialized_from** (`tuple[type[Implementation], ...]`): the winner's concrete `Implementation` ancestors that serve the step's pair, sorted by path; empty otherwise.
 - **step_uuid** (`UUID | None`): the compute step's uuid, the key `RunResult.frames()` and `ResultStream.frames()` pair by; None otherwise. Excluded from equality (fresh per planning run).
 - **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** / **result_framework_name** (`str | None`): Class names of the above, None when unset.

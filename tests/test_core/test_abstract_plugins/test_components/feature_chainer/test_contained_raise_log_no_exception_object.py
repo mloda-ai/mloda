@@ -142,6 +142,32 @@ class TestParserElementValidatorRaiseLogsNoExceptionObject:
         assert CLR975_VALUE in messages[0], f"DEBUG keeps the rejected value visible: {messages[0]}"
 
 
+class TestParserElementValidatorRaiseScrubsCredentialValues:
+    """The DEBUG raise record must not carry a credential-shaped option value."""
+
+    def test_debug_message_does_not_leak_a_credential_value(self, caplog: pytest.LogCaptureFixture) -> None:
+        secret_url = "postgres://u:hunter2@h/db"  # nosec B105
+        property_mapping = {
+            CLR975_VALIDATOR_KEY: PropertySpec(
+                "clr975 touchy",
+                context=True,
+                strict_validation=True,
+                element_validator=_clr975_validator_raises_type_error,
+            )
+        }
+        with caplog.at_level(logging.DEBUG, logger=PARSER_LOGGER_NAME):
+            with pytest.raises(PropertyValueRejection):
+                FeatureChainParser.match_configuration_feature_chain_parser(
+                    CLR975_FEATURE,
+                    Options(context={CLR975_VALIDATOR_KEY: secret_url}),
+                    property_mapping=property_mapping,
+                    prefix_patterns=[CLR975_PREFIX_PATTERN],
+                )
+
+        assert _raise_records(caplog, PARSER_LOGGER_NAME, logging.DEBUG), "the judgment failure reports at DEBUG"
+        assert all("hunter2" not in record.getMessage() for record in caplog.records)
+
+
 class TestRequiredWhenRaiseLogsNoExceptionObject:
     """The author guard's contained required_when raise must reach the log as text only."""
 

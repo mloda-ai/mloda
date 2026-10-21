@@ -186,9 +186,11 @@ class DataAccessCollection:
                 normalized[col] = path_to_handle[value]
             else:
                 raise ValueError(
-                    f"column_to_file value '{value}' for column '{col}' is not a known file handle or path. "
-                    f"Available file handles: {sorted(self.files.keys())}. "
-                    f"Available file paths: {sorted(self.files.values())}."
+                    scrub_credentials(
+                        f"column_to_file value '{value}' for column '{col}' is not a known file handle or path. "
+                        f"Available file handles: {sorted(self.files.keys())}. "
+                        f"Available file paths: {sorted(self.files.values())}."
+                    )
                 )
         return normalized
 

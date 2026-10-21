@@ -13,8 +13,9 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_mapping,
     redact_option_value,
     scrub_credentials,
+    strip_uri_userinfo,
 )
-from mloda.core.abstract_plugins.components.utils import contained_raise_reason
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_value_text
 
 # (case id, input text, secret substrings that must be gone, substrings that must survive)
 SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
@@ -575,6 +576,32 @@ def test_scrub_credentials_lookalikes_kept_unchanged(text: str) -> None:
 def test_azure_container_uri_kept_unchanged() -> None:
     text = "abfss://container@acct.dfs.core.windows.net/p"
     assert scrub_credentials(text) == text
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("s3://alice:hunter2@bucket/my%20file.csv", "s3://bucket/my%20file.csv"),  # nosec B105
+        ("s3://AKIA:ab/hunter2@bucket/x.csv", "s3://bucket/x.csv"),  # nosec B105
+        ("s3://tok@bucket/x.csv", "s3://bucket/x.csv"),
+        ("simplecache::s3://tok@bucket/x.csv", "simplecache::s3://bucket/x.csv"),
+        ("jdbc:hive2://tok@host/x.csv", "jdbc:hive2://host/x.csv"),
+        ("s3://bucket/a@b.csv", "s3://bucket/a@b.csv"),
+        ("s3://bucket:9000/x.csv", "s3://bucket:9000/x.csv"),
+        ("abfss://cont@acct.dfs.core.windows.net/a%20b.csv", "abfss://cont@acct.dfs.core.windows.net/a%20b.csv"),
+        ("s3://bucket]/x.csv", "s3://bucket]/x.csv"),
+    ],
+)
+def test_strip_uri_userinfo(text: str, expected: str) -> None:
+    assert strip_uri_userinfo(text) == expected
+
+
+def test_strip_uri_userinfo_never_raises_on_a_bad_bracket_host() -> None:
+    assert isinstance(strip_uri_userinfo("s3://[bad/x.csv"), str)
+
+
+def test_strip_uri_userinfo_strips_every_uri_in_the_text() -> None:
+    assert strip_uri_userinfo("s3://a:p1@b/x.csv::gs://c:p2@d/y.csv") == "s3://b/x.csv::gs://d/y.csv"  # nosec B105
 
 
 def test_path_at_symbol_kept_unchanged() -> None:
@@ -1177,3 +1204,10 @@ class TestScrubUriFailClosed:
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
         assert secret not in scrub_credentials(value)
+
+
+def test_safe_value_text_scrubs_a_credential_str_and_keeps_the_type() -> None:
+    text = safe_value_text("postgres://u:hunter2@h/db")  # nosec B105
+    assert "hunter2" not in text
+    assert text.startswith("str ")
+    assert safe_value_text("plain") == "str 'plain'"

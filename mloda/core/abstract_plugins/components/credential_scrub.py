@@ -129,6 +129,23 @@ def _drop_free_text_userinfo(text: str) -> str:
     return _USERINFO_FALLBACK_PATTERN.sub(r"\g<scheme>://", text)
 
 
+_USER_ONLY_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9+.-])(?P<scheme>(?:jdbc:)?[A-Za-z][A-Za-z0-9+.-]*)://(?P<userinfo>[^/?#\s@]*)@"
+)
+
+
+def _drop_user_only(match: re.Match[str]) -> str:
+    scheme, userinfo = match["scheme"], match["userinfo"]
+    if scheme.lower() in _AZURE_CONTAINER_SCHEMES and _AZURE_CONTAINER_PATTERN.fullmatch(userinfo):
+        return match[0]
+    return f"{scheme}://"
+
+
+def strip_uri_userinfo(text: str) -> str:
+    """Drop `user:pwd@` and `user@` userinfo after every `scheme://`, keeping an Azure container."""
+    return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text))
+
+
 def scrub_credentials(text: str) -> str:
     """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs."""
     text = _drop_free_text_userinfo(text)

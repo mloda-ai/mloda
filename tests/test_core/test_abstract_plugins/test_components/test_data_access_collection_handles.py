@@ -470,6 +470,16 @@ class TestColumnToFileAcceptsPathOrHandle:
         # so the user can correct the typo without spelunking through .files.
         assert "/data/tx.csv" in msg
 
+    def test_unknown_value_message_hides_uri_password(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            DataAccessCollection(
+                files={"s3://alice:hunter2@bucket/x.csv"},  # nosec B105
+                column_to_file={"col": "/missing.csv"},
+            )
+        msg = str(excinfo.value)
+        assert "hunter2" not in msg
+        assert "s3://bucket/x.csv" in msg
+
 
 class TestAmbiguityMessageShape:
     """When the resolver raises on ambiguity, the message guidance depends on whether

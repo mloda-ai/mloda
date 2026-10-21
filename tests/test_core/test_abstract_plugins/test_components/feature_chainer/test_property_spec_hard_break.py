@@ -17,10 +17,6 @@ invariants. This module pins the Phase B hard break:
 7. ``PropertySpec`` is exported from ``mloda.provider`` and is the same class.
 8. ``FeatureChainParser._can_skip_required_check`` understands ``PropertySpec``: a non-None
    ``default`` or a ``required_when`` predicate makes the key skippable.
-9. ``framework_set=True`` (#949) is reader-surface only and rejected at class definition, naming
-   the owner class and the key.
-10. ``scalar_only=True`` (#1154) is reader-surface only and rejected at class definition, naming
-    the owner class and the key.
 """
 
 from __future__ import annotations
@@ -328,87 +324,3 @@ class TestCanSkipRequiredCheckOnPropertySpec:
         spec = PropertySpec("x")
 
         assert FeatureChainParser._can_skip_required_check(spec) is False
-
-
-class TestFrameworkSetStaysOffThePropertyMappingSurface:
-    """Item 9: ``framework_set=True`` in a PROPERTY_MAPPING is a category error, rejected at class definition."""
-
-    def test_framework_set_spec_rejected_at_class_definition(self) -> None:
-        """``framework_set=True`` in a PROPERTY_MAPPING names the class, the key, and the flag."""
-        with pytest.raises(ValueError) as exc_info:
-
-            class HardBreak949FrameworkSetFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-                PROPERTY_MAPPING = {
-                    "hardbreak949_reader_key": PropertySpec("Reader-surface key.", default=None, framework_set=True)
-                }
-
-                @classmethod
-                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                    return data
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "HardBreak949FrameworkSetFeatureGroup" in message
-        assert "hardbreak949_reader_key" in message
-        assert "framework_set" in message
-
-    def test_framework_set_false_spec_defines_fine(self) -> None:
-        """Control: the field's default (an explicit False included) stays valid on this surface."""
-
-        class HardBreak949FlaglessFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-            PROPERTY_MAPPING = {
-                "hardbreak949_plain_key": PropertySpec("Plain user-facing key.", default=None, framework_set=False)
-            }
-
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                return data
-
-        assert "hardbreak949_plain_key" in HardBreak949FlaglessFeatureGroup.declared_option_keys()
-
-
-class TestScalarOnlyStaysOffThePropertyMappingSurface:
-    """Item 10: ``scalar_only=True`` in a PROPERTY_MAPPING is a category error, rejected at class definition."""
-
-    def test_scalar_only_spec_rejected_at_class_definition(self) -> None:
-        """``scalar_only=True`` in a PROPERTY_MAPPING names the class, the key, and the flag."""
-        with pytest.raises(ValueError) as exc_info:
-
-            class HardBreak1154ScalarOnlyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-                PROPERTY_MAPPING = {
-                    "hardbreak1154_scalar_key": PropertySpec(
-                        "Reader-surface key.",
-                        element_validator=_hardbreak694_positive_int,
-                        strict_validation=True,
-                        scalar_only=True,
-                    )
-                }
-
-                @classmethod
-                def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                    return data
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "HardBreak1154ScalarOnlyFeatureGroup" in message
-        assert "hardbreak1154_scalar_key" in message
-        assert "scalar_only" in message
-
-    def test_scalar_only_false_spec_defines_fine(self) -> None:
-        """Control: ``scalar_only=False`` (the default) stays valid on this surface."""
-
-        class HardBreak1154FlatFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-            PROPERTY_MAPPING = {
-                "hardbreak1154_plain_key": PropertySpec(
-                    "Plain user-facing key.",
-                    element_validator=_hardbreak694_positive_int,
-                    strict_validation=True,
-                    scalar_only=False,
-                )
-            }
-
-            @classmethod
-            def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-                return data
-
-        assert "hardbreak1154_plain_key" in HardBreak1154FlatFeatureGroup.declared_option_keys()

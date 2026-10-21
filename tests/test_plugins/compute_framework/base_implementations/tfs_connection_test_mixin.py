@@ -81,3 +81,52 @@ class TfsConnectionInitMixin:
         options = Options(context={"data_access_handle": "secondary"})
         resolved = framework_class.pick_connection_from_dac(dac, options=options)
         assert resolved is second_valid_connection
+
+    def test_connection_handle_picks_the_named_connection(
+        self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
+    ) -> None:
+        from mloda.user import Options
+
+        dac = DataAccessCollection(connections={"a": valid_connection, "b": second_valid_connection})
+        options = Options(group={"connection_handle": "b"})
+        assert framework_class.pick_connection_from_dac(dac, options=options) is second_valid_connection
+
+    # Hooks for the connection-binding tests below. Frameworks without relation-bound
+    # connections override the three tests and skip them with a reason.
+    missing_connection_prefix: str = "connection object is required"
+
+    def data_on_connection(self, connection: Any) -> Any:
+        """Framework-native data (e.g. a relation) living on the given connection."""
+        raise NotImplementedError
+
+    def test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one(
+        self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
+    ) -> None:
+        from mloda.user import ParallelizationMode
+
+        fw = framework_class(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        fw.set_framework_connection_object(valid_connection)
+        foreign = self.data_on_connection(second_valid_connection)
+        with pytest.raises(ValueError, match=f"{framework_class.__name__}.*connection_handle"):
+            fw._adopt_connection(foreign)
+
+    def test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound(
+        self, framework_class: Any, valid_connection: Any
+    ) -> None:
+        from mloda.user import ParallelizationMode
+
+        fw = framework_class(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        fw.fallback_connection_object = object()
+        data = self.data_on_connection(valid_connection)
+        fw._adopt_connection(data)
+        assert fw.framework_connection_object is valid_connection
+        fw._adopt_connection(data)
+
+    def test_missing_connection_error_names_the_dac_and_connection_handle(self, framework_class: Any) -> None:
+        from mloda.user import ParallelizationMode
+
+        fw = framework_class(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        with pytest.raises(
+            ValueError, match=f"{self.missing_connection_prefix}.*DataAccessCollection.*connection_handle"
+        ):
+            fw.set_framework_connection_object(None)

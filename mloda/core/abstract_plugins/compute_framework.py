@@ -157,6 +157,8 @@ class ComputeFramework(ABC):
 
         # connection object for frameworks that need persistent connections (e.g., DuckDB, Spark)
         self.framework_connection_object: Any | None = None
+        # Implicit DataAccessCollection connection, used only when this framework must build native data itself.
+        self.fallback_connection_object: Any | None = None
 
     @final
     def __setattr__(self, name: str, value: Any) -> None:
@@ -363,23 +365,19 @@ class ComputeFramework(ABC):
 
     @classmethod
     def pick_connection_from_dac(cls, data_access_collection: Any, options: Any | None = None) -> Any | None:
-        """Pick the matching connection for this framework from the DataAccessCollection.
+        """Pick this framework's connection from the DataAccessCollection, or None if none match.
 
-        Called at Engine setup (once per session), not on the per-request run path.
-        Delegates to ``DataAccessCollection.resolve('connection', ...)``: the resolver
-        returns the single match, returns None if none match, and raises ValueError
-        if multiple connections match without a disambiguating ``data_access_handle``.
+        Called at Engine setup. Raises ValueError if several connections match and neither
+        ``connection_handle`` nor ``data_access_handle`` in the options picks one.
         """
-        if data_access_collection is None:
+        from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
+
+        handle, explicit, reason = resolve_connection_handle(cls, data_access_collection, options)
+        if handle is None:
+            if reason is not None and not explicit:
+                raise ValueError(f"Ambiguous resolve for kind 'connection': {reason}")
             return None
-        hint = options.get("data_access_handle") if options is not None else None
-        if hint is not None:
-            handle_kind = data_access_collection.handles().get(hint)
-            if handle_kind not in (None, "connection"):
-                hint = None
-            elif handle_kind == "connection" and not cls._connection_matches(data_access_collection.connections[hint]):
-                hint = None
-        return data_access_collection.resolve("connection", predicate=cls._connection_matches, hint=hint)
+        return data_access_collection.connections[handle]
 
     @final
     def get_framework_connection_object(self) -> Any:
@@ -426,9 +424,8 @@ class ComputeFramework(ABC):
 
         if not isinstance(data, self.expected_data_framework()):
             # if data is not in the expected data framework, we need to transform it and for this, we may need the framework connection object
-            connection = features.get_options_key(feature_group.get_class_name())
-            if connection is not None or self.framework_connection_object is None:
-                self.set_framework_connection_object(connection)
+            if self.framework_connection_object is None:
+                self.set_framework_connection_object(self.fallback_connection_object)
             data = self.transform(data, names)
             self._pinned_frame = data
         else:
@@ -466,8 +463,15 @@ class ComputeFramework(ABC):
 
     def _adopt_connection(self, data: Any) -> None:
         carried = self.connection_of(data)
-        if carried is not None and self.framework_connection_object is None:
+        if carried is None:
+            return
+        if self.framework_connection_object is None:
             self.set_framework_connection_object(carried)
+        elif carried is not self.framework_connection_object:
+            raise ValueError(
+                f"{self.__class__.__name__} received data on another connection than the bound one. The data must "
+                "live on the connection selected by the step's connection_handle in the DataAccessCollection."
+            )
 
     @final
     def run_final_filter(self, data: Any, features: Any, feature_group: Any = None) -> Any:
@@ -827,6 +831,7 @@ class ComputeFramework(ABC):
         prior_marker = features._load_marker if stamped else None
         if stamped:
             features._load_marker = marker
+        marker.framework = self
         token = current_input_data_load_marker.set(marker)
         try:
             if extender is None and fetch_extender is None:
@@ -849,6 +854,7 @@ class ComputeFramework(ABC):
                 )
         finally:
             marker.active = None
+            marker.framework = None
             current_input_data_load_marker.reset(token)
             if stamped and prior_marker is not None and prior_marker.active is not None:
                 features._load_marker = prior_marker

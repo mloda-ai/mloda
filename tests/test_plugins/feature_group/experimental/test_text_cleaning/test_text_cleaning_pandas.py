@@ -138,7 +138,7 @@ class TestPandasTextCleaning:
         feature_set.add(feature)
 
         # Apply feature
-        result = PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set)
+        result = PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set, None)
 
         # Check results
         assert "text__cleaned_text" in result.columns
@@ -164,7 +164,7 @@ class TestPandasTextCleaning:
         feature_set.add(feature)
 
         # Apply feature
-        result = PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set)
+        result = PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set, None)
 
         # Check results
         assert "text__cleaned_text" in result.columns
@@ -188,7 +188,7 @@ class TestPandasTextCleaning:
 
         # Apply feature
         with pytest.raises(ValueError) as excinfo:
-            PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set)
+            PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set, None)
 
         assert "Source features not found in data:" in str(excinfo.value)
 
@@ -208,7 +208,7 @@ class TestPandasTextCleaning:
 
         # Apply feature
         with pytest.raises(ValueError) as excinfo:
-            PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set)
+            PandasTextCleaning.calculate(TextCleaningFeatureGroup, self.df.copy(), feature_set, None)
 
         assert "Unsupported cleaning operation" in str(excinfo.value)
 

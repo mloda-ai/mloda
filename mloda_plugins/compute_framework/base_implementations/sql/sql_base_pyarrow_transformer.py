@@ -48,7 +48,9 @@ class SqlBasePyArrowTransformer(BaseTransformer):
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         if framework_connection_object is None:
-            raise ValueError("A connection object is required for this transformation.")
+            raise ValueError(
+                "A connection object is required for this transformation. Put the connection in the DataAccessCollection and select it with connection_handle."
+            )
 
         cls._validate_connection(framework_connection_object)
         return cls._convert_to_native(data, framework_connection_object)

@@ -136,7 +136,7 @@ class TestFormatGroupsReadLikePyArrow:
         impl = group.select_implementation(PyArrowTable, match, loaded_implementations())
 
         assert impl is not None
-        result = impl.calculate(group, match, _Features(_WANTED))
+        result = impl.calculate(group, match, _Features(_WANTED), None)
         whole_file = class_name in ("CsvFG", "JsonFG")
         assert result.to_pydict() == self._expected(reader, path, whole_file)
 
@@ -166,4 +166,4 @@ class TestFormatGroupsReadLikePyArrow:
         assert impl.feature_group is parent
         expected = self._expected(reader, path, class_name == "JsonFG")
         assert Renamed.load_neutral(match, _Features(_WANTED)).to_pydict() == expected
-        assert impl.calculate(Renamed, match, _Features(_WANTED)).to_pydict() == expected
+        assert impl.calculate(Renamed, match, _Features(_WANTED), None).to_pydict() == expected

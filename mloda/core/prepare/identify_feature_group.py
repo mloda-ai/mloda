@@ -27,7 +27,10 @@ from mloda.core.prepare.resolution_failure_renderer import (
     _supported_feature_names,
 )
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.data_access_collection import (
+    CONNECTION_HANDLE_OPTION,
+    DataAccessCollection,
+)
 from mloda.core.abstract_plugins.components.declared_attributes import DeclarationRequirement
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import (
@@ -875,6 +878,10 @@ class IdentifyFeatureGroupClass:
                 key = feature_group.get_class_name()
                 if key in source.group:
                     feature_group.add_base_input_data_to_options(source.group[key], target)
+                if CONNECTION_HANDLE_OPTION in source.group:
+                    feature_group.add_base_input_data_to_options(
+                        source.group[CONNECTION_HANDLE_OPTION], target, CONNECTION_HANDLE_OPTION
+                    )
 
     def _declaration_requirement(
         self, feature_group: type[FeatureGroup], feature: Feature

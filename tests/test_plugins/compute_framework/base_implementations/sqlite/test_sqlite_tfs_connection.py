@@ -62,6 +62,10 @@ class TestSqliteTfsConnectionE2E(TfsConnectionEndToEndMixin):
     destination_framework_class = SqliteFramework
     destination_fg_class = TfsDoubledSqliteFG
 
+    @staticmethod
+    def double_relation(data: Any, src: str, dst: str) -> Any:
+        return data.select(_raw_sql=f"*, {src} * 2 AS {dst}")
+
     @pytest.fixture
     def live_connection(self) -> Any:
         conn = sqlite3.connect(":memory:")

@@ -10,6 +10,7 @@ from functools import partial
 from typing import Any, NamedTuple
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.link import JoinType, Link
@@ -80,6 +81,22 @@ def saves_conversions(count: int) -> str:
 def conversion_cost(from_framework: Framework, to_framework: Framework) -> int:
     """Cost of one transform step between two frameworks."""
     return 1
+
+
+def _add_connection(found: list[Any], conn: Any) -> bool:
+    if conn in found:
+        return False
+    found.append(conn)
+    return True
+
+
+_SELF_PROVIDED = object()
+
+
+def _label(conn: Any) -> str:
+    if conn is _SELF_PROVIDED:
+        return "a connection its parent brings itself"
+    return repr(conn) if isinstance(conn, str) else f"a {type(conn).__name__} connection"
 
 
 def _names(features: tuple[Feature, ...]) -> list[str]:
@@ -190,10 +207,11 @@ class ChooseComputeFrameworks:
         positions: Mapping[Framework, int],
         output_framework: Framework | None = None,
         dropped: Mapping[UUID, frozenset[Framework]] | None = None,
-        connected: Mapping[Framework, Any] | None = None,
         pin_frameworks: Mapping[UUID, frozenset[Framework]] | None = None,
         pinned: set[UUID] | None = None,
         implementations: Iterable[type[Implementation]] | None = None,
+        handle_of: Callable[[Framework, Any], tuple[str | None, bool]] | None = None,
+        dropped_reasons: Mapping[UUID, Mapping[Framework, str]] | None = None,
     ) -> None:
         self.implementations = list(implementations or ())
         self._differs: list[dict[Framework, tuple[str, ...]]] = []
@@ -203,7 +221,8 @@ class ChooseComputeFrameworks:
         self.pinned = pinned or set()
         self.output_framework = output_framework
         self.dropped = dropped or {}
-        self.connected: Mapping[Framework, Any] = connected or {}
+        self.handle_of = handle_of
+        self.dropped_reasons = dropped_reasons or {}
         self.graph = graph
         self.nodes = nodes_per_feature_group
         self.occurrences = link_occurrences
@@ -247,6 +266,9 @@ class ChooseComputeFrameworks:
                 self._penalty = penalty
             for index, framework in assignment.items():
                 reason = self._reason(blocks, touching, steps, assignment, index)
+                lost_why = self._lost_reasons(blocks[index], framework)
+                if lost_why:
+                    reason = f"{reason}; {lost_why}"
                 for feature in blocks[index].features:
                     feature.chosen_compute_framework = framework
                     feature.chosen_compute_framework_reason = reason
@@ -275,6 +297,16 @@ class ChooseComputeFrameworks:
 
     def _is_pinned(self, block: _Block) -> bool:
         return any(f.framework_pinned or f.uuid in self.pinned for f in block.features)
+
+    def _lost_reasons(self, block: _Block, chosen: Framework) -> str:
+        """Why other frameworks lost their connection for this block, for the reason of the chosen one."""
+        found = {
+            why
+            for feature in block.features
+            for framework, why in self.dropped_reasons.get(feature.uuid, {}).items()
+            if framework is not chosen
+        }
+        return "; ".join(sorted(found))
 
     def _component_indexes(
         self, count: int, rules: list[_Rule], groups: dict[tuple[int, type[FeatureGroup]], set[int]]
@@ -317,17 +349,25 @@ class ChooseComputeFrameworks:
         return [keyed[i][1] for i in order]
 
     def _regain_dropped(self, blocks: list[_Block], owner: dict[UUID, int]) -> tuple[list[_Block], list[_Rule]]:
-        """Frameworks dropped for lack of a connection return when parents share one connection or the DAC has one."""
-        if not self.dropped:
+        """Dropped frameworks return when the parents share one connection; parents on two handles block a child."""
+        frameworks = set().union(*self.dropped.values())
+        for block in blocks:
+            frameworks.update(
+                fw for fw in block.domain if fw.connection_requirement() is ConnectionRequirement.REQUIRED
+            )
+        if not frameworks:
             return blocks, []
         parents: list[set[int]] = [set() for _ in blocks]
         for parent, child in self.graph.edges:
             if parent in owner and child in owner and owner[parent] != owner[child]:
                 parents[owner[child]].add(owner[parent])
-        carried = self._carried_connections(blocks, parents)
-        domains, gained, via_dac = self._regain_fixpoint(blocks, owner, parents, carried)
+        carried, incoming = self._carried_connections(blocks, owner, parents, frameworks)
+        domains = self._drop_conflicting(blocks, parents, incoming)
+        gained = self._regain_fixpoint(blocks, owner, parents, carried, incoming, domains)
         widened = [
-            block._replace(domain=tuple(sorted(domains[i], key=self.rank))) if gained[i] else block
+            block._replace(domain=tuple(sorted(domains[i], key=self.rank)))
+            if domains[i] != set(block.domain)
+            else block
             for i, block in enumerate(blocks)
         ]
         rules = [
@@ -338,35 +378,88 @@ class ChooseComputeFrameworks:
                 "so it runs there only after its parents",
             )
             for child in range(len(blocks))
-            for framework in sorted(gained[child] - via_dac[child], key=self.rank)
+            for framework in sorted(gained[child], key=self.rank)
             for parent in sorted(parents[child])
         ]
         return widened, rules
 
-    def _carried_connections(self, blocks: list[_Block], parents: list[set[int]]) -> list[dict[Framework, list[Any]]]:
-        """Per block and framework, the distinct connections its data would carry, compared by identity."""
-        frameworks = set(self.connected).union(*self.dropped.values())
+    def _carried_connections(
+        self, blocks: list[_Block], owner: dict[UUID, int], parents: list[set[int]], frameworks: set[Framework]
+    ) -> tuple[list[dict[Framework, list[Any]]], list[dict[Framework, list[Any]]]]:
+        """Per block and framework, the connections its data carries and those its parents deliver."""
+        host_of = {owner[tied]: owner[host] for host, tied in self.ties if host in owner and tied in owner}
         carried: list[dict[Framework, list[Any]]] = [{} for _ in blocks]
+        incoming: list[dict[Framework, list[Any]]] = [{} for _ in blocks]
+        implicit: list[dict[Framework, str | None]] = [{} for _ in blocks]
+        own: set[tuple[int, Framework]] = set()
+        roots: set[tuple[int, Framework]] = set()
         for index, block in enumerate(blocks):
-            key = block.fg.get_class_name()
             for framework in frameworks:
-                found = [c for c in (f.options.get(key) for f in block.features) if framework._connection_matches(c)]
-                carried[index][framework] = [c for i, c in enumerate(found) if not any(c is d for d in found[:i])]
-        own = [{f for f in frameworks if carried[i][f]} for i in range(len(blocks))]
+                keys: list[Any] = []
+                handle, explicit = None, False
+                if self.handle_of is not None and framework in block.domain:
+                    handle, explicit = self.handle_of(framework, block.features[0].options)
+                if explicit and handle is not None:
+                    _add_connection(keys, handle)
+                if keys:
+                    own.add((index, framework))
+                elif handle is not None and not parents[index]:
+                    keys.append(handle)
+                    roots.add((index, framework))
+                carried[index][framework] = keys
+                incoming[index][framework] = []
+                implicit[index][framework] = None if explicit else handle
         changed = True
         while changed:
             changed = False
             for index, framework in ((i, f) for i in range(len(blocks)) for f in frameworks):
-                if framework in own[index]:
+                sources = [carried[p][framework] for p in parents[index]]
+                if index in host_of:
+                    sources.append(carried[host_of[index]][framework])
+                if not sources:
                     continue
-                incoming = [c for p in parents[index] for c in carried[p][framework]]
-                if framework in self.connected and any(framework not in blocks[p].domain for p in parents[index]):
-                    incoming.append(self.connected[framework])
-                for conn in incoming:
-                    if not any(conn is known for known in carried[index][framework]):
-                        carried[index][framework].append(conn)
+                found = incoming[index][framework]
+                handle = implicit[index][framework]
+                bound = handle is not None and any(framework not in blocks[p].domain for p in parents[index])
+                if bound:
+                    sources.append([handle])
+                for conn in (c for conns in sources for c in conns):
+                    if _add_connection(found, conn) and (index, framework) not in own:
+                        _add_connection(carried[index][framework], conn)
                         changed = True
-        return carried
+                if bound and any((p, framework) in roots for p in parents[index]):
+                    _add_connection(found, _SELF_PROVIDED)
+        return carried, incoming
+
+    def _drop_conflicting(
+        self, blocks: list[_Block], parents: list[set[int]], incoming: list[dict[Framework, list[Any]]]
+    ) -> list[set[Framework]]:
+        """Domains without frameworks whose parents deliver two connections; a pinned block fails at planning."""
+        domains = [set(block.domain) for block in blocks]
+        for index, block in enumerate(blocks):
+            if not parents[index]:
+                continue
+            pinned = any(f.framework_pinned for f in block.features)
+            for framework in block.domain:
+                found = incoming[index].get(framework, [])
+                if len(found) < 2:
+                    continue
+                if pinned or len(block.domain) == 1:
+                    labels = " and ".join(sorted(_label(c) for c in found))
+                    raise ValueError(
+                        f"Features {', '.join(_names(block.features))} can only run on {framework.get_class_name()}, "
+                        f"but their parents deliver different connections: {labels}. "
+                        "Select one with 'connection_handle' or choose another framework."
+                    )
+                domains[index].discard(framework)
+                if not domains[index]:
+                    names = " and ".join(sorted(f.get_class_name() for f in block.domain))
+                    raise ValueError(
+                        f"Features {', '.join(_names(block.features))} can run on none of {names}, "
+                        "because their parents deliver different connections to each. "
+                        "Select one with 'connection_handle' or choose another framework."
+                    )
+        return domains
 
     def _regain_fixpoint(
         self,
@@ -374,13 +467,13 @@ class ChooseComputeFrameworks:
         owner: dict[UUID, int],
         parents: list[set[int]],
         carried: list[dict[Framework, list[Any]]],
-    ) -> tuple[list[set[Framework]], list[set[Framework]], list[set[Framework]]]:
-        """Domains with regained frameworks, what each block gained, and which gains came from the DAC."""
+        incoming: list[dict[Framework, list[Any]]],
+        domains: list[set[Framework]],
+    ) -> list[set[Framework]]:
+        """Adds regained frameworks to the domains in place and returns what each block gained."""
         lost = [frozenset().union(*(self.dropped.get(f.uuid, frozenset()) for f in b.features)) for b in blocks]
         pinned = [self._is_pinned(b) for b in blocks]
-        domains = [set(block.domain) for block in blocks]
         gained: list[set[Framework]] = [set() for _ in blocks]
-        via_dac: list[set[Framework]] = [set() for _ in blocks]
         changed = True
         while changed:
             changed = False
@@ -388,25 +481,22 @@ class ChooseComputeFrameworks:
                 if pinned[index] or not parents[index]:
                     continue
                 for framework in lost[index] - domains[index]:
-                    if len(carried[index][framework]) > 1:
+                    if len(carried[index][framework]) > 1 or len(incoming[index][framework]) > 1:
                         continue
-                    from_dac = framework in self.connected and all(
-                        framework not in blocks[p].domain for p in parents[index]
-                    )
-                    if from_dac or all(framework in domains[p] for p in parents[index]):
+                    if all(framework in domains[p] for p in parents[index]):
                         domains[index].add(framework)
                         gained[index].add(framework)
-                        if from_dac:
-                            via_dac[index].add(framework)
                         changed = True
             for host, tied in self.ties:
                 if host in owner and tied in owner and not pinned[owner[tied]]:
-                    new = gained[owner[host]] - domains[owner[tied]]
+                    one, other = owner[host], owner[tied]
+                    admitted = {f for f in lost[other] & domains[one] if carried[one][f]}
+                    new = (gained[one] | admitted) - domains[other]
                     if new:
-                        domains[owner[tied]] |= new
-                        gained[owner[tied]] |= new
+                        domains[other] |= new
+                        gained[other] |= new
                         changed = True
-        return domains, gained, via_dac
+        return gained
 
     def _block_neighbors(self, keyed: list[tuple[tuple[object, ...], _Block]]) -> list[set[int]]:
         """Blocks adjacent through graph edges, links and filter ties, for telling equal-keyed blocks apart."""

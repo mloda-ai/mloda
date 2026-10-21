@@ -114,7 +114,7 @@ class ExecutionOrchestrator:
         flight_server: ParallelRunnerFlightServer | None = None,
         column_ordering: str | None = None,
         request_feature_order: list[str] | None = None,
-        tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
+        connections: dict[str, Any] | None = None,
         run_context: RunContext | None = None,
         output_framework: type[ComputeFramework] | None = None,
         output_connection: Any = None,
@@ -157,7 +157,7 @@ class ExecutionOrchestrator:
         if flight_server:
             self.flight_server = flight_server
 
-        self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
+        self.connections: dict[str, Any] = connections or {}
 
     def _is_step_done(self, step_uuids: set[UUID], finished_ids: set[UUID]) -> bool:
         """
@@ -196,7 +196,7 @@ class ExecutionOrchestrator:
         self.executor = ComputeFrameworkExecutor(
             self.cfw_register,
             self.worker_manager,
-            tfs_connection_map=self.tfs_connection_map,
+            connections=self.connections,
             function_extender=self.function_extender,
             worker_extender_payload=self.worker_extender_payload,
             hook_extenders=self._hook_extenders,
@@ -573,7 +573,7 @@ class ExecutionOrchestrator:
             self.manager = None
             self.worker_extender_payload = None
         else:
-            raise_on_multiprocessing_connection_conflict(self.tfs_connection_map)
+            raise_on_multiprocessing_connection_conflict(self.execution_planner)
             raise_on_unpicklable_join_link(self.execution_planner)
             raise_on_unpicklable_step_feature_group(self.execution_planner)
             raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)

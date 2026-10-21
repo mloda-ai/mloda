@@ -186,10 +186,6 @@ class EmptyResultRunAllTestBase(PolicyRunAllTestBase):
     """
 
     @classmethod
-    def connection_keyed_feature_groups(cls) -> set[type[FeatureGroup]]:
-        return {EmptyResultDefaultFeatureGroup, EmptyResultAllowedFeatureGroup}
-
-    @classmethod
     def default_empty_is_schemaless(cls) -> bool:
         """Whether the default FG's empty result is schema-less (state B) on this framework.
 

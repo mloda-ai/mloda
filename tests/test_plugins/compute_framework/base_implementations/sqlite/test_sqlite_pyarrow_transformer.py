@@ -107,7 +107,7 @@ class TestSqlitePyArrowTransformer:
     def test_connection_required(self) -> None:
         arrow_table = pa.Table.from_pydict({"a": [1, 2, 3]})
 
-        with pytest.raises(ValueError, match="connection object is required"):
+        with pytest.raises(ValueError, match="connection object is required.*DataAccessCollection.*connection_handle"):
             SqlitePyArrowTransformer.transform_other_fw_to_fw(arrow_table, None)
 
     def test_invalid_connection_type(self) -> None:

@@ -277,9 +277,23 @@ class FormatFeatureGroup(FeatureGroup):
             raise ValueError(f"{cls.__name__}.calculate_feature found no input_data_match on the feature set.")
         source = match[1]
         implementation = features.implementation
-        load: Callable[[SourceMatch, Any], Any] = (
-            types.MethodType(implementation.calculate, cls) if implementation is not None else cls.load_neutral
-        )
+        load: Callable[[SourceMatch, Any], Any]
+        if implementation is not None:
+            marker = features._load_marker
+            framework = marker.framework if marker is not None else None
+            if (
+                framework is not None
+                and framework.framework_connection_object is None
+                and framework.fallback_connection_object is not None
+            ):
+                framework.set_framework_connection_object(framework.fallback_connection_object)
+
+            def calculate(group: Any, match: SourceMatch, features: Any) -> Any:
+                return implementation.calculate(group, match, features, framework)
+
+            load = types.MethodType(calculate, cls)
+        else:
+            load = cls.load_neutral
         loader_name = implementation_path(cls, implementation, match)
         return dispatch_input_data_load(
             cls,

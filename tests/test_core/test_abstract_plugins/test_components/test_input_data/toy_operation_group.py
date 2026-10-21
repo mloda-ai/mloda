@@ -84,7 +84,7 @@ class OpToyPandas(Implementation):
         return options.get(OPTOY_PANDAS_OFF) is None
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
         cls.served_by.append(group)
         return pd.DataFrame({OPTOY_FEATURE: [PANDAS_MARK], OPTOY_CHILD_FEATURE: [PANDAS_MARK]})
 
@@ -96,7 +96,7 @@ class OpToyPyArrow(Implementation):
     served_by: ClassVar[list[Any]] = []
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
         cls.served_by.append(group)
         return pa.table({OPTOY_FEATURE: [PYARROW_MARK], OPTOY_CHILD_FEATURE: [PYARROW_MARK]})
 
@@ -143,7 +143,7 @@ class OpToyChainPandas(Implementation):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
         for name in sorted(features.get_all_names()):
             CHAIN_LOG.append((name, cls.__name__))
             data[name] = PANDAS_MARK
@@ -155,7 +155,7 @@ class OpToyChainPyArrow(Implementation):
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
         for name in sorted(features.get_all_names()):
             CHAIN_LOG.append((name, cls.__name__))
             data = data.append_column(name, pa.array([PYARROW_MARK] * data.num_rows))

@@ -137,7 +137,7 @@ class ChooserOpPandas(Implementation):
     divergent = {"sum": SUM_DIFFERS}
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
         return data
 
 
@@ -146,7 +146,7 @@ class ChooserOpPyArrow(Implementation):
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any) -> Any:
+    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
         return data
 
 

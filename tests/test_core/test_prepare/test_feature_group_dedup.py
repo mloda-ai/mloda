@@ -1457,7 +1457,7 @@ class RedefImpl(Implementation):
     compute_framework = _FRAMEWORK_
 
     @classmethod
-    def calculate(cls, group, match, features):
+    def calculate(cls, group, match, features, framework):
         return {version!r}
 """
 

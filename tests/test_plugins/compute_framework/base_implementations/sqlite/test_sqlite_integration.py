@@ -202,10 +202,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
         )
 
-        feature_list: list[Feature | str] = [
-            Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn}),
-            Feature(name="score_plus_ten", options={"SqliteTestDataCreator": sqlite_conn}),
-        ]
+        feature_list: list[Feature | str] = [Feature(name="doubled_value"), Feature(name="score_plus_ten")]
 
         data_access_collection = DataAccessCollection(connections={sqlite_conn})
 
@@ -239,7 +236,7 @@ class TestSqliteIntegrationWithMlodaAPI:
 
         with pytest.raises(Exception, match="unbuildable_text"):
             mloda.run_all(
-                [Feature(name="unbuildable_text", options={"SqliteTestDataCreator": sqlite_conn})],
+                [Feature(name="unbuildable_text")],
                 flight_server=flight_server,
                 plugin_collector=plugin_collector,
                 data_access_collection=DataAccessCollection(connections={sqlite_conn}),
@@ -251,13 +248,11 @@ class TestSqliteIntegrationWithMlodaAPI:
             {SqliteTestDataCreator, SqliteAggregationFeatureGroup}
         )
 
-        feature_list: list[Feature | str] = [
-            Feature(name="avg_value_by_category", options={"SqliteTestDataCreator": sqlite_conn}),
-            Feature(name="count_by_category", options={"SqliteTestDataCreator": sqlite_conn}),
-        ]
+        feature_list: list[Feature | str] = [Feature(name="avg_value_by_category"), Feature(name="count_by_category")]
 
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={sqlite_conn}),
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks=[SqliteFramework],
@@ -281,12 +276,11 @@ class TestSqliteIntegrationWithMlodaAPI:
             {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup, SqliteSecondTransformFeatureGroup}
         )
 
-        feature_list: list[Feature | str] = [
-            Feature(name="quadrupled_value", options={"SqliteTestDataCreator": sqlite_conn})
-        ]
+        feature_list: list[Feature | str] = [Feature(name="quadrupled_value")]
 
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={sqlite_conn}),
             flight_server=flight_server,
             compute_frameworks=[SqliteFramework],
             plugin_collector=plugin_collector,
@@ -304,7 +298,7 @@ class TestSqliteIntegrationWithMlodaAPI:
     @pytest.mark.parametrize("output", [PyArrowTable, PandasDataFrame, SqliteFramework])
     def test_output_framework_with_a_sqlite_run(self, flight_server: Any, sqlite_conn: Any, output: Any) -> None:
         result = mloda.run_all(
-            [Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn})],
+            [Feature(name="doubled_value")],
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=PluginCollector.enabled_feature_groups(
@@ -328,13 +322,15 @@ class TestSqliteIntegrationWithMlodaAPI:
         collection_conn = sqlite3.connect(":memory:")
         try:
             result = mloda.run_all(
-                [Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn})],
+                [Feature(name="doubled_value", options={"connection_handle": "step"})],
                 flight_server=flight_server,
                 parallelization_modes={ParallelizationMode.SYNC},
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {SqliteTestDataCreator, SqliteSimpleTransformFeatureGroup}
                 ),
-                data_access_collection=DataAccessCollection(connections={collection_conn}) if with_collection else None,
+                data_access_collection=DataAccessCollection(connections={"step": sqlite_conn, "other": collection_conn})
+                if with_collection
+                else DataAccessCollection(connections={"step": sqlite_conn}),
                 compute_frameworks=[SqliteFramework],
                 output_framework=SqliteFramework,
             )
@@ -353,10 +349,7 @@ class TestSqliteIntegrationWithMlodaAPI:
             global_filter = GlobalFilter()
             global_filter.add_filter("value", "min", {"value": minimum})
             result = mloda.run_all(
-                [
-                    Feature(name="doubled_value", options={"SqliteTestDataCreator": sqlite_conn}),
-                    Feature(name="score_plus_ten", options={"SqliteTestDataCreator": sqlite_conn}),
-                ],
+                [Feature(name="doubled_value"), Feature(name="score_plus_ten")],
                 flight_server=flight_server,
                 parallelization_modes={ParallelizationMode.SYNC},
                 plugin_collector=PluginCollector.enabled_feature_groups(
@@ -387,12 +380,11 @@ class TestSqliteIntegrationWithMlodaAPI:
             }
         )
 
-        feature_list: list[Feature | str] = [
-            Feature(name="pyarrow_avg_value_by_category_sqlite", options={"SqliteTestDataCreator": sqlite_conn})
-        ]
+        feature_list: list[Feature | str] = [Feature(name="pyarrow_avg_value_by_category_sqlite")]
 
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={sqlite_conn}),
             flight_server=flight_server,
             compute_frameworks=[PyArrowTable, SqliteFramework],
             plugin_collector=plugin_collector,

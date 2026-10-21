@@ -95,6 +95,29 @@ def test_csv_reads_into_polars_dataframe(csv_path: str) -> None:
     assert "B" in columns
 
 
+def test_csv_pointer_runs_under_duckdb_with_a_dac_connection(csv_path: str) -> None:
+    """The CsvFG pointer is a path, never a connection; the DuckDB connection comes from the DataAccessCollection."""
+    duckdb = pytest.importorskip("duckdb")
+    importlib.import_module("mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework")
+    from mloda.user import Feature, PluginCollector
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+    from tests.test_plugins.compute_framework.test_tooling.policy_run_all_test_base import records_from_frame
+
+    conn = duckdb.connect()
+    try:
+        result = mloda.run_all(
+            [Feature("A", options={"CsvFG": csv_path}), Feature("B", options={"CsvFG": csv_path})],
+            compute_frameworks=["DuckDBFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
+            data_access_collection=DataAccessCollection(connections={"warehouse": conn}),
+        )
+
+        rows = sorted((int(r["A"]), int(r["B"])) for r in records_from_frame(result[0]))
+        assert rows == [(1, 3), (2, 4)]
+    finally:
+        conn.close()
+
+
 class _CsvFiles:
     file_group = lazy_group("csv_fg", "CsvFG")
 

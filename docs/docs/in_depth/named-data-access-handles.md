@@ -169,8 +169,19 @@ mloda.run_all(features, compute_frameworks=["PyArrowTable"], data_access_collect
 
 The key works across the file, document, and database format groups on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.
 
-!!! note "Connections are resolved once per engine, not per feature"
-    `ComputeFramework.pick_connection_from_dac` runs at engine setup, not on the per-request path. A single CFW therefore binds a single connection per session. If you need two features in the same session to bind different connections of the same CFW, that is currently out of scope (tracked separately); use a single `data_access_handle` on the DAC's matching connections, or split the run.
+Two features in one session can bind different connections of the same framework, each step getting its own. A `data_access_handle` naming a connection counts as an explicit choice: the step binds that connection eagerly.
+
+## Selecting a connection: `connection_handle`
+
+The group option `connection_handle` (`CONNECTION_HANDLE_OPTION`) names the connection a feature runs on. Connections live only in the DataAccessCollection; a connection object in a feature option raises at planning.
+
+```python
+from mloda.user import Feature, Options
+
+feature = Feature("amount", options=Options(group={"connection_handle": "warehouse"}))
+```
+
+With a single matching connection no handle is needed. Two unnamed matches drop a DuckDB or SQLite candidate, with a reason naming the handles. A step whose data lives on another connection than the one bound to it raises.
 
 ## Introspection: `handles()`
 

@@ -21,7 +21,7 @@ class PandasMissingValueImputation(Implementation):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet) -> Any:
+    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
         return group.impute(
             data,
             features,

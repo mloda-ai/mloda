@@ -72,6 +72,9 @@ class TestSparkTfsConnectionE2E(TfsConnectionEndToEndMixin):
     destination_framework_class = SparkFramework
     destination_fg_class = TfsDoubledSparkFG
 
+    def test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option(self, live_connection: Any) -> None:
+        pytest.skip("Spark data does not expose .connection and the result is not a pa.Table")
+
     @pytest.fixture
     def live_connection(self, spark_session: Any) -> Any:
         return spark_session

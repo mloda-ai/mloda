@@ -175,7 +175,7 @@ class TestPyArrowAggregation:
 
     def test_calculate_feature_single(self, sample_table: pa.Table, feature_set_sum: FeatureSet) -> None:
         """Test calculate_feature method with a single aggregation."""
-        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set_sum)
+        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set_sum, None)
 
         # Check that the result contains the original data plus the aggregated feature
         assert "sales__sum_aggr" in result.schema.names
@@ -190,7 +190,7 @@ class TestPyArrowAggregation:
 
     def test_calculate_feature_multiple(self, sample_table: pa.Table, feature_set_multiple: FeatureSet) -> None:
         """Test calculate_feature method with multiple aggregations."""
-        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set_multiple)
+        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set_multiple, None)
 
         # Check that the result contains all aggregated features
         assert "sales__sum_aggr" in result.schema.names
@@ -218,7 +218,7 @@ class TestPyArrowAggregation:
         feature_set.add(Feature("missing__sum_aggr"))
 
         with pytest.raises(ValueError, match="None of the source features") as exc_info:
-            PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set)
+            PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set, None)
         assert "Available columns" in str(exc_info.value)
         assert "sales" in str(exc_info.value)
 
@@ -233,7 +233,7 @@ class TestPyArrowAggregation:
             feature_set.add(Feature("sales__min_aggr"))
 
             with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
-                PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set)
+                PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set, None)
         finally:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
@@ -296,7 +296,7 @@ class TestPyArrowAggregationMultiColumn:
         feature_set = FeatureSet()
         feature_set.add(Feature("metrics__sum_aggr"))
 
-        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, multi_source_table, feature_set)
+        result = PyArrowAggregation.calculate(AggregatedFeatureGroup, multi_source_table, feature_set, None)
 
         result_col = result.column("metrics__sum_aggr")
         assert not pa.types.is_list(result_col.type), (
@@ -305,7 +305,7 @@ class TestPyArrowAggregationMultiColumn:
         assert len(result_col) == multi_source_table.num_rows
         assert result_col.to_pylist() == [11, 22, 33, 44]
 
-        recomputed = PyArrowAggregation.calculate(AggregatedFeatureGroup, result, feature_set)
+        recomputed = PyArrowAggregation.calculate(AggregatedFeatureGroup, result, feature_set, None)
         assert recomputed.schema.names.count("metrics__sum_aggr") == 1
 
 

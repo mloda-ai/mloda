@@ -261,7 +261,7 @@ class TestPyArrowMissingValueImputation:
     def test_calculate_feature_single(self, sample_table_with_missing: pa.Table, feature_set_mean: FeatureSet) -> None:
         """Test calculate method with a single imputation."""
         result = PyArrowMissingValueImputation.calculate(
-            MissingValueFeatureGroup, sample_table_with_missing, feature_set_mean
+            MissingValueFeatureGroup, sample_table_with_missing, feature_set_mean, None
         )
 
         # Check that the result contains the original data plus the imputed feature
@@ -282,7 +282,7 @@ class TestPyArrowMissingValueImputation:
     ) -> None:
         """Test calculate method with multiple imputations."""
         result = PyArrowMissingValueImputation.calculate(
-            MissingValueFeatureGroup, sample_table_with_missing, feature_set_multiple
+            MissingValueFeatureGroup, sample_table_with_missing, feature_set_multiple, None
         )
 
         # Check that the result contains all imputed features
@@ -314,7 +314,7 @@ class TestPyArrowMissingValueImputation:
     ) -> None:
         """Test calculate method with constant imputation."""
         result = PyArrowMissingValueImputation.calculate(
-            MissingValueFeatureGroup, sample_table_with_missing, feature_set_constant
+            MissingValueFeatureGroup, sample_table_with_missing, feature_set_constant, None
         )
 
         # Check that the result contains the imputed feature
@@ -334,7 +334,7 @@ class TestPyArrowMissingValueImputation:
     ) -> None:
         """Test calculate method with grouped imputation."""
         result = PyArrowMissingValueImputation.calculate(
-            MissingValueFeatureGroup, sample_table_with_missing, feature_set_grouped
+            MissingValueFeatureGroup, sample_table_with_missing, feature_set_grouped, None
         )
 
         # Check that the result contains the imputed feature
@@ -362,7 +362,9 @@ class TestPyArrowMissingValueImputation:
         feature_set.add(Feature("missing__mean_imputed"))
 
         with pytest.raises(ValueError, match="Source features not found in data"):
-            PyArrowMissingValueImputation.calculate(MissingValueFeatureGroup, sample_table_with_missing, feature_set)
+            PyArrowMissingValueImputation.calculate(
+                MissingValueFeatureGroup, sample_table_with_missing, feature_set, None
+            )
 
     def test_calculate_feature_constant_without_value(self, sample_table_with_missing: pa.Table) -> None:
         """Test calculate method with constant imputation but no constant value."""
@@ -370,7 +372,9 @@ class TestPyArrowMissingValueImputation:
         feature_set.add(Feature("category__constant_imputed"))
 
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
-            PyArrowMissingValueImputation.calculate(MissingValueFeatureGroup, sample_table_with_missing, feature_set)
+            PyArrowMissingValueImputation.calculate(
+                MissingValueFeatureGroup, sample_table_with_missing, feature_set, None
+            )
 
 
 class TestPyArrowMissingValueZeroRow(PyArrowZeroRowAdapter, MissingValueZeroRowTestMixin):

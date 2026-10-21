@@ -273,10 +273,7 @@ class TestSparkIntegrationWithMlodaAPI:
         )
 
         # Define features to calculate
-        feature_list = [
-            Feature(name="doubled_value", options={"SparkTestDataCreator": spark_session}),
-            Feature(name="score_plus_ten", options={"SparkTestDataCreator": spark_session}),
-        ]
+        feature_list = [Feature(name="doubled_value"), Feature(name="score_plus_ten")]
 
         data_access_collection = DataAccessCollection(connections={spark_session})
 
@@ -315,10 +312,7 @@ class TestSparkIntegrationWithMlodaAPI:
         plugin_collector = PluginCollector.enabled_feature_groups({SparkTestDataCreator, SparkAggregationFeatureGroup})
 
         # Define features to calculate
-        feature_list = [
-            Feature(name="avg_value_by_category", options={"SparkTestDataCreator": spark_session}),
-            Feature(name="count_by_category", options={"SparkTestDataCreator": spark_session}),
-        ]
+        feature_list = [Feature(name="avg_value_by_category"), Feature(name="count_by_category")]
 
         # Run with Spark framework
         result = mloda.run_all(
@@ -327,6 +321,7 @@ class TestSparkIntegrationWithMlodaAPI:
             parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks=[SparkFramework],
             plugin_collector=plugin_collector,
+            data_access_collection=DataAccessCollection(connections={spark_session}),
         )
 
         # Verify results
@@ -366,11 +361,12 @@ class TestSparkIntegrationWithMlodaAPI:
             {SparkTestDataCreator, SparkSimpleTransformFeatureGroup, SparkSecondTransformFeatureGroup}
         )
 
-        feature_list = [Feature(name="quadrupled_value", options={"SparkTestDataCreator": spark_session})]
+        feature_list = [Feature(name="quadrupled_value")]
 
         # Run the multi-step pipeline
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={spark_session}),
             flight_server=flight_server,
             compute_frameworks=[SparkFramework],
             plugin_collector=plugin_collector,
@@ -402,11 +398,12 @@ class TestSparkIntegrationWithMlodaAPI:
             }
         )
 
-        feature_list = [Feature(name="pyarrow_avg_value_by_category", options={"SparkTestDataCreator": spark_session})]
+        feature_list = [Feature(name="pyarrow_avg_value_by_category")]
 
         # Run the multi-step pipeline with cross-framework transformation
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={spark_session}),
             flight_server=flight_server,
             compute_frameworks=[PyArrowTable, SparkFramework],
             plugin_collector=plugin_collector,
@@ -424,14 +421,12 @@ class TestSparkIntegrationWithMlodaAPI:
         )
 
         # Define multiple features to calculate
-        feature_list = [
-            Feature(name="avg_value_by_category", options={"SparkTestDataCreator": spark_session}),
-            Feature(name="count_by_category", options={"SparkTestDataCreator": spark_session}),
-        ]
+        feature_list = [Feature(name="avg_value_by_category"), Feature(name="count_by_category")]
 
         # Run with Spark framework
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={spark_session}),
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks=[SparkFramework],
@@ -482,12 +477,13 @@ class TestSparkIntegrationWithMlodaAPI:
         # Enable the error feature group
         plugin_collector = PluginCollector.enabled_feature_groups({SparkTestDataCreator, SparkErrorFeatureGroup})
 
-        feature_list = [Feature(name="error_feature", options={"SparkTestDataCreator": spark_session})]
+        feature_list = [Feature(name="error_feature")]
 
         # This should raise an exception due to the non-existent column
         with pytest.raises(Exception):
             mloda.run_all(
                 feature_list,
+                data_access_collection=DataAccessCollection(connections={spark_session}),
                 flight_server=flight_server,
                 parallelization_modes={ParallelizationMode.SYNC},
                 compute_frameworks=[SparkFramework],

@@ -28,7 +28,7 @@ class PyArrowTimeWindow(Implementation):
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet) -> Any:
+    def calculate(cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
         return group.window(
             data,
             features,

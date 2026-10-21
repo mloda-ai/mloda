@@ -5,6 +5,8 @@ from mloda.core.abstract_plugins.components.credential import Credential, Regist
 from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping, scrub_credentials
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
+CONNECTION_HANDLE_OPTION = "connection_handle"
+
 _MIN_REDACT_LENGTH = 8
 _PLACEHOLDER = "MLODAREDACTED"
 
@@ -394,3 +396,44 @@ class DataAccessCollection:
             iterable: Iterable[Any] = value.values() if isinstance(value, Mapping) else value
             for nested in iterable:
                 cls._collect_str_leaves(nested, leaves, visited)
+
+
+def resolve_connection_handle(framework: Any, dac: Any, options: Any | None) -> tuple[str | None, bool, str | None]:
+    """Resolve the DAC connection handle for `framework`: (handle, explicit, reason)."""
+    named = options.get(CONNECTION_HANDLE_OPTION) if options is not None else None
+    if dac is None:
+        if named is not None:
+            raise ValueError(
+                f"Option '{CONNECTION_HANDLE_OPTION}' names '{named}' but no DataAccessCollection is given."
+            )
+        return None, False, None
+    connections: dict[str, Any] = dac.connections
+    foreign: str | None = None
+    if named is not None:
+        entry = dac.resolve("connection", hint=named)
+        if framework._connection_matches(entry):
+            return named, True, None
+        foreign = f"Connection handle '{named}' holds a connection this framework does not accept."
+    hint = options.get("data_access_handle") if options is not None else None
+    if foreign is None and hint in connections and framework._connection_matches(connections[hint]):
+        return hint, True, None
+    matches = [h for h, conn in connections.items() if framework._connection_matches(conn)]
+    if len(matches) == 1:
+        return matches[0], False, None
+    if foreign is not None:
+        return None, True, foreign
+    if matches:
+        given = sorted(h for h in matches if h not in dac._auto_handles)
+        unnamed = len(matches) - len(given)
+        parts = []
+        if given:
+            parts.append(f"named {given}")
+        if unnamed:
+            parts.append(f"{unnamed} unnamed")
+        return (
+            None,
+            False,
+            f"Ambiguous connections ({' and '.join(parts)}): name them in the DataAccessCollection "
+            f"and set '{CONNECTION_HANDLE_OPTION}' or 'data_access_handle' to pick one.",
+        )
+    return None, False, None

@@ -92,7 +92,7 @@ class TestPythonDictTextCleaning:
         group = Mock()
         feature_set = _feature_set("text__cleaned_text", "normalize")
         with pytest.raises(ValueError, match="Data cannot be empty"):
-            PythonDictTextCleaning.calculate(group, {}, feature_set)
+            PythonDictTextCleaning.calculate(group, {}, feature_set, None)
         group.clean.assert_not_called()
 
     def test_get_source_text(self) -> None:
@@ -217,7 +217,7 @@ class TestPythonDictTextCleaning:
 
         # Apply feature
         data_copy = _copy_columnar(self.data)
-        result = PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
+        result = PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set, None)
 
         # Check results
         assert "text__cleaned_text" in result
@@ -244,7 +244,7 @@ class TestPythonDictTextCleaning:
 
         # Apply feature
         data_copy = _copy_columnar(self.data)
-        result = PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
+        result = PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set, None)
 
         # Check results
         assert "text__cleaned_text" in result
@@ -269,7 +269,7 @@ class TestPythonDictTextCleaning:
         # Apply feature
         data_copy = _copy_columnar(self.data)
         with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
+            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set, None)
 
         assert "Source features not found in data:" in str(excinfo.value)
 
@@ -290,7 +290,7 @@ class TestPythonDictTextCleaning:
         # Apply feature
         data_copy = _copy_columnar(self.data)
         with pytest.raises(ValueError) as excinfo:
-            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set)
+            PythonDictTextCleaning.calculate(TextCleaningFeatureGroup, data_copy, feature_set, None)
 
         assert "Unsupported cleaning operation" in str(excinfo.value)
 

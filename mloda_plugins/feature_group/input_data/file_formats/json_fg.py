@@ -66,5 +66,5 @@ class JsonPyArrowTable(Implementation):
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
+    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
         return _read(group, match, features)

@@ -99,13 +99,13 @@ class TestTextCleaningFeatureGroupBase:
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
     def test_clean_source_check_is_strict_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
         with pytest.raises(ValueError) as exc_info:
-            impl.calculate(TextCleaningFeatureGroup, make_data(), _feature_set("nope__cleaned_text", "normalize"))
+            impl.calculate(TextCleaningFeatureGroup, make_data(), _feature_set("nope__cleaned_text", "normalize"), None)
         assert str(exc_info.value) == "Source features not found in data: ['nope']. Available columns: ['a', 'b']"
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
     def test_clean_rejects_an_unsupported_operation(self, impl: Any, make_data: Any) -> None:
         with pytest.raises(ValueError, match="Unsupported cleaning operation"):
-            impl.calculate(TextCleaningFeatureGroup, make_data(), _feature_set("a__cleaned_text", "bogus"))
+            impl.calculate(TextCleaningFeatureGroup, make_data(), _feature_set("a__cleaned_text", "bogus"), None)
 
     def test_clean_applies_operations_in_order_through_apply(self) -> None:
         data = object()

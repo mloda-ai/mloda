@@ -77,4 +77,6 @@ class OperationFeatureGroup(FeatureGroup):
         implementation = features.implementation
         if implementation is None:
             raise ValueError(f"{cls.__name__}.calculate_feature found no implementation on the feature set.")
-        return types.MethodType(implementation.calculate, cls)(data, features)
+        marker = features._load_marker
+        framework = marker.framework if marker is not None else None
+        return types.MethodType(implementation.calculate, cls)(data, features, framework)

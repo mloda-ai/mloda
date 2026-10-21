@@ -207,29 +207,29 @@ class TestMissingValueFeatureGroup:
     def test_python_dict_calculate_rejects_empty_data_before_the_group(self) -> None:
         group = Mock()
         with pytest.raises(ValueError, match="Data cannot be empty"):
-            PythonDictMissingValueImputation.calculate(group, {}, _feature_set("income__mean_imputed"))
+            PythonDictMissingValueImputation.calculate(group, {}, _feature_set("income__mean_imputed"), None)
         group.impute.assert_not_called()
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
     def test_impute_source_check_comes_first_and_lists_sorted_columns(self, impl: Any, make_data: Any) -> None:
         feature_set = _feature_set("missing__mean_imputed", group_by_features=["g1", "g2"])
         with pytest.raises(ValueError) as exc_info:
-            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set)
+            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set, None)
         assert str(exc_info.value) == SOURCE_ERROR.format(missing=["missing"])
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
     def test_impute_names_one_missing_group_by_feature_per_error(self, impl: Any, make_data: Any) -> None:
         feature_set = _feature_set("a__mean_imputed", group_by_features=["g1", "g2"])
         with pytest.raises(ValueError) as exc_info:
-            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set)
+            impl.calculate(MissingValueFeatureGroup, make_data(), feature_set, None)
         assert str(exc_info.value) == SOURCE_ERROR.format(missing=["g1"])
 
     @pytest.mark.parametrize(("impl", "make_data"), IMPL_DATA, ids=IMPL_IDS)
     def test_impute_checks_the_constant_after_the_columns(self, impl: Any, make_data: Any) -> None:
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
-            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("a__constant_imputed"))
+            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("a__constant_imputed"), None)
         with pytest.raises(ValueError, match="Source features not found in data"):
-            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("zzz__constant_imputed"))
+            impl.calculate(MissingValueFeatureGroup, make_data(), _feature_set("zzz__constant_imputed"), None)
 
     def test_impute_reports_all_missing_resolved_names_in_one_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         resolved = Mock(return_value=["x~0", "x~1", "a"])

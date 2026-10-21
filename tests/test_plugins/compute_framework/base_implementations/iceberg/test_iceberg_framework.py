@@ -465,6 +465,21 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_te
     pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed. Skipping this test."
 )
 class TestIcebergTfsConnectionInit(TfsConnectionInitMixin):
+    _SKIP = "Iceberg data does not carry its own connection; no per-data connection check"
+
+    def test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one(
+        self, framework_class: Any, valid_connection: Any, second_valid_connection: Any
+    ) -> None:
+        pytest.skip(self._SKIP)
+
+    def test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound(
+        self, framework_class: Any, valid_connection: Any
+    ) -> None:
+        pytest.skip(self._SKIP)
+
+    def test_missing_connection_error_names_the_dac_and_connection_handle(self, framework_class: Any) -> None:
+        pytest.skip(self._SKIP)
+
     @pytest.fixture
     def framework_class(self) -> Any:
         return IcebergFramework

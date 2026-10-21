@@ -3,6 +3,7 @@ from copy import copy, deepcopy
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -137,8 +138,11 @@ class ExecutionPlan:
         resolved_input_feature_names: dict[UUID, frozenset[str] | None] | None = None,
         specialized_from: dict[UUID, tuple[str, ...]] | None = None,
         implementations: Collection[type[Implementation]] | None = None,
+        data_access_collection: Any = None,
     ) -> None:
         self.implementations = () if implementations is None else implementations
+        # Read only while building; cleared afterwards so a plan deepcopy never copies a connection.
+        self.data_access_collection = data_access_collection
         # Maps a step to itself so a dedup hit can recover the already-inserted canonical member.
         self.tfs_collection: dict[TransformFrameworkStep, TransformFrameworkStep] = {}
         self.joinstep_collection = JoinStepCollection()
@@ -211,6 +215,8 @@ class ExecutionPlan:
             if isinstance(planned_step, FeatureGroupStep):
                 planned_step.reads_join_result = bool(planned_step.get_uuids() & all_consumers)
 
+        self._stamp_connection_handles(fw_execution_plan)
+
         # Built before add_tfs, whose write serialization edges are not part of the join decision.
         join_steps = [step for step in fw_execution_plan if isinstance(step, JoinStep)]
         resolved_records = wire_join_dependencies(self.planned_records, join_steps)
@@ -233,11 +239,44 @@ class ExecutionPlan:
         # ResolveComputeFrameworks's own dict must not linger past the plan build that needs it, and
         # neither must the engine's resolved_input_feature_names map that run_feature_group read.
         self.declared_frameworks = {}
+        self.data_access_collection = None
         self.resolved_input_feature_names = None
         self.specialized_from = None
         self._feature_set_index_cache = {}
         self._feature_set_index_source = None
         self._feature_set_index_length = 0
+
+    def _connection_for(
+        self, framework: type[ComputeFramework], options: Any, hop: bool = False
+    ) -> tuple[str | None, bool]:
+        """The DataAccessCollection handle and whether it was named; a hop into an ambiguous match raises."""
+        handle, explicit, reason = resolve_connection_handle(framework, self.data_access_collection, options)
+        if hop and handle is None and reason is not None:
+            raise ValueError(reason if explicit else f"Ambiguous resolve for kind 'connection': {reason}")
+        return handle, explicit
+
+    def _stamp_connection_handles(self, steps: Sequence[Step]) -> None:
+        """Set connection_handle on every feature group and join step from its features' options."""
+        owner = {u: s for s in steps if isinstance(s, FeatureGroupStep) for u in s.get_uuids()}
+        records = {r.token: r.consumers for r in self.planned_records}
+        for step in steps:
+            if isinstance(step, FeatureGroupStep):
+                step.connection_handle, step.connection_explicit = self._connection_for(
+                    step.compute_framework, step.features.options
+                )
+            elif isinstance(step, JoinStep):
+                consumers = [owner[u] for u in records.get(step.uuid, ()) if u in owner] or [
+                    owner[u] for u in step.destination_framework_uuids if u in owner
+                ]
+                resolved = [self._connection_for(step.destination_framework, c.features.options) for c in consumers]
+                handles = {handle for handle, _ in resolved}
+                if len(handles) > 1:
+                    names = " and ".join(f"'{h}'" for h in sorted(str(h) for h in handles))
+                    raise ValueError(f"The consumers of one join use different connections: {names}.")
+                if not resolved:
+                    resolved = [self._connection_for(step.destination_framework, None)]
+                step.connection_handle = resolved[0][0]
+                step.connection_explicit = any(explicit for _, explicit in resolved)
 
     @staticmethod
     def _shared_frame_error(
@@ -1172,6 +1211,8 @@ Available join types:
             to_feature_group=to_feature_group,
             link_id=ep.uuid,
             source_framework_uuids=ep.source_framework_uuids,
+            connection_handle=ep.connection_handle,
+            connection_explicit=ep.connection_explicit,
         )
 
     @staticmethod
@@ -1198,6 +1239,8 @@ Available join types:
             to_feature_group=destination_group,
             source_step_uuid=owning_step_of.get(carrier, carrier),
             private_copy=private_copy,
+            connection_handle=ep.connection_handle,
+            connection_explicit=ep.connection_explicit,
         )
 
     @staticmethod
@@ -1697,6 +1740,7 @@ Available join types:
                         continue
 
                     if ep.compute_framework != parent_node_property.feature.get_compute_framework():
+                        hop_handle, hop_explicit = self._connection_for(ep.compute_framework, ep.features.options, True)
                         new_tfs = TransformFrameworkStep(
                             from_framework=parent_node_property.feature.get_compute_framework(),
                             to_framework=ep.compute_framework,
@@ -1704,6 +1748,8 @@ Available join types:
                             from_feature_group=parent_node_property.feature_group_class,
                             to_feature_group=ep.feature_group,
                             source_step_uuid=owning_step_of.get(parent, parent),
+                            connection_handle=hop_handle,
+                            connection_explicit=hop_explicit,
                         )
                         canonical_tfs = self.tfs_collection.get(new_tfs)
                         if canonical_tfs is None:

@@ -51,7 +51,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 sample_data = pd.DataFrame({"sales": [10.0, 20.0, 30.0]})
 feature_set = FeatureSet()
 feature_set.add(Feature("sales__sum_aggr"))
-result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set)
+result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set, None)
 assert "sales__sum_aggr" in result.columns
 ```
 

@@ -216,7 +216,7 @@ def make_implementation() -> Iterator[Callable[..., type[Implementation]]]:
             compute_framework = framework
 
             @classmethod
-            def calculate(cls, serving: Any, match: Any, features: Any) -> Any:
+            def calculate(cls, serving: Any, match: Any, features: Any, framework: Any) -> Any:
                 return None if fn is None else fn(serving, match, features)
 
         if name is not None:

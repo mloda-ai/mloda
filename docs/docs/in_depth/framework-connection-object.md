@@ -101,6 +101,19 @@ result = mloda.run_all(
 )
 ```
 
+Connections live only in the `DataAccessCollection`. With one matching connection no selection is needed; with several, name each in a feature's options:
+
+```python
+import duckdb
+from mloda.user import DataAccessCollection, Feature
+
+data_access_collection = DataAccessCollection(
+    connections={"warehouse": duckdb.connect(), "scratch": duckdb.connect()}
+)
+
+feature = Feature("feature1", options={"connection_handle": "warehouse"})
+```
+
 ### Using Spark with mloda API
 
 ```py
@@ -194,7 +207,13 @@ return framework_connection_object.from_other_format(data)
    ```
    ValueError: A connection object is required for this transformation.
    ```
-   **Solution**: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatically. Thus, you might need to give them a second time to root features!
+   **Solution**: Put the connection in the `DataAccessCollection`. mloda binds it to every step that needs it, roots included, so nothing is repeated per feature. With several connections, name one per feature with the `connection_handle` option (see below).
+
+2. **Connection object in a feature option**: a connection object under any feature option (for example the group's class name) raises at planning, naming the key.
+   **Solution**: Move it to the `DataAccessCollection` and select it with `connection_handle`.
+
+3. **Two handles in one step**: parents on different handles never share a DuckDB or SQLite consumer, and a consumer pinned to that framework fails at planning naming both handles.
+   **Solution**: Give the consumer one `connection_handle`, or run the branches as separate features.
 
 ## Summary
 

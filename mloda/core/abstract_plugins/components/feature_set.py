@@ -248,6 +248,14 @@ class FeatureSet:
                 names.update(f"{feature.name}~{part}" for part in feature.result_parts)
         return tuple(sorted(FeatureName(name) for name in names))
 
+    def get_result_index_columns(self) -> dict[str, tuple[str, ...]]:
+        """Key columns kept next to each initially requested feature, by feature name; only non-empty."""
+        return {
+            str(feature.name): feature.result_index_columns
+            for feature in self.features
+            if feature.initial_requested_data and feature.result_index_columns
+        }
+
     def get_name_of_one_feature(self) -> FeatureName:
         """Return the alphabetically smallest feature name added to the set (deterministic regardless of add() order)."""
         FeatureSetValidator.validate_feature_added(self.name_of_one_feature, "get_name_of_one_feature")

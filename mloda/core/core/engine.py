@@ -51,6 +51,7 @@ from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.link import JoinType, Link
+from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
 
 
@@ -233,6 +234,8 @@ class Engine:
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
+        with reader_probe_scope(probe_scope):
+            self._load_result_index_columns()
 
         if self.global_filter:
             self.global_filter.warn_on_unmatched_filters()
@@ -318,6 +321,8 @@ class Engine:
 
         self._set_feature_name(feature, feature_group, result.output_parts.get(feature_group_class))
         self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
+
+        feature.result_index_columns = self._result_index_columns(feature, feature_group, feature_group_class)
 
         # Stash the declared pre-default options: dependency declaration and child inheritance observe
         # them; intake materialization canonicalizes default-equivalent twins.
@@ -536,11 +541,11 @@ class Engine:
             left, right = self._link_sides(link, feature_group_class, feature)
             if left:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features, link.left_index
+                    feature_group_class, feature_group, feature, features.child_uuid, link.left_index
                 )
             if right:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features, link.right_index
+                    feature_group_class, feature_group, feature, features.child_uuid, link.right_index
                 )
 
     def _process_index_feature(
@@ -558,22 +563,26 @@ class Engine:
         for link in self.links:
             left, right = self._link_sides(link, feature_group_class, feature)
             if left and link.left_index == index:
-                self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, index)
+                self._create_and_add_index_feature(
+                    feature_group_class, feature_group, feature, features.child_uuid, index
+                )
 
             if right and link.right_index == index:
-                self._create_and_add_index_feature(feature_group_class, feature_group, feature, features, index)
+                self._create_and_add_index_feature(
+                    feature_group_class, feature_group, feature, features.child_uuid, index
+                )
 
     def _create_and_add_index_feature(
         self,
         feature_group_class: type[FeatureGroup],
         feature_group: FeatureGroup,
         feature: Feature,
-        features: Features,
+        child_uuid: UUID | None,
         index: Index,
     ) -> None:
         """Creates and adds a new index feature to the collection."""
         new_index_feature = create_index_feature(index, feature_group, feature)
-        self.add_feature_to_collection(feature_group_class, new_index_feature, features.child_uuid, True)
+        self.add_feature_to_collection(feature_group_class, new_index_feature, child_uuid, True)
         if feature.uuid in self.connection_dropped:
             self.connection_dropped[new_index_feature.uuid] = self.connection_dropped[feature.uuid]
 
@@ -693,10 +702,65 @@ class Engine:
 
         return ids(host) == ids(target)
 
+    def _result_index_columns(
+        self, feature: Feature, feature_group: FeatureGroup, feature_group_class: type[FeatureGroup]
+    ) -> tuple[str, ...]:
+        """The key columns this request keeps in its result frame: Feature.index, else the group's index_columns."""
+        if not (feature.keep_index and feature.initial_requested_data):
+            return ()
+        if feature.index is not None:
+            key = tuple(feature.index.index)
+        else:
+            key = tuple(dict.fromkeys(c for index in feature_group.index_columns() or [] for c in index.index))
+        if not key:
+            raise ValueError(
+                f"Feature '{feature.name}' sets keep_index, but no key is known for it in feature group "
+                f"{format_feature_group_class(feature_group_class)}; set Feature.index or declare index_columns()."
+            )
+        return key
+
+    def _load_result_index_columns(self) -> None:
+        """Inject each kept key column into the root features of the features that keep it."""
+        owners = {f.uuid: (group, f) for group, fs in self.feature_group_collection.items() for f in fs}
+        for _, feature in list(owners.values()):
+            if not feature.result_index_columns:
+                continue
+            roots: dict[UUID, tuple[type[FeatureGroup], Feature]] = {}
+            seen: set[UUID] = set()
+            todo = [feature.uuid]
+            while todo:
+                current = todo.pop()
+                if current in seen:
+                    continue
+                seen.add(current)
+                if not self.resolved_input_feature_names.get(current):
+                    roots[current] = owners[current]
+                todo.extend(self.feature_link_parents.get(current, ()))
+            visited = {str(owners[u][1].name) for u in seen}
+            ordered = sorted(roots.values(), key=lambda gr: (format_feature_group_class(gr[0]), str(gr[1].name)))
+            for column in feature.result_index_columns:
+                if column in visited:
+                    continue
+                match = next(
+                    (
+                        (group, root)
+                        for group, root in ordered
+                        if call_match_hook(group, column, root.options._fork(), self.data_access_collection).matched
+                    ),
+                    None,
+                )
+                if match is None:
+                    raise ValueError(
+                        f"Feature '{feature.name}' keeps index column '{column}', but no input feature group "
+                        f"provides it; the column must be matched by one of the feature's root input feature groups."
+                    )
+                self._create_and_add_index_feature(match[0], match[0](), match[1], None, Index((column,)))
+
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
         existing.options.union_own_keys(host.options)
         existing.absorb_parts(host)
+        existing.absorb_result_index_columns(host)
         for name, keys in host.consumer_attributions:
             existing.add_consumer_attribution(name, keys)
         if host.initial_requested_data:
@@ -783,6 +847,7 @@ class Engine:
                 self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
             existing_feature.options.union_own_keys(feature.options)
             existing_feature.absorb_parts(feature)
+            existing_feature.absorb_result_index_columns(feature)
             for name, keys in feature.consumer_attributions:
                 existing_feature.add_consumer_attribution(name, keys)
             self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)

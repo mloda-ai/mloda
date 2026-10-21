@@ -111,12 +111,18 @@ class DataLifecycleManager:
         if not initial_requested_features:
             return
 
-        result = self.get_result_data(cfw, initial_requested_features, location)
+        result = self.get_result_data(
+            cfw, initial_requested_features, location, result_index_columns=features.get_result_index_columns()
+        )
         if result is not None:
             self.result_data_collection[step_uuid] = result
 
     def get_result_data(
-        self, cfw: ComputeFramework, selected_feature_names: Sequence[FeatureName], location: str | None = None
+        self,
+        cfw: ComputeFramework,
+        selected_feature_names: Sequence[FeatureName],
+        location: str | None = None,
+        result_index_columns: dict[str, tuple[str, ...]] | None = None,
     ) -> Any:
         """
         Gets result data from the compute framework.
@@ -125,11 +131,13 @@ class DataLifecycleManager:
             cfw: The compute framework containing the data.
             selected_feature_names: Sequence of feature names to select.
             location: Optional location string for remote data access.
+            result_index_columns: Key columns kept next to their feature, by feature name.
 
         Returns:
             The selected data from the CFW.
 
         Raises:
+            ValueError: If a kept key column is missing from the result frame.
             NotImplementedError: If CFW has no data and no location is provided.
         """
         if cfw.data is not None:
@@ -153,6 +161,20 @@ class DataLifecycleManager:
         # a schema-less result is meaningless and must not raise; it skips selection but is still converted.
         if not cfw._extract_column_names(data):
             return self._to_output_framework(cfw, data)
+
+        if result_index_columns:
+            present = set(cfw._extract_column_names(data))
+            names = list(selected_feature_names)
+            for feature_name, columns in result_index_columns.items():
+                for column in columns:
+                    if column not in present:
+                        raise ValueError(
+                            f"Feature '{feature_name}' keeps index column '{column}', but its result frame has "
+                            f"no column '{column}'; the feature group computing it must pass the column through."
+                        )
+                    if column not in names:
+                        names.append(FeatureName(column))
+            selected_feature_names = names
 
         select = cfw.select_data_by_column_names
         if self.output_framework is not None:

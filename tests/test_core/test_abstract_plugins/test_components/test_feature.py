@@ -411,3 +411,38 @@ def test_the_chosen_reason_and_pin_flag_stay_out_of_equality_and_survive_copy() 
     duplicate = copy.copy(marked)
     assert duplicate.framework_pinned is True
     assert duplicate.chosen_compute_framework_reason == "pinned"
+
+
+def test_keep_index_defaults_to_false() -> None:
+    assert Feature("ki_unit").keep_index is False
+    assert Feature("ki_unit", keep_index=True).keep_index is True
+
+
+def test_keep_index_excluded_from_equality_and_hash() -> None:
+    kept = Feature("ki_unit", keep_index=True)
+    plain = Feature("ki_unit")
+    assert kept == plain
+    assert hash(kept) == hash(plain)
+    assert len({kept, plain}) == 1
+
+
+def test_absorb_result_index_columns_unions_in_order() -> None:
+    survivor = Feature("ki_unit")
+    survivor.result_index_columns = ("a", "b")
+    twin = Feature("ki_unit")
+    twin.result_index_columns = ("c", "a")
+
+    survivor.absorb_result_index_columns(twin)
+
+    assert list(survivor.result_index_columns) == ["a", "b", "c"]
+
+
+def test_absorb_result_index_columns_from_empty_twin_keeps_survivor() -> None:
+    survivor = Feature("ki_unit")
+    survivor.result_index_columns = ("a",)
+    twin = Feature("ki_unit")
+    twin.result_index_columns = ()
+
+    survivor.absorb_result_index_columns(twin)
+
+    assert survivor.result_index_columns == ("a",)

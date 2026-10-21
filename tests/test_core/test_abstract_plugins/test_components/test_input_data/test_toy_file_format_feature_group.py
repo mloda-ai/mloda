@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import inspect
 import os
 from collections.abc import Collection
@@ -21,7 +22,7 @@ from mloda.core.prepare.identify_feature_group import (
     IdentifyFeatureGroupClass,
     resolve_or_raise,
 )
-from mloda.user import DataAccessCollection, Feature, FeatureName, Options
+from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
@@ -264,6 +265,45 @@ class TestPinnedFileOwnedBySomeFileGroup:
         text = str(excinfo.value)
         assert "supersecret" not in text
         assert self.UNOWNED_FRAGMENT in text
+
+
+class TestUserinfoUriPlanIdentity:
+    """A userinfo URI handle never shows its password in the plan step identity or the rendered plan."""
+
+    def test_plan_step_identity_and_render_hide_the_password(self) -> None:
+        column = "toyfmt_uri_plan_col"
+        uri = f"s3://alice:hunter2@bucket/plan{TOY_SUFFIX}"  # nosec B105
+
+        class ToyfmtUriPlanFG(ToyFileFormatFG):
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                if str(feature_name) != column:
+                    return False
+                return bool(super().match_feature_group_criteria(feature_name, options, data_access_collection))
+
+            @classmethod
+            def columns(cls, match: Any) -> Collection[str] | None:
+                return [column]
+
+            @classmethod
+            def has_column(cls, match: Any, column_name: str) -> bool | None:
+                return column_name == column
+
+        explained = mloda.explain(
+            [Feature(column)],
+            compute_frameworks=[PyArrowTable],
+            data_access_collection=DataAccessCollection(files={uri}),
+            plugin_collector=PluginCollector.enabled_feature_groups({ToyfmtUriPlanFG}),
+        )
+        steps = [step for step in explained if step.step_kind == "compute"]
+        assert len(steps) == 1
+        assert steps[0].data_access_identity == f"s3://bucket/plan{TOY_SUFFIX}"
+        assert "hunter2" not in repr(explained)
+        assert "hunter2" not in str(explained)
+        del explained, steps, ToyfmtUriPlanFG
+        gc.collect()
 
 
 class TestAbstractReadFileFGWithAPin:

@@ -78,9 +78,9 @@ class ReadDocumentFG(_FileSourceFG):
             cls._record_handed_over(feature_name, options, data_access_collection)
         gone = [match for match in found if not os.path.isfile(match.access)]
         if gone:
-            path = os.path.abspath(gone[0].access)
+            reason = not_a_file_reason(os.path.abspath(gone[0].access))
             record_match_rejection(
-                name, scrub_credentials(f"{name} matched {path} but {not_a_file_reason(path)}"), stage=INPUT_DATA_STAGE
+                name, scrub_credentials(f"{name} matched {gone[0].source} but {reason}"), stage=INPUT_DATA_STAGE
             )
         kept = [match for match in found if match not in gone]
         if not kept and cls._pointer_key(options) is None:
@@ -126,7 +126,9 @@ class ReadDocumentFG(_FileSourceFG):
         if path.endswith(cls.suffixes()) and not cls._owns(path, cls._document_suffixes(options)):
             record_match_rejection(
                 cls.get_class_name(),
-                f"{path} is handed over to another reader; list its suffix in document_suffixes to read it here",
+                scrub_credentials(
+                    f"{path} is handed over to another reader; list its suffix in document_suffixes to read it here"
+                ),
                 stage=INPUT_DATA_STAGE,
             )
 

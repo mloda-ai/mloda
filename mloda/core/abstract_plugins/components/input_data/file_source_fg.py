@@ -4,8 +4,9 @@ import inspect
 import os
 from abc import abstractmethod
 from typing import Any, ClassVar, cast
+from urllib.parse import urlsplit
 
-from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.credential_scrub import _drop_free_text_userinfo, scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, SourceMatch, first_report_of_pin
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
@@ -150,6 +151,9 @@ class _FileSourceFG(FormatFeatureGroup):
 
     @staticmethod
     def _source(path: str) -> SourceMatch:
+        if "://" in path:
+            parts = urlsplit(_drop_free_text_userinfo(path))
+            return SourceMatch(source=scrub_credentials(f"{parts.scheme}://{parts.netloc}") + parts.path, access=path)
         return SourceMatch(source=os.path.abspath(path), access=path)
 
     @staticmethod

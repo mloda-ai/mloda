@@ -218,6 +218,28 @@ class DocumentFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         with pytest.raises(ValueError, match="it does not exist"):
             self._resolve(self._feature(name, {name: gone}), None)
 
+    def test_doc_a_userinfo_uri_never_leaks_the_password_in_a_missing_file_reason(self) -> None:
+        uri = f"s3://alice:hunter2@bucket/gone{self._suffix()}"  # nosec B105
+        name = self._group_name()
+        for dac in (DataAccessCollection(files={"gone_file": uri}), None):
+            group = None if dac is not None else {name: uri}
+            result = self._evaluate(self._feature(name, group), dac)
+            assert all("hunter2" not in elimination.reason for elimination in result.eliminations.values())
+        with pytest.raises(ValueError) as exc_info:
+            self._resolve(self._feature(name, {name: uri}), None)
+        assert "hunter2" not in str(exc_info.value)
+
+    def test_doc_a_userinfo_uri_never_leaks_the_password_in_a_handed_over_reason(self) -> None:
+        sub = self._gated_subclass()
+        sub.handover_suffixes = classmethod(lambda cls: cls.suffixes())
+        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
+        uri = f"s3://alice:hunter2@bucket/x{self._suffix()}"  # nosec B105
+        feature = Feature(self._group_name(), Options({self._group_name(): uri}))
+        result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
+        assert "hunter2" not in result.eliminations[sub].reason
+        del sub, mapping, result, feature
+        gc.collect()
+
     def test_doc_a_pointer_to_a_handed_over_suffix_names_document_suffixes(self) -> None:
         sub = self._gated_subclass()
         sub.handover_suffixes = classmethod(lambda cls: cls.suffixes())

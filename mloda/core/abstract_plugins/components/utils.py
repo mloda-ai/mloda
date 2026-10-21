@@ -243,7 +243,8 @@ def safe_value_text(value: Any) -> str:
         # 2**2126 < 10**640, the lowest settable str-digit limit, so repr cannot raise
         if type(value) is int and value.bit_length() > 2126:
             return "int"
-        return f"{type(value).__name__} {reprlib.repr(value)}"
+        text = reprlib.repr(scrub_credentials(value) if type(value) is str else value)
+        return f"{type(value).__name__} {text}"
     if value is None:
         return "None"
     # No value text: a composite can hold data the caller should not see.

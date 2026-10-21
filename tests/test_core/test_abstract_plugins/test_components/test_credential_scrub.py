@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import (
     redact_option_value,
     scrub_credentials,
 )
-from mloda.core.abstract_plugins.components.utils import contained_raise_reason
+from mloda.core.abstract_plugins.components.utils import contained_raise_reason, safe_value_text
 
 # (case id, input text, secret substrings that must be gone, substrings that must survive)
 SCRUB_CASES: list[tuple[str, str, list[str], list[str]]] = [
@@ -1177,3 +1177,10 @@ class TestScrubUriFailClosed:
     )
     def test_secret_is_not_kept(self, value: str, secret: str) -> None:
         assert secret not in scrub_credentials(value)
+
+
+def test_safe_value_text_scrubs_a_credential_str_and_keeps_the_type() -> None:
+    text = safe_value_text("postgres://u:hunter2@h/db")  # nosec B105
+    assert "hunter2" not in text
+    assert text.startswith("str ")
+    assert safe_value_text("plain") == "str 'plain'"

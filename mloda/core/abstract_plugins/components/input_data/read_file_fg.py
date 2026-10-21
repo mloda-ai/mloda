@@ -11,6 +11,7 @@ from abc import abstractmethod
 from collections.abc import Collection
 from typing import Any, ClassVar
 
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
@@ -47,7 +48,7 @@ class ReadFileFG(_FileSourceFG):
         handles = sorted(
             handle
             for handle, path in (data_access_collection.files.items() if data_access_collection else ())
-            if os.path.abspath(path) in sources
+            if cls._source(path).source in sources
         )
         name = cls.get_class_name()
         if handles:
@@ -88,7 +89,7 @@ class ReadFileFG(_FileSourceFG):
     def _listing(cls, kind: str, match: SourceMatch) -> Collection[str] | None:
         names, failure = cls._listing_result(kind, match)
         if failure is not None:
-            cls._reject_listing(os.path.abspath(match.access), failure)
+            cls._reject_listing(match.source, failure)
         return names
 
     @classmethod
@@ -125,6 +126,6 @@ class ReadFileFG(_FileSourceFG):
     def _reject_listing(cls, path: str, reason: str) -> None:
         record_match_rejection(
             cls.get_class_name(),
-            f"{cls.get_class_name()} matched {path} but {reason.replace(REASON_DETAIL, ': ')}",
+            scrub_credentials(f"{cls.get_class_name()} matched {path} but {reason.replace(REASON_DETAIL, ': ')}"),
             stage=INPUT_DATA_STAGE,
         )

@@ -11,7 +11,7 @@ from mloda.user import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort, safe_value_text
 from mloda.provider import DefaultOptionKeys, PropertySpec, property_spec
 
 
@@ -606,7 +606,7 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
     def test_unresolvable_in_features_logs_one_debug_line_carrying_the_value(
         self, value: Any, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """The rejection is readable at DEBUG, carries the offending value, and stays quiet above DEBUG."""
+        """The rejection is readable at DEBUG, carries the redacted value, and stays quiet above DEBUG."""
         options = Options(context={"operation": "op1", "in_features": value})
         with caplog.at_level(logging.DEBUG, logger=MIXIN_LOGGER_NAME):
             result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
@@ -616,8 +616,21 @@ class TestFeatureChainParserMixinMinMaxInFeatures:
 
         assert result is False
         assert len(debugs) == 1, f"exactly one DEBUG record must report the rejection, got: {debugs}"
-        assert repr(value) in debugs[0], f"the DEBUG record must carry the offending value: {debugs[0]}"
+        assert safe_value_text(value) in debugs[0], f"the DEBUG record must carry the redacted value: {debugs[0]}"
         assert loud == [], f"an unresolvable value is one group's non-match, not a defect, got: {loud}"
+
+    def test_unresolvable_in_features_debug_line_does_not_leak_a_credential(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        secret_url = "postgres://u:hunter2@h/db"  # nosec B105
+        options = Options(context={"operation": "op1", "in_features": [secret_url, 1]})
+        with caplog.at_level(logging.DEBUG, logger=MIXIN_LOGGER_NAME):
+            result = MockFeatureGroupWithMinMax.match_feature_group_criteria("any_name", options)
+        debugs = [r.getMessage() for r in caplog.records if r.name == MIXIN_LOGGER_NAME and r.levelno == logging.DEBUG]
+
+        assert result is False
+        assert any("cannot resolve in_features" in message for message in debugs), debugs
+        assert all("hunter2" not in message for message in debugs)
 
     def test_absent_in_features_still_matches_when_min_is_zero(self) -> None:
         """A group with MIN_IN_FEATURES = 0 is unaffected by an absent in_features."""

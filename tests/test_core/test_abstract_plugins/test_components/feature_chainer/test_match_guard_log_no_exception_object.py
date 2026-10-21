@@ -43,6 +43,20 @@ class _JudgmentRaiseGuard945(FeatureChainParserMixin):
     }
 
 
+def _guard_rejects(value: Any) -> bool:
+    return False
+
+
+class _RejectingGuard945(FeatureChainParserMixin):
+    """Guard that declines every value without raising."""
+
+    PREFIX_PATTERN = r".*__([\w]+)_g945reject$"
+    PROPERTY_MAPPING = {
+        "operation": PropertySpec("Operation", allowed_values={"op1": "Operation 1"}, context=True),
+        "items": PropertySpec("Guarded items", context=True, match_guard=_guard_rejects),
+    }
+
+
 class _UnexpectedRaiseGuard945(FeatureChainParserMixin):
     """Guard raising an unexpected class, which takes the WARNING branch."""
 
@@ -116,3 +130,25 @@ class TestMatchGuardRaiseLogsNoExceptionObject:
         assert "items" in messages[0], f"the key must stay in the message: {messages[0]}"
         assert "GuardExploded" in messages[0], f"the exception type must stay in the message: {messages[0]}"
         assert repr(5) not in messages[0], f"the raw value stays out of WARNING logs: {messages[0]}"
+
+
+class TestMatchGuardLogsScrubCredentialValues:
+    """DEBUG guard records must not carry a credential-shaped option value."""
+
+    def test_raise_branch_does_not_leak_a_credential_value(self, caplog: pytest.LogCaptureFixture) -> None:
+        options = Options(context={"operation": "op1", "items": "postgres://u:hunter2@h/db"})  # nosec B105
+        with caplog.at_level(logging.DEBUG, logger=MIXIN_LOGGER_NAME):
+            result = _JudgmentRaiseGuard945.match_feature_group_criteria("src__op1_g945debug", options)
+
+        assert result is False
+        assert _guard_raise_records(caplog, logging.DEBUG), "the DEBUG branch must report the contained raise"
+        assert all("hunter2" not in record.getMessage() for record in caplog.records)
+
+    def test_non_raising_rejection_does_not_leak_a_credential_value(self, caplog: pytest.LogCaptureFixture) -> None:
+        options = Options(context={"operation": "op1", "items": "postgres://u:hunter2@h/db"})  # nosec B105
+        with caplog.at_level(logging.DEBUG):
+            result = _RejectingGuard945.match_feature_group_criteria("src__op1_g945reject", options)
+
+        assert result is False
+        assert any("rejected value" in record.getMessage() for record in caplog.records)
+        assert all("hunter2" not in record.getMessage() for record in caplog.records)

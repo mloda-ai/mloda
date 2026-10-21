@@ -675,9 +675,9 @@ class FeatureChainParserMixin:
                     raise
                 # Text, not exc: a retained record must not pin this frame, its cls and the plugin class.
                 logger.debug(
-                    "%s cannot resolve in_features value %r: %s",
+                    "%s cannot resolve in_features value %s: %s",
                     cls.__name__,
-                    in_features_raw,
+                    safe_value_text(in_features_raw),
                     contained_raise_reason(exc),
                 )
                 return False

@@ -182,10 +182,10 @@ class FeatureChainParser:
                 level = contained_raise_log_level(exc)
                 if level == logging.DEBUG:
                     logger.debug(
-                        "element_validator for '%s' %s for value %r; treating value as rejected.",
+                        "element_validator for '%s' %s for value %s; treating value as rejected.",
                         property_name,
                         contained_raise_reason(exc),
-                        found_property_val,
+                        safe_value_text(found_property_val),
                     )
                 else:
                     # The raw value stays out of WARNING logs; rerun with debug logging to see it.
@@ -409,7 +409,9 @@ class FeatureChainParser:
                 level = contained_raise_log_level(exc)
                 # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 if level == logging.DEBUG:
-                    log.debug("match_guard for '%s' %s for value %r", key, contained_raise_reason(exc), value)
+                    log.debug(
+                        "match_guard for '%s' %s for value %s", key, contained_raise_reason(exc), safe_value_text(value)
+                    )
                 else:
                     # The raw value stays out of WARNING logs; rerun with debug logging to see it.
                     log.warning("match_guard for '%s' %s", key, contained_raise_reason(exc))
@@ -443,7 +445,7 @@ class FeatureChainParser:
             return True
 
         key, value = rejection
-        log.debug("match_guard for '%s' rejected value %r", key, value)
+        log.debug("match_guard for '%s' rejected value %s", key, safe_value_text(value))
         if property_mapping is not None:
             reason = cls._guard_rejection_reason(key, value, property_mapping[key])
             if reason is not None:

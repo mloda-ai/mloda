@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.match_rejection import context_forwa
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
 from mloda.core.abstract_plugins.components.declaration_surface import DeclarationSurface, validate_property_spec
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
@@ -202,13 +202,17 @@ class FeatureChainParser:
                     f"Property value {safe_value_text(found_property_val)} failed validation for '{property_name}'"
                 ) from raised
         else:
-            # Fallback to membership check.
-            try:
-                is_member = found_property_val in property_value
-            # Swallows: an unhashable element can never be a member, so the TypeError is a clean rejection.
-            except TypeError:
-                is_member = False
-            if not is_member:
+
+            def log_raise(exc: Exception) -> None:
+                # Type only: the message may carry the raw value.
+                logger.log(
+                    contained_raise_log_level(exc),
+                    "membership check for '%s' raised %s; treating value as rejected.",
+                    property_name,
+                    type(exc).__name__,
+                )
+
+            if not element_admitted(original_property_config, found_property_val, log_raise):
                 # Contained: a rejected option value is this candidate's own verdict, recorded as its reason.
                 raise PropertyValueRejection(
                     f"Property value {safe_value_text(found_property_val)} not found in mapping for '{property_name}'"

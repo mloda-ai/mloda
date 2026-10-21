@@ -615,9 +615,9 @@ class TestScopeAndFilter:
             result = mloda.run_all(
                 [feature],
                 compute_frameworks=[PyArrowTable],
-                plugin_collector=_ENABLED,
+                plugin_collector=_ENABLED_FMT,
                 parallelization_modes={ParallelizationMode.SYNC},
-                data_access_collection=_global_access(False),
+                data_access_collection=_global_access(),
                 function_extender={_ImdColumnGate()},
             )
             assert _COL_F not in result[0].column_names

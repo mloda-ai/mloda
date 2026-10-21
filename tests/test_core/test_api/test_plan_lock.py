@@ -226,6 +226,7 @@ def test_a_step_without_an_implementation_records_nulls(tmp_path: Path) -> None:
     assert record["implementation"] is None
     assert record["implementation_hash"] is None
     assert record["implementation_specialized_from"] == []
+    assert "feature_group_hash" not in record
 
 
 def _explain_compute_step(group: type[FeatureGroup]) -> PlanStep:
@@ -281,6 +282,35 @@ def test_an_operation_group_step_round_trips_its_serving_implementation(tmp_path
     record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
     assert record["implementation"] == _impl_path(toy.OpToyPyArrow)
     assert record["implementation_hash"] == _dependency_free_hash(toy.OpToyPyArrow)
+    assert "feature_group_hash" not in record
+    check_plan_lock(steps, lock)
+
+
+def test_a_subclass_group_step_round_trips_its_own_group_hash(tmp_path: Path) -> None:
+    toy = importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
+    lock = tmp_path / "plan.lock"
+    steps = mloda.explain(
+        [Feature(toy.OPTOY_CHILD_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework="PyArrowTable")],
+        compute_frameworks=[PandasDataFrame, PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyChildFG}),
+    )
+
+    write_plan_lock(steps, lock)
+
+    record = json.loads(lock.read_text(encoding="utf-8"))["compute"][0]
+    assert record["feature_group_hash"] == BaseFeatureGroupVersion.first_party_hash(toy.OpToyChildFG)
+    check_plan_lock(steps, lock)
+
+
+def test_an_unavailable_group_hash_is_written_as_is(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+    steps = [_compute_step(feature_group_hash="unavailable")]
+
+    write_plan_lock(steps, lock)
+
+    assert json.loads(lock.read_text(encoding="utf-8"))["compute"][0]["feature_group_hash"] == "unavailable"
     check_plan_lock(steps, lock)
 
 
@@ -332,6 +362,10 @@ class LockEditGroup(ToyFormatBase):
     pass
 
 
+class LockEditSubGroup(LockEditGroup):
+    unused_value = {sub_value}
+
+
 def helper() -> int:
     return {value}
 
@@ -346,17 +380,47 @@ class LockEditImpl(Implementation):
 """
 
 
-def _load_impl(directory: Path, value: int, monkeypatch: pytest.MonkeyPatch) -> type[Implementation]:
+def _load_impl(
+    directory: Path, value: int, monkeypatch: pytest.MonkeyPatch, sub_value: int | None = None
+) -> type[Implementation]:
     """Load LockEditImpl from a file in directory under one fixed module name, so only the body differs."""
     directory.mkdir(parents=True, exist_ok=True)
     source = directory / f"{_IMPL_MODULE}.py"
-    source.write_text(_IMPL_SRC.format(value=value), encoding="utf-8")
+    source.write_text(
+        _IMPL_SRC.format(value=value, sub_value=value if sub_value is None else sub_value), encoding="utf-8"
+    )
     spec = importlib.util.spec_from_file_location(_IMPL_MODULE, source)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, _IMPL_MODULE, module)
     spec.loader.exec_module(module)
     return cast("type[Implementation]", module.LockEditImpl)
+
+
+def test_an_edited_subclass_group_body_fails_check_while_the_implementation_hash_is_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def step_for(directory: Path, value: int) -> PlanStep:
+        impl = _load_impl(directory, 1, monkeypatch, sub_value=value)
+        sub = cast("type[FeatureGroup]", sys.modules[_IMPL_MODULE].LockEditSubGroup)
+        return _impl_step(
+            impl,
+            BaseFeatureGroupVersion.first_party_hash(impl),
+            feature_group=sub,
+            feature_group_hash=BaseFeatureGroupVersion.first_party_hash(sub),
+        )
+
+    before = step_for(tmp_path / "before", 1)
+    lock = tmp_path / "plan.lock"
+    write_plan_lock([before], lock)
+    check_plan_lock([before], lock)
+
+    after = step_for(tmp_path / "after", 2)
+
+    assert after.implementation_hash == before.implementation_hash
+    assert after.feature_group_hash != before.feature_group_hash
+    with pytest.raises(PlanLockMismatchError, match="feature_group_hash"):
+        check_plan_lock([after], lock)
 
 
 def test_an_edited_implementation_body_fails_check_while_the_class_path_is_unchanged(
@@ -417,12 +481,13 @@ def test_plan_hashes_change_with_the_implementation_fields(
     group = _inert_group()
     first = make_implementation(group, PythonDictFramework, name="LockHashImplA")
     second = make_implementation(group, PythonDictFramework, base=first, name="LockHashImplB")
-    base = [_impl_step(first)]
+    base = [_impl_step(first, feature_group_hash="g1")]
 
     for changed in (
-        [_impl_step(second)],
-        [_impl_step(first, "h2")],
-        [_impl_step(first, implementation_specialized_from=(second,))],
+        [_impl_step(second, feature_group_hash="g1")],
+        [_impl_step(first, "h2", feature_group_hash="g1")],
+        [_impl_step(first, implementation_specialized_from=(second,), feature_group_hash="g1")],
+        [_impl_step(first, feature_group_hash="g2")],
     ):
         assert plan_structure_hash(changed) != plan_structure_hash(base)
         assert plan_content_hash(changed) != plan_content_hash(base)

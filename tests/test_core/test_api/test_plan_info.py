@@ -59,7 +59,7 @@ import json
 import sqlite3
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, ClassVar, Literal, get_args, get_origin
+from typing import Any, ClassVar, Literal, cast, get_args, get_origin
 from uuid import UUID, uuid4
 
 import numpy as np
@@ -642,6 +642,7 @@ class TestPlanStepDataclass:
             "implementation_hash",
             "implementation_specialized_from",
             "feature_group_version",
+            "feature_group_hash",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:
@@ -879,6 +880,7 @@ class TestPlanStepImplementation:
         assert step.implementation_hash != BaseFeatureGroupVersion.implementation_hash(impl)
         assert step.implementation_specialized_from == ()
         assert step.feature_group_version == ToyWorkerFG.version()
+        assert step.feature_group_hash is None
 
     @pytest.mark.parametrize(
         "framework_name, impl_name", [("PandasDataFrame", "OpToyPandas"), ("PyArrowTable", "OpToyPyArrow")]
@@ -899,6 +901,46 @@ class TestPlanStepImplementation:
         assert step.implementation_path == _class_path(impl)
         assert step.implementation_version == impl.version()
         assert step.implementation is impl
+
+    @staticmethod
+    def _explain_op_toy_child() -> tuple[Any, PlanStep]:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        steps = mloda.explain(
+            [Feature(toy.OPTOY_CHILD_FEATURE, {toy.OPTOY_KEY: "sum"}, compute_framework="PyArrowTable")],
+            compute_frameworks=[PandasDataFrame, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({toy.OpToyChildFG}),
+        )
+        return toy, next(s for s in steps if s.step_kind == "compute")
+
+    def test_a_subclass_group_served_by_an_inherited_implementation_reports_its_own_hash(self) -> None:
+        toy, step = self._explain_op_toy_child()
+
+        child: Any = toy.OpToyChildFG
+        expected = BaseFeatureGroupVersion.first_party_hash(child)
+        assert step.feature_group is child
+        assert step.implementation is not None
+        assert step.implementation.feature_group is not child
+        assert step.feature_group_hash == expected
+
+    def test_a_group_hash_failure_degrades_to_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        toy = importlib.import_module(
+            "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+        )
+        real = BaseFeatureGroupVersion.first_party_hash.__func__  # type: ignore[attr-defined]
+
+        def selective(cls: Any, target_class: Any) -> str:
+            if target_class is toy.OpToyChildFG:
+                raise OSError("no source")
+            return cast(str, real(cls, target_class))
+
+        monkeypatch.setattr(BaseFeatureGroupVersion, "first_party_hash", classmethod(selective))
+
+        _, step = self._explain_op_toy_child()
+
+        assert step.feature_group_hash == "unavailable"
+        assert step.implementation_hash != "unavailable"
 
     def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
         step = _explain_toy_group(neutral_csv_group(tmp_path / "n.csv"))
@@ -951,6 +993,7 @@ class TestPlanStepImplementation:
             dataclasses.replace(step, implementation_version="v", implementation_hash="h", feature_group_version="g")
             == step
         )
+        assert dataclasses.replace(step, feature_group_hash="g") == step
 
     def test_a_non_str_version_degrades_to_none_like_the_hook_context(
         self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch

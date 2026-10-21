@@ -235,8 +235,23 @@ class TestLinkFromFeatures:
         left, right = _specs()
         lf = Feature(name="a", options=Options(group={"side": "s"}, context={"note": "x"}))
         rf = Feature(name="b", options=Options(group={"side": "s"}, context={"note": "y"}))
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="context options are ignored"):
             Link.from_features("inner", left, right, lf, rf)
+
+    def test_mutating_a_list_option_afterwards_does_not_change_the_link(self) -> None:
+        left, right = _specs()
+        files = ["a", "b"]
+        link = Link.from_features(
+            "inner",
+            left,
+            right,
+            Feature(name="a", options={"files": files}),
+            Feature(name="b", options={"files": ["c"]}),
+        )
+        before = hash(link)
+        files.append("z")
+        assert link.left_discriminator == {"files": ["a", "b"]}
+        assert hash(link) == before
 
     @pytest.mark.parametrize(
         "left_opts, right_opts, side",
@@ -256,7 +271,18 @@ class TestLinkFromFeatures:
             )
 
 
+class _BrokenRepr:
+    def __repr__(self) -> str:
+        raise RuntimeError("no repr")
+
+
 class TestLinkStr:
+    def test_a_raising_value_repr_does_not_break_str(self) -> None:
+        link = _hand_written({"table": _BrokenRepr()}, {"table": "items"})
+        text = str(link)
+        assert "left_discriminator=" in text
+        assert "_BrokenRepr" in text
+
     def test_includes_discriminators(self) -> None:
         link = _hand_written({"table": "orders"}, {"table": "items"})
         text = str(link)

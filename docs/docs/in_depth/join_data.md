@@ -268,16 +268,13 @@ link = Link("inner", left, right,
             right_discriminator={"side": "right"})
 
 # Option 3: Derive the discriminators from the two features
-link = Link.from_features("inner", left, right,
-                          Feature("age", options={"side": "left"}),
-                          Feature("age", options={"side": "right"}))
+left_age = Feature("age", options={"side": "left"})
+right_age = Feature("age", options={"side": "right"})
+link = Link.from_features("inner", left, right, left_age, right_age)
 
 # 2. Tag features with matching options
 # Feature names reference the feature from the feature group
-features = {
-    Feature("age", options={"side": "left"}),
-    Feature("age", options={"side": "right"}),
-}
+features = {left_age, right_age}
 ```
 
 `Link.from_features` uses the group options that differ between the two features as discriminators, and raises if a side has none.

@@ -1091,7 +1091,8 @@ def test_an_unmatched_discriminator_names_its_side_class_and_seen_values(left_va
     right_line = _unmatched_line("right", {SELF_SIDE: right_value})
     assert (left_line in message) == (left_value != "left"), message
     assert (right_line in message) == (right_value != "right"), message
-    assert "'left'" in message and "'right'" in message, f"the seen values must be listed; got: {message}"
+    seen = message.split("options seen on TokenSelfSource nodes: ", 1)[1]
+    assert "'left'" in seen and "'right'" in seen, f"the seen values must be listed; got: {seen}"
     assert "matched no TokenSelfSource node" in message
 
 

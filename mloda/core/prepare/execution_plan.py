@@ -3,7 +3,6 @@ from copy import copy, deepcopy
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
 
-from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys, redact_option_value
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.core.abstract_plugins.components.index.index import Index
@@ -549,14 +548,11 @@ class ExecutionPlan:
             seen: set[str] = set()
             for node in nodes:
                 options = node.feature.options
-                values = {
-                    key: redact_option_value(options.get(key)) if key in options else "<missing>"
-                    for key in discriminator
-                }
-                seen.add(f"{_mask_secret_keys(values)} (keys: {sorted(options.group.keys())})")
+                values = {key: options.get(key) if key in options else "<missing>" for key in discriminator}
+                seen.add(f"{Link._masked_discriminator(values)} (keys: {sorted(map(str, options.keys()))})")
             name = group.get_class_name()
             lines.append(
-                f"{side}_discriminator {Link.masked_discriminator(discriminator)!r} matched no {name} node; "
+                f"{side}_discriminator {Link._masked_discriminator(discriminator)} matched no {name} node; "
                 f"options seen on {name} nodes: {', '.join(sorted(seen)) or 'none'}"
             )
         return lines

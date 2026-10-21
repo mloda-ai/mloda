@@ -314,7 +314,7 @@ def _plan(
 
 
 def _refusal_error(kind: _Kind, scope: str) -> tuple[type[Exception], str]:
-    """A refused pointed format group and every other refusal fail resolution."""
+    """The exception type and message expected when the extender refuses this kind in this scope."""
     if kind.is_format and scope == "pinned":
         return FeatureResolutionError, _REFUSED
     return FeatureResolutionError, "no clearance"

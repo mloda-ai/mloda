@@ -648,7 +648,9 @@ class TestOptionsWithCredentialValues:
 
 class TestOptionsClassKeyNormalization:
     def test_format_group_class_key_normalizes_to_its_class_name_not_its_alias(self) -> None:
-        aliased = type("_ToyfmtAliasKeyFG", (ToyFormatBase,), {"data_access_name": classmethod(lambda cls: "toyfmt_k")})
+        aliased: Any = type(
+            "_ToyfmtAliasKeyFG", (ToyFormatBase,), {"data_access_name": classmethod(lambda cls: "toyfmt_k")}
+        )
 
         options = Options({aliased: {"x": 1}})
 
@@ -657,7 +659,9 @@ class TestOptionsClassKeyNormalization:
         del aliased
 
     def test_legacy_reader_class_key_still_normalizes_to_data_access_name(self) -> None:
-        reader = type("_ToyfmtLegacyReader", (ApiInputData,), {"data_access_name": classmethod(lambda cls: "toyfmt_l")})
+        reader: Any = type(
+            "_ToyfmtLegacyReader", (ApiInputData,), {"data_access_name": classmethod(lambda cls: "toyfmt_l")}
+        )
 
         options = Options({reader: {"x": 1}})
 

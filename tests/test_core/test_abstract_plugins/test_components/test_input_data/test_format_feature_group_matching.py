@@ -573,7 +573,9 @@ class TestPointedGroupDefersToAComputingCandidate:
 
     def test_pointed_reader_aborts_when_the_other_claimant_input_features_raises(self) -> None:
         feature = Feature("toyfmt_typo_probe", Options({"ToyFormatFG": {COL: [1]}}))
-        with pytest.raises(FeatureResolutionError, match="column 'toyfmt_typo_probe' is in none of the sources of ToyFormatFG"):
+        with pytest.raises(
+            FeatureResolutionError, match="column 'toyfmt_typo_probe' is in none of the sources of ToyFormatFG"
+        ):
             evaluate_or_raise(feature, _plugins(ToyFormatFG, _RaisingInputsFG), None, None)
 
     def test_strictness_holds_per_deferring_group_despite_another_groups_takeover(self) -> None:

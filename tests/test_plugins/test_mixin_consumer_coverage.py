@@ -13,10 +13,12 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.implementation import loaded_implementations
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.provider import BaseFilterEngine
 from mloda.provider import BaseMaskEngine
 from mloda.user import PluginLoader
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from tests.test_plugins.compute_framework.base_implementations.filter_engine_test_mixin import FilterEngineTestMixin
@@ -47,7 +49,7 @@ class MixinContract:
 
 CONTRACTS: tuple[MixinContract, ...] = (
     MixinContract(
-        AggregationImplementation,
+        AggregatedFeatureGroup,
         AggregatedZeroRowTestMixin,
         "feature_group_class",
         (
@@ -116,6 +118,12 @@ def _qualified_name(cls: type[Any]) -> str:
 def concrete_plugin_classes(base: type[Any]) -> set[str]:
     """Concrete subclasses of base defined under mloda_plugins; test-local subclasses fall out by module."""
     PluginLoader.all()
+    if issubclass(base, OperationFeatureGroup):
+        return {
+            _qualified_name(impl)
+            for impl in loaded_implementations()
+            if issubclass(impl.feature_group, base) and impl.__module__.startswith("mloda_plugins.")
+        }
     return {
         _qualified_name(cls)
         for cls in get_all_subclasses(base)

@@ -100,17 +100,6 @@ class TestPolarsLazyAggregation:
         """Test compute_framework_rule method."""
         assert PolarsLazyAggregation.compute_framework is PolarsLazyDataFrame
 
-    def test_check_source_features_exist_valid(self, sample_lazy_dataframe: Any) -> None:
-        """Test _check_source_features_exist with valid feature."""
-        # Should not raise an exception
-        PolarsLazyAggregation._check_source_features_exist(sample_lazy_dataframe, ["sales"])
-        PolarsLazyAggregation._check_source_features_exist(sample_lazy_dataframe, ["price"])
-
-    def test_check_source_features_exist_invalid(self, sample_lazy_dataframe: Any) -> None:
-        """Test _check_source_features_exist with invalid feature."""
-        with pytest.raises(ValueError, match="None of the source features"):
-            PolarsLazyAggregation._check_source_features_exist(sample_lazy_dataframe, ["missing"])
-
     def test_perform_aggregation_sum(self, sample_lazy_dataframe: Any) -> None:
         """Test _perform_aggregation method with sum aggregation."""
         result_expr = PolarsLazyAggregation._perform_aggregation(sample_lazy_dataframe, "sum", ["sales"])
@@ -230,8 +219,10 @@ class TestPolarsLazyAggregation:
         feature_set = FeatureSet()
         feature_set.add(Feature("missing__sum_aggr"))
 
-        with pytest.raises(ValueError, match="None of the source features"):
+        with pytest.raises(ValueError, match="None of the source features") as exc_info:
             PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set)
+        assert "Available columns" in str(exc_info.value)
+        assert "sales" in str(exc_info.value)
 
     def test_calculate_feature_invalid_aggregation(self, sample_lazy_dataframe: Any) -> None:
         """Test calculate_feature method with invalid aggregation type."""

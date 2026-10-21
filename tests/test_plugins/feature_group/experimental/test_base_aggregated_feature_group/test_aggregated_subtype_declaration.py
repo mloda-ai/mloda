@@ -11,7 +11,9 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from mloda.core.abstract_plugins.components.code_closure import closure_parts
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import SubtypeDeclaration
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
@@ -20,7 +22,6 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictFramework,
 )
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
@@ -106,12 +107,16 @@ class TestAggregatedSubtypeSupportMatrix:
         assert not unserved & set(matrix)
         assert all(subtypes == AGGREGATION_UNIVERSE for subtypes in matrix.values())
 
-    def test_implementations_are_abstract_helper_children_serving_the_group(self) -> None:
-        assert inspect.isabstract(AggregationImplementation)
+    def test_implementations_are_direct_implementation_subclasses_serving_the_group(self) -> None:
+        group_part = "mloda_plugins.feature_group.experimental.aggregated_feature_group.base:AggregatedFeatureGroup:"
         for implementation in (PandasAggregation, PyArrowAggregation, PolarsLazyAggregation):
-            assert issubclass(implementation, AggregationImplementation)
+            assert implementation.__bases__ == (Implementation,)
             assert implementation.feature_group is AggregatedFeatureGroup
             assert not inspect.isabstract(implementation)
+            assert not hasattr(implementation, "_get_available_columns")
+            assert not hasattr(implementation, "_check_source_features_exist")
+            parts = closure_parts(implementation, include_dependencies=False)
+            assert any(part.startswith(group_part) for part in parts)
 
 
 _NAN = float("nan")
@@ -210,7 +215,7 @@ class TestImplementationsConformToTheReferenceContract:
     @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
     @pytest.mark.parametrize("implementation", list(_RESULT_OF), ids=lambda impl: impl.__name__)
     def test_result_differs_from_the_reference_exactly_when_declared(
-        self, implementation: type[AggregationImplementation], aggregation_type: str
+        self, implementation: type[Implementation], aggregation_type: str
     ) -> None:
         assert dict(implementation.divergent) == _DIVERGENT_DECLARATIONS[implementation]
         shapes = {"single": _SINGLE_COLUMN, "multi": _MULTI_COLUMNS}

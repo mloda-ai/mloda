@@ -4,7 +4,11 @@ Base implementation for aggregated feature groups.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from mloda.user import Feature
+from mloda.provider import FeatureSet
 from mloda.provider import (
     FeatureChainParserMixin,
 )
@@ -154,3 +158,26 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     def _supports_aggregation_type(cls, aggregation_type: str) -> bool:
         """Check if this feature group supports the given aggregation type."""
         return aggregation_type in cls.AGGREGATION_TYPES
+
+    @classmethod
+    def aggregate(
+        cls,
+        data: Any,
+        features: FeatureSet,
+        *,
+        perform: Callable[[Any, str, list[str]], Any],
+        add_column: Callable[[Any, str, Any], Any],
+        columns: Callable[[Any], set[str]],
+    ) -> Any:
+        """Shared loop: resolve each feature's source columns, run perform, add the result with add_column."""
+        for feature in features.get_sorted_features():
+            aggregation_type, source_feature_name = cls._extract_aggr_and_source_feature(feature)
+            available = columns(data)
+            resolved = cls.resolve_multi_column_feature(source_feature_name, available)
+            if not any(name in available for name in resolved):
+                listing = sorted(available, key=str)
+                raise ValueError(f"None of the source features {resolved} found in data. Available columns: {listing}")
+            if aggregation_type not in cls.AGGREGATION_TYPES:
+                raise ValueError(f"Unsupported aggregation type: {aggregation_type}")
+            data = add_column(data, feature.name, perform(data, aggregation_type, resolved))
+        return data

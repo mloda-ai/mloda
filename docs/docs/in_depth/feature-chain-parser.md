@@ -166,7 +166,7 @@ Beyond parsing, the mixin declares three column-wise data hooks: `_get_available
 instead of silently. A group that resolves column names against the data implements the discovery
 hook too; the others only need the check/add pair. `_get_available_columns` can return `<Framework>.extract_column_names(data)`, the framework's own instance-free column listing.
 
-For an operation group (such as `AggregatedFeatureGroup`) the hooks live on the `Implementation`: the abstract helper (`AggregationImplementation`) declares `REQUIRED_COLUMNWISE_HOOKS` and each framework implementation supplies them. The per-framework-subclass pattern below and above still applies to the other families.
+An operation group such as `AggregatedFeatureGroup` does not use these hooks; its implementations pass their per-framework callables into the group's `aggregate` loop (see [compute-framework-integration.md](compute-framework-integration.md)), and the group declares no `REQUIRED_COLUMNWISE_HOOKS`. The per-framework-subclass pattern below and above still applies to the other families.
 
 Whether `_check_source_features_exist` tolerates partial presence (some source names missing) or
 rejects it is a per-feature-group policy, not a framework rule.

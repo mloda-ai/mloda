@@ -1,3 +1,6 @@
+from typing import Any
+from unittest.mock import Mock
+
 import pandas as pd
 import pytest
 
@@ -15,6 +18,8 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 )
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 
 from tests.test_plugins.feature_group.experimental.test_base_aggregated_feature_group.aggregated_zero_row_test_mixin import (
     AggregatedZeroRowTestMixin,
@@ -163,6 +168,24 @@ class TestAggregatedFeatureGroup:
         assert declared.options.get("some_key") == 1
         assert declared.feature_group_scope == "SomeReader"
 
+    @pytest.mark.parametrize("impl", [PandasAggregation, PyArrowAggregation, PolarsLazyAggregation])
+    def test_calculate_delegates_to_the_group_it_is_handed(self, impl: Any) -> None:
+        group = Mock()
+        data = object()
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__sum_aggr"))
+
+        result = impl.calculate(group, data, feature_set)
+
+        group.aggregate.assert_called_once_with(
+            data,
+            feature_set,
+            perform=impl._perform_aggregation,
+            add_column=impl._add_result_to_data,
+            columns=impl.compute_framework.extract_column_names,
+        )
+        assert result is group.aggregate.return_value
+
 
 class TestPandasAggregation:
     """Tests for the PandasAggregation class."""
@@ -281,8 +304,10 @@ class TestPandasAggregation:
         feature_set = FeatureSet()
         feature_set.add(Feature("missing__sum_aggr"))
 
-        with pytest.raises(ValueError, match="None of the source features"):
+        with pytest.raises(ValueError, match="None of the source features") as exc_info:
             PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set)
+        assert "Available columns" in str(exc_info.value)
+        assert "sales" in str(exc_info.value)
 
     def test_calculate_feature_invalid_aggregation(self, sample_dataframe: pd.DataFrame) -> None:
         """Test calculate_feature method with invalid aggregation type."""

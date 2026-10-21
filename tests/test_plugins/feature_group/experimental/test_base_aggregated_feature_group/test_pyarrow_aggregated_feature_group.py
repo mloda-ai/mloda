@@ -217,8 +217,10 @@ class TestPyArrowAggregation:
         feature_set = FeatureSet()
         feature_set.add(Feature("missing__sum_aggr"))
 
-        with pytest.raises(ValueError, match="None of the source features"):
+        with pytest.raises(ValueError, match="None of the source features") as exc_info:
             PyArrowAggregation.calculate(AggregatedFeatureGroup, sample_table, feature_set)
+        assert "Available columns" in str(exc_info.value)
+        assert "sales" in str(exc_info.value)
 
     def test_calculate_feature_invalid_aggregation(self, sample_table: pa.Table) -> None:
         """Test calculate_feature method with invalid aggregation type."""

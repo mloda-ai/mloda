@@ -11,9 +11,6 @@ from typing import Any
 
 import pytest
 
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import (
-    PandasAggregation,
-)
 from mloda_plugins.feature_group.experimental.clustering.pandas import PandasClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.pandas import (
     PandasMissingValueFeatureGroup,
@@ -49,7 +46,6 @@ import pandas as pd
 
 
 ALL_PANDAS_CLASSES = [
-    PandasAggregation,
     PandasClusteringFeatureGroup,
     PandasMissingValueFeatureGroup,
     PandasDimensionalityReductionFeatureGroup,
@@ -118,8 +114,7 @@ def test_pandas_plugin_is_concrete(cls: Any) -> None:
     assert inspect.isabstract(cls) is False, f"{cls.__name__} is abstract: {sorted(cls.__abstractmethods__)}"
 
 
-TOLERANT_PANDAS_CLASSES = [
-    PandasAggregation,
+TOLERANT_PANDAS_CLASSES: list[type[Any]] = [
     PandasClusteringFeatureGroup,
 ]
 

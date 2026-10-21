@@ -10,9 +10,9 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from mloda.core.optional_dependency import loaded, require
+from mloda.provider import FeatureSet, Implementation
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.implementation import AggregationImplementation
 
 if TYPE_CHECKING:
     import numpy as np
@@ -42,7 +42,7 @@ def _reduce_without_nan_warning(
     return restored
 
 
-class PyArrowAggregation(AggregationImplementation):
+class PyArrowAggregation(Implementation):
     """
     PyArrow implementation of aggregated feature group.
 
@@ -53,28 +53,14 @@ class PyArrowAggregation(AggregationImplementation):
     compute_framework = PyArrowTable
 
     @classmethod
-    def _get_available_columns(cls, data: pa.Table) -> set[str]:
-        """Get the set of available column names from the Table schema."""
-        return PyArrowTable.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data: pa.Table, feature_names: list[str]) -> None:
-        """
-        Check if the resolved features exist in the Table.
-
-        Args:
-            data: The PyArrow Table
-            feature_names: List of resolved feature names (may contain ~N suffixes)
-
-        Raises:
-            ValueError: If none of the resolved features exist in the data
-        """
-        available_columns = cls._get_available_columns(data)
-        missing_features = [name for name in feature_names if name not in available_columns]
-        if len(missing_features) == len(feature_names):
-            raise ValueError(
-                f"None of the source features {feature_names} found in data. Available columns: {sorted(available_columns, key=str)}"
-            )
+    def calculate(cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet) -> Any:
+        return group.aggregate(
+            data,
+            features,
+            perform=cls._perform_aggregation,
+            add_column=cls._add_result_to_data,
+            columns=cls.compute_framework.extract_column_names,
+        )
 
     @classmethod
     def _add_result_to_data(cls, data: pa.Table, feature_name: str, result: Any) -> pa.Table:

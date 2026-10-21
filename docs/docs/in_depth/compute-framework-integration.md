@@ -241,11 +241,11 @@ class PandasMyOperation(Implementation):
 ```
 
 - **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
-- **Shared loop**: put the per-feature loop in an abstract `Implementation` helper that names no pair; concrete implementations subclass it and fill in the hooks. Abstract helpers are ignored when implementations are loaded.
+- **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.
 - **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature.
 - **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "skips NaN in sum"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: a NaN-free column still prefers the matching implementation. Polars `max` is declared divergent because its multi-column form propagates NaN.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
-- **Hooks**: column-wise hooks live on the implementation (see [Feature Chain Parser](feature-chain-parser.md#column-wise-data-hooks)).
+- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate` call inside each implementation's `calculate`.
 
 ### Choosing among implementations
 
@@ -272,6 +272,7 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - `feature_group="PandasAggregatedFeatureGroup"` becomes `implementation="PandasAggregation"`, or `compute_framework=PandasDataFrame`.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
 - With Pandas and PyArrow both enabled, a sum now runs on PyArrow (it matches the reference contract; Pandas skips NaN) and may add a conversion. Pin `implementation="PandasAggregation"` to keep the old behaviour.
+- A provider customizes an aggregation implementation by overriding `_perform_aggregation` or `_add_result_to_data` on an implementation subclass, and the loop by overriding `aggregate` on a group subclass.
 
 ## Framework Selection Process
 

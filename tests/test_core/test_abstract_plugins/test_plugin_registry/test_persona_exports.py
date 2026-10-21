@@ -34,6 +34,7 @@ _SOURCE_MODULES: dict[str, str] = {
     "plan_info": "mloda.core.api.plan_info",
     "plan_lock": "mloda.core.api.plan_lock",
     "verified_context": "mloda.core.abstract_plugins.verified_context",
+    "link": "mloda.core.abstract_plugins.components.link",
 }
 
 
@@ -55,6 +56,7 @@ EXPORT_MATRIX: list[tuple[str, str, str]] = [
     ("steward", "PluginPolicyViolationError", "core_policy"),
     # Resolved execution plan (issue #647): the same PlanStep record for users and stewards.
     ("user", "PlanStep", "plan_info"),
+    ("user", "AsOfJoinConfig", "link"),
     ("steward", "PlanStep", "plan_info"),
     ("steward", "write_plan_lock", "plan_lock"),
     ("steward", "plan_structure_hash", "plan_lock"),

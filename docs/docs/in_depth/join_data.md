@@ -277,7 +277,7 @@ link = Link.from_features("inner", left, right, left_age, right_age)
 features = {left_age, right_age}
 ```
 
-`Link.from_features` uses the group options that differ between the two features as discriminators, and raises if a side has none.
+`Link.from_features` uses the group options that differ between the two features as discriminators, and raises if a side has none. It also builds ASOF links when given `asof_config=AsOfJoinConfig(...)`, importable from `mloda.user`.
 
 The execution planner validates that the discriminator key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.
 

@@ -49,6 +49,8 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                     _class_path(parent) or "" for parent in step.implementation_specialized_from
                 ),
             }
+            if step.feature_group_hash is not None:
+                record["feature_group_hash"] = step.feature_group_hash
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
                 key: value for key, value in record.items() if key != "compute_framework_reason"

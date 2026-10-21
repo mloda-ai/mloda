@@ -27,13 +27,14 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import register_plugin as registry_register
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
+from tests.helpers.docs_scope import shipped_feature_groups_collector
 from mloda.core.api.plugin_docs import (
     get_compute_framework_docs,
     get_extender_docs,
     get_feature_group_docs,
 )
 
-# Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
+# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
 
 
@@ -130,19 +131,11 @@ class TestRegisteredOnlyDocsFiltering:
         registry = PluginRegistry.default()
         registry.clear()
 
-        # A GC pass between the two walks can drop dead test-local subclasses and make the
-        # otherwise-identical calls disagree. Collect first, then hold the subclass graph stable
-        # for the comparison instead of depending on when another test's garbage is reclaimed.
-        gc.collect()
-        gc_was_enabled = gc.isenabled()
-        gc.disable()
-        try:
-            default_names = [fg.name for fg in get_feature_group_docs()]
-            explicit_names = [fg.name for fg in get_feature_group_docs(registered_only=False)]
-        finally:
-            if gc_was_enabled:
-                gc.enable()
+        collector = shipped_feature_groups_collector()
+        default_names = [fg.name for fg in get_feature_group_docs(plugin_collector=collector)]
+        explicit_names = [fg.name for fg in get_feature_group_docs(plugin_collector=collector, registered_only=False)]
 
+        assert default_names, "the scoped catalog must not be empty"
         assert default_names == explicit_names
 
     def test_compute_framework_docs_registered_only_filters_to_registry(self) -> None:
@@ -189,7 +182,7 @@ class TestDocsFallbackNonRegression:
         class _DocsEnumFallbackFG(FeatureGroup):
             """Unregistered local feature group; the subclass walk must still find it."""
 
-        names = [fg.name for fg in get_feature_group_docs()]
+        names = [fg.name for fg in get_feature_group_docs(name="_DocsEnumFallbackFG")]
         assert "_DocsEnumFallbackFG" in names
 
     def test_default_docs_are_union_of_registry_and_subclass_walk(self) -> None:
@@ -204,7 +197,7 @@ class TestDocsFallbackNonRegression:
 
         registry_register(_DocsEnumUnionRegisteredFG)
 
-        names = [fg.name for fg in get_feature_group_docs()]
+        names = [fg.name for fg in get_feature_group_docs(name="_DocsEnumUnion")]
         assert "_DocsEnumUnionRegisteredFG" in names
         assert "_DocsEnumUnionUnregisteredFG" in names
 
@@ -217,7 +210,7 @@ class TestDocsFallbackNonRegression:
 
         registry_register(_DocsEnumOnceFG)
 
-        names = [fg.name for fg in get_feature_group_docs()]
+        names = [fg.name for fg in get_feature_group_docs(name="_DocsEnumOnceFG")]
         assert names.count("_DocsEnumOnceFG") == 1, (
             "a class that is both registered and subclass-reachable must not be documented twice"
         )

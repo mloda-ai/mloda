@@ -18,6 +18,7 @@ import pytest
 import mloda.interfaces.cli.main as cli_main
 import mloda.interfaces.mcp.main as mcp_main
 from mloda.interfaces.service.config import Settings, load_settings
+from tests.helpers.docs_scope import shipped_feature_group_walk
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -282,6 +283,8 @@ class TestServe:
             runs.append((self, transport))
 
         monkeypatch.setattr(mcpserver.MCPServer, "run", fake_run)
+        walk = shipped_feature_group_walk()
+        monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
         settings = load_settings(_config(tmp_path), ENV)
 
         assert mcp_main.serve(settings, env=ENV) == 0

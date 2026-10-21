@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from mloda.provider import FeatureGroup
+from mloda.user import AsOfJoinConfig
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Index
@@ -179,6 +180,48 @@ class TestLinkFromFeatures:
         expected = _hand_written({"side": "l"}, {"side": "r"})
         assert built == expected
         assert hash(built) == hash(expected)
+
+    @pytest.mark.parametrize("jointype", ["asof", JoinType.ASOF])
+    def test_asof_equals_hand_written_asof_with_same_hash(self, jointype: str | JoinType) -> None:
+        left, right = _specs()
+        config = AsOfJoinConfig(left_time_column="lt", right_time_column="rt", direction="nearest", tolerance=5)
+        built = Link.from_features(
+            jointype,
+            left,
+            right,
+            Feature(name="a", options={"side": "l"}),
+            Feature(name="b", options={"side": "r"}),
+            asof_config=config,
+        )
+        expected = Link.asof(
+            left,
+            right,
+            left_time_column="lt",
+            right_time_column="rt",
+            direction="nearest",
+            tolerance=5,
+            left_discriminator={"side": "l"},
+            right_discriminator={"side": "r"},
+        )
+        assert built == expected
+        assert hash(built) == hash(expected)
+
+    @pytest.mark.parametrize(
+        "jointype, with_config",
+        [("asof", False), (JoinType.ASOF, False), ("inner", True), (JoinType.INNER, True)],
+    )
+    def test_asof_config_mismatch_raises(self, jointype: str | JoinType, with_config: bool) -> None:
+        left, right = _specs()
+        config = AsOfJoinConfig(left_time_column="lt", right_time_column="rt") if with_config else None
+        with pytest.raises(ValueError, match="asof_config"):
+            Link.from_features(
+                jointype,
+                left,
+                right,
+                Feature(name="a", options={"side": "l"}),
+                Feature(name="b", options={"side": "r"}),
+                asof_config=config,
+            )
 
     def test_jointype_enum_and_str_forms_agree(self) -> None:
         left, right = _specs()

@@ -12,9 +12,10 @@ from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import is_error
 from mloda.user import PluginCollector, PluginLoader
+from tests.helpers.docs_scope import small_feature_group_walk
 from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
 
-# Building the catalog loads every plugin and enumerates all FeatureGroups; a cold run can exceed 10s.
+# Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
 
 LOAD = "PluginLoader.all"
@@ -53,7 +54,11 @@ def catalog(tmp_path: Path) -> Catalog:
 
 
 class TestBuildLoadsPlugins:
-    def test_plugins_are_loaded_before_feature_groups_are_enumerated(self, calls: list[str]) -> None:
+    def test_plugins_are_loaded_before_feature_groups_are_enumerated(
+        self, calls: list[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        walk = small_feature_group_walk(*FILE_FORMAT_GROUPS)
+        monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
         Catalog.build(Settings())
 
         assert LOAD in calls, f"Catalog.build never called PluginLoader.all: {calls}"

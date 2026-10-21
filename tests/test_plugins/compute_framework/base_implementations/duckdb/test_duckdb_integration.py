@@ -244,10 +244,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
         # Define features to calculate
         feature_list: list[Feature | str] = ["doubled_value", "score_plus_ten"]
 
-        feature_list = [
-            Feature(name="doubled_value", options={"DuckDBTestDataCreator": duckdb_conn}),
-            Feature(name="score_plus_ten", options={"DuckDBTestDataCreator": duckdb_conn}),
-        ]
+        feature_list = [Feature(name="doubled_value"), Feature(name="score_plus_ten")]
 
         data_access_collection = DataAccessCollection(connections={duckdb_conn})
 
@@ -286,14 +283,12 @@ class TestDuckDBIntegrationWithMlodaAPI:
         # Define features to calculate
         feature_list: list[Feature | str] = ["doubled_value", "score_plus_ten"]
 
-        feature_list = [
-            Feature(name="avg_value_by_category", options={"DuckDBTestDataCreator": duckdb_conn}),
-            Feature(name="count_by_category", options={"DuckDBTestDataCreator": duckdb_conn}),
-        ]
+        feature_list = [Feature(name="avg_value_by_category"), Feature(name="count_by_category")]
 
         # Run with DuckDB framework
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={duckdb_conn}),
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             compute_frameworks=[DuckDBFramework],
@@ -324,11 +319,12 @@ class TestDuckDBIntegrationWithMlodaAPI:
             {DuckDBTestDataCreator, DuckDBSimpleTransformFeatureGroup, DuckDBSecondTransformFeatureGroup}
         )
 
-        feature_list = [Feature(name="quadrupled_value", options={"DuckDBTestDataCreator": duckdb_conn})]
+        feature_list = [Feature(name="quadrupled_value")]
 
         # Run the multi-step pipeline
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={duckdb_conn}),
             flight_server=flight_server,
             compute_frameworks=[DuckDBFramework],
             plugin_collector=plugin_collector,
@@ -358,11 +354,12 @@ class TestDuckDBIntegrationWithMlodaAPI:
             }
         )
 
-        feature_list = [Feature(name="pyarrow_avg_value_by_category", options={"DuckDBTestDataCreator": duckdb_conn})]
+        feature_list = [Feature(name="pyarrow_avg_value_by_category")]
 
         # Run the multi-step pipeline
         result = mloda.run_all(
             feature_list,
+            data_access_collection=DataAccessCollection(connections={duckdb_conn}),
             flight_server=flight_server,
             compute_frameworks=[PyArrowTable, DuckDBFramework],
             plugin_collector=plugin_collector,
@@ -379,13 +376,15 @@ class TestDuckDBIntegrationWithMlodaAPI:
         collection_conn = duckdb.connect()
         try:
             result = mloda.run_all(
-                [Feature(name="doubled_value", options={"DuckDBTestDataCreator": duckdb_conn})],
+                [Feature(name="doubled_value", options={"connection_handle": "step"})],
                 flight_server=flight_server,
                 parallelization_modes={ParallelizationMode.SYNC},
                 plugin_collector=PluginCollector.enabled_feature_groups(
                     {DuckDBTestDataCreator, DuckDBSimpleTransformFeatureGroup}
                 ),
-                data_access_collection=DataAccessCollection(connections={collection_conn}) if with_collection else None,
+                data_access_collection=DataAccessCollection(connections={"step": duckdb_conn, "other": collection_conn})
+                if with_collection
+                else DataAccessCollection(connections={"step": duckdb_conn}),
                 compute_frameworks=[DuckDBFramework],
                 output_framework=DuckDBFramework,
             )
@@ -400,7 +399,7 @@ class TestDuckDBIntegrationWithMlodaAPI:
     @pytest.mark.parametrize("output", [PyArrowTable, PandasDataFrame, DuckDBFramework])
     def test_output_framework_with_a_duckdb_run(self, flight_server: Any, duckdb_conn: Any, output: Any) -> None:
         result = mloda.run_all(
-            [Feature(name="doubled_value", options={"DuckDBTestDataCreator": duckdb_conn})],
+            [Feature(name="doubled_value")],
             flight_server=flight_server,
             parallelization_modes={ParallelizationMode.SYNC},
             plugin_collector=PluginCollector.enabled_feature_groups(

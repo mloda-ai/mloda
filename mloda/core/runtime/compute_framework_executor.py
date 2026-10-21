@@ -34,7 +34,7 @@ class ComputeFrameworkExecutor:
         self,
         cfw_register: CfwManager,
         worker_manager: WorkerManager,
-        tfs_connection_map: dict[type[ComputeFramework], Any] | None = None,
+        connections: dict[str, Any] | None = None,
         function_extender: set[Extender] | None = None,
         worker_extender_payload: bytes | None = None,
         hook_extenders: dict[ExtenderHook, Extender] | None = None,
@@ -45,10 +45,8 @@ class ComputeFrameworkExecutor:
         Args:
             cfw_register: The CFW manager for registering compute frameworks.
             worker_manager: The worker manager for handling parallel execution.
-            tfs_connection_map: Setup-resolved map of destination CFW class to its
-                framework connection (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection).
-                Engine builds this once from the DataAccessCollection at setup; the
-                executor only does a dict lookup per TFS step on the run path.
+            connections: Setup-resolved map of DataAccessCollection handle to its connection
+                (e.g. duckdb.DuckDBPyConnection, sqlite3.Connection); steps carry only the handle.
             function_extender: The caller's extenders; a resident framework gets a read-only
                 copy at attach time.
             worker_extender_payload: Pickled (extenders, hook table) snapshot for a framework dispatched
@@ -60,7 +58,7 @@ class ComputeFrameworkExecutor:
         self.cfw_collection: dict[UUID, ComputeFramework] = {}
         self.cfw_register = cfw_register
         self.worker_manager = worker_manager
-        self.tfs_connection_map: dict[type[ComputeFramework], Any] = tfs_connection_map or {}
+        self.connections: dict[str, Any] = connections or {}
         self.function_extender = function_extender
         self.worker_extender_payload = worker_extender_payload
         self.hook_extenders = hook_extenders
@@ -310,18 +308,22 @@ class ComputeFrameworkExecutor:
             from_cfw = self.cfw_collection[from_cfw_uuid]
         return from_cfw
 
-    def _bind_tfs_connection(self, step: Any, cfw_uuid: UUID) -> None:
-        """Bind the setup-resolved connection to a TFS destination CFW, if any.
-
-        No-op for non-TFS steps and for destinations whose framework has no entry
-        in `tfs_connection_map` (i.e. no connection was resolved at Engine setup).
-        """
-        if not isinstance(step, TransformFrameworkStep):
+    def _bind_connection(self, step: Any, cfw_uuid: UUID) -> None:
+        """Bind the step's handle to its cfw: eagerly when explicit or a transform, else as a fallback."""
+        conn = self.connections.get(step.connection_handle)
+        if conn is None:
             return
         cfw = self.cfw_collection[cfw_uuid]
-        conn = self.tfs_connection_map.get(type(cfw))
-        if conn is not None and cfw.framework_connection_object is None:
-            cfw.set_framework_connection_object(conn)
+        if step.connection_explicit or isinstance(step, TransformFrameworkStep):
+            if cfw.framework_connection_object is None:
+                cfw.set_framework_connection_object(conn)
+            elif step.connection_explicit and cfw.framework_connection_object is not conn:
+                raise ValueError(
+                    f"{cfw.__class__.__name__} is already bound to another connection than the one selected by "
+                    f"connection_handle '{step.connection_handle}' in the DataAccessCollection."
+                )
+        else:
+            cfw.fallback_connection_object = conn
 
     def sync_execute_step(self, step: Any) -> None:
         """
@@ -329,7 +331,7 @@ class ComputeFrameworkExecutor:
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.SYNC)
 
-        self._bind_tfs_connection(step, cfw_uuid)
+        self._bind_connection(step, cfw_uuid)
 
         try:
             from_cfw = self.prepare_tfs_and_joinstep(step) or None
@@ -347,7 +349,7 @@ class ComputeFrameworkExecutor:
         """
         cfw_uuid = self.prepare_execute_step(step, ParallelizationMode.THREADING)
 
-        self._bind_tfs_connection(step, cfw_uuid)
+        self._bind_connection(step, cfw_uuid)
 
         from_cfw = self.prepare_tfs_and_joinstep(step) or None
 

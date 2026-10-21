@@ -44,7 +44,7 @@ class TestPandasTimeWindowReferenceTimeContract:
         feature_set.add(Feature("temperature__avg_3_day_window"))
 
         with pytest.raises(ValueError, match=str(DefaultOptionKeys.reference_time)):
-            PandasTimeWindow.calculate(TimeWindowFeatureGroup, df, feature_set)
+            PandasTimeWindow.calculate(TimeWindowFeatureGroup, df, feature_set, None)
 
     def test_tz_aware_reference_time_accepted_guard(self) -> None:
         """GUARD: a tz-aware datetime reference-time column is accepted."""
@@ -58,7 +58,7 @@ class TestPandasTimeWindowReferenceTimeContract:
         feature_set = FeatureSet()
         feature_set.add(Feature("temperature__avg_3_day_window"))
 
-        result = PandasTimeWindow.calculate(TimeWindowFeatureGroup, df, feature_set)
+        result = PandasTimeWindow.calculate(TimeWindowFeatureGroup, df, feature_set, None)
         assert "temperature__avg_3_day_window" in result.columns
 
 
@@ -77,7 +77,7 @@ class TestPyArrowTimeWindowReferenceTimeContract:
         feature_set.add(Feature("temperature__avg_3_day_window"))
 
         with pytest.raises(ValueError, match=str(DefaultOptionKeys.reference_time)):
-            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set)
+            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set, None)
 
     def test_tz_aware_reference_time_accepted_guard(self) -> None:
         """GUARD: a tz-aware timestamp reference-time column is accepted."""
@@ -92,7 +92,7 @@ class TestPyArrowTimeWindowReferenceTimeContract:
         feature_set = FeatureSet()
         feature_set.add(Feature("temperature__avg_3_day_window"))
 
-        result = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set)
+        result = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set, None)
         assert "temperature__avg_3_day_window" in result.schema.names
 
 

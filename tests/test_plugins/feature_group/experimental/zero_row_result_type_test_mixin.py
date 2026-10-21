@@ -50,7 +50,7 @@ class ZeroRowResultTypeTestMixin:
         feature_set.add(feature)
         data = self.from_arrow(table)
         if issubclass(self.feature_group_class, Implementation):
-            return self.feature_group_class.calculate(self.feature_group_class.feature_group, data, feature_set)
+            return self.feature_group_class.calculate(self.feature_group_class.feature_group, data, feature_set, None)
         return self.feature_group_class.calculate_feature(data, feature_set)
 
     def assert_typed(self, result: Any, column: str, expected_rows: int) -> None:

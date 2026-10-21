@@ -137,10 +137,6 @@ def _assert_column_values(expected: dict[str, list[Any]]) -> PolicySuccess:
 class SiblingDictRunAllTestBase(PolicyRunAllTestBase):
     """Drives dict-returning sibling consumers end-to-end through ``run_all``."""
 
-    @classmethod
-    def connection_keyed_feature_groups(cls) -> set[type[FeatureGroup]]:
-        return {SiblingDictRoot}
-
     def _run(
         self,
         names: list[str],

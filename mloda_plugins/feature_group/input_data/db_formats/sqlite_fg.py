@@ -123,5 +123,5 @@ class SqlitePythonDict(Implementation):
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> Any:
+    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
         return _load_dict(group, match, features)

@@ -85,7 +85,7 @@ class ToyFilePyArrowTable(Implementation):
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> pa.Table:
+    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> pa.Table:
         return pa.table(read_toy_file(match.access, tuple(sorted(features.get_all_names()))))
 
 
@@ -94,7 +94,7 @@ class ToyFilePythonDict(Implementation):
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any) -> dict[str, list[Any]]:
+    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> dict[str, list[Any]]:
         return read_toy_file(match.access, tuple(sorted(features.get_all_names())))
 
 

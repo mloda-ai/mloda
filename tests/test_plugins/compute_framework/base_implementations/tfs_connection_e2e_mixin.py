@@ -5,12 +5,14 @@ of a TransformFrameworkStep at setup time. This mixin exercises that wiring
 through `mloda.run_all` so each SQL framework gets the same coverage as the
 original DuckDB reproducer."""
 
+import functools
 from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
-from mloda.user import mloda, Feature, DataAccessCollection, ParallelizationMode, PluginCollector
+from mloda.user import mloda, Feature, FeatureName, Options, DataAccessCollection, ParallelizationMode, PluginCollector
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet
 from mloda.core.abstract_plugins.components.input_data.creator.data_creator import DataCreator
 from mloda.provider import BaseInputData
@@ -32,6 +34,54 @@ class TfsRawValPyArrowSource(FeatureGroup):
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"raw_val": [1, 2, 3]}
+
+
+_ROOT_SEEN: dict[str, Any] = {}
+
+
+@functools.cache
+def root_binding_groups(
+    framework: type[ComputeFramework], double: Callable[[Any, str, str], Any]
+) -> tuple[type[FeatureGroup], type[FeatureGroup], str]:
+    """Build a root and a sink pinned to ``framework``; the sink records the connection of its input.
+
+    Returns (root, sink, sink_feature_name). The root returns a dict that run_calculation must
+    convert on the connection bound to the framework.
+    """
+    src = f"tfs_root_val_{framework.__name__}"
+    dst = f"tfs_root_out_{framework.__name__}"
+
+    class RootBindingRoot(FeatureGroup):
+        @classmethod
+        def input_data(cls) -> BaseInputData | None:
+            return DataCreator({src})
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {framework}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            return {src: [1, 2, 3]}
+
+    class RootBindingSink(FeatureGroup):
+        def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+            return {Feature(src, options=options)}
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+            return {framework}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            _ROOT_SEEN[dst] = data.connection
+            return double(data, src, dst)
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {dst}
+
+    return RootBindingRoot, RootBindingSink, dst
 
 
 class TfsConnectionEndToEndMixin:
@@ -60,6 +110,24 @@ class TfsConnectionEndToEndMixin:
     @abstractmethod
     def extract_doubled(self, final: Any) -> list[int]:
         raise NotImplementedError
+
+    @staticmethod
+    def double_relation(data: Any, src: str, dst: str) -> Any:
+        """Return ``data`` with column ``dst`` = ``src`` * 2, on the data's own connection."""
+        raise NotImplementedError
+
+    def test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option(self, live_connection: Any) -> None:
+        root, sink, dst = root_binding_groups(self.destination_framework_class, self.double_relation)
+        _ROOT_SEEN.clear()
+        result = mloda.run_all(
+            [Feature(dst)],
+            compute_frameworks=[self.destination_framework_class],
+            plugin_collector=PluginCollector.enabled_feature_groups({root, sink}),
+            data_access_collection=DataAccessCollection({live_connection}),
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+        assert sorted(result[0].column(dst).to_pylist()) == [2, 4, 6]
+        assert _ROOT_SEEN[dst] is live_connection
 
     def test_tfs_connection_reaches_destination_framework(self, live_connection: Any) -> None:
         plugin_collector = PluginCollector.enabled_feature_groups({self.source_fg_class, self.destination_fg_class})

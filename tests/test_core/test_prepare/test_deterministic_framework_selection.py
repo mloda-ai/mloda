@@ -370,10 +370,16 @@ def _frameworks() -> list[type[ComputeFramework]]:
 
 
 def _compute_framework_names(
-    feature: Feature | str, fg: type[FeatureGroup], frameworks: list[type[ComputeFramework]]
+    feature: Feature | str,
+    fg: type[FeatureGroup],
+    frameworks: list[type[ComputeFramework]],
+    data_access_collection: DataAccessCollection | None = None,
 ) -> list[str | None]:
     steps = mloda.explain(
-        [feature], compute_frameworks=frameworks, plugin_collector=PluginCollector.enabled_feature_groups({fg})
+        [feature],
+        compute_frameworks=frameworks,
+        plugin_collector=PluginCollector.enabled_feature_groups({fg}),
+        data_access_collection=data_access_collection,
     )
     return [step.compute_framework_name for step in steps if step.step_kind == "compute"]
 
@@ -393,9 +399,11 @@ def test_run_all_unrestricted_root_avoids_unconnected_duckdb() -> None:
 
 
 def test_root_with_sqlite_connection_plans_on_sqlite(sqlite_conn: sqlite3.Connection) -> None:
-    feature = Feature("conn_aware_sqlite_root", options={"ConnAwareSqliteRootFG": sqlite_conn})
+    feature = Feature("conn_aware_sqlite_root")
 
-    names = _compute_framework_names(feature, ConnAwareSqliteRootFG, _frameworks())
+    names = _compute_framework_names(
+        feature, ConnAwareSqliteRootFG, _frameworks(), DataAccessCollection(connections={sqlite_conn})
+    )
 
     assert names == ["SqliteFramework"]
 
@@ -407,15 +415,76 @@ def test_root_without_any_connection_keeps_duckdb() -> None:
 
 
 def test_pinned_duckdb_feature_keeps_its_pin(sqlite_conn: sqlite3.Connection) -> None:
-    feature = Feature(
-        "conn_aware_pinned_root",
-        options={"ConnAwarePinnedRootFG": sqlite_conn},
-        compute_framework="DuckDBFramework",
+    feature = Feature("conn_aware_pinned_root", compute_framework="DuckDBFramework")
+
+    names = _compute_framework_names(
+        feature, ConnAwarePinnedRootFG, _frameworks(), DataAccessCollection(connections={sqlite_conn})
     )
 
-    names = _compute_framework_names(feature, ConnAwarePinnedRootFG, _frameworks())
+    assert names == ["DuckDBFramework"]
+
+
+def test_pinned_duckdb_feature_with_a_resolvable_duckdb_dac_connection_stays_on_duckdb() -> None:
+    duckdb = pytest.importorskip("duckdb")
+    feature = Feature("conn_aware_pinned_root", compute_framework="DuckDBFramework")
+
+    names = _compute_framework_names(
+        feature, ConnAwarePinnedRootFG, _frameworks(), DataAccessCollection(connections={duckdb.connect()})
+    )
 
     assert names == ["DuckDBFramework"]
+
+
+class MoveErrorRootFG(_ConnAwareRoot):
+    NAME = "move_error_root"
+
+
+def _assert_move_error(raised: pytest.ExceptionInfo[ValueError], key: str, framework: str) -> None:
+    message = str(raised.value)
+    assert key in message
+    assert framework in message
+    assert "DataAccessCollection" in message
+    assert "connection_handle" in message
+
+
+def test_a_duckdb_connection_under_a_group_class_name_raises_the_move_error() -> None:
+    duckdb = pytest.importorskip("duckdb")
+    feature = Feature("move_error_root", options={"MoveErrorRootFG": duckdb.connect()})
+
+    with pytest.raises(ValueError) as raised:
+        _compute_framework_names(feature, MoveErrorRootFG, _frameworks())
+
+    _assert_move_error(raised, "MoveErrorRootFG", "DuckDBFramework")
+
+
+def test_a_sqlite_connection_under_a_group_class_name_raises_the_move_error(sqlite_conn: sqlite3.Connection) -> None:
+    feature = Feature("move_error_root", options={"MoveErrorRootFG": sqlite_conn})
+
+    with pytest.raises(ValueError) as raised:
+        _compute_framework_names(feature, MoveErrorRootFG, _frameworks())
+
+    _assert_move_error(raised, "MoveErrorRootFG", "SqliteFramework")
+
+
+def test_a_duckdb_connection_under_a_format_group_pointer_key_raises_the_move_error() -> None:
+    duckdb = pytest.importorskip("duckdb")
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+
+    key = CsvFG.pointer_keys()[0]
+    feature = Feature("move_error_csv_col", options={key: duckdb.connect()})
+
+    with pytest.raises(ValueError) as raised:
+        _compute_framework_names(feature, CsvFG, _frameworks())
+
+    _assert_move_error(raised, key, "DuckDBFramework")
+
+
+def test_a_non_connection_value_under_a_group_class_name_does_not_raise() -> None:
+    feature = Feature("move_error_root", options={"MoveErrorRootFG": "some_pointer"})
+
+    names = _compute_framework_names(feature, MoveErrorRootFG, _frameworks())
+
+    assert len(names) == 1
 
 
 # --- run-level framework preference -------------------------------------------------------------
@@ -1058,13 +1127,15 @@ def test_diagnose_reports_a_transform_into_a_required_connection_framework_witho
 def test_a_same_type_hop_into_a_required_connection_framework_needs_no_connection() -> None:
     sqlite_cls = _load_framework(_MODULE_OF["SqliteFramework"], "SqliteFramework")
     to_cls = sqlite_cls
-    tfs = type("_Tfs", (), {"from_framework": sqlite_cls, "to_framework": to_cls})()
+    tfs = type("_Tfs", (), {"from_framework": sqlite_cls, "to_framework": to_cls, "connection_handle": None})()
     engine = Engine.__new__(Engine)
-    engine.execution_planner = type("_Planner", (), {"tfs_collection": {"k": tfs}})()
+    engine.execution_planner = type(
+        "_Planner", (), {"tfs_collection": {"k": tfs}, "__iter__": lambda self: iter([tfs])}
+    )()
     engine.data_access_collection = None
     engine.resolution_records = []
 
-    assert engine._resolve_tfs_connection_map() == {}
+    assert engine._resolve_connections() == {}
 
 
 def _requested_step(feature_group: type[FeatureGroup], framework: type[ComputeFramework]) -> Any:
@@ -1685,13 +1756,13 @@ class BdOptRightRoot(_PlanRoot):
 class BdOptConsumer(_PlanConsumer):
     OUTPUT = "bd_o_out"
     RULE = _BD_DUCK_PYARROW
-    CONNS: ClassVar[tuple[Any, Any]] = (None, None)
+    HANDLES: ClassVar[tuple[str, str]] = ("a", "a")
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        left, right = self.CONNS
+        left, right = self.HANDLES
         return {
-            Feature("bd_o_l_val", options=Options(context={"BdOptLeftRoot": left})),
-            Feature("bd_o_r_val", options=Options(context={"BdOptRightRoot": right})),
+            Feature("bd_o_l_val", options=Options(context={"connection_handle": left})),
+            Feature("bd_o_r_val", options=Options(context={"connection_handle": right})),
         }
 
     @classmethod
@@ -1702,17 +1773,23 @@ class BdOptConsumer(_PlanConsumer):
 
 
 @pytest.mark.parametrize("shared", [False, True], ids=["different_connections", "one_connection"])
-def test_a_consumer_of_parents_with_option_connections_borrows_duckdb_only_on_one_connection(
+def test_a_consumer_of_parents_with_dac_handles_borrows_duckdb_only_on_one_connection(
     shared: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     duckdb = pytest.importorskip("duckdb")
-    left = duckdb.connect()
-    monkeypatch.setattr(BdOptConsumer, "CONNS", (left, left if shared else duckdb.connect()))
+    monkeypatch.setattr(BdOptConsumer, "HANDLES", ("a", "a" if shared else "b"))
+    access = DataAccessCollection(connections={"a": duckdb.connect(), "b": duckdb.connect()})
     links = {Link.inner(JoinSpec(BdOptLeftRoot, "bd_o_lidx"), JoinSpec(BdOptRightRoot, "bd_o_ridx"))}
     groups = {BdOptLeftRoot, BdOptRightRoot, BdOptConsumer}
     frameworks = _bd_frameworks(["DuckDBFramework", "PyArrowTable"])
 
-    steps = _plan(["bd_o_out"], groups, frameworks, links=links)
+    steps = mloda.explain(
+        ["bd_o_out"],
+        compute_frameworks=frameworks,
+        links=links,
+        data_access_collection=access,
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
     if not shared:
         assert "DuckDBFramework" not in _compute_names(steps, BdOptConsumer)
 
@@ -1720,6 +1797,7 @@ def test_a_consumer_of_parents_with_option_connections_borrows_duckdb_only_on_on
         ["bd_o_out"],
         compute_frameworks=frameworks,
         links=links,
+        data_access_collection=access,
         plugin_collector=PluginCollector.enabled_feature_groups(groups),
     )
     assert sorted(_bd_values(result[0])["bd_o_out"]) == [10, 20, 30]
@@ -1763,6 +1841,244 @@ def test_a_dac_connection_differing_from_a_parents_own_connection_keeps_the_cons
         plugin_collector=PluginCollector.enabled_feature_groups(groups),
     )
     assert sorted(_bd_values(result[0])["bd_dm_out"]) == [10, 20, 30]
+
+
+# --- candidacy and per-root, per-handle keying from DataAccessCollection connections ----------------
+
+
+class CkRoot(_PlanRoot):
+    NAMES = ("ck_root",)
+
+
+def _ck_handle(handle: str) -> Options:
+    return Options(group={"connection_handle": handle})
+
+
+def _ck_named() -> DataAccessCollection:
+    import duckdb
+
+    return DataAccessCollection({"a": duckdb.connect(), "b": duckdb.connect()})
+
+
+def _ck_single() -> DataAccessCollection:
+    import duckdb
+
+    return DataAccessCollection({"only": duckdb.connect()})
+
+
+@pytest.mark.parametrize(
+    ("access", "options"),
+    [
+        pytest.param(_ck_single, None, id="single_match"),
+        pytest.param(_ck_named, _ck_handle("b"), id="connection_handle"),
+    ],
+)
+def test_a_root_with_a_resolvable_dac_connection_is_a_duckdb_candidate(access: Any, options: Options | None) -> None:
+    steps = mloda.explain(
+        [Feature("ck_root", options=options or Options())],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        data_access_collection=access(),
+        plugin_collector=PluginCollector.enabled_feature_groups({CkRoot}),
+    )
+
+    assert _compute_names(steps, CkRoot) == {"DuckDBFramework"}
+
+
+def test_a_global_filter_tied_to_a_host_root_takes_the_hosts_handle_among_two_connections() -> None:
+    global_filter = GlobalFilter()
+    global_filter.add_filter("ck_root", "equal", {"value": 2})
+
+    steps = mloda.explain(
+        [Feature("ck_root", options=_ck_handle("b"))],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        data_access_collection=_ck_named(),
+        global_filter=global_filter,
+        plugin_collector=PluginCollector.enabled_feature_groups({CkRoot}),
+    )
+
+    assert _compute_names(steps, CkRoot) == {"DuckDBFramework"}
+
+
+def test_two_unnamed_connections_without_a_handle_drop_duckdb_and_the_reason_names_both() -> None:
+    duckdb = pytest.importorskip("duckdb")
+
+    steps = mloda.explain(
+        ["ck_root"],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        data_access_collection=DataAccessCollection(connections={duckdb.connect(), duckdb.connect()}),
+        plugin_collector=PluginCollector.enabled_feature_groups({CkRoot}),
+    )
+
+    assert _compute_names(steps, CkRoot) == {"PyArrowTable"}
+    (step,) = _compute_steps(steps, CkRoot)
+    reason = str(step.compute_framework_reason)
+    assert "_auto_connection" not in reason
+    assert "2" in reason
+    assert "connection_handle" in reason
+
+
+class CkJoinConsumer(_PlanConsumer):
+    OUTPUT = "ck_join_out"
+    RULE: ClassVar[tuple[str, ...]] = _BD_DUCK_PYARROW
+    HANDLES: ClassVar[tuple[str, str]] = ("a", "b")
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        left, right = self.HANDLES
+        return {
+            Feature("bd_l_val", options=_ck_handle(left)),
+            Feature("bd_r_val", options=_ck_handle(right)),
+        }
+
+
+_CK_LINKS = {Link.inner(JoinSpec(BdLeftRoot, "bd_lidx"), JoinSpec(BdRightRoot, "bd_ridx"))}
+_CK_GROUPS: set[type[FeatureGroup]] = {BdLeftRoot, BdRightRoot, CkJoinConsumer}
+
+
+def _ck_join(request: Feature | str, handles: tuple[str, str], monkeypatch: pytest.MonkeyPatch) -> list[PlanStep]:
+    monkeypatch.setattr(CkJoinConsumer, "HANDLES", handles)
+    return mloda.explain(
+        [request],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        links=_CK_LINKS,
+        data_access_collection=_ck_named(),
+        plugin_collector=PluginCollector.enabled_feature_groups(_CK_GROUPS),
+    )
+
+
+class CkFreeLeftRoot(_PlanRoot):
+    NAMES = ("ck_f_l_val", "ck_f_lidx")
+    INDEXES = ("ck_f_lidx",)
+
+
+class CkFreeRightRoot(_PlanRoot):
+    NAMES = ("ck_f_r_val", "ck_f_ridx")
+    INDEXES = ("ck_f_ridx",)
+
+
+class CkFreeJoinConsumer(_PlanConsumer):
+    OUTPUT = "ck_free_out"
+    RULE = _BD_DUCK_PYARROW
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {
+            Feature("ck_f_l_val", options=_ck_handle("a"), compute_framework="DuckDBFramework"),
+            Feature("ck_f_r_val", options=_ck_handle("b")),
+        }
+
+
+def test_a_join_of_duckdb_roots_on_different_handles_does_not_plan_on_duckdb() -> None:
+    groups: set[type[FeatureGroup]] = {CkFreeLeftRoot, CkFreeRightRoot, CkFreeJoinConsumer}
+    steps = mloda.explain(
+        ["ck_free_out"],
+        compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+        links={Link.inner(JoinSpec(CkFreeLeftRoot, "ck_f_lidx"), JoinSpec(CkFreeRightRoot, "ck_f_ridx"))},
+        data_access_collection=_ck_named(),
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+    )
+
+    assert _compute_names(steps, CkFreeLeftRoot) == {"DuckDBFramework"}
+    assert _compute_names(steps, CkFreeJoinConsumer) == {"PyArrowTable"}
+
+
+def test_a_join_of_duckdb_roots_on_one_handle_may_stay_on_duckdb(monkeypatch: pytest.MonkeyPatch) -> None:
+    steps = _ck_join("ck_join_out", ("a", "a"), monkeypatch)
+
+    assert _compute_names(steps, CkJoinConsumer) == {"DuckDBFramework"}
+
+
+def test_a_pinned_duckdb_consumer_of_parents_on_two_handles_fails_at_planning(monkeypatch: pytest.MonkeyPatch) -> None:
+    pinned = Feature("ck_join_out", compute_framework="DuckDBFramework")
+
+    with pytest.raises(Exception, match="connection") as raised:
+        _ck_join(pinned, ("a", "b"), monkeypatch)
+
+    message = str(raised.value)
+    assert "'a'" in message
+    assert "'b'" in message
+
+
+class CkDuckOnlyJoinConsumer(CkJoinConsumer):
+    OUTPUT = "ck_only_out"
+    RULE = ("DuckDBFramework",)
+
+
+def test_a_duckdb_only_consumer_of_parents_on_two_handles_fails_at_planning(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(CkJoinConsumer, "HANDLES", ("a", "b"))
+
+    with pytest.raises(Exception, match="connection") as raised:
+        mloda.explain(
+            ["ck_only_out"],
+            compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+            links=_CK_LINKS,
+            data_access_collection=_ck_named(),
+            plugin_collector=PluginCollector.enabled_feature_groups({BdLeftRoot, BdRightRoot, CkDuckOnlyJoinConsumer}),
+        )
+
+    message = str(raised.value)
+    assert "'a'" in message
+    assert "'b'" in message
+
+
+class CkTwoFamilyRoot(_PlanRoot):
+    NAMES = ("ck_t_d1", "ck_t_d2", "ck_t_s1", "ck_t_s2")
+
+
+class CkTwoFamilyConsumer(_PlanConsumer):
+    OUTPUT = "ck_two_family_out"
+    RULE = ("DuckDBFramework", "SqliteFramework")
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        pairs = (("ck_t_d1", "d1"), ("ck_t_d2", "d2"), ("ck_t_s1", "s1"), ("ck_t_s2", "s2"))
+        return {Feature(name, options=_ck_handle(handle)) for name, handle in pairs}
+
+
+def test_emptying_a_multi_framework_domain_by_connection_conflicts_raises_the_labelled_error() -> None:
+    duckdb = pytest.importorskip("duckdb")
+    access = DataAccessCollection(
+        {
+            "d1": duckdb.connect(),
+            "d2": duckdb.connect(),
+            "s1": sqlite3.connect(":memory:"),
+            "s2": sqlite3.connect(":memory:"),
+        }
+    )
+    frameworks = _bd_frameworks(["PyArrowTable", "DuckDBFramework", "SqliteFramework"])
+
+    with pytest.raises(ValueError, match="different connections"):
+        mloda.explain(
+            ["ck_two_family_out"],
+            compute_frameworks=frameworks,
+            data_access_collection=access,
+            plugin_collector=PluginCollector.enabled_feature_groups({CkTwoFamilyRoot, CkTwoFamilyConsumer}),
+        )
+
+
+class CkTwoHandleJoinConsumer(_PlanConsumer):
+    """Two outputs over one shared pair of parents (the handle is not forwarded), each on its own handle."""
+
+    RULE = ("DuckDBFramework",)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"ck_j_a", "ck_j_b"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("bd_l_val", forward_group=False), Feature("bd_r_val", forward_group=False)}
+
+
+def test_consumers_of_one_join_on_different_handles_fail_at_planning_naming_both() -> None:
+    with pytest.raises(Exception, match="connection") as raised:
+        mloda.explain(
+            [Feature("ck_j_a", options=_ck_handle("a")), Feature("ck_j_b", options=_ck_handle("b"))],
+            compute_frameworks=_bd_frameworks(["DuckDBFramework", "PyArrowTable"]),
+            links=_CK_LINKS,
+            data_access_collection=_ck_named(),
+            plugin_collector=PluginCollector.enabled_feature_groups({BdLeftRoot, BdRightRoot, CkTwoHandleJoinConsumer}),
+        )
+
+    message = str(raised.value)
+    assert "'a'" in message
+    assert "'b'" in message
 
 
 class BdDacRunConsumer(_PlanConsumer):

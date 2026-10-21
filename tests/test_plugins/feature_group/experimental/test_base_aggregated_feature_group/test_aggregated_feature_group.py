@@ -226,7 +226,7 @@ class TestPandasAggregation:
 
     def test_calculate_feature_single(self, sample_dataframe: pd.DataFrame, feature_set_sum: FeatureSet) -> None:
         """Test calculate_feature method with a single aggregation."""
-        result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set_sum)
+        result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set_sum, None)
 
         # Check that the result contains the original data plus the aggregated feature
         assert "sales__sum_aggr" in result.columns
@@ -248,7 +248,7 @@ class TestPandasAggregation:
 
     def test_calculate_feature_multiple(self, sample_dataframe: pd.DataFrame, feature_set_multiple: FeatureSet) -> None:
         """Test calculate_feature method with multiple aggregations."""
-        result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set_multiple)
+        result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set_multiple, None)
 
         # Check that the result contains all aggregated features
         assert "sales__sum_aggr" in result.columns
@@ -282,7 +282,7 @@ class TestPandasAggregation:
         feature_set.add(Feature("missing__sum_aggr"))
 
         with pytest.raises(ValueError, match="None of the source features") as exc_info:
-            PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set)
+            PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set, None)
         assert "Available columns" in str(exc_info.value)
         assert "sales" in str(exc_info.value)
 
@@ -297,7 +297,7 @@ class TestPandasAggregation:
             feature_set.add(Feature("sales__min_aggr"))
 
             with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
-                PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set)
+                PandasAggregation.calculate(AggregatedFeatureGroup, sample_dataframe, feature_set, None)
         finally:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types

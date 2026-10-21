@@ -221,6 +221,102 @@ class TestResolveContract:
         assert "users" in msg
 
 
+class _Conn:
+    """Stand-in connection type for the resolver tests."""
+
+
+class _OtherConn:
+    """A connection of a type the stub framework does not accept."""
+
+
+class _StubFramework:
+    @classmethod
+    def _connection_matches(cls, conn: Any) -> bool:
+        return isinstance(conn, _Conn)
+
+
+class TestConnectionHandleResolver:
+    """The single resolver behind ``connection_handle``: returns (handle, explicit, reason)."""
+
+    def _resolve(self, dac: DataAccessCollection, **group: Any) -> tuple[str | None, bool, str | None]:
+        from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
+        from mloda.user import Options
+
+        return resolve_connection_handle(_StubFramework, dac, Options(group=group))
+
+    def test_option_name_constant(self) -> None:
+        from mloda.core.abstract_plugins.components.data_access_collection import CONNECTION_HANDLE_OPTION
+
+        assert CONNECTION_HANDLE_OPTION == "connection_handle"
+
+    def test_connection_handle_is_explicit_and_picks_the_named_one(self) -> None:
+        dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})
+        assert self._resolve(dac, connection_handle="b") == ("b", True, None)
+
+    def test_data_access_handle_naming_a_connection_is_explicit(self) -> None:
+        dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})
+        assert self._resolve(dac, data_access_handle="a") == ("a", True, None)
+
+    def test_connection_handle_wins_over_data_access_handle(self) -> None:
+        dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})
+        assert self._resolve(dac, connection_handle="b", data_access_handle="a")[0] == "b"
+
+    def test_unknown_connection_handle_raises_naming_it(self) -> None:
+        dac = DataAccessCollection(connections={"a": _Conn()})
+        with pytest.raises(ValueError, match="nope"):
+            self._resolve(dac, connection_handle="nope")
+
+    def test_wrong_type_connection_handle_gives_no_handle_and_a_reason(self) -> None:
+        dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn(), "other": _OtherConn()})
+        handle, _explicit, reason = self._resolve(dac, connection_handle="other")
+        assert handle is None
+        assert reason is not None
+        assert "other" in reason
+
+    def test_handle_naming_another_frameworks_connection_falls_through_to_the_single_match(self) -> None:
+        dac = DataAccessCollection(connections={"s": _OtherConn(), "d": _Conn()})
+        assert self._resolve(dac, connection_handle="s") == ("d", False, None)
+
+    def test_connection_handle_without_a_data_access_collection_raises_naming_it(self) -> None:
+        from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
+        from mloda.user import Options
+
+        with pytest.raises(ValueError, match="orphan"):
+            resolve_connection_handle(_StubFramework, None, Options(group={"connection_handle": "orphan"}))
+
+    def test_ambiguous_reason_hides_auto_handles_counts_them_and_keeps_given_names(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_connection("given", _Conn())
+        dac.add_connection(_Conn())
+        dac.add_connection(_Conn())
+        _handle, _explicit, reason = self._resolve(dac)
+        assert reason is not None
+        assert "_auto_connection" not in reason
+        assert "given" in reason
+        assert "2" in reason
+        assert "connection_handle" in reason
+
+    def test_single_unnamed_match_is_implicit(self) -> None:
+        conn = _Conn()
+        dac = DataAccessCollection(connections={conn})
+        handle, explicit, reason = self._resolve(dac)
+        assert handle is not None
+        assert dac.connections[handle] is conn
+        assert explicit is False
+        assert reason is None
+
+    def test_two_unnamed_matches_return_a_reason_naming_both_handles_and_the_option(self) -> None:
+        dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})
+        handle, explicit, reason = self._resolve(dac)
+        assert (handle, explicit) == (None, False)
+        assert reason is not None
+        for expected in ("a", "b", "connection_handle"):
+            assert expected in reason
+
+    def test_no_connection_returns_nothing(self) -> None:
+        assert self._resolve(DataAccessCollection())[0] is None
+
+
 class TestResolveAcrossKinds:
     """Verify that ``resolve`` does not cross kinds when filtering."""
 

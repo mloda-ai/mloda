@@ -18,7 +18,10 @@ from mloda.core.filter.global_filter import GlobalFilter
 from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, PreFilterPlugins
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.data_access_collection import (
+    DataAccessCollection,
+    resolve_connection_handle,
+)
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -80,6 +83,7 @@ class Engine:
         self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
         self.filter_ties: list[tuple[UUID, UUID]] = []
         self.connection_dropped: dict[UUID, frozenset[type[ComputeFramework]]] = {}
+        self.connection_reasons: dict[UUID, dict[type[ComputeFramework], str]] = {}
         # setup variables which track the primary sources and the compute platforms
         self.function_extender = function_extender if function_extender is not None else set()
         self._hook_extenders = build_hook_extenders(self.function_extender)
@@ -98,6 +102,15 @@ class Engine:
         pre_filter = PreFilterPlugins(compute_frameworks, plugin_collector)
         self.accessible_plugins = pre_filter.get_accessible_plugins()
         self.implementations = pre_filter.implementations
+        self._connection_frameworks = sorted(
+            {
+                cfw
+                for cfws in self.accessible_plugins.values()
+                for cfw in cfws
+                if cfw.connection_requirement() is not ConnectionRequirement.NONE
+            },
+            key=lambda cfw: cfw.get_class_name(),
+        )
         self.excluded_feature_groups = pre_filter.excluded_feature_groups
         # get links
         LinkValidator.validate_links(links)
@@ -131,7 +144,7 @@ class Engine:
             self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
-        self.tfs_connection_map = self._resolve_tfs_connection_map()
+        self.connections = self._resolve_connections()
         self.output_connection = self._resolve_output_connection()
 
     def _resolve_plugin_versions(self) -> dict[str, str | None] | None:
@@ -157,7 +170,18 @@ class Engine:
         ]
         if not converting:
             return None
-        connection = output.pick_connection_from_dac(self.data_access_collection)
+        dac = self.data_access_collection
+        picked = [
+            output.pick_connection_from_dac(dac, s.features.options) if dac is not None else None for s in converting
+        ]
+        connection = picked[0]
+        if any(other is not connection for other in picked):
+            handles = sorted({str(self._resolve_handle(output, s.features.options)[0]) for s in converting})
+            raise ValueError(
+                f"The results converted to output_framework {output.get_class_name()} select different connections: "
+                + " and ".join(f"'{h}'" for h in handles)
+                + "."
+            )
         if connection is None and output.connection_requirement() is ConnectionRequirement.REQUIRED:
             labels = dict.fromkeys(
                 f"{s.feature_group.get_class_name()} on {s.compute_framework.get_class_name()}" for s in converting
@@ -170,31 +194,29 @@ class Engine:
             )
         return connection
 
-    def _resolve_tfs_connection_map(self) -> dict[type[ComputeFramework], Any]:
-        """Resolve a connection per TFS destination framework at setup time.
+    def _resolve_connections(self) -> dict[str, Any]:
+        """Map each handle a step uses to its DataAccessCollection connection.
 
         Raises EnvironmentPreconditionError when a converting hop into a REQUIRED-connection framework has none.
         """
-        connection_map: dict[type[ComputeFramework], Any] = {}
         for tfs in self.execution_planner.tfs_collection.values():
-            cfw_class = tfs.to_framework
-            if cfw_class in connection_map:
-                continue
-            conn = cfw_class.pick_connection_from_dac(self.data_access_collection)
-            if conn is not None:
-                connection_map[cfw_class] = conn
-            elif (
-                cfw_class.connection_requirement() is ConnectionRequirement.REQUIRED
-                and tfs.from_framework.expected_data_framework() is not cfw_class.expected_data_framework()
+            if (
+                tfs.connection_handle is None
+                and tfs.to_framework.connection_requirement() is ConnectionRequirement.REQUIRED
+                and tfs.from_framework.expected_data_framework() is not tfs.to_framework.expected_data_framework()
             ):
                 raise EnvironmentPreconditionError(
                     f"The transform from {tfs.from_feature_group.get_class_name()} on "
                     f"{tfs.from_framework.get_class_name()} to {tfs.to_feature_group.get_class_name()} on "
-                    f"{cfw_class.get_class_name()} needs a connection, so add a matching connection "
+                    f"{tfs.to_framework.get_class_name()} needs a connection, so add a matching connection "
                     "to the DataAccessCollection.",
                     partial_records=self.resolution_records,
                 )
-        return connection_map
+        dac = self.data_access_collection
+        if dac is None:
+            return {}
+        handles = {step.connection_handle for step in self.execution_planner if step.connection_handle is not None}
+        return {handle: dac.connections[handle] for handle in sorted(handles)}
 
     def get_function_extender(self, hook: ExtenderHook) -> Extender | None:
         """Select the extender(s) registered for hook, from the table built at init."""
@@ -207,7 +229,7 @@ class Engine:
             flight_server,
             column_ordering=self.column_ordering,
             request_feature_order=self.request_feature_order,
-            tfs_connection_map=self.tfs_connection_map,
+            connections=self.connections,
             run_context=self.run_context,
             output_framework=self.output_framework,
             output_connection=self.output_connection,
@@ -259,10 +281,11 @@ class Engine:
             self.framework_positions,
             output_framework=self.output_framework,
             connection_dropped=self.connection_dropped,
-            connected=self._connected_frameworks(),
             pin_frameworks=pin_frameworks,
             pinned=pinned,
             implementations=self.implementations,
+            handle_of=self._resolve_handle,
+            connection_reasons=self.connection_reasons,
         )
         resolver.create_initial_queue()
 
@@ -288,6 +311,7 @@ class Engine:
                 for uuid, classes in self.specialized_from.items()
             },
             self.implementations,
+            self.data_access_collection,
         )
         execution_planner.create_execution_plan(
             planned_queue,
@@ -324,6 +348,7 @@ class Engine:
 
         # Feature-group matchers write into the options; those writes are never the feature's own declaration.
         feature.options.lock_own_keys()
+        self._raise_on_connection_in_options(feature)
         feature_group_class, compute_frameworks, result = self._identify_feature_group_and_frameworks(feature, depth)
         self.resolution_records.append(ResolutionRecord(str(feature.name), requested, result))
         self._warn_on_dual_option_consumption(feature, feature_group_class)
@@ -595,6 +620,8 @@ class Engine:
         self.add_feature_to_collection(feature_group_class, new_index_feature, child_uuid, True)
         if feature.uuid in self.connection_dropped:
             self.connection_dropped[new_index_feature.uuid] = self.connection_dropped[feature.uuid]
+        if feature.uuid in self.connection_reasons:
+            self.connection_reasons[new_index_feature.uuid] = self.connection_reasons[feature.uuid]
 
     def _add_filter_feature(
         self,
@@ -960,31 +987,41 @@ class Engine:
                 self.connection_dropped[feature.uuid] = dropped
         return feature
 
-    def _connected_frameworks(self) -> dict[type[ComputeFramework], Any]:
-        """Dropped frameworks mapped to the one matching connection the DataAccessCollection holds."""
-        dac = self.data_access_collection
-        if dac is None:
-            return {}
-        connected: dict[type[ComputeFramework], Any] = {}
-        for cfw in set().union(*self.connection_dropped.values()):
-            matching = [conn for conn in dac.connections.values() if cfw._connection_matches(conn)]
-            if len(matching) == 1:
-                connected[cfw] = matching[0]
-        return connected
+    def _raise_on_connection_in_options(self, feature: Feature) -> None:
+        """A connection object in the options is no longer read; it belongs in the DataAccessCollection."""
+        if not self._connection_frameworks:
+            return
+        for scope in (feature.options.group, feature.options.context):
+            for key, value in scope.items():
+                for cfw in self._connection_frameworks:
+                    if cfw._connection_matches(value):
+                        raise ValueError(
+                            f"Option '{key}' of feature '{feature.name}' holds a {cfw.get_class_name()} connection. "
+                            "Put it in the DataAccessCollection and select it with the 'connection_handle' option."
+                        )
 
-    @staticmethod
+    def _resolve_handle(self, framework: type[ComputeFramework], options: Any) -> tuple[str | None, bool]:
+        """The DataAccessCollection handle for a framework and whether the options named it."""
+        handle, explicit, _ = resolve_connection_handle(framework, self.data_access_collection, options)
+        return handle, explicit
+
     def _drop_unconnected_required(
+        self,
         feature: Feature,
         compute_frameworks: set[type[ComputeFramework]],
         feature_group_class: type[FeatureGroup],
     ) -> set[type[ComputeFramework]]:
-        """Drop REQUIRED frameworks lacking a matching connection in the options; keep the set if none would remain."""
-        conn = feature.options.get(feature_group_class.get_class_name())
-        kept = {
-            cfw
-            for cfw in compute_frameworks
-            if cfw.connection_requirement() is not ConnectionRequirement.REQUIRED or cfw._connection_matches(conn)
-        }
+        """Drop REQUIRED frameworks without a connection handle; keep the set if none would remain."""
+        kept: set[type[ComputeFramework]] = set()
+        for cfw in compute_frameworks:
+            if cfw.connection_requirement() is not ConnectionRequirement.REQUIRED:
+                kept.add(cfw)
+                continue
+            handle, _, reason = resolve_connection_handle(cfw, self.data_access_collection, feature.options)
+            if handle is not None:
+                kept.add(cfw)
+            elif reason is not None:
+                self.connection_reasons.setdefault(feature.uuid, {})[cfw] = reason
         return kept or compute_frameworks
 
     def set_data_type(self, feature: Feature, feature_group_class: type[FeatureGroup]) -> DataType | None:

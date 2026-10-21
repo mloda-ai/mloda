@@ -103,12 +103,12 @@ def test_unsorted_input_end_to_end_alignment(window_function: str) -> None:
 
     pandas_fs = FeatureSet()
     pandas_fs.add(Feature(feature_name))
-    pandas_out = PandasTimeWindow.calculate(TimeWindowFeatureGroup, _unsorted_dataframe(), pandas_fs)
+    pandas_out = PandasTimeWindow.calculate(TimeWindowFeatureGroup, _unsorted_dataframe(), pandas_fs, None)
     pandas_result = _as_floats(pandas_out[feature_name].tolist())
 
     pyarrow_fs = FeatureSet()
     pyarrow_fs.add(Feature(feature_name))
-    pyarrow_out = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, _unsorted_table(), pyarrow_fs)
+    pyarrow_out = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, _unsorted_table(), pyarrow_fs, None)
     pyarrow_result = _as_floats(pyarrow_out.column(feature_name))
 
     assert pandas_result == pytest.approx(expected)
@@ -257,4 +257,4 @@ def test_null_reference_time_raises_value_error(cls: Any, data_factory: Callable
     feature_set = FeatureSet()
     feature_set.add(Feature("value__sum_3_hour_window"))
     with pytest.raises(ValueError):
-        cls.calculate(TimeWindowFeatureGroup, data_factory(), feature_set)
+        cls.calculate(TimeWindowFeatureGroup, data_factory(), feature_set, None)

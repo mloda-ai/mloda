@@ -242,7 +242,7 @@ class TestPythonDictMissingValueImputation:
     ) -> None:
         """Test calculate method with a single imputation."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_mean)
+        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_mean, None)
 
         # Check that the result contains the imputed feature
         assert "income__mean_imputed" in result
@@ -260,7 +260,9 @@ class TestPythonDictMissingValueImputation:
     ) -> None:
         """Test calculate method with multiple imputations."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_multiple)
+        result = PythonDictMissingValueImputation.calculate(
+            MissingValueFeatureGroup, data_copy, feature_set_multiple, None
+        )
 
         # Check that all imputed features are present
         assert "income__mean_imputed" in result
@@ -285,7 +287,9 @@ class TestPythonDictMissingValueImputation:
     ) -> None:
         """Test calculate method with constant imputation."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_constant)
+        result = PythonDictMissingValueImputation.calculate(
+            MissingValueFeatureGroup, data_copy, feature_set_constant, None
+        )
 
         # Check that the result contains the imputed feature
         assert "category__constant_imputed" in result
@@ -297,7 +301,9 @@ class TestPythonDictMissingValueImputation:
     ) -> None:
         """Test calculate method with grouped imputation."""
         data_copy = _copy_columnar(sample_data_with_missing)
-        result = PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set_grouped)
+        result = PythonDictMissingValueImputation.calculate(
+            MissingValueFeatureGroup, data_copy, feature_set_grouped, None
+        )
 
         # Check that the result contains the imputed feature
         assert "income__mean_imputed" in result
@@ -319,7 +325,7 @@ class TestPythonDictMissingValueImputation:
 
         data_copy = _copy_columnar(sample_data_with_missing)
         with pytest.raises(ValueError, match="Source features not found in data"):
-            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set)
+            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set, None)
 
     def test_calculate_feature_constant_without_value(self, sample_data_with_missing: dict[str, Any]) -> None:
         """Test calculate method with constant imputation but no constant value."""
@@ -328,7 +334,7 @@ class TestPythonDictMissingValueImputation:
 
         data_copy = _copy_columnar(sample_data_with_missing)
         with pytest.raises(ValueError, match="Constant value must be provided for constant imputation method"):
-            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set)
+            PythonDictMissingValueImputation.calculate(MissingValueFeatureGroup, data_copy, feature_set, None)
 
 
 class TestPythonDictMissingValueZeroRow(PythonDictZeroRowAdapter, MissingValueZeroRowTestMixin):

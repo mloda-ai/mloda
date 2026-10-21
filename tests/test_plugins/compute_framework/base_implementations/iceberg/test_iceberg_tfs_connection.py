@@ -95,6 +95,9 @@ class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
     destination_framework_class = ConnectionRecordingIcebergFramework
     destination_fg_class = TfsDoubledIcebergFG
 
+    def test_a_root_runs_on_the_one_dac_connection_without_a_class_name_option(self, live_connection: Any) -> None:
+        pytest.skip("Iceberg is read-only (no root conversion on a bound relation) and has no .connection on data")
+
     @pytest.fixture
     def live_connection(self) -> Any:
         _observed_catalogs.clear()

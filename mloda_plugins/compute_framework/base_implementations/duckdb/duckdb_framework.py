@@ -68,7 +68,9 @@ class DuckDBFramework(ComputeFramework):
         if duckdb is None:
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
         if framework_connection_object is None:
-            raise ValueError("A DuckDB connection object is required.")
+            raise ValueError(
+                "A DuckDB connection object is required. Put the connection in the DataAccessCollection and select it with connection_handle."
+            )
         if not isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             raise ValueError(f"Expected a DuckDB connection object, got {type(framework_connection_object)}")
         if self.framework_connection_object is not None:

@@ -236,7 +236,7 @@ class PandasMyOperation(Implementation):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group, data, features):
+    def calculate(cls, group, data, features, framework):
         ...  # group is the matched feature group class
 ```
 
@@ -286,7 +286,8 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 mloda picks one compute framework per step group (the features of one FeatureGroup that run as one step) in one planning step, before link joins are resolved.
 
 - **Allowed set**: the framework must fit the FeatureGroup (`compute_framework_rule`, `supports_compute_framework`), any pin via `Feature(compute_framework=...)`, and the run's enabled frameworks.
-- **Connection skip**: a `REQUIRED` framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. It is kept when every parent can run on that framework, because the step then uses the connection its input data carries. Parents carrying different connections keep the step off that framework. It is also kept when the feature has parents and the DataAccessCollection holds exactly one matching connection. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with `compute_frameworks=[DuckDBFramework]`.
+- **Connection skip**: a `REQUIRED` framework (DuckDB, SQLite) is a candidate for a feature, roots included, when the DataAccessCollection resolves a connection for it: by the feature's `connection_handle` option, or as the single matching connection. Two matching connections without a handle drop it, with a reason naming the handles. A non-root feature can also use the connection a parent carries, so the framework is kept when every parent can run on it; parents carrying different connections keep the step off that framework. Connections come only from the DataAccessCollection. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with `compute_frameworks=[DuckDBFramework]`.
+- **Bound connection**: the resolved connection is bound to every step that needs it, roots included. Parents on two different handles never share a DuckDB or SQLite consumer; a consumer pinned or restricted to that framework fails at planning naming both handles.
 - **Joins**: a link's child runs on one of its two sides. RIGHT joins run on the right side's framework, unless the consumers cannot run there, then on the left side's (only for links joining two different FeatureGroups). APPEND and UNION on the left. Children of one link agree on the side.
 - **Filters**: a filter pinned to a framework moves its host feature onto that framework.
 - **Conversions**: a transformer chain must exist between every parent and child on different frameworks.
@@ -320,7 +321,7 @@ For more details on how data transformation works between compute frameworks, se
 
 ## Framework Notes
 
-- **DuckDB**: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name, or from the relation its parents hand in (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. An `output_framework` of DuckDB or SQLite needs one only when a requested step runs on another framework and its result is converted. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
+- **DuckDB**: a step gets its connection from the DataAccessCollection (select one with the `connection_handle` option), or from the relation its parents hand in; a connection object in a feature option raises at planning. mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. An `output_framework` of DuckDB or SQLite needs one only when a requested step runs on another framework and its result is converted. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.
 - **Spark**: requires PySpark and a Java 17+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
 - **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 

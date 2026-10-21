@@ -8,6 +8,9 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 
 
 class Step(ABC):
+    connection_handle: str | None = None
+    connection_explicit: bool = False
+
     def __init__(self, required_uuids: set[UUID]) -> None:
         self.required_uuids = required_uuids
         self.uuid = uuid4()

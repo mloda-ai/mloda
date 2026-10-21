@@ -82,7 +82,7 @@ class TestPyArrowTimeWindow:
 
     def test_calculate_feature_single(self, sample_time_table: pa.Table, feature_set_avg_window: FeatureSet) -> None:
         """Test calculate_feature method with a single time window feature."""
-        result = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set_avg_window)
+        result = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set_avg_window, None)
 
         # Check that the result contains the original data plus the time window feature
         assert "temperature__avg_3_day_window" in result.schema.names
@@ -105,7 +105,9 @@ class TestPyArrowTimeWindow:
         self, sample_time_table: pa.Table, feature_set_multiple_windows: FeatureSet
     ) -> None:
         """Test calculate_feature method with multiple time window features."""
-        result = PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set_multiple_windows)
+        result = PyArrowTimeWindow.calculate(
+            TimeWindowFeatureGroup, sample_time_table, feature_set_multiple_windows, None
+        )
 
         # Check that the result contains all time window features
         assert "temperature__avg_3_day_window" in result.schema.names
@@ -125,7 +127,7 @@ class TestPyArrowTimeWindow:
         feature_set.add(Feature("missing__avg_3_day_window"))
 
         with pytest.raises(ValueError, match="None of the source features .* found in data"):
-            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set)
+            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_table, feature_set, None)
 
     def test_calculate_feature_missing_time_filter(self) -> None:
         """Test calculate_feature method with Table that has no time filter feature."""
@@ -144,7 +146,7 @@ class TestPyArrowTimeWindow:
             ValueError,
             match=f"Reference time column '{DefaultOptionKeys.reference_time}' not found in data.*",
         ):
-            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set)
+            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set, None)
 
     def test_calculate_feature_invalid_time_column(self, sample_time_table: pa.Table) -> None:
         """Test calculate_feature method with invalid time column type."""
@@ -163,7 +165,7 @@ class TestPyArrowTimeWindow:
             ValueError,
             match=f"Column '{DefaultOptionKeys.reference_time}' must be temporal.*",
         ):
-            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set)
+            PyArrowTimeWindow.calculate(TimeWindowFeatureGroup, table, feature_set, None)
 
 
 class TestPyArrowTimeWindowZeroRow(PyArrowZeroRowAdapter, TimeWindowZeroRowTestMixin):

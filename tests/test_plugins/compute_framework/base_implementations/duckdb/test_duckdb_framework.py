@@ -375,6 +375,9 @@ import mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framew
 
 @pytest.mark.skipif(duckdb is None, reason="DuckDB is not installed.")
 class TestDuckDBTfsConnectionInit(TfsConnectionInitMixin):
+    def data_on_connection(self, connection: Any) -> Any:
+        return DuckdbRelation.from_arrow(connection, pa.Table.from_pydict({"a": [1]}))
+
     @pytest.fixture
     def framework_class(self) -> Any:
         return DuckDBFramework

@@ -281,7 +281,7 @@ class TestTimeWindowFeatureGroup:
         feature_set.add(Feature("missing__sum_2_hour_window"))
         expected = "None of the source features ['missing'] found in data. Available columns: "
         with pytest.raises(ValueError) as exc_info:
-            impl.calculate(TimeWindowFeatureGroup, data, feature_set)
+            impl.calculate(TimeWindowFeatureGroup, data, feature_set, None)
         assert str(exc_info.value) == expected + str(sorted(["b", "a", REFERENCE_TIME], key=str))
 
     def test_window_raises_one_wording_for_a_missing_reference_time(self) -> None:

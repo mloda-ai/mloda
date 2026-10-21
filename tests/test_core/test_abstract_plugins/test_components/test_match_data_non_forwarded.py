@@ -5,7 +5,12 @@ input features via Options.inherit_from or Features.build_feature_collection."""
 
 from typing import Any
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+import pytest
+
+from mloda.core.abstract_plugins.components.data_access_collection import (
+    CONNECTION_HANDLE_OPTION,
+    DataAccessCollection,
+)
 from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.abstract_plugins.components.options import Options
 
@@ -35,27 +40,44 @@ class _StubMatchDataFG(MatchData):
         return None
 
 
-class TestGlobalScopeDataAccessMarksNonForwarded:
-    """global_scope_data_access delegates to add_base_input_data_to_options, which must mark the
-    class-name key non-forwarded."""
+class TestGlobalScopeDataAccessWritesTheConnectionHandle:
+    """A DAC connection match records its DAC handle under connection_handle, never the object."""
 
-    def test_match_marks_class_name_key_non_forwarded(self) -> None:
+    def test_match_sets_connection_handle_to_the_dac_handle(self) -> None:
         options = Options()
+        conn = _StubConnection()
+        # The stub returns the first _StubConnection, so "handle" is the match; "first" and "last" must not win.
+        dac = DataAccessCollection(connections={"first": "not_a_connection", "handle": conn, "last": _StubConnection()})
+
+        matched = _StubMatchDataFG.global_scope_data_access("some_feature", options, dac)
+
+        assert matched is True
+        assert options.get(CONNECTION_HANDLE_OPTION) == "handle"
+
+    def test_match_writes_nothing_under_the_class_name_key(self) -> None:
+        options = Options()
+        dac = DataAccessCollection(connections={"handle": _StubConnection()})
+
+        _StubMatchDataFG.global_scope_data_access("some_feature", options, dac)
+
+        assert _StubMatchDataFG.get_class_name() not in options
+        assert _StubMatchDataFG.get_class_name() not in options.non_forwarded_group_keys
+
+    def test_an_equal_existing_connection_handle_is_kept(self) -> None:
+        options = Options(group={CONNECTION_HANDLE_OPTION: "handle"})
         dac = DataAccessCollection(connections={"handle": _StubConnection()})
 
         matched = _StubMatchDataFG.global_scope_data_access("some_feature", options, dac)
 
         assert matched is True
-        assert _StubMatchDataFG.get_class_name() in options.non_forwarded_group_keys
+        assert options.get(CONNECTION_HANDLE_OPTION) == "handle"
 
-    def test_match_still_sets_the_value(self) -> None:
-        options = Options()
-        conn = _StubConnection()
-        dac = DataAccessCollection(connections={"handle": conn})
+    def test_a_different_existing_connection_handle_raises(self) -> None:
+        options = Options(group={CONNECTION_HANDLE_OPTION: "other"})
+        dac = DataAccessCollection(connections={"handle": _StubConnection()})
 
-        _StubMatchDataFG.global_scope_data_access("some_feature", options, dac)
-
-        assert options.get(_StubMatchDataFG.get_class_name()) is conn
+        with pytest.raises(ValueError, match="already set with different values"):
+            _StubMatchDataFG.global_scope_data_access("some_feature", options, dac)
 
     def test_no_match_does_not_mark(self) -> None:
         """A non-None DAC reaches match_data_access, whose isinstance check declines a non-_StubConnection value."""

@@ -31,7 +31,7 @@ class PythonDictTextCleaning(Implementation):
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet) -> Any:
+    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
         return group.clean(

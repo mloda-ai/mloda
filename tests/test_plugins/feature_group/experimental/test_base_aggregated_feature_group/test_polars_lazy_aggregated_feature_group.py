@@ -166,7 +166,7 @@ class TestPolarsLazyAggregation:
 
     def test_calculate_feature_single(self, sample_lazy_dataframe: Any, feature_set_sum: FeatureSet) -> None:
         """Test calculate_feature method with a single aggregation."""
-        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set_sum)
+        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set_sum, None)
 
         # The result should still be a LazyFrame
         assert hasattr(result, "collect_schema")
@@ -188,7 +188,9 @@ class TestPolarsLazyAggregation:
 
     def test_calculate_feature_multiple(self, sample_lazy_dataframe: Any, feature_set_multiple: FeatureSet) -> None:
         """Test calculate_feature method with multiple aggregations."""
-        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set_multiple)
+        result = PolarsLazyAggregation.calculate(
+            AggregatedFeatureGroup, sample_lazy_dataframe, feature_set_multiple, None
+        )
 
         # The result should still be a LazyFrame
         assert hasattr(result, "collect_schema")
@@ -220,7 +222,7 @@ class TestPolarsLazyAggregation:
         feature_set.add(Feature("missing__sum_aggr"))
 
         with pytest.raises(ValueError, match="None of the source features") as exc_info:
-            PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set)
+            PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set, None)
         assert "Available columns" in str(exc_info.value)
         assert "sales" in str(exc_info.value)
 
@@ -235,7 +237,7 @@ class TestPolarsLazyAggregation:
             feature_set.add(Feature("sales__min_aggr"))
 
             with pytest.raises(ValueError, match="Unsupported aggregation type: min"):
-                PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set)
+                PolarsLazyAggregation.calculate(AggregatedFeatureGroup, sample_lazy_dataframe, feature_set, None)
         finally:
             # Restore the original AGGREGATION_TYPES
             AggregatedFeatureGroup.AGGREGATION_TYPES = original_types
@@ -344,7 +346,7 @@ class TestPolarsLazyAggregationIntegration:
         feature_set.add(Feature("sales__sum_aggr"))
         feature_set.add(Feature("price__avg_aggr"))
 
-        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, lazy_frame, feature_set)
+        result = PolarsLazyAggregation.calculate(AggregatedFeatureGroup, lazy_frame, feature_set, None)
 
         # The result should still be a LazyFrame (not collected)
         assert hasattr(result, "collect_schema")

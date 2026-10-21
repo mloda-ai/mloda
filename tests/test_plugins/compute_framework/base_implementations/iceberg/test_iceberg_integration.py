@@ -689,10 +689,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         )
 
         # Define features to calculate with catalog connection
-        feature_list: Features | list[Feature | str] = [
-            Feature(name="doubled_value", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
-            Feature(name="score_plus_ten", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
-        ]
+        feature_list: Features | list[Feature | str] = [Feature(name="doubled_value"), Feature(name="score_plus_ten")]
 
         data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
@@ -730,9 +727,7 @@ class TestIcebergIntegrationWithMlodaAPI:
         )
 
         # Define feature that requires transformation between frameworks
-        feature_list: Features | list[Feature | str] = [
-            Feature(name="arrow_doubled_value", options={"IcebergTestDataCreator": mock_iceberg_catalog})
-        ]
+        feature_list: Features | list[Feature | str] = [Feature(name="arrow_doubled_value")]
 
         data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})
 
@@ -767,9 +762,9 @@ class TestIcebergIntegrationWithMlodaAPI:
 
         # Request basic features from the data creator
         feature_list: Features | list[Feature | str] = [
-            Feature(name="id", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
-            Feature(name="value", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
-            Feature(name="category", options={"IcebergTestDataCreator": mock_iceberg_catalog}),
+            Feature(name="id"),
+            Feature(name="value"),
+            Feature(name="category"),
         ]
 
         data_access_collection = DataAccessCollection(connections={mock_iceberg_catalog})

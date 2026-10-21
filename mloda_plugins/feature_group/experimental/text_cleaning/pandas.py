@@ -37,7 +37,7 @@ class PandasTextCleaning(Implementation):
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet) -> Any:
+    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
         return group.clean(
             data,
             features,

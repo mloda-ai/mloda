@@ -326,7 +326,7 @@ def test_calculate_delegates_to_the_group_it_is_handed(name: str, impl: type[Any
     feature_set = FeatureSet()
     feature_set.add(Feature(feature_name))
 
-    result = impl.calculate(group, data, feature_set)
+    result = impl.calculate(group, data, feature_set, None)
 
     getattr(group, loop).assert_called_once_with(
         data, feature_set, **{key: resolve(impl) for key, resolve in expected.items()}

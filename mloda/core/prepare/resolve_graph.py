@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 from uuid import UUID
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -27,17 +27,19 @@ class ResolveGraph:
         positions: Mapping[type[ComputeFramework], int] | None = None,
         output_framework: type[ComputeFramework] | None = None,
         connection_dropped: Mapping[UUID, frozenset[type[ComputeFramework]]] | None = None,
-        connected: Mapping[type[ComputeFramework], Any] | None = None,
         pin_frameworks: Mapping[UUID, frozenset[type[ComputeFramework]]] | None = None,
         pinned: set[UUID] | None = None,
         implementations: Iterable[type[Implementation]] | None = None,
+        handle_of: Callable[[type[ComputeFramework], Any], tuple[str | None, bool]] | None = None,
+        connection_reasons: Mapping[UUID, Mapping[type[ComputeFramework], str]] | None = None,
     ):
         self.implementations = implementations
         self.pin_frameworks = pin_frameworks or {}
         self.pinned = pinned or set()
         self.output_framework = output_framework
         self.connection_dropped = connection_dropped or {}
-        self.connected: Mapping[type[ComputeFramework], Any] = connected or {}
+        self.handle_of = handle_of
+        self.connection_reasons = connection_reasons or {}
         self.graph = graph
         self.filter_ties = filter_ties or []
         self.positions: Mapping[type[ComputeFramework], int] = positions or {}
@@ -62,10 +64,11 @@ class ResolveGraph:
             self.positions,
             output_framework=self.output_framework,
             dropped=self.connection_dropped,
-            connected=self.connected,
             pin_frameworks=self.pin_frameworks,
             pinned=self.pinned,
             implementations=self.implementations,
+            handle_of=self.handle_of,
+            dropped_reasons=self.connection_reasons,
         ).choose()
         self.resolver_links.resolve_links()
         # we put link into queue depending on feature link relation

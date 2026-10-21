@@ -13,13 +13,14 @@ import pytest
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.options import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
-from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import (
@@ -183,6 +184,117 @@ class TestImplementation:
         spy_impl = make_implementation(_Spy, PythonDictFramework, _sentinel)
         assert column_values(_run(_Spy), "toyfmt_ld") == [111, 222]
         assert seen == [spy_impl]
+
+
+class TestImplementationReceivesFramework:
+    def _run_capturing(self, tmp_path: Path, extenders: Any = None) -> list[tuple[Any, Any]]:
+        group = neutral_csv_group(tmp_path / "n.csv")
+        seen: list[tuple[Any, Any]] = []
+
+        class _FrameworkImpl(Implementation):
+            feature_group = group
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+                seen.append((framework, ComputeFramework.current()))
+                return SENTINEL
+
+        result = mloda.run_all(
+            ["toyfmt_ld"],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            data_access_collection=toy_dac(h1={"toyfmt_ld": [1, 2]}),
+            function_extender=extenders,
+        )
+        assert column_values(result, "toyfmt_ld") == [111, 222]
+        del _FrameworkImpl
+        gc.collect()
+        return seen
+
+    def test_framework_instance_is_passed_without_extender(self, tmp_path: Path) -> None:
+        seen = self._run_capturing(tmp_path)
+
+        assert len(seen) == 1
+        assert isinstance(seen[0][0], PythonDictFramework)
+
+    def test_framework_instance_is_the_one_running_the_step(self, tmp_path: Path) -> None:
+        capture = _LoadCapture()
+        seen = self._run_capturing(tmp_path, {capture})
+
+        assert len(capture.contexts) == 1
+        assert len(seen) == 1
+        framework, running = seen[0]
+        assert isinstance(framework, PythonDictFramework)
+        assert framework is running
+
+
+class TestImplementationSeesDacConnection:
+    """A DuckDB Implementation reads the DataAccessCollection connection from the framework, implicit or named."""
+
+    @pytest.mark.parametrize("named", [False, True], ids=["implicit", "connection_handle"])
+    def test_framework_connection_object_is_the_dac_connection(self, tmp_path: Path, named: bool) -> None:
+        duckdb = pytest.importorskip("duckdb")
+        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
+        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
+        group = neutral_csv_group(tmp_path / "n.csv")
+        conn = duckdb.connect()
+        seen: list[Any] = []
+
+        class _DuckImpl(Implementation):
+            feature_group = group
+            compute_framework = DuckDBFramework
+
+            @classmethod
+            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+                seen.append(framework.framework_connection_object)
+                conn = framework.framework_connection_object or framework.fallback_connection_object
+                return DuckdbRelation.from_dict(conn or duckdb.connect(), {"toyfmt_ld": [1, 2]})
+
+        options = {"connection_handle": "w"} if named else {}
+        dac = DataAccessCollection(
+            credentials={"h1": {"toyfmt_columns": {"toyfmt_ld": [1, 2]}}}, connections={"w": conn}
+        )
+        mloda.run_all(
+            [Feature("toyfmt_ld", options=options)],
+            compute_frameworks=[DuckDBFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            data_access_collection=dac,
+        )
+        del _DuckImpl
+        gc.collect()
+
+        assert len(seen) == 1
+        assert seen[0] is conn
+
+
+class TestCalculateFeatureWithoutMarker:
+    def test_a_missing_load_marker_passes_no_framework(self, tmp_path: Path) -> None:
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+
+        group = neutral_csv_group(tmp_path / "n.csv")
+        frameworks: list[Any] = []
+
+        class _NoneImpl(Implementation):
+            feature_group = group
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+                frameworks.append(framework)
+                return SENTINEL
+
+        feature = Feature("toyfmt_ld")
+        feature.input_data_match = (group, _MATCH)
+        features = FeatureSet([feature])
+        features.implementation = _NoneImpl
+
+        group.calculate_feature(None, features)
+        del _NoneImpl
+        gc.collect()
+
+        assert frameworks == [None]
 
 
 @pytest.fixture

@@ -32,7 +32,7 @@ class PolarsLazyAggregation(Implementation):
     }
 
     @classmethod
-    def calculate(cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet) -> Any:
+    def calculate(cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
         return group.aggregate(
             data,
             features,

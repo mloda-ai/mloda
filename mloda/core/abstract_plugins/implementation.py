@@ -36,7 +36,7 @@ def _names_a_pair(cls: Any) -> bool:
 
 
 class Implementation(ABC):
-    """Names its pair with feature_group and compute_framework; a format group calls calculate(group, match, features)."""
+    """Names its pair with feature_group and compute_framework; a format group calls calculate(group, match, features, framework), an operation group (group, data, features, framework)."""
 
     feature_group: ClassVar[type[FeatureGroup]]
     compute_framework: ClassVar[type[ComputeFramework]]
@@ -89,7 +89,7 @@ class Implementation(ABC):
     @classmethod
     @abstractmethod
     def calculate(cls, *args: Any, **kwargs: Any) -> Any:
-        """Load the source; a format group passes (group, match, features)."""
+        """Load the source; a format group passes (group, match, features, framework), an operation group (group, data, features, framework)."""
 
 
 def serving_implementation(

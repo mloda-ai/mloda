@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.validate_multiprocessing_link import raise_on_multiprocessing_connection_conflict
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
@@ -20,9 +22,13 @@ class _ConnectionConflictUnitCFW(ComputeFramework):
         return False
 
 
+def _hop_with_handle(cfw_class: type[ComputeFramework]) -> TransformFrameworkStep:
+    return TransformFrameworkStep(cfw_class, cfw_class, set(), FeatureGroup, FeatureGroup, connection_handle="h")
+
+
 def test_a_framework_supporting_multiprocessing_with_a_resolved_connection_is_rejected() -> None:
     with pytest.raises(ValueError) as excinfo:
-        raise_on_multiprocessing_connection_conflict({_ConnectionConflictUnitCFW: object()})
+        raise_on_multiprocessing_connection_conflict([_hop_with_handle(_ConnectionConflictUnitCFW)])
 
     message = str(excinfo.value)
     assert _ConnectionConflictUnitCFW.__name__ in message, f"the offending framework must be named; got: {message}"
@@ -43,8 +49,8 @@ def test_a_framework_supporting_multiprocessing_with_a_resolved_connection_is_re
 def test_a_framework_excluding_multiprocessing_with_a_resolved_connection_does_not_raise(
     cfw_class: type[ComputeFramework],
 ) -> None:
-    raise_on_multiprocessing_connection_conflict({cfw_class: object()})
+    raise_on_multiprocessing_connection_conflict([_hop_with_handle(cfw_class)])
 
 
 def test_an_empty_connection_map_does_not_raise() -> None:
-    raise_on_multiprocessing_connection_conflict({})
+    raise_on_multiprocessing_connection_conflict([])

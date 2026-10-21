@@ -19,7 +19,7 @@ class PythonDictMissingValueImputation(Implementation):
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet) -> Any:
+    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
         return group.impute(

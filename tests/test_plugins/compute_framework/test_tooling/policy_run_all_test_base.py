@@ -17,7 +17,6 @@ from typing import Any, Callable
 
 import pytest
 
-from mloda.provider import FeatureGroup
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
 from mloda.user import GlobalFilter
@@ -97,7 +96,7 @@ class PolicyRunAllTestBase(ABC):
     """Drives a FeatureGroup-level policy end-to-end through ``run_all``.
 
     Subclasses implement ``compute_framework_name`` and, for connection-backed frameworks,
-    ``get_connection`` plus ``connection_keyed_feature_groups``.
+    ``get_connection`` (the connection travels in the DataAccessCollection).
     """
 
     @classmethod
@@ -110,16 +109,10 @@ class PolicyRunAllTestBase(ABC):
         """Return a framework connection object, or None when none is needed."""
         return None
 
-    @classmethod
-    def connection_keyed_feature_groups(cls) -> set[type[FeatureGroup]]:
-        """FeatureGroup classes whose ``get_class_name()`` keys the connection in options."""
-        return set()
-
     def _features_and_dac(self, feature_names: Sequence[str]) -> tuple[list[Feature], DataAccessCollection | None]:
         conn = self.get_connection()
         if conn is not None:
-            options = {fg.get_class_name(): conn for fg in self.connection_keyed_feature_groups()}
-            features = [Feature(name=name, options=dict(options)) for name in feature_names]
+            features = [Feature(name=name) for name in feature_names]
             return features, DataAccessCollection(connections={conn})
         return [Feature(name=name) for name in feature_names], None
 

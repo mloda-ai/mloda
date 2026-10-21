@@ -148,7 +148,7 @@ def _(mo):
                 return next(csv.reader(f), [])
     ```
 
-    Its neutral form is a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. An `Implementation` class for a compute framework, whose `calculate(group, match, features)` returns the data, replaces that for the framework.
+    Its neutral form is a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. An `Implementation` class for a compute framework, whose `calculate(group, match, features, framework)` returns the data, replaces that for the framework.
 
     As you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion.
     """)
@@ -188,7 +188,7 @@ def _(PyArrowTable):
         compute_framework = PyArrowTable
 
         @classmethod
-        def calculate(cls, group: Any, match: SourceMatch, features: FeatureSet) -> Any:
+        def calculate(cls, group: Any, match: SourceMatch, features: FeatureSet, framework: Any) -> Any:
             result = pyarrow_csv.read_csv(match.access, parse_options=group._parse_options)
             print("We used CsvFG2 to load the data.")
             return result.select(list(features.get_all_names()))
@@ -262,7 +262,7 @@ def _(mo):
             )
 
             # The custom read lives in the Implementation for PyArrowTable
-            CsvFG2PyArrowTable.calculate(CsvFG2, SourceMatch(source="data.csv", access="data.csv"), Mock(spec=FeatureSet))
+            CsvFG2PyArrowTable.calculate(CsvFG2, SourceMatch(source="data.csv", access="data.csv"), Mock(spec=FeatureSet), None)
 
             # Verify that the read used the customized parse options
             self.assertEqual(mock_read_csv.call_args.kwargs["parse_options"], expected_parse_options)

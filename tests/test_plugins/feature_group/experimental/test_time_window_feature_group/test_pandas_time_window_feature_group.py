@@ -69,7 +69,7 @@ class TestPandasTimeWindow:
         self, sample_time_dataframe: pd.DataFrame, feature_set_avg_window: FeatureSet
     ) -> None:
         """Test calculate_feature method with a single time window feature."""
-        result = PandasTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_dataframe, feature_set_avg_window)
+        result = PandasTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_dataframe, feature_set_avg_window, None)
 
         # Check that the result contains the original data plus the time window feature
         assert "temperature__avg_3_day_window" in result.columns
@@ -92,7 +92,9 @@ class TestPandasTimeWindow:
         self, sample_time_dataframe: pd.DataFrame, feature_set_multiple_windows: FeatureSet
     ) -> None:
         """Test calculate_feature method with multiple time window features."""
-        result = PandasTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_dataframe, feature_set_multiple_windows)
+        result = PandasTimeWindow.calculate(
+            TimeWindowFeatureGroup, sample_time_dataframe, feature_set_multiple_windows, None
+        )
 
         # Check that the result contains all time window features
         assert "temperature__avg_3_day_window" in result.columns
@@ -112,7 +114,7 @@ class TestPandasTimeWindow:
         feature_set.add(Feature("missing__avg_3_day_window"))
 
         with pytest.raises(ValueError, match="None of the source features .* found in data"):
-            PandasTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_dataframe, feature_set)
+            PandasTimeWindow.calculate(TimeWindowFeatureGroup, sample_time_dataframe, feature_set, None)
 
     def test_calculate_feature_missing_time_filter(self) -> None:
         """Test calculate_feature method with DataFrame that has no time filter feature."""
@@ -131,7 +133,7 @@ class TestPandasTimeWindow:
             ValueError,
             match=f"Reference time column '{DefaultOptionKeys.reference_time}' not found in data.*",
         ):
-            PandasTimeWindow.calculate(TimeWindowFeatureGroup, df, feature_set)
+            PandasTimeWindow.calculate(TimeWindowFeatureGroup, df, feature_set, None)
 
 
 class TestPandasTimeWindowZeroRow(PandasZeroRowAdapter, TimeWindowZeroRowTestMixin):

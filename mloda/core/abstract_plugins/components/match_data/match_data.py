@@ -1,6 +1,9 @@
 from typing import Any
 
-from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.data_access_collection import (
+    CONNECTION_HANDLE_OPTION,
+    DataAccessCollection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 
@@ -68,7 +71,15 @@ class MatchData:
             return False
 
         # We need to add the matched data access to the options of the feature. This way it is linked throughout mloda.
-        cls.add_base_input_data_to_options(matched_data_access, options)
+        handle = next(
+            (h for h, conn in data_access_collection.connections.items() if conn is matched_data_access), None
+        )
+        if handle is None:
+            cls.add_base_input_data_to_options(matched_data_access, options)
+            return True
+        if cls.get_class_name() in options:
+            cls.add_base_input_data_to_options(matched_data_access, options)
+        cls.add_base_input_data_to_options(handle, options, CONNECTION_HANDLE_OPTION)
         return True
 
     @classmethod
@@ -86,12 +97,12 @@ class MatchData:
         raise NotImplementedError()
 
     @classmethod
-    def add_base_input_data_to_options(cls, matched_data_access: Any, options: Options) -> None:
+    def add_base_input_data_to_options(cls, matched_data_access: Any, options: Options, key: str | None = None) -> None:
         """
-        Adding the found data access class to the options.
+        Adding the found data access (or its connection handle, via key) to the options.
         """
 
-        cls_name = cls.get_class_name()
+        cls_name = key or cls.get_class_name()
 
         if cls_name in options:
             existing_data = options.get(cls_name)
@@ -101,11 +112,18 @@ class MatchData:
                 options.mark_non_forwarded(cls_name)
                 return
 
+            if cls_name == CONNECTION_HANDLE_OPTION and cls_name in options.inherited_group_keys:
+                # A handle only inherited from the consumer yields to this matcher's own; a later write conflicts.
+                options.group[cls_name] = matched_data_access
+                options.inherited_group_keys = options.inherited_group_keys - {cls_name}
+                options.mark_non_forwarded(cls_name)
+                return
+
             # Marked: two conflicting readers for one feature is a user misconfiguration.
             # Keyed on presence so add_to_group cannot raise it unmarked; access named by type, it may hold secrets.
             raise escalate_match_abort(
                 ValueError(
-                    f"{cls_name} already set with different values. "
+                    f"{cls.get_class_name()} already set with different values. "
                     f"incoming={type(matched_data_access).__name__}, existing={type(existing_data).__name__}"
                 )
             )

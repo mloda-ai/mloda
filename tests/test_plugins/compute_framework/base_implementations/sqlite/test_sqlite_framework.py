@@ -181,6 +181,11 @@ from tests.test_plugins.compute_framework.base_implementations.tfs_connection_te
 
 
 class TestSqliteTfsConnectionInit(TfsConnectionInitMixin):
+    missing_connection_prefix = r"sqlite3\.Connection object is required"
+
+    def data_on_connection(self, connection: Any) -> Any:
+        return SqliteRelation.from_dict(connection, {"a": [1]})
+
     @pytest.fixture
     def framework_class(self) -> Any:
         return SqliteFramework

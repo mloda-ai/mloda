@@ -178,8 +178,17 @@ def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]
     )
 
 
-def raise_on_multiprocessing_connection_conflict(tfs_connection_map: dict[type[ComputeFramework], Any]) -> None:
-    """Raise ValueError if a cfw class in tfs_connection_map supports MULTIPROCESSING."""
-    for cfw_class in tfs_connection_map:
+def raise_on_multiprocessing_connection_conflict(steps: Iterable[Any]) -> None:
+    """Raise ValueError if a step with a connection handle runs on a framework that supports MULTIPROCESSING."""
+    for step in steps:
+        if step.connection_handle is None:
+            continue
+        cfw_class = (
+            step.compute_framework
+            if isinstance(step, FeatureGroupStep)
+            else step.to_framework
+            if isinstance(step, TransformFrameworkStep)
+            else step.destination_framework
+        )
         if ParallelizationMode.MULTIPROCESSING in cfw_class.supported_parallelization_modes():
             raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))

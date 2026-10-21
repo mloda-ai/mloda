@@ -194,18 +194,10 @@ class AsofRunAllTestBase(ABC):
         conn = self.get_connection()
 
         if conn is not None:
-            feature = Feature(
-                name=AsofJoinedFeature.get_class_name(),
-                options={
-                    AsofLeftFeature.get_class_name(): conn,
-                    AsofRightFeature.get_class_name(): conn,
-                    AsofJoinedFeature.get_class_name(): conn,
-                },
-            )
             data_access_collection = DataAccessCollection(connections={conn})
         else:
-            feature = Feature(name=AsofJoinedFeature.get_class_name())
             data_access_collection = None
+        feature = Feature(name=AsofJoinedFeature.get_class_name())
 
         result = mloda.run_all(
             [feature],

@@ -58,7 +58,7 @@ CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib 
 
 A database implementation receives `match.access` as a `DBTable` (or a `DBQuery` on the query route), both from `mloda.provider`. A subclass that changes parsing (for example a semicolon CSV overriding only `column_names`) must also override `load_neutral`, otherwise the inherited neutral form and the inherited implementations still parse the parent format.
 
-A per-framework fast path is an `Implementation` (from `mloda.provider`): set `feature_group` (a `FormatFeatureGroup` subclass) and `compute_framework`, and write a classmethod `calculate(group, match, features)` that returns the data. At plan build mloda picks one per step over the governed set, walking the group MRO, then the framework MRO, most specific pair first; the serving subclass is passed as `group`. A class that overrides `load_neutral` cuts off implementations inherited from above it, and a subclass of an implementation replaces it. Two implementations of one exact pair where neither subclasses the other stop the environment build with `EnvironmentPreconditionError`. Without an implementation the group loads `load_neutral` and a transformer converts. An implementation must stay referenced: define it at module level, because an unreferenced class is garbage-collected and no longer found. Disable one with `PluginCollector.add_disabled_implementation_classes`. Calls made without an engine (`count_rows`) see every loaded implementation, not the governed set. `Implementation.version()` hashes the class like a FeatureGroup's. `PlanStep`, the plan lock and `HookContext.implementation` record which implementation ran.
+A per-framework fast path is an `Implementation` (from `mloda.provider`): set `feature_group` (a `FormatFeatureGroup` subclass) and `compute_framework`, and write a classmethod `calculate(group, match, features, framework)` that returns the data. At plan build mloda picks one per step over the governed set, walking the group MRO, then the framework MRO, most specific pair first; the serving subclass is passed as `group`. A class that overrides `load_neutral` cuts off implementations inherited from above it, and a subclass of an implementation replaces it. Two implementations of one exact pair where neither subclasses the other stop the environment build with `EnvironmentPreconditionError`. Without an implementation the group loads `load_neutral` and a transformer converts. An implementation must stay referenced: define it at module level, because an unreferenced class is garbage-collected and no longer found. Disable one with `PluginCollector.add_disabled_implementation_classes`. Calls made without an engine (`count_rows`) see every loaded implementation, not the governed set. `Implementation.version()` hashes the class like a FeatureGroup's. `PlanStep`, the plan lock and `HookContext.implementation` record which implementation ran.
 
 The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (`" 1 "`), `inf`/`infinity`, uppercase `NAN` (the float value, not the `NaN` null token), hex literals (`0x1f`), and a `true`/`1` mix (pyarrow reads `1`/`0` as bools too).
 
@@ -174,22 +174,20 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
         data_access_collection: DataAccessCollection | None = None,
         framework_connection_object: Any | None = None,
     ) -> Any:
-        # Logic to determine if this matcher handles DuckDB connections
-        if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
+        # Connections come from the DataAccessCollection only
         if data_access_collection is not None:
             return data_access_collection.resolve(
                 "connection",
                 predicate=lambda c: isinstance(c, duckdb.DuckDBPyConnection),
-                hint=options.get("data_access_handle"),
+                hint=options.get("connection_handle") or options.get("data_access_handle"),
             )
         return None
 ```
 
-### Connection Forwarding
-- The connection value forwards to input features like any other option, including across a same-class chain (an upstream feature resolved by the same MatchData class as its consumer).
-- Both MatchData entry points (`global_scope_data_access` and `feature_scope_data_access`) mark the class-name key non-forwarded for pickling, without blocking normal option flow.
-- Pickling an `Options` with a marked key (multiprocessing preflight or a worker handoff) drops that key from the snapshot, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs even though the connection itself can't be pickled. In-process reads are unaffected.
+### Connection Handle
+- A connection lives only in the DataAccessCollection. A connection object under a feature option, including the group's class name, raises at planning and asks you to move it to the collection and select it with `connection_handle`. The option under a group's class name is only a format pointer.
+- When `match_data_access` returns a connection of the collection, `global_scope_data_access` writes its handle to the `connection_handle` option, never the object under the class name. The handle is picklable, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs.
+- The handle forwards to input features, but an input feature whose own matcher selects another connection overrides the inherited one. A handle the feature sets itself still conflicts with its matcher.
 
 ## Combined Usage Example
 ```py
@@ -202,9 +200,11 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
     def match_data_access(cls, feature_name: str, options: Options,
                          data_access_collection: DataAccessCollection | None = None,
                          framework_connection_object: Any | None = None) -> Any:
-        # MatchData for connection object matching
-        if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
+        # MatchData for connection object matching, from the DataAccessCollection
+        if data_access_collection is not None:
+            return data_access_collection.resolve(
+                "connection", predicate=lambda c: isinstance(c, duckdb.DuckDBPyConnection)
+            )
         return None
 ```
 ## Practical Examples

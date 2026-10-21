@@ -405,6 +405,11 @@ class DocsCatalogAnchorFG(FeatureGroup):
         return {"docs_catalog_anchor_feature_unique_xyz"}
 
 
+def _scoped_collector(*classes: type[FeatureGroup]) -> PluginCollector:
+    """Collector enabling the healthy anchor plus the given classes, so docs never walk every subclass."""
+    return PluginCollector.enabled_feature_groups({DocsCatalogAnchorFG, *classes})
+
+
 # ---------------------------------------------------------------------------
 # Case 6: plugin_collector=None end-to-end via PreFilterPlugins
 # ---------------------------------------------------------------------------
@@ -737,7 +742,7 @@ def test_get_feature_group_docs_with_allow_redefinition_does_not_raise() -> None
     v2 = _exec_fg_in_main(qualname, src_v2, "cell-test12-v2")
     _REF_STORE.extend([v1, v2])
 
-    plugin_collector = PluginCollector().set_allow_redefinition()
+    plugin_collector = _scoped_collector(v1, v2).set_allow_redefinition()
     result = get_feature_group_docs(plugin_collector=plugin_collector)
 
     assert isinstance(result, list)
@@ -774,7 +779,7 @@ def test_get_feature_group_docs_degrades_gracefully_on_redef_conflict_without_fl
     v2 = _exec_fg_in_main(qualname, src_v2, "cell-test13-v2")
     _REF_STORE.extend([v1, v2])
 
-    result = get_feature_group_docs()
+    result = get_feature_group_docs(plugin_collector=_scoped_collector(v1, v2))
 
     assert isinstance(result, list), f"get_feature_group_docs must not raise on a redef conflict, got {type(result)}"
     assert all(isinstance(item, FeatureGroupInfo) for item in result), (
@@ -804,7 +809,8 @@ def test_get_feature_group_docs_filter_runs_before_dedup() -> None:
     v2 = _exec_fg_in_main(qualname, src_v2, "cell-test17-v2")
     _REF_STORE.extend([v1, v2])
 
-    plugin_collector = PluginCollector.disabled_feature_groups({v1})
+    plugin_collector = _scoped_collector(v1, v2)
+    plugin_collector.add_disabled_feature_group_classes({v1})
 
     # With v1 filtered before dedup, only v2 remains — no conflict, must not raise.
     result = get_feature_group_docs(plugin_collector=plugin_collector)
@@ -961,7 +967,7 @@ def test_get_feature_group_docs_annotates_unintrospectable_class_with_unavailabl
         type("MyFG_Test19_FakeModule", (FeatureGroup,), {"__module__": fake_module}),
     )
 
-    result = get_feature_group_docs()
+    result = get_feature_group_docs(plugin_collector=_scoped_collector(fake_cls))
 
     assert isinstance(result, list), (
         f"get_feature_group_docs must not raise on an unintrospectable class, got {type(result)}"
@@ -1012,7 +1018,7 @@ def test_get_feature_group_docs_redef_conflict_does_not_leak_main_classes() -> N
     v2 = _exec_fg_in_main(qualname, src_v2, "cell-test20-v2")
     _REF_STORE.extend([v1, v2])
 
-    result = get_feature_group_docs()
+    result = get_feature_group_docs(plugin_collector=_scoped_collector(v1, v2))
 
     assert isinstance(result, list), f"get_feature_group_docs must not raise on a redef conflict, got {type(result)}"
     assert all(item.module != "__main__" for item in result), (
@@ -1066,7 +1072,7 @@ def test_get_feature_group_docs_reload_conflict_collapses_to_live_class() -> Non
     v2_version = v2.version()
     assert v1_version != v2_version, "the two versions must have differing source hashes for a real conflict"
 
-    result = get_feature_group_docs()
+    result = get_feature_group_docs(plugin_collector=_scoped_collector(v1, v2))
 
     # Snapshot plain data, then clean up so the assertions below cannot leak
     # the live-module conflict into later tests on this worker.

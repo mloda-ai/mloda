@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.user import PluginLoader
+from tests.helpers.docs_scope import shipped_feature_groups_collector
 from tests.helpers.plugin_stubs import make_raising_fg
 
 # Docs enumeration source-hashes every FeatureGroup subclass; a cold cache under xdist load can exceed the default timeout.
@@ -119,8 +120,18 @@ class DocKind:
     info_class: type[Any]
 
 
+def _shipped_feature_group_docs(**filters: Any) -> list[FeatureGroupInfo]:
+    """Feature group docs scoped to the shipped groups."""
+    return get_feature_group_docs(plugin_collector=shipped_feature_groups_collector(), **filters)
+
+
+def _scoped_docs(*extra: type[FeatureGroup], **filters: Any) -> list[FeatureGroupInfo]:
+    """Feature group docs scoped to the shipped groups plus the given test doubles."""
+    return get_feature_group_docs(plugin_collector=shipped_feature_groups_collector(extra), **filters)
+
+
 DOC_KINDS: list[DocKind] = [
-    DocKind("feature group", get_feature_group_docs, FeatureGroupInfo),
+    DocKind("feature group", _shipped_feature_group_docs, FeatureGroupInfo),
     DocKind("compute framework", get_compute_framework_docs, ComputeFrameworkInfo),
     DocKind("extender", get_extender_docs, ExtenderInfo),
 ]
@@ -207,7 +218,7 @@ class TestDocsGetterSharedBehaviour:
 class TestGetFeatureGroupDocs:
     def test_get_feature_group_docs_has_required_fields(self) -> None:
         """Test that each FeatureGroupInfo has all required fields populated."""
-        result = get_feature_group_docs()
+        result = _shipped_feature_group_docs()
         assert len(result) > 0, "Need at least one result to validate fields"
 
         for fg_info in result:
@@ -226,7 +237,7 @@ class TestGetFeatureGroupDocs:
         Issue #537 requirement 2: the compute_framework filter compares names
         case-sensitively, so a casing mismatch wrongly returns an empty list.
         """
-        all_results = get_feature_group_docs()
+        all_results = _shipped_feature_group_docs()
         assert len(all_results) > 0, "Need at least one feature group for filtering"
 
         # Pick a real framework name that at least one feature group supports.
@@ -242,8 +253,8 @@ class TestGetFeatureGroupDocs:
         expected = sum(1 for fg in all_results if canonical_name.lower() in {c.lower() for c in fg.compute_frameworks})
         assert expected >= 1, "Canonical framework should match at least one feature group"
 
-        lower_filtered = get_feature_group_docs(compute_framework=canonical_name.lower())
-        upper_filtered = get_feature_group_docs(compute_framework=canonical_name.upper())
+        lower_filtered = _shipped_feature_group_docs(compute_framework=canonical_name.lower())
+        upper_filtered = _shipped_feature_group_docs(compute_framework=canonical_name.upper())
 
         assert len(lower_filtered) == expected
         assert len(upper_filtered) == expected
@@ -398,7 +409,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
         double = make_raising_fg(case.class_name, case.hook, doc=case.doc)
         try:
             with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
-                by_name = {fg.name: fg for fg in get_feature_group_docs()}
+                by_name = {fg.name: fg for fg in _scoped_docs(double)}
             assert case.class_name in by_name, f"{case.hook} raising must not drop the class from the catalog"
             degraded: str | list[str] | set[str] = getattr(by_name[case.class_name], case.field)
             assert degraded == case.expected
@@ -420,7 +431,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
 
     def test_degraded_compute_framework_rule_excluded_by_compute_framework_filter(self) -> None:
         """A class whose compute_framework_rule() raises is excluded by a compute_framework= filter."""
-        baseline = get_feature_group_docs()
+        baseline = _shipped_feature_group_docs()
         canonical_name: str | None = None
         for fg in baseline:
             if len(fg.compute_frameworks) > 0:
@@ -434,10 +445,10 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             doc="Test double whose compute_framework_rule() raises.",
         )
         try:
-            unfiltered = {fg.name for fg in get_feature_group_docs()}
+            unfiltered = {fg.name for fg in _scoped_docs(double)}
             assert "_DocsFrameworkRuleFilterBoomFG" in unfiltered, "Degraded class must still be documented"
 
-            filtered = get_feature_group_docs(compute_framework=canonical_name)
+            filtered = _scoped_docs(double, compute_framework=canonical_name)
             assert len(filtered) > 0, "Healthy feature groups must still match the framework filter"
             assert "_DocsFrameworkRuleFilterBoomFG" not in {fg.name for fg in filtered}
         finally:
@@ -446,12 +457,12 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
 
     def test_broken_feature_group_does_not_sink_the_catalog(self) -> None:
         """With a raising subclass live, every other feature group is still listed."""
-        baseline = {fg.name for fg in get_feature_group_docs()}
+        baseline = {fg.name for fg in _shipped_feature_group_docs()}
         assert len(baseline) > 0, "Need a populated baseline catalog"
 
         double = make_raising_fg("_DocsSinkBoomFG", "description", doc="Test double whose description() raises.")
         try:
-            degraded = {fg.name for fg in get_feature_group_docs()}
+            degraded = {fg.name for fg in _scoped_docs(double)}
             assert baseline.issubset(degraded), "A broken plugin must not drop healthy feature groups"
             assert "_DocsSinkBoomFG" in degraded
         finally:
@@ -502,7 +513,7 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
         This mirrors how a compute framework degraded to is_available=False is excluded
         by available_only=True: the degraded value, not the exception, drives the filter.
         """
-        baseline = get_feature_group_docs()
+        baseline = _shipped_feature_group_docs()
         canonical_name: str | None = None
         for fg in baseline:
             if len(fg.compute_frameworks) > 0:
@@ -516,10 +527,10 @@ class TestGetFeatureGroupDocsDegradedFieldReads:
             doc="Test double whose compute_framework_definition() raises.",
         )
         try:
-            unfiltered = {fg.name for fg in get_feature_group_docs()}
+            unfiltered = {fg.name for fg in _scoped_docs(double)}
             assert "_DocsFrameworkFilterBoomFG" in unfiltered, "Degraded class must still be documented"
 
-            filtered = get_feature_group_docs(compute_framework=canonical_name)
+            filtered = _scoped_docs(double, compute_framework=canonical_name)
             assert len(filtered) > 0, "Healthy feature groups must still match the framework filter"
             assert "_DocsFrameworkFilterBoomFG" not in {fg.name for fg in filtered}
         finally:
@@ -551,7 +562,7 @@ class TestGetFeatureGroupDocsContractViolations:
                 return None
 
         try:
-            searched = {fg.name for fg in get_feature_group_docs(search="ripcordquux")}
+            searched = {fg.name for fg in _scoped_docs(_DocsDescriptionNoneFG, search="ripcordquux")}
             assert "_DocsDescriptionNoneFG" in searched, "A None description must degrade to the docstring"
         finally:
             del _DocsDescriptionNoneFG
@@ -568,7 +579,7 @@ class TestGetFeatureGroupDocsContractViolations:
                 return None
 
         try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            by_name = {fg.name: fg for fg in _scoped_docs(_DocsDescriptionNoneUnfilteredFG)}
             assert "_DocsDescriptionNoneUnfilteredFG" in by_name, "Contract-violating class must still be documented"
             assert (
                 by_name["_DocsDescriptionNoneUnfilteredFG"].description
@@ -606,7 +617,7 @@ class TestGetFeatureGroupDocsContractViolations:
                 return 42
 
         try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            by_name = {fg.name: fg for fg in _scoped_docs(_DocsClassNameNonStrUnfilteredFG)}
             assert "_DocsClassNameNonStrUnfilteredFG" in by_name, "Contract-violating class must still be documented"
             assert by_name["_DocsClassNameNonStrUnfilteredFG"].name == "_DocsClassNameNonStrUnfilteredFG"
         finally:
@@ -629,7 +640,7 @@ class TestGetFeatureGroupDocsContractViolations:
                 return 42
 
         try:
-            filtered = get_feature_group_docs(version_contains="unavailable")
+            filtered = _scoped_docs(_DocsVersionNonStrFG, version_contains="unavailable")
             assert "_DocsVersionNonStrFG" in {fg.name for fg in filtered}, (
                 "A non-str version must degrade to the documented sentinel and stay filterable"
             )
@@ -648,7 +659,7 @@ class TestGetFeatureGroupDocsContractViolations:
                 return 42
 
         try:
-            by_name = {fg.name: fg for fg in get_feature_group_docs()}
+            by_name = {fg.name: fg for fg in _scoped_docs(_DocsVersionNonStrUnfilteredFG)}
             assert "_DocsVersionNonStrUnfilteredFG" in by_name, "Contract-violating class must still be documented"
             assert by_name["_DocsVersionNonStrUnfilteredFG"].version == "unavailable"
         finally:
@@ -678,7 +689,7 @@ class TestDegradedReadLogging:
 
         try:
             with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
-                get_feature_group_docs()
+                _scoped_docs(_DocsWarnBoomFG)
 
             messages = [
                 record.getMessage()
@@ -706,8 +717,8 @@ class TestDegradedReadLogging:
 
         try:
             with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
-                first = {fg.name: fg for fg in get_feature_group_docs()}
-                second = {fg.name: fg for fg in get_feature_group_docs()}
+                first = {fg.name: fg for fg in _scoped_docs(_DocsVersionRaisesFG)}
+                second = {fg.name: fg for fg in _scoped_docs(_DocsVersionRaisesFG)}
 
             assert "_DocsVersionRaisesFG" in first, "A raising version() must not drop the class from the catalog"
             assert first["_DocsVersionRaisesFG"].version == "unavailable"
@@ -739,7 +750,7 @@ class TestDegradedReadLogging:
 
         try:
             with caplog.at_level(logging.WARNING, logger=SAFE_FIELD_LOGGER):
-                by_name = {fg.name: fg for fg in get_feature_group_docs()}
+                by_name = {fg.name: fg for fg in _scoped_docs(_DocsVersionWarnFG)}
 
             assert by_name["_DocsVersionWarnFG"].version == "unavailable"
 

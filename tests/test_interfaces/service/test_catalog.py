@@ -25,6 +25,7 @@ from mloda.interfaces.service.errors import is_error
 from mloda.provider import FeatureChainParserMixin, property_spec
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.helpers.docs_scope import small_feature_group_walk
 from tests.helpers.plugin_stubs import StubFeatureGroup
 
 # Catalog.build enumerates FeatureGroups; a cold cache under xdist load can exceed the default timeout.
@@ -251,7 +252,11 @@ class TestBuildDoesNotTouchDenied:
         assert DENIED not in _fg_names(result)
         assert denied_calls == []
 
-    def test_build_without_collector_excludes_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
+    def test_build_without_collector_excludes_denied(
+        self, tmp_path: Path, denied_calls: list[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        walk = small_feature_group_walk(*ALLOWED, CatalogDeniedMcp3)
+        monkeypatch.setattr("mloda.core.api.plugin_docs.get_all_subclasses", walk)
         catalog = Catalog.build(_settings(tmp_path))
         result = catalog.search("Mcp3", kinds=["feature_group"], limit=MAX_SEARCH_LIMIT)
 

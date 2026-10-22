@@ -285,15 +285,28 @@ class ComputeFramework(ABC):
 
         return None
 
+    @staticmethod
+    def descriptor_reaches(transformer: ComputeFrameworkTransformer, _from_fw: type[Any], _to_fw: Any) -> bool:
+        """True when a direct transformer or a transformation chain leads from the descriptor type to the target."""
+        return (_from_fw, _to_fw) in transformer.transformer_map or (
+            transformer.get_transformation_chain(_from_fw, _to_fw) is not None
+        )
+
+    @staticmethod
+    def no_transformer_reason(_from_fw: type[Any], _to_fw: Any) -> str:
+        """The missing-transformer text; _to_fw may be a non-class (expected_data_framework defaults to None)."""
+        target_name = getattr(_to_fw, "__name__", None) or str(_to_fw)
+        return (
+            f"no transformer is registered from {_from_fw.__name__} to {target_name}. "
+            f"Register a compute-framework transformer for this pair to enable it."
+        )
+
     def _materialize_descriptor(self, data: Any, _from_fw: type[Any], _to_fw: Any) -> Any:
         chain = self.transformer.get_transformation_chain(_from_fw, _to_fw)
         if chain is None:
-            # _to_fw may be a non-class (expected_data_framework defaults to None); render it safely.
-            target_name = getattr(_to_fw, "__name__", None) or str(_to_fw)
             raise ValueError(
-                f"Cannot materialize {_from_fw.__name__} into {type(self).__name__}: no transformer is "
-                f"registered from {_from_fw.__name__} to {target_name}. Register a compute-framework "
-                f"transformer for this pair to enable it."
+                f"Cannot materialize {_from_fw.__name__} into {type(self).__name__}: "
+                f"{self.no_transformer_reason(_from_fw, _to_fw)}"
             )
         return self.transformer.apply_chain(_from_fw, _to_fw, chain, data, self.framework_connection_object)
 

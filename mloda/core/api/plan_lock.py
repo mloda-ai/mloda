@@ -12,7 +12,7 @@ from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.prepare.stable_text import stable_text
 
-PLAN_LOCK_FORMAT = 7
+PLAN_LOCK_FORMAT = 8
 
 
 class PlanLockMismatchError(Exception):
@@ -43,6 +43,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 "specialized_from": sorted(_class_path(parent) or "" for parent in step.specialized_from),
                 "result_framework": _class_path(step.result_framework),
                 "input_feature_edges": {name: sorted(inputs) for name, inputs in step.input_feature_edges.items()},
+                "leaves_connection": step.leaves_connection,
                 "implementation": step.implementation_path,
                 "implementation_hash": None if step.implementation is None else step.implementation_hash,
                 "implementation_specialized_from": sorted(
@@ -53,7 +54,9 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 record["feature_group_hash"] = step.feature_group_hash
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
-                key: value for key, value in record.items() if key != "compute_framework_reason"
+                key: value
+                for key, value in record.items()
+                if key not in ("compute_framework_reason", "leaves_connection")
             }
             options = step.feature_set_options
             wide_record["options"] = None if options is None else stable_text(_mask_secret_keys(options.group))
@@ -75,9 +78,10 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 "feature_group": _class_path(step.feature_group),
                 "from_compute_framework": _class_path(step.source_compute_framework),
                 "to_compute_framework": _class_path(step.compute_framework),
+                "leaves_connection": step.leaves_connection,
             }
             lock["transforms"].append(record)
-            wide["transforms"].append(record)
+            wide["transforms"].append({k: v for k, v in record.items() if k != "leaves_connection"})
         else:
             raise ValueError(f"Unknown plan step kind {step.step_kind!r}.")
     sorted_requested = sorted(requested)

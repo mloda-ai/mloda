@@ -1,6 +1,6 @@
 import contextlib
 import contextvars
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
 from collections.abc import Sequence
@@ -188,6 +188,8 @@ class mlodaAPI:
             # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
             _requested_features = deepcopy(requested_features) if copy_features else requested_features
 
+            data_access_collection = self._bind_feature_connections(_requested_features, data_access_collection)
+
             # Handle api_data: create ApiInputDataCollection if api_data provided
             api_input_data_collection: ApiInputDataCollection | None = None
             if api_data is not None and len(api_data) > 0:
@@ -225,6 +227,35 @@ class mlodaAPI:
             raise SetupConfigurationError(str(error)) from error
 
         self.engine = self._create_engine()
+
+    @staticmethod
+    def _bind_feature_connections(
+        requested_features: Features | Sequence[Feature | str],
+        data_access_collection: DataAccessCollection | None,
+    ) -> DataAccessCollection | None:
+        """Register each Feature(connection=) on a copy of the collection and write its handle on the feature."""
+        entries = requested_features.collection if isinstance(requested_features, Features) else requested_features
+        bound = [f for f in entries if isinstance(f, Feature) and f.connection is not None]
+        if not bound:
+            return data_access_collection
+        dac = DataAccessCollection() if data_access_collection is None else data_access_collection.copy()
+        handles: dict[int, str] = {}
+        for feature in bound:
+            connection = feature.connection
+            if id(connection) not in handles:
+                existing = [h for h, c in dac.connections.items() if c is connection]
+                named = [h for h in existing if h not in dac._auto_handles]
+                if named:
+                    handles[id(connection)] = named[0]
+                else:
+                    for handle in existing:
+                        del dac.connections[handle]
+                        dac._auto_handles.discard(handle)
+                    dac.add_connection(connection)
+                    handles[id(connection)] = next(h for h, c in dac.connections.items() if c is connection)
+            feature.options = copy(feature.options)
+            feature.options.set("connection_handle", handles[id(connection)])
+        return dac
 
     def _process_features(
         self,
@@ -565,6 +596,9 @@ class mlodaAPI:
             self.engine.execution_planner.resolved_join_plan,
             specialized_from=self.engine.specialized_from,
             output_framework=self.engine.output_framework,
+            auto_handles=(
+                () if self.engine.data_access_collection is None else self.engine.data_access_collection._auto_handles
+            ),
         )
 
     def resolution_report(self) -> list[ResolutionRecord]:

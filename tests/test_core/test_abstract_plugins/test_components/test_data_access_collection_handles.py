@@ -826,3 +826,37 @@ class TestRedact:
         dac = DataAccessCollection(credentials={"pg": {"password": " " * 8}})
         text = "a line" + " " * 8 + "with padding"
         assert dac.redact(text) == text
+
+
+class TestCopy:
+    """copy() returns an independent collection that shares the connection objects."""
+
+    def test_mutating_the_copy_leaves_the_original_untouched(self) -> None:
+        import sqlite3
+
+        kept = sqlite3.connect(":memory:")
+        extra = sqlite3.connect(":memory:")
+        original = DataAccessCollection(connections={"kept": kept}, files=["/a.csv"], folders={"raw": "/raw"})
+        original.add_connection(sqlite3.connect(":memory:"))
+        before_connections = dict(original.connections)
+        before_files = dict(original.files)
+        before_auto = set(original._auto_handles)
+
+        duplicate = original.copy()
+        assert duplicate.connections == before_connections
+        assert duplicate.connections["kept"] is kept
+        assert duplicate._auto_handles == before_auto
+
+        duplicate.add_connection(extra)
+        duplicate.add_connection("named", sqlite3.connect(":memory:"))
+        duplicate.add_file("/b.csv")
+        duplicate.add_folder("more", "/more")
+        duplicate.credentials["c"] = {"k": "v"}
+
+        assert original.connections == before_connections
+        assert original.files == before_files
+        assert original.folders == {"raw": "/raw"}
+        assert original.credentials == {}
+        assert original._auto_handles == before_auto
+        assert duplicate._auto_handles is not original._auto_handles
+        assert len(duplicate._auto_handles) == len(before_auto) + 2

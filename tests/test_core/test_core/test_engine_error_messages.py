@@ -4,7 +4,8 @@ These tests verify that error messages use human-readable formatting
 with class names and module paths instead of raw class representations.
 """
 
-from typing import cast
+import sqlite3
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -15,7 +16,9 @@ from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.engine import Engine
-from mloda.user import Feature, Features, Options
+from mloda.provider import DataCreator, FeatureSet
+from mloda.user import Feature, Features, Options, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
 from tests.test_core.test_abstract_plugins.test_abstract_compute_framework import (
     BaseTestComputeFramework1,
@@ -105,3 +108,46 @@ class TestEngineErrorMessages:
             assert "(" in error_message and ")" in error_message, (
                 f"Error message should contain module path in parentheses. Got: {error_message}"
             )
+
+
+class ConnectionInInputFeaturesRoot(FeatureGroup):
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({"conn_in_input_root"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"conn_in_input_root": [1]}
+
+
+class ConnectionInInputFeaturesConsumer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("conn_in_input_root", connection=sqlite3.connect(":memory:"))}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"conn_in_input_consumer": [1]}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"conn_in_input_consumer"}
+
+
+def test_a_plugin_returning_a_feature_with_a_connection_raises_naming_the_plugin() -> None:
+    with pytest.raises(ValueError, match="ConnectionInInputFeaturesConsumer") as raised:
+        mloda.run_all(
+            [Feature("conn_in_input_consumer")],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {ConnectionInInputFeaturesConsumer, ConnectionInInputFeaturesRoot}
+            ),
+        )
+    assert "connection_handle" in str(raised.value)

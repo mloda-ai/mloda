@@ -81,6 +81,17 @@ class DataAccessCollection:
 
         self.column_to_file: dict[str, str] | None = self._normalize_column_to_file(column_to_file)
 
+    def copy(self) -> "DataAccessCollection":
+        """Return an independent collection sharing the registered objects."""
+        duplicate = DataAccessCollection()
+        duplicate.connections = dict(self.connections)
+        duplicate.files = dict(self.files)
+        duplicate.folders = dict(self.folders)
+        duplicate.credentials = dict(self.credentials)
+        duplicate._auto_handles = set(self._auto_handles)
+        duplicate.column_to_file = None if self.column_to_file is None else dict(self.column_to_file)
+        return duplicate
+
     @classmethod
     def _normalize_credentials(
         cls, credentials: dict[str, Any] | list[Any] | Credential | None

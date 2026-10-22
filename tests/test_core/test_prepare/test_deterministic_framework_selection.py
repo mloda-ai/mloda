@@ -21,6 +21,9 @@ from mloda.user import DataAccessCollection, GlobalFilter, Index, Options, Plugi
 
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -2148,3 +2151,113 @@ def test_a_run_of_a_sqlite_native_consumer_returns_a_materialized_table() -> Non
     (step, frame), *_ = result.frames()
     assert frame is result[0]
     assert step.result_framework_name == "PyArrowTable"
+
+
+# --- plan-time neutral-load feasibility for a file root ---------------------------------------------
+
+
+class _NlMarker:
+    """Target type of the throwaway framework; no transformer reaches it from FileSource."""
+
+
+class _NlConn:
+    """Fake connection the throwaway REQUIRED framework adopts."""
+
+
+def _nl_framework() -> type[ComputeFramework]:
+    """Defined per call so discovery of other tests never sees it for long."""
+    from mloda.provider import ConnectionRequirement
+
+    class NlRequiredThrowawayFramework(ComputeFramework):
+        @classmethod
+        def connection_requirement(cls) -> ConnectionRequirement:
+            return ConnectionRequirement.REQUIRED
+
+        @classmethod
+        def _connection_matches(cls, conn: Any) -> bool:
+            return isinstance(conn, _NlConn)
+
+        @classmethod
+        def expected_data_framework(cls) -> Any:
+            return _NlMarker
+
+    return NlRequiredThrowawayFramework
+
+
+def _nl_plan(framework: type[ComputeFramework], tmp_path: Path, pinned: bool) -> list[PlanStep]:
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+
+    csv_file = tmp_path / "nl_data.csv"
+    csv_file.write_text("nl_col\n1\n2\n")
+    feature = Feature("nl_col")
+    if pinned:
+        # By class: a name lookup could hit a same-named throwaway of another test that is not yet collected.
+        feature.compute_frameworks = {framework}
+    return mloda.explain(
+        [feature],
+        compute_frameworks=[framework, PythonDictFramework],
+        data_access_collection=DataAccessCollection(files={"nl_file": str(csv_file)}, connections={"c": _NlConn()}),
+        plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
+    )
+
+
+def test_a_file_root_does_not_plan_on_a_required_framework_no_transformer_reaches(tmp_path: Path) -> None:
+    framework = _nl_framework()
+
+    steps = [s for s in _nl_plan(framework, tmp_path, pinned=False) if s.step_kind == "compute"]
+
+    assert [s.compute_framework_name for s in steps] == ["PythonDictFramework"]
+    reason = str(steps[0].compute_framework_reason)
+    assert "NlRequiredThrowawayFramework" in reason
+    assert "transformer" in reason
+    assert "FileSource" in reason
+
+
+def test_a_file_root_pinned_to_a_framework_no_transformer_reaches_raises_at_planning(tmp_path: Path) -> None:
+    framework = _nl_framework()
+
+    with pytest.raises(ValueError) as raised:
+        _nl_plan(framework, tmp_path, pinned=True)
+
+    message = str(raised.value)
+    assert "FileSource" in message
+    assert "_NlMarker" in message
+    assert "transformer" in message
+
+
+def test_a_file_root_whose_only_framework_no_transformer_reaches_fails_at_planning_naming_it(tmp_path: Path) -> None:
+    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
+
+    framework = _nl_framework()
+    csv_file = tmp_path / "nl_data.csv"
+    csv_file.write_text("nl_col\n1\n2\n")
+
+    with pytest.raises(Exception) as raised:
+        mloda.explain(
+            [Feature("nl_col")],
+            compute_frameworks=[framework],
+            data_access_collection=DataAccessCollection(files={"nl_file": str(csv_file)}, connections={"c": _NlConn()}),
+            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
+        )
+
+    message = str(raised.value)
+    assert "FileSource" in message
+    assert "_NlMarker" in message
+    assert "transformer" in message
+
+
+def test_a_registered_transformer_keeps_the_required_framework_a_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = ComputeFrameworkTransformer.initilize_transformer
+
+    def with_entry(self: ComputeFrameworkTransformer) -> None:
+        original(self)
+        self.transformer_map[(FileSource, _NlMarker)] = BaseTransformer  # type: ignore[type-abstract]
+
+    monkeypatch.setattr(ComputeFrameworkTransformer, "initilize_transformer", with_entry)
+    framework = _nl_framework()
+
+    steps = _nl_plan(framework, tmp_path, pinned=True)
+
+    assert [s.compute_framework_name for s in steps if s.step_kind == "compute"] == [framework.get_class_name()]

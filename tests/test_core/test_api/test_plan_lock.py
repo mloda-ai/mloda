@@ -15,6 +15,7 @@ from typing import Any, cast
 import pytest
 
 from mloda.core.api.plan_lock import PLAN_LOCK_FORMAT, _lock_text
+from tests.test_core.test_api.test_plan_info import leave_plan
 from mloda.steward import (
     PlanLockMismatchError,
     PlanStep,
@@ -103,6 +104,10 @@ def _transform_step() -> PlanStep:
     )
 
 
+def _transform_step_with(**overrides: object) -> PlanStep:
+    return dataclasses.replace(_transform_step(), **overrides)  # type: ignore[arg-type]
+
+
 def _plan() -> list[PlanStep]:
     return [_compute_step(), _join_step(), _transform_step()]
 
@@ -131,10 +136,11 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 7
+    assert content["format"] == PLAN_LOCK_FORMAT == 8
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
+        "leaves_connection",
         "feature_names",
         "feature_group",
         "compute_framework",
@@ -155,7 +161,12 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "destination_side",
         "join_keys",
     }
-    assert set(content["transforms"][0]) == {"feature_group", "from_compute_framework", "to_compute_framework"}
+    assert set(content["transforms"][0]) == {
+        "feature_group",
+        "from_compute_framework",
+        "to_compute_framework",
+        "leaves_connection",
+    }
     assert text == _lock_text(plan)
     check_plan_lock(plan, lock)
 
@@ -168,6 +179,35 @@ def test_the_result_framework_is_recorded_per_compute_record_and_a_changed_one_f
     assert recorded == f"{PyArrowTable.__module__}:{PyArrowTable.__qualname__}"
     with pytest.raises(PlanLockMismatchError):
         check_plan_lock([_compute_step(result_framework=PandasDataFrame)], lock)
+
+
+def test_leaves_connection_is_recorded_on_compute_and_transform_records_and_a_change_fails_check(
+    tmp_path: Path,
+) -> None:
+    lock = tmp_path / "plan.lock"
+    plan = [_compute_step(leaves_connection="mine"), _transform_step_with(leaves_connection="mine")]
+    write_plan_lock(plan, lock)
+
+    content = json.loads(lock.read_text(encoding="utf-8"))
+    assert content["compute"][0]["leaves_connection"] == "mine"
+    assert content["transforms"][0]["leaves_connection"] == "mine"
+    check_plan_lock(plan, lock)
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock(
+            [_compute_step(leaves_connection="other"), _transform_step_with(leaves_connection="mine")], lock
+        )
+    with pytest.raises(PlanLockMismatchError):
+        check_plan_lock([_compute_step(leaves_connection="mine"), _transform_step_with(leaves_connection=None)], lock)
+
+
+def test_a_lock_of_an_auto_named_connection_plan_has_the_token_and_no_auto_handle(tmp_path: Path) -> None:
+    lock = tmp_path / "plan.lock"
+
+    write_plan_lock(leave_plan(auto=True), lock)
+
+    text = lock.read_text(encoding="utf-8")
+    assert "_auto_connection_" not in text
+    assert json.loads(text)["transforms"][0]["leaves_connection"] == "<unnamed>"
 
 
 def test_write_refuses_a_main_module_result_framework_and_writes_nothing(tmp_path: Path) -> None:
@@ -526,7 +566,7 @@ def test_a_lock_written_in_the_previous_format_with_a_reader_entry_fails_check(t
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
     content["format"] = PLAN_LOCK_FORMAT - 1
-    assert content["format"] == 6
+    assert content["format"] == 7
     for record in content["compute"]:
         record["reader"] = None
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")

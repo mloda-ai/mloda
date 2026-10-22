@@ -7,7 +7,7 @@ from __future__ import annotations
 import datetime
 from typing import Any, Callable, cast
 
-from mloda.provider import OperationFeatureGroup
+from mloda.provider import OperationFeatureGroup, SubtypeDeclaration
 from mloda.user import Feature
 from mloda.provider import (
     FeatureChainParser,
@@ -56,6 +56,12 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
     - `first`: First value in the window
     - `last`: Last value in the window
 
+    Reference contract: per window null is skipped; NaN propagates in sum, avg, mean, std, var;
+    count counts non-null values including NaN; min, max and median skip NaN; first and last take the
+    window's first and last value as is. A multi-column feature reduces the per-column results across
+    columns with the same function, skipping missing values (first and last use mean, count gives the
+    number of columns); a row with no value gives NaN.
+
     ## Supported Time Units
 
     - `second`: Seconds
@@ -77,6 +83,8 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
     WINDOW_FUNCTION = "window_function"
     WINDOW_SIZE = "window_size"
     TIME_UNIT = "time_unit"
+
+    SUBTYPES = SubtypeDeclaration(key=WINDOW_FUNCTION)
 
     # Define supported window functions
     WINDOW_FUNCTIONS = {

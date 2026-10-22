@@ -7,18 +7,20 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PyArrowMissingValueImputation(Implementation):
+class PyArrowMissingValueImputation(OperationImplementation[MissingValueFeatureGroup]):
     feature_group = MissingValueFeatureGroup
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return group.impute(
             data,
             features,
@@ -39,6 +41,27 @@ class PyArrowMissingValueImputation(Implementation):
         else:
             # Column doesn't exist - add it
             return data.append_column(feature_name, result)
+
+    @classmethod
+    def _nan_to_null(cls, data: pa.Table, columns: list[str]) -> pa.Table:
+        """Turn float NaN into null in the given float columns."""
+        for name in columns:
+            column = data.column(name)
+            if pa.types.is_floating(column.type):
+                data = data.set_column(
+                    data.schema.get_field_index(name), name, pc.if_else(pc.is_nan(column), None, column)
+                )
+        return data
+
+    @classmethod
+    def _mode_value(cls, column: Any) -> Any:
+        """Smallest value among the most frequent non-null values, or None."""
+        counts = pc.value_counts(pc.drop_null(column))
+        if len(counts) == 0:
+            return None
+        max_count = pc.max(counts.field("counts")).as_py()
+        top = pc.filter(counts.field("values"), pc.equal(counts.field("counts"), max_count))
+        return pc.min(top).as_py()
 
     @classmethod
     def _perform_imputation(
@@ -66,6 +89,7 @@ class PyArrowMissingValueImputation(Implementation):
         Returns:
             The result of the imputation as a PyArrow Array
         """
+        data = cls._nan_to_null(data, in_features)
         # Handle single column case (backward compatibility)
         if len(in_features) == 1:
             source_feature = in_features[0]
@@ -93,26 +117,8 @@ class PyArrowMissingValueImputation(Implementation):
                 fill_value = result[0].as_py() if len(result) > 0 else None
                 return pc.fill_null(source_column, fill_value)
             elif imputation_method == "mode":
-                # PyArrow doesn't have a direct mode function
-                # We need to compute the mode manually
-                value_counts = pc.value_counts(source_column)
-                if len(value_counts) > 0:
-                    # Find the index with the maximum count
-                    counts = value_counts.field("counts")
-                    max_count = pc.max(counts).as_py()
-
-                    # Find all indices where count equals max_count
-                    max_indices = []
-                    for count_idx in range(len(counts)):
-                        if counts[count_idx].as_py() == max_count:
-                            max_indices.append(count_idx)
-
-                    # Use the first index with maximum count
-                    if max_indices:
-                        mode_value = value_counts.field("values")[max_indices[0]].as_py()
-                        return pc.fill_null(source_column, mode_value)
-
-                return source_column
+                mode_value = cls._mode_value(source_column)
+                return pc.fill_null(source_column, mode_value)
             elif imputation_method == "constant":
                 return pc.fill_null(source_column, constant_value)
             elif imputation_method == "ffill":
@@ -191,21 +197,7 @@ class PyArrowMissingValueImputation(Implementation):
             result = pc.quantile(source_column, q=0.5)
             overall_value = result[0].as_py() if len(result) > 0 else None
         elif imputation_method == "mode":
-            value_counts = pc.value_counts(source_column)
-            if len(value_counts) > 0:
-                # Find the index with the maximum count
-                counts = value_counts.field("counts")
-                max_count = pc.max(counts).as_py()
-
-                # Find all indices where count equals max_count
-                max_indices = []
-                for count_idx in range(len(counts)):
-                    if counts[count_idx].as_py() == max_count:
-                        max_indices.append(count_idx)
-
-                # Use the first index with maximum count
-                if max_indices:
-                    overall_value = value_counts.field("values")[max_indices[0]].as_py()
+            overall_value = cls._mode_value(source_column)
 
         # Create a list to store the results
         results = []
@@ -243,21 +235,7 @@ class PyArrowMissingValueImputation(Implementation):
                 result = pc.quantile(group_data, q=0.5)
                 group_value = result[0].as_py() if len(result) > 0 else None
             elif imputation_method == "mode":
-                value_counts = pc.value_counts(group_data)
-                if len(value_counts) > 0:
-                    # Find the index with the maximum count
-                    counts = value_counts.field("counts")
-                    max_count = pc.max(counts).as_py()
-
-                    # Find all indices where count equals max_count
-                    max_indices = []
-                    for count_idx in range(len(counts)):
-                        if counts[count_idx].as_py() == max_count:
-                            max_indices.append(count_idx)
-
-                    # Use the first index with maximum count
-                    if max_indices:
-                        group_value = value_counts.field("values")[max_indices[0]].as_py()
+                group_value = cls._mode_value(group_data)
             elif imputation_method == "ffill":
                 # `i` is the global row index; translate it to the row's position within the group.
                 # A null group key yields an all-null group_mask, so `i` won't be found; there is

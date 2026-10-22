@@ -231,14 +231,18 @@ An operation is written once as an `OperationFeatureGroup` (naming, options, inp
 class MyOperation(OperationFeatureGroup):
     ...  # naming, PROPERTY_MAPPING, input_features
 
-class PandasMyOperation(Implementation):
+class PandasMyOperation(OperationImplementation[MyOperation]):
     feature_group = MyOperation
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group, data, features, framework):
+    def calculate(
+        cls, group: type[MyOperation], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         ...  # group is the matched feature group class
 ```
+
+Operation implementations subclass `OperationImplementation` (a plain `Implementation` naming an operation group raises `TypeError`); loaders keep `Implementation`.
 
 - **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
 - **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.
@@ -274,7 +278,9 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
-- Framework differences not declared yet: only Pandas imputes NaN (the others impute null only), `mode` ties differ, a single-column PyArrow time window propagates NaN in `sum`, `avg`/`mean`, `std` and `var` (Pandas skips it) and counts it in `count`, and PythonDict text cleaning turns NaN into `"nan"` (Pandas gives `""`).
+- Time window: Pandas skips NaN in sum, avg, mean, std, var and count, which diverges from the reference. With Pandas and PyArrow both enabled those windows run on PyArrow (NaN propagates, slower); pin `implementation="PandasTimeWindow"` to keep the Pandas result.
+- PythonDict text cleaning turns NaN into an empty string, like Pandas.
+- PyArrow and PythonDict imputation treat NaN as missing (skipped in statistics and filled) and break `mode` ties by the smallest value, like Pandas; string ties change too.
 - PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.
 - `feature_group="<old per-framework class>"` becomes `implementation="<implementation>"`, or `compute_framework=...`, for every moved family.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.

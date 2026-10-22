@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import re
 import string
 import unicodedata
 from typing import Any
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
@@ -24,14 +25,16 @@ except ImportError:
     nltk_available = False
 
 
-class PythonDictTextCleaning(Implementation):
+class PythonDictTextCleaning(OperationImplementation[TextCleaningFeatureGroup]):
     """PythonDict text cleaning."""
 
     feature_group = TextCleaningFeatureGroup
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
         return group.clean(
@@ -55,8 +58,11 @@ class PythonDictTextCleaning(Implementation):
         Returns:
             The source text as a list of strings
         """
-        # Convert to string if not already and handle None values
-        return [str(value) if value is not None else "" for value in data.get(feature_name, [])]
+        return ["" if cls._is_missing(value) else str(value) for value in data.get(feature_name, [])]
+
+    @staticmethod
+    def _is_missing(value: Any) -> bool:
+        return value is None or (isinstance(value, float) and math.isnan(value)) or type(value).__name__ == "NAType"
 
     @classmethod
     def _add_result_to_data(

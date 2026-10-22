@@ -5,6 +5,7 @@ Tests for the TextCleaningFeatureGroup base class.
 from typing import Any
 from unittest.mock import Mock, call
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -174,3 +175,43 @@ class TestTextCleaningFeatureChainParser:
         assert len(input_features) == 1
         source_feature = next(iter(input_features))
         assert source_feature.name == "review"
+
+
+_TEXTS: list[Any] = ["Hello, World!", None, float("nan"), "  Café   https://x.y  ", ""]
+
+
+def _cleaned(impl: Any, data: Any, operation: str) -> list[Any]:
+    source = impl._get_source_text(data, "t")
+    return list(impl._apply_operation(data, source, operation))
+
+
+class TestImplementationsConformToTheReferenceContract:
+    """Null and NaN become an empty string before the operations, in every implementation."""
+
+    def test_group_declares_no_subtypes(self) -> None:
+        assert TextCleaningFeatureGroup.subtype_universe() == frozenset()
+
+    @pytest.mark.parametrize("operation", sorted(TextCleaningFeatureGroup.SUPPORTED_OPERATIONS))
+    def test_implementations_give_the_same_output(self, operation: str) -> None:
+        if operation == "remove_stopwords":
+            pytest.importorskip("nltk")
+        pandas_out = _cleaned(PandasTextCleaning, pd.DataFrame({"t": _TEXTS}), operation)
+        python_dict_out = _cleaned(PythonDictTextCleaning, {"t": list(_TEXTS)}, operation)
+        assert python_dict_out == pandas_out
+
+    @pytest.mark.parametrize(
+        ("impl", "make_data"),
+        [
+            (PandasTextCleaning, lambda: pd.DataFrame({"t": _TEXTS})),
+            (PythonDictTextCleaning, lambda: {"t": list(_TEXTS)}),
+        ],
+        ids=IMPL_IDS,
+    )
+    def test_null_and_nan_become_an_empty_string(self, impl: Any, make_data: Any) -> None:
+        source = list(impl._get_source_text(make_data(), "t"))
+        assert source[1] == ""
+        assert source[2] == ""
+
+    @pytest.mark.parametrize("missing", [pd.NA, np.float64("nan")], ids=["pd_na", "numpy_nan"])
+    def test_python_dict_treats_pandas_and_numpy_missing_as_an_empty_string(self, missing: Any) -> None:
+        assert list(PythonDictTextCleaning._get_source_text({"t": [missing, "x"]}, "t")) == ["", "x"]

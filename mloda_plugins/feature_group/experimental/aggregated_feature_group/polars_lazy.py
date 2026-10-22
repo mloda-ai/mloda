@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 from mloda.user.polars import PolarsLazyDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
@@ -16,7 +16,7 @@ except ImportError:
     pl = None  # type: ignore[assignment]
 
 
-class PolarsLazyAggregation(Implementation):
+class PolarsLazyAggregation(OperationImplementation[AggregatedFeatureGroup]):
     """
     Polars Lazy implementation of aggregated feature group.
 
@@ -32,7 +32,9 @@ class PolarsLazyAggregation(Implementation):
     }
 
     @classmethod
-    def calculate(cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return group.aggregate(
             data,
             features,

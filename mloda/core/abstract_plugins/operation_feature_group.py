@@ -1,6 +1,5 @@
 """OperationFeatureGroup: one group per operation, served by one Implementation per ComputeFramework."""
 
-import types
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -79,4 +78,10 @@ class OperationFeatureGroup(FeatureGroup):
             raise ValueError(f"{cls.__name__}.calculate_feature found no implementation on the feature set.")
         marker = features._load_marker
         framework = marker.framework if marker is not None else None
-        return types.MethodType(implementation.calculate, cls)(data, features, framework)
+        from mloda.core.abstract_plugins.implementation import OperationImplementation
+
+        if not issubclass(implementation, OperationImplementation):
+            raise TypeError(
+                f"{implementation.__name__} serves {cls.__name__}, so it must subclass OperationImplementation."
+            )
+        return implementation.calculate(cls, data, features, framework)

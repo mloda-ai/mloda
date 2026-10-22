@@ -22,7 +22,8 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.implementation import Implementation, OperationImplementation
+from mloda.provider import FeatureSet
 from mloda.provider import OperationFeatureGroup, SubtypeDeclaration, property_spec
 from mloda.core.prepare import choose_compute_frameworks
 from mloda.core.prepare.choose_compute_frameworks import ChooseComputeFrameworks
@@ -131,26 +132,30 @@ class ChooserOpFG(OperationFeatureGroup):
         return None
 
 
-class ChooserOpPandas(Implementation):
+class ChooserOpPandas(OperationImplementation[ChooserOpFG]):
     feature_group = ChooserOpFG
     compute_framework = PandasDataFrame
     divergent = {"sum": SUM_DIFFERS}
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[ChooserOpFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return data
 
 
-class ChooserOpPyArrow(Implementation):
+class ChooserOpPyArrow(OperationImplementation[ChooserOpFG]):
     feature_group = ChooserOpFG
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[ChooserOpFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return data
 
 
-OP_IMPLEMENTATIONS = [ChooserOpPandas, ChooserOpPyArrow]
+OP_IMPLEMENTATIONS: list[type[Implementation]] = [ChooserOpPandas, ChooserOpPyArrow]
 
 
 @pytest.fixture(autouse=True, scope="module")

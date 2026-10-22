@@ -9,7 +9,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.implementation import OperationImplementation
 from mloda.provider import (
     BaseInputData,
     ComputeFramework,
@@ -73,7 +73,7 @@ class OpToyBareFG(_NamedFeatureGroup):
     FEATURE = OPTOY_BARE_FEATURE
 
 
-class OpToyPandas(Implementation):
+class OpToyPandas(OperationImplementation[OpToyFG]):
     feature_group = OpToyFG
     compute_framework = PandasDataFrame
     divergent = {"sum": "skips NaN in sum"}
@@ -84,19 +84,23 @@ class OpToyPandas(Implementation):
         return options.get(OPTOY_PANDAS_OFF) is None
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[OpToyFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         cls.served_by.append(group)
         return pd.DataFrame({OPTOY_FEATURE: [PANDAS_MARK], OPTOY_CHILD_FEATURE: [PANDAS_MARK]})
 
 
-class OpToyPyArrow(Implementation):
+class OpToyPyArrow(OperationImplementation[OpToyFG]):
     feature_group = OpToyFG
     compute_framework = PyArrowTable
     supported = frozenset({"sum"})
     served_by: ClassVar[list[Any]] = []
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[OpToyFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         cls.served_by.append(group)
         return pa.table({OPTOY_FEATURE: [PYARROW_MARK], OPTOY_CHILD_FEATURE: [PYARROW_MARK]})
 
@@ -138,24 +142,28 @@ class OpToyChainFG(OperationFeatureGroup):
         return {Feature(str(feature_name)[: -len(OPTOY_CHAIN_SUFFIX)])}
 
 
-class OpToyChainPandas(Implementation):
+class OpToyChainPandas(OperationImplementation[OpToyChainFG]):
     feature_group = OpToyChainFG
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[OpToyChainFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         for name in sorted(features.get_all_names()):
             CHAIN_LOG.append((name, cls.__name__))
             data[name] = PANDAS_MARK
         return data
 
 
-class OpToyChainPyArrow(Implementation):
+class OpToyChainPyArrow(OperationImplementation[OpToyChainFG]):
     feature_group = OpToyChainFG
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[OpToyChainFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         for name in sorted(features.get_all_names()):
             CHAIN_LOG.append((name, cls.__name__))
             data = data.append_column(name, pa.array([PYARROW_MARK] * data.num_rows))

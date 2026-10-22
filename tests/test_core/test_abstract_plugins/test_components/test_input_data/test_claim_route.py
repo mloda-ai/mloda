@@ -72,3 +72,10 @@ def test_provider_exports_implementation() -> None:
 
     assert provider.Implementation is Implementation
     assert "Implementation" in provider.__all__
+
+
+def test_provider_exports_operation_implementation() -> None:
+    from mloda.core.abstract_plugins.implementation import OperationImplementation
+
+    assert provider.OperationImplementation is OperationImplementation
+    assert "OperationImplementation" in provider.__all__

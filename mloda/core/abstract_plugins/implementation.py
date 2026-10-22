@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import (
     BaseFeatureGroupVersion,
@@ -16,8 +16,11 @@ from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+
+G = TypeVar("G", bound=OperationFeatureGroup)
 
 
 def _is_concrete(cls: Any) -> bool:
@@ -29,14 +32,20 @@ def _serves_groups(group: Any) -> bool:
     return isinstance(group, type) and issubclass(group, (FormatFeatureGroup, OperationFeatureGroup))
 
 
+def _serves_operation(group: Any) -> bool:
+    return isinstance(group, type) and issubclass(group, OperationFeatureGroup)
+
+
 def _names_a_pair(cls: Any) -> bool:
     group = getattr(cls, "feature_group", None)
     framework = getattr(cls, "compute_framework", None)
-    return _serves_groups(group) and isinstance(framework, type) and issubclass(framework, ComputeFramework)
+    if not (_serves_groups(group) and isinstance(framework, type) and issubclass(framework, ComputeFramework)):
+        return False
+    return not _serves_operation(group) or issubclass(cls, OperationImplementation)
 
 
 class Implementation(ABC):
-    """Names its pair with feature_group and compute_framework; a format group calls calculate(group, match, features, framework), an operation group (group, data, features, framework)."""
+    """Names its pair with feature_group and compute_framework; a loader subclasses this, an operation group's implementation OperationImplementation."""
 
     feature_group: ClassVar[type[FeatureGroup]]
     compute_framework: ClassVar[type[ComputeFramework]]
@@ -55,6 +64,8 @@ class Implementation(ABC):
             )
         if not (isinstance(framework, type) and issubclass(framework, ComputeFramework)):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
+        if _serves_operation(group) and not issubclass(cls, OperationImplementation):
+            raise TypeError(f"{cls.__name__} serves an operation group, so it must subclass OperationImplementation.")
 
     @classmethod
     def version(cls) -> str:
@@ -89,7 +100,16 @@ class Implementation(ABC):
     @classmethod
     @abstractmethod
     def calculate(cls, *args: Any, **kwargs: Any) -> Any:
-        """Load the source; a format group passes (group, match, features, framework), an operation group (group, data, features, framework)."""
+        """Load the source: the loader shape (group, match, features, framework); operation groups use OperationImplementation."""
+
+
+class OperationImplementation(Implementation, Generic[G]):
+    """An Implementation of operation group G, called as calculate(group, data, features, framework)."""
+
+    @classmethod
+    @abstractmethod
+    def calculate(cls, group: type[G], data: Any, features: FeatureSet, framework: ComputeFramework | None) -> Any:
+        """Compute the operation on data for the features."""
 
 
 def serving_implementation(

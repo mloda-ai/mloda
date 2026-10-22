@@ -2,24 +2,28 @@
 
 from __future__ import annotations
 
+import math
+import numbers
 import statistics
 from collections import Counter
 from typing import Any
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PythonDictMissingValueImputation(Implementation):
+class PythonDictMissingValueImputation(OperationImplementation[MissingValueFeatureGroup]):
     """PythonDict missing value imputation."""
 
     feature_group = MissingValueFeatureGroup
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
         return group.impute(
@@ -41,6 +45,27 @@ class PythonDictMissingValueImputation(Implementation):
         data[feature_name] = list(result)
 
         return data
+
+    @classmethod
+    def _nan_to_none(cls, data: dict[str, list[Any]], columns: list[str]) -> dict[str, list[Any]]:
+        """Copy data with float NaN replaced by None in the given columns."""
+        normalized = dict(data)
+        for name in columns:
+            if name in data:
+                normalized[name] = [None if isinstance(v, float) and math.isnan(v) else v for v in data[name]]
+        return normalized
+
+    @classmethod
+    def _mode_of(cls, values: list[Any]) -> Any:
+        """Smallest value among the most frequent ones."""
+        counter = Counter(values)
+        top = max(counter.values())
+        return min((v for v, c in counter.items() if c == top), key=cls._mode_key)
+
+    @staticmethod
+    def _mode_key(v: Any) -> tuple[bool, str, Any]:
+        real = isinstance(v, numbers.Real)
+        return (not real, "" if real else type(v).__name__, v)
 
     @classmethod
     def _perform_imputation(
@@ -68,6 +93,7 @@ class PythonDictMissingValueImputation(Implementation):
         Returns:
             The result of the imputation as a list of values
         """
+        data = cls._nan_to_none(data, in_features)
         # Handle single column case (backward compatibility)
         if len(in_features) == 1:
             source_feature = in_features[0]
@@ -115,8 +141,7 @@ class PythonDictMissingValueImputation(Implementation):
                 elif imputation_method == "mode":
                     non_null = [v for v in row_values if v is not None]
                     if non_null:
-                        counter = Counter(non_null)
-                        result.append(counter.most_common(1)[0][0])
+                        result.append(cls._mode_of(non_null))
                     else:
                         result.append(None)
                 elif imputation_method == "constant":
@@ -176,10 +201,7 @@ class PythonDictMissingValueImputation(Implementation):
         non_null_values = [val for val in result if val is not None]
         overall_mean = statistics.mean(non_null_values) if non_null_values else None
         overall_median = statistics.median(non_null_values) if non_null_values else None
-        overall_mode = None
-        if non_null_values:
-            mode_counter = Counter(non_null_values)
-            overall_mode = mode_counter.most_common(1)[0][0] if mode_counter else None
+        overall_mode = cls._mode_of(non_null_values) if non_null_values else None
 
         # Process each group
         for group_indices in groups.values():
@@ -212,8 +234,7 @@ class PythonDictMissingValueImputation(Implementation):
 
             elif imputation_method == "mode":
                 if group_non_null:
-                    mode_counter = Counter(group_non_null)
-                    group_mode = mode_counter.most_common(1)[0][0] if mode_counter else overall_mode
+                    group_mode = cls._mode_of(group_non_null)
                     for i in group_indices:
                         if result[i] is None:
                             result[i] = group_mode
@@ -272,8 +293,7 @@ class PythonDictMissingValueImputation(Implementation):
             return values  # No non-null values to calculate mode
 
         # Count frequencies
-        counter = Counter(non_null_values)
-        mode_value = counter.most_common(1)[0][0]
+        mode_value = cls._mode_of(non_null_values)
         return [mode_value if val is None else val for val in values]
 
     @classmethod

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, raise_null_reference_time
@@ -19,12 +19,19 @@ except ImportError:
     pd = None
 
 
-class PandasTimeWindow(Implementation):
+class PandasTimeWindow(OperationImplementation[TimeWindowFeatureGroup]):
     feature_group = TimeWindowFeatureGroup
     compute_framework = PandasDataFrame
+    divergent = {
+        "sum": "skips NaN in sum and gives 0 for a multi-column row with no value",
+        **{op: f"skips NaN in {op}" for op in ("avg", "mean", "std", "var")},
+        "count": "does not count NaN",
+    }
 
     @classmethod
-    def calculate(cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return group.window(
             data,
             features,

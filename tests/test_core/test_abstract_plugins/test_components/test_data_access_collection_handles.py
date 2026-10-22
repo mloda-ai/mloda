@@ -273,6 +273,21 @@ class TestConnectionHandleResolver:
         assert reason is not None
         assert "other" in reason
 
+    def test_wrong_type_reason_renders_an_auto_handle_as_unnamed_and_a_named_one_by_name(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_connection(_OtherConn())
+        (auto_handle,) = dac.connections
+        _handle, _explicit, reason = self._resolve(dac, connection_handle=auto_handle)
+        assert reason is not None
+        assert "<unnamed>" in reason
+        assert "_auto_connection_" not in reason
+
+        named = DataAccessCollection(connections={"other": _OtherConn()})
+        _handle, _explicit, named_reason = self._resolve(named, connection_handle="other")
+        assert named_reason is not None
+        assert "other" in named_reason
+        assert "<unnamed>" not in named_reason
+
     def test_handle_naming_another_frameworks_connection_falls_through_to_the_single_match(self) -> None:
         dac = DataAccessCollection(connections={"s": _OtherConn(), "d": _Conn()})
         assert self._resolve(dac, connection_handle="s") == ("d", False, None)
@@ -826,3 +841,37 @@ class TestRedact:
         dac = DataAccessCollection(credentials={"pg": {"password": " " * 8}})
         text = "a line" + " " * 8 + "with padding"
         assert dac.redact(text) == text
+
+
+class TestCopy:
+    """copy() returns an independent collection that shares the connection objects."""
+
+    def test_mutating_the_copy_leaves_the_original_untouched(self) -> None:
+        import sqlite3
+
+        kept = sqlite3.connect(":memory:")
+        extra = sqlite3.connect(":memory:")
+        original = DataAccessCollection(connections={"kept": kept}, files=["/a.csv"], folders={"raw": "/raw"})
+        original.add_connection(sqlite3.connect(":memory:"))
+        before_connections = dict(original.connections)
+        before_files = dict(original.files)
+        before_auto = set(original._auto_handles)
+
+        duplicate = original.copy()
+        assert duplicate.connections == before_connections
+        assert duplicate.connections["kept"] is kept
+        assert duplicate._auto_handles == before_auto
+
+        duplicate.add_connection(extra)
+        duplicate.add_connection("named", sqlite3.connect(":memory:"))
+        duplicate.add_file("/b.csv")
+        duplicate.add_folder("more", "/more")
+        duplicate.credentials["c"] = {"k": "v"}
+
+        assert original.connections == before_connections
+        assert original.files == before_files
+        assert original.folders == {"raw": "/raw"}
+        assert original.credentials == {}
+        assert original._auto_handles == before_auto
+        assert duplicate._auto_handles is not original._auto_handles
+        assert len(duplicate._auto_handles) == len(before_auto) + 2

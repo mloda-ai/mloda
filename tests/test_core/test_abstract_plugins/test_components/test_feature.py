@@ -497,3 +497,44 @@ def test_the_implementation_pin_is_part_of_equality_and_hash_and_survives_copy()
     assert hash(pinned) == hash(Feature("impl_pin_eq_feature", implementation=["OpA"]))
     assert len({plain, pinned, other}) == 3
     assert copy.copy(pinned).implementation_pin == ("OpA",)
+
+
+def test_feature_connection_is_exposed_and_none_by_default() -> None:
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    assert Feature("x", connection=conn).connection is conn
+    assert Feature("x").connection is None
+    conn.close()
+
+
+def test_feature_connection_with_a_connection_handle_option_raises() -> None:
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    with pytest.raises(ValueError, match="connection_handle"):
+        Feature("x", connection=conn, options={"connection_handle": "x"})
+    conn.close()
+
+
+def test_feature_deepcopy_keeps_the_same_connection_object() -> None:
+    import sqlite3
+
+    conn = sqlite3.connect(":memory:")
+    original = Feature("x", connection=conn)
+    assert copy.deepcopy(original).connection is conn
+    assert copy.deepcopy([original])[0].connection is conn
+    conn.close()
+
+
+def test_features_differing_only_in_connection_are_not_equal() -> None:
+    import sqlite3
+
+    first = sqlite3.connect(":memory:")
+    second = sqlite3.connect(":memory:")
+    assert Feature("x", connection=first) != Feature("x", connection=second)
+    assert Feature("x", connection=first) != Feature("x")
+    assert Feature("x", connection=first) == Feature("x", connection=first)
+    assert len({Feature("x", connection=first), Feature("x", connection=second)}) == 2
+    first.close()
+    second.close()

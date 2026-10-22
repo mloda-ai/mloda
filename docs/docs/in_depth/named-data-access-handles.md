@@ -183,6 +183,8 @@ feature = Feature("amount", options=Options(group={"connection_handle": "warehou
 
 With a single matching connection no handle is needed. Two unnamed matches drop a DuckDB or SQLite candidate, with a reason naming the handles. A step whose data lives on another connection than the one bound to it raises.
 
+`Feature("amount", connection=conn)` is sugar for this: the request registers `conn` on a copy of your collection (your own collection is never changed) and sets `connection_handle` on the feature. A handle you already gave that connection is kept; otherwise it gets an auto handle. Combining `connection=` with a `connection_handle` option raises, and `input_features` entries may not carry a connection (use the collection and `connection_handle`).
+
 ## Introspection: `handles()`
 
 `DataAccessCollection.handles()` returns a `{handle: kind}` map of everything registered. Use it for audits, logging, or to surface candidates in your own error messages:

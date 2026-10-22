@@ -56,6 +56,22 @@ def normalize_feature_group_scope(
     )
 
 
+class _ConnectionHolder:
+    """Holds a live connection by identity: deepcopy returns the holder itself."""
+
+    def __init__(self, connection: Any) -> None:
+        self.connection = connection
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> _ConnectionHolder:
+        return self
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _ConnectionHolder) and self.connection is other.connection
+
+    def __hash__(self) -> int:
+        return id(self.connection)
+
+
 class Feature:
     """Represents a raw feature.
 
@@ -128,12 +144,16 @@ class Feature:
         required_declarations: Mapping[str, str | int | float | bool | None] | None = None,
         keep_index: bool = False,
         implementation: str | type | Sequence[str | type] | None = None,
+        connection: Any = None,
     ):
         if options is None:
             options = {}
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
         reject_reserved_reader_key(self.options)
+        if connection is not None and self.options.get("connection_handle") is not None:
+            raise ValueError("Feature(connection=...) cannot be combined with a 'connection_handle' option; use one.")
+        self._connection_holder = None if connection is None else _ConnectionHolder(connection)
         self.domain = self._set_domain(domain, self.options.get("domain"))
         if "domain" in self.options.group:
             # Copy first: options may be a caller-owned Options instance, not a private dict.
@@ -232,6 +252,11 @@ class Feature:
         )
         validate_forwarding_directives(self.forward_group, self.forward_group_exclude)
         self.inherit_context_keys = self._normalize_allowlist(inherit_context_keys, "inherit_context_keys")
+
+    @property
+    def connection(self) -> Any:
+        """The live connection passed as ``connection=``, or None."""
+        return None if self._connection_holder is None else self._connection_holder.connection
 
     def add_consumer_attribution(self, name: str, keys: frozenset[str]) -> None:
         """Record a consumer attribution, skipping an identical (name, keys) entry.
@@ -480,6 +505,7 @@ class Feature:
             and (not include_compute_frameworks or self.compute_frameworks == other.compute_frameworks)
             and self.data_type == other.data_type
             and self.implementation_pin == other.implementation_pin
+            and self._connection_holder == other._connection_holder
             and self._child_options_key() == other._child_options_key()
             and self._input_data_match_key() == other._input_data_match_key()
         )
@@ -505,6 +531,7 @@ class Feature:
                 compute_frameworks_hashable,
                 self.data_type,
                 self.implementation_pin,
+                self._connection_holder,
                 self._child_options_key(),
                 self._input_data_match_key(),
             )

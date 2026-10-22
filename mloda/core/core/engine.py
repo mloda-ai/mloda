@@ -43,7 +43,14 @@ from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.graph.build_graph import BuildGraph
 from mloda.core.prepare.resolve_graph import ResolveGraph
-from mloda.core.abstract_plugins.implementation import accessible_implementations
+from mloda.core.abstract_plugins.implementation import (
+    accessible_implementations,
+    current_implementations,
+    serving_implementation,
+)
+from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
+from mloda.core.abstract_plugins.components.input_data.read_file_fg import ReadFileFG
 from mloda.core.prepare.resolve_implementation_pins import ResolveImplementationPins
 from mloda.core.prepare.resolution_failure_renderer import _candidate_sort_key
 from mloda.core.runtime.run import ExecutionOrchestrator
@@ -963,6 +970,13 @@ class Engine:
         if not input_features:
             return None
 
+        for entry in input_features:
+            if isinstance(entry, Feature) and entry.connection is not None:
+                raise ValueError(
+                    f"{feature_group_class.get_class_name()}.input_features returned '{entry.name}' with a "
+                    "connection; register it in the DataAccessCollection and set the 'connection_handle' option."
+                )
+
         ordered: list[Feature | str] = list(input_features)
         if isinstance(input_features, (set, frozenset)):  # set order is hash-seed dependent
             ordered.sort(key=lambda f: str(f.name) if isinstance(f, Feature) else str(f))
@@ -993,20 +1007,56 @@ class Engine:
         """
         This function ensures that the feature always has a compute framework set!
         """
+        infeasible = self._infeasible_file_frameworks(compute_frameworks, feature_group_class)
         if feature.compute_frameworks:
             if not feature.compute_frameworks & compute_frameworks:
                 raise ValueError(
                     f"Feature {feature.name} does not support compute framework {feature.compute_frameworks}."
                 )
+            for cfw in feature.compute_frameworks & compute_frameworks:
+                if cfw in infeasible:
+                    raise ValueError(f"Feature {feature.name} cannot use {infeasible[cfw]}")
         else:
+            if infeasible and not compute_frameworks - infeasible.keys():
+                raise ValueError(f"Feature {feature.name} cannot use {'; '.join(sorted(infeasible.values()))}")
             # Hash-safe only because this runs before add_feature_to_collection stores the feature.
             feature.compute_frameworks = self._drop_unconnected_required(
-                feature, compute_frameworks, feature_group_class
+                feature, compute_frameworks - infeasible.keys(), feature_group_class
             )
-            dropped = frozenset(compute_frameworks - feature.compute_frameworks)
+            for cfw, reason in infeasible.items():
+                self.connection_reasons.setdefault(feature.uuid, {})[cfw] = reason
+            dropped = frozenset(compute_frameworks - feature.compute_frameworks - infeasible.keys())
             if dropped:
                 self.connection_dropped[feature.uuid] = dropped
         return feature
+
+    @staticmethod
+    def _infeasible_file_frameworks(
+        compute_frameworks: set[type[ComputeFramework]], feature_group_class: type[FeatureGroup]
+    ) -> dict[type[ComputeFramework], str]:
+        """REQUIRED frameworks a neutral FileSource load of a file root cannot reach, with the reason."""
+        if not (
+            isinstance(feature_group_class, type)
+            and issubclass(feature_group_class, ReadFileFG)
+            and not feature_group_class.overrides_load_neutral(ReadFileFG)
+        ):
+            return {}
+        if not any(cfw.connection_requirement() is ConnectionRequirement.REQUIRED for cfw in compute_frameworks):
+            return {}
+        transformer = ComputeFrameworkTransformer()
+        implementations = list(current_implementations())
+        infeasible: dict[type[ComputeFramework], str] = {}
+        for cfw in compute_frameworks:
+            if cfw.connection_requirement() is not ConnectionRequirement.REQUIRED:
+                continue
+            if serving_implementation(feature_group_class, cfw, implementations, stop_after="load_neutral"):
+                continue
+            target = cfw.expected_data_framework()
+            if not ComputeFramework.descriptor_reaches(transformer, FileSource, target):
+                infeasible[cfw] = (
+                    f"{cfw.get_class_name()}: {ComputeFramework.no_transformer_reason(FileSource, target)}"
+                )
+        return infeasible
 
     def _raise_on_connection_in_options(self, feature: Feature) -> None:
         """A connection object in the options is no longer read; it belongs in the DataAccessCollection."""

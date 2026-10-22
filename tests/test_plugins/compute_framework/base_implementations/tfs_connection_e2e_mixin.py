@@ -142,3 +142,15 @@ class TfsConnectionEndToEndMixin:
         assert result is not None
         assert len(result) == 1
         assert self.extract_doubled(result[0]) == [2, 4, 6]
+
+    def test_a_connection_on_the_feature_needs_no_data_access_collection(self, live_connection: Any) -> None:
+        root, sink, dst = root_binding_groups(self.destination_framework_class, self.double_relation)
+        _ROOT_SEEN.clear()
+        result = mloda.run_all(
+            [Feature(dst, connection=live_connection)],
+            compute_frameworks=[self.destination_framework_class],
+            plugin_collector=PluginCollector.enabled_feature_groups({root, sink}),
+            parallelization_modes={ParallelizationMode.SYNC},
+        )
+        assert sorted(result[0].column(dst).to_pylist()) == [2, 4, 6]
+        assert _ROOT_SEEN[dst] is live_connection

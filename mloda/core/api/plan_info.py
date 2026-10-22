@@ -1,5 +1,5 @@
 import heapq
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
@@ -91,6 +91,9 @@ class PlanStep:
     ``join_keys`` is a join step's ``left=right`` index column pairs, as ``HookContext.join_keys``; None for
     APPEND/UNION and non-join steps.
 
+    ``leaves_connection``: the handle whose connection a compute step's root read or a transform leaves, "<unnamed>"
+    for an auto handle, else None.
+
     ``implementation``: the Implementation class serving a compute step, else None.
     ``implementation_path``: its ``module:qualname``, "neutral" for a format group step without one, else None.
     ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
@@ -127,6 +130,7 @@ class PlanStep:
     implementation_specialized_from: tuple[type["Implementation"], ...] = ()
     feature_group_version: str | None = field(default=None, compare=False)
     feature_group_hash: str | None = field(default=None, compare=False)
+    leaves_connection: str | None = None
     _data_access_identity: str | None = field(default=None, compare=False)
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
     _neutral: bool = field(default=False, compare=False)
@@ -197,6 +201,7 @@ def build_plan_steps(
     resolved_join_plan: "ResolvedJoinPlan | None" = None,
     specialized_from: Mapping[UUID, tuple[type["FeatureGroup"], ...]] | None = None,
     output_framework: type["ComputeFramework"] | None = None,
+    auto_handles: Collection[str] = (),
 ) -> list[PlanStep]:
     """Map the steps of an ExecutionPlan onto PlanStep records, in dependency order.
 
@@ -214,6 +219,9 @@ def build_plan_steps(
 
     plan: list[PlanStep] = []
     raw_steps = list(execution_plan)
+
+    def leaves(handle: str | None) -> str | None:
+        return "<unnamed>" if handle in auto_handles else handle
 
     for step in raw_steps:
         if isinstance(step, FeatureGroupStep):
@@ -238,6 +246,13 @@ def build_plan_steps(
             match = step.features.input_data_match
             identity = None if match is None else match[0].data_access_identity(match[1])
             is_fallback = None if match is None or identity is None else _is_fallback_identity(match[1], identity)
+            named = None if step.features.options is None else step.features.options.get("connection_handle")
+            declared_here = any(f.options.is_own("connection_handle") for f in step.features.features)
+            leaves_handle = (
+                named
+                if named is not None and declared_here and not declared and step.connection_handle != named
+                else None
+            )
             impl = step.features.implementation
             path = implementation_path(step.feature_group, impl, match)
             plan.append(
@@ -263,6 +278,7 @@ def build_plan_steps(
                     },
                     specialized_from=tuple(sorted(replaced, key=_candidate_sort_key)),
                     compute_framework_reason="; ".join(sorted(reasons)) or None,
+                    leaves_connection=leaves(leaves_handle),
                     result_framework=(output_framework or step.compute_framework.result_framework())
                     if requested
                     else None,
@@ -284,6 +300,15 @@ def build_plan_steps(
                 )
             )
         elif isinstance(step, TransformFrameworkStep):
+            sources = [
+                source
+                for source in raw_steps
+                if source is not step
+                and isinstance(source, FeatureGroupStep | JoinStep)
+                and source.get_uuids() & step.required_uuids
+                and source.connection_explicit
+                and source.connection_handle != step.connection_handle
+            ]
             plan.append(
                 PlanStep(
                     step_kind="transform",
@@ -292,6 +317,11 @@ def build_plan_steps(
                     compute_framework=step.to_framework,
                     source_feature_group=step.from_feature_group,
                     source_compute_framework=step.from_framework,
+                    leaves_connection=leaves(
+                        min((h for source in sources if (h := source.connection_handle) is not None), default=None)
+                    )
+                    if step.from_framework is not step.to_framework
+                    else None,
                 )
             )
         elif isinstance(step, JoinStep):

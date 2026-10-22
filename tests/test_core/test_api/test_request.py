@@ -1,9 +1,12 @@
+import sqlite3
+from typing import Any
 from unittest.mock import patch, Mock
 import pytest
 
-from mloda.provider import ComputeFramework
+from mloda.provider import ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Features
-from mloda.user import Feature
+from mloda.user import DataAccessCollection, Feature, Options, ParallelizationMode, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda.user import mlodaAPI
 from mloda.core.api.request import SetupConfigurationError
 from mloda.core.core.engine import Engine
@@ -126,3 +129,144 @@ class TestShutdownRunnerManagerDeleted:
         assert not hasattr(mlodaAPI, "_shutdown_runner_manager"), (
             "_shutdown_runner_manager should be deleted to avoid double shutdown"
         )
+
+
+_CONN_SEEN: list[tuple[Any, str | None]] = []
+
+
+class ConnSugarRoot(FeatureGroup):
+    """Sqlite root that records each feature's connection object and bound connection_handle."""
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({"conn_sugar_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {SqliteFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        for feature in features.features:
+            _CONN_SEEN.append((feature.connection, feature.options.get("connection_handle")))
+        return {"conn_sugar_col": [1, 2]}
+
+
+def _run_conn_sugar(features: list[Feature], **kwargs: Any) -> dict[int, str | None]:
+    _CONN_SEEN.clear()
+    result = mloda.run_all(
+        features,
+        compute_frameworks=[SqliteFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({ConnSugarRoot}),
+        parallelization_modes={ParallelizationMode.SYNC},
+        **kwargs,
+    )
+    assert result[0].column("conn_sugar_col").to_pylist() == [1, 2]
+    return {id(conn): handle for conn, handle in _CONN_SEEN}
+
+
+class TestFeatureConnectionIntake:
+    @pytest.fixture
+    def conns(self) -> Any:
+        first = sqlite3.connect(":memory:")
+        second = sqlite3.connect(":memory:")
+        yield first, second
+        first.close()
+        second.close()
+
+    def test_features_differing_only_in_connection_each_bind_their_own_in_request_order(self, conns: Any) -> None:
+        first, second = conns
+        seen = _run_conn_sugar(
+            [Feature("conn_sugar_col", connection=first), Feature("conn_sugar_col", connection=second)]
+        )
+        assert seen == {id(first): "_feature_connection_0", id(second): "_feature_connection_1"}
+
+    def test_features_sharing_one_options_instance_bind_their_own_and_leave_it_untouched(self, conns: Any) -> None:
+        first, second = conns
+        shared = Options({"k": "v"})
+        seen = _run_conn_sugar(
+            [
+                Feature("conn_sugar_col", options=shared, connection=first),
+                Feature("conn_sugar_col", options=shared, connection=second),
+            ]
+        )
+        assert seen == {id(first): "_feature_connection_0", id(second): "_feature_connection_1"}
+        assert shared.get("connection_handle") is None
+
+    def test_a_user_named_connection_keeps_its_handle_and_the_users_collection_is_unchanged(self, conns: Any) -> None:
+        first, second = conns
+        dac = DataAccessCollection(connections={"mine": first})
+        seen = _run_conn_sugar(
+            [Feature("conn_sugar_col", connection=first), Feature("conn_sugar_col", connection=second)],
+            data_access_collection=dac,
+        )
+        assert seen == {id(first): "mine", id(second): "_feature_connection_1"}
+        assert dac.connections == {"mine": first}
+        assert dac._auto_handles == set()
+
+    def test_copy_features_true_leaves_the_users_feature_without_a_handle(self, conns: Any) -> None:
+        first, _ = conns
+        feature = Feature("conn_sugar_col", connection=first)
+        seen = _run_conn_sugar([feature])
+        assert seen == {id(first): "_feature_connection_0"}
+        assert feature.options.get("connection_handle") is None
+
+    def test_copy_features_false_rederives_the_handle_on_every_run(self, conns: Any) -> None:
+        first, _ = conns
+        feature = Feature("conn_sugar_col", connection=first)
+        assert _run_conn_sugar([feature], copy_features=False) == {id(first): "_feature_connection_0"}
+        dac = DataAccessCollection(connections={"mine": first})
+        assert _run_conn_sugar([feature], copy_features=False, data_access_collection=dac) == {id(first): "mine"}
+
+    def test_names_follow_request_order_not_the_set_order_of_a_user_collection_and_repeat_across_runs(
+        self, conns: Any
+    ) -> None:
+        first, second = conns
+        extra = sqlite3.connect(":memory:")
+        try:
+            features = [Feature("conn_sugar_col", connection=first), Feature("conn_sugar_col", connection=second)]
+            expected = {id(first): "_feature_connection_0", id(second): "_feature_connection_1"}
+            for _ in range(2):
+                dac = DataAccessCollection({second, extra, first})
+                assert _run_conn_sugar(features, data_access_collection=dac) == expected
+        finally:
+            extra.close()
+
+
+class ConnValueRoot(FeatureGroup):
+    """Sqlite root whose value is the connection's user_version, so each connection yields its own frame."""
+
+    @classmethod
+    def input_data(cls) -> DataCreator:
+        return DataCreator({"conn_value_col"})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {SqliteFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        connection = next(iter(features.features)).connection
+        return {"conn_value_col": [connection.execute("PRAGMA user_version").fetchone()[0]]}
+
+
+class TestFrameForConnectionFeature:
+    def test_frame_for_a_connection_feature_returns_its_own_frame_with_copy_features(self) -> None:
+        first = sqlite3.connect(":memory:")
+        second = sqlite3.connect(":memory:")
+        try:
+            first.execute("PRAGMA user_version = 11")
+            second.execute("PRAGMA user_version = 22")
+            f1 = Feature("conn_value_col", connection=first)
+            f2 = Feature("conn_value_col", connection=second)
+            result = mloda.run_all(
+                [f1, f2],
+                compute_frameworks=[SqliteFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups({ConnValueRoot}),
+                parallelization_modes={ParallelizationMode.SYNC},
+            )
+            assert result.frame_for(f1).column("conn_value_col").to_pylist() == [11]
+            assert result.frame_for(f2).column("conn_value_col").to_pylist() == [22]
+        finally:
+            first.close()
+            second.close()

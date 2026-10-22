@@ -1,6 +1,6 @@
 import contextlib
 import contextvars
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
 from collections.abc import Sequence
@@ -188,6 +188,10 @@ class mlodaAPI:
             # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
             _requested_features = deepcopy(requested_features) if copy_features else requested_features
 
+            data_access_collection, self._connection_handles = self._bind_feature_connections(
+                _requested_features, data_access_collection
+            )
+
             # Handle api_data: create ApiInputDataCollection if api_data provided
             api_input_data_collection: ApiInputDataCollection | None = None
             if api_data is not None and len(api_data) > 0:
@@ -225,6 +229,34 @@ class mlodaAPI:
             raise SetupConfigurationError(str(error)) from error
 
         self.engine = self._create_engine()
+
+    @staticmethod
+    def _bind_feature_connections(
+        requested_features: Features | Sequence[Feature | str],
+        data_access_collection: DataAccessCollection | None,
+    ) -> tuple[DataAccessCollection | None, dict[int, str]]:
+        """Register each Feature(connection=) on a copy of the collection; return it and the id-to-handle map."""
+        entries = requested_features.collection if isinstance(requested_features, Features) else requested_features
+        bound = [f for f in entries if isinstance(f, Feature) and f.connection is not None]
+        if not bound:
+            return data_access_collection, {}
+        dac = DataAccessCollection() if data_access_collection is None else data_access_collection.copy()
+        handles: dict[int, str] = {}
+        for feature in bound:
+            connection = feature.connection
+            if id(connection) not in handles:
+                named = [h for h, c in dac.connections.items() if c is connection and h not in dac.auto_handles]
+                if named:
+                    handles[id(connection)] = named[0]
+                else:
+                    index = len(handles)
+                    while f"_feature_connection_{index}" in dac.handles():
+                        index += 1
+                    handles[id(connection)] = f"_feature_connection_{index}"
+                    dac.bind_auto_connection(connection, handles[id(connection)])
+            feature.options = copy(feature.options)
+            feature.options.set("connection_handle", handles[id(connection)])
+        return dac, handles
 
     def _process_features(
         self,
@@ -565,6 +597,9 @@ class mlodaAPI:
             self.engine.execution_planner.resolved_join_plan,
             specialized_from=self.engine.specialized_from,
             output_framework=self.engine.output_framework,
+            auto_handles=(
+                () if self.engine.data_access_collection is None else self.engine.data_access_collection.auto_handles
+            ),
         )
 
     def resolution_report(self) -> list[ResolutionRecord]:
@@ -632,7 +667,14 @@ class mlodaAPI:
             parallelization_modes, flight_server, api_data=api_data, artifacts=artifacts, run_context=run_context
         )
         items = self._plan_ordered_items(runner, plan)
-        return RunResult([r for _, r in items], plan, items, run_id=run_context.run_id, plan_id=self.plan_id)
+        return RunResult(
+            [r for _, r in items],
+            plan,
+            items,
+            run_id=run_context.run_id,
+            plan_id=self.plan_id,
+            connection_handles=self._connection_handles,
+        )
 
     def stream_run(
         self,

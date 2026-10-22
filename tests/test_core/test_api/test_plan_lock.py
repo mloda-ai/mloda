@@ -131,10 +131,11 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
     text = lock.read_text(encoding="utf-8")
     content = json.loads(text)
     assert text == json.dumps(content, sort_keys=True, indent=2) + "\n"
-    assert content["format"] == PLAN_LOCK_FORMAT == 7
+    assert content["format"] == PLAN_LOCK_FORMAT == 8
     assert set(content) == {"format", "requested_features", "compute", "joins", "transforms"}
     assert content["requested_features"] == ["lock_io_value"]
     assert set(content["compute"][0]) == {
+        "leaves_connection",
         "feature_names",
         "feature_group",
         "compute_framework",
@@ -155,7 +156,12 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "destination_side",
         "join_keys",
     }
-    assert set(content["transforms"][0]) == {"feature_group", "from_compute_framework", "to_compute_framework"}
+    assert set(content["transforms"][0]) == {
+        "feature_group",
+        "from_compute_framework",
+        "to_compute_framework",
+        "leaves_connection",
+    }
     assert text == _lock_text(plan)
     check_plan_lock(plan, lock)
 
@@ -526,7 +532,7 @@ def test_a_lock_written_in_the_previous_format_with_a_reader_entry_fails_check(t
     write_plan_lock(plan, lock)
     content = json.loads(lock.read_text(encoding="utf-8"))
     content["format"] = PLAN_LOCK_FORMAT - 1
-    assert content["format"] == 6
+    assert content["format"] == 7
     for record in content["compute"]:
         record["reader"] = None
     lock.write_text(json.dumps(content, sort_keys=True, indent=2) + "\n", encoding="utf-8")

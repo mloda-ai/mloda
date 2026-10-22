@@ -260,9 +260,11 @@ def test_explain_writes_the_serving_implementation_and_its_dependency_free_hash_
     if served:
         assert record["implementation"] == _impl_path(ToyWorkerPythonDict)
         assert record["implementation_hash"] == _dependency_free_hash(ToyWorkerPythonDict)
+        assert "feature_group_hash" not in record
     else:
         assert record["implementation"] == "neutral"
         assert record["implementation_hash"] is None
+        assert record["feature_group_hash"] == BaseFeatureGroupVersion.first_party_hash(group)
     check_plan_lock(steps, lock)
 
 
@@ -366,6 +368,10 @@ class LockEditSubGroup(LockEditGroup):
     unused_value = {sub_value}
 
 
+class LockEditNeutralGroup(ToyFormatBase):
+    unused_value = {sub_value}
+
+
 def helper() -> int:
     return {value}
 
@@ -397,11 +403,20 @@ def _load_impl(
     return cast("type[Implementation]", module.LockEditImpl)
 
 
+@pytest.mark.parametrize("neutral", [False, True])
 def test_an_edited_subclass_group_body_fails_check_while_the_implementation_hash_is_unchanged(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, neutral: bool
 ) -> None:
     def step_for(directory: Path, value: int) -> PlanStep:
         impl = _load_impl(directory, 1, monkeypatch, sub_value=value)
+        if neutral:
+            group = cast("type[FeatureGroup]", sys.modules[_IMPL_MODULE].LockEditNeutralGroup)
+            return _compute_step(
+                implementation=None,
+                _neutral=True,
+                feature_group=group,
+                feature_group_hash=BaseFeatureGroupVersion.first_party_hash(group),
+            )
         sub = cast("type[FeatureGroup]", sys.modules[_IMPL_MODULE].LockEditSubGroup)
         return _impl_step(
             impl,

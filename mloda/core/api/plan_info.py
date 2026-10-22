@@ -95,9 +95,9 @@ class PlanStep:
     ``implementation_path``: its ``module:qualname``, "neutral" for a format group step without one, else None.
     ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
     ``implementation_hash`` is the first-party code closure hash, never dependency versions ("unavailable" when
-    hashing fails). ``feature_group_hash``: the group's code hash, set only when an inherited implementation serves a
-    subclass group. ``implementation_version``, ``implementation_hash``, ``feature_group_version``,
-    ``feature_group_hash``: excluded from equality.
+    hashing fails). ``feature_group_hash``: the group's code hash, set when an inherited implementation serves a
+    subclass group or a format group loads neutrally. ``implementation_version``, ``implementation_hash``,
+    ``feature_group_version``, ``feature_group_hash``: excluded from equality.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -274,7 +274,7 @@ def build_plan_steps(
                     implementation_specialized_from=_replaced_implementations(impl, step),
                     feature_group_version=safe_field(lambda: as_str(step.feature_group.version()), None),
                     feature_group_hash=None
-                    if impl is None or step.feature_group is impl.feature_group
+                    if path is None or (impl is not None and step.feature_group is impl.feature_group)
                     else safe_field(
                         lambda: BaseFeatureGroupVersion.first_party_hash(step.feature_group), "unavailable"
                     ),

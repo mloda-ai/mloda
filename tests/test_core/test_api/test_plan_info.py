@@ -943,10 +943,12 @@ class TestPlanStepImplementation:
         assert step.implementation_hash != "unavailable"
 
     def test_a_format_step_without_an_implementation_is_neutral(self, tmp_path: Path) -> None:
-        step = _explain_toy_group(neutral_csv_group(tmp_path / "n.csv"))
+        group = neutral_csv_group(tmp_path / "n.csv")
+        step = _explain_toy_group(group)
 
         assert step.implementation is None
         assert step.implementation_path == "neutral"
+        assert step.feature_group_hash == BaseFeatureGroupVersion.first_party_hash(group)
         assert step.implementation_version is None
         assert step.implementation_hash is None
 

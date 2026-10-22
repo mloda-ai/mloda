@@ -14,6 +14,7 @@ Red failure. Every feature group and compute framework double is suffixed ``011`
 groups become global ``FeatureGroup`` subclasses and must not collide with other suites.
 """
 
+import importlib
 from abc import abstractmethod
 from collections.abc import Mapping
 from typing import Any, ClassVar
@@ -30,6 +31,7 @@ from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
@@ -552,6 +554,18 @@ ELIM_LINK = Link.inner(
 # --- helpers ------------------------------------------------------------------------------------
 
 
+NO_IMPLEMENTATION_REASON = (
+    "no Implementation of it is loaded; import its implementation modules or call PluginLoader.all()"
+)
+DISABLED_IMPLEMENTATIONS_REASON = "its implementations are all disabled or denied for this run"
+
+
+def _op_toy() -> Any:
+    return importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
+
+
 def _fail(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
@@ -624,6 +638,36 @@ class TestEliminationStages:
             stage="frameworks_not_enabled", reason=reason
         )
         assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
+
+    @pytest.mark.parametrize(
+        ("bare", "accessible", "reason", "rendered"),
+        [
+            pytest.param(True, None, NO_IMPLEMENTATION_REASON, True, id="no_implementation"),
+            pytest.param(False, "none", DISABLED_IMPLEMENTATIONS_REASON, True, id="all_disabled"),
+            pytest.param(
+                False, "some", "none of its compute frameworks are enabled for this run", False, id="accessible"
+            ),
+        ],
+    )
+    def test_frameworks_not_enabled_stage_for_an_operation_group(
+        self, bare: bool, accessible: str | None, reason: str, rendered: bool
+    ) -> None:
+        toy = _op_toy()
+        group = toy.OpToyBareFG if bare else toy.OpToyFG
+        name = toy.OPTOY_BARE_FEATURE if bare else toy.OPTOY_FEATURE
+        feature = Feature(name, {toy.OPTOY_KEY: "sum"})
+        plugins: FeatureGroupEnvironmentMapping = {group: set()}
+
+        if accessible is None:
+            err = _fail(feature, plugins)
+        else:
+            implementations = frozenset() if accessible == "none" else {toy.OpToyPandas, toy.OpToyPyArrow}
+            with accessible_implementations(implementations):
+                err = _fail(feature, plugins)
+
+        assert err.result.eliminations[group] == Elimination(stage="frameworks_not_enabled", reason=reason)
+        if rendered:
+            assert f"{group.__name__} (compute framework): {reason}" in str(err)
 
     def test_frameworks_not_enabled_stage_when_no_compute_framework_is_loaded(
         self, monkeypatch: pytest.MonkeyPatch

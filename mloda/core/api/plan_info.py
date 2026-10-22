@@ -247,7 +247,12 @@ def build_plan_steps(
             identity = None if match is None else match[0].data_access_identity(match[1])
             is_fallback = None if match is None or identity is None else _is_fallback_identity(match[1], identity)
             named = None if step.features.options is None else step.features.options.get("connection_handle")
-            leaves_handle = named if named is not None and not declared and step.connection_handle != named else None
+            declared_here = any(f.options.is_own("connection_handle") for f in step.features.features)
+            leaves_handle = (
+                named
+                if named is not None and declared_here and not declared and step.connection_handle != named
+                else None
+            )
             impl = step.features.implementation
             path = implementation_path(step.feature_group, impl, match)
             plan.append(
@@ -312,7 +317,9 @@ def build_plan_steps(
                     compute_framework=step.to_framework,
                     source_feature_group=step.from_feature_group,
                     source_compute_framework=step.from_framework,
-                    leaves_connection=leaves(min((str(source.connection_handle) for source in sources), default=None))
+                    leaves_connection=leaves(
+                        min((h for source in sources if (h := source.connection_handle) is not None), default=None)
+                    )
                     if step.from_framework is not step.to_framework
                     else None,
                 )

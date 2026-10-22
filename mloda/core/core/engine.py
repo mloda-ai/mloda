@@ -1041,6 +1041,8 @@ class Engine:
             and not feature_group_class.overrides_load_neutral(ReadFileFG)
         ):
             return {}
+        if not any(cfw.connection_requirement() is ConnectionRequirement.REQUIRED for cfw in compute_frameworks):
+            return {}
         transformer = ComputeFrameworkTransformer()
         implementations = list(current_implementations())
         infeasible: dict[type[ComputeFramework], str] = {}

@@ -29,8 +29,10 @@ class RunResult(list[Any]):
         *,
         run_id: str | None = None,
         plan_id: str | None = None,
+        connection_handles: dict[int, str] | None = None,
     ) -> None:
         super().__init__(results)
+        self._connection_handles = connection_handles or {}
         self._plan = plan
         self._result_items = tuple(result_items or ())
         self._run_id = run_id
@@ -60,6 +62,9 @@ class RunResult(list[Any]):
         """Return the frame whose step requested ``feature`` (a Feature also matches group options); else ValueError."""
         name = feature if isinstance(feature, str) else str(feature.name)
         group = None if isinstance(feature, str) else snapshot_group(feature.options.group)
+        if not isinstance(feature, str) and feature.connection is not None:
+            handle = self._connection_handles.get(id(feature.connection))
+            group = {**(group or {}), "connection_handle": handle}
         pinned = None if isinstance(feature, str) else feature.compute_frameworks
         frames = self.frames()
         pairs = [(step, frame) for step, frame in frames if name in step.requested_feature_names]

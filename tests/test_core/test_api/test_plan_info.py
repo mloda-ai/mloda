@@ -1995,6 +1995,37 @@ class LeaveDictConsumer(FeatureGroup):
         return {"leave_out"}
 
 
+class LeaveSqliteConsumer(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("leave_dict_src")}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {SqliteFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"leave_sql_out"}
+
+
+def forwarded_handle_plan() -> list[PlanStep]:
+    """A PythonDict root feeding a SQLite consumer that names the handle; the root never declares it."""
+    conn = sqlite3.connect(":memory:")
+    try:
+        return mloda.explain(
+            [Feature("leave_sql_out", options={"connection_handle": "mine"})],
+            compute_frameworks=[PythonDictFramework, SqliteFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({LeaveDictRoot, LeaveSqliteConsumer}),
+            data_access_collection=DataAccessCollection(connections={"mine": conn}),
+        )
+    finally:
+        conn.close()
+
+
 def leave_plan(*, auto: bool = False, handle: str | None = None, dict_root: bool = False) -> list[PlanStep]:
     """Plan a SQLite root feeding a PythonDict consumer (or a PythonDict root) with the connection chosen by the args.
 
@@ -2093,6 +2124,36 @@ class TestLeavesConnection:
             (SqliteFramework, PythonDictFramework)
         ]
         assert transforms[0].leaves_connection == "mine"
+
+    def test_a_transform_out_of_a_python_dict_root_records_none_never_the_string_none(self) -> None:
+        plan = forwarded_handle_plan()
+
+        transforms = [s for s in plan if s.step_kind == "transform"]
+        assert [(s.source_compute_framework, s.compute_framework) for s in transforms] == [
+            (PythonDictFramework, SqliteFramework)
+        ]
+        assert transforms[0].leaves_connection is None
+        assert "None" not in [s.leaves_connection for s in plan]
+
+    def test_a_root_given_its_handle_by_a_consumer_records_none(self) -> None:
+        plan = forwarded_handle_plan()
+
+        roots = [s for s in plan if s.step_kind == "compute" and s.compute_framework is PythonDictFramework]
+        assert len(roots) == 1
+        assert roots[0].leaves_connection is None
+
+    def test_a_connection_feature_on_a_python_dict_root_records_the_unnamed_token(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        try:
+            plan = mloda.explain(
+                [Feature("leave_dict_src", connection=conn)],
+                compute_frameworks=[PythonDictFramework, SqliteFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups({LeaveDictRoot}),
+            )
+        finally:
+            conn.close()
+        computes = [s for s in plan if s.step_kind == "compute"]
+        assert [s.leaves_connection for s in computes] == ["<unnamed>"]
 
     def test_an_auto_named_connection_records_the_unnamed_token(self, tmp_path: Path) -> None:
         plan = leave_plan(auto=True)

@@ -188,7 +188,9 @@ class mlodaAPI:
             # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
             _requested_features = deepcopy(requested_features) if copy_features else requested_features
 
-            data_access_collection = self._bind_feature_connections(_requested_features, data_access_collection)
+            data_access_collection, self._connection_handles = self._bind_feature_connections(
+                _requested_features, data_access_collection
+            )
 
             # Handle api_data: create ApiInputDataCollection if api_data provided
             api_input_data_collection: ApiInputDataCollection | None = None
@@ -232,30 +234,29 @@ class mlodaAPI:
     def _bind_feature_connections(
         requested_features: Features | Sequence[Feature | str],
         data_access_collection: DataAccessCollection | None,
-    ) -> DataAccessCollection | None:
-        """Register each Feature(connection=) on a copy of the collection and write its handle on the feature."""
+    ) -> tuple[DataAccessCollection | None, dict[int, str]]:
+        """Register each Feature(connection=) on a copy of the collection; return it and the id-to-handle map."""
         entries = requested_features.collection if isinstance(requested_features, Features) else requested_features
         bound = [f for f in entries if isinstance(f, Feature) and f.connection is not None]
         if not bound:
-            return data_access_collection
+            return data_access_collection, {}
         dac = DataAccessCollection() if data_access_collection is None else data_access_collection.copy()
         handles: dict[int, str] = {}
         for feature in bound:
             connection = feature.connection
             if id(connection) not in handles:
-                existing = [h for h, c in dac.connections.items() if c is connection]
-                named = [h for h in existing if h not in dac._auto_handles]
+                named = [h for h, c in dac.connections.items() if c is connection and h not in dac.auto_handles]
                 if named:
                     handles[id(connection)] = named[0]
                 else:
-                    for handle in existing:
-                        del dac.connections[handle]
-                        dac._auto_handles.discard(handle)
-                    dac.add_connection(connection)
-                    handles[id(connection)] = next(h for h, c in dac.connections.items() if c is connection)
+                    index = len(handles)
+                    while f"_feature_connection_{index}" in dac.handles():
+                        index += 1
+                    handles[id(connection)] = f"_feature_connection_{index}"
+                    dac.bind_auto_connection(connection, handles[id(connection)])
             feature.options = copy(feature.options)
             feature.options.set("connection_handle", handles[id(connection)])
-        return dac
+        return dac, handles
 
     def _process_features(
         self,
@@ -597,7 +598,7 @@ class mlodaAPI:
             specialized_from=self.engine.specialized_from,
             output_framework=self.engine.output_framework,
             auto_handles=(
-                () if self.engine.data_access_collection is None else self.engine.data_access_collection._auto_handles
+                () if self.engine.data_access_collection is None else self.engine.data_access_collection.auto_handles
             ),
         )
 
@@ -666,7 +667,14 @@ class mlodaAPI:
             parallelization_modes, flight_server, api_data=api_data, artifacts=artifacts, run_context=run_context
         )
         items = self._plan_ordered_items(runner, plan)
-        return RunResult([r for _, r in items], plan, items, run_id=run_context.run_id, plan_id=self.plan_id)
+        return RunResult(
+            [r for _, r in items],
+            plan,
+            items,
+            run_id=run_context.run_id,
+            plan_id=self.plan_id,
+            connection_handles=self._connection_handles,
+        )
 
     def stream_run(
         self,

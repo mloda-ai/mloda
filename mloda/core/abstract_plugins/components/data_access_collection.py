@@ -1,3 +1,4 @@
+import copy as _copy
 from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
@@ -83,7 +84,7 @@ class DataAccessCollection:
 
     def copy(self) -> "DataAccessCollection":
         """Return an independent collection sharing the registered objects."""
-        duplicate = DataAccessCollection()
+        duplicate = _copy.copy(self)
         duplicate.connections = dict(self.connections)
         duplicate.files = dict(self.files)
         duplicate.folders = dict(self.folders)
@@ -91,6 +92,20 @@ class DataAccessCollection:
         duplicate._auto_handles = set(self._auto_handles)
         duplicate.column_to_file = None if self.column_to_file is None else dict(self.column_to_file)
         return duplicate
+
+    @property
+    def auto_handles(self) -> frozenset[str]:
+        """The handles assigned automatically rather than named by the user."""
+        return frozenset(self._auto_handles)
+
+    def bind_auto_connection(self, connection: Any, handle: str) -> None:
+        """Register ``connection`` under the auto ``handle``, dropping its other auto entries."""
+        for existing in [h for h, c in self.connections.items() if c is connection and h in self._auto_handles]:
+            del self.connections[existing]
+            self._auto_handles.discard(existing)
+        self._reject_duplicate(handle)
+        self.connections[handle] = connection
+        self._auto_handles.add(handle)
 
     @classmethod
     def _normalize_credentials(
@@ -426,7 +441,8 @@ def resolve_connection_handle(framework: Any, dac: Any, options: Any | None) -> 
         entry = dac.resolve("connection", hint=named)
         if framework._connection_matches(entry):
             return named, True, None
-        foreign = f"Connection handle '{named}' holds a connection this framework does not accept."
+        shown = "<unnamed>" if named in dac.auto_handles else named
+        foreign = f"Connection handle '{shown}' holds a connection this framework does not accept."
     hint = options.get("data_access_handle") if options is not None else None
     if foreign is None and hint in connections and framework._connection_matches(connections[hint]):
         return hint, True, None

@@ -273,6 +273,21 @@ class TestConnectionHandleResolver:
         assert reason is not None
         assert "other" in reason
 
+    def test_wrong_type_reason_renders_an_auto_handle_as_unnamed_and_a_named_one_by_name(self) -> None:
+        dac = DataAccessCollection()
+        dac.add_connection(_OtherConn())
+        (auto_handle,) = dac.connections
+        _handle, _explicit, reason = self._resolve(dac, connection_handle=auto_handle)
+        assert reason is not None
+        assert "<unnamed>" in reason
+        assert "_auto_connection_" not in reason
+
+        named = DataAccessCollection(connections={"other": _OtherConn()})
+        _handle, _explicit, named_reason = self._resolve(named, connection_handle="other")
+        assert named_reason is not None
+        assert "other" in named_reason
+        assert "<unnamed>" not in named_reason
+
     def test_handle_naming_another_frameworks_connection_falls_through_to_the_single_match(self) -> None:
         dac = DataAccessCollection(connections={"s": _OtherConn(), "d": _Conn()})
         assert self._resolve(dac, connection_handle="s") == ("d", False, None)

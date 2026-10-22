@@ -103,10 +103,6 @@ def _transform_step() -> PlanStep:
     )
 
 
-def _transform_step_with(**overrides: object) -> PlanStep:
-    return dataclasses.replace(_transform_step(), **overrides)  # type: ignore[arg-type]
-
-
 def _plan() -> list[PlanStep]:
     return [_compute_step(), _join_step(), _transform_step()]
 

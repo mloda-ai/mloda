@@ -109,7 +109,6 @@ class SqliteFG(ReadDBFG):
 
     @classmethod
     def select_rows(cls, connection: Any, table: str, features: Any) -> tuple[list[str], list[Any]]:
-        """The requested rows, with the pushable filters applied in SQL."""
         names = ", ".join(quote_ident(name) for name in sorted(features.get_all_names()))
         where, params, _ = cls._pushdown(connection, table, features)
         query = f"select {names} from {quote_ident(table)}{where};"  # nosec B608 - identifiers quoted, values bound

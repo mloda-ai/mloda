@@ -127,7 +127,7 @@ _MULTI_COLUMNS: dict[str, list[float | None]] = {
     "c": [3.0, 5.0, 7.0, None, 9.0],
 }
 
-_DIVERGENT_DECLARATIONS = {
+_DIVERGENT_DECLARATIONS: dict[type[Implementation], dict[str, str]] = {
     PandasAggregation: {
         "sum": "skips NaN in sum",
         "avg": "skips NaN in avg",
@@ -191,7 +191,7 @@ def _polars_result(aggregation_type: str, columns: dict[str, list[float | None]]
     return list(frame.select(expression.alias("result")).collect()["result"].to_list())
 
 
-_RESULT_OF = {
+_RESULT_OF: dict[type[Implementation], Callable[[str, dict[str, list[float | None]]], list[Any]]] = {
     PandasAggregation: _pandas_result,
     PyArrowAggregation: _pyarrow_result,
     PolarsLazyAggregation: _polars_result,

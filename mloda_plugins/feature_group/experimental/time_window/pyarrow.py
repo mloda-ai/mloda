@@ -10,7 +10,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from mloda.core.optional_dependency import require
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda.user.pyarrow import PyArrowTable
@@ -23,12 +23,14 @@ from mloda_plugins.feature_group.experimental.nan_safe_reduction import (
 _NUMPY_REASON = "multi-column time-window aggregation"
 
 
-class PyArrowTimeWindow(Implementation):
+class PyArrowTimeWindow(OperationImplementation[TimeWindowFeatureGroup]):
     feature_group = TimeWindowFeatureGroup
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[TimeWindowFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return group.window(
             data,
             features,

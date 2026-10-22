@@ -14,7 +14,12 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import Source
 from mloda.core.abstract_plugins.components.options import Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.implementation import (
+    Implementation,
+    OperationImplementation,
+    loaded_implementations,
+)
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
@@ -23,6 +28,10 @@ from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group import (
+    OpToyBareFG,
+    OpToyFG,
+)
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import (
     WORKER_COLUMN,
     WORKER_VALUES,
@@ -348,6 +357,86 @@ class TestImplementationDefinition:
         group = ToyFormatFG if kind == "format" else _toy_operation().OpToyFG
         impl = make_implementation(group, PythonDictFramework, _sentinel)
         assert impl in loaded_implementations()
+
+    def test_a_plain_implementation_naming_an_operation_group_raises(self, gc_disabled: None) -> None:
+        with pytest.raises(TypeError, match="OperationImplementation"):
+
+            class _PlainOpImpl(Implementation):
+                feature_group = OpToyBareFG
+                compute_framework = PythonDictFramework
+
+                @classmethod
+                def calculate(cls, *args: Any) -> Any:
+                    return None
+
+        assert all(impl.__name__ != "_PlainOpImpl" for impl in loaded_implementations())
+
+    def test_an_operation_implementation_naming_an_operation_group_is_accepted(self) -> None:
+        class _OpGroup(OpToyBareFG):
+            pass
+
+        class _TypedImpl(OperationImplementation[OpToyBareFG]):
+            feature_group = _OpGroup
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(
+                cls, group: type[OpToyBareFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+            ) -> Any:
+                return None
+
+        assert _TypedImpl in loaded_implementations()
+        del _TypedImpl, _OpGroup
+        gc.collect()
+
+    def test_the_operation_implementation_base_is_not_a_loaded_implementation(self) -> None:
+        assert OperationImplementation not in loaded_implementations()
+        assert getattr(OperationImplementation.calculate, "__isabstractmethod__", False)
+
+    def test_calculate_feature_passes_group_data_features_framework(self) -> None:
+        class _OpGroup(OpToyBareFG):
+            pass
+
+        seen: list[tuple[Any, ...]] = []
+
+        class _RecordingImpl(OperationImplementation[OpToyBareFG]):
+            feature_group = _OpGroup
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(
+                cls, group: type[OpToyBareFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
+            ) -> Any:
+                seen.append((group, data, features, framework))
+                return "done"
+
+        features = FeatureSet([Feature("optoy_bare_value")])
+        features.implementation = _RecordingImpl
+        data = object()
+
+        assert _OpGroup.calculate_feature(data, features) == "done"
+        assert seen == [(_OpGroup, data, features, None)]
+        del _RecordingImpl, _OpGroup
+        gc.collect()
+
+    def test_the_typed_signature_is_enforced_by_mypy(self) -> None:
+        class _OpGroup(OpToyFG):
+            pass
+
+        # mypy --strict (warn_unused_ignores) fails the gate if this wrong override stops being flagged.
+        class _WrongArity(OperationImplementation[OpToyFG]):
+            feature_group = _OpGroup
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(  # type: ignore[override]
+                cls, data: Any, features: FeatureSet, framework: ComputeFramework | None
+            ) -> Any:
+                return None
+
+        assert issubclass(_WrongArity, OperationImplementation)
+        del _WrongArity, _OpGroup
+        gc.collect()
 
     def test_compute_framework_must_be_a_compute_framework(self) -> None:
         with pytest.raises(TypeError, match="compute_framework"):

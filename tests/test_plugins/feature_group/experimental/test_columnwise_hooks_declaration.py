@@ -32,7 +32,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParserMixin,
     missing_columnwise_hooks,
 )
-from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.core.abstract_plugins.implementation import OperationImplementation
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
@@ -308,7 +308,7 @@ def test_operation_group_is_concrete(group: type[Any]) -> None:
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)
 def test_implementation_serves_its_group(name: str, impl: type[Any]) -> None:
     group = OPERATION_FAMILIES[name][0]
-    assert impl.__bases__ == (Implementation,)
+    assert impl.__bases__ == (OperationImplementation,)
     assert impl.feature_group is group
     assert not inspect.isabstract(impl)
     for hook in _ABSENT_OLD_HOOKS:

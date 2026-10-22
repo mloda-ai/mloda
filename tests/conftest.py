@@ -8,7 +8,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components import utils
-from mloda.provider import MatchRejection, collect_match_rejections
+from mloda.provider import MatchRejection, OperationFeatureGroup, collect_match_rejections
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
@@ -201,16 +201,23 @@ if os.getenv(CHECK_SKIP_COUNT_ENV_VAR) == "1":
 
 @pytest.fixture
 def make_implementation() -> Iterator[Callable[..., type[Implementation]]]:
-    """make(group, framework, fn=None, base=Implementation, name=None); teardown asserts every class is collected."""
+    """make(group, framework, fn=None, base=Implementation (OperationImplementation for an operation group), name=None); teardown asserts every class is collected."""
     created: list[weakref.ref[type[Implementation]]] = []
 
     def make(
         group: Any,
         framework: Any,
         fn: Callable[[Any, Any, Any], Any] | None = None,
-        base: type[Implementation] = Implementation,
+        base: type[Implementation] | None = None,
         name: str | None = None,
     ) -> type[Implementation]:
+        if base is None:
+            base = Implementation
+            if isinstance(group, type) and issubclass(group, OperationFeatureGroup):
+                from mloda.core.abstract_plugins.implementation import OperationImplementation
+
+                base = OperationImplementation
+
         class _Impl(base):  # type: ignore[misc, valid-type]
             feature_group = group
             compute_framework = framework

@@ -10,7 +10,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from mloda.core.optional_dependency import loaded, require
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.nan_safe_reduction import reduce_without_nan_warning
@@ -18,7 +18,7 @@ from mloda_plugins.feature_group.experimental.nan_safe_reduction import reduce_w
 _NUMPY_REASON = "pyarrow row-wise aggregation across multiple columns"
 
 
-class PyArrowAggregation(Implementation):
+class PyArrowAggregation(OperationImplementation[AggregatedFeatureGroup]):
     """
     PyArrow implementation of aggregated feature group.
 
@@ -29,7 +29,9 @@ class PyArrowAggregation(Implementation):
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[AggregatedFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return group.aggregate(
             data,
             features,

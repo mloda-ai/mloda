@@ -231,14 +231,18 @@ An operation is written once as an `OperationFeatureGroup` (naming, options, inp
 class MyOperation(OperationFeatureGroup):
     ...  # naming, PROPERTY_MAPPING, input_features
 
-class PandasMyOperation(Implementation):
+class PandasMyOperation(OperationImplementation[MyOperation]):
     feature_group = MyOperation
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group, data, features, framework):
+    def calculate(
+        cls, group: type[MyOperation], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         ...  # group is the matched feature group class
 ```
+
+Operation implementations subclass `OperationImplementation` (a plain `Implementation` naming an operation group raises `TypeError`); loaders keep `Implementation`.
 
 - **Framework set**: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with `compute_framework_rule()`. A group with no implementation has no framework and never matches.
 - **Shared loop**: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (`AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)`). Each implementation's `calculate` hands its own methods over through the `group` it is called with, never through `cls.feature_group`, so a subclass of the group is served with its overrides. An `Implementation` subclass that leaves `calculate` abstract is ignored when implementations are loaded.

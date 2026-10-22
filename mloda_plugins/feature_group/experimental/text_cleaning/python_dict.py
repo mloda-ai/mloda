@@ -7,7 +7,7 @@ import string
 import unicodedata
 from typing import Any
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
@@ -24,14 +24,16 @@ except ImportError:
     nltk_available = False
 
 
-class PythonDictTextCleaning(Implementation):
+class PythonDictTextCleaning(OperationImplementation[TextCleaningFeatureGroup]):
     """PythonDict text cleaning."""
 
     feature_group = TextCleaningFeatureGroup
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[TextCleaningFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
         return group.clean(

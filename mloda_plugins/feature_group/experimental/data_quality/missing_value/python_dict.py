@@ -6,20 +6,22 @@ import statistics
 from collections import Counter
 from typing import Any
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PythonDictMissingValueImputation(Implementation):
+class PythonDictMissingValueImputation(OperationImplementation[MissingValueFeatureGroup]):
     """PythonDict missing value imputation."""
 
     feature_group = MissingValueFeatureGroup
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         if not data:
             raise ValueError("Data cannot be empty")
         return group.impute(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-from mloda.provider import FeatureSet, Implementation
+from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
 
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -16,12 +16,14 @@ except ImportError:
     pd = None
 
 
-class PandasMissingValueImputation(Implementation):
+class PandasMissingValueImputation(OperationImplementation[MissingValueFeatureGroup]):
     feature_group = MissingValueFeatureGroup
     compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate(cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: Any) -> Any:
+    def calculate(
+        cls, group: type[MissingValueFeatureGroup], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
         return group.impute(
             data,
             features,

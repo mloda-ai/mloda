@@ -1,3 +1,4 @@
+import datetime
 import sqlite3
 from typing import Any
 
@@ -452,3 +453,43 @@ class TestSqliteUnionResultTypes:
         result = SqliteMergeEngine(connection).merge_union(left, right, index_obj, index_obj)
         by_name = dict(zip(result.columns, result.types, strict=True))
         assert by_name == {"idx": pa.int64(), "v": pa.float64(), "w": pa.string()}
+
+    @pytest.mark.parametrize("method", ["merge_union", "merge_append"])
+    @pytest.mark.parametrize("with_rows", [True, False], ids=["rows", "zero_rows"])
+    def test_hinted_bool_and_timestamp_columns_keep_their_types(
+        self, connection: sqlite3.Connection, index_obj: Index, method: str, with_rows: bool
+    ) -> None:
+        schema = pa.schema([("idx", pa.int64()), ("flag", pa.bool_()), ("ts", pa.timestamp("us"))])
+        t1, t2 = datetime.datetime(2024, 1, 1, 12, 0, 0), datetime.datetime(2024, 6, 2, 8, 30, 0)
+        left_data = {"idx": [1], "flag": [True], "ts": [t1]} if with_rows else {"idx": [], "flag": [], "ts": []}
+        right_data = {"idx": [2], "flag": [False], "ts": [t2]} if with_rows else {"idx": [], "flag": [], "ts": []}
+        left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict(left_data, schema=schema))
+        right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict(right_data, schema=schema))
+        result = getattr(SqliteMergeEngine(connection), method)(left, right, index_obj, index_obj)
+        by_name = dict(zip(result.columns, result.types, strict=True))
+        assert by_name["flag"] == pa.bool_()
+        assert by_name["ts"] == pa.timestamp("us")
+        arrow = result.to_arrow_table()
+        assert arrow.schema.field("flag").type == pa.bool_()
+        assert arrow.schema.field("ts").type == pa.timestamp("us")
+        if with_rows:
+            rows = sorted(zip(*(arrow.column(n).to_pylist() for n in ("idx", "flag", "ts")), strict=True))
+            assert rows == [(1, True, t1), (2, False, t2)]
+        else:
+            assert arrow.num_rows == 0
+
+    @pytest.mark.parametrize("method", ["merge_union", "merge_append"])
+    def test_hinted_bool_against_hinted_int_column_is_int64(
+        self, connection: sqlite3.Connection, index_obj: Index, method: str
+    ) -> None:
+        left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1], "m": [True]}))
+        right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [2], "m": [5]}))
+        result = getattr(SqliteMergeEngine(connection), method)(left, right, index_obj, index_obj)
+        by_name = dict(zip(result.columns, result.types, strict=True))
+        assert by_name["m"] == pa.int64()
+        arrow = result.to_arrow_table()
+        assert arrow.schema.field("m").type == pa.int64()
+        assert sorted(zip(arrow.column("idx").to_pylist(), arrow.column("m").to_pylist(), strict=True)) == [
+            (1, 1),
+            (2, 5),
+        ]

@@ -41,15 +41,26 @@ class SqliteMergeEngine(SqlBaseMergeEngine):
         left_ref = quote_ident(left_data.table_name)
         right_ref = quote_ident(right_data.table_name)
         sql = f" SELECT {left_proj} FROM {left_ref} {union_keyword} SELECT {right_proj} FROM {right_ref} "  # nosec
-        left_types = dict(zip(left_data.columns, left_data._affinity_types(), strict=True))
-        right_types = dict(zip(right_data.columns, right_data._affinity_types(), strict=True))
-        fallback = [
-            self._union_column_type(left_types[c], right_types[c])
-            if c in left_types and c in right_types
-            else (left_types[c] if c in left_types else right_types[c])
-            for c in sorted(set(left_types) | set(right_types))
-        ]
-        return self._execute_sql(sql, fallback_types=fallback)
+
+        def merged(left_list: Sequence[Any], right_list: Sequence[Any], hinted: bool = False) -> list[Any]:
+            lt = dict(zip(left_data.columns, left_list, strict=True))
+            rt = dict(zip(right_data.columns, right_list, strict=True))
+
+            def union(lv: pa.DataType, rv: pa.DataType) -> pa.DataType | None:
+                if hinted and lv != rv:
+                    lv, rv = (pa.int64() if pa.types.is_boolean(t) else t for t in (lv, rv))
+                return self._union_column_type(lv, rv)
+
+            return [
+                union(lt[c], rt[c]) if c in lt and c in rt else (lt[c] if c in lt else rt[c])
+                for c in sorted(set(lt) | set(rt))
+            ]
+
+        fallback = merged(left_data._affinity_types(), right_data._affinity_types())
+        left_hints, right_hints = left_data.type_hints, right_data.type_hints
+        if left_hints is None or right_hints is None or None in left_hints or None in right_hints:
+            return self._execute_sql(sql, fallback_types=fallback)
+        return self._execute_sql(sql, types=merged(left_hints, right_hints, True), fallback_types=fallback)
 
     @staticmethod
     def _union_column_type(left: pa.DataType | None, right: pa.DataType | None) -> pa.DataType | None:

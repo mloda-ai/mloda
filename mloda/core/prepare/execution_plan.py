@@ -1666,6 +1666,8 @@ Available join types:
                                     # add the JoinStep token to the children_if_root of the source feature group
                                     if ep.uuid not in routed_joins:
                                         inner_ep.add_value_to_children_if_root(ep.uuid)
+                                        if ep.source_owner_uuid is None:
+                                            ep.source_owner_uuid = uuid
 
                                     # add to upload as this source feature group gets accessed in mp by other process
                                     need_to_upload_collector.update(ep.source_framework_uuids)
@@ -2381,8 +2383,7 @@ Available join types:
         destination_framework_uuids: set[UUID],
         source_framework_uuids: set[UUID],
     ) -> None:
-        """Both JoinStep sides must name at least one parent; the runtime later reads
-        them with next(iter(...))."""
+        """Both JoinStep sides must name a parent; the runtime reads only the destination with next(iter(...))."""
         if not destination_framework_uuids or not source_framework_uuids:
             raise ValueError(
                 internal_invariant_error(

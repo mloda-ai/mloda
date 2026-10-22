@@ -839,6 +839,7 @@ class TestPrepareTfsAndJoinStep:
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
         step.source_framework_uuids = {uuid4()}
+        step.source_owner_uuid = None
 
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = from_cfw_uuid
@@ -852,22 +853,22 @@ class TestPrepareTfsAndJoinStep:
         # Should first look up by the step uuid
         assert cfw_register.get_cfw_uuid.call_args_list[0] == call("DestinationCFW", step.uuid)
 
-    def test_falls_back_to_source_framework_uuids_for_join_step(self) -> None:
-        """Should fall back to source_framework_uuids if the step uuid is not registered."""
+    def test_falls_back_to_recorded_source_owner_for_join_step(self) -> None:
+        """Should fall back to the recorded source owner uuid if the step uuid is not registered."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
 
         step = Mock(spec=JoinStep)
         step.uuid = uuid4()
-        source_uuid = uuid4()
+        owner_uuid = uuid4()
         step.link = Mock()
         step.link.uuid = uuid4()
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
-        step.source_framework_uuids = {source_uuid}
+        step.source_framework_uuids = {owner_uuid, uuid4()}
+        step.source_owner_uuid = owner_uuid
 
-        # First call returns None, second returns valid UUID
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.side_effect = [None, from_cfw_uuid]
 
@@ -877,10 +878,20 @@ class TestPrepareTfsAndJoinStep:
         result = executor.prepare_tfs_and_joinstep(step)
 
         assert result is from_cfw
-        assert cfw_register.get_cfw_uuid.call_count == 2
+        assert cfw_register.get_cfw_uuid.call_args_list == [
+            call("DestinationCFW", step.uuid),
+            call("DestinationCFW", owner_uuid),
+        ]
 
-    def test_raises_error_for_join_step_if_from_cfw_uuid_is_none(self) -> None:
-        """Should raise ValueError if from_cfw_uuid is None for JoinStep."""
+    @pytest.mark.parametrize(
+        "owner_set, message",
+        [
+            (False, "no frame lists the join token"),
+            (True, "from_cfw_uuid should not be none"),
+        ],
+    )
+    def test_raises_error_for_join_step_if_from_cfw_uuid_is_none(self, owner_set: bool, message: str) -> None:
+        """Unregistered token raises; never resolves through source_framework_uuids."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
@@ -892,10 +903,16 @@ class TestPrepareTfsAndJoinStep:
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
         step.source_framework_uuids = {uuid4()}
+        step.source_owner_uuid = uuid4() if owner_set else None
 
-        cfw_register.get_cfw_uuid.return_value = None
+        if owner_set:
+            cfw_register.get_cfw_uuid.return_value = None
+        else:
+            # Only the join token is unregistered; any other key would resolve, proving no fallback to source uuids.
+            registered = {step.uuid: None}
+            cfw_register.get_cfw_uuid.side_effect = lambda _cls, key: registered.get(key, uuid4())
 
-        with pytest.raises(ValueError, match="from_cfw_uuid should not be none"):
+        with pytest.raises(ValueError, match=message):
             executor.prepare_tfs_and_joinstep(step)
 
     def test_returns_none_for_other_step_types(self) -> None:
@@ -923,6 +940,7 @@ class TestPrepareTfsAndJoinStep:
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
         step.source_framework_uuids = {uuid4()}
+        step.source_owner_uuid = None
 
         from_cfw_uuid = uuid4()
         cfw_register.get_cfw_uuid.return_value = from_cfw_uuid

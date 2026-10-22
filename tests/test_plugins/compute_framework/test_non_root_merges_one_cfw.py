@@ -14,6 +14,7 @@ from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda.core.core.step.join_step import JoinStep
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
 
@@ -111,7 +112,7 @@ class TestNonRootMerge:
             right=JoinSpec(GroupedSecondNonRootJoinTestFeature, Index(("GroupedSecondNonRootJoinTestFeature",))),
         )
 
-        result = mloda.run_all(
+        session = mloda.prepare(
             [feature],
             links={link},
             compute_frameworks=["PandasDataFrame"],
@@ -124,9 +125,16 @@ class TestNonRootMerge:
                     Call2GroupedNonRootJoinTestFeature,
                 }
             ),
-            flight_server=flight_server,
             parallelization_modes=modes,
         )
+
+        assert session.engine is not None
+        joins = [s for s in session.engine.execution_planner if isinstance(s, JoinStep)]
+        assert joins
+        for join in joins:
+            assert join.source_owner_uuid in join.source_framework_uuids
+
+        result = session.run(flight_server=flight_server)
 
         for res in result:
             assert res["Call2GroupedNonRootJoinTestFeature"].values == ["Same ValueSame Value"]

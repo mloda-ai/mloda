@@ -9,7 +9,11 @@ import uuid
 
 from mloda.core.abstract_plugins.components.index.add_index_feature import create_index_feature
 from mloda.core.abstract_plugins.components.index.index import Index
-from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
+from mloda.core.abstract_plugins.components.input_data.reader_probe import (
+    ReaderProbeScope,
+    probe_format_group,
+    reader_probe_scope,
+)
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
@@ -55,6 +59,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -576,11 +581,11 @@ class Engine:
             left, right = self._link_sides(link, feature_group_class, feature)
             if left:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, link.left_index
+                    feature_group_class, feature_group, feature, features.child_uuid, link.left_index, link
                 )
             if right:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, link.right_index
+                    feature_group_class, feature_group, feature, features.child_uuid, link.right_index, link
                 )
 
     def _process_index_feature(
@@ -599,12 +604,12 @@ class Engine:
             left, right = self._link_sides(link, feature_group_class, feature)
             if left and link.left_index == index:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, index
+                    feature_group_class, feature_group, feature, features.child_uuid, index, link
                 )
 
             if right and link.right_index == index:
                 self._create_and_add_index_feature(
-                    feature_group_class, feature_group, feature, features.child_uuid, index
+                    feature_group_class, feature_group, feature, features.child_uuid, index, link
                 )
 
     def _create_and_add_index_feature(
@@ -614,8 +619,24 @@ class Engine:
         feature: Feature,
         child_uuid: UUID | None,
         index: Index,
+        link: Link | None,
     ) -> None:
-        """Creates and adds a new index feature to the collection."""
+        """Creates and adds a new index feature; a link's key columns are probed through the INPUT_DATA_MATCH gate."""
+        if (
+            link is not None
+            and feature.input_data_match is not None
+            and issubclass(feature_group_class, FormatFeatureGroup)
+        ):
+            for column in index.index:
+                outcome = probe_format_group(
+                    feature_group_class, lambda: None, self.data_access_collection, column, feature.options._fork()
+                )
+                if outcome.refused is not None:
+                    raise ValueError(
+                        f"The link index column '{column}' of feature '{feature.name}' on "
+                        f"{feature_group_class.get_class_name()} (link {link}) was refused at INPUT_DATA_MATCH: "
+                        f"{outcome.refused}"
+                    ) from outcome.error
         new_index_feature = create_index_feature(index, feature_group, feature)
         self.add_feature_to_collection(feature_group_class, new_index_feature, child_uuid, True)
         if feature.uuid in self.connection_dropped:
@@ -791,7 +812,7 @@ class Engine:
                         f"Feature '{feature.name}' keeps index column '{column}', but no input feature group "
                         f"provides it; the column must be matched by one of the feature's root input feature groups."
                     )
-                self._create_and_add_index_feature(match[0], match[0](), match[1], None, Index((column,)))
+                self._create_and_add_index_feature(match[0], match[0](), match[1], None, Index((column,)), None)
 
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""

@@ -1,6 +1,7 @@
 from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import ExtenderHook, _invoke_extender
@@ -12,8 +13,31 @@ from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.runtime.flight.flight_server import FlightServer
 
 
+def resolve_join_source_cfw(step: "JoinStep", cfw_register: CfwManager) -> UUID:
+    """Find the frame a join reads: the token's frame, else the recorded same-framework source owner."""
+    dest_cls = step.destination_framework.get_class_name()
+    from_cfw_uuid = cfw_register.get_cfw_uuid(dest_cls, step.uuid)
+    if from_cfw_uuid is not None:
+        return from_cfw_uuid
+
+    if step.source_owner_uuid is None:
+        raise ValueError(
+            internal_invariant_error(
+                "no frame lists the join token and the join has no recorded source owner",
+                f"link {step.link.uuid}, join token {step.uuid}",
+                "Cross-framework joins find their source by the hop's link_id and routed joins by copy_readers.",
+            )
+        )
+
+    from_cfw_uuid = cfw_register.get_cfw_uuid(dest_cls, step.source_owner_uuid)
+    if from_cfw_uuid is None:
+        raise ValueError(f"from_cfw_uuid should not be none: {dest_cls}, join token {step.uuid}")
+    return from_cfw_uuid
+
+
 class JoinStep(Step):
     destination_hop_uuid: UUID | None = None
+    source_owner_uuid: UUID | None = None  # first same-framework source feature whose frame the join reads
     split_consumers: frozenset[UUID] | None = None  # set only for parts of a carrier-frame split
     # Consumers of every join feeding the same frame; the merged frame is kept until all of them ran.
     keep_alive: frozenset[UUID] = frozenset()

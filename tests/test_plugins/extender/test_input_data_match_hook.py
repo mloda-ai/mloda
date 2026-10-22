@@ -18,7 +18,18 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, FormatFeatureGroup, NamePolicy, SourceMatch
-from mloda.user import Feature, FeatureName, GlobalFilter, Index, Options, ParallelizationMode, PluginCollector, mloda
+from mloda.user import (
+    Feature,
+    FeatureName,
+    GlobalFilter,
+    Index,
+    JoinSpec,
+    Link,
+    Options,
+    ParallelizationMode,
+    PluginCollector,
+    mloda,
+)
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     TOY_KEY,
@@ -90,6 +101,10 @@ class ImdMatchGateFormat(_ImdFmtBase):
 
 class ImdMatchGateSubFormat(ImdMatchGateFormat):
     pass
+
+
+class _ImdKeyFmt(_ImdFmtBase):
+    served = frozenset({_COL_A, _COL_B, _COL_G})
 
 
 class ImdMatchSiblingFormat(_ImdFmtBase):
@@ -190,6 +205,7 @@ _ALL_FORMATS = (
     ImdMatchAaTwinFormat,
     ImdMatchZzTwinFormat,
     ImdMatchRefusedThenRaisingFormat,
+    _ImdKeyFmt,
 )
 
 _ENABLED_FMT = PluginCollector.enabled_feature_groups(
@@ -623,6 +639,48 @@ class TestScopeAndFilter:
             assert _COL_F not in result[0].column_names
 
         assert not isinstance(raised.value, AssertionError)
+
+    @pytest.mark.parametrize("case", ["refused", "refused_multi_column", "allowed", "observer_key_in_two_sources"])
+    def test_a_link_index_column_cannot_bypass_the_refusing_gate(self, case: str) -> None:
+        observer = case == "observer_key_in_two_sources"
+        fmt = _ImdKeyFmt if observer else ImdMatchGateFormat
+        left_index = {"refused": (_COL_F,), "refused_multi_column": (_COL_G, _COL_F)}.get(case, (_COL_G,))
+        link = Link.inner(
+            left=JoinSpec(fmt, Index(left_index)),
+            right=JoinSpec(ImdMatchPlainGroup, Index((_COL_P,) * len(left_index))),
+        )
+        enabled = PluginCollector.enabled_feature_groups({fmt, ImdMatchPlainGroup})
+        access = _global_access()
+        if observer:
+            access = DataAccessCollection(
+                credentials={
+                    "h1": {TOY_KEY: {_COL_A: [1], _COL_G: [1]}, _CRED_KEY: 1},
+                    "h2": {TOY_KEY: {_COL_B: [1], _COL_G: [2]}, _CRED_KEY: 1},
+                }
+            )
+        recorder = _ImdRecordingExtender()
+        extender = recorder if observer else _ImdColumnGate()
+
+        def plan() -> Any:
+            return mloda.prepare(
+                [Feature(_COL_A)],
+                compute_frameworks=[PyArrowTable],
+                plugin_collector=enabled,
+                links={link},
+                parallelization_modes={ParallelizationMode.SYNC},
+                data_access_collection=access,
+                function_extender={extender},
+            )
+
+        if case.startswith("refused"):
+            with pytest.raises(ValueError, match="INPUT_DATA_MATCH") as raised:
+                plan()
+            assert _COL_F in str(raised.value)
+            assert isinstance(raised.value.__cause__, PermissionError)
+        else:
+            assert plan() is not None
+        if observer:
+            assert any(_COL_G in c.feature_names for c in recorder.contexts)
 
     @_BY_KIND
     def test_a_plan_without_its_own_extender_does_not_inherit_an_outer_probe_scope(self, kind: _Kind) -> None:

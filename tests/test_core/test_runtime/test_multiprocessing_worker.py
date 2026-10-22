@@ -21,9 +21,10 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
+from mloda.core.core.step.join_step import JoinStep
 from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker import multiprocessing_worker as worker_module
-from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, worker
+from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, _execute_command, worker
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
@@ -822,3 +823,19 @@ class TestCloseContextIsUsableFromAThreadStartedInClose:
         assert len(captured_remaining) == 1
         assert captured_remaining[0] > 0.0
         assert captured_remaining[0] <= timeout
+
+
+class TestExecuteCommandJoinStepWithoutSource:
+    def test_unregistered_join_token_without_owner_raises(self) -> None:
+        cfw_register = Mock(spec=CfwManager)
+        step = Mock(spec=JoinStep)
+        step.uuid = uuid4()
+        step.link = Mock()
+        step.destination_framework = Mock()
+        step.destination_framework.get_class_name.return_value = "DestinationCFW"
+        step.source_framework_uuids = {uuid4()}
+        step.source_owner_uuid = None
+        cfw_register.get_cfw_uuid.side_effect = lambda _cls, key: None if key == step.uuid else uuid4()
+
+        with pytest.raises(ValueError, match="no frame lists the join token"):
+            _execute_command(step, cfw_register, Mock(spec=ComputeFramework), None, None)

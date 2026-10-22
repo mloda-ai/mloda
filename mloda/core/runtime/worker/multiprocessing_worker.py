@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from mloda.core.core.step.join_step import JoinStep
+from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 
 
@@ -100,15 +100,7 @@ def _execute_command(
     """Executes a given command based on its type."""
     if isinstance(command, JoinStep):
         # Destination framework here, because it is already transformed beforehand
-        from_cfw = cfw_register.get_cfw_uuid(command.destination_framework.get_class_name(), command.uuid)
-
-        if from_cfw is None:
-            from_cfw = cfw_register.get_cfw_uuid(
-                command.destination_framework.get_class_name(), next(iter(command.source_framework_uuids))
-            )
-
-        if from_cfw is None:
-            raise ValueError(f"from_cfw should not be none: {command}")
+        from_cfw = resolve_join_source_cfw(command, cfw_register)
 
     if isinstance(command, TransformFrameworkStep):
         # from cfw is not None, if the TFS is done due to a join

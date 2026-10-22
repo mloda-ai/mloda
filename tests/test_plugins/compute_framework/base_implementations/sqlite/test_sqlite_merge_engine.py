@@ -479,12 +479,17 @@ class TestSqliteUnionResultTypes:
             assert arrow.num_rows == 0
 
     @pytest.mark.parametrize("method", ["merge_union", "merge_append"])
-    def test_hinted_bool_against_hinted_int_column_is_string(
+    def test_hinted_bool_against_hinted_int_column_is_int64(
         self, connection: sqlite3.Connection, index_obj: Index, method: str
     ) -> None:
         left = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [1], "m": [True]}))
         right = SqliteRelation.from_arrow(connection, pa.Table.from_pydict({"idx": [2], "m": [5]}))
         result = getattr(SqliteMergeEngine(connection), method)(left, right, index_obj, index_obj)
         by_name = dict(zip(result.columns, result.types, strict=True))
-        assert by_name["m"] == pa.string()
-        assert result.to_arrow_table().schema.field("m").type == pa.string()
+        assert by_name["m"] == pa.int64()
+        arrow = result.to_arrow_table()
+        assert arrow.schema.field("m").type == pa.int64()
+        assert sorted(zip(arrow.column("idx").to_pylist(), arrow.column("m").to_pylist(), strict=True)) == [
+            (1, 1),
+            (2, 5),
+        ]

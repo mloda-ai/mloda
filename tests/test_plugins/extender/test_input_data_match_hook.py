@@ -103,6 +103,10 @@ class ImdMatchGateSubFormat(ImdMatchGateFormat):
     pass
 
 
+class _ImdKeyFmt(_ImdFmtBase):
+    served = frozenset({_COL_A, _COL_B, _COL_G})
+
+
 class ImdMatchSiblingFormat(_ImdFmtBase):
     served = frozenset({_COL_B})
 
@@ -201,6 +205,7 @@ _ALL_FORMATS = (
     ImdMatchAaTwinFormat,
     ImdMatchZzTwinFormat,
     ImdMatchRefusedThenRaisingFormat,
+    _ImdKeyFmt,
 )
 
 _ENABLED_FMT = PluginCollector.enabled_feature_groups(
@@ -635,13 +640,26 @@ class TestScopeAndFilter:
 
         assert not isinstance(raised.value, AssertionError)
 
-    @pytest.mark.parametrize(("key", "refused"), [(_COL_F, True), (_COL_G, False)], ids=["refused", "allowed"])
-    def test_a_link_index_column_cannot_bypass_the_refusing_gate(self, key: str, refused: bool) -> None:
+    @pytest.mark.parametrize("case", ["refused", "refused_multi_column", "allowed", "observer_key_in_two_sources"])
+    def test_a_link_index_column_cannot_bypass_the_refusing_gate(self, case: str) -> None:
+        observer = case == "observer_key_in_two_sources"
+        fmt = _ImdKeyFmt if observer else ImdMatchGateFormat
+        left_index = {"refused": (_COL_F,), "refused_multi_column": (_COL_G, _COL_F)}.get(case, (_COL_G,))
         link = Link.inner(
-            left=JoinSpec(ImdMatchGateFormat, Index((key,))),
-            right=JoinSpec(ImdMatchPlainGroup, Index((_COL_P,))),
+            left=JoinSpec(fmt, Index(left_index)),
+            right=JoinSpec(ImdMatchPlainGroup, Index((_COL_P,) * len(left_index))),
         )
-        enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchPlainGroup})
+        enabled = PluginCollector.enabled_feature_groups({fmt, ImdMatchPlainGroup})
+        access = _global_access()
+        if observer:
+            access = DataAccessCollection(
+                credentials={
+                    "h1": {TOY_KEY: {_COL_A: [1], _COL_G: [1]}, _CRED_KEY: 1},
+                    "h2": {TOY_KEY: {_COL_B: [1], _COL_G: [2]}, _CRED_KEY: 1},
+                }
+            )
+        recorder = _ImdRecordingExtender()
+        extender = recorder if observer else _ImdColumnGate()
 
         def plan() -> Any:
             return mloda.prepare(
@@ -650,15 +668,19 @@ class TestScopeAndFilter:
                 plugin_collector=enabled,
                 links={link},
                 parallelization_modes={ParallelizationMode.SYNC},
-                data_access_collection=_global_access(),
-                function_extender={_ImdColumnGate()},
+                data_access_collection=access,
+                function_extender={extender},
             )
 
-        if refused:
-            with pytest.raises(ValueError, match=_COL_F):
+        if case.startswith("refused"):
+            with pytest.raises(ValueError, match="INPUT_DATA_MATCH") as raised:
                 plan()
+            assert _COL_F in str(raised.value)
+            assert isinstance(raised.value.__cause__, PermissionError)
         else:
             assert plan() is not None
+        if observer:
+            assert any(_COL_G in c.feature_names for c in recorder.contexts)
 
     @_BY_KIND
     def test_a_plan_without_its_own_extender_does_not_inherit_an_outer_probe_scope(self, kind: _Kind) -> None:

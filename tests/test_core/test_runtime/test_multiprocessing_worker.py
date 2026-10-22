@@ -825,7 +825,7 @@ class TestCloseContextIsUsableFromAThreadStartedInClose:
         assert captured_remaining[0] <= timeout
 
 
-class TestExecuteCommandJoinStepUsesSourceOwner:
+class TestExecuteCommandJoinStepWithoutSource:
     def test_unregistered_join_token_without_owner_raises(self) -> None:
         cfw_register = Mock(spec=CfwManager)
         step = Mock(spec=JoinStep)

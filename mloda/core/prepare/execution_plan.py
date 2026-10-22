@@ -2337,8 +2337,7 @@ Available join types:
         destination_framework_uuids: set[UUID],
         source_framework_uuids: set[UUID],
     ) -> None:
-        """Both JoinStep sides must name at least one parent; the runtime later reads
-        them with next(iter(...))."""
+        """Both JoinStep sides must name a parent; the runtime reads only the destination with next(iter(...))."""
         if not destination_framework_uuids or not source_framework_uuids:
             raise ValueError(
                 internal_invariant_error(

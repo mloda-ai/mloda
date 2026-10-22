@@ -4,7 +4,7 @@ from copy import copy, deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
 from collections.abc import Sequence
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, cast
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
+from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.api.plan_info import PlanStep, build_plan_steps, source_of
 from mloda.core.api.plan_lock import plan_content_hash, plan_structure_hash
 from mloda.core.prepare.identify_feature_group import (
@@ -591,16 +592,14 @@ class mlodaAPI:
         Available after ``prepare()`` and unchanged by ``run()``. Steps are in dependency order,
         independent ones sorted by content.
         """
-        if self.engine is None:
-            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        execution_plan = self._execution_plan()
+        engine = cast(Engine, self.engine)
         return build_plan_steps(
-            self.engine.execution_planner,
-            self.engine.execution_planner.resolved_join_plan,
-            specialized_from=self.engine.specialized_from,
-            output_framework=self.engine.output_framework,
-            auto_handles=(
-                () if self.engine.data_access_collection is None else self.engine.data_access_collection.auto_handles
-            ),
+            execution_plan,
+            execution_plan.resolved_join_plan,
+            specialized_from=engine.specialized_from,
+            output_framework=engine.output_framework,
+            auto_handles=(() if engine.data_access_collection is None else engine.data_access_collection.auto_handles),
         )
 
     def describe_columns(self, step: PlanStep) -> dict[str, DataType | None]:
@@ -608,7 +607,7 @@ class mlodaAPI:
 
         Opens the source outside a run (no input-data-load hooks).
         """
-        group, match, _ = source_of(self._planned_steps(), step)
+        group, match, _ = source_of(self._execution_plan(), step)
         return group.describe_columns(match)
 
     def count_rows(self, step: PlanStep) -> int | None:
@@ -616,10 +615,10 @@ class mlodaAPI:
 
         Opens the source outside a run (no input-data-load hooks).
         """
-        group, match, compute_framework = source_of(self._planned_steps(), step)
+        group, match, compute_framework = source_of(self._execution_plan(), step)
         return group.count_rows(match, compute_framework)
 
-    def _planned_steps(self) -> Any:
+    def _execution_plan(self) -> ExecutionPlan:
         if self.engine is None:
             raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
         return self.engine.execution_planner

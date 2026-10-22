@@ -388,7 +388,7 @@ class ReadDBFG(FormatFeatureGroup):
     @classmethod
     def _hidden_source(cls, match: SourceMatch) -> str:
         if isinstance(match.access, DBQuery):
-            return match.source
+            return cls.data_access_identity(match)
         return cls.database_identity(match.access.credentials)
 
     @classmethod

@@ -187,7 +187,7 @@ class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
     ) -> None:
         path = tmp_path / "dbloads_filtered.db"
         self.write_database(path, {"dbloads_table": {name: [1, 2, 3, 4, 5, 6] for name in self.columns}})
-        original = self.db_group.select_rows
+        original = self.db_group._fetch
         fetched: list[int] = []
 
         def spy(cls: Any, connection: Any, table: str, features: Any) -> Any:
@@ -195,7 +195,7 @@ class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
             fetched.append(len(result[1]))
             return result
 
-        monkeypatch.setattr(self.db_group, "select_rows", classmethod(spy))
+        monkeypatch.setattr(self.db_group, "_fetch", classmethod(spy))
         global_filter = GlobalFilter()
         global_filter.add_filter("dbloads_a", "range", {"min": 2, "max": 4, "max_exclusive": True})
 

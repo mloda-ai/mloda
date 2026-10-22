@@ -477,6 +477,13 @@ def filter_db(tmp_path: Path) -> str:
     connection.executemany("INSERT INTO mixed VALUES (?, ?)", [(1, 5), (2, "abc"), (3, 10)])
     connection.execute("CREATE TABLE loose (id INTEGER, u, num NUMERIC, i INTEGER)")
     connection.executemany("INSERT INTO loose VALUES (?, ?, ?, ?)", [(1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3)])
+    connection.execute("CREATE TABLE wild (id INTEGER, mi INTEGER, mt TEXT)")
+    connection.executemany("INSERT INTO wild VALUES (?, ?, ?)", [(1, 1, "a"), (2, 2.5, b"\x01\x02"), (3, 3, "c")])
+    connection.execute("CREATE TABLE kinds (id, a, b, c, d, e)")
+    connection.executemany(
+        "INSERT INTO kinds VALUES (?, ?, ?, ?, ?, ?)",
+        [(1, 1, 1.5, "x", b"\x01", None), (2, 2, 2.5, "y", b"\x02", None)],
+    )
     connection.commit()
     connection.close()
     return str(path)
@@ -517,19 +524,51 @@ class TestSqliteFilterPushdown:
         features = _filtered_features([Feature.int64_of("id"), Feature.int64_of("v")], [_flt("v", T.MAX, {"value": 7})])
         assert _ids(filter_db, "mixed", features) == [1]
 
-    def test_an_untyped_numeric_column_blocks_the_pushdown(self, filter_db: str) -> None:
+    def test_an_untyped_numeric_column_holding_one_storage_class_does_not_block_the_pushdown(
+        self, filter_db: str
+    ) -> None:
         features = _filtered_features(
             [Feature.not_typed("id"), Feature.not_typed("i"), Feature.not_typed("num")],
             [_flt("i", T.MIN, {"value": 3})],
         )
-        assert _ids(filter_db, "loose", features) == [1, 2, 3]
+        assert _ids(filter_db, "loose", features) == [3]
 
-    def test_an_untyped_column_without_a_declared_type_blocks_the_pushdown(self, filter_db: str) -> None:
+    def test_an_undeclared_untyped_column_holding_one_storage_class_does_not_block_the_pushdown(
+        self, filter_db: str
+    ) -> None:
         features = _filtered_features(
             [Feature.not_typed("id"), Feature.not_typed("i"), Feature.not_typed("u")],
             [_flt("i", T.MIN, {"value": 3})],
         )
-        assert _ids(filter_db, "loose", features) == [1, 2, 3]
+        assert _ids(filter_db, "loose", features) == [3]
+
+    def test_an_untyped_column_with_mixed_storage_classes_blocks_the_pushdown(self, filter_db: str) -> None:
+        features = _filtered_features(
+            [Feature.not_typed("id"), Feature.not_typed("mi"), Feature.not_typed("mt")],
+            [_flt("id", T.EQUAL, {"value": 1})],
+        )
+        assert _ids(filter_db, "wild", features) == [1, 2, 3]
+
+    @pytest.mark.parametrize(
+        ("column", "declared", "filter_value", "pushed"),
+        [
+            ("r", Feature.float_of, 2.5, False),
+            ("r", Feature.double_of, 2.5, True),
+            ("i", Feature.int64_of, 3, True),
+            ("i", Feature.int32_of, 3, False),
+            ("i", Feature.double_of, 3, False),
+            ("t", Feature.str_of, "c", True),
+        ],
+        ids=["real_float", "real_double", "int_int64", "int_int32", "int_double", "text_string"],
+    )
+    def test_a_typed_filter_column_is_pushed_only_when_its_type_matches_the_affinity(
+        self, filter_db: str, column: str, declared: Any, filter_value: Any, pushed: bool
+    ) -> None:
+        features = _filtered_features(
+            [Feature.int64_of("id"), declared(column)], [_flt(column, T.EQUAL, {"value": filter_value})]
+        )
+        ids = _ids(filter_db, "ft", features)
+        assert (len(ids) < len(ALL_IDS)) is pushed
 
     def test_a_typed_numeric_column_does_not_block_other_pushed_filters(self, filter_db: str) -> None:
         features = _filtered_features(
@@ -557,18 +596,30 @@ class TestSqliteFilteredInference:
         assert isinstance(result, pa.Table)
         return result
 
-    def test_a_pushed_filter_matching_no_rows_keeps_the_affinity_types(self, filter_db: str) -> None:
+    def test_a_pushed_filter_matching_no_rows_gives_the_full_table_storage_class_types(self, filter_db: str) -> None:
+        names = ["a", "b", "c", "d", "e"]
         features = _filtered_features(
-            [Feature.not_typed("i"), Feature.not_typed("r"), Feature.not_typed("t")],
-            [_flt("i", T.EQUAL, {"value": 99})],
+            [Feature.not_typed("id"), *[Feature.not_typed(n) for n in names]],
+            [_flt("id", T.EQUAL, {"value": 99})],
         )
-        table = self._table(filter_db, "ft", features)
+        table = self._table(filter_db, "kinds", features)
         assert table.num_rows == 0
-        assert pa.types.is_int64(table.schema.field("i").type)
-        assert pa.types.is_float64(table.schema.field("r").type)
-        assert pa.types.is_string(table.schema.field("t").type)
+        assert pa.types.is_int64(table.schema.field("a").type)
+        assert pa.types.is_float64(table.schema.field("b").type)
+        assert pa.types.is_string(table.schema.field("c").type)
+        assert pa.types.is_binary(table.schema.field("d").type)
+        assert pa.types.is_null(table.schema.field("e").type)
 
-    def test_a_pushed_filter_matching_only_null_rows_keeps_the_affinity_type(self, tmp_path: Path) -> None:
+    def test_a_filter_with_mixed_untyped_columns_returns_the_same_types_as_without_it(self, filter_db: str) -> None:
+        columns = [Feature.not_typed("id"), Feature.not_typed("mi"), Feature.not_typed("mt")]
+        plain = self._table(filter_db, "wild", _features(*columns))
+        filtered = self._table(filter_db, "wild", _filtered_features(columns, [_flt("id", T.EQUAL, {"value": 1})]))
+        assert pa.types.is_float64(filtered.schema.field("mi").type)
+        assert pa.types.is_binary(filtered.schema.field("mt").type)
+        assert filtered.schema.field("mi").type == plain.schema.field("mi").type
+        assert filtered.schema.field("mt").type == plain.schema.field("mt").type
+
+    def test_a_pushed_filter_matching_only_null_rows_keeps_the_full_table_type(self, tmp_path: Path) -> None:
         path = tmp_path / "nulls.db"
         connection = sqlite3.connect(path)
         connection.execute("CREATE TABLE nt (a INTEGER, b TEXT, c REAL)")

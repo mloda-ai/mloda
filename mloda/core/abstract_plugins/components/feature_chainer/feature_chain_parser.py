@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
-from mloda.core.abstract_plugins.components.declaration_surface import DeclarationSurface, validate_property_spec
+from mloda.core.abstract_plugins.components.declaration_surface import validate_property_spec
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
     contained_raise_reason,
@@ -271,7 +271,7 @@ class FeatureChainParser:
     def _require_spec(cls, owner_name: str, key: str, spec: Any) -> PropertySpec:
         """Thin seam onto the shared FEATURE_GROUP surface rules; the parser entry point is public
         and takes caller mappings."""
-        return validate_property_spec(owner_name, key, spec, DeclarationSurface.FEATURE_GROUP)
+        return validate_property_spec(owner_name, key, spec)
 
     @classmethod
     def validate_property_mapping_defaults(cls, owner_name: str, property_mapping: dict[str, Any] | None) -> None:

@@ -85,7 +85,7 @@ SEEDS: dict[str, str] = {
 _CANDIDATE_OWN_DECLARATION = "contained: validates the requesting feature's own declaration during matching"
 _DECIDED_ABOVE_BY_READER_SELECTION = (
     "decided above by the marked raise in MatchData.add_base_input_data_to_options; this write only "
-    "ever reaches an absent key"
+    "ever reaches an absent or equal key"
 )
 _MATCHES_COLLISION = "name collision: the match path calls the input-data hooks named matches, not Link.matches"
 _JOIN_COLLISION = "name collision: str.join, not the runner's join"
@@ -98,18 +98,19 @@ _ADOPT_COLLISION = (
     "dict.clear names collide with a raising, swallowing update() elsewhere"
 )
 _VALIDATE_PROPERTY_SPEC_RAISES = (
-    "real edge: validate_property_spec's ValueError for a non-PropertySpec value on the FEATURE_GROUP "
-    "surface, reached via _require_spec's public entry point for a caller-supplied mapping that never passed "
+    "real edge: validate_property_spec's ValueError for a non-PropertySpec value in PROPERTY_MAPPING, "
+    "reached via _require_spec's public entry point for a caller-supplied mapping that never passed "
     "the class-definition check; that candidate's own defect, so the seam reads it as a non-match"
 )
 
 RAISING_HELPERS_OUTSIDE_THE_PATH: dict[tuple[str, str], str] = {
     ("mloda/core/abstract_plugins/components/input_data/format_feature_group.py", "_matches_by_default_rules"): (
-        "real edge, collided verdict: the format group override of the default rules; its raises are marked aborts"
+        "real edge, collided verdict: the format group override of the default rules; its raises are marked aborts, "
+        "except the reader pair conflict, a plain ValueError the seam contains"
     ),
     ("mloda/core/abstract_plugins/components/input_data/read_db_fg.py", "_matches_by_default_rules"): (
         "real edge: the database group override delegates to the format group default rules, whose raises are "
-        "marked aborts"
+        "marked aborts, except the contained reader pair conflict"
     ),
     ("mloda/core/abstract_plugins/function_extender.py", "_invoke_extender"): (
         "the INPUT_DATA_MATCH extender seam; an extender raise refuses one candidate in probe_format_group"

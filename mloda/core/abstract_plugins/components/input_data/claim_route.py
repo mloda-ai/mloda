@@ -83,28 +83,31 @@ def open_claim_scope() -> Iterator[list[bool]]:
         _OPEN_CLAIM.reset(token)
 
 
-_REPORTED_PINS: ContextVar[set[str] | None] = ContextVar("mloda_reported_pins", default=None)
+_PIN_SCOPE: ContextVar[tuple[set[str], list[tuple[str, Any]]] | None] = ContextVar("mloda_pin_scope", default=None)
 
 
-def first_report_of_pin(path: str) -> bool:
-    """True the first time path is reported within pin_report_scope, and always outside one."""
-    reported = _REPORTED_PINS.get()
-    if reported is None:
-        return True
-    if path in reported:
-        return False
-    reported.add(path)
-    return True
+def pin_is_unreported(path: str) -> bool:
+    """True unless path was already reported within pin_report_scope."""
+    scope = _PIN_SCOPE.get()
+    return scope is None or path not in scope[0]
+
+
+def note_pending_pin(path: str, rejection: Any) -> None:
+    """Note the record made for a pinned path; it counts as reported only if it survives as the harvest."""
+    scope = _PIN_SCOPE.get()
+    if scope is not None:
+        scope[1].append((path, rejection))
 
 
 @contextmanager
-def pin_report_scope(reported: set[str]) -> Iterator[None]:
-    """Share one reported-pins set across the candidates of a single resolution."""
-    token = _REPORTED_PINS.set(reported)
+def pin_report_scope(reported: set[str]) -> Iterator[list[tuple[str, Any]]]:
+    """Share one reported-pins set across the candidates of a resolution; yields this candidate's pending records."""
+    pending: list[tuple[str, Any]] = []
+    token = _PIN_SCOPE.set((reported, pending))
     try:
-        yield
+        yield pending
     finally:
-        _REPORTED_PINS.reset(token)
+        _PIN_SCOPE.reset(token)
 
 
 def current_feature_group_scope() -> Any:

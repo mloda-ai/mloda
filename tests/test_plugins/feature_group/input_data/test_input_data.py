@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.declaration_surface import DeclarationSurface
+from mloda.core.abstract_plugins.components import declaration_surface
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import FeatureGroup
 from mloda.user import Feature, Options
@@ -165,7 +165,7 @@ class TestBaseInputDataIsOnlyAMarker:
         assert not hasattr(importlib.import_module(module), symbol)
 
     def test_the_reader_declaration_surface_is_gone(self) -> None:
-        assert not hasattr(DeclarationSurface, "READER")
+        assert not hasattr(declaration_surface, "DeclarationSurface")
 
     def test_a_bare_subclass_matches_nothing_on_its_own(self) -> None:
         options = Options({_BareInputData.__name__: "bare_access", "BaseInputData": (_BareInputData, "bare_access")})

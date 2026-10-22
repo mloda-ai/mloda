@@ -985,9 +985,11 @@ class IdentifyFeatureGroupClass:
         with (
             feature_group_scope(feature.feature_group_scope),
             open_claim_scope() as open_claim,
-            pin_report_scope(self._reported_pins),
+            pin_report_scope(self._reported_pins) as pending_pins,
         ):
             probe = probe_match_criteria(feature_group, feature.name, options, data_access_collection, True)
+        if not probe.matched and probe.matcher_error is None:
+            self._reported_pins |= {path for path, record in pending_pins if record is probe.rejection}
         if probe.matched and open_claim:
             self._open_claims |= {feature_group}
         # The pair carries credentials: it never stays in options, only in this evaluation's per-candidate map.

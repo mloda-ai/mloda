@@ -116,15 +116,35 @@ def _backends(violations: list[str]) -> list[str]:
     return sorted(violation.rsplit("imports ", 1)[1] for violation in violations)
 
 
-def test_core_does_not_import_optional_backends() -> None:
-    """Every module under mloda/ must be importable without any optional backend installed."""
+def _core_subpackage_roots() -> list[tuple[str, Path]]:
+    """Top-level subpackages under mloda/; each becomes its own guard case."""
     assert CORE_ROOTS, "could not locate the mloda package directory"
+    cases: list[tuple[str, Path]] = []
+    for package_root in CORE_ROOTS:
+        for child in sorted(package_root.iterdir()):
+            if child.is_dir() and child.name != "__pycache__" and not child.name.startswith("."):
+                cases.append((child.name, child))
+    assert cases, "mloda package root has no subpackages to scan"
+    return cases
 
-    violations: list[str] = []
-    for root in CORE_ROOTS:
-        violations.extend(_violations(root))
 
-    assert violations == [], "mloda core imports optional backends directly:\n" + "\n".join(violations) + "\n" + _HINT
+def test_optional_backend_guard_covers_every_core_module() -> None:
+    """Splitting the guard by subpackage must still cover every .py under mloda/."""
+    covered = {path for _, root in _core_subpackage_roots() for path in root.rglob("*.py")}
+    expected = {path for package_root in CORE_ROOTS for path in package_root.rglob("*.py")}
+    assert covered == expected
+
+
+@pytest.mark.parametrize(
+    ("subpackage_name", "subpackage_root"),
+    [pytest.param(name, root, id=name) for name, root in _core_subpackage_roots()],
+)
+def test_core_does_not_import_optional_backends(subpackage_name: str, subpackage_root: Path) -> None:
+    """Modules under each mloda/ subpackage must be importable without any optional backend installed."""
+    violations = _violations(subpackage_root)
+    assert violations == [], (
+        f"mloda.{subpackage_name} imports optional backends directly:\n" + "\n".join(violations) + "\n" + _HINT
+    )
 
 
 def test_guard_flags_a_hand_rolled_import(tmp_path: Path) -> None:

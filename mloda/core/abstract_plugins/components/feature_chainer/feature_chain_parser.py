@@ -269,8 +269,7 @@ class FeatureChainParser:
 
     @classmethod
     def _require_spec(cls, owner_name: str, key: str, spec: Any) -> PropertySpec:
-        """Thin seam onto the shared FEATURE_GROUP surface rules; the parser entry point is public
-        and takes caller mappings."""
+        """Applies the PROPERTY_MAPPING per-key rule to a caller-supplied mapping entry."""
         return validate_property_spec(owner_name, key, spec)
 
     @classmethod

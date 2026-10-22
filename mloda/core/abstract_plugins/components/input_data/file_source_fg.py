@@ -213,12 +213,15 @@ class _FileSourceFG(FormatFeatureGroup):
             return
         if not pin_is_unreported(pinned_path):
             return
+        created = _UNOWNED_PIN_OWNER not in (MATCH_REJECTION_REASONS.get() or {})
         record_match_rejection(
             _UNOWNED_PIN_OWNER,
             scrub_credentials(f"pinned file {pinned_path} has a suffix no registered reader owns"),
             stage=INPUT_DATA_STAGE,
         )
-        note_pending_pin(pinned_path, (MATCH_REJECTION_REASONS.get() or {}).get(_UNOWNED_PIN_OWNER))
+        record = (MATCH_REJECTION_REASONS.get() or {}).get(_UNOWNED_PIN_OWNER)
+        if created and record is not None:
+            note_pending_pin(pinned_path, record)
 
     @classmethod
     def _owns(cls, path: str, document_suffixes: tuple[str, ...]) -> bool:

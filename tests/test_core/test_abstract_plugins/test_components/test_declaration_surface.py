@@ -26,6 +26,8 @@ class TestValidatePropertySpec:
         message = str(exc_info.value)
         del exc_info
         assert "DsurfOwner.PROPERTY_MAPPING['dsurf_key'] is a int, not a PropertySpec." in message
+        assert "PROPERTY_MAPPING" in message
+        assert "READER_OPTIONS" not in message
 
     def test_feature_group_accepts_match_guard(self) -> None:
         spec = PropertySpec("x", match_guard=_dsurf_match_guard, default=None)
@@ -40,15 +42,6 @@ class TestValidatePropertySpec:
         result = validate_property_spec("DsurfOwner", "dsurf_key", spec)
 
         assert result is spec
-
-    def test_feature_group_surface_message_contains_property_mapping_not_reader_options(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            validate_property_spec("DsurfOwner", "dsurf_key", 42)
-
-        message = str(exc_info.value)
-        del exc_info
-        assert "PROPERTY_MAPPING" in message
-        assert "READER_OPTIONS" not in message
 
     def test_no_message_ever_mentions_the_retired_surface_marker_constant(self) -> None:
         messages = []

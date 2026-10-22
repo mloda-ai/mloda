@@ -465,7 +465,7 @@ class FormatFeatureGroup(FeatureGroup):
             reader_pair = (cls, next(iter(fitting.values())))
             # Contained: only a plugin's own matcher can write this key.
             if RESERVED_READER_OPTION_KEY in options.context or (
-                RESERVED_READER_OPTION_KEY in options.group and options.group[RESERVED_READER_OPTION_KEY] != reader_pair
+                RESERVED_READER_OPTION_KEY in options.group and reader_pair != options.group[RESERVED_READER_OPTION_KEY]
             ):
                 held_value = options.context.get(
                     RESERVED_READER_OPTION_KEY, options.group.get(RESERVED_READER_OPTION_KEY)

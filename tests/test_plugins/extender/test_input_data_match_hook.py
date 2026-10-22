@@ -50,7 +50,7 @@ _REFUSED = "refused at INPUT_DATA_MATCH"
 
 
 def _fmt_in_scope(cls: type[FormatFeatureGroup], options: Options, data_access_collection: Any) -> bool:
-    if options.get(cls.get_class_name()) is not None:
+    if any(options.get(key) is not None for key in cls.pointer_keys()):
         return True
     return isinstance(data_access_collection, DataAccessCollection) and any(
         _CRED_KEY in credential for credential in data_access_collection.credentials.values()
@@ -79,6 +79,11 @@ class _ImdFmtBase(ToyFormatBase):
         cls.probes += 1
         if cls.raises and feature_name in cls.served:
             raise ValueError("imdmatch probe boom")
+        if options.get(cls.get_class_name()) is None:
+            for key in cls.pointer_keys():
+                pointed = options.get(key)
+                if pointed is not None:
+                    return [SourceMatch(source="scoped:toy", access=pointed)]
         return super().find_sources(route, feature_name, options, data_access_collection)
 
     @classmethod
@@ -739,16 +744,34 @@ class TestFormatGroupHook:
         assert ImdMatchGateFormat.probes == 0
         assert ImdMatchGateFormat.column_reads == 0
 
-    def test_a_refused_subclass_leaves_its_concrete_parent_able_to_serve_the_source(self) -> None:
-        """Pins the documented per-class limit: a refusal never reaches the parent."""
+    @pytest.mark.parametrize(
+        ("refused", "server", "pointed"),
+        [
+            (ImdMatchGateSubFormat, ImdMatchGateFormat, False),
+            (ImdMatchGateFormat, ImdMatchGateSubFormat, False),
+            (ImdMatchGateFormat, ImdMatchGateSubFormat, True),
+        ],
+        ids=[
+            "subclass_refused_parent_serves",
+            "parent_refused_subclass_serves",
+            "pointed_parent_refused_subclass_takes_over",
+        ],
+    )
+    def test_a_refusal_binds_only_the_refused_class(
+        self, refused: type[ImdMatchGateFormat], server: type[ImdMatchGateFormat], pointed: bool
+    ) -> None:
+        """The refusal is per class, never reaching a parent or a subclass."""
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchGateSubFormat})
+        feature = (
+            Feature(_COL_A, options={ImdMatchGateFormat.__name__: dict(_FMT_COLUMNS)}) if pointed else Feature(_COL_A)
+        )
 
-        session = _prepare(Feature(_COL_A), enabled, _global_access(), _gate(ImdMatchGateSubFormat))
+        session = _prepare(feature, enabled, None if pointed else _global_access(), _gate(refused))
         result = session.run(parallelization_modes={ParallelizationMode.SYNC})
 
         assert result[0].column_names == [_COL_A]
-        assert ImdMatchGateSubFormat.probes == 0
-        assert ImdMatchGateFormat.probes >= 1
+        assert refused.probes == 0
+        assert server.probes >= 1
 
     def test_a_refusing_gate_leaves_an_unrelated_computing_group_planning_and_running(self) -> None:
         enabled = PluginCollector.enabled_feature_groups({ImdMatchGateFormat, ImdMatchPlainGroup})

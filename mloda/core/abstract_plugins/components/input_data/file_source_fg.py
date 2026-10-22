@@ -7,14 +7,23 @@ from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials, strip_uri_userinfo
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, SourceMatch, first_report_of_pin
+from mloda.core.abstract_plugins.components.input_data.claim_route import (
+    ClaimRoute,
+    SourceMatch,
+    note_pending_pin,
+    pin_is_unreported,
+)
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
     FOLDER_ESCAPE_MARK,
     HANDLE_OPTION,
     HANDLE_SPEC,
     FormatFeatureGroup,
 )
-from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
+from mloda.core.abstract_plugins.components.match_rejection import (
+    INPUT_DATA_STAGE,
+    MATCH_REJECTION_REASONS,
+    record_match_rejection,
+)
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
@@ -202,13 +211,17 @@ class _FileSourceFG(FormatFeatureGroup):
             for group in get_all_subclasses(_FileSourceFG)
         ):
             return
-        if not first_report_of_pin(pinned_path):
+        if not pin_is_unreported(pinned_path):
             return
+        created = _UNOWNED_PIN_OWNER not in (MATCH_REJECTION_REASONS.get() or {})
         record_match_rejection(
             _UNOWNED_PIN_OWNER,
             scrub_credentials(f"pinned file {pinned_path} has a suffix no registered reader owns"),
             stage=INPUT_DATA_STAGE,
         )
+        record = (MATCH_REJECTION_REASONS.get() or {}).get(_UNOWNED_PIN_OWNER)
+        if created and record is not None:
+            note_pending_pin(pinned_path, record)
 
     @classmethod
     def _owns(cls, path: str, document_suffixes: tuple[str, ...]) -> bool:

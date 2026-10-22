@@ -462,7 +462,23 @@ class FormatFeatureGroup(FeatureGroup):
                 candidates=tuple(sorted(fitting)),
             )
         if len(fitting) == 1:
-            options.add_to_group(RESERVED_READER_OPTION_KEY, (cls, next(iter(fitting.values()))))
+            reader_pair = (cls, next(iter(fitting.values())))
+            # Contained: only a plugin's own matcher can write this key.
+            if RESERVED_READER_OPTION_KEY in options.context or (
+                RESERVED_READER_OPTION_KEY in options.group and reader_pair != options.group[RESERVED_READER_OPTION_KEY]
+            ):
+                held_value = options.context.get(
+                    RESERVED_READER_OPTION_KEY, options.group.get(RESERVED_READER_OPTION_KEY)
+                )
+                held = (
+                    held_value[0].__name__
+                    if isinstance(held_value, tuple) and held_value and isinstance(held_value[0], type)
+                    else type(held_value).__name__
+                )
+                raise ValueError(
+                    f"{cls.get_class_name()} cannot record its reader: the reserved option already holds {held}"
+                )
+            options.add_to_group(RESERVED_READER_OPTION_KEY, reader_pair)
             if open_only:
                 note_open_claim()
             return True

@@ -15,6 +15,9 @@ import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.provider import FormatFeatureGroup, ReadFileFG
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
@@ -200,6 +203,28 @@ class TestSampleListing:
         assert len(names) == 1
 
 
+class _FirstCandidateRefusingExtender(Extender):
+    """Runs the probe, then refuses the first file group probed; later groups pass."""
+
+    never_fall_back = True
+
+    def __init__(self) -> None:
+        self.priority = 100
+        self.name = "toyfmt_first_refuser"
+        self.refused: list[str] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.INPUT_DATA_MATCH}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        result = func(*args, **kwargs)
+        context = HookContext.current()
+        if context is not None and context.reader_class is not None and not self.refused:
+            self.refused.append(context.reader_class.__name__)
+            raise PermissionError("no clearance")
+        return result
+
+
 class TestPinnedFileOwnedBySomeFileGroup:
     """A pin to a file whose suffix no file format group owns is named in the resolution failure, once."""
 
@@ -244,14 +269,22 @@ class TestPinnedFileOwnedBySomeFileGroup:
 
         assert self._unowned_pin_reasons(result) == []
 
-    def test_a_pin_to_a_suffix_nobody_owns_is_named_once_in_the_resolution_failure(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("refusing", [False, True], ids=["no_extender", "first_candidate_refused"])
+    def test_a_pin_to_a_suffix_nobody_owns_is_named_once_in_the_resolution_failure(
+        self, tmp_path: Path, refusing: bool
+    ) -> None:
         path = tmp_path / "pinned.toyfmtunowned9"
         path.write_text("toyfmt_g6_other\n1\n")
         plugins: Any = {ToyFileFormatFG: {PyArrowTable}, CsvFG: {PyArrowTable}}
+        extender = _FirstCandidateRefusingExtender() if refusing else None
+        scope = ReaderProbeScope(extender, None, None, None, None) if extender is not None else None
 
-        with pytest.raises(FeatureResolutionError) as excinfo:
-            evaluate_or_raise(Feature("toyfmt_g6_other"), plugins, None, self._dac(path, "toyfmt_g6_other"))
+        with reader_probe_scope(scope):
+            with pytest.raises(FeatureResolutionError) as excinfo:
+                evaluate_or_raise(Feature("toyfmt_g6_other"), plugins, None, self._dac(path, "toyfmt_g6_other"))
 
+        if extender is not None:
+            assert len(extender.refused) == 1
         assert str(excinfo.value).count(self.UNOWNED_FRAGMENT) == 1
 
     def test_the_unowned_pin_message_scrubs_uri_credentials(self) -> None:

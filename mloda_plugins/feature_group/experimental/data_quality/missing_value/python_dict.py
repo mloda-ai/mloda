@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import numbers
 import statistics
 from collections import Counter
 from typing import Any
@@ -59,7 +60,12 @@ class PythonDictMissingValueImputation(OperationImplementation[MissingValueFeatu
         """Smallest value among the most frequent ones."""
         counter = Counter(values)
         top = max(counter.values())
-        return min((v for v, c in counter.items() if c == top), key=lambda v: (type(v).__name__, v))
+        return min((v for v, c in counter.items() if c == top), key=cls._mode_key)
+
+    @staticmethod
+    def _mode_key(v: Any) -> tuple[bool, str, Any]:
+        real = isinstance(v, numbers.Real)
+        return (not real, "" if real else type(v).__name__, v)
 
     @classmethod
     def _perform_imputation(

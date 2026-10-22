@@ -419,6 +419,18 @@ class TestImplementationDefinition:
         del _RecordingImpl, _OpGroup
         gc.collect()
 
+    @pytest.mark.parametrize("implementation", [object, Implementation])
+    def test_calculate_feature_rejects_a_non_operation_implementation(self, implementation: type) -> None:
+        class _OpGroup(OpToyBareFG):
+            pass
+
+        features = FeatureSet([Feature("optoy_bare_value")])
+        features.implementation = implementation
+        with pytest.raises(TypeError, match="OperationImplementation"):
+            _OpGroup.calculate_feature(object(), features)
+        del _OpGroup
+        gc.collect()
+
     def test_the_typed_signature_is_enforced_by_mypy(self) -> None:
         class _OpGroup(OpToyFG):
             pass

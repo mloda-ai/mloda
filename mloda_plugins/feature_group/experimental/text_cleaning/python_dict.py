@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import string
 import unicodedata
@@ -57,7 +58,11 @@ class PythonDictTextCleaning(OperationImplementation[TextCleaningFeatureGroup]):
         Returns:
             The source text as a list of strings
         """
-        return ["" if value is None or value != value else str(value) for value in data.get(feature_name, [])]
+        return ["" if cls._is_missing(value) else str(value) for value in data.get(feature_name, [])]
+
+    @staticmethod
+    def _is_missing(value: Any) -> bool:
+        return value is None or (isinstance(value, float) and math.isnan(value)) or type(value).__name__ == "NAType"
 
     @classmethod
     def _add_result_to_data(

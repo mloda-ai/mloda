@@ -29,7 +29,8 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     and configuration-based creation with proper group/context parameter separation.
 
     Reference contract: null and float NaN are missing; mean/median/mode skip them; missing cells are
-    filled; mode ties take the smallest value; single-column, multi-column and grouped paths.
+    filled; mode ties take the smallest value; single-column, multi-column and grouped paths;
+    a group with no value falls back to the column statistic.
 
     ## Supported Imputation Methods
 

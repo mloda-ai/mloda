@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components import utils
 from mloda.provider import MatchRejection, OperationFeatureGroup, collect_match_rejections
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
+from mloda.core.abstract_plugins.implementation import Implementation, OperationImplementation, loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -214,8 +214,6 @@ def make_implementation() -> Iterator[Callable[..., type[Implementation]]]:
         if base is None:
             base = Implementation
             if isinstance(group, type) and issubclass(group, OperationFeatureGroup):
-                from mloda.core.abstract_plugins.implementation import OperationImplementation
-
                 base = OperationImplementation
 
         class _Impl(base):  # type: ignore[misc, valid-type]

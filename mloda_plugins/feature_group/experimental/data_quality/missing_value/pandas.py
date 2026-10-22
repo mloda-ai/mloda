@@ -184,7 +184,8 @@ class PandasMissingValueImputation(OperationImplementation[MissingValueFeatureGr
                     mode_value = group_mode.iloc[0]
                     # Apply the mode to missing values in this group
                     result.loc[group_indices] = result.loc[group_indices].fillna(mode_value)
-            return result
+            overall_mode = data[in_features].mode()
+            return result.fillna(overall_mode.iloc[0]) if not overall_mode.empty else result
         elif imputation_method == "ffill":
             # Forward fill within groups
             return grouped[in_features].transform(lambda x: x.ffill())

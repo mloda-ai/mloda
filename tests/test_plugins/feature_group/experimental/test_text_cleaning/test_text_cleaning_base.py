@@ -5,6 +5,7 @@ Tests for the TextCleaningFeatureGroup base class.
 from typing import Any
 from unittest.mock import Mock, call
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -210,3 +211,7 @@ class TestImplementationsConformToTheReferenceContract:
         source = list(impl._get_source_text(make_data(), "t"))
         assert source[1] == ""
         assert source[2] == ""
+
+    @pytest.mark.parametrize("missing", [pd.NA, np.float64("nan")], ids=["pd_na", "numpy_nan"])
+    def test_python_dict_treats_pandas_and_numpy_missing_as_an_empty_string(self, missing: Any) -> None:
+        assert list(PythonDictTextCleaning._get_source_text({"t": [missing, "x"]}, "t")) == ["", "x"]

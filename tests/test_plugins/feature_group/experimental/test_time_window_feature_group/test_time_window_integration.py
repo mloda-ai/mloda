@@ -2,8 +2,14 @@
 Integration tests for time window feature groups.
 """
 
+import math
+from typing import Any
+
+import pandas as pd
+import pytest
+
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from mloda.provider import DefaultOptionKeys
+from mloda.provider import ComputeFramework, DefaultOptionKeys, FeatureSet
 from mloda.user import mloda
 from mloda.user import Feature
 from mloda.user import Options
@@ -18,6 +24,8 @@ from mloda_plugins.feature_group.experimental.time_window.base import TimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow as PandasTimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow as PyArrowTimeWindow
 
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import column_values
+from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_time_window_utils import (
     PandasTimeWindowTestDataCreator,
     PyArrowTimeWindowTestDataCreator,
@@ -151,3 +159,58 @@ class TestTimeWindowPyArrowIntegration:
 
         # Validate the time window features
         validate_time_window_features(window_df, TIME_WINDOW_FEATURES)
+
+
+class TimeWindowNanSourceCreator(ATestDataCreator):
+    """Serves a float column holding a NaN on both Pandas and PyArrow, so the window framework is free."""
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {
+            "tw_nan_x": [1.0, float("nan"), 3.0, 4.0, 5.0],
+            DefaultOptionKeys.reference_time: pd.date_range(start="2023-01-01", periods=5, freq="D"),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame, PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return cls.get_raw_data()
+
+
+_NAN_WINDOW = "tw_nan_x__sum_3_day_window"
+_NAN_WINDOW_PLUGINS = PluginCollector.enabled_feature_groups({TimeWindowNanSourceCreator, TimeWindowFeatureGroup})
+
+
+class TestTimeWindowImplementationChoice:
+    """With Pandas and PyArrow both enabled the matching implementation wins unless one is pinned."""
+
+    @pytest.mark.parametrize(
+        ("pin", "framework", "propagates_nan"),
+        [
+            pytest.param({}, "PyArrowTable", True, id="matching_implementation_wins"),
+            pytest.param({"implementation": "PandasTimeWindow"}, "PandasDataFrame", False, id="implementation_pin"),
+        ],
+    )
+    def test_sum_over_a_nan_runs_the_chosen_implementation(
+        self, pin: dict[str, Any], framework: str, propagates_nan: bool
+    ) -> None:
+        feature = Feature(_NAN_WINDOW, **pin)
+        frameworks: list[type[ComputeFramework]] = [PandasDataFrame, PyArrowTable]
+
+        steps = mloda.explain([feature], compute_frameworks=frameworks, plugin_collector=_NAN_WINDOW_PLUGINS)
+        step = next(s for s in steps if s.step_kind == "compute" and s.feature_group is TimeWindowFeatureGroup)
+        assert step.compute_framework_name == framework
+        if propagates_nan:
+            assert step.compute_framework_reason == "prefers a matching version"
+        else:
+            assert step.compute_framework_reason is not None
+            assert step.compute_framework_reason.startswith("pinned; runs a version that differs: skips NaN in sum")
+
+        results = mloda.run_all([feature], compute_frameworks=frameworks, plugin_collector=_NAN_WINDOW_PLUGINS)
+        values = column_values(results, _NAN_WINDOW)
+        assert len(values) == 5
+        assert values[0] == 1.0
+        assert math.isnan(values[1]) is propagates_nan

@@ -356,7 +356,7 @@ def _reference_multi(method: str, columns: _Columns, constant: Any) -> _Cells:
 
 
 def _reference_grouped(method: str, columns: _Columns, constant: Any) -> _Cells:
-    """Per group fill; a constant fills everywhere."""
+    """Per group fill; a constant fills everywhere; a group without a statistic falls back to the overall one."""
     values = columns["a"]
     if method == "constant":
         return _reference_fill(method, values, constant)
@@ -364,7 +364,13 @@ def _reference_grouped(method: str, columns: _Columns, constant: Any) -> _Cells:
     keys = columns["g"]
     for key in dict.fromkeys(keys):
         indices = [i for i, k in enumerate(keys) if k == key]
-        filled = _reference_fill(method, [values[i] for i in indices], constant)
+        group = [values[i] for i in indices]
+        if method in ("mean", "median", "mode") and _statistic(method, group) is None:
+            filled = _reference_fill(method, group, constant)
+            overall = _statistic(method, values)
+            filled = [overall if _missing(cell) else cell for cell in filled]
+        else:
+            filled = _reference_fill(method, group, constant)
         for i, cell in zip(indices, filled):
             result[i] = cell
     return result
@@ -426,12 +432,17 @@ _MULTI: _Columns = {
     "c": [_NAN, 8.0, None, None, 4.0],
 }
 _GROUPED: _Columns = {
-    "a": [4.0, _NAN, 7.0, 2.0, None, 4.0, 2.0, _NAN, 9.0, 5.0],
-    "g": ["x", "x", "y", "x", "y", "x", "x", "x", "y", "x"],
+    "a": [4.0, _NAN, 7.0, 2.0, None, 4.0, 2.0, _NAN, 9.0, 5.0, None, _NAN, None],
+    "g": ["x", "x", "y", "x", "y", "x", "x", "x", "y", "x", "z", "z", "w"],
 }
 _CONSTANT = 0.5
 _ALL_METHODS = sorted(METHOD_UNIVERSE)
 _MULTI_METHODS = [method for method in _ALL_METHODS if method not in ("ffill", "bfill")]
+
+
+_MIXED_TIE = [2.0, 1, 2.0, 1, None]
+_MIXED_MULTI_INT = [1, 3]
+_MIXED_MULTI_FLOAT = [2.0, 3.0]
 
 
 class TestImplementationsConformToTheReferenceContract:
@@ -446,6 +457,22 @@ class TestImplementationsConformToTheReferenceContract:
     def test_single_float_column(self, implementation: Any, method: str) -> None:
         actual = _impute(implementation, _SINGLE, method, ["a"], _CONSTANT, None)
         assert not _differences(implementation, actual, _reference_single(method, _SINGLE, _CONSTANT))
+
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_mode_tie_of_int_and_float_values_takes_the_smallest(self, implementation: Any) -> None:
+        cells: _Cells = [2.0, 1.0, 2.0, 1.0, None]
+        if implementation is PythonDictMissingValueImputation:
+            cells = list(_MIXED_TIE)
+        actual = _impute(implementation, {"a": cells}, "mode", ["a"], None, None)
+        assert not _differences(implementation, actual, [2.0, 1.0, 2.0, 1.0, 1.0])
+
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_multi_column_mode_tie_of_int_and_float_columns(self, implementation: Any) -> None:
+        columns: _Columns = {"a": [1.0, 3.0], "b": list(_MIXED_MULTI_FLOAT)}
+        if implementation is PythonDictMissingValueImputation:
+            columns = {"a": list(_MIXED_MULTI_INT), "b": list(_MIXED_MULTI_FLOAT)}
+        actual = _impute(implementation, columns, "mode", ["a", "b"], None, None)
+        assert not _differences(implementation, actual, [1.0, 3.0])
 
     @pytest.mark.parametrize("method", ["mode", "constant", "ffill", "bfill"])
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
@@ -499,7 +526,7 @@ class TestNanNormalizationIsLimitedToFloatColumns:
     @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])
     def test_float_group_keys_are_never_altered(self, implementation: Any, method: str) -> None:
         values: _Cells = [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0, None]
-        float_keys: _Columns = {"a": values, "g": [1.0, 1.0, _NAN, _NAN, None, None, 2.0, 2.0]}
+        float_keys: _Columns = {"a": values, "g": [1.0, 1.0, float("nan"), float("nan"), None, None, 2.0, 2.0]}
         string_keys: _Columns = {"a": values, "g": ["one", "one", "nan", "nan", "null", "null", "two", "two"]}
         with_float_keys = _impute(implementation, float_keys, method, ["a"], None, ["g"])
         with_string_keys = _impute(implementation, string_keys, method, ["a"], None, ["g"])

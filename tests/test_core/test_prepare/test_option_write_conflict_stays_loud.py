@@ -242,6 +242,7 @@ class TestUserSuppliedReservedReaderKeyIsRejected:
         assert "BaseInputData" in message
         assert OPAQUE_OPTION_VALUE not in message
 
+
 _PAIR_MARKER = "toyfmt_pair_conflict_marker_path"
 
 

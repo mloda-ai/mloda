@@ -422,7 +422,6 @@ class TestTimeWindowBehaviorNeutral:
 
     @pytest.mark.parametrize("framework", [PandasDataFrame, PyArrowTable], ids=lambda fw: fw.__name__)
     def test_every_window_function_stays_supported(self, framework: Any) -> None:
-        # Anchor on the declared universe so this test is red until SUBTYPES lands.
         assert TimeWindowFeatureGroup.subtype_universe() == WINDOW_UNIVERSE
         for window_function in TimeWindowFeatureGroup.WINDOW_FUNCTIONS:
             supported = TimeWindowFeatureGroup.supports_compute_framework(

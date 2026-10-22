@@ -643,6 +643,11 @@ class TestOptionsWithCredentialValues:
         toy = Options(group={ToyFormatFG.get_class_name(): {"toy_col": "/raw/toy_pointer_marker.db"}})
         assert "/raw/toy_pointer_marker.db" not in str(toy)
         assert "toy_col" in str(toy)
+        toy_context = Options(context={ToyFormatFG.get_class_name(): {"toy_col": "/raw/toy_pointer_marker.db"}})
+        assert "/raw/toy_pointer_marker.db" not in str(toy_context)
+        url = Options(group={ToyFormatFG.get_class_name(): "https://user:toy-url-secret@api.example/v1"})
+        assert "toy-url-secret" not in str(url)
+        assert "api.example" in str(url)
 
     def test_str_redacts_a_reader_tuple_dsn_string_in_base_input_data_context(self) -> None:
         """The reserved BaseInputData reader tuple also masks a DSN string second element."""

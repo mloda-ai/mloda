@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Collection
 from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
@@ -116,11 +116,8 @@ def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def _display_option_dict(d: dict[str, Any], format_group_names: Collection[str]) -> dict[str, Any]:
-    """Display-only: also redact a mapping pointer under a format group name."""
-    return {
-        k: redact_option_value(v) if isinstance(v, Mapping) and k in format_group_names else _str_option_value(v)
-        for k, v in d.items()
-    }
+    """Display-only: also redact a pointer under a format group name."""
+    return {k: redact_option_value(v) if k in format_group_names else _str_option_value(v) for k, v in d.items()}
 
 
 def validate_forwarding_directives(

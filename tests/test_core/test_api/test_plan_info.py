@@ -1435,8 +1435,8 @@ class TestPlanStepDataAccessIdentity:
             function_extender={recorder},
         )
 
-        assert recorder.options_text
-        assert all(secret not in text for text in recorder.options_text)
+        assert len(recorder.options_text) == 2
+        assert all(secret not in text and db not in text for text in recorder.options_text)
         assert result.frame_for(feature)["PlanInfoPointerConsumer"] == [1]
 
     def test_a_format_group_identity_naming_no_source_is_flagged_as_fallback(self) -> None:

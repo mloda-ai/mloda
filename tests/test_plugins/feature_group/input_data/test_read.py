@@ -13,6 +13,7 @@ import pyarrow.csv as pa_csv
 
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
+from mloda.user import FeatureResolutionError
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
@@ -240,7 +241,7 @@ class TestTwoReader:
         plugins = PluginCollector.enabled_feature_groups({CsvFG, AggregatedFeatureGroup})
 
         if not cascade:
-            with pytest.raises(ValueError):
+            with pytest.raises(FeatureResolutionError, match="'Amount'"):
                 mloda.run_all([feature], compute_frameworks=["PyArrowTable"], plugin_collector=plugins)
             return
 

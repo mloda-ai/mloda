@@ -12,6 +12,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from mloda.core.abstract_plugins.components.utils import is_match_abort
+
 
 def is_positive_int(value: Any) -> bool:
     """Element validator for positive-integer options.
@@ -206,16 +208,21 @@ def element_admitted(spec: PropertySpec, element: Any, on_raise: Callable[[Excep
     if validator is not None:
         try:
             return bool(validator(element))
-        except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
+        except Exception as exc:
+            if is_match_abort(exc):  # a marked abort must escape, not become a rejection
+                raise
             on_raise(exc)
             return False
     try:
         return spec.allowed_values is not None and element in spec.allowed_values
-    # Swallows: an unhashable element can never be a member, so the TypeError is a clean rejection.
-    except TypeError:
+    # An unhashable element is never a member.
+    except TypeError as exc:
+        if is_match_abort(exc):
+            raise
         return False
-    # Swallows: a membership test that raises cannot judge the value, so it is rejected.
     except Exception as exc:
+        if is_match_abort(exc):
+            raise
         on_raise(exc)
         return False
 

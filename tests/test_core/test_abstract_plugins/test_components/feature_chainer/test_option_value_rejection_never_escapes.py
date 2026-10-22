@@ -799,8 +799,9 @@ class TestContainedRaiseLogTiers:
         warnings = _records_at_or_above(caplog, PARSER_LOGGER_NAME, logging.WARNING)
         assert warnings, "a KeyError-raising validator looks broken and must log at WARNING"
         assert any(VALIDATOR_KEY_ESC763 in record.getMessage() for record in warnings)
-        # The exception text stays for triage; the option value itself is redacted at WARNING (production-visible).
-        assert any("element_validator cannot judge the poison value" in record.getMessage() for record in warnings)
+        # WARNING keeps only the exception type; the message and option value are DEBUG-only.
+        assert all("element_validator cannot judge the poison value" not in r.getMessage() for r in warnings)
+        assert any("KeyError" in record.getMessage() for record in warnings)
         assert all(POISON_VALUE_ESC763 not in record.getMessage() for record in warnings), (
             "option values may carry secrets and must not appear in WARNING-tier containment messages"
         )

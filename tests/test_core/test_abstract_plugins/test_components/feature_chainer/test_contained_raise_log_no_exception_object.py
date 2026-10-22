@@ -127,9 +127,24 @@ class TestParserElementValidatorRaiseLogsNoExceptionObject:
         assert len(messages) == 1, f"exactly one WARNING record reports the raise, got: {messages}"
         assert CLR975_VALIDATOR_KEY in messages[0], f"the key must stay in the message: {messages[0]}"
         assert "Clr975Exploded" in messages[0], f"the exception type must stay in the message: {messages[0]}"
-        assert CLR975_VALIDATOR_BROKEN_MESSAGE in messages[0], f"the reason must stay readable: {messages[0]}"
+        assert CLR975_VALIDATOR_BROKEN_MESSAGE not in messages[0], (
+            f"the message stays out of WARNING logs: {messages[0]}"
+        )
         assert "raised " in messages[0], f"the message must still read as a contained raise: {messages[0]}"
         assert CLR975_VALUE not in messages[0], f"the raw value stays out of WARNING logs: {messages[0]}"
+
+    def test_validator_echoing_value_keeps_it_out_of_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        def echoing_validator(value: Any) -> bool:
+            raise Clr975Exploded(f"cannot judge {value}")
+
+        _run_validator(echoing_validator, caplog)
+
+        records = _module_records(caplog, PARSER_LOGGER_NAME)
+        warnings = [r for r in records if r.levelno == logging.WARNING]
+        debugs = [r for r in records if r.levelno == logging.DEBUG]
+        assert warnings, "a broken-looking validator warns"
+        assert all(CLR975_VALUE not in r.getMessage() for r in warnings), "value stays out of WARNING logs"
+        assert any(f"cannot judge {CLR975_VALUE}" in r.getMessage() for r in debugs), "DEBUG keeps the reason"
 
     def test_debug_message_still_names_key_exception_type_and_value(self, caplog: pytest.LogCaptureFixture) -> None:
         _run_validator(_clr975_validator_raises_type_error, caplog)

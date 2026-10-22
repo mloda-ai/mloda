@@ -21,6 +21,7 @@ from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
     contained_raise_reason,
     escalate_match_abort,
+    is_match_abort,
     safe_field,
     safe_value_text,
 )
@@ -177,22 +178,23 @@ class FeatureChainParser:
             raised: Exception | None = None
             try:
                 verdict = element_validator(found_property_val)
-            except Exception as exc:  # Swallows: a validator that raises cannot judge the value, so it is rejected.
+            except Exception as exc:
+                if is_match_abort(exc):  # a marked abort must escape, not become a rejection
+                    raise
                 # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
                 level = contained_raise_log_level(exc)
-                if level == logging.DEBUG:
-                    logger.debug(
-                        "element_validator for '%s' %s for value %s; treating value as rejected.",
-                        property_name,
-                        contained_raise_reason(exc),
-                        safe_value_text(found_property_val),
-                    )
-                else:
-                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
+                # WARNING carries the type only, the raw value and reason stay at DEBUG.
+                logger.debug(
+                    "element_validator for '%s' %s for value %s; treating value as rejected.",
+                    property_name,
+                    contained_raise_reason(exc),
+                    safe_value_text(found_property_val),
+                )
+                if level != logging.DEBUG:
                     logger.warning(
-                        "element_validator for '%s' %s; treating value as rejected.",
+                        "element_validator for '%s' raised %s; treating value as rejected.",
                         property_name,
-                        contained_raise_reason(exc),
+                        type(exc).__name__,
                     )
                 raised = exc
                 verdict = False

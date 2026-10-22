@@ -197,6 +197,37 @@ class PlainElementValidatorPgv(FeatureGroup):
     }
 
 
+def _marked_abort_validator(value: Any) -> bool:
+    raise escalate_match_abort(ValueError("marked"))
+
+
+class PlainMarkedAbortValidatorPgv(FeatureGroup):
+    """Plain group whose element_validator raises a marked abort."""
+
+    PROPERTY_MAPPING = {
+        "mode": PropertySpec(
+            "Mode of operation",
+            context=False,
+            strict_validation=True,
+            element_validator=_marked_abort_validator,
+            default=None,
+        )
+    }
+
+
+class _MarkedAbortEqValue:
+    """Hash-collides with a member so membership runs __eq__, which raises a marked abort."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def __hash__(self) -> int:
+        return hash("mode_a")
+
+    def __eq__(self, other: object) -> bool:
+        raise escalate_match_abort(self._exc)
+
+
 class PlainGuardedPgv(FeatureGroup):
     """Plain group with a match_guard and no required key."""
 
@@ -336,6 +367,19 @@ class TestPlainGroupStrictValidation:
 
         with pytest.raises(ValueError, match="marked"):
             PlainStrictModePgv.match_feature_group_criteria(name, Options(group={"mode": "mode_a"}))
+
+    @pytest.mark.parametrize(
+        "group, value, exc_type",
+        [
+            (PlainMarkedAbortValidatorPgv, "mode_a", ValueError),
+            (PlainStrictModePgv, _MarkedAbortEqValue(ValueError("marked")), ValueError),
+            (PlainStrictModePgv, _MarkedAbortEqValue(TypeError("marked")), TypeError),
+        ],
+        ids=["element_validator", "eq_value_error", "eq_type_error"],
+    )
+    def test_marked_abort_from_value_check_propagates(self, group: Any, value: Any, exc_type: type) -> None:
+        with pytest.raises(exc_type, match="marked"):
+            group.match_feature_group_criteria(group.get_class_name(), Options(group={"mode": value}))
 
 
 class TestPlainGroupMatchGuard:

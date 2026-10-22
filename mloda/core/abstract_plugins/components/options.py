@@ -129,6 +129,15 @@ def validate_forwarding_directives(
 RESERVED_READER_OPTION_KEY = "BaseInputData"
 
 
+def reject_reserved_reader_key(options: "Options") -> None:
+    """Reject the engine-reserved reader key in user-supplied options."""
+    if RESERVED_READER_OPTION_KEY in options.group or RESERVED_READER_OPTION_KEY in options.context:
+        raise ValueError(
+            f"Option key '{RESERVED_READER_OPTION_KEY}' is reserved for the engine's reader selection; "
+            "remove it, and point at a format group with its class-name key instead."
+        )
+
+
 class Options:
     """
     Configuration container for features with group/context separation.

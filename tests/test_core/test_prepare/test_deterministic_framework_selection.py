@@ -34,6 +34,7 @@ from mloda.core.prepare.accessible_plugins import EnvironmentPreconditionError, 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from tests.helpers.probe_runner import run_probes
 
 _PROBE = Path(__file__).with_name("determinism_probe.py")
@@ -471,8 +472,6 @@ def test_a_sqlite_connection_under_a_group_class_name_raises_the_move_error(sqli
 
 def test_a_duckdb_connection_under_a_format_group_pointer_key_raises_the_move_error() -> None:
     duckdb = pytest.importorskip("duckdb")
-    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-
     key = CsvFG.pointer_keys()[0]
     feature = Feature("move_error_csv_col", options={key: duckdb.connect()})
 
@@ -2184,9 +2183,12 @@ def _nl_framework() -> type[ComputeFramework]:
     return NlRequiredThrowawayFramework
 
 
-def _nl_plan(framework: type[ComputeFramework], tmp_path: Path, pinned: bool) -> list[PlanStep]:
-    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-
+def _nl_plan(
+    framework: type[ComputeFramework],
+    tmp_path: Path,
+    pinned: bool,
+    frameworks: list[type[ComputeFramework]] | None = None,
+) -> list[PlanStep]:
     csv_file = tmp_path / "nl_data.csv"
     csv_file.write_text("nl_col\n1\n2\n")
     feature = Feature("nl_col")
@@ -2195,7 +2197,7 @@ def _nl_plan(framework: type[ComputeFramework], tmp_path: Path, pinned: bool) ->
         feature.compute_frameworks = {framework}
     return mloda.explain(
         [feature],
-        compute_frameworks=[framework, PythonDictFramework],
+        compute_frameworks=frameworks if frameworks is not None else [framework, PythonDictFramework],
         data_access_collection=DataAccessCollection(files={"nl_file": str(csv_file)}, connections={"c": _NlConn()}),
         plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
     )
@@ -2226,19 +2228,10 @@ def test_a_file_root_pinned_to_a_framework_no_transformer_reaches_raises_at_plan
 
 
 def test_a_file_root_whose_only_framework_no_transformer_reaches_fails_at_planning_naming_it(tmp_path: Path) -> None:
-    from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-
     framework = _nl_framework()
-    csv_file = tmp_path / "nl_data.csv"
-    csv_file.write_text("nl_col\n1\n2\n")
 
-    with pytest.raises(Exception) as raised:
-        mloda.explain(
-            [Feature("nl_col")],
-            compute_frameworks=[framework],
-            data_access_collection=DataAccessCollection(files={"nl_file": str(csv_file)}, connections={"c": _NlConn()}),
-            plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
-        )
+    with pytest.raises(ValueError) as raised:
+        _nl_plan(framework, tmp_path, pinned=False, frameworks=[framework])
 
     message = str(raised.value)
     assert "FileSource" in message

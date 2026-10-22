@@ -2094,12 +2094,43 @@ class TestLeavesConnection:
         ]
         assert transforms[0].leaves_connection == "mine"
 
-    def test_an_auto_named_connection_records_the_unnamed_token(self) -> None:
+    def test_an_auto_named_connection_records_the_unnamed_token(self, tmp_path: Path) -> None:
         plan = leave_plan(auto=True)
 
         transforms = [s for s in plan if s.step_kind == "transform"]
         assert [s.leaves_connection for s in transforms] == ["<unnamed>"]
         assert "_auto_connection_" not in _lock_text(plan)
+
+        lock = tmp_path / "plan.lock"
+        write_plan_lock(plan, lock)
+        text = lock.read_text(encoding="utf-8")
+        assert "_auto_connection_" not in text
+        assert json.loads(text)["transforms"][0]["leaves_connection"] == "<unnamed>"
+
+    def test_leaves_connection_is_recorded_on_compute_and_transform_records_and_a_change_fails_check(
+        self, tmp_path: Path
+    ) -> None:
+        base = leave_plan(handle="mine")
+
+        def variant(compute: str | None, transform: str | None) -> list[PlanStep]:
+            leaves = {"compute": compute, "transform": transform}
+            return [
+                dataclasses.replace(s, leaves_connection=leaves[s.step_kind]) if s.step_kind in leaves else s
+                for s in base
+            ]
+
+        lock = tmp_path / "plan.lock"
+        plan = variant("mine", "mine")
+        write_plan_lock(plan, lock)
+
+        content = json.loads(lock.read_text(encoding="utf-8"))
+        assert content["compute"] and all(r["leaves_connection"] == "mine" for r in content["compute"])
+        assert content["transforms"][0]["leaves_connection"] == "mine"
+        check_plan_lock(plan, lock)
+        with pytest.raises(PlanLockMismatchError):
+            check_plan_lock(variant("other", "mine"), lock)
+        with pytest.raises(PlanLockMismatchError):
+            check_plan_lock(variant("mine", None), lock)
 
 
 class TestJoinStepMapping:

@@ -1,11 +1,13 @@
 """Planner.explain: request checks, policy, row limits, and a path-free plan with lineage, estimate and egress."""
 
+import dataclasses
 import json
 import threading
 from collections.abc import Iterator, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, ClassVar
+from uuid import uuid4
 
 import pytest
 
@@ -21,7 +23,7 @@ from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.planner import PLAN_TOKEN_PREFIX, Planner
-from mloda.provider import FeatureSet, ResolutionDiagnosis, SourceMatch
+from mloda.provider import BaseInputData, DataCreator, FeatureSet, ResolutionDiagnosis, SourceMatch
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
@@ -559,6 +561,84 @@ class TestRowLimits:
     def test_csv_reader_counts_rows_exactly_on_python_dict(self, tmp_path: Path) -> None:
         path = str(_write_sales(tmp_path))
         assert CsvFG.count_rows(SourceMatch(source=path, access=path), PythonDictFramework) == 5
+
+
+class PlannerApiSourceMcp4(FeatureGroup):
+    """A DataCreator root: its compute step has no source."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"mcp4_api_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"mcp4_api_value": [1, 2]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+
+def _prepare_csv(path: Path) -> Any:
+    return mloda.prepare(
+        [Feature("customer_id")],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({CsvFG}),
+        data_access_collection=DataAccessCollection(files={"sales_handle": str(path)}),
+    )
+
+
+def _csv_step(session: Any) -> Any:
+    return next(s for s in session.resolved_plan() if s.step_kind == "compute" and s.feature_group is CsvFG)
+
+
+class TestSessionSourceRoutes:
+    def test_session_routes_equal_the_group_calls_for_a_csv_step(self, tmp_path: Path) -> None:
+        path = str(_write_sales(tmp_path))
+        session = _prepare_csv(Path(path))
+        step = _csv_step(session)
+        match = SourceMatch(source=path, access=path)
+
+        assert session.count_rows(step) == 5
+        assert session.count_rows(step) == CsvFG.count_rows(match, step.compute_framework)
+        assert session.describe_columns(step) == CsvFG.describe_columns(match)
+
+    @pytest.mark.parametrize("route", ["describe_columns", "count_rows"])
+    def test_a_step_without_a_step_uuid_raises(self, tmp_path: Path, route: str) -> None:
+        session = _prepare_csv(_write_sales(tmp_path))
+        joinlike = dataclasses.replace(_csv_step(session), step_kind="join", step_uuid=None)
+
+        with pytest.raises(ValueError):
+            getattr(session, route)(joinlike)
+
+    @pytest.mark.parametrize("route", ["describe_columns", "count_rows"])
+    def test_a_step_from_another_session_raises(self, tmp_path: Path, route: str) -> None:
+        path = _write_sales(tmp_path)
+        step = _csv_step(_prepare_csv(path))
+        other = _prepare_csv(path)
+
+        with pytest.raises(ValueError):
+            getattr(other, route)(step)
+
+    @pytest.mark.parametrize("route", ["describe_columns", "count_rows"])
+    def test_a_step_with_an_unknown_uuid_raises(self, tmp_path: Path, route: str) -> None:
+        session = _prepare_csv(_write_sales(tmp_path))
+        stranger = dataclasses.replace(_csv_step(session), step_uuid=uuid4())
+
+        with pytest.raises(ValueError):
+            getattr(session, route)(stranger)
+
+    @pytest.mark.parametrize("route", ["describe_columns", "count_rows"])
+    def test_a_data_creator_step_raises_naming_the_group(self, route: str) -> None:
+        session = mloda.prepare(
+            [Feature("mcp4_api_value")],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({PlannerApiSourceMcp4}),
+        )
+        step = next(s for s in session.resolved_plan() if s.feature_group is PlannerApiSourceMcp4)
+
+        with pytest.raises(ValueError, match="PlannerApiSourceMcp4"):
+            getattr(session, route)(step)
 
 
 class TestRestrictSources:

@@ -438,6 +438,22 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         described = self.feature_group_class.describe_columns(self._own_match())
         assert set(described) == {self.present_column}
 
+    def test_db_session_route_equals_the_group_call(self) -> None:
+        group = self.feature_group_class
+        session = mloda.prepare(
+            [self.present_column],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({group}),
+            data_access_collection=self._dac_of(self.own_path),
+        )
+        steps = [s for s in session.resolved_plan() if s.step_kind == "compute" and s.feature_group is group]
+        assert len(steps) == 1
+        step = steps[0]
+        match = self._own_match()
+
+        assert session.describe_columns(step) == group.describe_columns(match)
+        assert session.count_rows(step) == group.count_rows(match, step.compute_framework)
+
     @pytest.mark.parametrize("error", [OSError("toyfmt os failure"), ValueError("toyfmt value failure")])
     def test_db_listing_failures_are_none_with_a_reason(
         self, error: Exception, monkeypatch: pytest.MonkeyPatch

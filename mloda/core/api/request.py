@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.plugin_option.plugin_collector impor
 
 # Explicit alias re-exports Engine under no_implicit_reexport so tests can patch mloda.core.api.request.Engine.
 from mloda.core.core.engine import Engine as Engine
-from mloda.core.api.plan_info import PlanStep, build_plan_steps
+from mloda.core.api.plan_info import PlanStep, build_plan_steps, source_of
 from mloda.core.api.plan_lock import plan_content_hash, plan_structure_hash
 from mloda.core.prepare.identify_feature_group import (
     ComputeFrameworkPinError,
@@ -57,6 +57,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
+from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.runtime.run_id import generate_run_id
 
 
@@ -601,6 +602,27 @@ class mlodaAPI:
                 () if self.engine.data_access_collection is None else self.engine.data_access_collection.auto_handles
             ),
         )
+
+    def describe_columns(self, step: PlanStep) -> dict[str, DataType | None]:
+        """Read the step's source columns from this session, so the PlanStep stays credential-free.
+
+        Opens the source outside a run (no input-data-load hooks).
+        """
+        group, match = source_of(self._planned_steps(), step)
+        return group.describe_columns(match)
+
+    def count_rows(self, step: PlanStep) -> int | None:
+        """Count the step's source rows from this session, so the PlanStep stays credential-free.
+
+        Opens the source outside a run (no input-data-load hooks).
+        """
+        group, match = source_of(self._planned_steps(), step)
+        return group.count_rows(match, step.compute_framework)  # type: ignore[arg-type]
+
+    def _planned_steps(self) -> Any:
+        if self.engine is None:
+            raise ValueError("Internal error: engine not initialized. This is likely a bug in mloda.")
+        return self.engine.execution_planner
 
     def resolution_report(self) -> list[ResolutionRecord]:
         """Return this session's per-feature resolution records, captured during planning.

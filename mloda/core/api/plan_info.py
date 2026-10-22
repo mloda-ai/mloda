@@ -11,9 +11,11 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
 )
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+    FormatFeatureGroup,
     concrete_format_groups,
     implementation_path,
 )
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.abstract_plugins.components.utils import as_str, safe_field
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -360,6 +362,22 @@ def build_plan_steps(
             raise ValueError(f"Element {step} is not a valid element.")
 
     return _dependency_order(raw_steps, plan)
+
+
+def source_of(
+    execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep], step: PlanStep
+) -> tuple[type[FormatFeatureGroup], SourceMatch]:
+    """The (format group, source match) of a compute step of this plan; ValueError when it has none."""
+    name = step.feature_group_name or "unknown"
+    if step.step_uuid is None:
+        raise ValueError(f"Step of feature group {name} is not a compute step, so it has no source.")
+    found = next((s for s in execution_plan if isinstance(s, FeatureGroupStep) and s.uuid == step.step_uuid), None)
+    if found is None:
+        raise ValueError(f"Step of feature group {name} does not belong to this session's plan.")
+    pair = found.features.input_data_match
+    if pair is None:
+        raise ValueError(f"Step of feature group {name} has no data source.")
+    return pair
 
 
 def _replaced_implementations(

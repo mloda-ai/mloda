@@ -118,6 +118,7 @@ class ColumnDiscoveryContractTestMixin:
         steps = [s for s in session.resolved_plan() if s.step_kind == "compute" and s.feature_group is self.group_cls]
         assert len(steps) == 1
         step = steps[0]
+        assert step.compute_framework is not None
 
         assert session.describe_columns(step) == self.describe_columns(match_of(data_file))
         assert session.count_rows(step) == self.count_rows(match_of(data_file), step.compute_framework)

@@ -366,8 +366,8 @@ def build_plan_steps(
 
 def source_of(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep], step: PlanStep
-) -> tuple[type[FormatFeatureGroup], SourceMatch]:
-    """The (format group, source match) of a compute step of this plan; ValueError when it has none."""
+) -> tuple[type[FormatFeatureGroup], SourceMatch, type["ComputeFramework"]]:
+    """The (format group, source match, compute framework) of a compute step of this plan; ValueError when it has none."""
     name = step.feature_group_name or "unknown"
     if step.step_uuid is None:
         raise ValueError(f"Step of feature group {name} is not a compute step, so it has no source.")
@@ -377,7 +377,8 @@ def source_of(
     pair = found.features.input_data_match
     if pair is None:
         raise ValueError(f"Step of feature group {name} has no data source.")
-    return pair
+    group, match = pair
+    return group, match, found.compute_framework
 
 
 def _replaced_implementations(

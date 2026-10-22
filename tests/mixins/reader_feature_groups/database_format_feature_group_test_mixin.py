@@ -449,6 +449,7 @@ class DatabaseFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         steps = [s for s in session.resolved_plan() if s.step_kind == "compute" and s.feature_group is group]
         assert len(steps) == 1
         step = steps[0]
+        assert step.compute_framework is not None
         match = self._own_match()
 
         assert session.describe_columns(step) == group.describe_columns(match)

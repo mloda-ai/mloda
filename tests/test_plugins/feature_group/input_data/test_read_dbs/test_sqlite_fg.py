@@ -514,9 +514,7 @@ class TestSqliteFilterPushdown:
         assert _ids(filter_db, "ft", _features(*TYPED_COLUMNS)) == ALL_IDS
 
     def test_a_text_value_in_an_integer_column_does_not_break_a_pushed_max(self, filter_db: str) -> None:
-        features = _filtered_features(
-            [Feature.int64_of("id"), Feature.int64_of("v")], [_flt("v", T.MAX, {"value": 7})]
-        )
+        features = _filtered_features([Feature.int64_of("id"), Feature.int64_of("v")], [_flt("v", T.MAX, {"value": 7})])
         assert _ids(filter_db, "mixed", features) == [1]
 
     def test_an_untyped_numeric_column_blocks_the_pushdown(self, filter_db: str) -> None:

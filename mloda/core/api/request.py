@@ -608,7 +608,7 @@ class mlodaAPI:
 
         Opens the source outside a run (no input-data-load hooks).
         """
-        group, match = source_of(self._planned_steps(), step)
+        group, match, _ = source_of(self._planned_steps(), step)
         return group.describe_columns(match)
 
     def count_rows(self, step: PlanStep) -> int | None:
@@ -616,8 +616,8 @@ class mlodaAPI:
 
         Opens the source outside a run (no input-data-load hooks).
         """
-        group, match = source_of(self._planned_steps(), step)
-        return group.count_rows(match, step.compute_framework)  # type: ignore[arg-type]
+        group, match, compute_framework = source_of(self._planned_steps(), step)
+        return group.count_rows(match, compute_framework)
 
     def _planned_steps(self) -> Any:
         if self.engine is None:

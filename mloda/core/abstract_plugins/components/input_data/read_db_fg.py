@@ -209,7 +209,7 @@ class ReadDBFG(FormatFeatureGroup):
         query = QUERY_OPTION in route.required_options
         candidates = [c for c in cls._candidates(options, data_access_collection) if cls.is_valid_credentials(c)]
         if query:
-            query_text = options.get(QUERY_OPTION)
+            query_text = cls.read_option(QUERY_OPTION, options)
             if not isinstance(query_text, str) or not query_text:
                 record_match_rejection(
                     cls.get_class_name(), f"{QUERY_OPTION} must be a non-empty string", stage=INPUT_DATA_STAGE
@@ -291,7 +291,7 @@ class ReadDBFG(FormatFeatureGroup):
 
     @classmethod
     def _handle_credentials(cls, options: Options, dac: DataAccessCollection) -> list[Any]:
-        handle = options.get(HANDLE_OPTION)
+        handle = cls.read_option(HANDLE_OPTION, options)
         if not isinstance(handle, str):
             return list(dac.credentials.values())
         if handle in dac.credentials:

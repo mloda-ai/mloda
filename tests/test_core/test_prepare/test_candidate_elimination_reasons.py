@@ -14,6 +14,7 @@ Red failure. Every feature group and compute framework double is suffixed ``011`
 groups become global ``FeatureGroup`` subclasses and must not collide with other suites.
 """
 
+import importlib
 from abc import abstractmethod
 from collections.abc import Mapping
 from typing import Any, ClassVar
@@ -30,6 +31,7 @@ from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
@@ -552,6 +554,16 @@ ELIM_LINK = Link.inner(
 # --- helpers ------------------------------------------------------------------------------------
 
 
+NO_IMPLEMENTATION_REASON = "no Implementation of it is loaded; import its implementation modules or call PluginLoader.all()"
+DISABLED_IMPLEMENTATIONS_REASON = "its implementations are all disabled or denied for this run"
+
+
+def _op_toy() -> Any:
+    return importlib.import_module(
+        "tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_operation_group"
+    )
+
+
 def _fail(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
@@ -624,6 +636,40 @@ class TestEliminationStages:
             stage="frameworks_not_enabled", reason=reason
         )
         assert f"  - ElimNotEnabledFG011 (compute framework): {reason}" in str(err)
+
+    def test_frameworks_not_enabled_stage_for_an_operation_group_without_an_implementation(self) -> None:
+        toy = _op_toy()
+        feature = Feature(toy.OPTOY_BARE_FEATURE, {toy.OPTOY_KEY: "sum"})
+        plugins: FeatureGroupEnvironmentMapping = {toy.OpToyBareFG: set()}
+
+        err = _fail(feature, plugins)
+
+        reason = NO_IMPLEMENTATION_REASON
+        assert err.result.eliminations[toy.OpToyBareFG] == Elimination(stage="frameworks_not_enabled", reason=reason)
+        assert f"OpToyBareFG (compute framework): {reason}" in str(err)
+
+    def test_frameworks_not_enabled_stage_for_an_operation_group_with_all_implementations_disabled(self) -> None:
+        toy = _op_toy()
+        feature = Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"})
+        plugins: FeatureGroupEnvironmentMapping = {toy.OpToyFG: set()}
+
+        with accessible_implementations(frozenset()):
+            err = _fail(feature, plugins)
+
+        reason = DISABLED_IMPLEMENTATIONS_REASON
+        assert err.result.eliminations[toy.OpToyFG] == Elimination(stage="frameworks_not_enabled", reason=reason)
+        assert f"OpToyFG (compute framework): {reason}" in str(err)
+
+    def test_frameworks_not_enabled_stage_for_an_operation_group_with_accessible_implementations(self) -> None:
+        toy = _op_toy()
+        feature = Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"})
+        plugins: FeatureGroupEnvironmentMapping = {toy.OpToyFG: set()}
+
+        with accessible_implementations({toy.OpToyPandas, toy.OpToyPyArrow}):
+            err = _fail(feature, plugins)
+
+        reason = "none of its compute frameworks are enabled for this run"
+        assert err.result.eliminations[toy.OpToyFG] == Elimination(stage="frameworks_not_enabled", reason=reason)
 
     def test_frameworks_not_enabled_stage_when_no_compute_framework_is_loaded(
         self, monkeypatch: pytest.MonkeyPatch

@@ -50,11 +50,11 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 # reads entirely.
 _OPTIONS_ACCESSORS = frozenset({"get_singular_option_from_options", "get_options", "options_with_defaults"})
 _OPTIONS_RECEIVER_NAMES = frozenset({"options", "option"})
-_READ_METHODS = frozenset({"get", "get_options_key"})
-# Reads whose receiver is never options-like, so they are recognized by method name alone: get_options_key
+_READ_METHODS = frozenset({"get", "get_options_key", "read_option"})
+# Reads whose receiver is never options-like, so they are recognized by method name alone: read_option (receiver cls/self, key first positional or key=), get_options_key
 # is a FeatureSet method (receiver features/self). The name is distinctive enough to carry the match on its
 # own, and it takes the key as its first positional argument.
-_METHOD_NAME_ONLY_READS = frozenset({"get_options_key"})
+_METHOD_NAME_ONLY_READS = frozenset({"get_options_key", "read_option"})
 
 # DefaultOptionKeys.<member> resolves to the member's string value. Built from the enum so it cannot drift.
 _DEFAULT_OPTION_KEY_MEMBERS: dict[str, str] = {member.name: member.value for member in DefaultOptionKeys}
@@ -448,6 +448,30 @@ def test_scanner_flags_get_options_key(tmp_path: Path) -> None:
     (tmp_path / "mod.py").write_text("def f(features):\n    return features.get_options_key('undeclared_x')\n")
     violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
     assert any("undeclared_x" in v for v in violations), violations
+
+
+def test_scanner_flags_read_option(tmp_path: Path) -> None:
+    """``cls.read_option(KEY, options)`` is recognized by method name, with literal and class-constant keys."""
+    source = (
+        "class P:\n"
+        "    BAR = 'foo'\n"
+        "    @classmethod\n"
+        "    def a(cls, options):\n"
+        "        return cls.read_option('undeclared_x', options)\n"
+        "    @classmethod\n"
+        "    def b(cls, options):\n"
+        "        return cls.read_option(cls.BAR, options)\n"
+        "    @classmethod\n"
+        "    def c(cls, options):\n"
+        "        return cls.read_option(key='undeclared_y', options=options)\n"
+    )
+    (tmp_path / "mod.py").write_text(source)
+    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
+    assert any("undeclared_x" in v for v in violations), violations
+    assert any("'foo'" in v for v in violations), violations
+    assert any("undeclared_y" in v for v in violations), violations
+    declared = frozenset({"undeclared_x", "foo", "undeclared_y"})
+    assert find_violations(tmp_path, declared, frozenset(), {}, {}) == []
 
 
 def test_scanner_flags_not_in_membership(tmp_path: Path) -> None:

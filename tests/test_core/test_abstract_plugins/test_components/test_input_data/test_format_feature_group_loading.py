@@ -462,7 +462,7 @@ class TestOperationImplementation:
         toy = _toy_operation()
 
         assert toy.OpToyBareFG.compute_framework_definition() == set()
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="no Implementation of it is loaded; import its implementation modules"):
             _run_operation(toy.OPTOY_BARE_FEATURE, group=toy.OpToyBareFG)
 
     def test_a_framework_without_an_implementation_is_not_in_the_definition(self, make_implementation: Any) -> None:
@@ -483,6 +483,12 @@ class TestOperationImplementation:
         assert column_values(result, toy.OPTOY_FEATURE) == [toy.PANDAS_MARK]
         with pytest.raises(ValueError):
             _run_operation(toy.OPTOY_FEATURE, PyArrowTable, disabled={toy.OpToyPyArrow})
+
+    def test_disabling_every_implementation_reports_disabled_or_denied(self) -> None:
+        toy = _toy_operation()
+
+        with pytest.raises(ValueError, match="its implementations are all disabled or denied for this run"):
+            _run_operation(toy.OPTOY_FEATURE, disabled={toy.OpToyPandas, toy.OpToyPyArrow})
 
     def test_divergence_reports_the_declared_reason_for_its_subtype_only(self) -> None:
         toy = _toy_operation()

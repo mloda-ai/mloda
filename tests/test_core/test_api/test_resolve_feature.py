@@ -683,6 +683,19 @@ class TestResolveFeatureWithOptions:
         assert "PythonDictFramework" in result.error
 
 
+    def test_all_implementations_disabled_reports_disabled_or_denied(self) -> None:
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_operation_group as toy
+
+        collector = PluginCollector.enabled_feature_groups({toy.OpToyFG})
+        collector.add_disabled_implementation_classes({toy.OpToyPandas, toy.OpToyPyArrow})
+
+        result = resolve_feature(toy.OPTOY_FEATURE, options=Options({toy.OPTOY_KEY: "sum"}), plugin_collector=collector)
+
+        assert result.feature_group is None
+        assert result.error is not None
+        assert "its implementations are all disabled or denied for this run" in result.error
+
+
 class TestResolveFeatureIsNonThrowing:
     """resolve_feature is a debug API: matching errors surface as ResolvedFeature.error, never as exceptions."""
 

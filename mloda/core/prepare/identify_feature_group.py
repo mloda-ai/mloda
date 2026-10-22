@@ -67,7 +67,22 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
 
+from mloda.core.abstract_plugins.implementation import current_implementations, loaded_implementations
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+
 import logging
+
+
+def _operation_implementation_reason(feature_group: type[FeatureGroup]) -> str | None:
+    """Why an operation group has no accessible implementation, or None when it has one or is not an operation."""
+    if not issubclass(feature_group, OperationFeatureGroup):
+        return None
+    if not any(issubclass(feature_group, impl.feature_group) for impl in loaded_implementations()):
+        return "no Implementation of it is loaded; import its implementation modules or call PluginLoader.all()"
+    if not any(issubclass(feature_group, impl.feature_group) for impl in current_implementations()):
+        return "its implementations are all disabled or denied for this run"
+    return None
+
 
 logger = logging.getLogger(__name__)
 
@@ -723,7 +738,10 @@ class IdentifyFeatureGroupClass:
                     )
                 else:
                     if get_all_subclasses(ComputeFramework):
-                        not_enabled_reason = "none of its compute frameworks are enabled for this run"
+                        not_enabled_reason = (
+                            _operation_implementation_reason(feature_group)
+                            or "none of its compute frameworks are enabled for this run"
+                        )
                     else:
                         not_enabled_reason = (
                             "no compute framework plugin is loaded; import one or call PluginLoader.all()"

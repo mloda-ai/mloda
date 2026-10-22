@@ -103,7 +103,7 @@ class ReadDocumentFG(_FileSourceFG):
             return
         files = data_access_collection.files
         folders = data_access_collection.folders
-        handle = options.get(HANDLE_OPTION)
+        handle = cls.read_option(HANDLE_OPTION, options)
         if isinstance(handle, str):
             files = {handle: files[handle]} if handle in files else {}
             folders = {handle: folders[handle]} if handle in folders else {}

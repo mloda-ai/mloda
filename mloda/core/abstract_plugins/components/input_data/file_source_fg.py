@@ -129,7 +129,7 @@ class _FileSourceFG(FormatFeatureGroup):
             return []
         files: list[str] = list(dac.files.values())
         folders: list[str] = list(dac.folders.values())
-        handle = options.get(HANDLE_OPTION)
+        handle = cls.read_option(HANDLE_OPTION, options)
         if isinstance(handle, str):
             if handle in dac.files:
                 files, folders = [dac.files[handle]], []
@@ -170,9 +170,9 @@ class _FileSourceFG(FormatFeatureGroup):
             return SourceMatch(source=source, access=path)
         return SourceMatch(source=os.path.abspath(path), access=path)
 
-    @staticmethod
-    def _document_suffixes(options: Options) -> tuple[str, ...]:
-        value = options.get(_DOCUMENT_SUFFIXES_OPTION)
+    @classmethod
+    def _document_suffixes(cls, options: Options) -> tuple[str, ...]:
+        value = cls.read_option(_DOCUMENT_SUFFIXES_OPTION, options)
         if value is None or not _is_suffix_value(value):
             return ()
         return (value,) if isinstance(value, str) else tuple(value)

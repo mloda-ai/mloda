@@ -81,7 +81,7 @@ The matched pair lives on `Feature.input_data_match`, never in the options, and 
 
 ### Non-file sources such as HTTP
 
-Write a `FormatFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
+Write a `FormatFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. A plain `FeatureGroup` is not a pointer target. A key that differs from a loaded format group's name only by case raises a `FormatPointerError`; a key naming a group that is not loaded is an unknown option key and is ignored. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 
 ### Resolution of a pointed group vs feature-group resolution
 

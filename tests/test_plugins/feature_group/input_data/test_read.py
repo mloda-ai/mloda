@@ -9,14 +9,18 @@ from mloda.user import Options
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 import pytest
 import pyarrow as pa
+import pyarrow.csv as pa_csv
 
 from mloda.user import DataAccessCollection
 from mloda.user import Feature
+from mloda.user import FeatureResolutionError
 from mloda.provider import FeatureSet
 from mloda.user import Index
 from mloda.user import Link, JoinSpec
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
 
@@ -226,3 +230,25 @@ class TestTwoReader:
                 links={link},
                 plugin_collector=PluginCollector.enabled_feature_groups({csv_group, db_group, SumFeature}),
             )
+
+    @pytest.mark.parametrize("cascade", [True, False], ids=["cascaded", "not_cascaded"])
+    def test_a_cascaded_context_pointer_reaches_the_csv_group_two_hops_down(self, cascade: bool) -> None:
+        keys = frozenset({"CsvFG"}) if cascade else frozenset()
+        feature = Feature(
+            "Amount__sum_aggr__max_aggr",
+            Options(context={CsvFG.get_class_name(): self.file_path}, cascade_context_keys=keys),
+        )
+        plugins = PluginCollector.enabled_feature_groups({CsvFG, AggregatedFeatureGroup})
+
+        if not cascade:
+            with pytest.raises(FeatureResolutionError, match="'Amount'"):
+                mloda.run_all([feature], compute_frameworks=["PyArrowTable"], plugin_collector=plugins)
+            return
+
+        result = mloda.run_all([feature], compute_frameworks=["PyArrowTable"], plugin_collector=plugins)
+
+        expected = sum(pa_csv.read_csv(self.file_path)["Amount"].to_pylist())
+        assert result[0].to_pydict()["Amount__sum_aggr__max_aggr"][0] == pytest.approx(expected)
+        computes = [s for s in result.plan if s.step_kind == "compute"]
+        assert [s.feature_group for s in computes].count(CsvFG) == 1
+        assert computes[0].feature_group is CsvFG

@@ -253,7 +253,7 @@ Check the spelling, request a column a source has, or point at the source that h
 
 ### Pointers on derived features
 
-A class-name pointer on a derived feature reaches its inputs, because group options forward to input features. A consumer whose inputs come from several sources must put each pointer on its input feature (or use the `DataAccessCollection`): a forwarded pointer to a source without the column aborts with the missing-column error above.
+A class-name pointer on a derived feature reaches its inputs, because group options forward to input features. A pointer in the context options counts wherever it is visible, including when pushed with `propagate_context_keys` or `cascade_context_keys`, so a pushed pointer at another group also makes the format groups there skip their search. A consumer whose inputs come from several sources must put each pointer on its input feature (or use the `DataAccessCollection`): a forwarded pointer to a source without the column aborts with the missing-column error above.
 
 ```py
 # in the consumer's input_features: each input carries its own pointer, the consumer's own options carry none

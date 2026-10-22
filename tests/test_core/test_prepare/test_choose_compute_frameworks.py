@@ -1648,6 +1648,13 @@ def test_stable_text_keeps_a_reader_tuple_option_redacted() -> None:
     assert "dsn-marker-text" not in choose_compute_frameworks.stable_text(options)
 
 
+def test_stable_text_keeps_a_mapping_pointer_raw_so_ordering_keys_differ() -> None:
+    first = Options({"SqliteFG": {"sqlite": "a.db"}})
+    second = Options({"SqliteFG": {"sqlite": "b.db"}})
+
+    assert choose_compute_frameworks.stable_text(first) != choose_compute_frameworks.stable_text(second)
+
+
 @pytest.mark.parametrize(
     ("a", "b"),
     [("1", 1), (["None"], [None]), (["a, b"], ["a", "b"])],

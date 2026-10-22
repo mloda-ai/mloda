@@ -473,7 +473,7 @@ class PlanInfoPointerConsumer(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        return data
+        return {**data, cls.get_class_name(): data["plan_info_pointer_col"]}
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
@@ -1425,6 +1425,19 @@ class TestPlanStepDataAccessIdentity:
             assert step.feature_set_options is not None
             assert secret not in str(step.feature_set_options)
             assert db not in str(step.feature_set_options)
+
+        feature = Feature("PlanInfoPointerConsumer", options={"SqliteFG": {"sqlite": db, "password": secret}})
+        recorder = PlanInfoOptionsRecorder("SqliteFG")
+        result = mloda.run_all(
+            [feature],
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG, PlanInfoPointerConsumer}),
+            function_extender={recorder},
+        )
+
+        assert len(recorder.options_text) == 2
+        assert all(secret not in text and db not in text for text in recorder.options_text)
+        assert result.frame_for(feature)["PlanInfoPointerConsumer"] == [1]
 
     def test_a_format_group_identity_naming_no_source_is_flagged_as_fallback(self) -> None:
         pointer = {PlanInfoTypeNameIdentityFormat.__name__: {"plan_info_type_name_col": [1]}}

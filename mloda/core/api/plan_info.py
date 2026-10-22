@@ -274,8 +274,7 @@ def build_plan_steps(
                     implementation_specialized_from=_replaced_implementations(impl, step),
                     feature_group_version=safe_field(lambda: as_str(step.feature_group.version()), None),
                     feature_group_hash=None
-                    if (impl is None and path != "neutral")
-                    or (impl is not None and step.feature_group is impl.feature_group)
+                    if path is None or (impl is not None and step.feature_group is impl.feature_group)
                     else safe_field(
                         lambda: BaseFeatureGroupVersion.first_party_hash(step.feature_group), "unavailable"
                     ),

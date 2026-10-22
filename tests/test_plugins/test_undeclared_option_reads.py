@@ -51,9 +51,8 @@ assert SCAN_ROOT.exists(), f"scan root not found; check the parents index for th
 _OPTIONS_ACCESSORS = frozenset({"get_singular_option_from_options", "get_options", "options_with_defaults"})
 _OPTIONS_RECEIVER_NAMES = frozenset({"options", "option"})
 _READ_METHODS = frozenset({"get", "get_options_key", "read_option"})
-# Reads whose receiver is never options-like, so they are recognized by method name alone: read_option (receiver cls/self, key first positional or key=), get_options_key
-# is a FeatureSet method (receiver features/self). The name is distinctive enough to carry the match on its
-# own, and it takes the key as its first positional argument.
+# get_options_key (FeatureSet method) and read_option (FeatureGroup classmethod) have non-options receivers,
+# so they match by method name alone; both take the key as the first positional argument or `key=`.
 _METHOD_NAME_ONLY_READS = frozenset({"get_options_key", "read_option"})
 
 # DefaultOptionKeys.<member> resolves to the member's string value. Built from the enum so it cannot drift.

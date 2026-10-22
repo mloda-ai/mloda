@@ -43,6 +43,7 @@ from mloda.core.prepare.accessible_plugins import (
 )
 from mloda.core.abstract_plugins.implementation import accessible_implementations
 from mloda.core.prepare.identify_feature_group import evaluate_and_render
+from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.prepare.resolution_failure_renderer import scope_callout
 from mloda.core.prepare.resolution_types import CandidateFrameworks
 
@@ -452,7 +453,7 @@ def resolve_feature(
 
     # The seam does the name/domain/scope/abstract/subclass filtering. Matching, a capability hook or the
     # renderer can raise; resolve_feature must not, so degrade any raise into an error result.
-    def _evaluate() -> Any:
+    def _evaluate() -> tuple[EvaluationResult, str | None]:
         with accessible_implementations(pre_filter.implementations):
             return evaluate_and_render(
                 feature_obj,

@@ -1,11 +1,17 @@
+import math
+import statistics
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.provider import FeatureSet
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.provider import FeatureSet, SubtypeDeclaration
+from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -261,3 +267,246 @@ class TestMissingValueFeatureGroup:
         perform.assert_called_once_with(data, "constant", ["a"], 0, ["b"])
         add_column.assert_called_once_with(data, "a__constant_imputed", "result")
         assert result == "done"
+
+
+METHOD_UNIVERSE = frozenset(MissingValueFeatureGroup.IMPUTATION_METHODS)
+
+
+class TestMissingValueSubtypeDeclaration:
+    """MissingValueFeatureGroup declares its imputation methods via SUBTYPES."""
+
+    def test_declaration_key_is_imputation_method(self) -> None:
+        declaration = MissingValueFeatureGroup.SUBTYPES
+        assert isinstance(declaration, SubtypeDeclaration)
+        assert declaration.key == "imputation_method"
+
+    def test_universe_matches_declared_methods(self) -> None:
+        assert MissingValueFeatureGroup.subtype_universe() == METHOD_UNIVERSE
+
+    def test_resolves_from_feature_name(self) -> None:
+        assert MissingValueFeatureGroup.SUBTYPES is not None
+        assert MissingValueFeatureGroup.resolve_subtype("income__mean_imputed", Options()) == "mean"
+
+    def test_resolves_from_options_path(self) -> None:
+        assert MissingValueFeatureGroup.SUBTYPES is not None
+        options = Options(context={MissingValueFeatureGroup.IMPUTATION_METHOD: "median"})
+        assert MissingValueFeatureGroup.resolve_subtype("imputation_placeholder", options) == "median"
+
+    @pytest.mark.parametrize("framework", FRAMEWORKS, ids=IMPL_IDS)
+    def test_every_method_stays_supported(self, framework: Any) -> None:
+        assert MissingValueFeatureGroup.subtype_universe() == METHOD_UNIVERSE
+        for method in sorted(METHOD_UNIVERSE):
+            supported = MissingValueFeatureGroup.supports_compute_framework(
+                f"income__{method}_imputed", Options(), framework
+            )
+            assert supported is True, f"'{method}' must stay supported on {framework.__name__}"
+
+
+_NAN = float("nan")
+_Cells = list[Any]
+_Columns = dict[str, _Cells]
+
+
+def _missing(cell: Any) -> bool:
+    return cell is None or (isinstance(cell, float) and math.isnan(cell))
+
+
+def _statistic(method: str, cells: _Cells) -> Any:
+    """The contract statistic over the present cells: mode ties take the smallest value."""
+    present = [cell for cell in cells if not _missing(cell)]
+    if not present:
+        return None
+    if method == "mean":
+        return statistics.fmean(present)
+    if method == "median":
+        return statistics.median(present)
+    counts = {value: present.count(value) for value in present}
+    return min(value for value, count in counts.items() if count == max(counts.values()))
+
+
+def _reference_fill(method: str, cells: _Cells, constant: Any) -> _Cells:
+    """Fill missing cells of one column (or one group) by the contract."""
+    if method == "constant":
+        return [constant if _missing(cell) else cell for cell in cells]
+    if method in ("ffill", "bfill"):
+        order = range(len(cells)) if method == "ffill" else range(len(cells) - 1, -1, -1)
+        result = list(cells)
+        last: Any = None
+        for i in order:
+            if _missing(result[i]):
+                result[i] = last
+            else:
+                last = result[i]
+        return result
+    fill = _statistic(method, cells)
+    return [fill if _missing(cell) else cell for cell in cells]
+
+
+def _reference_single(method: str, columns: _Columns, constant: Any) -> _Cells:
+    return _reference_fill(method, columns["a"], constant)
+
+
+def _reference_multi(method: str, columns: _Columns, constant: Any) -> _Cells:
+    """Row-wise: the statistic across the columns of each row, skipping missing cells."""
+    names = list(columns)
+    rows = range(len(columns[names[0]]))
+    if method == "constant":
+        return [constant for _ in rows]
+    return [_statistic(method, [columns[name][row] for name in names]) for row in rows]
+
+
+def _reference_grouped(method: str, columns: _Columns, constant: Any) -> _Cells:
+    """Per group fill; a constant fills everywhere."""
+    values = columns["a"]
+    if method == "constant":
+        return _reference_fill(method, values, constant)
+    result = list(values)
+    keys = columns["g"]
+    for key in dict.fromkeys(keys):
+        indices = [i for i, k in enumerate(keys) if k == key]
+        filled = _reference_fill(method, [values[i] for i in indices], constant)
+        for i, cell in zip(indices, filled):
+            result[i] = cell
+    return result
+
+
+def _pandas_data(columns: _Columns) -> pd.DataFrame:
+    def column(cells: _Cells) -> _Cells:
+        numeric = any(isinstance(cell, float) for cell in cells)
+        return [np.nan if numeric and cell is None else cell for cell in cells]
+
+    return pd.DataFrame({name: column(cells) for name, cells in columns.items()})
+
+
+def _pyarrow_data(columns: _Columns) -> pa.Table:
+    return pa.table({name: pa.array(cells) for name, cells in columns.items()})
+
+
+def _python_dict_data(columns: _Columns) -> dict[str, _Cells]:
+    return {name: list(cells) for name, cells in columns.items()}
+
+
+_MAKE_DATA: dict[type[Implementation], Callable[[_Columns], Any]] = {
+    PandasMissingValueImputation: _pandas_data,
+    PyArrowMissingValueImputation: _pyarrow_data,
+    PythonDictMissingValueImputation: _python_dict_data,
+}
+
+
+def _to_list(result: Any) -> _Cells:
+    if isinstance(result, (pa.Array, pa.ChunkedArray)):
+        return list(result.to_pylist())
+    return list(result.tolist()) if hasattr(result, "tolist") else list(result)
+
+
+def _impute(
+    implementation: Any,
+    columns: _Columns,
+    method: str,
+    in_features: list[str],
+    constant: Any,
+    group_by: list[str] | None,
+) -> _Cells:
+    data = _MAKE_DATA[implementation](columns)
+    return _to_list(implementation._perform_imputation(data, method, in_features, constant, group_by))
+
+
+def _differences(implementation: Any, actual: _Cells, expected: _Cells) -> list[str]:
+    equal = same_on_pandas if implementation is PandasMissingValueImputation else same
+    assert len(actual) == len(expected), f"{actual} vs {expected}"
+    return [f"row {i}: {a!r} != reference {e!r}" for i, (a, e) in enumerate(zip(actual, expected)) if not equal(a, e)]
+
+
+# Methods are chosen so the filled values differ between a NaN-skipping and a NaN-keeping implementation.
+_SINGLE: _Columns = {"a": [3.0, _NAN, 1.0, 3.0, None, 1.0, 5.0]}
+_STRINGS: _Columns = {"a": ["b", None, "a", "b", "a"]}
+_MULTI: _Columns = {
+    "a": [3.0, _NAN, None, 2.0, 4.0],
+    "b": [3.0, 2.0, 6.0, 1.0, None],
+    "c": [_NAN, 8.0, None, None, 4.0],
+}
+_GROUPED: _Columns = {
+    "a": [4.0, _NAN, 7.0, 2.0, None, 4.0, 2.0, _NAN, 9.0, 5.0],
+    "g": ["x", "x", "y", "x", "y", "x", "x", "x", "y", "x"],
+}
+_CONSTANT = 0.5
+_ALL_METHODS = sorted(METHOD_UNIVERSE)
+_MULTI_METHODS = [method for method in _ALL_METHODS if method not in ("ffill", "bfill")]
+
+
+class TestImplementationsConformToTheReferenceContract:
+    """Null and NaN are missing, statistics skip them, missing cells are filled, mode ties take the smallest."""
+
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_declares_no_divergence(self, implementation: type[Implementation]) -> None:
+        assert dict(implementation.divergent) == {}
+
+    @pytest.mark.parametrize("method", _ALL_METHODS)
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_single_float_column(self, implementation: Any, method: str) -> None:
+        actual = _impute(implementation, _SINGLE, method, ["a"], _CONSTANT, None)
+        assert not _differences(implementation, actual, _reference_single(method, _SINGLE, _CONSTANT))
+
+    @pytest.mark.parametrize("method", ["mode", "constant", "ffill", "bfill"])
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_string_column_with_a_mode_tie(self, implementation: Any, method: str) -> None:
+        actual = _impute(implementation, _STRINGS, method, ["a"], "z", None)
+        assert not _differences(implementation, actual, _reference_single(method, _STRINGS, "z"))
+
+    @pytest.mark.parametrize("method", _MULTI_METHODS)
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_multi_column_feature(self, implementation: Any, method: str) -> None:
+        actual = _impute(implementation, _MULTI, method, ["a", "b", "c"], _CONSTANT, None)
+        assert not _differences(implementation, actual, _reference_multi(method, _MULTI, _CONSTANT))
+
+    @pytest.mark.parametrize("method", ["ffill", "bfill"])
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_multi_column_fill_methods_raise(self, implementation: Any, method: str) -> None:
+        with pytest.raises(ValueError):
+            _impute(implementation, _MULTI, method, ["a", "b", "c"], _CONSTANT, None)
+
+    @pytest.mark.parametrize("method", _ALL_METHODS)
+    @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
+    def test_grouped_imputation(self, implementation: Any, method: str) -> None:
+        actual = _impute(implementation, _GROUPED, method, ["a"], _CONSTANT, ["g"])
+        assert not _differences(implementation, actual, _reference_grouped(method, _GROUPED, _CONSTANT))
+
+
+class TestNanNormalizationIsLimitedToFloatColumns:
+    """Only floating source columns have NaN treated as missing; ints, strings and group keys are untouched."""
+
+    @pytest.mark.parametrize("method", ["mode", "constant"])
+    @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])
+    def test_int_column_with_nulls_keeps_its_values(self, implementation: Any, method: str) -> None:
+        columns: _Columns = {"a": [1, None, 1, 3, 3, 0]}
+        actual = _impute(implementation, columns, method, ["a"], 7, None)
+        expected = _reference_single(method, columns, 7)
+        assert actual == expected
+        assert all(isinstance(cell, int) for cell in actual)
+
+    def test_pyarrow_int_column_keeps_its_type(self) -> None:
+        table = pa.table({"a": pa.array([1, None, 3], type=pa.int64())})
+        result = PyArrowMissingValueImputation._perform_imputation(table, "constant", ["a"], 7, None)
+        assert result.type == pa.int64()
+
+    @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])
+    def test_string_column_keeps_its_values(self, implementation: Any) -> None:
+        columns: _Columns = {"a": ["nan", None, "NaN", "nan"]}
+        actual = _impute(implementation, columns, "mode", ["a"], None, None)
+        assert actual == ["nan", "nan", "NaN", "nan"]
+
+    @pytest.mark.parametrize("method", ["mean", "mode", "ffill"])
+    @pytest.mark.parametrize("implementation", [PyArrowMissingValueImputation, PythonDictMissingValueImputation])
+    def test_float_group_keys_are_never_altered(self, implementation: Any, method: str) -> None:
+        values: _Cells = [1.0, None, 3.0, 4.0, 5.0, 6.0, 7.0, None]
+        float_keys: _Columns = {"a": values, "g": [1.0, 1.0, _NAN, _NAN, None, None, 2.0, 2.0]}
+        string_keys: _Columns = {"a": values, "g": ["one", "one", "nan", "nan", "null", "null", "two", "two"]}
+        with_float_keys = _impute(implementation, float_keys, method, ["a"], None, ["g"])
+        with_string_keys = _impute(implementation, string_keys, method, ["a"], None, ["g"])
+        assert not _differences(implementation, with_float_keys, with_string_keys)
+
+    def test_python_dict_input_is_not_mutated(self) -> None:
+        data = _python_dict_data(_GROUPED)
+        PythonDictMissingValueImputation._perform_imputation(data, "mean", ["a"], None, ["g"])
+        assert data["g"] == _GROUPED["g"]
+        assert all(same(a, e) for a, e in zip(data["a"], _GROUPED["a"]))

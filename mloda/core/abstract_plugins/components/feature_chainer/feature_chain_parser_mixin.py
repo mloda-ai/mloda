@@ -902,5 +902,6 @@ def missing_columnwise_hooks(owner: type[Any]) -> list[str]:
 
     Assert this empty in a plugin repo's own suite to catch a skipped hook there instead of mid-run.
     A family base correctly reports all of them: it declares the contract its subclasses implement.
+    It does not apply to operation groups, whose loop signature is their contract.
     """
     return sorted(hook for hook in declared_columnwise_hooks(owner) if not _hook_is_implemented(owner, hook))

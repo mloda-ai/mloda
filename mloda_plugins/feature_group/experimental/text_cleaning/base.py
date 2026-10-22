@@ -25,6 +25,8 @@ class TextCleaningFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     They allow you to apply multiple cleaning operations in sequence to prepare text for
     further analysis or machine learning tasks.
 
+    Reference contract: null and NaN become an empty string before the operations run.
+
     ## Feature Naming Convention
 
     Text cleaning features follow this naming pattern:

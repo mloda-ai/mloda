@@ -249,7 +249,7 @@ Operation implementations subclass `OperationImplementation` (a plain `Implement
 - **Capability**: `supported` (a frozenset of subtypes, `None` means all) and the classmethod `accepts(feature_name, options)` (default `True`) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature.
 - **Divergence**: `divergent` maps a subtype to a short reason when the implementation's result differs from the group's reference contract (for example `{"sum": "skips NaN in sum"}`). The contract is documented on the group; implementations that follow it declare nothing. Divergence is declared per operation, not detected from the data: a NaN-free column still prefers the matching implementation. Polars `max` is declared divergent because its multi-column form propagates NaN.
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
-- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window`, `impute` or `clean` call inside each implementation's `calculate`.
+- **Hooks**: an operation group declares no column-wise hooks; the loop's keyword-only callables are its contract and mypy checks the `aggregate`, `window`, `impute` or `clean` call inside each implementation's `calculate`. The hook contract covers families with one FeatureGroup subclass per framework, and the hook sweeps assert operation families declare and call no hooks.
 
 ### Choosing among implementations
 
@@ -278,7 +278,9 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - An allow or deny list that names an old class must name the group or the implementation instead.
 - Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
-- Framework differences not declared yet: only Pandas imputes NaN (the others impute null only), `mode` ties differ, a single-column PyArrow time window propagates NaN in `sum`, `avg`/`mean`, `std` and `var` (Pandas skips it) and counts it in `count`, and PythonDict text cleaning turns NaN into `"nan"` (Pandas gives `""`).
+- Time window declares its reference contract: Pandas is divergent for sum, avg, mean, std, var and count (it skips NaN). With Pandas and PyArrow both enabled those windows run on PyArrow, which propagates NaN, is slower (a Python loop per row) and may add a conversion; pin `implementation="PandasTimeWindow"` to keep the old result.
+- PythonDict text cleaning turns NaN into an empty string, like Pandas.
+- PyArrow and PythonDict imputation treat NaN as missing (skipped in statistics and filled) and break `mode` ties by the smallest value, like Pandas; string ties change too.
 - PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.
 - `feature_group="<old per-framework class>"` becomes `implementation="<implementation>"`, or `compute_framework=...`, for every moved family.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.

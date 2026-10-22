@@ -57,8 +57,7 @@ class PythonDictTextCleaning(OperationImplementation[TextCleaningFeatureGroup]):
         Returns:
             The source text as a list of strings
         """
-        # Convert to string if not already and handle None values
-        return [str(value) if value is not None else "" for value in data.get(feature_name, [])]
+        return ["" if value is None or value != value else str(value) for value in data.get(feature_name, [])]
 
     @classmethod
     def _add_result_to_data(

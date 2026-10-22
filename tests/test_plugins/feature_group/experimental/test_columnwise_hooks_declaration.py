@@ -33,6 +33,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     missing_columnwise_hooks,
 )
 from mloda.core.abstract_plugins.implementation import OperationImplementation
+from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
@@ -303,6 +304,17 @@ def test_operation_group_declares_no_hooks(group: type[Any]) -> None:
 @pytest.mark.parametrize("group", OPERATION_GROUPS, ids=GROUP_IDS)
 def test_operation_group_is_concrete(group: type[Any]) -> None:
     assert not inspect.isabstract(group)
+
+
+def test_operation_family_bases_under_the_scan_root_are_exactly_the_table_groups() -> None:
+    discovered = {family for family in _family_declarations().values() if issubclass(family, OperationFeatureGroup)}
+    assert discovered == set(OPERATION_GROUPS)
+
+
+@pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)
+def test_divergent_keys_are_subtypes_of_the_group(name: str, impl: type[Any]) -> None:
+    group = OPERATION_FAMILIES[name][0]
+    assert set(impl.divergent) <= set(group.subtype_universe())
 
 
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)

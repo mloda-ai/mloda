@@ -2,14 +2,22 @@
 Tests for the TimeWindowFeatureGroup class.
 """
 
+import datetime
+import math
+import statistics
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
 
-from mloda.provider import FeatureSet
+from mloda.core.abstract_plugins.implementation import Implementation
+from mloda.provider import FeatureSet, SubtypeDeclaration
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.user import Feature
@@ -384,3 +392,168 @@ class TestTimeWindowFeatureGroup:
         assert WinPatternGroup._has_valid_time_window_suffix(name) is True
         with pytest.raises(ValueError):
             WinPatternGroup.parse_time_window_prefix("x__sum_7_day_window")
+
+
+WINDOW_UNIVERSE = frozenset(TimeWindowFeatureGroup.WINDOW_FUNCTIONS)
+
+
+class TestTimeWindowSubtypeDeclaration:
+    """TimeWindowFeatureGroup declares its window functions via SUBTYPES."""
+
+    def test_declaration_key_is_window_function(self) -> None:
+        declaration = TimeWindowFeatureGroup.SUBTYPES
+        assert isinstance(declaration, SubtypeDeclaration)
+        assert declaration.key == TimeWindowFeatureGroup.WINDOW_FUNCTION
+        assert declaration.key == "window_function"
+
+    def test_universe_matches_declared_window_functions(self) -> None:
+        assert TimeWindowFeatureGroup.subtype_universe() == WINDOW_UNIVERSE
+
+    def test_resolves_from_feature_name(self) -> None:
+        assert TimeWindowFeatureGroup.resolve_subtype("temperature__avg_3_day_window", Options()) == "avg"
+
+    def test_resolves_from_options_path(self) -> None:
+        options = Options(context={TimeWindowFeatureGroup.WINDOW_FUNCTION: "max"})
+        assert TimeWindowFeatureGroup.resolve_subtype("window_config_placeholder", options) == "max"
+
+
+class TestTimeWindowBehaviorNeutral:
+    """The declaration is behavior-neutral: every window function stays supported on both frameworks."""
+
+    @pytest.mark.parametrize("framework", [PandasDataFrame, PyArrowTable], ids=lambda fw: fw.__name__)
+    def test_every_window_function_stays_supported(self, framework: Any) -> None:
+        # Anchor on the declared universe so this test is red until SUBTYPES lands.
+        assert TimeWindowFeatureGroup.subtype_universe() == WINDOW_UNIVERSE
+        for window_function in TimeWindowFeatureGroup.WINDOW_FUNCTIONS:
+            supported = TimeWindowFeatureGroup.supports_compute_framework(
+                f"temperature__{window_function}_3_day_window", Options(), framework
+            )
+            assert supported is True, f"'{window_function}' must stay supported on {framework.__name__}"
+
+
+_NAN = float("nan")
+_DAY = datetime.timedelta(days=1)
+_START = datetime.datetime(2024, 1, 1)
+
+_DIVERGENT_DECLARATIONS: dict[type[Implementation], dict[str, str]] = {
+    PandasTimeWindow: {
+        "sum": "skips NaN in sum and gives 0 for a multi-column row with no value",
+        "avg": "skips NaN in avg",
+        "mean": "skips NaN in mean",
+        "std": "skips NaN in std",
+        "var": "skips NaN in var",
+        "count": "does not count NaN",
+    },
+    PyArrowTimeWindow: {},
+}
+
+# (columns, span in days): NaN and null inside windows; a NaN next to values inside one column's window;
+# rows with no value in any column.
+_SHAPES: dict[str, tuple[dict[str, list[float | None]], int]] = {
+    "single": ({"a": [1.0, 2.0, _NAN, None, 3.0, 4.0, None]}, 3),
+    "multi_nan_beside_values": ({"a": [1.0, _NAN, 2.0, 3.0], "b": [10.0, 20.0, 30.0, 40.0]}, 2),
+    "multi_rows_without_value": ({"a": [None, 1.0, None, 2.0], "b": [None, 3.0, None, None]}, 1),
+}
+
+
+def _is_missing(cell: float | None) -> bool:
+    return cell is None or math.isnan(cell)
+
+
+def _column_window_result(window_function: str, window: list[float | None]) -> float | int | None:
+    """Reference for one column and one window: null skipped, NaN propagates in sum/avg/mean/std/var."""
+    present = [cell for cell in window if cell is not None]
+    clean = [cell for cell in present if not math.isnan(cell)]
+    has_nan = len(clean) != len(present)
+    if window_function == "count":
+        return len(present)
+    if window_function == "first":
+        return window[0]
+    if window_function == "last":
+        return window[-1]
+    if window_function in ("min", "max", "median"):
+        if not clean:
+            return None
+        reducers: dict[str, Callable[[list[float]], float]] = {"min": min, "max": max, "median": statistics.median}
+        return reducers[window_function](clean)
+    if not present:
+        return None
+    if has_nan:
+        return _NAN
+    if window_function == "sum":
+        return sum(clean)
+    if window_function in ("avg", "mean"):
+        return statistics.fmean(clean)
+    if len(clean) < 2:
+        return None
+    return statistics.stdev(clean) if window_function == "std" else statistics.variance(clean)
+
+
+def _across_columns(window_function: str, results: list[float | int | None]) -> float | int:
+    """Reference reduction of the per-column window results, skipping missing ones."""
+    values = [float(r) for r in results if r is not None and not math.isnan(r)]
+    if window_function == "count":
+        return len(values)
+    if not values:
+        return _NAN
+    if window_function == "sum":
+        return sum(values)
+    if window_function in ("avg", "mean", "first", "last"):
+        return statistics.fmean(values)
+    if window_function in ("min", "max", "median"):
+        reducers: dict[str, Callable[[list[float]], float]] = {"min": min, "max": max, "median": statistics.median}
+        return reducers[window_function](values)
+    if len(values) < 2:
+        return _NAN
+    return statistics.stdev(values) if window_function == "std" else statistics.variance(values)
+
+
+def _window_reference(window_function: str, columns: dict[str, list[float | None]], span_days: int) -> list[Any]:
+    names = list(columns)
+    expected: list[Any] = []
+    for row in range(len(columns[names[0]])):
+        start = max(0, row - span_days + 1)
+        per_column = [_column_window_result(window_function, columns[name][start : row + 1]) for name in names]
+        expected.append(per_column[0] if len(names) == 1 else _across_columns(window_function, per_column))
+    return expected
+
+
+def _pandas_window(window_function: str, columns: dict[str, list[float | None]], span_days: int) -> list[Any]:
+    cells = {k: [np.nan if v is None else v for v in vs] for k, vs in columns.items()}
+    times = [_START + _DAY * i for i in range(len(next(iter(columns.values()))))]
+    frame = pd.DataFrame({**cells, "t": times})
+    result = PandasTimeWindow._perform_window_operation(frame, window_function, _DAY * span_days, list(columns), "t")
+    return list(result.tolist())
+
+
+def _pyarrow_window(window_function: str, columns: dict[str, list[float | None]], span_days: int) -> list[Any]:
+    times = [_START + _DAY * i for i in range(len(next(iter(columns.values()))))]
+    table = pa.table({**{k: pa.array(vs, type=pa.float64()) for k, vs in columns.items()}, "t": pa.array(times)})
+    result = PyArrowTimeWindow._perform_window_operation(table, window_function, _DAY * span_days, list(columns), "t")
+    return list(result.to_pylist())
+
+
+_WINDOW_RESULT_OF: dict[type[Implementation], Callable[[str, dict[str, list[float | None]], int], list[Any]]] = {
+    PandasTimeWindow: _pandas_window,
+    PyArrowTimeWindow: _pyarrow_window,
+}
+
+
+class TestImplementationsConformToTheReferenceContract:
+    """An implementation differs from the reference exactly where it declares a divergence."""
+
+    @pytest.mark.parametrize("window_function", sorted(WINDOW_UNIVERSE))
+    @pytest.mark.parametrize("implementation", list(_WINDOW_RESULT_OF), ids=lambda impl: impl.__name__)
+    def test_result_differs_from_the_reference_exactly_when_declared(
+        self, implementation: type[Implementation], window_function: str
+    ) -> None:
+        assert dict(implementation.divergent) == _DIVERGENT_DECLARATIONS[implementation]
+        equal = same_on_pandas if implementation is PandasTimeWindow else same
+        differing: list[str] = []
+        for shape, (columns, span_days) in _SHAPES.items():
+            actual = _WINDOW_RESULT_OF[implementation](window_function, columns, span_days)
+            expected = _window_reference(window_function, columns, span_days)
+            assert len(actual) == len(expected), f"{shape}: {actual} vs {expected}"
+            if not all(equal(a, e) for a, e in zip(actual, expected)):
+                differing.append(f"{shape}: {actual} != reference {expected}")
+        assert bool(differing) == (window_function in implementation.divergent), differing

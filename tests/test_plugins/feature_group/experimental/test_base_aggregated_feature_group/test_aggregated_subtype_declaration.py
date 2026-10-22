@@ -27,6 +27,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.polars_lazy import PolarsLazyAggregation
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from tests.test_plugins.feature_group.experimental.reference_contract import same
 
 
 AGGREGATION_UNIVERSE = frozenset(AggregatedFeatureGroup.AGGREGATION_TYPES)
@@ -198,14 +199,6 @@ _RESULT_OF: dict[type[Implementation], Callable[[str, dict[str, list[float | Non
 }
 
 
-def _same(actual: Any, expected: Any) -> bool:
-    if actual is None or expected is None:
-        return actual is None and expected is None
-    if math.isnan(actual) or math.isnan(expected):
-        return math.isnan(actual) and math.isnan(expected)
-    return math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-12)
-
-
 class TestImplementationsConformToTheReferenceContract:
     """An implementation differs from the reference exactly where it declares a divergence."""
 
@@ -224,6 +217,6 @@ class TestImplementationsConformToTheReferenceContract:
             actual = _RESULT_OF[implementation](aggregation_type, columns)
             expected = _reference_result(aggregation_type, columns)
             assert len(actual) == len(expected), f"{shape}: {actual} vs {expected}"
-            if not all(_same(a, e) for a, e in zip(actual, expected)):
+            if not all(same(a, e) for a, e in zip(actual, expected)):
                 differing.append(f"{shape}: {actual} != reference {expected}")
         assert bool(differing) == (aggregation_type in implementation.divergent), differing

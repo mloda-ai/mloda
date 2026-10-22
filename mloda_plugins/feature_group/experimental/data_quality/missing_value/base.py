@@ -15,6 +15,7 @@ from mloda.provider import (
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
 from mloda.provider import PropertySpec
+from mloda.provider import SubtypeDeclaration
 from mloda.user import FeatureName, Options
 from mloda_plugins.feature_group.experimental.key_features import with_key_features
 
@@ -26,6 +27,9 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     Missing value feature groups impute missing values in the source feature using
     the specified imputation method. They support both string-based feature creation
     and configuration-based creation with proper group/context parameter separation.
+
+    Reference contract: null and float NaN are missing; mean/median/mode skip them; missing cells are
+    filled; mode ties take the smallest value; single-column, multi-column and grouped paths.
 
     ## Supported Imputation Methods
 
@@ -159,6 +163,8 @@ class MissingValueFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
         "ffill": "Forward fill (use the last valid value)",
         "bfill": "Backward fill (use the next valid value)",
     }
+
+    SUBTYPES = SubtypeDeclaration(key=IMPUTATION_METHOD)
 
     PREFIX_PATTERN = r".*__(?P<imputation_method>[\w]+)_imputed$"
 

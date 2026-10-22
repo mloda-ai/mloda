@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
-from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
+from mloda.core.core.step.join_step import JoinStep
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
 from mloda.core.runtime.worker.thread_worker import thread_worker
@@ -905,26 +905,15 @@ class TestPrepareTfsAndJoinStep:
         step.source_framework_uuids = {uuid4()}
         step.source_owner_uuid = uuid4() if owner_set else None
 
-        cfw_register.get_cfw_uuid.return_value = None
+        if owner_set:
+            cfw_register.get_cfw_uuid.return_value = None
+        else:
+            # Only the join token is unregistered; any other key would resolve, proving no fallback to source uuids.
+            registered = {step.uuid: None}
+            cfw_register.get_cfw_uuid.side_effect = lambda _cls, key: registered.get(key, uuid4())
 
         with pytest.raises(ValueError, match=message):
             executor.prepare_tfs_and_joinstep(step)
-
-    def test_no_owner_raises_even_when_source_framework_uuids_would_resolve(self) -> None:
-        cfw_register = Mock(spec=CfwManager)
-        step = Mock(spec=JoinStep)
-        step.uuid = uuid4()
-        step.link = Mock()
-        step.link.uuid = uuid4()
-        step.destination_framework = Mock()
-        step.destination_framework.get_class_name.return_value = "DestinationCFW"
-        step.source_framework_uuids = {uuid4()}
-        step.source_owner_uuid = None
-        registered = {step.uuid: None}
-        cfw_register.get_cfw_uuid.side_effect = lambda _cls, key: registered.get(key, uuid4())
-
-        with pytest.raises(ValueError, match="no frame lists the join token"):
-            resolve_join_source_cfw(step, cfw_register)
 
     def test_returns_none_for_other_step_types(self) -> None:
         """Should return None for step types that are neither TFS nor JoinStep."""

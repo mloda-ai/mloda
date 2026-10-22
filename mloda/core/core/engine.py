@@ -604,7 +604,7 @@ class Engine:
                 if not outcome.matched:
                     raise ValueError(
                         f"The link index column '{column}' of feature '{feature.name}' is not matched by "
-                        f"{feature_group_class.get_class_name()} (refused by the INPUT_DATA_MATCH gate)."
+                        f"{feature_group_class.get_class_name()} under the INPUT_DATA_MATCH gate."
                     ) from outcome.error
         new_index_feature = create_index_feature(index, feature_group, feature)
         self.add_feature_to_collection(feature_group_class, new_index_feature, child_uuid, True)

@@ -1,3 +1,4 @@
+import datetime
 import sqlite3
 from typing import Any
 
@@ -458,8 +459,6 @@ class TestSqliteUnionResultTypes:
     def test_hinted_bool_and_timestamp_columns_keep_their_types(
         self, connection: sqlite3.Connection, index_obj: Index, method: str, with_rows: bool
     ) -> None:
-        import datetime
-
         schema = pa.schema([("idx", pa.int64()), ("flag", pa.bool_()), ("ts", pa.timestamp("us"))])
         t1, t2 = datetime.datetime(2024, 1, 1, 12, 0, 0), datetime.datetime(2024, 6, 2, 8, 30, 0)
         left_data = {"idx": [1], "flag": [True], "ts": [t1]} if with_rows else {"idx": [], "flag": [], "ts": []}

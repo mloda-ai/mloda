@@ -828,7 +828,6 @@ class TestCloseContextIsUsableFromAThreadStartedInClose:
 class TestExecuteCommandJoinStepUsesSourceOwner:
     def test_unregistered_join_token_without_owner_raises(self) -> None:
         cfw_register = Mock(spec=CfwManager)
-        cfw_register.get_cfw_uuid.return_value = uuid4()
         step = Mock(spec=JoinStep)
         step.uuid = uuid4()
         step.link = Mock()

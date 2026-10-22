@@ -179,29 +179,28 @@ class TestNonRootMerge:
             assert len(res.columns) == 1
             assert len(res) == 1
 
-
-def test_same_framework_join_steps_record_their_source_owner() -> None:
-    link = Link.inner(
-        left=JoinSpec(GroupedNonRootJoinTestFeature, Index(("GroupedNonRootJoinTestFeature",))),
-        right=JoinSpec(GroupedSecondNonRootJoinTestFeature, Index(("GroupedSecondNonRootJoinTestFeature",))),
-    )
-    session = mloda.prepare(
-        [Feature(name=Call2GroupedNonRootJoinTestFeature.get_class_name())],
-        links={link},
-        compute_frameworks=["PandasDataFrame"],
-        plugin_collector=PluginCollector.enabled_feature_groups(
-            {
-                NonRootJoinTestFeature,
-                SecondNonRootJoinTestFeature,
-                GroupedNonRootJoinTestFeature,
-                GroupedSecondNonRootJoinTestFeature,
-                Call2GroupedNonRootJoinTestFeature,
-            }
-        ),
-        parallelization_modes={ParallelizationMode.SYNC},
-    )
-    assert session.engine is not None
-    joins = [s for s in session.engine.execution_planner if isinstance(s, JoinStep)]
-    assert joins
-    for join in joins:
-        assert join.source_owner_uuid in join.source_framework_uuids
+    def test_same_framework_join_steps_record_their_source_owner(self, modes: set[ParallelizationMode]) -> None:
+        link = Link.inner(
+            left=JoinSpec(GroupedNonRootJoinTestFeature, Index(("GroupedNonRootJoinTestFeature",))),
+            right=JoinSpec(GroupedSecondNonRootJoinTestFeature, Index(("GroupedSecondNonRootJoinTestFeature",))),
+        )
+        session = mloda.prepare(
+            [Feature(name=Call2GroupedNonRootJoinTestFeature.get_class_name())],
+            links={link},
+            compute_frameworks=["PandasDataFrame"],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {
+                    NonRootJoinTestFeature,
+                    SecondNonRootJoinTestFeature,
+                    GroupedNonRootJoinTestFeature,
+                    GroupedSecondNonRootJoinTestFeature,
+                    Call2GroupedNonRootJoinTestFeature,
+                }
+            ),
+            parallelization_modes=modes,
+        )
+        assert session.engine is not None
+        joins = [s for s in session.engine.execution_planner if isinstance(s, JoinStep)]
+        assert joins
+        for join in joins:
+            assert join.source_owner_uuid in join.source_framework_uuids

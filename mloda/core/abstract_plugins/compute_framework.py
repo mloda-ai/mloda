@@ -287,7 +287,7 @@ class ComputeFramework(ABC):
 
     @staticmethod
     def descriptor_reaches(transformer: ComputeFrameworkTransformer, _from_fw: type[Any], _to_fw: Any) -> bool:
-        """True when a direct transformer or a transformation chain leads from the descriptor type to the target."""
+        """True when a transformer or chain leads from the descriptor type to the target."""
         return (_from_fw, _to_fw) in transformer.transformer_map or (
             transformer.get_transformation_chain(_from_fw, _to_fw) is not None
         )

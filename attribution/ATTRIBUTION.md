@@ -10,7 +10,7 @@
 | attrs                     | 26.1.0          | MIT                                                |
 | bandit                    | 1.9.4           | Apache-2.0                                         |
 | cachetools                | 6.2.6           | MIT                                                |
-| certifi                   | 2026.4.22       | Mozilla Public License 2.0 (MPL 2.0)               |
+| certifi                   | 2026.10.19      | Mozilla Public License 2.0 (MPL 2.0)               |
 | cffi                      | 2.0.0           | MIT                                                |
 | charset-normalizer        | 3.4.7           | MIT                                                |
 | click                     | 8.4.0           | BSD-3-Clause                                       |

@@ -29,7 +29,7 @@ from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_ST
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_match_abort
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_reapplies_filters
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.filter.single_filter import SingleFilter
 
 if TYPE_CHECKING:
@@ -156,7 +156,7 @@ class ReadDBFG(FormatFeatureGroup):
     @classmethod
     def rechecked_filters(cls, features: Any) -> list[SingleFilter]:
         """Filters a read may push into its query, because the framework applies them again after the load."""
-        if not framework_reapplies_filters(features, cls):
+        if not features.filters_reapplied(cls):
             return []
         return list(features.filter_engine().applicable_filters(features))
 

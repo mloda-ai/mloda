@@ -94,20 +94,6 @@ _CONNECTION_RANK = {
 }
 
 
-def framework_reapplies_filters(features: Any, feature_group: Any = None) -> bool:
-    """Whether the framework applies the filters again after this step's calculation."""
-    if features.filter_engine is None:
-        return False
-    if feature_group is not None:
-        fg_preference = feature_group.final_filters()
-        if fg_preference is not None:
-            return bool(fg_preference)
-    try:
-        return features.filter_engine().final_filters() is not False
-    except NotImplementedError:
-        return False
-
-
 class ComputeFramework(ABC):
     """
     Documentation ComputeFramework:
@@ -500,7 +486,7 @@ class ComputeFramework(ABC):
 
     @final
     def run_final_filter(self, data: Any, features: Any, feature_group: Any = None) -> Any:
-        if not framework_reapplies_filters(features, feature_group):
+        if not features.filters_reapplied(feature_group):
             return data
 
         self._validate_filter_columns(data, features, feature_group)

@@ -1675,9 +1675,9 @@ def test_destination_lookups_grow_linearly_with_independent_joins() -> None:
     calls_at_base = _destination_lookup_calls(BASE_JOINS)
     calls_at_double = _destination_lookup_calls(2 * BASE_JOINS)
 
-    assert (
-        calls_at_double < MAX_CALL_RATIO_FOR_DOUBLED_JOINS * calls_at_base
-    ), f"calls at {BASE_JOINS} joins: {calls_at_base}, at {2 * BASE_JOINS}: {calls_at_double}"
+    assert calls_at_double < MAX_CALL_RATIO_FOR_DOUBLED_JOINS * calls_at_base, (
+        f"calls at {BASE_JOINS} joins: {calls_at_base}, at {2 * BASE_JOINS}: {calls_at_double}"
+    )
 
 
 def test_every_cross_framework_join_in_a_mixed_plan_still_waits_for_every_earlier_join() -> None:

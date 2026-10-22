@@ -196,7 +196,8 @@ extend-select = ["UP006", "UP007", "UP045"]
 exclude-newer = "7 days"
 # decorator 5.3.0 ships empty License metadata so pip-licenses can't classify it; 5.3.1 fixes this.
 # Opt decorator out of the rolling window so the latest published version is always accepted.
-exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
+# certifi 2026.10.19 is a security fix inside the window; drop this entry after 2026-10-27.
+exclude-newer-package = { decorator = "2099-01-01T00:00:00Z", certifi = "2026-10-21T00:00:00Z" }
 # Constraints applied only to transitive dependencies to remediate Dependabot security alerts.
 # - urllib3 >= 2.7.0: GHSA decompression-bomb bypass + sensitive headers across origins
 # - idna   >= 3.15:   idna.encode() bypass of CVE-2024-3651 fix
@@ -208,6 +209,7 @@ exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
 # - anyio >= 4.14.2: TLSStream IDNA 2003 host name encoding allows TLS certificate spoofing; process-pool
 #   workers can block indefinitely on undrained stderr
 # - fsspec >= 2026.6.0: template injection in ReferenceFileSystem
+# - certifi >= 2026.10.19: bundled emSign root CAs with compromised intermediate CA keys
 constraint-dependencies = [
     "urllib3>=2.7.0",
     "idna>=3.15",
@@ -216,6 +218,7 @@ constraint-dependencies = [
     "nbconvert>=7.17.1",
     "anyio>=4.14.2",
     "fsspec>=2026.6.0",
+    "certifi>=2026.10.19",
 ]
 # Overrides, not constraints: marimo pins `pymdown-extensions<11`, and the fix for the
 # b64 path-traversal advisory only ships in 11.0. A constraint cannot beat that upper

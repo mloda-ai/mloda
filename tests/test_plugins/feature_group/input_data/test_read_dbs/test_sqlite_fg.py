@@ -12,6 +12,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBTable
+from mloda.core.filter.filter_engine import BaseFilterEngine
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import FeatureSet, HashableDict, ReadDBFG
 from mloda.user import (
@@ -19,12 +20,15 @@ from mloda.user import (
     DataAccessCollection,
     DataType,
     Feature,
+    FilterType,
     Options,
     ParallelizationMode,
     PluginCollector,
     PluginLoader,
+    SingleFilter,
     mloda,
 )
+from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
@@ -388,6 +392,227 @@ class TestSqliteProduceRowsInference:
         values = result[0]["leading_null_pd_col"].tolist()
         assert values[0] != values[0] or values[0] is None
         assert values[1:] == [3, 4]
+
+
+class NoRecheckSqliteFG(SqliteFG):
+    """Test-local SqliteFG that opts out of the post-read filter pass; its own credential key keeps it inert."""
+
+    CREDENTIAL_KEY = "norecheck_sqlite"
+
+    @classmethod
+    def final_filters(cls) -> bool | None:
+        return False
+
+
+def _filtered_features(features: list[Feature], filters: list[SingleFilter], engine: Any = PyArrowFilterEngine) -> Any:
+    feature_set = _features(*features)
+    feature_set.add_filters(set(filters))
+    feature_set.filter_engine = engine
+    return feature_set
+
+
+def _flt(column: str, filter_type: FilterType, parameter: dict[str, Any]) -> SingleFilter:
+    return SingleFilter(Feature(column), filter_type, parameter)
+
+
+T = FilterType
+TYPED_COLUMNS = [
+    Feature.int64_of("id"),
+    Feature.int64_of("i"),
+    Feature.double_of("r"),
+    Feature.str_of("t"),
+    Feature.int64_of("n"),
+    Feature.str_of("nc"),
+]
+ALL_IDS = [1, 2, 3, 4, 5]
+BIG = 2**53 + 1
+
+PUSHED = [
+    ("int_equal", "i", T.EQUAL, {"value": 3}, [3]),
+    ("int_min", "i", T.MIN, {"value": 4}, [4, 5]),
+    ("int_max_inclusive", "i", T.MAX, {"value": 2}, [1, 2]),
+    ("int_max_exclusive", "i", T.MAX, {"max": 2, "max_exclusive": True}, [1]),
+    ("int_range", "i", T.RANGE, {"min": 2, "max": 4}, [2, 3, 4]),
+    ("int_range_exclusive", "i", T.RANGE, {"min": 2, "max": 4, "max_exclusive": True}, [2, 3]),
+    ("int_inclusion", "i", T.CATEGORICAL_INCLUSION, {"values": [1, 5]}, [1, 5]),
+    ("real_equal_float", "r", T.EQUAL, {"value": 2.5}, [2]),
+    ("real_min_float", "r", T.MIN, {"value": 4.5}, [4, 5]),
+    ("real_range_int_bounds", "r", T.RANGE, {"min": 2, "max": 4}, [2, 3]),
+    ("text_equal", "t", T.EQUAL, {"value": "c"}, [3]),
+    ("text_inclusion", "t", T.CATEGORICAL_INCLUSION, {"values": ["a", "e"]}, [1, 5]),
+    ("nocase_equal_is_binary", "nc", T.EQUAL, {"value": "abc"}, [2, 5]),
+]
+
+NOT_PUSHED = [
+    ("regex", "t", T.REGEX, {"value": "^a"}),
+    ("text_range", "t", T.RANGE, {"min": "b", "max": "d"}),
+    ("text_min", "t", T.MIN, {"value": "c"}),
+    ("bool_bound", "i", T.EQUAL, {"value": True}),
+    ("big_int_bound", "i", T.MIN, {"value": BIG}),
+    ("big_negative_int_bound", "i", T.MAX, {"value": -BIG}),
+    ("float_bound_on_integer_column", "i", T.MIN, {"value": 2.5}),
+    ("numeric_column", "n", T.EQUAL, {"value": 3}),
+    ("inclusion_with_none", "i", T.CATEGORICAL_INCLUSION, {"values": [1, None]}),
+    ("inclusion_with_nan", "r", T.CATEGORICAL_INCLUSION, {"values": [1.5, float("nan")]}),
+    ("inclusion_empty", "i", T.CATEGORICAL_INCLUSION, {"values": []}),
+    ("inclusion_over_900", "i", T.CATEGORICAL_INCLUSION, {"values": list(range(10, 1010))}),
+    ("inclusion_text_on_integer_column", "i", T.CATEGORICAL_INCLUSION, {"values": ["1"]}),
+]
+
+
+@pytest.fixture()
+def filter_db(tmp_path: Path) -> str:
+    path = tmp_path / "filters.db"
+    connection = sqlite3.connect(path)
+    connection.execute("CREATE TABLE ft (id INTEGER, i INTEGER, r REAL, t TEXT, n NUMERIC, nc TEXT COLLATE NOCASE)")
+    rows = [
+        (1, 1, 1.5, "a", 1, "Abc"),
+        (2, 2, 2.5, "b", 2, "abc"),
+        (3, 3, 3.5, "c", 3, "ABC"),
+        (4, 4, 4.5, "d", 4, "xyz"),
+        (5, 5, 5.5, "e", 5, "abc"),
+    ]
+    connection.executemany("INSERT INTO ft VALUES (?, ?, ?, ?, ?, ?)", rows)
+    connection.execute("CREATE TABLE mixed (id INTEGER, v INTEGER)")
+    connection.executemany("INSERT INTO mixed VALUES (?, ?)", [(1, 5), (2, "abc"), (3, 10)])
+    connection.execute("CREATE TABLE loose (id INTEGER, u, num NUMERIC, i INTEGER)")
+    connection.executemany("INSERT INTO loose VALUES (?, ?, ?, ?)", [(1, 1, 1, 1), (2, 2, 2, 2), (3, 3, 3, 3)])
+    connection.commit()
+    connection.close()
+    return str(path)
+
+
+def _ids(db: str, table: str, features: Any, group: type[SqliteFG] = SqliteFG) -> list[int]:
+    connection = SqliteFG.connect({KEY: db})
+    try:
+        names, rows = group.select_rows(connection, table, features)
+    finally:
+        connection.close()
+    return [row[names.index("id")] for row in rows]
+
+
+class TestSqliteFilterPushdown:
+    @pytest.mark.parametrize("case", PUSHED, ids=[case[0] for case in PUSHED])
+    def test_a_pushed_filter_fetches_only_the_matching_rows(self, filter_db: str, case: Any) -> None:
+        _, column, filter_type, parameter, expected = case
+        features = _filtered_features(TYPED_COLUMNS, [_flt(column, filter_type, parameter)])
+        assert _ids(filter_db, "ft", features) == expected
+
+    @pytest.mark.parametrize("case", NOT_PUSHED, ids=[case[0] for case in NOT_PUSHED])
+    def test_a_filter_that_is_not_pushed_leaves_every_row_to_the_post_read_pass(
+        self, filter_db: str, case: Any
+    ) -> None:
+        _, column, filter_type, parameter = case
+        features = _filtered_features(TYPED_COLUMNS, [_flt(column, filter_type, parameter)])
+        assert _ids(filter_db, "ft", features) == ALL_IDS
+
+    def test_a_filter_on_a_column_the_step_does_not_request_is_irrelevant(self, filter_db: str) -> None:
+        features = _filtered_features([Feature.int64_of("id")], [_flt("i", T.EQUAL, {"value": 3})])
+        assert _ids(filter_db, "ft", features) == ALL_IDS
+
+    def test_no_filter_fetches_every_row(self, filter_db: str) -> None:
+        assert _ids(filter_db, "ft", _features(*TYPED_COLUMNS)) == ALL_IDS
+
+    def test_a_text_value_in_an_integer_column_does_not_break_a_pushed_max(self, filter_db: str) -> None:
+        features = _filtered_features(
+            [Feature.int64_of("id"), Feature.int64_of("v")], [_flt("v", T.MAX, {"value": 7})]
+        )
+        assert _ids(filter_db, "mixed", features) == [1]
+
+    def test_an_untyped_numeric_column_blocks_the_pushdown(self, filter_db: str) -> None:
+        features = _filtered_features(
+            [Feature.not_typed("id"), Feature.not_typed("i"), Feature.not_typed("num")],
+            [_flt("i", T.MIN, {"value": 3})],
+        )
+        assert _ids(filter_db, "loose", features) == [1, 2, 3]
+
+    def test_an_untyped_column_without_a_declared_type_blocks_the_pushdown(self, filter_db: str) -> None:
+        features = _filtered_features(
+            [Feature.not_typed("id"), Feature.not_typed("i"), Feature.not_typed("u")],
+            [_flt("i", T.MIN, {"value": 3})],
+        )
+        assert _ids(filter_db, "loose", features) == [1, 2, 3]
+
+    def test_a_typed_numeric_column_does_not_block_other_pushed_filters(self, filter_db: str) -> None:
+        features = _filtered_features(
+            [Feature.not_typed("id"), Feature.not_typed("i"), Feature.int64_of("num")],
+            [_flt("i", T.MIN, {"value": 3})],
+        )
+        assert _ids(filter_db, "loose", features) == [3]
+
+    def test_nothing_is_pushed_when_the_group_skips_the_post_read_pass(self, filter_db: str) -> None:
+        features = _filtered_features(TYPED_COLUMNS, [_flt("i", T.EQUAL, {"value": 3})])
+        assert _ids(filter_db, "ft", features, NoRecheckSqliteFG) == ALL_IDS
+
+    def test_nothing_is_pushed_when_the_filter_engine_skips_the_post_read_pass(self, filter_db: str) -> None:
+        features = _filtered_features(TYPED_COLUMNS, [_flt("i", T.EQUAL, {"value": 3})], BaseFilterEngine)
+        assert _ids(filter_db, "ft", features) == ALL_IDS
+
+
+class TestSqliteFilteredInference:
+    def _table(self, db: str, table: str, features: Any) -> pa.Table:
+        connection = SqliteFG.connect({KEY: db})
+        try:
+            result = SqliteFG.produce_rows(connection, table, features)
+        finally:
+            connection.close()
+        assert isinstance(result, pa.Table)
+        return result
+
+    def test_a_pushed_filter_matching_no_rows_keeps_the_affinity_types(self, filter_db: str) -> None:
+        features = _filtered_features(
+            [Feature.not_typed("i"), Feature.not_typed("r"), Feature.not_typed("t")],
+            [_flt("i", T.EQUAL, {"value": 99})],
+        )
+        table = self._table(filter_db, "ft", features)
+        assert table.num_rows == 0
+        assert pa.types.is_int64(table.schema.field("i").type)
+        assert pa.types.is_float64(table.schema.field("r").type)
+        assert pa.types.is_string(table.schema.field("t").type)
+
+    def test_a_pushed_filter_matching_only_null_rows_keeps_the_affinity_type(self, tmp_path: Path) -> None:
+        path = tmp_path / "nulls.db"
+        connection = sqlite3.connect(path)
+        connection.execute("CREATE TABLE nt (a INTEGER, b TEXT, c REAL)")
+        connection.executemany("INSERT INTO nt VALUES (?, ?, ?)", [(1, None, None), (2, "x", 2.5)])
+        connection.commit()
+        connection.close()
+        features = _filtered_features(
+            [Feature.not_typed("a"), Feature.not_typed("b"), Feature.not_typed("c")],
+            [_flt("a", T.EQUAL, {"value": 1})],
+        )
+        table = self._table(str(path), "nt", features)
+        assert table.to_pydict() == {"a": [1], "b": [None], "c": [None]}
+        assert pa.types.is_string(table.schema.field("b").type)
+        assert pa.types.is_float64(table.schema.field("c").type)
+
+    def test_without_a_filter_an_empty_table_still_loads_as_null_type(self, filter_db: str) -> None:
+        connection = sqlite3.connect(filter_db)
+        connection.execute("CREATE TABLE empty_t (a INTEGER)")
+        connection.commit()
+        connection.close()
+        table = self._table(filter_db, "empty_t", _features(Feature.not_typed("a")))
+        assert pa.types.is_null(table.schema.field("a").type)
+
+
+class TestSqliteRecheckedFilters:
+    FILTER = _flt("i", T.EQUAL, {"value": 3})
+
+    def test_returns_the_applicable_filters_when_the_post_read_pass_runs(self) -> None:
+        elsewhere = _flt("not_requested", T.EQUAL, {"value": 1})
+        features = _filtered_features(TYPED_COLUMNS, [self.FILTER, elsewhere])
+        assert SqliteFG.rechecked_filters(features) == [self.FILTER]
+
+    def test_returns_nothing_when_the_group_skips_the_pass(self) -> None:
+        features = _filtered_features(TYPED_COLUMNS, [self.FILTER])
+        assert NoRecheckSqliteFG.rechecked_filters(features) == []
+
+    def test_returns_nothing_when_the_filter_engine_skips_the_pass(self) -> None:
+        features = _filtered_features(TYPED_COLUMNS, [self.FILTER], BaseFilterEngine)
+        assert SqliteFG.rechecked_filters(features) == []
+
+    def test_returns_nothing_without_filters(self) -> None:
+        assert SqliteFG.rechecked_filters(_features(*TYPED_COLUMNS)) == []
 
 
 class TestSqliteDescribeColumns:

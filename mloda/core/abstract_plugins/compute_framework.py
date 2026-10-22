@@ -94,6 +94,20 @@ _CONNECTION_RANK = {
 }
 
 
+def framework_reapplies_filters(features: Any, feature_group: Any = None) -> bool:
+    """Whether the framework applies the filters again after this step's calculation."""
+    if features.filter_engine is None:
+        return False
+    if feature_group is not None:
+        fg_preference = feature_group.final_filters()
+        if fg_preference is not None:
+            return bool(fg_preference)
+    try:
+        return features.filter_engine().final_filters() is not False
+    except NotImplementedError:
+        return False
+
+
 class ComputeFramework(ABC):
     """
     Documentation ComputeFramework:
@@ -486,29 +500,12 @@ class ComputeFramework(ABC):
 
     @final
     def run_final_filter(self, data: Any, features: Any, feature_group: Any = None) -> Any:
-        if features.filter_engine is None:
-            return data
-
-        if feature_group is not None:
-            fg_preference = feature_group.final_filters()
-            if fg_preference is False:
-                return data
-            if fg_preference is True:
-                self._validate_filter_columns(data, features, feature_group)
-                filter_engine = features.filter_engine()
-                return filter_engine.apply_filters(data, features)
-
-        try:
-            if features.filter_engine().final_filters() is False:
-                return data
-        except NotImplementedError:
+        if not framework_reapplies_filters(features, feature_group):
             return data
 
         self._validate_filter_columns(data, features, feature_group)
         filter_engine = features.filter_engine()
-        result = filter_engine.apply_filters(data, features)
-
-        return result
+        return filter_engine.apply_filters(data, features)
 
     def _validate_filter_columns(self, data: Any, features: Any, feature_group: Any) -> None:
         """Validate that filter columns exist and have compatible dtypes before row elimination.

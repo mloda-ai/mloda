@@ -13,7 +13,7 @@ import pytest
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.user import DataAccessCollection, Feature, Options, PluginCollector, mloda
+from mloda.user import DataAccessCollection, Feature, GlobalFilter, Options, PluginCollector, mloda
 from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import expected_implementation_version
 
 
@@ -181,6 +181,36 @@ class DatabaseLoadsIntoFrameworkMixin(FrameworkAdapterMixin):
         assert len(result) == 1
         assert self.columns_of(result[0]) == set(self.columns[:2])
         assert [self.values_of(result[0], name) for name in self.columns[:2]] == [[1, 2, 3], [1, 2, 3]]
+
+    def test_a_global_filter_returns_the_matching_rows_and_fetches_fewer_rows(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "dbloads_filtered.db"
+        self.write_database(path, {"dbloads_table": {name: [1, 2, 3, 4, 5, 6] for name in self.columns}})
+        original = self.db_group.select_rows
+        fetched: list[int] = []
+
+        def spy(cls: Any, connection: Any, table: str, features: Any) -> Any:
+            result = original(connection, table, features)
+            fetched.append(len(result[1]))
+            return result
+
+        monkeypatch.setattr(self.db_group, "select_rows", classmethod(spy))
+        global_filter = GlobalFilter()
+        global_filter.add_filter("dbloads_a", "range", {"min": 2, "max": 4, "max_exclusive": True})
+
+        result = mloda.run_all(
+            list(self.columns[:2]),
+            compute_frameworks=[self.compute_framework()],
+            plugin_collector=PluginCollector.enabled_feature_groups({self.db_group}),
+            data_access_collection=DataAccessCollection(
+                credentials={"dbloads_handle": {self.credential_key: str(path)}}
+            ),
+            global_filter=global_filter,
+        )
+
+        assert [self.values_of(result[0], name) for name in self.columns[:2]] == [[2, 3], [2, 3]]
+        assert fetched == [2]
 
     def test_input_data_load_names_the_loader(self, tmp_path: Path) -> None:
         capture = _LoadCapture()

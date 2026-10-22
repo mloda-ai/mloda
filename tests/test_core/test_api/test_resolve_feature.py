@@ -682,7 +682,6 @@ class TestResolveFeatureWithOptions:
         assert "PandasDataFrame" in result.error
         assert "PythonDictFramework" in result.error
 
-
     def test_all_implementations_disabled_reports_disabled_or_denied(self) -> None:
         from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_operation_group as toy
 

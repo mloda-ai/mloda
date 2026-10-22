@@ -66,7 +66,6 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.plugin_loader.plugin_loader import PluginLoader
-
 from mloda.core.abstract_plugins.implementation import current_implementations, loaded_implementations
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
@@ -74,7 +73,7 @@ import logging
 
 
 def _operation_implementation_reason(feature_group: type[FeatureGroup]) -> str | None:
-    """Why an operation group has no accessible implementation, or None when it has one or is not an operation."""
+    """Why an operation group has no accessible implementation, else None."""
     if not issubclass(feature_group, OperationFeatureGroup):
         return None
     if not any(issubclass(feature_group, impl.feature_group) for impl in loaded_implementations()):

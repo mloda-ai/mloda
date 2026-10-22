@@ -96,8 +96,8 @@ class PlanStep:
     ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
     ``implementation_hash`` is the first-party code closure hash, never dependency versions ("unavailable" when
     hashing fails). ``feature_group_hash``: the group's code hash, set when an inherited implementation serves a
-    subclass group or a format group loads neutrally. ``implementation_version``, ``implementation_hash``, ``feature_group_version``,
-    ``feature_group_hash``: excluded from equality.
+    subclass group or a format group loads neutrally. ``implementation_version``, ``implementation_hash``,
+    ``feature_group_version``, ``feature_group_hash``: excluded from equality.
     """
 
     step_kind: Literal["compute", "join", "transform"]

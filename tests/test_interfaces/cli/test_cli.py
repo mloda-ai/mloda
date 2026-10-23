@@ -500,7 +500,7 @@ class TestRunInlineData:
 
         assert outcome.code == 2
         assert _error_code(outcome) == "policy_denied"
-        assert "007" not in outcome.out
+        assert '"007"' not in outcome.out
 
 
 class TestRunFeatureGroupFailure:

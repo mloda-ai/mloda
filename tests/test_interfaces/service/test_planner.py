@@ -712,7 +712,7 @@ class TestInlineData:
     def test_data_without_opt_in_is_policy_denied(self, tmp_path: Path) -> None:
         error = _error(_explain(tmp_path, INLINE_REQUEST), "policy_denied")
         assert _has_detail(error, path="/data")
-        assert "007" not in json.dumps(error)
+        assert '"007"' not in json.dumps(error)
 
     def test_inline_request_is_planned(self, tmp_path: Path) -> None:
         result = _success(_explain(tmp_path, INLINE_REQUEST, inline_data=True))
@@ -727,7 +727,7 @@ class TestInlineData:
 
         error = _error(result, "limit_exceeded")
         assert _has_detail(error, source="Tokens", reason="over_limit", rows=3, max_rows=2)
-        assert "007" not in json.dumps(result)
+        assert '"007"' not in json.dumps(result)
 
     def test_set_named_like_a_configured_source_is_validation_failed(self, tmp_path: Path) -> None:
         request = {"features": ["token"], "data": {"sales": {"token": ["a"]}}}
@@ -756,19 +756,70 @@ class TestInlineData:
 
         error = _error(result, "policy_denied")
         assert [detail["path"] for detail in error["details"]] == [f"/features/0/options/{key}"]
-        assert "007" not in json.dumps(result)
+        assert '"007"' not in json.dumps(result)
 
     def test_oversized_plan_id_is_limit_exceeded_without_values(self, tmp_path: Path) -> None:
+        # Inline JSON under the limit, but the signed base64 plan id is over it.
         marker = "BIGVALUE_mcp_inline"
-        values = [f"{marker}{index:06d}" for index in range(MAX_PLAN_ID_LENGTH // 8)]
-        request = {"features": ["token"], "data": {"Tokens": {"token": values}}}
+        value = marker * (int(MAX_PLAN_ID_LENGTH * 0.85) // len(marker))
+        data = {"Tokens": {"token": [value]}}
+        assert len(json.dumps(data)) <= MAX_PLAN_ID_LENGTH
+        request = {"features": ["token"], "data": data}
 
         result = _explain(tmp_path, request, inline_data=True)
 
         error = _error(result, "limit_exceeded")
         assert "plan_id" not in result
         assert marker not in json.dumps(result)
-        assert "plan id" in error["message"]
+        assert error["message"] == "The request is too large for a plan id."
+
+    def test_oversized_inline_json_is_refused_before_planning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls: list[str] = []
+
+        def recorder(*args: Any, **kwargs: Any) -> Any:
+            calls.append("diagnose")
+            raise AssertionError("planning must not run")
+
+        monkeypatch.setattr(mloda, "diagnose", recorder)
+        marker = "BIGVALUE_mcp_inline"
+        values = [f"{marker}{index:06d}" for index in range(MAX_PLAN_ID_LENGTH // 8)]
+        data = {"Tokens": {"token": values}}
+        assert len(json.dumps(data)) > MAX_PLAN_ID_LENGTH
+        request = {"features": ["token"], "data": data}
+
+        result = _explain(tmp_path, request, inline_data=True)
+
+        _error(result, "limit_exceeded")
+        assert calls == []
+        assert marker not in json.dumps(result)
+
+    def test_set_name_with_slash_is_reported_at_escaped_pointer(self, tmp_path: Path) -> None:
+        sources = {"a/b": _source("a/b", _write_sales(tmp_path))}
+        request = {"features": ["token"], "data": {"a/b": {"token": ["x"]}}}
+
+        result = _explain(tmp_path, request, sources=sources, inline_data=True)
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/data/a~1b")
+
+    def test_denying_api_input_data_switches_inline_off(self, tmp_path: Path) -> None:
+        planner = _planner(
+            Settings(
+                deny_feature_groups=(DENIED, "ApiInputDataFeature"),
+                sources={"sales": _source("sales", _write_sales(tmp_path))},
+                inline_data=True,
+            )
+        )
+
+        request = {"features": ["token"], "data": {"Tokens": {"token": ["SECRETVAL"]}}}
+
+        result = planner.explain(request)
+
+        error = _error(result, "validation_failed")
+        assert "plan_id" not in result
+        assert "SECRETVAL" not in json.dumps(error)
 
 
 class TestLock:

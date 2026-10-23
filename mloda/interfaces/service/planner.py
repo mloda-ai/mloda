@@ -29,6 +29,7 @@ from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
     ParsedRequest,
     build_request,
+    _pointer,
     data_access_violations,
     validate_request,
 )
@@ -54,6 +55,7 @@ STRICTNESS = ("public", "internal", "confidential", "personal", UNCLASSIFIED)
 ROWS_RETURNED_NOTE = "Rows returned depend on filters and joins; they are known only after execution."
 _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _PAYLOAD_KEYS = frozenset({"kid", "req", "digest", "cfg", "sub", "exp"})
+_TOO_LARGE_MESSAGE = "The request is too large for a plan id."
 _DENIED_MESSAGE = "This feature is not available under the service policy."
 _UNPLANNABLE_MESSAGE = "The request cannot be planned under the service policy and sources."
 _WITHHELD_FILTER_MESSAGE = "Filters on columns the preview withholds are refused; row counts would reveal their values."
@@ -202,8 +204,7 @@ class Planner:
             return planned
         described = self._described(planned)
         if len(described["plan_id"]) > MAX_PLAN_ID_LENGTH:
-            message = "The request is too large for a plan id; send fewer inline values."
-            return error_result("limit_exceeded", message)
+            return error_result("limit_exceeded", _TOO_LARGE_MESSAGE)
         return described
 
     def plan(self, request: Any) -> PlannedRequest | dict[str, Any]:
@@ -331,8 +332,14 @@ class Planner:
         if not self._settings.inline_data:
             detail = {"path": "/data", "problem": "policy_denied", "message": "Inline data is not enabled."}
             return error_result("policy_denied", "Inline data is not enabled under the service policy.", [detail])
+        if len(json.dumps(request["data"])) > MAX_PLAN_ID_LENGTH:
+            return error_result("limit_exceeded", _TOO_LARGE_MESSAGE)
         details = [
-            {"path": f"/data/{name}", "problem": "invalid", "message": "An inline set may not reuse a source alias."}
+            {
+                "path": _pointer("data", name),
+                "problem": "invalid",
+                "message": "An inline set may not reuse a source alias.",
+            }
             for name in request["data"]
             if name in self._settings.sources
         ]
@@ -468,7 +475,7 @@ class Planner:
             alias: _total(self._count(path, step) for path, step in sorted(reads[alias].items())) for alias in reads
         }
         for step, alias in zip(steps, aliases):
-            if alias is not None and alias in inline and alias not in totals and _inline_alias(step, inline) == alias:
+            if alias is not None and alias in inline and alias not in totals:
                 totals[alias] = len(next(iter(inline[alias].values())))
         entries: list[dict[str, Any]] = [
             {"alias": alias, "rows": totals[alias], "rows_exact": totals[alias] is not None} for alias in sorted(totals)

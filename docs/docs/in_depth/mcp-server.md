@@ -39,6 +39,7 @@ deny_feature_groups = ["CustomerEmailFeatureGroup"]
 alternatives = { customer_email = ["customer_id"] }
 preview_allows = ["public", "internal"]
 max_preview_rows = 20
+inline_data = false                    # allow inline request data (trusted callers only)
 plan_ttl = "24h"
 
 [mcp.sources.sales]
@@ -63,7 +64,7 @@ signs plan ids; without it every process uses a random key, so a plan id is vali
 | `mloda_run_request` | Runs a `plan_id`; only offered when `mode = "execute"` |
 
 The resource `mloda://schema/feature-request` is the JSON Schema of a request. A request is the
-[feature configuration](feature-config.md) JSON plus optional filters and source restrictions:
+[feature configuration](feature-config.md) JSON plus optional filters, source restrictions and inline data:
 
 ```json
 {
@@ -75,7 +76,7 @@ The resource `mloda://schema/feature-request` is the JSON Schema of a request. A
 ```
 
 `data` is optional inline data, `{"<set>": {"<column>": [values]}}`. It needs `inline_data = true` under `[mcp]`
-(default off) and a set name that is not a source alias. Values travel in the signed, unencrypted plan id. Inline
+(default off) and a set name that is not a source alias. Values travel in the signed, unencrypted plan id and are echoed in the `normalized_request` of explain. Inline
 columns are unclassified, so the preview is empty unless you classify them in `[mcp.classification]`. Use it for trusted
 callers only, since row counts over caller-chosen values can reveal plugin data;
 `deny_feature_groups = ["ApiInputDataFeature"]` turns it off entirely.

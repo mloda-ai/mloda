@@ -1,4 +1,4 @@
-"""The stock file source groups the interface tests enable in their plugin collectors."""
+"""The stock file source groups, and a deliberately failing group, the interface tests enable in their collectors."""
 
 from typing import Any
 

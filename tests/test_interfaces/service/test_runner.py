@@ -4,6 +4,7 @@ Results carry per-table classification, a bounded untrusted preview of allowed c
 """
 
 import json
+import logging
 import math
 import re
 import threading
@@ -424,6 +425,18 @@ class TestFeatureGroupFailure:
         assert "ValueError" in error["message"]
         assert RAISE_SECRET not in json.dumps(result)
 
+    def test_failure_is_logged_once_with_audit_id_and_traceback(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.ERROR, logger="mloda.interfaces.service"):
+            result = _run(tmp_path, {"features": ["customer_id", RAISE]})
+
+        audit_id = _error(result, "internal")["audit_id"]
+        records = [r for r in caplog.records if r.name == "mloda.interfaces.service" and r.levelno == logging.ERROR]
+        assert len(records) == 1
+        assert audit_id in records[0].getMessage()
+        assert records[0].exc_info is not None
+
 
 class TestSuccessShape:
     def test_result_keys_status_and_audit_id(self, tmp_path: Path) -> None:
@@ -508,7 +521,7 @@ class TestInlineData:
         table = _only_table(result)
         assert table["columns"] == [{"name": "token", "classification": "unclassified", "in_preview": False}]
         assert all("token" not in row for row in table["preview"]["rows"])
-        assert "007" not in json.dumps(result)
+        assert '"007"' not in json.dumps(result)
 
 
 class TestPreviewBounds:

@@ -7,7 +7,7 @@ import copy
 import difflib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
@@ -49,6 +49,19 @@ _OP_PARAMETERS: dict[str, tuple[str, ...]] = {
 }
 _OP_FILTER_TYPES = {"eq": FilterType.EQUAL, "in": FilterType.CATEGORICAL_INCLUSION, "range": FilterType.RANGE}
 _RESTRICT_SOURCES_SCHEMA: dict[str, Any] = {"type": "array", "uniqueItems": True, "items": {"type": "string"}}
+_DATA_VALUE_SCHEMA: dict[str, Any] = {"type": ["string", "number", "boolean", "null"]}
+_DATA_COLUMN_SCHEMA: dict[str, Any] = {"type": "array", "items": _DATA_VALUE_SCHEMA}
+_DATA_SET_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "minProperties": 1,
+    "propertyNames": _NAME_SCHEMA,
+    "additionalProperties": _DATA_COLUMN_SCHEMA,
+}
+_DATA_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "propertyNames": _NAME_SCHEMA,
+    "additionalProperties": _DATA_SET_SCHEMA,
+}
 _OPTION_CONTAINERS = ("options", "group_options", "context_options")
 
 
@@ -71,6 +84,7 @@ class ParsedRequest:
     restrict_sources: tuple[str, ...]
     normalized: dict[str, Any]
     filter_uuids: tuple[UUID, ...] = ()
+    inline_data: Mapping[str, Mapping[str, list[Any]]] = field(default_factory=dict)
 
 
 def _feature_config_def() -> dict[str, Any]:
@@ -99,6 +113,7 @@ def request_schema() -> dict[str, Any]:
             },
             "filters": {"type": "array", "maxItems": MAX_FILTERS, "items": {"$ref": "#/$defs/filter"}},
             "restrict_sources": copy.deepcopy(_RESTRICT_SOURCES_SCHEMA),
+            "data": copy.deepcopy(_DATA_SCHEMA),
         },
         "$defs": {
             "featureConfig": copy.deepcopy(_FEATURE_CONFIG),
@@ -130,6 +145,8 @@ def _is_type(value: Any, name: str) -> bool:
         if isinstance(value, float):
             return value.is_integer()
         return isinstance(value, int) and not isinstance(value, bool)
+    if name == "null":
+        return value is None
     expected = {"string": str, "boolean": bool, "object": dict, "array": list}[name]
     return isinstance(value, expected)
 
@@ -227,11 +244,40 @@ def _source_problems(sources: Any, settings: Settings) -> list[Problem]:
     return problems
 
 
+def _data_problems(data: Any) -> list[Problem]:
+    if not isinstance(data, dict):
+        return [_invalid("/data", "'data' must be an object of named sets.")]
+    problems: list[Problem] = []
+    if not all(_conforms(name, _NAME_SCHEMA) for name in data):
+        problems.append(_invalid("/data", f"A set name is 1 to {MAX_NAME_LENGTH} characters."))
+    for set_name, columns in data.items():
+        path = _pointer("data", set_name)
+        if not isinstance(columns, dict) or not columns:
+            problems.append(_invalid(path, "A data set must be an object with at least one column."))
+            continue
+        if not all(_conforms(name, _NAME_SCHEMA) for name in columns):
+            problems.append(_invalid(path, f"A column name is 1 to {MAX_NAME_LENGTH} characters."))
+        for column, values in columns.items():
+            column_path = path + _pointer(column)
+            if not _conforms(values, _DATA_COLUMN_SCHEMA):
+                if not isinstance(values, list):
+                    problems.append(_invalid(column_path, "A column must be an array."))
+                    continue
+                for index, value in enumerate(values):
+                    if not _conforms(value, _DATA_VALUE_SCHEMA):
+                        problems.append(
+                            _invalid(
+                                column_path + _pointer(index), "A value must be a string, number, boolean or null."
+                            )
+                        )
+    return problems
+
+
 def validate_request(request: Any, settings: Settings) -> list[Problem]:
     """Return every problem of a feature request; an empty list means it is valid."""
     if not isinstance(request, dict):
         return [_invalid("", "The request must be a JSON object.")]
-    allowed = ("features", "filters", "restrict_sources")
+    allowed = ("features", "filters", "restrict_sources", "data")
     problems = [
         _invalid(_pointer(key), f"Unknown key '{key}'; allowed: {list(allowed)}.")
         for key in request
@@ -245,6 +291,8 @@ def validate_request(request: Any, settings: Settings) -> list[Problem]:
         problems.extend(_filter_problems(request["filters"]))
     if "restrict_sources" in request:
         problems.extend(_source_problems(request["restrict_sources"], settings))
+    if "data" in request:
+        problems.extend(_data_problems(request["data"]))
     return problems
 
 
@@ -319,6 +367,31 @@ def _build_filter(filters: list[dict[str, Any]]) -> tuple[GlobalFilter | None, t
     return global_filter, tuple(uuids)
 
 
+def _inline_data_problems(data: Mapping[str, Mapping[str, list[Any]]]) -> list[Problem]:
+    problems: list[Problem] = []
+    owner: dict[str, str] = {}
+    for set_name, columns in data.items():
+        path = _pointer("data", set_name)
+        if len({len(values) for values in columns.values()}) > 1:
+            problems.append(
+                Problem(
+                    path=path, problem="invalid_inline_data", message="The columns of a set must have equal lengths."
+                )
+            )
+        for column in columns:
+            if column in owner:
+                problems.append(
+                    Problem(
+                        path=path + _pointer(column),
+                        problem="invalid_inline_data",
+                        message=f"Column '{column}' is already in set '{owner[column]}'; a column belongs to one set.",
+                    )
+                )
+            else:
+                owner[column] = set_name
+    return problems
+
+
 def build_request(request: Mapping[str, Any]) -> ParsedRequest | list[Problem]:
     """Build a structurally valid request; semantic feature-config errors come back as problems."""
     features: list[Feature | str] = []
@@ -332,6 +405,8 @@ def build_request(request: Mapping[str, Any]) -> ParsedRequest | list[Problem]:
             problems.append(loaded)
         else:
             features.extend(loaded)
+    inline_data = request.get("data", {})
+    problems.extend(_inline_data_problems(inline_data))
     if problems:
         return problems
     global_filter, filter_uuids = _build_filter(request.get("filters", []))
@@ -341,4 +416,5 @@ def build_request(request: Mapping[str, Any]) -> ParsedRequest | list[Problem]:
         restrict_sources=tuple(request.get("restrict_sources", ())),
         normalized=json.loads(json.dumps(request, sort_keys=True)),
         filter_uuids=filter_uuids,
+        inline_data=json.loads(json.dumps(inline_data)),
     )

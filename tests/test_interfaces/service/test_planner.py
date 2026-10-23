@@ -14,6 +14,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -22,7 +23,7 @@ from mloda.interfaces.service.catalog import Catalog
 from mloda.interfaces.service.config import Settings, SourceConfig
 from mloda.interfaces.service.errors import ERROR_CODES, is_error
 from mloda.interfaces.service.lock import MLODA_LOCK
-from mloda.interfaces.service.planner import PLAN_TOKEN_PREFIX, Planner
+from mloda.interfaces.service.planner import MAX_PLAN_ID_LENGTH, PLAN_TOKEN_PREFIX, Planner
 from mloda.provider import BaseInputData, DataCreator, FeatureSet, ResolutionDiagnosis, SourceMatch
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -141,7 +142,9 @@ class PlannerDeniedMcp4(StubFeatureGroup):
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4})
+    return PluginCollector.enabled_feature_groups(
+        {*FILE_SOURCE_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4, ApiInputDataFeature}
+    )
 
 
 def _write_sales(tmp_path: Path) -> Path:
@@ -700,6 +703,72 @@ class TestDeterminismAndShape:
             assert result["error"]["code"] in ERROR_CODES
             assert result["error"]["audit_id"].startswith("aud_")
         _assert_no_paths(result, tmp_path, "sales.csv")
+
+
+INLINE_REQUEST: dict[str, Any] = {"features": ["token"], "data": {"Tokens": {"token": ["007", "", None]}}}
+
+
+class TestInlineData:
+    def test_data_without_opt_in_is_policy_denied(self, tmp_path: Path) -> None:
+        error = _error(_explain(tmp_path, INLINE_REQUEST), "policy_denied")
+        assert _has_detail(error, path="/data")
+        assert "007" not in json.dumps(error)
+
+    def test_inline_request_is_planned(self, tmp_path: Path) -> None:
+        result = _success(_explain(tmp_path, INLINE_REQUEST, inline_data=True))
+
+        assert result["lineage"] == {"token": ["Tokens.token"]}
+        assert result["estimate"]["sources"] == [{"alias": "Tokens", "rows": 3, "rows_exact": True}]
+        assert result["estimate"]["rows_read"] == 3
+        assert result["normalized_request"]["data"] == INLINE_REQUEST["data"]
+
+    def test_max_rows_applies_to_inline_rows(self, tmp_path: Path) -> None:
+        result = _explain(tmp_path, INLINE_REQUEST, inline_data=True, max_rows=2)
+
+        error = _error(result, "limit_exceeded")
+        assert _has_detail(error, source="Tokens", reason="over_limit", rows=3, max_rows=2)
+        assert "007" not in json.dumps(result)
+
+    def test_set_named_like_a_configured_source_is_validation_failed(self, tmp_path: Path) -> None:
+        request = {"features": ["token"], "data": {"sales": {"token": ["a"]}}}
+
+        result = _explain(tmp_path, request, inline_data=True)
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, path="/data/sales")
+
+    def test_inline_column_shadowing_a_source_column_is_refused(self, tmp_path: Path) -> None:
+        # An inline column cannot shadow a source column.
+        request = {"features": ["income"], "data": {"Inline": {"income": ["a", "b"]}}}
+
+        result = _explain(tmp_path, request, inline_data=True)
+
+        error = _error(result, "validation_failed")
+        assert _has_detail(error, problem="unresolved")
+        assert '"a"' not in json.dumps(result)
+
+    def test_api_input_data_option_stays_policy_denied(self, tmp_path: Path) -> None:
+        # Already denied before inline planning exists; this pins the guard.
+        key = "ApiInputData"
+        request = {"features": [{"name": "token", "options": {key: {"Tokens": {"token": ["007"]}}}}]}
+
+        result = _explain(tmp_path, request, inline_data=True)
+
+        error = _error(result, "policy_denied")
+        assert [detail["path"] for detail in error["details"]] == [f"/features/0/options/{key}"]
+        assert "007" not in json.dumps(result)
+
+    def test_oversized_plan_id_is_limit_exceeded_without_values(self, tmp_path: Path) -> None:
+        marker = "BIGVALUE_mcp_inline"
+        values = [f"{marker}{index:06d}" for index in range(MAX_PLAN_ID_LENGTH // 8)]
+        request = {"features": ["token"], "data": {"Tokens": {"token": values}}}
+
+        result = _explain(tmp_path, request, inline_data=True)
+
+        error = _error(result, "limit_exceeded")
+        assert "plan_id" not in result
+        assert marker not in json.dumps(result)
+        assert "plan id" in error["message"]
 
 
 class TestLock:

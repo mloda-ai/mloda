@@ -249,7 +249,7 @@ class TestExplainInputSchema:
         assert request["additionalProperties"] is False
         assert request["required"] == ["features"]
         assert request["properties"]["features"]["maxItems"] == MAX_FEATURES
-        assert set(request["properties"]) == {"features", "filters", "restrict_sources"}
+        assert set(request["properties"]) == {"features", "filters", "restrict_sources", "data"}
 
     async def test_refs_stay_inside_the_document(self, tmp_path: Path) -> None:
         schema = await self._schema(tmp_path)

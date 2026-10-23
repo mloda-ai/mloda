@@ -69,9 +69,16 @@ The resource `mloda://schema/feature-request` is the JSON Schema of a request. A
 {
   "features": ["customer_id", {"name": "income", "options": {}}],
   "filters": [{"feature": "segment", "op": "eq", "value": "a"}],
-  "restrict_sources": ["sales"]
+  "restrict_sources": ["sales"],
+  "data": {"Inline": {"token": ["007", "", "12"]}}
 }
 ```
+
+`data` is optional inline data, `{"<set>": {"<column>": [values]}}`. It needs `inline_data = true` under `[mcp]`
+(default off) and a set name that is not a source alias. Values travel in the signed, unencrypted plan id. Inline
+columns are unclassified, so the preview is empty unless you classify them in `[mcp.classification]`. Use it for trusted
+callers only, since row counts over caller-chosen values can reveal plugin data;
+`deny_feature_groups = ["ApiInputDataFeature"]` turns it off entirely.
 
 Every result is a one-line summary followed by the result as JSON, which is also the structured content. A failed
 call has `isError` set and one error shape: `{"error": {"code", "message", "details", "audit_id"}}` with the codes
@@ -107,4 +114,5 @@ cat request.json | mloda explain -
 ```
 
 `mloda run` executes regardless of `mode`, since you started it yourself, but applies the same limits and preview
-rules. Exit codes: `0` success, `2` nothing ran (bad config, bad request, policy or limit), `1` any other failure.
+rules. Exit codes: `0` success, `2` an error result or nothing could run (bad config, bad request, policy, limit, or a
+FeatureGroup that failed while running, reported as `internal`), `1` any other failure.

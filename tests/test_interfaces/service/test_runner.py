@@ -18,6 +18,7 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -31,7 +32,7 @@ from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import StubFeatureGroup
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
+from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS, RAISE, RAISE_SECRET, RunnerRaiseMcp5
 
 # Running resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -184,7 +185,14 @@ class _Clock:
 
 
 def _base(*extra: type[FeatureGroup]) -> PluginCollector:
-    groups: set[type[FeatureGroup]] = {*FILE_SOURCE_GROUPS, RunnerProbeMcp5, RunnerTypesMcp5, RunnerDeniedMcp5}
+    groups: set[type[FeatureGroup]] = {
+        *FILE_SOURCE_GROUPS,
+        RunnerProbeMcp5,
+        RunnerTypesMcp5,
+        RunnerDeniedMcp5,
+        RunnerRaiseMcp5,
+        ApiInputDataFeature,
+    }
     return PluginCollector.enabled_feature_groups(groups | set(extra))
 
 
@@ -408,6 +416,15 @@ class TestRunTimeChecks:
         assert denied_calls == []
 
 
+class TestFeatureGroupFailure:
+    def test_exception_becomes_an_internal_error_without_its_text(self, tmp_path: Path) -> None:
+        result = _run(tmp_path, {"features": ["customer_id", RAISE]})
+
+        error = _error(result, "internal")
+        assert "ValueError" in error["message"]
+        assert RAISE_SECRET not in json.dumps(result)
+
+
 class TestSuccessShape:
     def test_result_keys_status_and_audit_id(self, tmp_path: Path) -> None:
         result = _success(_run(tmp_path))
@@ -471,6 +488,27 @@ class TestSuccessShape:
 
     def test_no_paths_anywhere(self, tmp_path: Path) -> None:
         _assert_no_paths(_success(_run(tmp_path)), tmp_path)
+
+
+class TestInlineData:
+    REQUEST: ClassVar[dict[str, Any]] = {"features": ["token"], "data": {"Tokens": {"token": ["007", "", None]}}}
+
+    def test_classified_inline_column_round_trips_exact_values(self, tmp_path: Path) -> None:
+        classification = {**CLASSIFICATION, "token": "public"}  # nosec B105
+
+        table = _only_table(_run(tmp_path, self.REQUEST, inline_data=True, classification=classification))
+
+        assert table["row_count"] == 3
+        assert table["columns"] == [{"name": "token", "classification": "public", "in_preview": True}]
+        assert [row["token"] for row in table["preview"]["rows"]] == ["007", "", None]
+
+    def test_unclassified_inline_column_is_withheld(self, tmp_path: Path) -> None:
+        result = _run(tmp_path, self.REQUEST, inline_data=True)
+
+        table = _only_table(result)
+        assert table["columns"] == [{"name": "token", "classification": "unclassified", "in_preview": False}]
+        assert all("token" not in row for row in table["preview"]["rows"])
+        assert "007" not in json.dumps(result)
 
 
 class TestPreviewBounds:

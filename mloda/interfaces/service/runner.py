@@ -43,7 +43,10 @@ class Runner:
         if planned.digest != verified["digest"]:
             message = "The plan no longer matches how the service resolves this request; call explain again."
             return error_result("plan_stale", message)
-        result = self._planner.execute(planned)
+        try:
+            result = self._planner.execute(planned)
+        except Exception as error:  # adapter boundary: the exception text may hold data, so only the type is reported
+            return error_result("internal", f"The run failed with {type(error).__name__}.")
         tables = [self._table(frame, planned.names, result.plan) for frame in result]
         max_rows = self._planner.settings.max_rows
         over = [table["row_count"] for table in tables if max_rows is not None and table["row_count"] > max_rows]

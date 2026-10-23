@@ -25,7 +25,7 @@ Properties:
 -   Multi-Index Support: Supports multi-column keys for complex merges.
 -   Comparison Operations: Methods to compare indexes and determine subset relationships.
 -   Utility Methods: Provides methods to check if the index is a multi-index.
--   Result keys: `Feature(..., keep_index=True)` returns the key columns with the result, and setting `Feature.index` also decides which link side a feature binds to when links exist.
+-   Result keys: `Feature(..., keep_index=True)` returns the key columns with the result, and setting `Feature.index` also decides which link side a feature binds to when links exist. In a feature config: `{"name": "income", "keep_index": true, "index": ["customer_id"]}`.
 
 Example:
 

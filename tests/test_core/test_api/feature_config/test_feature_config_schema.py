@@ -45,3 +45,21 @@ def test_feature_config_schema_includes_context_push_keys(field: str) -> None:
     prop = schema["properties"][field]
     assert prop["type"] == "array", f"'{field}' should be an array"
     assert prop["items"] == {"type": "string"}, f"'{field}' items should be strings"
+
+
+def test_feature_config_schema_includes_keep_index_and_index() -> None:
+    """The schema advertises keep_index as a boolean and index as a non-empty array of non-empty strings."""
+    properties = feature_config_schema()["properties"]
+
+    assert properties["keep_index"] == {"type": "boolean"}
+    assert properties["index"] == {
+        "type": "array",
+        "items": {"type": "string", "minLength": 1},
+        "minItems": 1,
+        "uniqueItems": True,
+    }
+
+
+def test_feature_config_schema_index_items_are_unique() -> None:
+    """index entries must be unique."""
+    assert feature_config_schema()["properties"]["index"]["uniqueItems"] is True

@@ -528,6 +528,32 @@ class TestSuccessShape:
     def test_no_paths_anywhere(self, tmp_path: Path) -> None:
         _assert_no_paths(_success(_run(tmp_path)), tmp_path)
 
+    def test_keep_index_returns_withheld_key_column(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "keep_index": True, "index": ["customer_id"]}]}
+
+        result = _run(tmp_path, request)
+
+        table = _only_table(result)
+        assert {"name": "customer_id", "classification": "personal", "in_preview": False} in table["columns"]
+        assert {"name": "income", "classification": "internal", "in_preview": True} in table["columns"]
+        assert all(set(row) == {"income"} for row in table["preview"]["rows"])
+        assert all(customer_id not in json.dumps(result) for customer_id in CUSTOMER_IDS[:5])
+
+    def test_keep_index_key_column_is_previewed_when_allowed(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "keep_index": True, "index": ["customer_id"]}]}
+
+        table = _only_table(_run(tmp_path, request, classification={**CLASSIFICATION, "customer_id": "internal"}))
+
+        assert {"name": "customer_id", "classification": "internal", "in_preview": True} in table["columns"]
+        assert all(set(row) == {"customer_id", "income"} for row in table["preview"]["rows"])
+
+    def test_key_column_also_requested_appears_once(self, tmp_path: Path) -> None:
+        request = {"features": ["customer_id", {"name": "income", "keep_index": True, "index": ["customer_id"]}]}
+
+        table = _only_table(_run(tmp_path, request))
+
+        assert [column["name"] for column in table["columns"]].count("customer_id") == 1
+
 
 class TestInlineData:
     REQUEST: ClassVar[dict[str, Any]] = {"features": ["token"], "data": {"Tokens": {"token": ["007", "", None]}}}

@@ -87,6 +87,21 @@ def test_schema_feature_config_def_mirrors_core_schema() -> None:
     assert feature_config["properties"]["name"]["maxLength"] == MAX_NAME_LENGTH
 
 
+def test_schema_index_is_unique_and_bounded() -> None:
+    index = request_schema()["$defs"]["featureConfig"]["properties"]["index"]
+    assert index["uniqueItems"] is True
+    assert index["items"]["minLength"] == 1
+    assert index["items"]["maxLength"] == MAX_NAME_LENGTH
+
+
+def test_schema_requires_index_when_keep_index_is_true() -> None:
+    feature_config = request_schema()["$defs"]["featureConfig"]
+    assert "if" in feature_config
+    assert "then" in feature_config
+    assert "keep_index" in json.dumps(feature_config["if"])
+    assert "index" in json.dumps(feature_config["then"])
+
+
 def test_schema_filters_property() -> None:
     schema = request_schema()
     filters = schema["properties"]["filters"]
@@ -105,6 +120,15 @@ def test_schema_restrict_sources_property() -> None:
     assert restrict["type"] == "array"
     assert restrict["uniqueItems"] is True
     assert restrict["items"]["type"] == "string"
+
+
+def test_keep_index_with_index_is_valid_and_without_index_is_one_problem() -> None:
+    ok = {"features": [{"name": "a", "keep_index": True, "index": ["id"]}]}
+    assert validate_request(ok, SALES_SETTINGS) == []
+
+    problems = validate_request({"features": ["x", {"name": "a", "keep_index": True}]}, SALES_SETTINGS)
+    assert _paths(problems) == ["/features/1"]
+    assert problems[0].message
 
 
 def test_valid_request_has_no_problems() -> None:
@@ -219,6 +243,8 @@ AGREEMENT_CORPUS: list[Any] = [
     {"features": [{"name": "b", "in_features": ["x", "y"], "group_options": {"g": 1}, "context_options": {"c": 2}}]},
     {"features": [{"name": "b", "column_index": 0, "feature_group": "SomeGroup"}]},
     {"features": [{"name": "b", "context_options": {"c": 1}, "propagate_context_keys": ["c"]}]},
+    {"features": [{"name": "b", "keep_index": True, "index": ["id"]}]},
+    {"features": [{"name": "b", "keep_index": False}]},
     {"features": ["x" * MAX_NAME_LENGTH]},
     {"features": [f"f{i}" for i in range(MAX_FEATURES)]},
     {"features": ["a"], "restrict_sources": []},
@@ -255,6 +281,15 @@ AGREEMENT_CORPUS: list[Any] = [
     {"features": [{"name": "b", "column_index": "0"}]},
     {"features": [{"name": "b", "feature_group": ""}]},
     {"features": [{"name": "b", "propagate_context_keys": "c"}]},
+    {"features": [{"name": "b", "keep_index": 1, "index": ["id"]}]},
+    {"features": [{"name": "b", "keep_index": "true", "index": ["id"]}]},
+    {"features": [{"name": "b", "keep_index": True, "index": []}]},
+    {"features": [{"name": "b", "keep_index": True, "index": "id"}]},
+    {"features": [{"name": "b", "keep_index": True, "index": [""]}]},
+    {"features": [{"name": "b", "keep_index": True, "index": [1]}]},
+    {"features": [{"name": "b", "keep_index": True}]},
+    {"features": [{"name": "b", "keep_index": True, "index": ["id", "id"]}]},
+    {"features": [{"name": "b", "keep_index": True, "index": ["x" * (MAX_NAME_LENGTH + 1)]}]},
     {"features": ["a"], "optons": {}},
     {"features": ["a"], "filters": {}},
     {"features": ["a"], "filters": [_filter_request(op="eq", value=1)["filters"][0]] * (MAX_FILTERS + 1)},

@@ -99,6 +99,7 @@ the request by JSON pointer, with a suggestion when a close name exists.
   loads itself (never countable), and, after `run`, when a result table has more rows.
 - The preview holds only columns whose classification is in `preview_allows`. A derived feature takes the strictest
   classification of its inputs unless you classify it yourself. Unclassified columns are withheld.
+- `keep_index: true` in a request requires `index`. Index columns are deny-checked and classified like any column.
 - A filter on a column the preview withholds is refused as `policy_denied`: row counts would reveal its values.
 - Descriptions and previewed values come from plugins and data: the server marks them untrusted.
 - Each call writes one audit line to the `mloda.interfaces.mcp` logger, without argument values. The principal is the

@@ -81,6 +81,8 @@ Combine strings and objects:
 | `propagate_context_keys` | array | No | Context keys pushed to the feature's direct input features |
 | `cascade_context_keys` | array | No | Context keys pushed to every input feature down the chain |
 | `column_index` | integer | No | Index for multi-output features (adds `~N` suffix) |
+| `keep_index` | boolean | No | Return the key columns with the result (default `false`) |
+| `index` | array of strings | No | Unique key columns of the feature; the columns `keep_index` returns |
 | `feature_group` | string | No | Feature Group class name the feature resolves to (scope read by feature resolution and filter matching) |
 
 ## Configuration Approaches
@@ -142,6 +144,8 @@ For an operation group such as `AggregatedFeatureGroup`, add an `implementation`
 The scope narrows candidates but does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does; enable one framework for the run. Two classes with the same name in different modules likewise both match and stay ambiguous, and the root `FeatureGroup` base is rejected.
 
 The scope is read by feature resolution and by filter matching, and stays excluded from feature identity, so requesting the same name scoped to two different sources in one list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
+
+`keep_index` (boolean, default `false`) and `index` (non-empty array of column names) are top-level fields that set `Feature.keep_index` and `Feature.index`, e.g. `{"name": "income", "keep_index": true, "index": ["customer_id"]}`. A nested `in_features` dict rejects both.
 
 `feature_group` is a top-level field next to `name`: writing it inside `options`, `group_options`, or `context_options` is rejected with a validation error.
 
@@ -231,7 +235,7 @@ Inside `options`, `group_options` or `context_options`, an `in_features` key can
 ]
 ```
 
-A nested dict supports `name`, `options`, `in_features` and `feature_group` only, in `options`, `group_options` and `context_options` alike. A nested feature built from `group_options` stays in the group options, one built from `context_options` stays in the context options. In a nested `in_features` dict, the top-level-only fields (`column_index`, `group_options`, `context_options`, `propagate_context_keys`, `cascade_context_keys`) are rejected, and so is an unknown key. A feature dict must be the direct value of `in_features`: an `in_features` list holds source feature names, not feature dicts.
+A nested dict supports `name`, `options`, `in_features` and `feature_group` only, in `options`, `group_options` and `context_options` alike. A nested feature built from `group_options` stays in the group options, one built from `context_options` stays in the context options. In a nested `in_features` dict, the top-level-only fields (`column_index`, `keep_index`, `index`, `group_options`, `context_options`, `propagate_context_keys`, `cascade_context_keys`) are rejected, and so is an unknown key. A feature dict must be the direct value of `in_features`: an `in_features` list holds source feature names, not feature dicts.
 
 The container decides identity: a nested source feature declared under `group_options` is part of the feature's identity, so it affects Options hashing and equality and therefore Feature Group splitting, while one declared under `context_options` is not.
 

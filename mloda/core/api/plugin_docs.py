@@ -18,6 +18,7 @@ Example:
 from typing import Any
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import SOURCE_INTROSPECTION_ERRORS
+from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDeclaration
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -463,7 +464,9 @@ def resolve_feature(
                 excluded=pre_filter.excluded_feature_groups,
             )
 
-    evaluation, eval_error = safe_field_with_error(_evaluate, None)
+    literals = frozenset() if data_access_collection is None else data_access_collection.secret_literals()
+    with registered_secrets_scope(literals):
+        evaluation, eval_error = safe_field_with_error(_evaluate, None)
     if evaluation is None:
         return ResolvedFeature(feature_name, None, [], error=f"{eval_error}{scope_suffix}")
     result, message = evaluation

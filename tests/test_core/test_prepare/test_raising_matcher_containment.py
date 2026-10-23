@@ -331,6 +331,21 @@ class TestRegisteredTokenInResolutionErrors:
         assert TOY_TOKEN not in repr(diagnosis)
         assert TOY_TOKEN not in caplog.text
 
+    @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
+    def test_resolve_feature_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+        request = toy_token_request(group, _TOKEN_COLUMN)
+        with caplog.at_level(logging.DEBUG):
+            resolved = resolve_feature(
+                _TOKEN_COLUMN,
+                plugin_collector=request["plugin_collector"],
+                data_access_collection=request["data_access_collection"],
+            )
+
+        assert resolved.error is not None
+        assert TOY_TOKEN not in resolved.error
+        assert TOY_TOKEN not in repr(resolved)
+        assert TOY_TOKEN not in caplog.text
+
     def test_find_sources_error_is_still_contained_as_a_non_match(self) -> None:
         diagnosis = mloda.diagnose(
             [Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenFindSourcesFG, _TOKEN_COLUMN)

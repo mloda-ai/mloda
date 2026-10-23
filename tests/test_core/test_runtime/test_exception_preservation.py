@@ -688,3 +688,78 @@ def test_registered_token_scope_does_not_leak_after_a_failed_run() -> None:
         mloda.run_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN))
 
     assert current_registered_secrets() == frozenset()
+
+
+class TokenIdentityFG(ToyFormatFG):
+    """data_access_identity raises with the registered token in its message."""
+
+    @classmethod
+    def data_access_identity(cls, match: SourceMatch) -> str:
+        raise ValueError(f"username={TOY_TOKEN}")
+
+
+@pytest.mark.parametrize("entry", ["run_all", "explain", "resolved_plan"])
+def test_plan_building_error_masks_registered_token(entry: str, caplog: pytest.LogCaptureFixture) -> None:
+    request = toy_token_request(TokenIdentityFG, _TOKEN_COLUMN)
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            if entry == "run_all":
+                mloda.run_all([Feature(name=_TOKEN_COLUMN)], **request)
+            elif entry == "explain":
+                mloda.explain([Feature(name=_TOKEN_COLUMN)], **request)
+            else:
+                mloda.prepare([Feature(name=_TOKEN_COLUMN)], **request).resolved_plan()
+
+    assert TOY_TOKEN not in str(excinfo.value)
+    assert TOY_TOKEN not in repr(excinfo.value.args)
+    assert TOY_TOKEN not in caplog.text
+
+
+def test_early_stream_close_finalizes_inside_the_redaction_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+    from mloda.core.runtime.run import ExecutionOrchestrator
+
+    seen: list[frozenset[str]] = []
+    original = ExecutionOrchestrator._finalize
+
+    def spy(self: Any, cancelled: bool = False) -> None:
+        seen.append(current_registered_secrets())
+        original(self, cancelled)
+
+    monkeypatch.setattr(ExecutionOrchestrator, "_finalize", spy)
+    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToyFormatFG, _TOKEN_COLUMN))
+    stream = session.stream_run()
+    next(stream)
+    stream.close()
+
+    assert seen
+    assert all(TOY_TOKEN in literals for literals in seen)
+
+
+def test_stream_start_enters_the_redaction_scope_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mloda.core.api import request as request_module
+
+    depth = 0
+    deepest = 0
+    original_enter = request_module._CredentialRedaction.__enter__
+    original_exit = request_module._CredentialRedaction.__exit__
+
+    def counting_enter(self: Any) -> None:
+        nonlocal depth, deepest
+        depth += 1
+        deepest = max(deepest, depth)
+        original_enter(self)
+
+    def counting_exit(self: Any, *exc_info: Any) -> None:
+        nonlocal depth
+        depth -= 1
+        original_exit(self, *exc_info)
+
+    monkeypatch.setattr(request_module._CredentialRedaction, "__enter__", counting_enter)
+    monkeypatch.setattr(request_module._CredentialRedaction, "__exit__", counting_exit)
+    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToyFormatFG, _TOKEN_COLUMN))
+
+    stream = session.stream_run()
+    stream.close()
+
+    assert deepest == 1

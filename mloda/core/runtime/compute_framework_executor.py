@@ -368,7 +368,7 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = self.worker_manager.create_worker_process(
                 cfw_uuid,
                 worker,
-                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
+                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, current_registered_secrets()),
             )
         else:
             process, command_queue, result_queue = existing

@@ -86,9 +86,11 @@ class _CredentialRedaction:
         self._scope.__enter__()
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
-        if exc is not None:
-            redact_exception(exc, self._literals)
-        self._scope.__exit__(exc_type, exc, tb)
+        try:
+            if exc is not None:
+                redact_exception(exc, self._literals)
+        finally:
+            self._scope.__exit__(exc_type, exc, tb)
 
 
 _PLAN_TIME_HOOKS = (ExtenderHook.FEATURE_GROUP_MATCHED, ExtenderHook.INPUT_DATA_MATCH)
@@ -617,15 +619,18 @@ class mlodaAPI:
         Available after ``prepare()`` and unchanged by ``run()``. Steps are in dependency order,
         independent ones sorted by content.
         """
-        execution_plan = self._execution_plan()
-        engine = cast(Engine, self.engine)
-        return build_plan_steps(
-            execution_plan,
-            execution_plan.resolved_join_plan,
-            specialized_from=engine.specialized_from,
-            output_framework=engine.output_framework,
-            auto_handles=(() if engine.data_access_collection is None else engine.data_access_collection.auto_handles),
-        )
+        with self._credential_redaction():
+            execution_plan = self._execution_plan()
+            engine = cast(Engine, self.engine)
+            return build_plan_steps(
+                execution_plan,
+                execution_plan.resolved_join_plan,
+                specialized_from=engine.specialized_from,
+                output_framework=engine.output_framework,
+                auto_handles=(
+                    () if engine.data_access_collection is None else engine.data_access_collection.auto_handles
+                ),
+            )
 
     def describe_columns(self, step: PlanStep) -> dict[str, DataType | None]:
         """Read the step's source columns from this session, so the PlanStep stays credential-free.
@@ -759,8 +764,7 @@ class mlodaAPI:
         _api_data = api_data if api_data is not None else self.api_data
         stream = self._stream_run_results(flight_server, parallelization_modes, _api_data, artifacts, run_context)
         # Primes the generator so a refusal at run start raises here, not on first iteration.
-        with self._credential_redaction():
-            next(stream)
+        next(stream)
         return stream
 
     def _start_run(self, run_context: RunContext) -> None:
@@ -818,7 +822,8 @@ class mlodaAPI:
                         artifacts=artifacts,
                         run_context=run_context,
                     )
-                with contextlib.closing(runner.compute_stream()) as stream:
+                stream = runner.compute_stream()
+                try:
                     while True:
                         # The scope never spans the yield, so it cannot leak into the caller between items.
                         with self._credential_redaction(literals):
@@ -826,6 +831,9 @@ class mlodaAPI:
                         if item is None:
                             break
                         yield item
+                finally:
+                    with self._credential_redaction(literals):
+                        stream.close()
             finally:
                 with self._credential_redaction(literals):
                     self._exit_runner_context(runner)

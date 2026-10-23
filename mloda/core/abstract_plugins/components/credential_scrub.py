@@ -147,7 +147,7 @@ def strip_uri_userinfo(text: str) -> str:
     return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text))
 
 
-_PLACEHOLDER = "MLODAREDACTED"
+_PLACEHOLDER = "\ue000"
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
 
 
@@ -230,8 +230,31 @@ def scrub_credentials(text: str) -> str:
     return text
 
 
-def _mask_item(item: Any, literals: frozenset[str]) -> Any:
-    return mask_literals(item, literals) if isinstance(item, str) else item
+def _mask_item(item: Any, literals: frozenset[str], memo: dict[int, Any] | None = None) -> Any:
+    """Mask str leaves, recursing into tuples, lists and dicts (types kept, cycles terminate via ``memo``)."""
+    if isinstance(item, str):
+        return mask_literals(item, literals)
+    if not isinstance(item, (tuple, list, dict)):
+        return item
+    memo = {} if memo is None else memo
+    if id(item) in memo:
+        return memo[id(item)]
+    if isinstance(item, list):
+        masked_list: list[Any] = []
+        memo[id(item)] = masked_list
+        masked_list.extend(_mask_item(element, literals, memo) for element in item)
+        return masked_list
+    if isinstance(item, dict):
+        masked_dict: dict[Any, Any] = {}
+        memo[id(item)] = masked_dict
+        for key, element in item.items():
+            masked_dict[_mask_item(key, literals, memo)] = _mask_item(element, literals, memo)
+        return masked_dict
+    memo[id(item)] = item
+    elements = [_mask_item(element, literals, memo) for element in item]
+    result = item._make(elements) if hasattr(item, "_make") else tuple(elements)
+    memo[id(item)] = result
+    return result
 
 
 def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseException:
@@ -245,7 +268,10 @@ def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseExcept
         if id(current) in seen:
             continue
         seen.add(id(current))
-        object.__setattr__(current, "args", tuple(_mask_item(arg, literals) for arg in current.args))
+        object.__setattr__(current, "args", _mask_item(tuple(current.args), literals))
+        for name, value in list(vars(current).items()):
+            if isinstance(value, str) and not name.startswith("__"):
+                object.__setattr__(current, name, mask_literals(value, literals))
         if isinstance(current, OSError):
             for name in ("strerror", "filename", "filename2"):
                 object.__setattr__(current, name, _mask_item(getattr(current, name), literals))

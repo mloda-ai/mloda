@@ -11,7 +11,6 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import Ba
 from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_KEY, _mask_secret_keys, redact_option_value
 from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
 )
@@ -143,6 +142,7 @@ class PlanStep:
     _neutral: bool = field(default=False, compare=False)
     _hash_options: Options | None = field(default=None, compare=False)
     _match_digests: Mapping[Any, str] = field(default_factory=dict, compare=False, hash=False, repr=False)
+    _match_key_id: str = field(default="", compare=False, hash=False, repr=False)
 
     @property
     def content_options(self) -> Options | None:
@@ -200,7 +200,8 @@ def _snapshot_option(key: Any, value: Any, format_group_names: Iterable[str]) ->
     if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
         return "***"
     if not isinstance(value, Mapping):
-        return _safe_deepcopy(value, {})
+        copied = _safe_deepcopy(value, {})
+        return _mask_secret_keys(copied) if isinstance(copied, (list, tuple)) else copied
     if key in format_group_names:
         return redact_option_value(value)
     return _mask_secret_keys(_safe_deepcopy(value, {}))
@@ -213,6 +214,11 @@ def snapshot_group(group: Mapping[Any, Any]) -> dict[Any, Any]:
 
 
 _PROCESS_KEY = secrets.token_bytes(32)
+
+
+def _key_id() -> str:
+    """Short fingerprint of the live process key, to tell this process's digests from another's."""
+    return hmac.new(_PROCESS_KEY, b"id", hashlib.sha256).hexdigest()[:16]
 
 
 def _canonical(value: Any, ancestors: frozenset[int] = frozenset()) -> Any:
@@ -235,7 +241,9 @@ def match_digests(group: Mapping[Any, Any]) -> dict[Any, str]:
     return {
         key: hmac.new(_PROCESS_KEY, stable_text(_canonical(value)).encode(), hashlib.sha256).hexdigest()
         for key, value in group.items()
-        if not _deep_equal(_snapshot_option(key, value, names), value)
+        if (isinstance(key, str) and _SECRET_KEY.fullmatch(key))
+        or key in names
+        or isinstance(value, (Mapping, list, tuple))
     }
 
 
@@ -372,6 +380,7 @@ def build_plan_steps(
                     feature_set_options=snapshot,
                     step_uuid=step.uuid,
                     _match_digests=match_digests(options.group) if options else {},
+                    _match_key_id=_key_id(),
                     input_feature_edges={
                         name: tuple(sorted(inputs))
                         for name, inputs in (step.features.declared_input_feature_edges or {}).items()

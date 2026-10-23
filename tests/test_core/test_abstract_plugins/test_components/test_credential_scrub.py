@@ -1264,6 +1264,21 @@ class TestRegisteredSecretsScope:
 
         assert current_registered_secrets() == frozenset()
 
+    def test_text_already_containing_the_old_placeholder_word_survives(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        with registered_secrets_scope(frozenset({_LITERAL})):
+            masked = scrub_credentials(f"MLODAREDACTED then {_LITERAL}")
+
+        assert masked == "MLODAREDACTED then ***"
+
+    def test_data_access_collection_redact_keeps_the_old_placeholder_word(self) -> None:
+        from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+
+        dac = DataAccessCollection(credentials={"h1": {"token": _LITERAL}})
+
+        assert dac.redact(f"MLODAREDACTED then {_LITERAL}") == "MLODAREDACTED then ***"
+
 
 def test_mask_literals_masks_every_occurrence_and_merges_overlaps() -> None:
     from mloda.core.abstract_plugins.components.credential_scrub import mask_literals
@@ -1393,3 +1408,69 @@ class TestRedactException:
         redact_exception(exc, frozenset())
 
         assert _LITERAL in str(exc)
+
+    def test_a_str_nested_in_a_tuple_arg_is_masked_keeping_the_container_type(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = KeyError(("h1", _LITERAL))
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc.args)
+        assert _LITERAL not in str(exc)
+        assert exc.args == (("h1", "***"),)
+
+    def test_a_str_nested_in_a_dict_arg_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = ValueError("bad", {"cfg": [_LITERAL]})
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc.args)
+        assert exc.args == ("bad", {"cfg": ["***"]})
+
+    def test_a_self_referencing_arg_terminates(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        loop: list[Any] = [_LITERAL]
+        loop.append(loop)
+        exc = ValueError(loop)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc.args)
+
+    def test_a_str_instance_attribute_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        class TokenHolderError(Exception):
+            def __init__(self, token: str) -> None:
+                super().__init__("failed")
+                self.token = token
+
+            def __str__(self) -> str:
+                return self.token
+
+        exc = TokenHolderError(_LITERAL)
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in str(exc)
+        assert exc.token == "***"  # nosec B105
+
+    def test_a_frozen_dataclass_exception_repr_is_masked(self) -> None:
+        from dataclasses import dataclass
+
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        @dataclass(frozen=True)
+        class FrozenDetailError(Exception):
+            detail: str
+
+        exc = FrozenDetailError(f"d {_LITERAL}")
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in repr(exc)
+        assert _LITERAL not in str(exc)

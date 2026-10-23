@@ -665,6 +665,18 @@ class TestOptionsWithCredentialValues:
         assert "hunter2" not in text
         assert "'api_key': '***'" in text
 
+    @pytest.mark.parametrize("where", ["group", "context"])
+    @pytest.mark.parametrize("container", [list, tuple])
+    def test_str_masks_a_credential_key_in_a_mapping_inside_a_sequence(
+        self, where: str, container: type[list[Any]] | type[tuple[Any, ...]]
+    ) -> None:
+        nested = {"sources": container([{"password": "hunter2", "host": "h"}])}  # nosec B105
+        options = Options(group=nested) if where == "group" else Options(context=nested)
+        text = str(options)
+        assert "hunter2" not in text
+        assert "'password': '***'" in text
+        assert "'host': 'h'" in text
+
     def test_str_keeps_a_non_secret_top_level_key_readable(self) -> None:
         assert "'region': 'eu'" in str(Options(group={"region": "eu"}))
 

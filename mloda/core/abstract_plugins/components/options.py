@@ -120,7 +120,7 @@ def _display_option_value(key: Any, value: Any, format_group_names: Collection[s
         return redact_option_value(value)
     if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
         return "***"
-    return _str_option_value(_mask_secret_keys(value) if isinstance(value, Mapping) else value)
+    return _str_option_value(_mask_secret_keys(value) if isinstance(value, (Mapping, list, tuple)) else value)
 
 
 def _display_option_dict(d: dict[str, Any], format_group_names: Collection[str]) -> dict[str, Any]:

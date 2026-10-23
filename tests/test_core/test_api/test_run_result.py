@@ -25,6 +25,7 @@ The chained ``plan_info_sales__mean_aggr`` request reuses the feature groups reg
 
 import collections.abc
 import copy
+import dataclasses
 import pickle  # nosec B403
 import threading
 import time
@@ -574,6 +575,22 @@ class TestRunResultFrameFor:
 
         with pytest.raises(ValueError, match="ambiguous"):
             results.frame_for(_secret_feature(_SECRET_A))
+
+    def test_same_process_digests_matching_no_step_raise_no_frame_not_a_silent_pick(self) -> None:
+        results = _run_secret_probe()
+
+        with pytest.raises(ValueError, match="No frame requested feature 'run_result_secret_value'"):
+            results.frame_for(_secret_feature("cccccccc"))  # nosec B105
+
+    def test_match_key_id_is_set_on_compute_steps_and_stays_out_of_repr_and_equality(self) -> None:
+        steps = [s for s in _run_secret_probe().plan if s.step_kind == "compute"]
+
+        key_ids = {s._match_key_id for s in steps}
+        assert len(key_ids) == 1
+        [key_id] = key_ids
+        assert isinstance(key_id, str) and key_id
+        assert all(key_id not in repr(s) for s in steps)
+        assert dataclasses.replace(steps[0], _match_key_id="other") == steps[0]
 
     def test_each_name_in_two_groups_returns_its_own_frame(self) -> None:
         results = _run_all(_TWO_GROUP_FEATURES)

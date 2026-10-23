@@ -7,7 +7,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
-from mloda.core.api.plan_info import PlanStep, match_digests, snapshot_group
+from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -82,7 +82,10 @@ class RunResult(list[Any]):
                     for step, frame in pairs
                     if all(step._match_digests.get(k) == d for k, d in digests.items())
                 ]
-                pairs = narrowed or pairs
+                if narrowed:
+                    pairs = narrowed
+                elif all(step._match_key_id == _key_id() for step, _ in pairs):
+                    pairs = []
             fewest = min((len(_group_of(step)) for step, _ in pairs), default=0)
             pairs = [(step, frame) for step, frame in pairs if len(_group_of(step)) == fewest]
         if len(pairs) == 1:

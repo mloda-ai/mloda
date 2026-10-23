@@ -1240,6 +1240,39 @@ class TestPlanStepFeatureSetOptions:
         assert step.feature_set_options.group["api_key"] == "***"
         assert "plan-top-key" not in str(step.feature_set_options)
 
+    @pytest.mark.parametrize("container", [list, tuple])
+    def test_the_snapshot_masks_a_credential_key_inside_a_sequence_of_mappings(self, container: type) -> None:
+        sources = container([{"password": "plan-seq-secret", "host": "h"}])  # nosec B105
+        explained = mloda.explain(
+            [Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}, "sources": sources})],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_NESTED_OPTIONS_PLUGINS,
+        )
+
+        step = next(s for s in explained if s.feature_group is PlanInfoNestedOptionsSource)
+        assert step.feature_set_options is not None
+        assert step.feature_set_options.group["sources"] == container([{"password": "***", "host": "h"}])  # nosec B105
+        assert "plan-seq-secret" not in str(step.feature_set_options)
+        assert sources[0]["password"] == "plan-seq-secret"  # nosec B105
+
+    @pytest.mark.parametrize(
+        "weights",
+        [np.array([1, 2, 3]), pd.DataFrame({"a": [1, 2]})],
+        ids=["numpy_array", "dataframe"],
+    )
+    def test_an_array_like_group_option_plans_and_runs(self, weights: Any) -> None:
+        feature = Feature("plan_info_nested_value", options={"plan_info_nested": {"table": "A"}, "weights": weights})
+
+        explained = mloda.explain(
+            [feature], compute_frameworks=[PandasDataFrame], plugin_collector=_NESTED_OPTIONS_PLUGINS
+        )
+        results = mloda.run_all(
+            [feature], compute_frameworks=[PandasDataFrame], plugin_collector=_NESTED_OPTIONS_PLUGINS
+        )
+
+        assert any(s.feature_group is PlanInfoNestedOptionsSource for s in explained)
+        assert results[0]["plan_info_nested_value"].tolist() == [1, 2, 3]
+
     def test_feature_set_options_is_excluded_from_equality(self) -> None:
         """Excluded like step_uuid, so a non-scalar group value cannot make plan comparison raise."""
         step = PlanStep(

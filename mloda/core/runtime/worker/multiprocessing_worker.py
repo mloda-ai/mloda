@@ -10,6 +10,7 @@ from uuid import UUID
 from queue import Empty
 
 from mloda.core.abstract_plugins.close_context import CloseContext, CloseReason
+from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason, failure_report
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -160,7 +161,20 @@ def worker(
     cfw_register: CfwManager,
     cfw: ComputeFramework,
     from_cfw: UUID | None,
+    registered_secrets: frozenset[str] = frozenset(),
     worker_index: int = 0,
+) -> None:
+    with registered_secrets_scope(registered_secrets):
+        _run_worker(command_queue, result_queue, cfw_register, cfw, from_cfw, worker_index)
+
+
+def _run_worker(
+    command_queue: multiprocessing.Queue[Any],
+    result_queue: multiprocessing.Queue[Any],
+    cfw_register: CfwManager,
+    cfw: ComputeFramework,
+    from_cfw: UUID | None,
+    worker_index: int,
 ) -> None:
     data = None
     location = cfw_register.get_location()

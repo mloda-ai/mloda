@@ -681,7 +681,7 @@ class TestEliminationStages:
         feature = Feature(toy.OPTOY_FEATURE, {toy.OPTOY_KEY: "sum"})
         reason = (
             "its OpToyPyArrow implementation for PyArrowTable is disabled or denied for this run; "
-            "re-enable it on the PluginCollector"
+            "re-enable it on the PluginCollector or register it in the plugin registry"
         )
 
         with accessible_implementations(pre.implementations):

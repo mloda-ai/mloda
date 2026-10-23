@@ -230,7 +230,26 @@ def _func_assignments(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> dict
             name = stmt.targets[0].id
             counts[name] = counts.get(name, 0) + 1
             values[name] = stmt.value
-    return {name: expr for name, expr in values.items() if counts[name] == 1}
+    single = {name: expr for name, expr in values.items() if counts[name] == 1}
+    return {**dict.fromkeys(_local_names(func_node), _SHADOWED), **single}
+
+
+_SHADOWED = ast.Constant(value=None)
+
+
+def _local_names(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Names bound locally (parameters and any Store target), which must not fall back to module constants."""
+    args = func_node.args
+    params = [*args.posonlyargs, *args.args, *args.kwonlyargs, *filter(None, [args.vararg, args.kwarg])]
+    names = {a.arg for a in params}
+    for node in ast.walk(func_node):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            names.add(node.id)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            names.add(node.name)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update((a.asname or a.name).split(".")[0] for a in node.names)
+    return names
 
 
 def _resolve_key(
@@ -436,17 +455,18 @@ def test_artifact_storage_path_declared_by_sklearn_groups() -> None:
     assert "artifact_storage_path" in SklearnPipelineFeatureGroup.declared_option_keys()
 
 
-def test_allowlist_paths_are_relative_to_the_scan_root() -> None:
-    """Every allowlist path resolves under _REPO_ROOT; a stale path silently stops matching and flags nothing."""
-    for paths_rel, _, _ in ALLOWED_LITERAL_KEYS.values():
-        for path_rel in paths_rel:
-            assert (_REPO_ROOT / path_rel).exists(), path_rel
-    for path_rel, _ in ALLOWED_DYNAMIC_READS:
+def test_allowlist_paths_lie_under_a_scan_root() -> None:
+    """Every allowlist path exists under _REPO_ROOT and lies under a scan root, else it silently never matches."""
+    paths = [p for paths_rel, _, _ in ALLOWED_LITERAL_KEYS.values() for p in paths_rel]
+    paths += [path_rel for path_rel, _ in ALLOWED_DYNAMIC_READS]
+    for path_rel in paths:
         assert (_REPO_ROOT / path_rel).exists(), path_rel
+        assert any((_REPO_ROOT / path_rel).is_relative_to(root) for root in SCAN_ROOTS), path_rel
 
 
-def test_literal_allowlist_is_load_bearing() -> None:
-    """Drop the literal allowlist and its one key is flagged, so the entry (and its path) really matches."""
+@pytest.mark.parametrize("key", sorted(ALLOWED_LITERAL_KEYS))
+def test_literal_allowlist_is_load_bearing(key: str) -> None:
+    """Drop the literal allowlist and each of its keys is flagged, so the entry (and its path) really matches."""
     violations: list[str] = []
     for root in SCAN_ROOTS:
         violations += find_violations(
@@ -459,7 +479,7 @@ def test_literal_allowlist_is_load_bearing() -> None:
             constant_roots=SCAN_ROOTS,
         )
 
-    assert any("'initial_requested_data'" in v for v in violations), violations
+    assert any(f"'{key}'" in v for v in violations), violations
 
 
 def test_the_format_groups_declare_the_match_time_keys() -> None:
@@ -646,6 +666,23 @@ def test_scanner_resolves_a_module_constant(tmp_path: Path, files: dict[str, str
     assert find_violations(tmp_path, frozenset({key}), frozenset(), {}, {}, base=tmp_path) == []
     violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {}, base=tmp_path)
     assert any(f"'{key}'" in v and "dynamic" not in v for v in violations), violations
+
+
+@pytest.mark.parametrize(
+    "func",
+    [
+        pytest.param("def f(options, KEY):\n    return options.get(KEY)\n", id="parameter"),
+        pytest.param("def f(options, keys):\n    for KEY in keys:\n        return options.get(KEY)\n", id="loop"),
+        pytest.param(
+            "def f(options, a, b):\n    KEY = a\n    KEY = b\n    return options.get(KEY)\n", id="assigned_twice"
+        ),
+    ],
+)
+def test_scanner_keeps_a_shadowed_module_constant_dynamic(tmp_path: Path, func: str) -> None:
+    """A local that shadows a module-level constant is not resolved to the constant."""
+    (tmp_path / "mod.py").write_text("KEY = 'module_key'\n\n\n" + func)
+    violations = find_violations(tmp_path, frozenset({"module_key"}), frozenset(), {}, {}, base=tmp_path)
+    assert any("dynamic" in v for v in violations), violations
 
 
 def test_scanner_keeps_an_import_from_an_unknown_module_dynamic(tmp_path: Path) -> None:

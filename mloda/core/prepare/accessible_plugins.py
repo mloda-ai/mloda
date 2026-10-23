@@ -558,18 +558,25 @@ class PreFilterPlugins:
         self, feature_group: type[OperationFeatureGroup], compute_frameworks: set[type[ComputeFramework]]
     ) -> str | None:
         rule = feature_group.compute_framework_rule()
+        loaded = loaded_implementations()
         names = sorted(
             f"{impl.__name__} implementation for {cfw.get_class_name()}"
             for cfw in compute_frameworks
             if rule is None or cfw in rule
             if feature_group.select_implementation(cfw, self.implementations) is None
-            if (impl := feature_group.select_implementation(cfw, loaded_implementations())) is not None
+            if (impl := feature_group.select_implementation(cfw, loaded)) is not None
         )
         if not names:
             return None
         if len(names) == 1:
-            return f"its {names[0]} is disabled or denied for this run; re-enable it on the PluginCollector"
-        return f"its {', '.join(names)} are disabled or denied for this run; re-enable them on the PluginCollector"
+            return (
+                f"its {names[0]} is disabled or denied for this run; "
+                "re-enable it on the PluginCollector or register it in the plugin registry"
+            )
+        return (
+            f"its {', '.join(names)} are disabled or denied for this run; "
+            "re-enable them on the PluginCollector or register them in the plugin registry"
+        )
 
     @staticmethod
     def get_cfw_subclasses() -> set[type[ComputeFramework]]:

@@ -33,6 +33,7 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from mloda.user import PluginLoader
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -693,17 +694,16 @@ class TestResolveFeatureWithOptions:
             ),
             pytest.param(
                 ("OpToyPyArrow",),
-                "pyarrow",
+                {PyArrowTable},
                 "its OpToyPyArrow implementation for PyArrowTable is disabled or denied for this run; "
-                "re-enable it on the PluginCollector",
+                "re-enable it on the PluginCollector or register it in the plugin registry",
                 id="partially_disabled",
             ),
         ],
     )
-    def test_all_implementations_disabled_reports_disabled_or_denied(
-        self, disabled: tuple[str, ...], frameworks: str | None, reason: str
+    def test_disabled_implementations_are_named_in_the_error(
+        self, disabled: tuple[str, ...], frameworks: set[type[ComputeFramework]] | None, reason: str
     ) -> None:
-        from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
         from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_operation_group as toy
 
         collector = PluginCollector.enabled_feature_groups({toy.OpToyFG})
@@ -713,7 +713,7 @@ class TestResolveFeatureWithOptions:
             toy.OPTOY_FEATURE,
             options=Options({toy.OPTOY_KEY: "sum"}),
             plugin_collector=collector,
-            compute_frameworks={PyArrowTable} if frameworks else None,
+            compute_frameworks=frameworks,
         )
 
         assert result.feature_group is None

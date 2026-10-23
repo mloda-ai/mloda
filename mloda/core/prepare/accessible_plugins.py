@@ -543,9 +543,40 @@ class PreFilterPlugins:
                     for cp_fg in new_set_of_compute_frameworks
                     if feature_group.select_implementation(cp_fg, self.implementations) is not None
                 }
+                if not new_set_of_compute_frameworks and any(
+                    issubclass(feature_group, impl.feature_group) for impl in self.implementations
+                ):
+                    reason = self._disabled_implementation_reason(feature_group, compute_frameworks)
+                    if reason is not None:
+                        # Also carries why an accessible group has an empty framework set.
+                        self.excluded_feature_groups[feature_group] = reason
             accessible_plugins[feature_group] = new_set_of_compute_frameworks
 
         return accessible_plugins
+
+    def _disabled_implementation_reason(
+        self, feature_group: type[OperationFeatureGroup], compute_frameworks: set[type[ComputeFramework]]
+    ) -> str | None:
+        rule = feature_group.compute_framework_rule()
+        loaded = loaded_implementations()
+        names = sorted(
+            f"{impl.__name__} implementation for {cfw.get_class_name()}"
+            for cfw in compute_frameworks
+            if rule is None or cfw in rule
+            if feature_group.select_implementation(cfw, self.implementations) is None
+            if (impl := feature_group.select_implementation(cfw, loaded)) is not None
+        )
+        if not names:
+            return None
+        if len(names) == 1:
+            return (
+                f"its {names[0]} is disabled or denied for this run; "
+                "re-enable it on the PluginCollector or register it in the plugin registry"
+            )
+        return (
+            f"its {', '.join(names)} are disabled or denied for this run; "
+            "re-enable them on the PluginCollector or register them in the plugin registry"
+        )
 
     @staticmethod
     def get_cfw_subclasses() -> set[type[ComputeFramework]]:

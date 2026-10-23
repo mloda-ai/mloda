@@ -13,6 +13,8 @@ Exact failure-message wording is out of scope: it is inherently wording-coupled,
 structured facts and reserve exact-string checks for tests whose contract is the wording itself.
 """
 
+from collections.abc import Mapping
+
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.link import Link
@@ -28,9 +30,11 @@ def evaluate_or_raise(
     accessible_plugins: FeatureGroupEnvironmentMapping,
     links: set[Link] | None = None,
     data_access_collection: DataAccessCollection | None = None,
+    *,
+    excluded: Mapping[type[FeatureGroup], str] | None = None,
 ) -> EvaluationResult:
     """Evaluate one feature and raise the typed error on failure, exactly as the engine seam does."""
-    return resolve_or_raise(feature, accessible_plugins, links, data_access_collection)
+    return resolve_or_raise(feature, accessible_plugins, links, data_access_collection, excluded=excluded)
 
 
 def identify_winner(

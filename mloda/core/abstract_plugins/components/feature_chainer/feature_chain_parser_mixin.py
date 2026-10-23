@@ -397,7 +397,7 @@ class FeatureChainParserMixin:
         parsing a PREFIX_PATTERN match (malformed feature name, no chain separator) is a parse
         error, not an option-value rejection, and is likewise nothing to report. Returns None
         when nothing was rejected (the match succeeded, or the candidate is unrelated).
-        Diagnostic-only: does not affect match_feature_group_criteria's behavior.
+        Diagnostic-only: does not affect match_feature_group_criteria's behavior; a marked match abort propagates.
         """
         property_mapping = cls._get_property_mapping()
         if property_mapping is None:
@@ -435,7 +435,10 @@ class FeatureChainParserMixin:
                 # guards are none of the feature's business.
                 if not matches_mapping:
                     return None
+        # A marked raise crosses this containment; an unmarked ValueError is the reported reason.
         except ValueError as exc:
+            if is_match_abort(exc):
+                raise
             return str(exc)
 
         if name_matched:

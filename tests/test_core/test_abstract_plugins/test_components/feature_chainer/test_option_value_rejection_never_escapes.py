@@ -403,7 +403,7 @@ class TestRaisingElementValidatorRejectionReason:
     """The discarded message stays actionable: it names the key and the rejected value."""
 
     def test_reason_for_typeerror_validator_on_name_path(self) -> None:
-        """_strict_validation_rejection_reason is diagnostic-only: it reports, it never raises."""
+        """_strict_validation_rejection_reason is diagnostic-only: it reports, it never raises an unmarked error."""
         options = Options(context={OPERATIONS_KEY: [UNHASHABLE_VALUE]})
 
         reason = RaisingTypeErrorValidatorFeatureGroup._strict_validation_rejection_reason(OPERATIONS_FEATURE, options)
@@ -582,7 +582,7 @@ class TestKeyErrorElementValidatorIsARejection:
         assert POISON_VALUE_ESC763 in message
 
     def test_reason_for_keyerror_validator_is_reported_not_raised(self) -> None:
-        """_strict_validation_rejection_reason reports the KeyError rejection; it never raises."""
+        """_strict_validation_rejection_reason reports the KeyError rejection; it never raises an unmarked error."""
         options = Options(context={VALIDATOR_KEY_ESC763: [POISON_VALUE_ESC763]})
 
         reason = RaisingKeyErrorValidatorFeatureGroupEsc763._strict_validation_rejection_reason(
@@ -628,6 +628,12 @@ class TestMarkedAbortCrossesTheMatcher:
 
         with pytest.raises(KeyError, match="esc763 marked match_guard abort"):
             RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options)
+
+    def test_marked_abort_from_match_guard_propagates_through_the_diagnostic(self) -> None:
+        options = Options(context={GUARD_KEY_ESC763: MARKED_POISON_VALUE_ESC763})
+
+        with pytest.raises(KeyError, match="esc763 marked match_guard abort"):
+            RaisingKeyErrorGuardFeatureGroupEsc763._strict_validation_rejection_reason(GUARD_FEATURE_ESC763, options)
 
     def test_marked_abort_from_required_when_propagates(self) -> None:
         options = Options(context={DRIVER_KEY_ESC763: MARKED_POISON_VALUE_ESC763})

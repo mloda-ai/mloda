@@ -450,12 +450,21 @@ class FormatFeatureGroup(FeatureGroup):
             return False
         if (len(fitting) > 1 or (not fitting and seen and pointed)) and not cls.passes_option_declarations(options):
             return False
+        show_columns = pointed or isinstance(options.get(HANDLE_OPTION), str)
         if len(fitting) > 1:
+            if show_columns:
+                listed = sorted(fitting)
+            else:
+                counts: dict[str, int] = {}
+                for match in fitting.values():
+                    label = cls._hidden_source(match)
+                    counts[label] = counts.get(label, 0) + 1
+                listed = sorted(label if n == 1 else f"{label} ({n} sources)" for label, n in counts.items())
             return cls._abort(
                 ValueError(
                     scrub_credentials(
                         f"{cls.get_class_name()} found feature '{name}' in several sources: "
-                        f"{', '.join(sorted(fitting))}; "
+                        f"{', '.join(listed)}; "
                         f"{cls.ambiguity_fix(name, list(fitting.values()), data_access_collection)}"
                     )
                 ),
@@ -483,7 +492,6 @@ class FormatFeatureGroup(FeatureGroup):
                 note_open_claim()
             return True
         if seen:
-            show_columns = pointed or isinstance(options.get(HANDLE_OPTION), str)
             items = sorted(seen.items())
             known = {source: cls.columns(match) for source, match in items}
             parts: list[str] = []

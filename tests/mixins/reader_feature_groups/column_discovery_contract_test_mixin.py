@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import Source
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.provider import CHAIN_SEPARATOR, FeatureSet, ReadFileFG
-from mloda.user import DataAccessCollection, DataType, Feature, Options
+from mloda.user import DataAccessCollection, DataType, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -107,6 +107,21 @@ class ColumnDiscoveryContractTestMixin:
         self, data_file: str, compute_framework: type[ComputeFramework]
     ) -> None:
         assert self.count_rows(match_of(data_file), compute_framework) == self.expected_row_count
+
+    def test_session_route_equals_the_group_call(self, data_file: str) -> None:
+        session = mloda.prepare(
+            [Feature("a1")],
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({self.group_cls}),
+            data_access_collection=DataAccessCollection(files={"session_route_handle": data_file}),
+        )
+        steps = [s for s in session.resolved_plan() if s.step_kind == "compute" and s.feature_group is self.group_cls]
+        assert len(steps) == 1
+        step = steps[0]
+        assert step.compute_framework is not None
+
+        assert session.describe_columns(step) == self.describe_columns(match_of(data_file))
+        assert session.count_rows(step) == self.count_rows(match_of(data_file), step.compute_framework)
 
     def test_count_rows_raises_oserror_for_absent_file(self, tmp_path: Path) -> None:
         absent = match_of(tmp_path / f"absent{self.group_cls.suffixes()[0]}")

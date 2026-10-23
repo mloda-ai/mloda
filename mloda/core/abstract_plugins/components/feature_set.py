@@ -68,6 +68,19 @@ class FeatureSet:
             for feature in features:
                 self.add(feature)
 
+    def filters_reapplied(self, feature_group: type["FeatureGroup"] | None = None) -> bool:
+        """Whether the framework applies the filters again after this step's calculation."""
+        if self.filter_engine is None:
+            return False
+        if feature_group is not None:
+            fg_preference = feature_group.final_filters()
+            if fg_preference is not None:
+                return bool(fg_preference)
+        try:
+            return self.filter_engine().final_filters() is not False
+        except NotImplementedError:
+            return False
+
     def add_artifact_name(self) -> None:
         FeatureSetValidator.validate_options_initialized(self.options, "add_artifact_name")
         assert self.options is not None  # Type narrowing for mypy

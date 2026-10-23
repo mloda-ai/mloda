@@ -30,6 +30,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import is_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.filter.single_filter import SingleFilter
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.implementation import Implementation
@@ -151,6 +152,13 @@ class ReadDBFG(FormatFeatureGroup):
     def produce_query_rows(cls, connection: Any, query_text: str, features: Any) -> Any:
         """The requested columns of the query result in a neutral form."""
         raise NotImplementedError(f"{cls.get_class_name()} lists QUERY_ROUTE but does not implement produce_query_rows")
+
+    @classmethod
+    def rechecked_filters(cls, features: Any) -> list[SingleFilter]:
+        """Filters a read may push into its query, because the framework applies them again after the load."""
+        if not features.filters_reapplied(cls):
+            return []
+        return list(features.filter_engine().applicable_filters(features))
 
     @classmethod
     def close_connection(cls, connection: Any) -> None:
@@ -379,6 +387,8 @@ class ReadDBFG(FormatFeatureGroup):
 
     @classmethod
     def _hidden_source(cls, match: SourceMatch) -> str:
+        if isinstance(match.access, DBQuery):
+            return cls.data_access_identity(match)
         return cls.database_identity(match.access.credentials)
 
     @classmethod
@@ -399,10 +409,9 @@ class ReadDBFG(FormatFeatureGroup):
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
             what = "one database" if len(identities) > 1 else "one credential handle"
             return f"select {what} with data_access_handle{hint}, or point {name} at one credential."
-        table = cast(DBTable, matches[0].access).table
         return (
             f"point {name} at one table with options={{{name!r}: "
-            f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}={table!r})}}, "
+            f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}=<table>)}}, "
             f"or set {cls.TABLE_KEY} on the credential."
         )
 

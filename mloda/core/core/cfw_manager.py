@@ -93,6 +93,7 @@ class CfwManager:
             UUID, tuple[str, set[UUID]]
         ] = {}  # cfw uuid -> (cfw class name, children_if_root)
         self.cfw_merge_relation: dict[UUID, tuple[UUID, str]] = {}  # merge relation
+        self.reused_join_tokens: dict[UUID, set[UUID]] = {}  # join token -> frames that reuse-registered it
 
         self.location: str | None = None  # multiprocessing location
         self.error = False  # multiprocessing error flag
@@ -167,6 +168,32 @@ class CfwManager:
             return None
 
         return self.find_leftmost(best_match, cf_class_name)
+
+    def add_join_tokens(self, cfw_uuid: UUID, tokens: Iterable[UUID]) -> None:
+        """Records join tokens a reused frame carries, for the join's source lookup."""
+        for token in tokens:
+            self.reused_join_tokens.setdefault(token, set()).add(cfw_uuid)
+
+    def get_join_source_cfw_uuid(self, cf_class_name: str, token: UUID) -> UUID | None:
+        """Resolves a join token: a frame listing it wins, else the single reused frame; raises if several."""
+        for cfw_uuid, (cls_name, children_if_root) in self.compute_frameworks.items():
+            if cls_name == cf_class_name and (cfw_uuid == token or token in children_if_root):
+                return self.get_cfw_uuid(cf_class_name, token)
+        frames = {
+            self.find_leftmost(cfw_uuid, cf_class_name)
+            for cfw_uuid in self.reused_join_tokens.get(token, set())
+            if cfw_uuid in self.compute_frameworks and self.compute_frameworks[cfw_uuid][0] == cf_class_name
+        }
+        if len(frames) == 1:
+            return next(iter(frames))
+        if len(frames) > 1:
+            raise ValueError(
+                internal_invariant_error(
+                    "join token resolved to more than one distinct reused frame: ambiguous.",
+                    f"cf_class_name={cf_class_name}, token={token}, frames={frames}",
+                )
+            )
+        return None
 
     def get_cfw_uuid_as_registered(self, cf_class_name: str, feature_uuid: UUID) -> UUID | None:
         """Same lookup as `get_cfw_uuid`, but without canonicalizing through `find_leftmost`/

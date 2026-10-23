@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 
 class FeatureGroupStep(Step):
     reads_join_result: bool = True
+    join_tokens: frozenset[UUID] = frozenset()
 
     def __init__(
         self,
@@ -142,5 +143,6 @@ class FeatureGroupStep(Step):
     def get_parallelization_mode(self) -> set[ParallelizationMode]:
         return self.compute_framework.supported_parallelization_modes()
 
-    def add_value_to_children_if_root(self, value: UUID) -> None:
-        self.children_if_root = self.children_if_root | frozenset([value])
+    def add_join_token(self, token: UUID) -> None:
+        self.children_if_root = self.children_if_root | frozenset([token])
+        self.join_tokens = self.join_tokens | frozenset([token])

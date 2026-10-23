@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     current_feature_group_scope,
     note_open_claim,
 )
-from mloda.core.abstract_plugins.components.input_data.reader_probe import probe_format_group
+from mloda.core.abstract_plugins.components.input_data.reader_probe import FormatProbeOutcome, probe_format_group
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
@@ -387,6 +387,32 @@ class FormatFeatureGroup(FeatureGroup):
         return fitting, seen, undeclared, frozenset(fitting) - firm
 
     @classmethod
+    def _decline_refused_probe(cls, outcome: FormatProbeOutcome, pointed: bool, known_owners: frozenset[str]) -> bool:
+        drop_match_rejections_since(known_owners)
+        message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
+        if pointed:
+            return cls._abort(ValueError(f"{cls.get_class_name()} {message}"), deferrable=True, refusal=outcome.error)
+        record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE, refusal=outcome.error)
+        return False
+
+    @classmethod
+    def gated_probe(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+        probe: Callable[[], Any],
+    ) -> FormatProbeOutcome:
+        """Run probe inside the INPUT_DATA_MATCH hook; a refusal declines or aborts like core's own probe."""
+        name = str(feature_name)
+        pointed = cls.is_pointed(name, options, data_access_collection)
+        known_owners = match_rejection_owners()
+        outcome = probe_format_group(cls, probe, data_access_collection, cls.get_column_base_feature(name), options)
+        if outcome.refused is not None:
+            cls._decline_refused_probe(outcome, pointed, known_owners)
+        return outcome
+
+    @classmethod
     def _matches_by_default_rules(
         cls,
         feature_name: FeatureName | str,
@@ -435,14 +461,7 @@ class FormatFeatureGroup(FeatureGroup):
                 options,
             )
             if outcome.refused is not None:
-                drop_match_rejections_since(known_owners)
-                message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
-                if pointed:
-                    return cls._abort(
-                        ValueError(f"{cls.get_class_name()} {message}"), deferrable=True, refusal=outcome.error
-                    )
-                record_match_rejection(cls.get_class_name(), message, stage=INPUT_DATA_STAGE, refusal=outcome.error)
-                return False
+                return cls._decline_refused_probe(outcome, pointed, known_owners)
             fitting, seen, undeclared, open_only = outcome.result
         if query_declined:
             if fitting or seen:

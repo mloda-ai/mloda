@@ -11,13 +11,13 @@ import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, FormatFeatureGroup, NamePolicy, SourceMatch
+from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import (
     Feature,
     FeatureName,
@@ -171,6 +171,30 @@ class ImdMatchRejectingFormat(_ImdFmtBase):
         return []
 
 
+class ImdMatchOverrideFormat(_ImdFmtBase):
+    """Overrides the matcher and does its own catalog I/O behind the INPUT_DATA_MATCH gate."""
+
+    served = frozenset({_COL_A})
+    catalog_reads = 0
+
+    @classmethod
+    def _read_catalog(cls) -> bool:
+        cls.catalog_reads += 1
+        return True
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        outcome = cls.gated_probe(feature_name, options, data_access_collection, cls._read_catalog)
+        if outcome.refused is not None:
+            return False
+        return super().match_feature_group_criteria(feature_name, options, data_access_collection)
+
+
 class ImdMatchComputingGroup(FeatureGroup):
     """Computing group (it has an input) for the column the pointed gate format serves."""
 
@@ -210,6 +234,7 @@ _ALL_FORMATS = (
     ImdMatchAaTwinFormat,
     ImdMatchZzTwinFormat,
     ImdMatchRefusedThenRaisingFormat,
+    ImdMatchOverrideFormat,
     _ImdKeyFmt,
 )
 
@@ -277,6 +302,22 @@ class _ImdRefusingExtender(Extender):
         return func(*args, **kwargs)
 
 
+class _ImdFirstCallRefusingExtender(_ImdRefusingExtender):
+    """Refuses only the first INPUT_DATA_MATCH call for the target, then passes through."""
+
+    def __init__(self, target: type) -> None:
+        super().__init__(target, never_fall_back=True)
+        self.calls = 0
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        if context is not None and context.reader_class in self._targets:
+            self.calls += 1
+            if self.calls > 1:
+                return func(*args, **kwargs)
+        return super().__call__(func, *args, **kwargs)
+
+
 class _ImdSkippingExtender(_ImdRefusingExtender):
     """Returns a forged probe result (fitting, seen, undeclared) for the target without calling func or raising."""
 
@@ -293,6 +334,7 @@ def _reset_probe_counters() -> None:
     for fmt in _ALL_FORMATS:
         fmt.probes = 0
         fmt.column_reads = 0
+    ImdMatchOverrideFormat.catalog_reads = 0
 
 
 def _global_access() -> DataAccessCollection:
@@ -805,3 +847,49 @@ class TestFormatGroupHook:
 
         assert _REFUSED in str(excinfo.value)
         assert _PROBE_TEXT not in str(excinfo.value)
+
+    @staticmethod
+    def _plan_override(scope: str, extender: Extender | None) -> Any:
+        options = {ImdMatchOverrideFormat.__name__: dict(_FMT_COLUMNS)} if scope == "pinned" else None
+        return _prepare(
+            Feature(_COL_A, options=options),
+            PluginCollector.enabled_feature_groups({ImdMatchOverrideFormat}),
+            _global_access() if scope == "global" else None,
+            extender,
+        )
+
+    @pytest.mark.parametrize("scope", ["pinned", "global"])
+    def test_a_matcher_override_reads_its_catalog_without_an_extender(self, scope: str) -> None:
+        session = self._plan_override(scope, None)
+
+        assert session is not None
+        assert ImdMatchOverrideFormat.catalog_reads == 1
+
+    @pytest.mark.parametrize("scope", ["pinned", "global"])
+    def test_a_matcher_override_probe_refused_by_the_gate_never_reads_its_catalog(self, scope: str) -> None:
+        extender = _ImdFirstCallRefusingExtender(ImdMatchOverrideFormat)
+        error_type, text = _refusal_error(_FORMAT_KIND, scope)
+
+        with pytest.raises(error_type) as excinfo:
+            self._plan_override(scope, extender)
+
+        assert type(excinfo.value) is error_type
+        assert ImdMatchOverrideFormat.catalog_reads == 0
+        assert text in str(excinfo.value)
+        assert "no clearance" in str(excinfo.value)
+        assert len(extender.raised) == 1
+        assert isinstance(excinfo.value, FeatureResolutionError)
+        assert excinfo.value.refusals == (extender.raised[0],)
+        assert excinfo.value.__cause__ is extender.raised[0]
+
+    @pytest.mark.parametrize("scope", ["pinned", "global"])
+    def test_a_matcher_override_fires_the_hook_for_its_own_probe_and_for_core(self, scope: str) -> None:
+        extender = _ImdRecordingExtender()
+
+        self._plan_override(scope, extender)
+
+        contexts = extender.for_reader(ImdMatchOverrideFormat)
+        assert len(contexts) == 2
+        assert len(extender.contexts) == 2
+        assert all(c.reader_class is ImdMatchOverrideFormat for c in contexts)
+        assert all(c.feature_names == (_COL_A,) for c in contexts)

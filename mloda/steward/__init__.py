@@ -66,6 +66,7 @@ from mloda.core.abstract_plugins.plugin_registry.plugin_policy import (
 )
 
 # Feature resolution
+from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
 from mloda.core.prepare.resolution_types import (
     ResolutionDiagnosis,
@@ -128,4 +129,7 @@ __all__ = [
     "FeatureResolutionError",
     "ResolutionRecord",
     "ResolutionDiagnosis",
+    # Input data probe test seam
+    "ReaderProbeScope",
+    "reader_probe_scope",
 ]

@@ -52,6 +52,8 @@ A format group's `PROPERTY_MAPPING` is merged over the declarations of every cla
 
 A format group reports `match.source` as its `data_access_identity`; override it to publish a richer identity. Run the contract mixins in mloda's `tests/mixins/reader_feature_groups/` against your group; they pin the behavior every format group shares.
 
+A family of groups shares an abstract base, which declines; each concrete subclass matches itself through the base's path. Customize discovery through `CLAIM_ROUTES` and `find_sources`, which run behind the `INPUT_DATA_MATCH` gate. An override of `match_feature_group_criteria` calls `super()` and runs any extra I/O through `gated_probe` (see [Extender](../chapter1/extender.md)).
+
 CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib reader behind PythonDict follows it. Types are inferred per column: null tokens (pyarrow's default set, e.g. `NA`, `NaN`, `null`) become `None` in an int/float/bool column but stay literal text in a string column, a column of only empty cells and/or null tokens is all-`None`, and an int column with a value outside signed int64 range degrades entirely to float.
 
 #### Loaders and compute frameworks

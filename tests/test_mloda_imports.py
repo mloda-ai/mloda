@@ -222,6 +222,11 @@ def test_import_provider_base_classes() -> None:
     # Credential scrubbing
     assert callable(scrub_credentials)
     assert "scrub_credentials" in provider_module.__all__
+    # Format probe outcome: what FormatFeatureGroup.gated_probe returns
+    from mloda.provider import FormatProbeOutcome
+
+    assert FormatProbeOutcome(None, 1).result == 1
+    assert "FormatProbeOutcome" in provider_module.__all__
 
 
 # =============================================================================
@@ -307,6 +312,13 @@ def test_import_steward_governance() -> None:
 
     assert AsOfJoinConfig is CoreAsOfJoinConfig
     assert "AsOfJoinConfig" in steward_module.__all__
+    # Probe scope test seam
+    from mloda.steward import ReaderProbeScope, reader_probe_scope
+
+    assert callable(reader_probe_scope)
+    assert ReaderProbeScope is not None
+    assert "reader_probe_scope" in steward_module.__all__
+    assert "ReaderProbeScope" in steward_module.__all__
 
 
 # =============================================================================

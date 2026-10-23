@@ -130,6 +130,11 @@ class TestMatchGuardRaiseLogsNoExceptionObject:
         assert "items" in messages[0], f"the key must stay in the message: {messages[0]}"
         assert "GuardExploded" in messages[0], f"the exception type must stay in the message: {messages[0]}"
         assert repr(5) not in messages[0], f"the raw value stays out of WARNING logs: {messages[0]}"
+        assert "guard is broken" not in messages[0], f"the message stays out of WARNING logs: {messages[0]}"
+        debug_text = [
+            r.getMessage() for r in caplog.records if r.name == MIXIN_LOGGER_NAME and r.levelno == logging.DEBUG
+        ]
+        assert any("guard is broken" in text for text in debug_text), "DEBUG keeps the reason"
 
 
 class TestMatchGuardLogsScrubCredentialValues:

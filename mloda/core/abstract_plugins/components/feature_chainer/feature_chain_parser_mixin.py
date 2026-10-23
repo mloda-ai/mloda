@@ -29,7 +29,7 @@ They serve different purposes and run at different points in the pipeline.
     list unpacking or element iteration.
   - On failure: logs a debug message and returns ``False`` (non-match). If the
     guard raises an exception, the exception is caught, logged, and the value is
-    treated as invalid.
+    treated as invalid, unless the raise is marked with ``escalate_match_abort``.
   - Use case: validating the shape or composite type of the whole value
     (e.g., ``lambda v: isinstance(v, list) and all(isinstance(i, str) for i in v)``).
 
@@ -134,7 +134,7 @@ class FeatureChainParserMixin:
     - Signature: ``(Options) -> bool``
     - Must be callable (enforced at ``PropertySpec`` construction)
     - A predicate that raises is contained: the feature group is treated as a non-match
-      (unexpected exception classes log a warning)
+      (unexpected exception classes log a warning), unless marked with ``escalate_match_abort``
     - Must be a pure function (no side effects)
     - Non-bool truthy return values are treated as True
 
@@ -275,7 +275,8 @@ class FeatureChainParserMixin:
         ``PropertySpec.match_guard`` callable, the guard is called with the raw
         option value. Returning a falsy value causes this method to return False. If
         the guard raises an exception, it is caught and the value is treated as
-        invalid. See the module docstring for the full validation design.
+        invalid, unless the raise is marked with ``escalate_match_abort``. See the
+        module docstring for the full validation design.
 
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES, counting the sources the name
         carries when it identifies the group, else the in_features option value. A

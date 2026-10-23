@@ -147,7 +147,7 @@ and `reason`) on the first failure.
 - `closed_world=True` rejects undeclared keys; `False` ignores them.
 - Defaults are never applied: `required_when` receives an `Options` of the raw values, unlike on a feature group.
 - Errors and logs never contain a value.
-- A raise marked with `escalate_match_abort` (from an `element_validator` or a value's `__eq__`) propagates unchanged instead of becoming a `PropertyValidationError`.
+- A raise marked with `escalate_match_abort` (from an `element_validator`, a `required_when` predicate or a value's `__eq__`) propagates unchanged instead of becoming a `PropertyValidationError`.
 
 ## Choosing a mechanism
 

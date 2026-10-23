@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     option_key_is_present,
 )
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.utils import contained_raise_log_level
+from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, is_match_abort
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
 
 logger = logging.getLogger(__name__)
@@ -33,10 +33,12 @@ def _log_raise(key: str, what: str, exc: Exception) -> None:
 
 
 def _required_by_predicate(predicate: Callable[[Any], Any], key: str, options: Options) -> bool | None:
-    """Predicate verdict, or None when it raised (logged by type name only)."""
+    """Predicate verdict, or None when it raised an unmarked exception (logged by type name only)."""
     try:
         return bool(predicate(options))
-    except Exception as exc:  # Swallows: a predicate that raises cannot judge, so the key is rejected.
+    except Exception as exc:
+        if is_match_abort(exc):
+            raise
         _log_raise(key, "required_when", exc)
         return None
 

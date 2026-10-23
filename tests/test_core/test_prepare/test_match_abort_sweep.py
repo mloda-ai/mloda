@@ -1183,12 +1183,14 @@ def test_known_escalating_handlers_are_enumerated() -> None:
     feature_group = "mloda/core/abstract_plugins/feature_group.py"
     mixin = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser_mixin.py"
     guards = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_author_guards.py"
+    parser = "mloda/core/abstract_plugins/components/feature_chainer/feature_chain_parser.py"
     expected = {
         (match_hook, "call_match_hook"),
         (feature_group, "passes_option_declarations"),
         (feature_group, "is_root"),
         (mixin, "match_parser_criteria"),
         (guards, "check_required_when"),
+        (parser, "_first_rejecting_guard"),
     }
 
     escalating = {(site.module, site.function) for site in _handlers_of_kind("escalating")}

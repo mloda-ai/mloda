@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
@@ -64,6 +65,8 @@ REQUIRED_WHEN_FEATURE_ESC763 = "text__required_esc763"
 
 # A value the callables cannot judge: looking at it raises KeyError, exactly the class the containment misses today.
 POISON_VALUE_ESC763 = "poison_esc763"
+# A value whose callable raises a marked abort: it must cross the matcher, never become a non-match.
+MARKED_POISON_VALUE_ESC763 = "marked_poison_esc763"
 # A value the callables CAN judge and accept: proves the fix does not over-reject.
 GOOD_VALUE_ESC763 = "good_esc763"
 # required_when driver modes: "needs" makes the key required, "optional" leaves it optional.
@@ -73,7 +76,8 @@ OPTIONAL_MODE_ESC763 = "optional_esc763"
 # The tier763 markers pin the two-tier logging contract on the user-callable containment sites: an expected
 # judgment failure (TypeError, ValueError, AttributeError) stays at DEBUG, while any other exception class means
 # the callable itself looks broken and must surface at WARNING. Containment (reject / non-match) is unchanged
-# for user callables; a raise from framework-owned build_effective_options surfaces instead (os-005).
+# for user callables, except that a marked abort crosses instead; a raise from framework-owned
+# build_effective_options surfaces too.
 TYPE_POISON_VALUE_TIER763 = "type_poison_tier763"
 CAUSE_KEY_TIER763 = "cause_key_tier763"
 
@@ -97,6 +101,8 @@ def _keyerror_match_guard_esc763(value: Any) -> bool:
     """Guard the raw value; the poison value raises KeyError (broken-looking), the tier value TypeError (expected)."""
     if value == POISON_VALUE_ESC763:
         raise KeyError("esc763 match_guard cannot judge the poison value")
+    if value == MARKED_POISON_VALUE_ESC763:
+        raise escalate_match_abort(KeyError("esc763 marked match_guard abort"))
     if value == TYPE_POISON_VALUE_TIER763:
         raise TypeError("tier763 match_guard expected judgment failure")
     return bool(value == GOOD_VALUE_ESC763)
@@ -107,6 +113,8 @@ def _keyerror_required_when_esc763(options: Options) -> bool:
     driver = options.get(DRIVER_KEY_ESC763)
     if driver == POISON_VALUE_ESC763:
         raise KeyError("esc763 required_when cannot judge the poison driver value")
+    if driver == MARKED_POISON_VALUE_ESC763:
+        raise escalate_match_abort(KeyError("esc763 marked required_when abort"))
     if driver == TYPE_POISON_VALUE_TIER763:
         raise TypeError("tier763 required_when expected judgment failure")
     return bool(driver == NEEDS_MODE_ESC763)
@@ -612,6 +620,24 @@ class TestKeyErrorRequiredWhenPredicateIsARejection:
         assert result is False
 
 
+class TestMarkedAbortCrossesTheMatcher:
+    """A callback raising a marked abort propagates out of the matcher instead of becoming a non-match."""
+
+    def test_marked_abort_from_match_guard_propagates(self) -> None:
+        options = Options(context={GUARD_KEY_ESC763: MARKED_POISON_VALUE_ESC763})
+
+        with pytest.raises(KeyError, match="esc763 marked match_guard abort"):
+            RaisingKeyErrorGuardFeatureGroupEsc763.match_feature_group_criteria(GUARD_FEATURE_ESC763, options)
+
+    def test_marked_abort_from_required_when_propagates(self) -> None:
+        options = Options(context={DRIVER_KEY_ESC763: MARKED_POISON_VALUE_ESC763})
+
+        with pytest.raises(KeyError, match="esc763 marked required_when abort"):
+            RaisingKeyErrorRequiredWhenFeatureGroupEsc763.match_feature_group_criteria(
+                REQUIRED_WHEN_FEATURE_ESC763, options
+            )
+
+
 class TestKeyErrorRejectionNeverEscapesTheEngine:
     """The definition-time required_when guard must never leak a KeyError out of the filter loop."""
 
@@ -779,9 +805,9 @@ class TestContainedRaiseLogTiers:
     """Two-tier logging for raises contained from user-supplied callables only (element_validator,
     match_guard, required_when predicates): an expected judgment failure (TypeError, ValueError,
     AttributeError) stays at DEBUG, any other exception class looks like a broken callable and must
-    surface at WARNING. Containment itself (reject / non-match, never escape) is unchanged for these
-    user callables; framework-owned build_effective_options raises propagate instead (os-005, see
-    TestBuildEffectiveOptionsRaiseSurfaces).
+    surface at WARNING. Containment (reject / non-match) holds for these user callables, except that a
+    marked abort crosses instead (TestMarkedAbortCrossesTheMatcher); framework-owned build_effective_options
+    raises propagate instead (see TestBuildEffectiveOptionsRaiseSurfaces).
     """
 
     def test_keyerror_validator_raise_logs_at_warning(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -838,11 +864,17 @@ class TestContainedRaiseLogTiers:
         warnings = _records_at_or_above(caplog, MIXIN_LOGGER_NAME, logging.WARNING)
         assert warnings, "a KeyError-raising guard looks broken and must log at WARNING"
         assert any(GUARD_KEY_ESC763 in record.getMessage() for record in warnings)
-        # The exception text stays for triage; the option value itself is redacted at WARNING (production-visible).
-        assert any("match_guard cannot judge the poison value" in record.getMessage() for record in warnings)
+        # WARNING keeps only the exception type; the message and option value are DEBUG-only.
+        assert all("match_guard cannot judge the poison value" not in r.getMessage() for r in warnings)
+        assert any("KeyError" in record.getMessage() for record in warnings)
         assert all(POISON_VALUE_ESC763 not in record.getMessage() for record in warnings), (
             "option values may carry secrets and must not appear in WARNING-tier containment messages"
         )
+        debug_records = _records_at_exactly(caplog, MIXIN_LOGGER_NAME, logging.DEBUG)
+        assert any(
+            "match_guard cannot judge the poison value" in r.getMessage() and POISON_VALUE_ESC763 in r.getMessage()
+            for r in debug_records
+        ), "the DEBUG tier keeps both the exception message and the rejected value"
 
     def test_typeerror_guard_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:
         """A guard raising TypeError is an expected judgment failure: contained at DEBUG, never WARNING."""
@@ -876,6 +908,12 @@ class TestContainedRaiseLogTiers:
         owner = RaisingKeyErrorRequiredWhenFeatureGroupEsc763.__name__
         assert any(
             owner in record.getMessage() or REQUIRED_WHEN_KEY_ESC763 in record.getMessage() for record in warnings
+        )
+        assert any("KeyError" in record.getMessage() for record in warnings)
+        assert all("required_when cannot judge the poison driver value" not in r.getMessage() for r in warnings)
+        debug_records = _records_at_exactly(caplog, GUARDS_LOGGER_NAME, logging.DEBUG)
+        assert any("required_when cannot judge the poison driver value" in r.getMessage() for r in debug_records), (
+            "the DEBUG tier keeps the exception message"
         )
 
     def test_typeerror_required_when_raise_logs_at_debug_only(self, caplog: pytest.LogCaptureFixture) -> None:

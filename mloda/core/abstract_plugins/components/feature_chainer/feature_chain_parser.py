@@ -177,7 +177,7 @@ class FeatureChainParser:
         if element_validator is not None:
             raised: Exception | None = None
             try:
-                verdict = element_validator(found_property_val)
+                verdict = bool(element_validator(found_property_val))
             except Exception as exc:
                 if is_match_abort(exc):  # a marked abort must escape, not become a rejection
                     raise
@@ -405,17 +405,18 @@ class FeatureChainParser:
                 continue
             try:
                 rejected = not guard(value)
-            # Swallows: a guard that raises cannot judge the value, so the value counts as rejected.
             except Exception as exc:
-                level = contained_raise_log_level(exc)
+                if is_match_abort(exc):  # a marked abort must escape, not become a rejection
+                    raise
                 # Text, not exc: a retained record must not pin the traceback, its frames and the plugin class.
-                if level == logging.DEBUG:
-                    log.debug(
-                        "match_guard for '%s' %s for value %s", key, contained_raise_reason(exc), safe_value_text(value)
-                    )
-                else:
-                    # The raw value stays out of WARNING logs; rerun with debug logging to see it.
-                    log.warning("match_guard for '%s' %s", key, contained_raise_reason(exc))
+                log.debug(
+                    "match_guard for '%s' %s for value %s; treating value as rejected.",
+                    key,
+                    contained_raise_reason(exc),
+                    safe_value_text(value),
+                )
+                if contained_raise_log_level(exc) != logging.DEBUG:
+                    log.warning("match_guard for '%s' raised %s; treating value as rejected.", key, type(exc).__name__)
                 rejected = True
             if rejected:
                 return key, value

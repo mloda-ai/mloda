@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.interfaces.cli.main import build_services, main
 from mloda.interfaces.service.catalog import Catalog
@@ -24,9 +25,18 @@ from mloda.interfaces.service.config import Settings, load_settings
 from mloda.interfaces.service.errors import is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.interfaces.service.runner import Runner
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.user import PluginCollector, PluginLoader
 from tests.helpers.docs_scope import shipped_feature_group_walk
-from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
+from tests.test_interfaces.source_groups import (
+    FILE_SOURCE_GROUPS,
+    PLAN_RAISE,
+    PLAN_RAISE_SECRET,
+    RAISE,
+    RAISE_SECRET,
+    PlanRaiseMcp5,
+    RunnerRaiseMcp5,
+)
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -73,8 +83,8 @@ def _clock() -> float:
     return CLOCK_START
 
 
-def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups(set(FILE_SOURCE_GROUPS))
+def _base(*extra: type[FeatureGroup]) -> PluginCollector:
+    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, ApiInputDataFeature, *extra})
 
 
 @dataclass(frozen=True)
@@ -88,7 +98,13 @@ class _Outcome:
         return result
 
 
-def _cli(argv: Sequence[str], *, env: Mapping[str, str] = ENV, stdin_text: str = "") -> _Outcome:
+def _cli(
+    argv: Sequence[str],
+    *,
+    env: Mapping[str, str] = ENV,
+    stdin_text: str = "",
+    extra_groups: Sequence[type[FeatureGroup]] = (),
+) -> _Outcome:
     out, err = io.StringIO(), io.StringIO()
     try:
         code = main(
@@ -97,7 +113,7 @@ def _cli(argv: Sequence[str], *, env: Mapping[str, str] = ENV, stdin_text: str =
             stdin=io.StringIO(stdin_text),
             stdout=out,
             stderr=err,
-            plugin_collector=_base(),
+            plugin_collector=_base(*extra_groups),
             clock=_clock,
         )
     except SystemExit as exited:
@@ -466,6 +482,62 @@ class TestRun:
 
         assert outcome.code == 2
         assert outcome.out == ""
+
+
+class TestRunInlineData:
+    REQUEST: dict[str, Any] = {"features": ["token"], "data": {"Tokens": {"token": ["007", "", None]}}}
+
+    def test_inline_data_runs_when_enabled_and_classified(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        text = CONFIG.replace('mode = "plan"', 'mode = "plan"\ninline_data = true')
+        config = _config(tmp_path, text.replace('segment = "public"', 'segment = "public"\ntoken = "public"'))
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["run", "-", "--config", str(config), "--format", "json"], stdin_text=json.dumps(self.REQUEST))
+
+        assert outcome.code == 0, outcome.err
+        (table,) = outcome.json()["tables"]
+        assert [row["token"] for row in table["preview"]["rows"]] == ["007", "", None]
+
+    def test_inline_data_without_opt_in_is_policy_denied(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+
+        outcome = _cli(["run", "-", "--config", str(config)], stdin_text=json.dumps(self.REQUEST))
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "policy_denied"
+        assert '"007"' not in outcome.out
+
+
+class TestRunFeatureGroupFailure:
+    def test_failing_feature_group_is_an_internal_result_with_exit_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": ["customer_id", RAISE]})
+
+        outcome = _cli(["run", str(request), "--config", str(config)], extra_groups=[RunnerRaiseMcp5])
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "internal"
+        assert RAISE_SECRET not in outcome.out
+
+    @pytest.mark.parametrize("command", ["explain", "run"])
+    def test_planning_failure_is_an_internal_result_with_exit_2(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
+    ) -> None:
+        config = _config(tmp_path)
+        _elsewhere(tmp_path, monkeypatch)
+        request = _request_file(tmp_path, {"features": [PLAN_RAISE]})
+
+        outcome = _cli([command, str(request), "--config", str(config)], extra_groups=[PlanRaiseMcp5])
+
+        assert outcome.code == 2
+        assert _error_code(outcome) == "internal"
+        assert PLAN_RAISE_SECRET not in outcome.out
 
 
 class TestRunFormats:

@@ -51,6 +51,7 @@ def test_settings_defaults() -> None:
     assert settings.plan_ttl_seconds == 86400
     assert dict(settings.sources) == {}
     assert dict(settings.classification) == {}
+    assert settings.inline_data is False
 
 
 def test_source_config_defaults() -> None:
@@ -223,6 +224,20 @@ def test_config_hash_changes_with_source() -> None:
 
 def test_config_hash_changes_with_classification() -> None:
     assert Settings().config_hash() != Settings(classification={"email": "personal"}).config_hash()
+
+
+def test_config_hash_changes_with_inline_data() -> None:
+    assert Settings().config_hash() != Settings(inline_data=True).config_hash()
+
+
+def test_inline_data_toml_true_loads(tmp_path: Path) -> None:
+    assert load_settings(_write(tmp_path, "[mcp]\ninline_data = true\n"), env={}).inline_data is True
+
+
+@pytest.mark.parametrize("value", ['"yes"', "1", "[true]"])
+def test_non_bool_inline_data_is_config_error(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ConfigError, match="'inline_data' must be true or false"):
+        load_settings(_write(tmp_path, f"[mcp]\ninline_data = {value}\n"), env={})
 
 
 def test_config_hash_ignores_mapping_insertion_order() -> None:

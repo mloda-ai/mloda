@@ -19,15 +19,17 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from mloda.core.abstract_plugins.components.input_data.api.api_input_data_feature import ApiInputDataFeature
 from mloda.core.abstract_plugins.components.utils import safe_field
 from mloda.interfaces.service.catalog import MAX_DESCRIPTION_LENGTH, Catalog, plugin_collector_for, sanitize_text
 from mloda.interfaces.service.config import Settings, SourceConfig
-from mloda.interfaces.service.errors import error_result, problems_to_details
+from mloda.interfaces.service.errors import error_result, failure_result, problems_to_details
 from mloda.interfaces.service.lock import MLODA_LOCK
 from mloda.interfaces.service.request import (
     MAX_NAME_LENGTH,
     ParsedRequest,
     build_request,
+    _pointer,
     data_access_violations,
     validate_request,
 )
@@ -53,6 +55,7 @@ STRICTNESS = ("public", "internal", "confidential", "personal", UNCLASSIFIED)
 ROWS_RETURNED_NOTE = "Rows returned depend on filters and joins; they are known only after execution."
 _SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _PAYLOAD_KEYS = frozenset({"kid", "req", "digest", "cfg", "sub", "exp"})
+_TOO_LARGE_MESSAGE = "The request is too large for a plan id."
 _DENIED_MESSAGE = "This feature is not available under the service policy."
 _UNPLANNABLE_MESSAGE = "The request cannot be planned under the service policy and sources."
 _WITHHELD_FILTER_MESSAGE = "Filters on columns the preview withholds are refused; row counts would reveal their values."
@@ -97,6 +100,14 @@ def _alias_of(step: PlanStep, sources: Mapping[str, SourceConfig]) -> str | None
         if str(path) in source.files or any(path.is_relative_to(folder) for folder in source.folders):
             return alias
     return None
+
+
+def _inline_alias(step: PlanStep, inline: Mapping[str, Mapping[str, Any]]) -> str | None:
+    """The inline set owning the columns of an ApiInputDataFeature step."""
+    fg = step.feature_group
+    if not (isinstance(fg, type) and issubclass(fg, ApiInputDataFeature)):
+        return None
+    return next((name for name in sorted(inline) if set(step.feature_names) & set(inline[name])), None)
 
 
 def _is_plugin_root(step: PlanStep, alias: str | None) -> bool:
@@ -191,13 +202,19 @@ class Planner:
         planned = self.plan(request)
         if isinstance(planned, dict):
             return planned
-        return self._described(planned)
+        described = self._described(planned)
+        if len(described["plan_id"]) > MAX_PLAN_ID_LENGTH:
+            return error_result("limit_exceeded", _TOO_LARGE_MESSAGE)
+        return described
 
     def plan(self, request: Any) -> PlannedRequest | dict[str, Any]:
         """Validate, policy-check and plan ``request`` within the row limits, or return the error result."""
         problems = validate_request(request, self._settings)
         if problems:
             return error_result("validation_failed", "The request is invalid.", problems_to_details(problems))
+        refused = self._inline_refusal(request)
+        if refused is not None:
+            return refused
         violations = data_access_violations(request)
         if violations:
             details = problems_to_details(violations)
@@ -210,22 +227,27 @@ class Planner:
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)
-        with verified_context(principal=self._principal), MLODA_LOCK:
-            PluginLoader.all()
-            diagnosis = mloda.diagnose(parsed.features, **self._plan_kwargs(parsed, sources))
-            steps = mloda.explain(parsed.features, **self._plan_kwargs(parsed, sources)) if diagnosis.complete else []
+        try:  # plugin boundary: plugin code runs during planning and its exception text may hold data
+            with verified_context(principal=self._principal), MLODA_LOCK:
+                PluginLoader.all()
+                diagnosis = mloda.diagnose(parsed.features, **self._plan_kwargs(parsed, sources))
+                steps = (
+                    mloda.explain(parsed.features, **self._plan_kwargs(parsed, sources)) if diagnosis.complete else []
+                )
+        except Exception as error:
+            return failure_result("Planning", error)
         if not diagnosis.complete:
             return self._unresolved(diagnosis, request_names, sources)
         filters = request.get("filters", [])
         unmatched = self._unmatched_filters(parsed, filters)
         if unmatched is not None:
             return unmatched
-        aliases = tuple(_alias_of(step, sources) for step in steps)
+        aliases = tuple(_alias_of(step, sources) or _inline_alias(step, parsed.inline_data) for step in steps)
         producers = _producers(steps, aliases)
         withheld = self._withheld_filters(filters, producers)
         if withheld is not None:
             return withheld
-        estimate = self._estimate(steps, aliases)
+        estimate = self._estimate(steps, aliases, parsed.inline_data)
         limited = self._limit_exceeded(estimate["sources"])
         if limited is not None:
             return limited
@@ -304,9 +326,31 @@ class Planner:
             "compute_frameworks": list(self._settings.compute_frameworks),
             "data_access_collection": data_access_collection(sources),
             "global_filter": parsed.global_filter,
+            "api_data": dict(parsed.inline_data) or None,
             "plugin_collector": plugin_collector_for(self._settings, self._base),
             "parallelization_modes": {ParallelizationMode.SYNC},
         }
+
+    def _inline_refusal(self, request: Any) -> dict[str, Any] | None:
+        if "data" not in request:
+            return None
+        if not self._settings.inline_data:
+            detail = {"path": "/data", "problem": "policy_denied", "message": "Inline data is not enabled."}
+            return error_result("policy_denied", "Inline data is not enabled under the service policy.", [detail])
+        if len(json.dumps(request["data"])) > MAX_PLAN_ID_LENGTH:
+            return error_result("limit_exceeded", _TOO_LARGE_MESSAGE)
+        details = [
+            {
+                "path": _pointer("data", name),
+                "problem": "invalid",
+                "message": "An inline set may not reuse a source alias.",
+            }
+            for name in request["data"]
+            if name in self._settings.sources
+        ]
+        if not details:
+            return None
+        return error_result("validation_failed", "An inline set is named like a configured source.", details)
 
     def _denied(self, names: Sequence[str]) -> dict[str, Any] | None:
         denied = [(index, name) for index, name in enumerate(names) if self._catalog.is_denied(name)]
@@ -424,7 +468,9 @@ class Planner:
                 withheld.append({"column": name, "reason": f"classification: {label}"})
         return {"preview_columns": preview, "withheld": withheld}
 
-    def _estimate(self, steps: Sequence[PlanStep], aliases: Sequence[str | None]) -> dict[str, Any]:
+    def _estimate(
+        self, steps: Sequence[PlanStep], aliases: Sequence[str | None], inline: Mapping[str, Mapping[str, Any]]
+    ) -> dict[str, Any]:
         reads: dict[str, dict[str, PlanStep]] = {}
         for step, alias in zip(steps, aliases):
             identity = _file_identity(step)
@@ -433,6 +479,9 @@ class Planner:
         totals = {
             alias: _total(self._count(path, step) for path, step in sorted(reads[alias].items())) for alias in reads
         }
+        for step, alias in zip(steps, aliases):
+            if alias is not None and alias in inline and alias not in totals:
+                totals[alias] = len(next(iter(inline[alias].values())))
         entries: list[dict[str, Any]] = [
             {"alias": alias, "rows": totals[alias], "rows_exact": totals[alias] is not None} for alias in sorted(totals)
         ]

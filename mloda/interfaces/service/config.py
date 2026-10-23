@@ -23,6 +23,7 @@ _MCP_KEYS = frozenset(
         "plan_ttl",
         "sources",
         "classification",
+        "inline_data",
     }
 )
 _SOURCE_KEYS = frozenset({"files", "folders"})
@@ -61,6 +62,7 @@ class Settings:
     plan_ttl_seconds: int = 86400
     sources: Mapping[str, SourceConfig] = field(default_factory=dict)
     classification: Mapping[str, str] = field(default_factory=dict)
+    inline_data: bool = False
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -194,6 +196,10 @@ def _build(raw: Mapping[str, Any], base_dir: Path) -> Settings:
         if not all(isinstance(v, str) for v in classification.values()):
             raise ConfigError("'classification' values must be strings")
         kwargs["classification"] = classification
+    if "inline_data" in raw:
+        if not isinstance(raw["inline_data"], bool):
+            raise ConfigError("'inline_data' must be true or false")
+        kwargs["inline_data"] = raw["inline_data"]
     if "sources" in raw:
         sources = _str_mapping(raw["sources"], "sources")
         kwargs["sources"] = {alias: _build_source(alias, v, base_dir) for alias, v in sources.items()}

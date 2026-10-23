@@ -3,6 +3,8 @@
 import json
 from typing import Any
 
+import pytest
+
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.api.feature_config.loader import load_features_from_config
 from mloda.core.filter.filter_type_enum import FilterType
@@ -113,3 +115,36 @@ def test_semantically_invalid_feature_config_is_a_problem() -> None:
     assert problem.problem == "invalid_feature_config"
     assert problem.path == "/features/1"
     assert problem.message
+
+
+INLINE: dict[str, Any] = {"S": {"a": ["x", 1, None], "b": [True, 2.5, "y"]}, "T": {"c": [1]}}
+
+
+def test_inline_data_defaults_to_empty() -> None:
+    assert dict(_parsed({"features": ["a"]}).inline_data) == {}
+
+
+def test_inline_data_is_parsed() -> None:
+    parsed = _parsed({"features": ["a"], "data": INLINE})
+    assert {name: dict(columns) for name, columns in parsed.inline_data.items()} == INLINE
+
+
+def test_normalized_carries_data() -> None:
+    normalized = _parsed({"features": ["a"], "data": INLINE}).normalized
+    assert normalized["data"] == INLINE
+    json.dumps(normalized)
+
+
+@pytest.mark.parametrize(
+    ("data", "path"),
+    [
+        ({"S": {"a": ["s3cr3t", 2], "b": [1]}}, "/data/S"),
+        ({"S": {"a": ["s3cr3t"]}, "T": {"a": [2]}}, "/data/T/a"),
+    ],
+)
+def test_inconsistent_inline_data_is_a_problem_without_values(data: dict[str, Any], path: str) -> None:
+    result = build_request({"features": ["a"], "data": data})
+    assert isinstance(result, list)
+    assert [(p.path, p.problem) for p in result] == [(path, "invalid_inline_data")]
+    assert result[0].message
+    assert "s3cr3t" not in result[0].message

@@ -53,7 +53,7 @@ def test_schema_root() -> None:
     assert schema["type"] == "object"
     assert schema["additionalProperties"] is False
     assert schema["required"] == ["features"]
-    assert set(schema["properties"]) == {"features", "filters", "restrict_sources"}
+    assert set(schema["properties"]) == {"features", "filters", "restrict_sources", "data"}
     json.dumps(schema)
 
 
@@ -136,6 +136,14 @@ def test_valid_request_has_no_problems() -> None:
         pytest.param(
             {"features": ["a"], "filters": [{"feature": "a", "op": "range"}]}, "/filters/0", id="range_without_bounds"
         ),
+        pytest.param({"features": ["a"], "data": []}, "/data", id="data_not_object"),
+        pytest.param({"features": ["a"], "data": {"S": []}}, "/data/S", id="data_set_not_object"),
+        pytest.param({"features": ["a"], "data": {"S": {}}}, "/data/S", id="data_set_empty"),
+        pytest.param({"features": ["a"], "data": {"S": {"a": 1}}}, "/data/S/a", id="data_column_not_array"),
+        pytest.param({"features": ["a"], "data": {"S": {"a": [1, [2]]}}}, "/data/S/a/1", id="data_value_array"),
+        pytest.param({"features": ["a"], "data": {"S": {"a": [{"k": 1}]}}}, "/data/S/a/0", id="data_value_object"),
+        pytest.param({"features": ["a"], "data": {"": {"a": [1]}}}, "/data", id="data_empty_set_name"),
+        pytest.param({"features": ["a"], "data": {"S": {"": [1]}}}, "/data/S", id="data_empty_column_name"),
     ],
 )
 def test_invalid_request_reports_one_problem_at_path(request_value: Any, path: str) -> None:
@@ -143,6 +151,38 @@ def test_invalid_request_reports_one_problem_at_path(request_value: Any, path: s
     assert _paths(problems) == [path]
     assert problems[0].problem == "invalid"
     assert problems[0].message
+
+
+def test_schema_data_property() -> None:
+    name = request_schema()["properties"]["data"]["propertyNames"]
+    assert request_schema()["properties"]["data"] == {
+        "type": "object",
+        "propertyNames": name,
+        "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": name,
+            "additionalProperties": {
+                "type": "array",
+                "items": {"type": ["string", "number", "boolean", "null"]},
+            },
+        },
+    }
+    assert name["minLength"] == 1
+    assert name["maxLength"] == MAX_NAME_LENGTH
+
+
+def test_valid_request_with_data_has_no_problems() -> None:
+    request = {"features": ["a"], "data": {"S": {"a": ["x", 1, 1.5, True, None]}}}
+    assert validate_request(request, Settings()) == []
+
+
+def test_invalid_data_problems_never_quote_values() -> None:
+    secret = "s3cr3t-value"  # nosec B105
+    for data in ({"S": {"a": [secret, {"k": secret}]}}, {"S": {"a": secret}}, {"S": secret}, secret):
+        problems = validate_request({"features": ["a"], "data": data}, Settings())
+        assert problems
+        assert all(secret not in p.message and secret not in p.path for p in problems)
 
 
 def test_multiple_issues_report_one_problem_each() -> None:
@@ -237,6 +277,25 @@ AGREEMENT_CORPUS: list[Any] = [
     {"features": ["a"], "restrict_sources": "sales"},
     {"features": ["a"], "restrict_sources": [1]},
     {"features": ["a"], "restrict_sources": ["sales", "sales"]},
+    # inline data, valid
+    {"features": ["a"], "data": {}},
+    {"features": ["a"], "data": {"S": {"a": []}}},
+    {"features": ["a"], "data": {"S": {"a": ["x", 1, 1.5, True, None], "b": [1, 2, 3, 4, 5]}, "T": {"c": [None]}}},
+    {"features": ["a"], "data": {"x" * MAX_NAME_LENGTH: {"x" * MAX_NAME_LENGTH: [1]}}},
+    # inline data, invalid
+    {"features": ["a"], "data": []},
+    {"features": ["a"], "data": "S"},
+    {"features": ["a"], "data": None},
+    {"features": ["a"], "data": {"S": []}},
+    {"features": ["a"], "data": {"S": {}}},
+    {"features": ["a"], "data": {"": {"a": [1]}}},
+    {"features": ["a"], "data": {"S": {"": [1]}}},
+    {"features": ["a"], "data": {"x" * (MAX_NAME_LENGTH + 1): {"a": [1]}}},
+    {"features": ["a"], "data": {"S": {"x" * (MAX_NAME_LENGTH + 1): [1]}}},
+    {"features": ["a"], "data": {"S": {"a": 1}}},
+    {"features": ["a"], "data": {"S": {"a": "x"}}},
+    {"features": ["a"], "data": {"S": {"a": [[1]]}}},
+    {"features": ["a"], "data": {"S": {"a": [{"k": 1}]}}},
 ]
 
 

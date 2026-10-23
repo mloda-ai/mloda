@@ -1,11 +1,15 @@
 """Service error results: a closed set of codes, a unique audit id per error, and Problem details."""
 
+import logging
 import re
 import secrets
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from mloda.core.abstract_plugins.components.utils import failure_report
 from mloda.interfaces.service.request import Problem
+
+_LOGGER = logging.getLogger("mloda.interfaces.service")
 
 ERROR_CODES = (
     "validation_failed",
@@ -38,6 +42,13 @@ def error_result(
         "audit_id": f"aud_{secrets.token_hex(8)}",
     }
     return {"error": error}
+
+
+def failure_result(action: str, error: Exception) -> dict[str, dict[str, Any]]:
+    """An internal error naming only the exception class; the log gets the audit id and a traceback without messages."""
+    result = error_result("internal", f"{action} failed with {type(error).__name__}.")
+    _LOGGER.error("%s failed audit_id=%s\n%s", action, result["error"]["audit_id"], failure_report(error)[1])
+    return result
 
 
 def problems_to_details(problems: Iterable[Problem]) -> list[dict[str, str]]:

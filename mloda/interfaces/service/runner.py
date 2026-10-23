@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
-from mloda.interfaces.service.errors import error_result, is_error
+from mloda.interfaces.service.errors import error_result, failure_result, is_error
 from mloda.interfaces.service.planner import Planner
 from mloda.user import PlanStep
 
@@ -43,7 +43,10 @@ class Runner:
         if planned.digest != verified["digest"]:
             message = "The plan no longer matches how the service resolves this request; call explain again."
             return error_result("plan_stale", message)
-        result = self._planner.execute(planned)
+        try:
+            result = self._planner.execute(planned)
+        except Exception as error:  # plugin boundary: the exception text may hold data, so only the type is reported
+            return failure_result("The run", error)
         tables = [self._table(frame, planned.names, result.plan) for frame in result]
         max_rows = self._planner.settings.max_rows
         over = [table["row_count"] for table in tables if max_rows is not None and table["row_count"] > max_rows]

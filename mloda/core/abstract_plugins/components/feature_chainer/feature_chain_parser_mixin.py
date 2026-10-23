@@ -410,7 +410,10 @@ class FeatureChainParserMixin:
         if prefix_patterns:
             try:
                 resolution = cls.resolve_feature_name(feature_name)
-            except ValueError:
+            # A marked raise crosses this containment; an unmarked parse ValueError is no rejection.
+            except ValueError as exc:
+                if is_match_abort(exc):
+                    raise
                 return None
             name_matched = resolution.owned
             if name_matched:

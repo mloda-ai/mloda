@@ -57,11 +57,11 @@ import inspect
 import logging
 import os
 from copy import copy
+from numbers import Number
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_author_guards import (
@@ -520,8 +520,16 @@ class FeatureChainParserMixin:
 
     @staticmethod
     def _agrees_with_binding(declared: Any, bound: Any) -> bool:
-        """A declared value agrees with a bound one when typed-equal or equal as text."""
-        return _deep_equal(declared, bound) or str(declared) == str(bound)
+        """A declared value agrees with a bound one when equal as text or numerically equal."""
+        if str(declared) == str(bound):
+            return True
+        numeric = (
+            isinstance(declared, Number)
+            and isinstance(bound, Number)
+            and not isinstance(declared, bool)
+            and not isinstance(bound, bool)
+        )
+        return numeric and bool(declared == bound)
 
     @classmethod
     def _name_mismatch_downgraded(cls, message: str) -> bool:

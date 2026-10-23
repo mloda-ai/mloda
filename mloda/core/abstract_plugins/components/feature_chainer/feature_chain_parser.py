@@ -370,7 +370,9 @@ class FeatureChainParser:
 
         A rejected conversion (key -> captured text) is rejected the same way.
         """
-        for key, text in (rejected_bindings or {}).items():
+        if rejected_bindings:
+            key, text = next(iter(rejected_bindings.items()))
+            # Contained: a rejected name conversion is this candidate's own verdict, recorded as its reason.
             raise PropertyValueRejection(f"Property value {safe_value_text(text)} failed name conversion for '{key}'")
         for key, value in bindings.items():
             spec = cls._require_spec(cls.__name__, key, property_mapping[key])

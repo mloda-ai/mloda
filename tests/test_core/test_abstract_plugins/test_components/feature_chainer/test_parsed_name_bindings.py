@@ -562,19 +562,18 @@ class TestNameResolution:
 
         assert calls == ["7"]
 
-    def test_raising_converter_is_recorded_and_the_name_stays_owned(self) -> None:
-        resolution = _resolve("f0__raisecv_abc", _converted_group(_raising_converter, "raisecv", capture=r"\w+"))
+    @pytest.mark.parametrize(
+        ("converter", "tag", "text"),
+        [(_raising_converter, "raisecv", "abc"), (int, "intcv", "x1")],
+        ids=["raising_converter", "int_on_non_numeric_text"],
+    )
+    def test_failing_converter_is_recorded_and_the_name_stays_owned(self, converter: Any, tag: str, text: str) -> None:
+        resolution = _resolve(f"f0__{tag}_{text}", _converted_group(converter, tag, capture=r"\w+"))
 
         assert resolution.owned is True
         assert KEY_K not in resolution.bindings
-        assert dict(resolution.rejected_bindings) == {KEY_K: "abc"}
-        assert resolution.value_for(KEY_K) == "abc"
-
-    def test_converter_failing_on_the_text_is_recorded_not_raised(self) -> None:
-        resolution = _resolve("f0__intcv_x1", _converted_group(int, "intcv", capture=r"\w+"))
-
-        assert resolution.owned is True
-        assert dict(resolution.rejected_bindings) == {KEY_K: "x1"}
+        assert dict(resolution.rejected_bindings) == {KEY_K: text}
+        assert resolution.value_for(KEY_K) == text
 
 
 class TestDefinitionTimeAmbiguity:

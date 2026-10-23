@@ -376,7 +376,7 @@ def _toy_operation() -> Any:
     )
 
 
-class TestOperationImplementationCapability:
+class TestOperationGroupImplementationCapability:
     """An Implementation's supported and accepts remove its framework at match time."""
 
     @pytest.mark.parametrize(

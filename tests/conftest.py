@@ -208,19 +208,16 @@ def make_implementation() -> Iterator[Callable[..., type[Implementation[Any]]]]:
         group: Any,
         framework: Any,
         fn: Callable[[Any, Any, Any], Any] | None = None,
-        base: type[Implementation[Any]] | None = None,
+        base: type[Implementation[Any]] = Implementation,
         name: str | None = None,
     ) -> type[Implementation[Any]]:
-        if base is None:
-            base = Implementation
-
         class _Impl(base):  # type: ignore[misc, valid-type]
             feature_group = group
             compute_framework = framework
 
             @classmethod
-            def calculate(cls, serving: Any, match: Any, features: Any, framework: Any) -> Any:
-                return None if fn is None else fn(serving, match, features)
+            def calculate(cls, serving: Any, data: Any, features: Any, framework: Any) -> Any:
+                return None if fn is None else fn(serving, data, features)
 
         if name is not None:
             _Impl.__name__ = name

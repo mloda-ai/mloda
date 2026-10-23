@@ -389,7 +389,7 @@ class LockEditImpl(Implementation[LockEditGroup]):
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, serving, match, features, framework):
+    def calculate(cls, serving, data, features, framework):
         return helper()
 """
 

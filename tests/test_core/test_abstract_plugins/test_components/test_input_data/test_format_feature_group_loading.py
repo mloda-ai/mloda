@@ -207,7 +207,7 @@ class TestImplementationReceivesFramework:
             compute_framework = PythonDictFramework
 
             @classmethod
-            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+            def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
                 seen.append((framework, ComputeFramework.current()))
                 return SENTINEL
 
@@ -258,7 +258,7 @@ class TestImplementationSeesDacConnection:
             compute_framework = DuckDBFramework
 
             @classmethod
-            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+            def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
                 seen.append(framework.framework_connection_object)
                 conn = framework.framework_connection_object or framework.fallback_connection_object
                 return DuckdbRelation.from_dict(conn or duckdb.connect(), {"toyfmt_ld": [1, 2]})
@@ -292,7 +292,7 @@ class TestCalculateFeatureWithoutMarker:
             compute_framework = PythonDictFramework
 
             @classmethod
-            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+            def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
                 frameworks.append(framework)
                 return SENTINEL
 
@@ -359,27 +359,6 @@ class TestImplementationDefinition:
         group = ToyFormatFG if kind == "format" else _toy_operation().OpToyFG
         impl = make_implementation(group, PythonDictFramework, _sentinel)
         assert impl in loaded_implementations()
-
-    def test_a_plain_implementation_naming_an_operation_group_is_accepted_and_computes(self) -> None:
-        class _OpGroup(OpToyBareFG):
-            pass
-
-        class _PlainOpImpl(Implementation[OpToyBareFG]):
-            feature_group = _OpGroup
-            compute_framework = PythonDictFramework
-
-            @classmethod
-            def calculate(
-                cls, group: type[OpToyBareFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
-            ) -> Any:
-                return "computed"
-
-        assert _PlainOpImpl in loaded_implementations()
-        features = FeatureSet([Feature("optoy_bare_value")])
-        features.implementation = _PlainOpImpl
-        assert _OpGroup.calculate_feature(object(), features) == "computed"
-        del _PlainOpImpl, _OpGroup
-        gc.collect()
 
     def test_the_implementation_base_is_not_a_loaded_implementation(self) -> None:
         assert Implementation not in loaded_implementations()
@@ -509,7 +488,7 @@ def _run_operation(
     )
 
 
-class TestOperationImplementation:
+class TestOperationGroupImplementation:
     def test_unpinned_run_with_two_frameworks_resolves_to_one_group(self) -> None:
         toy = _toy_operation()
 

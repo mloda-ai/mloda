@@ -14,7 +14,6 @@ import pytest
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.input_data.reader_probe import ReaderProbeScope, reader_probe_scope
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
@@ -23,6 +22,7 @@ from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, ComputeFramework, FormatFeatureGroup, NamePolicy
+from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 

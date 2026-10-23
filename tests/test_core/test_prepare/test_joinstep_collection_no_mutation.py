@@ -1,5 +1,5 @@
 """JoinStepCollection: get_required_join_uuids must not insert a key on a cache miss, and
-earlier_joins_sharing_destination returns earlier joins (of any link) with an overlapping destination."""
+earlier_joins_sharing_destination returns earlier joins of other links with an overlapping destination."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def _step(link: Link, destination_uuids: set[UUID]) -> JoinStep:
     return JoinStep(link, PyArrowTable, PandasDataFrame, set(), destination_uuids, set())
 
 
-def test_earlier_joins_sharing_destination_orders_same_link_joins_by_insertion() -> None:
+def test_earlier_joins_sharing_destination_skips_joins_of_the_same_link() -> None:
     coll = JoinStepCollection()
     link = _link()
     shared = uuid4()
@@ -71,8 +71,12 @@ def test_earlier_joins_sharing_destination_orders_same_link_joins_by_insertion()
     coll.add(earlier)
     coll.add(later)
 
-    assert coll.earlier_joins_sharing_destination(later) == {earlier.uuid}
+    assert coll.earlier_joins_sharing_destination(later) == set()
     assert coll.earlier_joins_sharing_destination(earlier) == set()
+
+
+def test_a_join_step_runs_after_no_join_by_default() -> None:
+    assert _step(_link(), {uuid4()}).runs_after_joins == frozenset()
 
 
 def test_earlier_joins_sharing_destination_returns_another_links_join() -> None:
@@ -80,26 +84,29 @@ def test_earlier_joins_sharing_destination_returns_another_links_join() -> None:
     shared = uuid4()
     earlier = _step(_link(), {shared})
     coll.add(earlier)
-    later = _step(_link(), {shared})
+    later = _step(_link(), {shared, uuid4()})
     coll.add(later)
 
     assert coll.earlier_joins_sharing_destination(later) == {earlier.uuid}
+    assert coll.earlier_joins_sharing_destination(earlier) == set()
 
 
 def test_earlier_joins_sharing_destination_ignores_disjoint_destinations() -> None:
     coll = JoinStepCollection()
-    link = _link()
-    coll.add(_step(link, {uuid4()}))
-    later = _step(link, {uuid4()})
+    coll.add(_step(_link(), {uuid4()}))
+    later = _step(_link(), {uuid4()})
     coll.add(later)
 
     assert coll.earlier_joins_sharing_destination(later) == set()
 
 
 def _fw_step(
-    destination: type[ComputeFramework], source: type[ComputeFramework], destination_uuids: set[UUID] | None = None
+    destination: type[ComputeFramework],
+    source: type[ComputeFramework],
+    destination_uuids: set[UUID] | None = None,
+    link: Link | None = None,
 ) -> JoinStep:
-    return JoinStep(_link(), destination, source, set(), destination_uuids or set(), set())
+    return JoinStep(_link() if link is None else link, destination, source, set(), destination_uuids or set(), set())
 
 
 def _add_three(
@@ -160,18 +167,35 @@ def test_a_join_on_untouched_frameworks_waits_on_nothing() -> None:
 
 def test_earlier_joins_sharing_destination_for_a_join_never_added_returns_every_match() -> None:
     coll = JoinStepCollection()
-    link = _link()
     shared = uuid4()
-    first = _step(link, {shared})
-    second = _step(link, {shared, uuid4()})
-    disjoint = _step(link, {uuid4()})
+    first = _step(_link(), {shared})
+    second = _step(_link(), {shared, uuid4()})
+    disjoint = _step(_link(), {uuid4()})
     other_link = _step(_link(), {shared})
     for step in (first, second, disjoint, other_link):
         coll.add(step)
 
-    never_added = _step(link, {shared})
+    never_added = _step(_link(), {shared})
 
     assert coll.earlier_joins_sharing_destination(never_added) == {first.uuid, second.uuid, other_link.uuid}
+
+
+def test_earlier_joins_sharing_destination_skips_same_link_joins_for_a_join_never_added() -> None:
+    coll = JoinStepCollection()
+    shared, owner_step, other_feature = uuid4(), uuid4(), uuid4()
+    owner = {shared: owner_step, other_feature: owner_step}
+    first = _step(_link(), {shared})
+    second = _step(_link(), {other_feature})
+    for step in (first, second):
+        coll.add(step)
+    same_link_as_first = _step(first.link, {shared})
+    same_link_as_second = _step(second.link, {shared})
+    index = coll.joins_by_destination_owner(owner)
+
+    assert coll.earlier_joins_sharing_destination(same_link_as_first) == set()
+    assert coll.earlier_joins_sharing_destination(same_link_as_second) == {first.uuid}
+    assert coll.earlier_joins_sharing_destination(same_link_as_first, owner, index) == {second.uuid}
+    assert coll.earlier_joins_sharing_destination(same_link_as_second, owner, index) == {first.uuid}
 
 
 def test_collection_keeps_joins_in_insertion_order() -> None:
@@ -238,6 +262,20 @@ def test_a_cross_join_waits_on_what_was_open_and_later_joins_reach_the_rest_thro
     assert coll.get_required_join_uuids(d) == {c.uuid, a.uuid}
 
 
+def test_add_leaves_a_same_link_token_out_of_a_cross_framework_join_and_keeps_another_links() -> None:
+    coll = JoinStepCollection()
+    link = _link()
+    first = _fw_step(_PA, _PD, link=link)
+    foreign = _fw_step(_PA, _PA)
+    second = _fw_step(_PA, _PD, link=link)
+    third = _fw_step(_PA, _PD)
+    for step in (first, foreign, second, third):
+        coll.add(step)
+
+    assert coll.get_required_join_uuids(second) == {foreign.uuid}
+    assert coll.get_required_join_uuids(third) == {second.uuid}
+
+
 def test_a_same_framework_join_after_a_cross_join_stays_open_for_the_next_cross_join() -> None:
     coll = JoinStepCollection()
     s1, c, s2, e = _fw_step(_PA, _PA), _fw_step(_PA, _PD), _fw_step(_PA, _PA), _fw_step(_PD, _PA)
@@ -260,14 +298,13 @@ def test_fifty_cross_framework_joins_each_carry_one_token() -> None:
 
 def test_destination_index_gives_the_same_answer_as_a_brute_force_comparison() -> None:
     coll = JoinStepCollection()
-    link = _link()
     feature_one, feature_two, owner_step, raw = uuid4(), uuid4(), uuid4(), uuid4()
     owner = {feature_one: owner_step, feature_two: owner_step}
-    first = _step(link, {feature_one})
-    second = _step(link, {feature_two})
-    third = _step(link, {raw})
-    fourth = _step(link, {raw, uuid4()})
-    fifth = _step(link, {uuid4()})
+    first = _step(_link(), {feature_one})
+    second = _step(_link(), {feature_two})
+    third = _step(_link(), {raw})
+    fourth = _step(_link(), {raw, uuid4()})
+    fifth = _step(_link(), {uuid4()})
     steps = [first, second, third, fourth, fifth]
     for step in steps:
         coll.add(step)
@@ -277,9 +314,13 @@ def test_destination_index_gives_the_same_answer_as_a_brute_force_comparison() -
     def owners(step: JoinStep) -> set[UUID]:
         return {owner.get(u, u) for u in step.destination_framework_uuids}
 
-    never_added = _step(link, {feature_two})
+    never_added = _step(_link(), {feature_two})
     for position, step in enumerate([*steps, never_added]):
-        expected = {earlier.uuid for earlier in steps[:position] if owners(earlier) & owners(step)}
+        expected = {
+            earlier.uuid
+            for earlier in steps[:position]
+            if owners(earlier) & owners(step) and earlier.link.uuid != step.link.uuid
+        }
         assert coll.earlier_joins_sharing_destination(step, owner, index) == expected
     assert type(index) is dict
     assert coll.earlier_joins_sharing_destination(second, owner, index) == {first.uuid}

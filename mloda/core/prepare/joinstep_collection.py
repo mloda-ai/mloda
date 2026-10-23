@@ -9,6 +9,7 @@ class JoinStepCollection:
     def __init__(self) -> None:
         self.collection: dict[JoinStep, set[UUID]] = defaultdict(set)
         self._open: defaultdict[type[ComputeFramework], set[UUID]] = defaultdict(set)
+        self._tokens_by_link: defaultdict[UUID, set[UUID]] = defaultdict(set)
 
     def similar_dependent_joins_uuids(
         self, destination_framework: type[ComputeFramework], source_framework: type[ComputeFramework]
@@ -19,9 +20,11 @@ class JoinStepCollection:
     def add(self, join_step: JoinStep) -> None:
         destination, source = join_step.destination_framework, join_step.source_framework
         # Only a cross-framework join reads its tokens and replaces the open set; a same-framework
-        # join stores none and only adds itself.
+        # join stores none and only adds itself. Joins of its own link are ordered by runs_after_joins.
+        self._tokens_by_link[join_step.link.uuid].add(join_step.uuid)
         if destination != source:
-            self.collection[join_step] = self.similar_dependent_joins_uuids(destination, source)
+            open_tokens = self.similar_dependent_joins_uuids(destination, source)
+            self.collection[join_step] = open_tokens - self._tokens_by_link[join_step.link.uuid]
             self._open[destination] = {join_step.uuid}
             self._open[source] = {join_step.uuid}
         else:
@@ -45,7 +48,7 @@ class JoinStepCollection:
         owning_step_of: Mapping[UUID, UUID] | None = None,
         index: Mapping[UUID, list[JoinStep]] | None = None,
     ) -> set[UUID]:
-        """Uuids of earlier joins of any link whose destination shares a feature uuid, or owning step if given."""
+        """Uuids of earlier joins of other links whose destination shares a feature uuid, or owning step if given."""
         owner = owning_step_of or {}
         if index is None:
             index = self.joins_by_destination_owner(owning_step_of)
@@ -54,7 +57,8 @@ class JoinStepCollection:
             for step in index.get(key, ()):
                 if step == join_step:
                     break
-                uuids.update(step.get_uuids())
+                if step.link.uuid != join_step.link.uuid:
+                    uuids.update(step.get_uuids())
         return uuids
 
     def get_required_join_uuids(self, join_step: JoinStep) -> set[UUID]:

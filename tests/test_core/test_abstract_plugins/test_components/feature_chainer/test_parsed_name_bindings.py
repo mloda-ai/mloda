@@ -182,6 +182,10 @@ def _raising_converter(text: str) -> Any:
     raise RuntimeError(f"cannot convert {text}")
 
 
+def _none_converter(text: str) -> Any:
+    return None
+
+
 FORWARDED_FEATURE_NAME = "sales__pca_auto_fwd_pnb770"
 
 
@@ -564,8 +568,8 @@ class TestNameResolution:
 
     @pytest.mark.parametrize(
         ("converter", "tag", "text"),
-        [(_raising_converter, "raisecv", "abc"), (int, "intcv", "x1")],
-        ids=["raising_converter", "int_on_non_numeric_text"],
+        [(_raising_converter, "raisecv", "abc"), (int, "intcv", "x1"), (_none_converter, "nonecv", "abc")],
+        ids=["raising_converter", "int_on_non_numeric_text", "none_returning_converter"],
     )
     def test_failing_converter_is_recorded_and_the_name_stays_owned(self, converter: Any, tag: str, text: str) -> None:
         resolution = _resolve(f"f0__{tag}_{text}", _converted_group(converter, tag, capture=r"\w+"))
@@ -768,6 +772,14 @@ class TestBoundValuesAreVisible:
         result = StrictNamedGroup.match_feature_group_criteria("f0__pca_strict_pnb770", Options())
 
         assert result is True
+
+    @pytest.mark.parametrize(("name", "expected"), [("f0__evcv_2", True), ("f0__evcv_1", False)])
+    def test_element_validator_sees_the_converted_value(self, name: str, expected: bool) -> None:
+        group = _converted_group(
+            int, "evcv", strict_validation=True, element_validator=lambda v: isinstance(v, int) and v > 1
+        )
+
+        assert group.match_feature_group_criteria(name, Options()) is expected
 
     def test_rejection_reason_reports_the_bound_value(self) -> None:
         """The diagnostic replay must not disagree with the match decision."""

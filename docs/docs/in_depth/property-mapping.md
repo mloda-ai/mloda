@@ -453,8 +453,11 @@ covers a secondary capture and an `element_validator`-only spec (one with no `al
 A key may declare `name_converter` (e.g. `int`): the captured text is converted, then validated
 (`allowed_values`, `element_validator`), seen by `match_guard` / `required_when`, and filled into
 `feature.options` as the converted value. A name agrees with a declared or forwarded value when it is
-numerically equal or equal as text. A raising converter is a rejected value (a recorded non-match). The
-converter must be pure and deterministic. The positional fallback, `NameResolution.value_for` and
+numerically equal, equal as text, or equal to the raw captured text. Agreement means no contradiction,
+not the same type: an explicit option is never rewritten, so a declared `5.0` stays `5.0`. A name-only
+request and an agreeing explicit option merge only for context keys. A raising converter, or one returning
+`None`, is a rejected value (a recorded non-match). The converter must be pure, deterministic and cheap
+(it runs on every resolution). The positional fallback, `NameResolution.value_for` and
 `_resolve_operation` stay text. `element_validator` / `allowed_values` are not reused because a validator
 returns a verdict, not a value.
 

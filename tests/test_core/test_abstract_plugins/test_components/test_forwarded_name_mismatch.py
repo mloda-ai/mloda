@@ -460,6 +460,28 @@ def _float_converter_group() -> type[FeatureChainParserMixin]:
     return type("FloatConverterCvmisGroup", (FeatureChainParserMixin,), namespace)
 
 
+RAW_KEY = "operation_rawcv"
+
+
+def _single_item_list(text: str) -> list[int]:
+    return [int(text)]
+
+
+def _split_digits(text: str) -> list[int]:
+    return [int(char) for char in text]
+
+
+def _raw_group(converter: Any) -> type[FeatureChainParserMixin]:
+    """Group key bound from `<src>__raw_<digits>_rawcv` through ``converter``."""
+    namespace = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": rf".*__raw_(?P<{RAW_KEY}>[0-9]+)_rawcv$",
+        "MIN_IN_FEATURES": 0,
+        "PROPERTY_MAPPING": {RAW_KEY: PropertySpec("Raw key", context=False, name_converter=converter)},
+    }
+    return type("RawConverterRawcvGroup", (FeatureChainParserMixin,), namespace)
+
+
 class TestNameConverterAgreement:
     """A declared or forwarded typed value agrees with a converted bound value; a contradiction still aborts."""
 
@@ -489,3 +511,56 @@ class TestNameConverterAgreement:
 
         with pytest.raises(ValueError, match="forward_group_exclude"):
             _float_converter_group().match_feature_group_criteria(FLOAT_FEATURE_NAME, child_options)
+
+    def test_declared_text_equal_to_the_raw_capture_matches(self) -> None:
+        options = Options(group={FLOAT_KEY: "1"})
+
+        assert _float_converter_group().match_feature_group_criteria("sales__fl_1_cvmis", options) is True
+
+    def test_forwarded_text_equal_to_the_raw_capture_matches(self) -> None:
+        child_options = _inherited_child_options({FLOAT_KEY: "1"})
+
+        assert _float_converter_group().match_feature_group_criteria("sales__fl_1_cvmis", child_options) is True
+
+    def test_declared_zero_padded_text_equal_to_the_raw_capture_matches(self) -> None:
+        options = Options(group={RAW_KEY: "05"})
+
+        assert _raw_group(int).match_feature_group_criteria("sales__raw_05_rawcv", options) is True
+
+    def test_contradiction_message_quotes_the_raw_capture(self) -> None:
+        options = Options(group={RAW_KEY: "06"})
+
+        with pytest.raises(ValueError, match="'05'"):
+            _raw_group(int).match_feature_group_criteria("sales__raw_05_rawcv", options)
+
+    @pytest.mark.parametrize(
+        ("converter", "name", "declared"),
+        [
+            (_single_item_list, "sales__raw_1_rawcv", [1]),
+            (_split_digits, "sales__raw_12_rawcv", [1, 2]),
+        ],
+        ids=["single_element", "multi_element"],
+    )
+    def test_container_converter_with_an_agreeing_declared_list_matches(
+        self, converter: Any, name: str, declared: list[int]
+    ) -> None:
+        options = Options(group={RAW_KEY: declared})
+
+        assert _raw_group(converter).match_feature_group_criteria(name, options) is True
+
+    @pytest.mark.parametrize(
+        ("converter", "name", "declared"),
+        [
+            (_single_item_list, "sales__raw_1_rawcv", [2]),
+            (_split_digits, "sales__raw_12_rawcv", [1, 3]),
+            (_split_digits, "sales__raw_12_rawcv", [1]),
+        ],
+        ids=["single_element", "multi_element", "length_differs"],
+    )
+    def test_container_converter_with_a_contradicting_declared_list_raises(
+        self, converter: Any, name: str, declared: list[int]
+    ) -> None:
+        options = Options(group={RAW_KEY: declared})
+
+        with pytest.raises(ValueError):
+            _raw_group(converter).match_feature_group_criteria(name, options)

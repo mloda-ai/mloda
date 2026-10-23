@@ -754,10 +754,5 @@ class TestPropertySpecNameConverter:
 
     def test_non_callable_name_converter_raises(self) -> None:
         not_callable: Any = "not callable"
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\).*name_converter must be callable"):
             property_spec("d", name_converter=not_callable)
-
-    def test_non_callable_name_converter_raises_on_direct_construction(self) -> None:
-        not_callable: Any = 5
-        with pytest.raises(ValueError):
-            PropertySpec("d", name_converter=not_callable)

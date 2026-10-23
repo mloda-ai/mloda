@@ -651,7 +651,11 @@ class FeatureChainParser:
                 bindings[key] = text
                 continue
             try:
-                bindings[key] = converter(text)
+                converted = converter(text)
+                if converted is None:
+                    rejected[key] = text
+                    continue
+                bindings[key] = converted
             except Exception as exc:
                 if is_match_abort(exc):
                     raise

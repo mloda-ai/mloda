@@ -5,7 +5,7 @@ import importlib
 from abc import abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 import pandas as pd
 import pytest
@@ -49,6 +49,10 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_s
 )
 
 SENTINEL = [{"toyfmt_ld": 111}, {"toyfmt_ld": 222}]
+
+
+_T = TypeVar("_T")
+_G = TypeVar("_G", bound=FeatureGroup)
 
 
 def _toy_operation() -> Any:
@@ -316,18 +320,94 @@ def gc_disabled() -> Iterator[None]:
 
 
 class TestImplementationDefinition:
-    def test_a_rejected_subclass_is_not_a_loaded_implementation_before_it_is_collected(self, gc_disabled: None) -> None:
+    @pytest.mark.parametrize("case", ["missing_feature_group", "mismatched_feature_group"])
+    def test_a_rejected_subclass_is_not_a_loaded_implementation_before_it_is_collected(
+        self, case: str, gc_disabled: None
+    ) -> None:
         with pytest.raises(TypeError, match="feature_group"):
+            if case == "missing_feature_group":
 
-            class _RejectedImpl(Implementation[Any]):
+                class _RejectedImpl(Implementation[Any]):
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            else:
+
+                class _RejectedImpl(Implementation[OpToyFG]):  # type: ignore[no-redef]
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+        assert all(impl.__name__ != "_RejectedImpl" for impl in loaded_implementations())
+        assert PreFilterPlugins({PythonDictFramework}).implementations is not None
+
+    @pytest.mark.parametrize("case", ["inherited", "other_generic_base", "walk_past_orig_bases", "typevar"])
+    def test_feature_group_must_match_the_parameterized_group(self, case: str) -> None:
+        class _Mixin(Generic[_T]):
+            pass
+
+        class _BaseImpl(Implementation[OpToyFG]):
+            feature_group = OpToyFG
+            compute_framework = PythonDictFramework
+
+            @classmethod
+            def calculate(cls, *args: Any) -> Any:
+                return None
+
+        if case == "inherited":
+            with pytest.raises(TypeError, match="feature_group") as excinfo:
+
+                class _Child(_BaseImpl):
+                    feature_group = ToySourceFG  # type: ignore[assignment]
+
+            assert "OpToyFG" in str(excinfo.value)
+        elif case == "other_generic_base":
+            with pytest.raises(TypeError, match="feature_group"):
+
+                class _Multi(_Mixin[int], Implementation[OpToyFG]):
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+        elif case == "walk_past_orig_bases":
+
+            class _Mid(Implementation[OpToyFG], _Mixin[int]):
+                pass
+
+            with pytest.raises(TypeError, match="feature_group"):
+
+                class _Leaf(_Mid, _Mixin[int]):
+                    feature_group = ToySourceFG
+                    compute_framework = PythonDictFramework
+
+                    @classmethod
+                    def calculate(cls, *args: Any) -> Any:
+                        return None
+
+            del _Mid
+        else:
+
+            class _Free(Implementation[_G]):
+                feature_group = ToySourceFG
                 compute_framework = PythonDictFramework
 
                 @classmethod
                 def calculate(cls, *args: Any) -> Any:
                     return None
 
-        assert all(impl.__name__ != "_RejectedImpl" for impl in loaded_implementations())
-        assert PreFilterPlugins({PythonDictFramework}).implementations is not None
+            assert _Free in loaded_implementations()
+            del _Free
+        del _BaseImpl
+        gc.collect()
 
     @pytest.mark.parametrize("missing", ["feature_group", "compute_framework", "both"])
     def test_concrete_subclass_missing_an_attribute_raises(self, missing: str) -> None:

@@ -2,6 +2,7 @@
 
 import inspect
 import types
+import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -32,10 +33,30 @@ def _serves_groups(group: Any) -> bool:
     return isinstance(group, type) and issubclass(group, (SourceFeatureGroup, OperationFeatureGroup))
 
 
+def _declared_group(cls: Any) -> type | None:
+    """The concrete G of the nearest Implementation[G] base, None when unparameterized or not a class."""
+    for klass in cls.__mro__:
+        for alias in klass.__dict__.get("__orig_bases__", ()):
+            if typing.get_origin(alias) is Implementation:
+                arg = typing.get_args(alias)[0]
+                return arg if isinstance(arg, type) and arg is not Any else None
+    return None
+
+
+def _matches_declared_group(cls: Any, group: Any) -> bool:
+    declared = _declared_group(cls)
+    return declared is None or issubclass(group, declared)
+
+
 def _names_a_pair(cls: Any) -> bool:
     group = getattr(cls, "feature_group", None)
     framework = getattr(cls, "compute_framework", None)
-    return _serves_groups(group) and isinstance(framework, type) and issubclass(framework, ComputeFramework)
+    return (
+        _serves_groups(group)
+        and _matches_declared_group(cls, group)
+        and isinstance(framework, type)
+        and issubclass(framework, ComputeFramework)
+    )
 
 
 class Implementation(ABC, Generic[G]):
@@ -50,11 +71,17 @@ class Implementation(ABC, Generic[G]):
         super().__init_subclass__(**kwargs)
         if not _is_concrete(cls):
             return
-        group = getattr(cls, "feature_group", None)
+        group: Any = getattr(cls, "feature_group", None)
         framework = getattr(cls, "compute_framework", None)
         if not _serves_groups(group):
             raise TypeError(
                 f"{cls.__name__} must set feature_group to a SourceFeatureGroup or OperationFeatureGroup subclass."
+            )
+        declared = _declared_group(cls)
+        if declared is not None and not issubclass(group, declared):
+            raise TypeError(
+                f"{cls.__name__}.feature_group must be {declared.__name__} or a subclass "
+                f"(Implementation[{declared.__name__}]), got {group.__name__}."
             )
         if not (isinstance(framework, type) and issubclass(framework, ComputeFramework)):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")

@@ -366,18 +366,19 @@ def check_required_when(
         except Exception as exc:
             if is_match_abort(exc):
                 raise
-            predicate_label = getattr(predicate, "__name__", repr(predicate))
+            predicate_name = getattr(predicate, "__name__", repr(predicate))
             logger.debug(
                 "required_when predicate %s for '%s' %s; treating feature group %s as a non-match.",
-                predicate_label,
+                predicate_name,
                 key,
                 contained_raise_reason(exc),
                 owner_name,
             )
             if contained_raise_log_level(exc) != logging.DEBUG:
+                # No repr fallback here: a partial's repr would echo its bound arguments at WARNING.
                 logger.warning(
                     "required_when predicate %s for '%s' raised %s; treating feature group %s as a non-match.",
-                    predicate_label,
+                    getattr(predicate, "__name__", type(predicate).__name__),
                     key,
                     type(exc).__name__,
                     owner_name,

@@ -335,7 +335,7 @@ class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
 
 `expected` names what the guard accepts, so a rejection is reported in the resolution-failure output instead of staying a silent non-match.
 
-The guard is only called when the option is present (not None). Validators must be pure functions, since they may be called several times during resolution. If the guard raises, the value counts as rejected (match returns False).
+The guard is only called when the option is present (not None). Validators must be pure functions, since they may be called several times during resolution. If the guard raises, the value counts as rejected (match returns False), unless the raise is marked with `escalate_match_abort`.
 
 The full model, which invariant fires at which moment, the precedence between the two callables, and what a validator receives for each container type, lives in one place: [PROPERTY_MAPPING Configuration](property-mapping.md).
 

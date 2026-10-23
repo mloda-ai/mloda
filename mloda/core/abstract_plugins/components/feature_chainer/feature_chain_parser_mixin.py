@@ -275,8 +275,8 @@ class FeatureChainParserMixin:
         ``PropertySpec.match_guard`` callable, the guard is called with the raw
         option value. Returning a falsy value causes this method to return False. If
         the guard raises an exception, it is caught and the value is treated as
-        invalid, unless the raise is marked with ``escalate_match_abort``. See the module docstring for the full
-        validation design.
+        invalid, unless the raise is marked with ``escalate_match_abort``. See the
+        module docstring for the full validation design.
 
         Also enforces MIN_IN_FEATURES / MAX_IN_FEATURES, counting the sources the name
         carries when it identifies the group, else the in_features option value. A

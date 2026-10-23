@@ -5,6 +5,7 @@ A retained record holding the object would pin exc.__traceback__ and through it 
 
 from __future__ import annotations
 
+import functools
 import logging
 from collections.abc import Mapping
 from typing import Any
@@ -49,6 +50,10 @@ def _clr975_validator_raises_type_error(value: Any) -> bool:
 
 
 def _clr975_predicate_raises_unexpected(options: Any) -> bool:
+    raise Clr975Exploded(CLR975_PREDICATE_BROKEN_MESSAGE)
+
+
+def _clr975_partial_predicate_raises_unexpected(secret: str, options: Any) -> bool:
     raise Clr975Exploded(CLR975_PREDICATE_BROKEN_MESSAGE)
 
 
@@ -268,6 +273,18 @@ class TestRequiredWhenRaiseLogsNoExceptionObject:
         assert "raised " in messages[0], f"the message must still read as a contained raise: {messages[0]}"
         debug_text = [r.getMessage() for r in _module_records(caplog, GUARDS_LOGGER_NAME) if r.levelno == logging.DEBUG]
         assert any(CLR975_PREDICATE_BROKEN_MESSAGE in text for text in debug_text), "DEBUG keeps the reason"
+
+    def test_partial_predicate_keeps_bound_argument_out_of_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        bound = "clr975-bound-secret"
+        predicate = functools.partial(_clr975_partial_predicate_raises_unexpected, bound)
+
+        assert _run_predicate(predicate, caplog) is False
+
+        messages = [record.getMessage() for record in _raise_records(caplog, GUARDS_LOGGER_NAME, logging.WARNING)]
+        assert len(messages) == 1, f"exactly one WARNING record reports the raise, got: {messages}"
+        assert bound not in messages[0], f"the bound argument stays out of WARNING logs: {messages[0]}"
+        assert CLR975_PREDICATE_KEY in messages[0], f"the key must stay in the message: {messages[0]}"
+        assert "Clr975Exploded" in messages[0], f"the exception type must stay in the message: {messages[0]}"
 
     def test_debug_message_still_names_key_and_exception_type(self, caplog: pytest.LogCaptureFixture) -> None:
         _run_predicate(_clr975_predicate_raises_type_error, caplog)

@@ -675,3 +675,25 @@ def test_unrelated_dict_options_are_still_recursed_not_built() -> None:
     processed = process_nested_features({"scaler": {"nested": {"name": "not_a_source"}}})
 
     assert processed["scaler"] == {"nested": {"name": "not_a_source"}}
+
+
+@pytest.mark.parametrize("with_fields", [True, False], ids=["with_fields", "defaults"])
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param({}, id="plain"),
+        pytest.param({"in_features": ["age"]}, id="in_features"),
+        pytest.param({"group_options": {"threshold": 0.5}}, id="group_options"),
+    ],
+)
+def test_load_features_keep_index_and_index(extra: dict[str, Any], with_fields: bool) -> None:
+    """keep_index and index reach the Feature in each loader branch; absent they default to False and None."""
+    from mloda.user import Index
+
+    fields: dict[str, Any] = {"keep_index": True, "index": ["id"]} if with_fields else {}
+
+    feature = load_features_from_config(json.dumps([{"name": "f", **fields, **extra}]))[0]
+
+    assert isinstance(feature, Feature)
+    assert feature.keep_index is with_fields
+    assert feature.index == (Index(("id",)) if with_fields else None)

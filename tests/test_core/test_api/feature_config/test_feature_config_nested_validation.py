@@ -145,6 +145,8 @@ TOP_LEVEL_ONLY_FIELDS: list[tuple[str, Any]] = [
     ("context_options", {"metadata": "test"}),
     ("propagate_context_keys", ["metadata"]),
     ("cascade_context_keys", ["metadata"]),
+    ("keep_index", True),
+    ("index", ["id"]),
 ]
 
 

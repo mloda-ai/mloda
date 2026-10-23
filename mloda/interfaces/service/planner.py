@@ -223,7 +223,7 @@ class Planner:
         if isinstance(parsed, list):
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))
         request_names = [_item_name(item) for item in request["features"]]
-        denied = self._denied(request_names)
+        denied = self._denied(request_names, self._index_entries(request))
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)
@@ -352,16 +352,24 @@ class Planner:
             return None
         return error_result("validation_failed", "An inline set is named like a configured source.", details)
 
-    def _denied(self, names: Sequence[str]) -> dict[str, Any] | None:
-        denied = [(index, name) for index, name in enumerate(names) if self._catalog.is_denied(name)]
+    @staticmethod
+    def _index_entries(request: Any) -> list[tuple[str, str]]:
+        """Each declared index column of a feature config item with its pointer."""
+        return [
+            (f"/features/{i}/index/{j}", column)
+            for i, item in enumerate(request["features"])
+            if isinstance(item, dict)
+            for j, column in enumerate(item.get("index", ()))
+        ]
+
+    def _denied(self, names: Sequence[str], index_entries: Sequence[tuple[str, str]]) -> dict[str, Any] | None:
+        entries = [(f"/features/{index}", name) for index, name in enumerate(names)]
+        denied = [(path, name) for path, name in [*entries, *index_entries] if self._catalog.is_denied(name)]
         if not denied:
             return None
         alternatives = [alt for _, name in denied for alt in self._settings.alternatives.get(name, ())]
         extra: dict[str, Any] = {"alternatives": list(dict.fromkeys(alternatives))} if alternatives else {}
-        details = [
-            {"path": f"/features/{index}", "problem": "policy_denied", "message": _DENIED_MESSAGE}
-            for index, _ in denied
-        ]
+        details = [{"path": path, "problem": "policy_denied", "message": _DENIED_MESSAGE} for path, _ in denied]
         return error_result("policy_denied", _DENIED_MESSAGE, details, **extra)
 
     def _unresolved(
@@ -421,14 +429,21 @@ class Planner:
     def _described(self, planned: PlannedRequest) -> dict[str, Any]:
         expires = math.floor(self._clock()) + self._settings.plan_ttl_seconds
         steps = zip(planned.steps, planned.aliases)
+        kept = (
+            column
+            for feature in planned.parsed.features
+            if isinstance(feature, Feature) and feature.keep_index and feature.index is not None
+            for column in feature.index.index
+        )
+        names = tuple(dict.fromkeys([*planned.names, *kept]))
         return {
             "plan_id": self._sign(planned.parsed.normalized, planned.digest, expires),
             "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "normalized_request": planned.parsed.normalized,
             "steps": [_step_record(index, step, alias) for index, (step, alias) in enumerate(steps, 1)],
-            "lineage": {name: sorted(self._lineage(name, planned.producers, frozenset())) for name in planned.names},
+            "lineage": {name: sorted(self._lineage(name, planned.producers, frozenset())) for name in names},
             "estimate": planned.estimate,
-            "egress": self._egress(planned.names, planned.producers),
+            "egress": self._egress(names, planned.producers),
             "policy": {"verdict": "allowed"},
         }
 

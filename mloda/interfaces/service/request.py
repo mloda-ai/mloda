@@ -90,6 +90,9 @@ class ParsedRequest:
 def _feature_config_def() -> dict[str, Any]:
     schema = copy.deepcopy(feature_config_schema())
     schema["properties"]["name"] = dict(_NAME_SCHEMA)
+    schema["properties"]["index"]["items"] = dict(_NAME_SCHEMA)
+    schema["if"] = {"properties": {"keep_index": {"const": True}}, "required": ["keep_index"]}
+    schema["then"] = {"required": ["index"]}
     return schema
 
 
@@ -162,6 +165,10 @@ def _conforms(value: Any, schema: Mapping[str, Any]) -> bool:
         return False
     if isinstance(value, str) and not schema.get("minLength", 0) <= len(value) <= schema.get("maxLength", len(value)):
         return False
+    if isinstance(value, list) and len(value) < schema.get("minItems", 0):
+        return False
+    if isinstance(value, list) and schema.get("uniqueItems") and len({json.dumps(item) for item in value}) < len(value):
+        return False
     if isinstance(value, list) and "items" in schema:
         return all(_conforms(item, schema["items"]) for item in value)
     return True
@@ -194,6 +201,8 @@ def _feature_problems(features: Any) -> list[Problem]:
         path = _pointer("features", index)
         if isinstance(item, dict):
             problems.extend(_object_problems(item, path, _FEATURE_CONFIG["properties"], _FEATURE_CONFIG["required"]))
+            if item.get("keep_index") is True and "index" not in item:
+                problems.append(_invalid(path, "'keep_index' requires 'index' so the returned key columns are known."))
         elif not _conforms(item, _NAME_SCHEMA):
             problems.append(
                 _invalid(path, f"A feature is a name of 1 to {MAX_NAME_LENGTH} characters or a feature config object.")

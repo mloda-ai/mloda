@@ -11,6 +11,7 @@ from typing import Any
 # imports load_features_from_config from this module, so a facade import here
 # creates a circular import (guarded by test_import_isolation.py).
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.api.feature_config.parser import parse_json
 from mloda.core.api.feature_config.models import (
@@ -153,6 +154,11 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                     validate_no_in_features_collision(item.context_options, "context_options")
                 validate_single_in_features_container(item.group_options, item.context_options)
 
+                key_kwargs: dict[str, Any] = {
+                    "keep_index": item.keep_index,
+                    "index": Index(tuple(item.index)) if item.index else None,
+                }
+
                 # Check if group_options or context_options exist
                 if item.group_options is not None or item.context_options is not None:
                     # Use new Options architecture with group/context separation
@@ -176,6 +182,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                         options=options,
                         feature_group=item.feature_group,
                         implementation=item.implementation,
+                        **key_kwargs,
                     )
                     features.append(feature)
                 # Check if in_features exists and create Options accordingly
@@ -189,6 +196,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                         options=options,
                         feature_group=item.feature_group,
                         implementation=item.implementation,
+                        **key_kwargs,
                     )
                     features.append(feature)
                 else:
@@ -199,6 +207,7 @@ def load_features_from_config(config_str: str, format: str = "json") -> list[Fea
                         options=processed_options,
                         feature_group=item.feature_group,
                         implementation=item.implementation,
+                        **key_kwargs,
                     )
                     features.append(feature)
         else:

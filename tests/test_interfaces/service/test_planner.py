@@ -548,6 +548,54 @@ class TestEgress:
 
         assert _success(result)["egress"] == {"preview_columns": ["customer_id", DERIVED], "withheld": []}
 
+    def test_keep_index_index_column_is_listed_and_withheld_by_classification(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "personal", "income": "internal"}
+        request = {"features": [{"name": "income", "keep_index": True, "index": ["customer_id"]}]}
+
+        egress = _success(_explain(tmp_path, request, classification=classification))["egress"]
+
+        assert egress["preview_columns"] == ["income"]
+        assert egress["withheld"] == [{"column": "customer_id", "reason": "classification: personal"}]
+
+    def test_keep_index_index_column_is_previewed_when_allowed(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "internal", "income": "internal"}
+        request = {"features": [{"name": "income", "keep_index": True, "index": ["customer_id"]}]}
+
+        egress = _success(_explain(tmp_path, request, classification=classification))["egress"]
+
+        assert sorted(egress["preview_columns"]) == ["customer_id", "income"]
+        assert egress["withheld"] == []
+
+    def test_keep_index_lineage_traces_the_kept_column(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "keep_index": True, "index": ["customer_id"]}]}
+
+        lineage = _success(_explain(tmp_path, request))["lineage"]
+
+        assert lineage["customer_id"] == ["sales.customer_id"]
+
+    def test_index_without_keep_index_is_not_in_egress(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "internal", "income": "internal"}
+        request = {"features": [{"name": "income", "keep_index": False, "index": ["customer_id"]}]}
+
+        egress = _success(_explain(tmp_path, request, classification=classification))["egress"]
+
+        assert egress == {"preview_columns": ["income"], "withheld": []}
+
+    def test_index_without_keep_index_is_still_deny_checked(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "index": ["mcp4_salary"]}]}
+
+        error = _error(_explain(tmp_path, request), "policy_denied")
+
+        assert _has_detail(error, path="/features/0/index/0")
+
+    def test_key_column_also_requested_appears_once_in_egress(self, tmp_path: Path) -> None:
+        classification = {"customer_id": "internal", "income": "internal"}
+        request = {"features": ["customer_id", {"name": "income", "keep_index": True, "index": ["customer_id"]}]}
+
+        egress = _success(_explain(tmp_path, request, classification=classification))["egress"]
+
+        assert egress == {"preview_columns": ["customer_id", "income"], "withheld": []}
+
 
 class TestRowLimits:
     def test_source_over_max_rows_is_limit_exceeded(self, tmp_path: Path) -> None:
@@ -857,3 +905,33 @@ class TestLock:
         assert lock_probes
         assert not any(lock_probes)
         assert _lock_free_elsewhere()
+
+
+class TestKeepIndex:
+    def test_keep_index_without_index_is_validation_failed(self, tmp_path: Path) -> None:
+        request = {"features": ["customer_id", {"name": "income", "keep_index": True}]}
+
+        error = _error(_explain(tmp_path, request), "validation_failed")
+
+        assert _has_detail(error, path="/features/1")
+
+    def test_denied_column_in_index_is_policy_denied_at_its_pointer(
+        self, tmp_path: Path, denied_calls: list[str]
+    ) -> None:
+        request = {"features": [{"name": "income", "keep_index": True, "index": ["customer_id", "mcp4_salary"]}]}
+
+        result = _explain(tmp_path, request)
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path="/features/0/index/1")
+        assert denied_calls == []
+
+    def test_index_column_no_group_provides_is_an_internal_error_without_tables(self, tmp_path: Path) -> None:
+        request = {"features": [{"name": "income", "keep_index": True, "index": ["no_such_col_mcp4"]}]}
+
+        result = _explain(tmp_path, request)
+
+        _error(result, "internal")
+        assert "tables" not in result
+        json.dumps(result)
+        _assert_no_paths(result, tmp_path, "sales.csv")

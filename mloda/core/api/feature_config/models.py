@@ -80,6 +80,8 @@ class FeatureConfig:
     column_index: int | None = None
     feature_group: str | None = field(default=None, metadata={"nested": True})
     implementation: str | list[str] | None = None
+    keep_index: bool = False
+    index: list[str] | None = None
 
     def __post_init__(self) -> None:
         """Validate the invariants shared by the top-level and the nested feature dict."""
@@ -109,6 +111,14 @@ class FeatureConfig:
                 )
             if self.column_index < 0:
                 raise ValueError("'column_index' must be a non-negative integer, got a negative integer")
+        if not isinstance(self.keep_index, bool):
+            raise ValueError(f"'keep_index' must be a boolean, got {describe_offender(self.keep_index)}")
+        if self.index is not None:
+            validate_context_keys(self.index, "index")
+            if not self.index:
+                raise ValueError("'index' must be a non-empty array of non-empty strings")
+            if len(set(self.index)) != len(self.index):
+                raise ValueError("'index' must not repeat a column")
         validate_feature_group_scope(self.feature_group)
         validate_feature_group_not_in_options(self.options, "options")
         validate_feature_group_not_in_options(self.group_options, "group_options")
@@ -234,6 +244,8 @@ def feature_config_schema() -> dict[str, Any]:
             "cascade_context_keys": {"type": "array", "items": {"type": "string"}},
             "column_index": {"type": "integer", "minimum": 0},
             "feature_group": {"type": "string", "minLength": 1},
+            "keep_index": {"type": "boolean"},
+            "index": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": True},
             "implementation": {
                 "oneOf": [
                     {"type": "string", "minLength": 1},

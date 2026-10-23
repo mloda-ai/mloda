@@ -130,7 +130,7 @@ namespaces = true
 include-package-data = true
 
 [tool.bandit]
-# Bandit matches entries as substrings of scanned paths, so anchor each to the repo root.
+# Bandit matches entries as substrings of scanned paths; anchored to "./" because tox scans "." from the repo root.
 exclude_dirs = [
     "./venv/",
     "./.venv/",

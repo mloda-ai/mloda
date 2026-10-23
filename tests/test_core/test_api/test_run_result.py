@@ -501,8 +501,79 @@ class RunResultAnyFrameworkProbe(FeatureGroup):
 _ANY_PLUGINS = PluginCollector.enabled_feature_groups({RunResultAnyFrameworkProbe})
 
 
+class RunResultSecretProbe(FeatureGroup):
+    """Root source whose column value depends on a nested credential-shaped group option."""
+
+    @classmethod
+    def input_data(cls) -> BaseInputData | None:
+        return DataCreator({"run_result_secret_value"})
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        assert features.options is not None
+        return pd.DataFrame({"run_result_secret_value": [features.options.get("cfg")["password"]]})
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+_SECRET_PLUGINS = PluginCollector.enabled_feature_groups({RunResultSecretProbe})
+_SECRET_A = "aaaaaaaa"  # nosec B105
+_SECRET_B = "bbbbbbbb"  # nosec B105
+
+
+def _secret_feature(password: str) -> Feature:
+    return Feature("run_result_secret_value", options={"cfg": {"password": password}})
+
+
+def _run_secret_probe() -> Any:
+    return mlodaAPI.run_all(
+        [_secret_feature(_SECRET_A), _secret_feature(_SECRET_B)],
+        compute_frameworks=[PandasDataFrame],
+        parallelization_modes={ParallelizationMode.SYNC},
+        plugin_collector=_SECRET_PLUGINS,
+    )
+
+
 class TestRunResultFrameFor:
     """frame_for finds the frame whose compute step requested the feature."""
+
+    def test_masked_mappings_with_different_secret_values_resolve_to_their_own_frame(self) -> None:
+        results = _run_secret_probe()
+
+        assert results.frame_for(_secret_feature(_SECRET_A))["run_result_secret_value"].tolist() == [_SECRET_A]
+        assert results.frame_for(_secret_feature(_SECRET_B))["run_result_secret_value"].tolist() == [_SECRET_B]
+
+    def test_a_str_request_stays_ambiguous_for_masked_mappings(self) -> None:
+        with pytest.raises(ValueError, match="ambiguous") as excinfo:
+            _run_secret_probe().frame_for("run_result_secret_value")
+
+        assert _SECRET_A not in str(excinfo.value)
+        assert _SECRET_B not in str(excinfo.value)
+
+    def test_match_digests_stay_out_of_repr_and_the_snapshot(self) -> None:
+        plan = _run_secret_probe().plan
+
+        steps = [s for s in plan if s.step_kind == "compute"]
+        digests = {d for s in steps for d in s._match_digests.values()}
+        assert len(digests) == 2
+        for step in steps:
+            text = repr(step) + str(step.feature_set_options)
+            assert all(d not in text for d in digests)
+            assert _SECRET_A not in text
+            assert _SECRET_B not in text
+
+    def test_unmatched_digests_fall_back_to_ambiguous_not_no_frame(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import mloda.core.api.plan_info as plan_info
+
+        results = _run_secret_probe()
+        assert results.frame_for(_secret_feature(_SECRET_A))["run_result_secret_value"].tolist() == [_SECRET_A]
+
+        monkeypatch.setattr(plan_info, "_PROCESS_KEY", b"\x01" * 32, raising=False)
+
+        with pytest.raises(ValueError, match="ambiguous"):
+            results.frame_for(_secret_feature(_SECRET_A))
 
     def test_each_name_in_two_groups_returns_its_own_frame(self) -> None:
         results = _run_all(_TWO_GROUP_FEATURES)

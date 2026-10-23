@@ -1,12 +1,17 @@
+import hashlib
 import heapq
+import hmac
+import secrets
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
 from mloda.core.abstract_plugins.components.base_feature_group_version import BaseFeatureGroupVersion
-from mloda.core.abstract_plugins.components.credential_scrub import _mask_secret_keys, redact_option_value
+from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_KEY, _mask_secret_keys, redact_option_value
+from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
 )
@@ -137,6 +142,7 @@ class PlanStep:
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
     _neutral: bool = field(default=False, compare=False)
     _hash_options: Options | None = field(default=None, compare=False)
+    _match_digests: Mapping[Any, str] = field(default_factory=dict, compare=False, hash=False, repr=False)
 
     @property
     def content_options(self) -> Options | None:
@@ -191,6 +197,8 @@ class PlanStep:
 
 
 def _snapshot_option(key: Any, value: Any, format_group_names: Iterable[str]) -> Any:
+    if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
+        return "***"
     if not isinstance(value, Mapping):
         return _safe_deepcopy(value, {})
     if key in format_group_names:
@@ -202,6 +210,33 @@ def snapshot_group(group: Mapping[Any, Any]) -> dict[Any, Any]:
     """Snapshot a group mapping with the plan-step redaction rule."""
     names = concrete_format_groups().keys()
     return {key: _snapshot_option(key, value, names) for key, value in group.items()}
+
+
+_PROCESS_KEY = secrets.token_bytes(32)
+
+
+def _canonical(value: Any, ancestors: frozenset[int] = frozenset()) -> Any:
+    """Plain-data form of a value: every Mapping a dict, a Credential its data, cycles cut."""
+    if isinstance(value, Credential):
+        value = value.data
+    if isinstance(value, (Mapping, list, tuple)):
+        if id(value) in ancestors:
+            return "<cycle>"
+        inner = ancestors | {id(value)}
+        if isinstance(value, Mapping):
+            return {key: _canonical(item, inner) for key, item in value.items()}
+        return type(value)(_canonical(item, inner) for item in value) if type(value) in (list, tuple) else value
+    return value
+
+
+def match_digests(group: Mapping[Any, Any]) -> dict[Any, str]:
+    """Per-process keyed digests of the group values whose snapshot hides part of the raw value."""
+    names = concrete_format_groups().keys()
+    return {
+        key: hmac.new(_PROCESS_KEY, stable_text(_canonical(value)).encode(), hashlib.sha256).hexdigest()
+        for key, value in group.items()
+        if not _deep_equal(_snapshot_option(key, value, names), value)
+    }
 
 
 def build_plan_steps(
@@ -336,6 +371,7 @@ def build_plan_steps(
                     input_feature_names=input_feature_names,
                     feature_set_options=snapshot,
                     step_uuid=step.uuid,
+                    _match_digests=match_digests(options.group) if options else {},
                     input_feature_edges={
                         name: tuple(sorted(inputs))
                         for name, inputs in (step.features.declared_input_feature_edges or {}).items()

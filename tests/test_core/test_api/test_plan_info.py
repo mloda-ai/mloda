@@ -1224,6 +1224,22 @@ class TestPlanStepFeatureSetOptions:
         assert step.feature_set_options is not None
         assert step.feature_set_options.group["plan_info_nested"] == {"table": "A", "api_key": "***"}
 
+    def test_the_snapshot_masks_a_top_level_credential_key(self) -> None:
+        explained = mloda.explain(
+            [
+                Feature(
+                    "plan_info_nested_value", options={"plan_info_nested": {"table": "A"}, "api_key": "plan-top-key"}
+                )
+            ],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=_NESTED_OPTIONS_PLUGINS,
+        )
+
+        step = next(s for s in explained if s.feature_group is PlanInfoNestedOptionsSource)
+        assert step.feature_set_options is not None
+        assert step.feature_set_options.group["api_key"] == "***"
+        assert "plan-top-key" not in str(step.feature_set_options)
+
     def test_feature_set_options_is_excluded_from_equality(self) -> None:
         """Excluded like step_uuid, so a non-scalar group value cannot make plan comparison raise."""
         step = PlanStep(
@@ -1446,6 +1462,29 @@ class TestPlanStepDataAccessIdentity:
         assert len(recorder.options_text) == 2
         assert all(secret not in text and db not in text for text in recorder.options_text)
         assert result.frame_for(feature)["PlanInfoPointerConsumer"] == [1]
+
+    def test_frame_for_tells_two_plain_dict_pointers_to_different_files_apart(self, tmp_path: Path) -> None:
+        dbs = []
+        for name, value in (("a", 1), ("b", 2)):
+            db = str(tmp_path / f"{name}.db")
+            conn = sqlite3.connect(db)
+            conn.execute("CREATE TABLE t (plan_info_pointer_col INTEGER)")
+            conn.execute("INSERT INTO t VALUES (?)", (value,))
+            conn.commit()
+            conn.close()
+            dbs.append(db)
+        features = [Feature("plan_info_pointer_col", options={"SqliteFG": {"sqlite": db}}) for db in dbs]
+
+        result = mloda.run_all(
+            features,
+            compute_frameworks=[PythonDictFramework],
+            plugin_collector=PluginCollector.enabled_feature_groups({SqliteFG}),
+        )
+
+        assert result.frame_for(features[0])["plan_info_pointer_col"] == [1]
+        assert result.frame_for(features[1])["plan_info_pointer_col"] == [2]
+        for step in result.plan:
+            assert all(db not in str(step.feature_set_options) for db in dbs)
 
     def test_a_format_group_identity_naming_no_source_is_flagged_as_fallback(self) -> None:
         pointer = {PlanInfoTypeNameIdentityFormat.__name__: {"plan_info_type_name_col": [1]}}

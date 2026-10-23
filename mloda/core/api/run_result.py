@@ -7,7 +7,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
-from mloda.core.api.plan_info import PlanStep, snapshot_group
+from mloda.core.api.plan_info import PlanStep, match_digests, snapshot_group
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -65,6 +65,7 @@ class RunResult(list[Any]):
         if not isinstance(feature, str) and feature.connection is not None:
             handle = self._connection_handles.get(id(feature.connection))
             group = {**(group or {}), "connection_handle": handle}
+        digests = {} if isinstance(feature, str) else match_digests(feature.options.group)
         pinned = None if isinstance(feature, str) else feature.compute_frameworks
         frames = self.frames()
         pairs = [(step, frame) for step, frame in frames if name in step.requested_feature_names]
@@ -75,6 +76,13 @@ class RunResult(list[Any]):
                 if all(k in _group_of(step) and _deep_equal(_group_of(step)[k], v) for k, v in group.items())
                 and (not pinned or step.compute_framework in pinned)
             ]
+            if len(pairs) > 1:
+                narrowed = [
+                    (step, frame)
+                    for step, frame in pairs
+                    if all(step._match_digests.get(k) == d for k, d in digests.items())
+                ]
+                pairs = narrowed or pairs
             fewest = min((len(_group_of(step)) for step, _ in pairs), default=0)
             pairs = [(step, frame) for step, frame in pairs if len(_group_of(step)) == fewest]
         if len(pairs) == 1:

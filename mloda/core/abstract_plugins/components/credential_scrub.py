@@ -198,19 +198,23 @@ def _redact_recursive(value: Any, ancestors: set[int]) -> Any:
 _SECRET_KEY = re.compile(r"[\w-]*" + _SECRET_NAME, re.IGNORECASE)
 
 
-def _mask_secret_keys(value: Any) -> Any:
+def _mask_secret_keys(value: Any, ancestors: frozenset[int] = frozenset()) -> Any:
     """Replace the value under every credential-shaped key with ``'***'``, walking mappings, lists and tuples."""
     from mloda.core.abstract_plugins.components.credential import RegisteredCredential  # credential imports us
 
     if isinstance(value, RegisteredCredential):
         return value
+    if isinstance(value, (Mapping, list, tuple)):
+        if id(value) in ancestors:
+            return "<cycle>"
+        inner = ancestors | {id(value)}
     if isinstance(value, Mapping):
         return {
-            key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item)
+            key: "***" if isinstance(key, str) and _SECRET_KEY.fullmatch(key) else _mask_secret_keys(item, inner)
             for key, item in value.items()
         }
     if isinstance(value, (list, tuple)):
-        items = [_mask_secret_keys(item) for item in value]
+        items = [_mask_secret_keys(item, inner) for item in value]
         if hasattr(value, "_make"):
             return value._make(items)
         return tuple(items) if isinstance(value, tuple) else items

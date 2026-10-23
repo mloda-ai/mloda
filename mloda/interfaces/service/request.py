@@ -155,7 +155,7 @@ def _is_type(value: Any, name: str) -> bool:
 
 
 def _conforms(value: Any, schema: Mapping[str, Any]) -> bool:
-    """Evaluate the leaf keywords this module's schemas use: type, enum, minLength, maxLength, items."""
+    """Evaluate the leaf keywords this module's schemas use: type, enum, minLength, maxLength, minimum, oneOf, items."""
     types = schema.get("type")
     if types is not None:
         names = [types] if isinstance(types, str) else types
@@ -168,6 +168,10 @@ def _conforms(value: Any, schema: Mapping[str, Any]) -> bool:
     if isinstance(value, list) and len(value) < schema.get("minItems", 0):
         return False
     if isinstance(value, list) and schema.get("uniqueItems") and len({json.dumps(item) for item in value}) < len(value):
+        return False
+    if _is_type(value, "number") and value < schema.get("minimum", value):
+        return False
+    if "oneOf" in schema and sum(_conforms(value, sub) for sub in schema["oneOf"]) != 1:
         return False
     if isinstance(value, list) and "items" in schema:
         return all(_conforms(item, schema["items"]) for item in value)

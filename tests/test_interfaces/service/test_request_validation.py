@@ -257,7 +257,13 @@ AGREEMENT_CORPUS: list[Any] = [
     _filter_request(op="range", min=1),
     _filter_request(op="range", max=10, max_exclusive=True),
     _filter_request(op="range", min=1, max=10),
+    {"features": [{"name": "b", "implementation": "x"}]},
+    {"features": [{"name": "b", "implementation": ["x", "y"]}]},
     # invalid
+    {"features": [{"name": "x", "implementation": []}]},
+    {"features": [{"name": "x", "implementation": ["x", ""]}]},
+    {"features": [{"name": "x", "implementation": ""}]},
+    {"features": [{"name": "x", "column_index": -1}]},
     "features",
     ["a"],
     None,
@@ -339,6 +345,29 @@ def test_schema_and_validator_agree(request_value: Any) -> None:
     jsonschema = pytest.importorskip("jsonschema")
     validator = jsonschema.Draft202012Validator(request_schema())
     assert validator.is_valid(request_value) == (validate_request(request_value, SALES_SETTINGS) == [])
+
+
+_EVALUATED_KEYWORDS = {
+    "type", "enum", "minLength", "maxLength", "minItems", "uniqueItems", "items", "oneOf", "minimum", "default",
+}  # fmt: skip
+
+
+def _keywords(schema: Any) -> set[str]:
+    if isinstance(schema, list):
+        return set().union(*[_keywords(s) for s in schema])
+    if not isinstance(schema, dict):
+        return set()
+    found = set(schema)
+    for key in ("items", "oneOf"):
+        if key in schema:
+            found |= _keywords(schema[key])
+    return found
+
+
+def test_feature_config_keywords_are_evaluated_by_validator() -> None:
+    props = request_schema()["$defs"]["featureConfig"]["properties"]
+    used = set().union(*[_keywords(s) for s in props.values()])
+    assert used <= _EVALUATED_KEYWORDS
 
 
 def test_agreement_corpus_covers_both_outcomes() -> None:

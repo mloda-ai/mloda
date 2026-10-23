@@ -108,6 +108,15 @@ class TestReadDBFGDeclarations:
         assert SqliteFG.declared_option_keys() == ReadDBFG.declared_option_keys()
 
 
+class TestDuckdbFGDeclarations:
+    """DuckdbFG selects its connection with connection_handle and declares exactly that key."""
+
+    def test_declares_exactly_connection_handle(self) -> None:
+        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+
+        assert DuckdbFG.declared_option_keys() == {"connection_handle"}
+
+
 class TestEveryOptionKeyReadIsDeclared:
     """Observed match-time reads are a subset of the declared keys, per BaseInputData reader."""
 

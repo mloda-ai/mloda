@@ -58,7 +58,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 for key, value in record.items()
                 if key not in ("compute_framework_reason", "leaves_connection")
             }
-            options = step.feature_set_options
+            options = step.content_options
             wide_record["options"] = None if options is None else stable_text(_mask_secret_keys(options.group))
             wide["compute"].append(wide_record)
         elif step.step_kind == "join":

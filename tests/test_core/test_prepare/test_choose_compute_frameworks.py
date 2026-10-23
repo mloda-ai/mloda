@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -21,6 +22,8 @@ from mloda.core.abstract_plugins.components.link import JoinSpec, Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation, OperationImplementation
 from mloda.provider import FeatureSet
@@ -49,6 +52,7 @@ SAVES_TWO = "saves 2 conversions"
 SAVES_THREE = "saves 3 conversions"
 SAVES_FIVE = "saves 5 conversions"
 CONVERTS_LATER = "converts later"
+READS_IN_PLACE = "reads in place"
 PREFERS_MATCHING = "prefers a matching version"
 SUM_DIFFERS = "skips NaN in sum"
 SUM_TAG = "; runs a version that differs: " + SUM_DIFFERS
@@ -156,6 +160,53 @@ class ChooserOpPyArrow(OperationImplementation[ChooserOpFG]):
 
 
 OP_IMPLEMENTATIONS: list[type[Implementation]] = [ChooserOpPandas, ChooserOpPyArrow]
+
+
+class _HomeConn:
+    """Sentinel connection only ChooserHomeFramework accepts."""
+
+
+class ChooserHomeFramework(ComputeFramework):
+    @staticmethod
+    def is_available() -> bool:
+        return False
+
+    @classmethod
+    def expected_data_framework(cls) -> type:
+        table: type = pa.Table
+        return table
+
+    @classmethod
+    def _connection_matches(cls, conn: Any) -> bool:
+        return isinstance(conn, _HomeConn)
+
+
+class ChooserHomeFG(FormatFeatureGroup):
+    @classmethod
+    def find_sources(
+        cls, route: Any, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None
+    ) -> list[SourceMatch]:
+        return []
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        return None
+
+    @classmethod
+    def match_connection(cls, match: SourceMatch) -> Any | None:
+        return match.access
+
+
+class ChooserHomeImpl(Implementation):
+    feature_group = ChooserHomeFG
+    compute_framework = ChooserHomeFramework
+
+    @classmethod
+    def calculate(cls, serving: Any, match: Any, features: Any, framework: Any) -> Any:
+        return None
+
+
+H = ChooserHomeFramework
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -935,6 +986,7 @@ def test_the_reason_texts_are_the_pinned_lock_contract() -> None:
     assert choose_compute_frameworks.LIST_ORDER == LIST_ORDER
     assert choose_compute_frameworks.DEFAULT_ORDER == DEFAULT_ORDER
     assert choose_compute_frameworks.CONVERTS_LATER == CONVERTS_LATER
+    assert choose_compute_frameworks.READS_IN_PLACE == READS_IN_PLACE
     assert choose_compute_frameworks.PREFERS_MATCHING == PREFERS_MATCHING
     assert choose_compute_frameworks.DIFFERS == "runs a version that differs"
     assert choose_compute_frameworks.saves_conversions(1) == SAVES_ONE
@@ -1081,6 +1133,40 @@ def _reason_mixed_members_prefer_matching(net: _Net) -> list[Feature]:
     return [_op(net, "chooser_op_sum_member", {P, A}), _op(net, "chooser_op_median_member", {P, A}, kind="median")]
 
 
+def _home_root(net: _Net, name: str, allowed: set[type[ComputeFramework]], pinned: bool = False) -> Feature:
+    net.implementations = [ChooserHomeImpl]
+    root = net.add(ChooserHomeFG, name, allowed, pinned=pinned, requested=True)
+    root.input_data_match = (ChooserHomeFG, SourceMatch(source=name, access=_HomeConn()))
+    return root
+
+
+def _reason_home_requested_directly(net: _Net) -> list[Feature]:
+    return [_home_root(net, "reason_home_direct", {A, H})]
+
+
+def _reason_home_feeds_a_matching_consumer(net: _Net) -> list[Feature]:
+    root = _home_root(net, "reason_home_matching", {A, H})
+    net.edge(root, net.add(ChooserLeafFG, "reason_home_matching_consumer", {A, H}, requested=True))
+    return [root]
+
+
+def _reason_home_with_one_off_home_consumer(net: _Net) -> list[Feature]:
+    root = _home_root(net, "reason_home_one_off", {A, H})
+    net.edge(root, net.add(ChooserLeafFG, "reason_home_one_off_consumer", {A}, requested=True))
+    return [root]
+
+
+def _reason_home_with_two_off_home_consumers(net: _Net) -> list[Feature]:
+    root = _home_root(net, "reason_home_two_off", {A, H})
+    for fg, name in [(ChooserLeafFG, "reason_home_two_leaf"), (ChooserOtherLeafFG, "reason_home_two_other_leaf")]:
+        net.edge(root, net.add(fg, name, {A}, requested=True))
+    return [root]
+
+
+def _reason_home_pinned_off_home(net: _Net) -> list[Feature]:
+    return [_home_root(net, "reason_home_pinned", {A}, pinned=True)]
+
+
 @pytest.mark.parametrize(
     ("build", "positions", "output", "expected", "frameworks"),
     [
@@ -1111,6 +1197,11 @@ def _reason_mixed_members_prefer_matching(net: _Net) -> list[Feature]:
         (_reason_rules_force_divergent, None, None, [RULES + SUM_TAG], [P]),
         (_reason_mixed_members_only_divergent, None, None, [ONLY_ALLOWED + SUM_TAG] * 2, [P, P]),
         (_reason_mixed_members_prefer_matching, None, None, [PREFERS_MATCHING] * 2, [A, A]),
+        (_reason_home_requested_directly, {A: 0, H: 1}, None, [READS_IN_PLACE], [H]),
+        (_reason_home_feeds_a_matching_consumer, {A: 0, H: 1}, None, [READS_IN_PLACE], [H]),
+        (_reason_home_with_one_off_home_consumer, {A: 0, H: 1}, None, [READS_IN_PLACE], [H]),
+        (_reason_home_with_two_off_home_consumers, {H: 0, A: 1}, None, [SAVES_TWO], [A]),
+        (_reason_home_pinned_off_home, {H: 0, A: 1}, None, [PINNED], [A]),
     ],
     ids=[
         "pinned",
@@ -1134,6 +1225,11 @@ def _reason_mixed_members_prefer_matching(net: _Net) -> list[Feature]:
         "rules_force_divergent",
         "mixed_members_only_divergent",
         "mixed_members_prefer_matching",
+        "home_requested_directly",
+        "home_feeds_a_matching_consumer",
+        "home_with_one_off_home_consumer",
+        "home_with_two_off_home_consumers_leaves",
+        "home_pinned_off_home",
     ],
 )
 def test_the_reason_names_why_the_framework_was_chosen(

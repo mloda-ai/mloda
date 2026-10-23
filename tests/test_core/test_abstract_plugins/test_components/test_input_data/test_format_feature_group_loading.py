@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
+from mloda.provider import FormatFeatureGroup
 from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -899,3 +900,6 @@ class TestTools:
         fg, match = self._step_group_and_match(ToyFormatFG, "toyfmt_a")
 
         assert fg.count_rows(match, PythonDictFramework) is None
+
+    def test_match_connection_defaults_to_none(self) -> None:
+        assert FormatFeatureGroup.match_connection(_MATCH) is None

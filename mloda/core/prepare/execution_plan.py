@@ -256,6 +256,19 @@ class ExecutionPlan:
             raise ValueError(reason if explicit else f"Ambiguous resolve for kind 'connection': {reason}")
         return handle, explicit
 
+    def _source_handle(self, step: FeatureGroupStep) -> str | None:
+        """The collection handle whose connection the step's matched format group reads from, by identity."""
+        match = step.features.input_data_match
+        if match is None or self.data_access_collection is None:
+            return None
+        connection = match[0].match_connection(match[1])
+        if connection is None:
+            return None
+        connections = self.data_access_collection.connections
+        if step.connection_handle in connections and connections[step.connection_handle] is connection:
+            return step.connection_handle
+        return next((h for h, c in connections.items() if c is connection), None)
+
     def _stamp_connection_handles(self, steps: Sequence[Step]) -> None:
         """Set connection_handle on every feature group and join step from its features' options."""
         owner = {u: s for s in steps if isinstance(s, FeatureGroupStep) for u in s.get_uuids()}
@@ -265,6 +278,7 @@ class ExecutionPlan:
                 step.connection_handle, step.connection_explicit = self._connection_for(
                     step.compute_framework, step.features.options
                 )
+                step.source_connection_handle = self._source_handle(step)
             elif isinstance(step, JoinStep):
                 consumers = [owner[u] for u in records.get(step.uuid, ()) if u in owner] or [
                     owner[u] for u in step.destination_framework_uuids if u in owner

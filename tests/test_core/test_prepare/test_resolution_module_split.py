@@ -252,6 +252,7 @@ def test_matcher_declares_no_all() -> None:
     assert declared is None, f"{MATCHER_MODULE} declares __all__ = {declared}, re-exporting names it does not own"
 
 
+@pytest.mark.timeout(30)
 def test_no_call_site_imports_a_foreign_name_from_the_matcher() -> None:
     """No call site imports a name from the matcher that the matcher does not own.
 

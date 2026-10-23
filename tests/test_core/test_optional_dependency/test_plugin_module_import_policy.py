@@ -552,6 +552,7 @@ _HINT = (
 )
 
 
+@pytest.mark.timeout(30)
 def test_every_plugin_module_imports_only_what_its_extra_declares() -> None:
     assert _PLUGIN_MODULE_NAMES, "could not locate any module under mloda_plugins/**"
 
@@ -570,6 +571,7 @@ def test_every_plugin_module_imports_only_what_its_extra_declares() -> None:
     )
 
 
+@pytest.mark.timeout(30)
 def test_module_extra_table_has_no_stale_rows() -> None:
     optional = _load_optional_deps()
     for module, extra in MODULE_EXTRA.items():
@@ -597,6 +599,7 @@ def test_module_extra_table_has_no_stale_rows() -> None:
     assert not orphans, f"EAGER_MODULES names modules without a MODULE_EXTRA row: {sorted(orphans)}"
 
 
+@pytest.mark.timeout(30)
 def test_every_plugin_module_with_a_backend_root_is_mapped(_isolated_effective_roots_cache: None) -> None:
     violations: list[str] = []
     for module in _PLUGIN_MODULE_NAMES:

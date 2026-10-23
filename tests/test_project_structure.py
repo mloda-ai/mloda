@@ -1,4 +1,5 @@
 import configparser
+import fnmatch
 import re
 import sys
 from pathlib import Path
@@ -315,6 +316,43 @@ class TestToxConfig:
             if parser.has_option("testenv:lint", key)
         ]
         assert not overridden, f"[testenv:lint] must inherit the full [testenv] install, overrides: {overridden}"
+
+    def test_bandit_exclude_dirs_skip_only_artifact_dirs(self) -> None:
+        """Bandit exclude entries must match only artifact dirs, never shipped or test files."""
+        with (PROJECT_ROOT / "pyproject.toml").open("rb") as handle:
+            entries = tomllib.load(handle)["tool"]["bandit"]["exclude_dirs"]
+
+        def excluded(path: str) -> bool:
+            return any(entry in path or fnmatch.fnmatch(path, entry) for entry in entries)
+
+        skipped: list[str] = []
+        for top in ("mloda", "mloda_plugins"):
+            for file in (PROJECT_ROOT / top).rglob("*.py"):
+                path = "./" + file.relative_to(PROJECT_ROOT).as_posix()
+                if excluded(path):
+                    skipped.append(path)
+        for file in (PROJECT_ROOT / "tests").rglob("*.py"):
+            path = file.relative_to(PROJECT_ROOT).as_posix()
+            if excluded(path):
+                skipped.append(path)
+        assert not skipped, f"bandit would skip shipped or test files: {skipped}"
+
+        artifacts = [
+            "./build/lib/mloda/x.py",
+            "./dist/x.py",
+            "./.venv/lib/x.py",
+            "./venv/lib/x.py",
+            "./.tox/lint/x.py",
+            "./attribution/attributions.py",
+            "./mloda.egg-info/x.py",
+            "./.cache/mloda-main/x.py",
+            "./.claude/worktrees/w/x.py",
+            "./.vscode/x.py",
+            "./.devcontainer/x.py",
+            "./lib/site-packages/x.py",
+        ]
+        kept = [path for path in artifacts if not excluded(path)]
+        assert not kept, f"bandit must exclude artifact paths: {kept}"
 
     def test_mcp_env_fails_when_its_smoke_test_is_skipped(self) -> None:
         """The mcp env runs one stdio smoke test; a failed `mcp` import must not skip it into a green run."""

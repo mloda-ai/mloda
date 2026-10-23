@@ -449,10 +449,10 @@ class TestLoadEntryPointsDiscovery:
             from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
                 PythonDictFramework,
             )
-            from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+            from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
 
-            class EpImplGroup(ToyFormatFG):
+            class EpImplGroup(ToySourceFG):
                 pass
 
 

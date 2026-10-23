@@ -13,7 +13,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import Source
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.user import DataType
 from tests.helpers.probe_runner import run_probes
-from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_group
 
 
 _PROBE = Path(__file__).with_name("column_order_probe.py")
@@ -58,7 +58,7 @@ class FeatureSetStub:
 
 
 class TestDeterministicColumnOrder:
-    """The five stock file format groups must materialize get_all_names() (a sorted tuple) in a
+    """The five stock file source groups must materialize get_all_names() (a sorted tuple) in a
     deterministic, alphabetically sorted order so the output column order does not
     depend on PYTHONHASHSEED."""
 

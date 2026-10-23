@@ -22,7 +22,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     current_feature_group_scope,
     note_open_claim,
 )
-from mloda.core.abstract_plugins.components.input_data.reader_probe import FormatProbeOutcome, probe_format_group
+from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome, probe_source_group
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
@@ -82,22 +82,22 @@ def _listed(columns: Collection[str] | None) -> str:
 
 
 def implementation_path(feature_group: type, implementation: Any, match: Any) -> str | None:
-    """module:qualname of the implementation, "neutral" for a format group with a match and none, else None."""
+    """module:qualname of the implementation, "neutral" for a source group with a match and none, else None."""
     if implementation is not None:
         return f"{implementation.__module__}:{implementation.__qualname__}"
-    if match is not None and issubclass(feature_group, FormatFeatureGroup):
+    if match is not None and issubclass(feature_group, SourceFeatureGroup):
         return "neutral"
     return None
 
 
-class FormatPointerError(ValueError):
+class SourcePointerError(ValueError):
     """A class-name pointer or feature_group= scope that cannot be served; validated before matching."""
 
 
-def concrete_format_groups() -> dict[str, type["FormatFeatureGroup"]]:
-    """Loaded concrete format groups by class name, including ones a run's filters dropped."""
-    found: dict[str, type[FormatFeatureGroup]] = {}
-    stack: list[Any] = list(FormatFeatureGroup.__subclasses__())
+def concrete_source_groups() -> dict[str, type["SourceFeatureGroup"]]:
+    """Loaded concrete source groups by class name, including ones a run's filters dropped."""
+    found: dict[str, type[SourceFeatureGroup]] = {}
+    stack: list[Any] = list(SourceFeatureGroup.__subclasses__())
     while stack:
         current = stack.pop()
         stack.extend(current.__subclasses__())
@@ -106,7 +106,7 @@ def concrete_format_groups() -> dict[str, type["FormatFeatureGroup"]]:
     return found
 
 
-class FormatFeatureGroup(FeatureGroup):
+class SourceFeatureGroup(FeatureGroup):
     """A FeatureGroup that claims features of one source format through its CLAIM_ROUTES."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = ()
@@ -231,18 +231,18 @@ class FormatFeatureGroup(FeatureGroup):
         return tuple(
             klass.__name__
             for klass in cls.__mro__
-            if issubclass(klass, FormatFeatureGroup)
-            and klass is not FormatFeatureGroup
+            if issubclass(klass, SourceFeatureGroup)
+            and klass is not SourceFeatureGroup
             and (klass is cls or not inspect.isabstract(klass))
         )
 
     @classmethod
     def foreign_pointer(cls, options: Options) -> str | None:
-        """First option key naming a concrete format group that is not one of this group's pointer keys."""
+        """First option key naming a concrete source group that is not one of this group's pointer keys."""
         keys = sorted(key for key in options.keys() if isinstance(key, str))
         if not keys:
             return None
-        groups = concrete_format_groups()
+        groups = concrete_source_groups()
         own = cls.pointer_keys()
         return next((key for key in keys if key in groups and key not in own), None)
 
@@ -252,7 +252,7 @@ class FormatFeatureGroup(FeatureGroup):
         if scope is None:
             return False
         for klass in cls.__mro__:
-            if not (isinstance(klass, type) and issubclass(klass, FormatFeatureGroup)):
+            if not (isinstance(klass, type) and issubclass(klass, SourceFeatureGroup)):
                 continue
             if klass is not cls and inspect.isabstract(klass):
                 continue
@@ -392,7 +392,7 @@ class FormatFeatureGroup(FeatureGroup):
         return fitting, seen, undeclared, frozenset(fitting) - firm
 
     @classmethod
-    def _decline_refused_probe(cls, outcome: FormatProbeOutcome, pointed: bool, known_owners: frozenset[str]) -> bool:
+    def _decline_refused_probe(cls, outcome: SourceProbeOutcome, pointed: bool, known_owners: frozenset[str]) -> bool:
         drop_match_rejections_since(known_owners)
         message = f"refused at INPUT_DATA_MATCH: {outcome.refused}"
         if pointed:
@@ -415,14 +415,14 @@ class FormatFeatureGroup(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None,
         probe: Callable[[], Any],
-    ) -> FormatProbeOutcome:
+    ) -> SourceProbeOutcome:
         """Run probe inside the INPUT_DATA_MATCH hook; a refusal declines or aborts like core's own probe."""
         name = str(feature_name)
         if inspect.isabstract(cls):
-            return FormatProbeOutcome(cls._reject_abstract(name, options, data_access_collection), None)
+            return SourceProbeOutcome(cls._reject_abstract(name, options, data_access_collection), None)
         pointed = cls.is_pointed(name, options, data_access_collection)
         known_owners = match_rejection_owners()
-        outcome = probe_format_group(cls, probe, data_access_collection, cls.get_column_base_feature(name), options)
+        outcome = probe_source_group(cls, probe, data_access_collection, cls.get_column_base_feature(name), options)
         if outcome.refused is not None:
             cls._decline_refused_probe(outcome, pointed, known_owners)
         return outcome
@@ -466,7 +466,7 @@ class FormatFeatureGroup(FeatureGroup):
         open_only: frozenset[str] = frozenset()
         known_owners = match_rejection_owners()
         if selected:
-            outcome = probe_format_group(
+            outcome = probe_source_group(
                 cls,
                 lambda: cls._probe_routes(selected, name, base_name, options, data_access_collection),
                 data_access_collection,

@@ -1,4 +1,4 @@
-"""CSV file format group: stdlib header discovery, a FileSource neutral form and a PyArrowTable implementation."""
+"""CSV file source group: stdlib header discovery, a FileSource neutral form and a PyArrowTable implementation."""
 
 import csv
 from collections.abc import Collection

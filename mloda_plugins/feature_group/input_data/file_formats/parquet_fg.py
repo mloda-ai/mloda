@@ -1,4 +1,4 @@
-"""Parquet file format group: typed schema from the footer, metadata row counts and a PyArrow read."""
+"""Parquet file source group: typed schema from the footer, metadata row counts and a PyArrow read."""
 
 from collections.abc import Collection
 from typing import Any

@@ -145,7 +145,7 @@ def dispatch_input_data_load(
 
 
 class BaseInputData(ABC):
-    """Marker for what a group's input_data() returns; reading files and sources is a FormatFeatureGroup."""
+    """Marker for what a group's input_data() returns; reading files and sources is a SourceFeatureGroup."""
 
     def __init__(self) -> None:
         pass
@@ -159,7 +159,7 @@ class BaseInputData(ABC):
                 if hook in klass.__dict__:
                     raise TypeError(
                         f"{cls.__name__} defines {hook}, which BaseInputData no longer supports; "
-                        "subclass FormatFeatureGroup to read a source."
+                        "subclass SourceFeatureGroup to read a source."
                     )
         super().__init_subclass__(**kwargs)
 

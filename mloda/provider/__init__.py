@@ -15,8 +15,8 @@
 #         def calculate_feature(cls, data, features): ...
 #
 # Primary-source feature groups (no input features) read files, documents and
-# databases by subclassing a format group base: ReadFileFG, ReadDocumentFG,
-# ReadDBFG, or FormatFeatureGroup for any other source.
+# databases by subclassing a source group base: ReadFileFG, ReadDocumentFG,
+# ReadDBFG, or SourceFeatureGroup for any other source.
 #
 # This module is core-only. Concrete compute frameworks come from mloda.user.<backend>.
 #
@@ -49,11 +49,11 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.input_data.base_input_data import BaseInputData
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.reader_probe import FormatProbeOutcome
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
+from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     HANDLE_OPTION,
     QUERY_OPTION,
-    FormatFeatureGroup,
+    SourceFeatureGroup,
 )
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable, ReadDBFG
 from mloda.core.abstract_plugins.components.input_data.read_document_fg import ReadDocumentFG
@@ -184,8 +184,8 @@ __all__ = [
     "ClaimRoute",
     "NamePolicy",
     "SourceMatch",
-    "FormatProbeOutcome",
-    "FormatFeatureGroup",
+    "SourceProbeOutcome",
+    "SourceFeatureGroup",
     "Implementation",
     "ImplementationPinError",
     "OperationFeatureGroup",

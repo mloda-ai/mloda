@@ -30,7 +30,7 @@ from mloda.provider import BaseInputData, DataCreator, FeatureSet, SourceMatch
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
-from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
+from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
 
 # Planning and running resolve real FeatureGroups and read source files; a cold cache can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -175,7 +175,7 @@ class ReviewDescribeProbeMcp9(FeatureGroup):
 
 
 def _base(*extra: type[FeatureGroup]) -> PluginCollector:
-    groups: set[type[FeatureGroup]] = {*FILE_FORMAT_GROUPS, ReviewDoubleMcp9, ReviewCreatorMcp9}
+    groups: set[type[FeatureGroup]] = {*FILE_SOURCE_GROUPS, ReviewDoubleMcp9, ReviewCreatorMcp9}
     return PluginCollector.enabled_feature_groups(groups | set(extra))
 
 

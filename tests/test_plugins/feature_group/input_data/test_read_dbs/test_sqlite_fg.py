@@ -31,7 +31,7 @@ from mloda.user import (
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_filter_engine import PyArrowFilterEngine
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     DatabaseLoadsIntoFrameworkMixin,
     PandasDataFrameAdapter,
@@ -39,8 +39,8 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.database_format_feature_group_test_mixin import (
-    DatabaseFormatFeatureGroupTestMixin,
+from tests.mixins.reader_feature_groups.read_db_fg_test_mixin import (
+    ReadDBFGTestMixin,
 )
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature
@@ -48,7 +48,7 @@ from tests.test_core.test_integration.test_core.test_runner_one_compute_framewor
 KEY = "sqlite"
 
 
-class TestSqliteFGContract(DatabaseFormatFeatureGroupTestMixin):
+class TestSqliteFGContract(ReadDBFGTestMixin):
     feature_group_class = SqliteFG
     credential_key = KEY
     present_column = "impl_sqlite_present"
@@ -90,7 +90,7 @@ class SqliteQueryToyfmtFG(SqliteFG):
         return pa.table({name: [row[names.index(name)] for row in rows] for name in wanted})
 
 
-class TestSqliteQueryRouteContract(DatabaseFormatFeatureGroupTestMixin):
+class TestSqliteQueryRouteContract(ReadDBFGTestMixin):
     feature_group_class = SqliteQueryToyfmtFG
     credential_key = QUERY_KEY
     present_column = "impl_sqlite_query_present"
@@ -118,7 +118,7 @@ class TestSqliteLoadsIntoPyArrowTable(PyArrowTableAdapter, DatabaseLoadsIntoFram
 class TestSqliteLoadsIntoPythonDict(PythonDictAdapter, DatabaseLoadsIntoFrameworkMixin):
     db_group = SqliteFG
     credential_key = KEY
-    expected_loader = "mloda_plugins.feature_group.input_data.db_formats.sqlite_fg:SqlitePythonDict"
+    expected_loader = "mloda_plugins.feature_group.input_data.db_sources.sqlite_fg:SqlitePythonDict"
 
     def write_database(self, path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
         write_sqlite(path, tables)

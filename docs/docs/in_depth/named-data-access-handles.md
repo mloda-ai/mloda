@@ -167,7 +167,7 @@ features = [
 mloda.run_all(features, compute_frameworks=["PyArrowTable"], data_access_collection=dac)
 ```
 
-The key works across the file, document, and database format groups on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.
+The key works across the file, document, and database source groups on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.
 
 Two features in one session can bind different connections of the same framework, each step getting its own. A `data_access_handle` naming a connection counts as an explicit choice: the step binds that connection eagerly.
 
@@ -211,7 +211,7 @@ DataAccessCollection(
 )
 ```
 
-For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong format group, missing column), the feature is declined rather than falling back to another file. When no file format group owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.
+For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong source group, missing column), the feature is declined rather than falling back to another file. When no file source group owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.
 
 See [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the full example.
 
@@ -234,5 +234,5 @@ Named handles collapse that bug class to one invariant: *if the registry has mor
 ## Related
 
 - [(Feature) data](access-feature-data.md): overview of data access in mloda.
-- [Data Access Patterns](data-access-patterns.md): format FeatureGroups and `MatchData`.
+- [Data Access Patterns](data-access-patterns.md): source FeatureGroups and `MatchData`.
 - [Framework Connection Object](framework-connection-object.md): stateful connection lifecycle.

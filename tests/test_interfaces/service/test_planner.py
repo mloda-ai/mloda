@@ -29,7 +29,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from tests.helpers.plugin_stubs import StubFeatureGroup
-from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
+from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
 
 # Planning resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -141,7 +141,7 @@ class PlannerDeniedMcp4(StubFeatureGroup):
 
 
 def _base() -> PluginCollector:
-    return PluginCollector.enabled_feature_groups({*FILE_FORMAT_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4})
+    return PluginCollector.enabled_feature_groups({*FILE_SOURCE_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4})
 
 
 def _write_sales(tmp_path: Path) -> Path:
@@ -293,7 +293,7 @@ class TestUnresolved:
 
 
 class TestDiagnosisWithoutFeatureName:
-    def test_scope_at_inaccessible_format_group_is_validation_failed(self, tmp_path: Path) -> None:
+    def test_scope_at_inaccessible_source_group_is_validation_failed(self, tmp_path: Path) -> None:
         request = {"features": [{"name": "income", "feature_group": "SqliteFG"}]}
 
         result = _explain(tmp_path, request)

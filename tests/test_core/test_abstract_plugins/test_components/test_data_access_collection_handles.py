@@ -14,8 +14,8 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.mixins.reader_feature_groups.lazy_format_group import load_group
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import TOY_TOKEN
+from tests.mixins.reader_feature_groups.lazy_source_group import load_group
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import TOY_TOKEN
 
 
 class TestNewConstructorShape:
@@ -57,7 +57,7 @@ class TestNewConstructorShape:
         """Under the loosened API, ``column_to_file`` accepts either a handle or a path.
 
         Passing a path that appears in ``files.values()`` must succeed and be normalized
-        to the matching file handle internally so a file format group can index
+        to the matching file handle internally so a file source group can index
         ``files`` by the stored value.
         """
         dac = DataAccessCollection(
@@ -449,8 +449,8 @@ class TestAutoHandleAssignment:
 class TestColumnToFileAcceptsPathOrHandle:
     """``column_to_file`` may reference a file by handle or by path; mixed is OK."""
 
-    def test_path_value_resolves_through_a_file_format_group(self, tmp_path: Path) -> None:
-        """End-to-end: a path value is normalized so a file format group finds the pinned file."""
+    def test_path_value_resolves_through_a_file_source_group(self, tmp_path: Path) -> None:
+        """End-to-end: a path value is normalized so a file source group finds the pinned file."""
         path = tmp_path / "tx.csv"
         path.write_text("amount\n1\n", encoding="utf-8")
         dac = DataAccessCollection(files={str(path)}, column_to_file={"amount": str(path)})

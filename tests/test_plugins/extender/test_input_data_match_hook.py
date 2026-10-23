@@ -1,4 +1,4 @@
-"""Tests for ExtenderHook.INPUT_DATA_MATCH: extenders wrap and may refuse a format group's match probe.
+"""Tests for ExtenderHook.INPUT_DATA_MATCH: extenders wrap and may refuse a source group's match probe.
 
 Each test candidate sits behind its own marker credential and only accepts it, so it never hijacks matching
 in other tests.
@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.verified_context import verified_context
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
-from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, FormatFeatureGroup, NamePolicy, SourceMatch
+from mloda.provider import ClaimRoute, FeatureGroup, FeatureSet, SourceFeatureGroup, NamePolicy, SourceMatch
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import (
     Feature,
@@ -33,9 +33,9 @@ from mloda.user import (
     mloda,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_KEY,
-    ToyFormatBase,
+    ToySourceBase,
 )
 
 _CRED_KEY = "imdmatch_marker"
@@ -51,7 +51,7 @@ _PROBE_LOGGER = "mloda.core.abstract_plugins.components.input_data.reader_probe"
 _REFUSED = "refused at INPUT_DATA_MATCH"
 
 
-def _fmt_in_scope(cls: type[FormatFeatureGroup], options: Options, data_access_collection: Any) -> bool:
+def _fmt_in_scope(cls: type[SourceFeatureGroup], options: Options, data_access_collection: Any) -> bool:
     if any(options.get(key) is not None for key in cls.pointer_keys()):
         return True
     return isinstance(data_access_collection, DataAccessCollection) and any(
@@ -59,8 +59,8 @@ def _fmt_in_scope(cls: type[FormatFeatureGroup], options: Options, data_access_c
     )
 
 
-class _ImdFmtBase(ToyFormatBase):
-    """Toy format group serving only `served` columns; reacts only to in-scope sources; counts source touches."""
+class _ImdFmtBase(ToySourceBase):
+    """Toy source group serving only `served` columns; reacts only to in-scope sources; counts source touches."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("imdmatch", NamePolicy.CHECKED, True),)
     served: frozenset[str] = frozenset()
@@ -770,7 +770,7 @@ class TestProbeRaise:
         assert "imdmatch probe boom" in str(baseline.value)
 
 
-class TestFormatGroupHook:
+class TestSourceGroupHook:
     def test_a_group_excluded_by_a_foreign_pointer_does_not_fire_the_hook(self) -> None:
         extender = _ImdRecordingExtender()
         feature = Feature(_COL_B, options={ImdMatchSiblingFormat.__name__: dict(_FMT_COLUMNS)})

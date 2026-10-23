@@ -49,7 +49,7 @@ except FeatureResolutionError as err:
     # err.result carries the per-candidate elimination facts (an EvaluationResult)
 ```
 
-When an INPUT_DATA_MATCH extender refused the candidate format groups, `err.refusals` holds its exceptions, so an access refusal can be told apart from a missing plugin (see [Extender](../../chapter1/extender.md)).
+When an INPUT_DATA_MATCH extender refused the candidate source groups, `err.refusals` holds its exceptions, so an access refusal can be told apart from a missing plugin (see [Extender](../../chapter1/extender.md)).
 
 To inspect a request without catching an exception, use the non-raising
 surfaces: `resolve_feature` for a single name (above), or `mlodaAPI.diagnose(...)`,
@@ -81,7 +81,7 @@ Each line names a candidate the matcher considered and dropped: the first gate t
 | --- | --- | --- |
 | `option value` | The group declined an option value in the request. | Fix the value the reason names. |
 | `feature name` | The group refused the requested feature name itself, for example an unknown output part. | Request a name the group serves; the reason may list them. |
-| `input data` | An INPUT_DATA_MATCH extender or a format group declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
+| `input data` | An INPUT_DATA_MATCH extender or a source group declined the request. | Point the request at data the group can read ([Data Access Patterns](../data-access-patterns.md)). |
 | `match hook` | The group's match hook raised; the error is contained and quoted. | Fix the plugin bug it names. |
 | `domain` | The group declares a different domain than the request. | Align the requested domain ([domain solution below](#3-use-domains-to-separate-feature-groups)). |
 | `scope` | The group is outside the requested `feature_group` scope. | Widen or correct the scope ([scope solution below](#4-scope-a-feature-to-one-source-shared-keys-across-sources)). |
@@ -143,7 +143,7 @@ This error occurs when multiple distinct feature groups claim they can handle th
 
 When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent.
 
-If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, two distinct classes (different `(module, qualname)`) both claim the name. For source-backed features this usually means two format groups found the column, for example `CsvFG` in a file and `SqliteFG` in a database. Fix it with `feature_group=` (see below), a pointer such as `options={"CsvFG": path}`, or a `data_access_handle` that names one source.
+If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, two distinct classes (different `(module, qualname)`) both claim the name. For source-backed features this usually means two source groups found the column, for example `CsvFG` in a file and `SqliteFG` in a database. Fix it with `feature_group=` (see below), a pointer such as `options={"CsvFG": path}`, or a `data_access_handle` that names one source.
 
 ### Solutions
 
@@ -218,9 +218,9 @@ Caveats:
 - The root `FeatureGroup` base is rejected in either form: it names no family.
 - The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one, so you are told, not surprised. Inside a single `input_features()` returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.
 
-## Format group source errors
+## Source group source errors
 
-A format group (`CsvFG`, `SqliteFG`, `TextFG`, ...) claims a feature when one of its sources has the column. Two errors come from inside one group, before any feature-group ambiguity.
+A source group (`CsvFG`, `SqliteFG`, `TextFG`, ...) claims a feature when one of its sources has the column. Two errors come from inside one group, before any feature-group ambiguity.
 
 ### Several sources in one group
 
@@ -249,11 +249,11 @@ Check the spelling, request a column a source has, or point at the source that h
 
 ### query_text on a group without a query route
 
-`query_text is set, but <Group> lists no query route`: `query_text` is reserved for groups that list `ReadDBFG.QUERY_ROUTE`; any other format group declines when unpointed and aborts when pointed. Point the feature at a group that lists the route, or keep `query_text` off the feature with `forward_group_exclude`.
+`query_text is set, but <Group> lists no query route`: `query_text` is reserved for groups that list `ReadDBFG.QUERY_ROUTE`; any other source group declines when unpointed and aborts when pointed. Point the feature at a group that lists the route, or keep `query_text` off the feature with `forward_group_exclude`.
 
 ### Pointers on derived features
 
-A class-name pointer on a derived feature reaches its inputs, because group options forward to input features. A pointer in the context options counts wherever it is visible, including when pushed with `propagate_context_keys` or `cascade_context_keys`, so a pushed pointer at another group also makes the format groups there skip their search. A consumer whose inputs come from several sources must put each pointer on its input feature (or use the `DataAccessCollection`): a forwarded pointer to a source without the column aborts with the missing-column error above.
+A class-name pointer on a derived feature reaches its inputs, because group options forward to input features. A pointer in the context options counts wherever it is visible, including when pushed with `propagate_context_keys` or `cascade_context_keys`, so a pushed pointer at another group also makes the source groups there skip their search. A consumer whose inputs come from several sources must put each pointer on its input feature (or use the `DataAccessCollection`): a forwarded pointer to a source without the column aborts with the missing-column error above.
 
 ```py
 # in the consumer's input_features: each input carries its own pointer, the consumer's own options carry none

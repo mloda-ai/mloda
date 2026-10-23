@@ -7,7 +7,7 @@ import pytest
 
 from mloda.core.abstract_plugins.components.input_data.base_input_data import RESERVED_READER_OPTION_KEY
 from mloda.user import DataAccessCollection, FeatureName, PluginCollector, mloda
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG  # noqa: F401
 from mloda.provider import BaseInputData, SourceMatch
@@ -299,12 +299,12 @@ class TestGlobalFilterFromAnotherSource:
         assert global_filter.dropped_filters == {}
 
 
-class TestGlobalFilterOnFormatGroupColumn:
-    """A filter on a format-group column keeps its source match off the options."""
+class TestGlobalFilterOnSourceGroupColumn:
+    """A filter on a source-group column keeps its source match off the options."""
 
     def test_matched_filter_feature_carries_the_source_match(self) -> None:
-        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-            ToyFormatFG,
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+            ToySourceFG,
             toy_dac,
         )
 
@@ -312,21 +312,21 @@ class TestGlobalFilterOnFormatGroupColumn:
         global_filter.add_filter("gf_toy_val", "equal", {"value": 20})
 
         matched = global_filter.identify_matched_filters(
-            ToyFormatFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10, 20]})
+            ToySourceFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10, 20]})
         )
 
         assert len(matched) == 1
         filter_feature = next(iter(matched)).filter_feature
         pair = filter_feature.input_data_match
         assert pair is not None
-        assert pair[0] is ToyFormatFG
+        assert pair[0] is ToySourceFG
         assert pair[1].source == "h1:toy"
         assert RESERVED_READER_OPTION_KEY not in filter_feature.options.group
         assert RESERVED_READER_OPTION_KEY not in filter_feature.options.context
 
     def test_filter_on_a_column_absent_from_every_source_is_not_matched(self) -> None:
-        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-            ToyFormatFG,
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+            ToySourceFG,
             toy_dac,
         )
 
@@ -334,28 +334,28 @@ class TestGlobalFilterOnFormatGroupColumn:
         global_filter.add_filter("gf_toy_missing", "equal", {"value": 1})
 
         matched = global_filter.identify_matched_filters(
-            ToyFormatFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10]})
+            ToySourceFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10]})
         )
 
         assert len(matched) == 0
 
     def test_class_name_key_carried_over_with_a_missing_filter_column_drops_the_filter(self) -> None:
-        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
         global_filter = GlobalFilter()
         global_filter.add_filter("gf_toy_missing", "equal", {"value": 1})
-        host = Feature("gf_toy_val", Options({"ToyFormatFG": {"gf_toy_val": [10]}}))
+        host = Feature("gf_toy_val", Options({"ToySourceFG": {"gf_toy_val": [10]}}))
 
-        matched = global_filter.identify_matched_filters(ToyFormatFG, host, None)
+        matched = global_filter.identify_matched_filters(ToySourceFG, host, None)
 
         assert len(matched) == 0
-        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
+        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToySourceFG] == [
             "input_data"
         ]
 
     def test_filter_column_in_two_sources_drops_the_filter_instead_of_raising(self) -> None:
-        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-            ToyFormatFG,
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+            ToySourceFG,
             toy_dac,
         )
 
@@ -363,11 +363,11 @@ class TestGlobalFilterOnFormatGroupColumn:
         global_filter.add_filter("gf_toy_val", "equal", {"value": 10})
 
         matched = global_filter.identify_matched_filters(
-            ToyFormatFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10]}, h2={"gf_toy_val": [10]})
+            ToySourceFG, Feature("gf_toy_val"), toy_dac(h1={"gf_toy_val": [10]}, h2={"gf_toy_val": [10]})
         )
 
         assert len(matched) == 0
-        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToyFormatFG] == [
+        assert [e.stage for (fg, _, _), e in global_filter.dropped_filters.items() if fg is ToySourceFG] == [
             "input_data"
         ]
 

@@ -295,7 +295,7 @@ class TestEveryWheelOwnedPluginIsRegistered:
         assert PythonDictFramework in _wheel_owned_plugin_classes(ComputeFramework), (
             "the sweep must reach dependency-free ComputeFrameworks under mloda_plugins"
         )
-        from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqlitePythonDict
+        from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqlitePythonDict
         from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvPyArrowTable
 
         assert {CsvPyArrowTable, SqlitePythonDict} <= _wheel_owned_plugin_classes(Implementation), (

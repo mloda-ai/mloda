@@ -5,12 +5,12 @@ from typing import Any
 import pytest
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
-from mloda.provider import FormatFeatureGroup
+from mloda.provider import SourceFeatureGroup
 from mloda.user import Credential, Feature, Options
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-    ToyFormatBase,
-    ToyFormatFG,
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToySourceBase,
+    ToySourceFG,
 )
 
 IN_FEATURES = DefaultOptionKeys.in_features.value
@@ -640,12 +640,12 @@ class TestOptionsWithCredentialValues:
         plain = Options(group={"cfg": {"a": "b"}})
         assert "'a': 'b'" in str(plain)
 
-        toy = Options(group={ToyFormatFG.get_class_name(): {"toy_col": "/raw/toy_pointer_marker.db"}})
+        toy = Options(group={ToySourceFG.get_class_name(): {"toy_col": "/raw/toy_pointer_marker.db"}})
         assert "/raw/toy_pointer_marker.db" not in str(toy)
         assert "toy_col" in str(toy)
-        toy_context = Options(context={ToyFormatFG.get_class_name(): {"toy_col": "/raw/toy_pointer_marker.db"}})
+        toy_context = Options(context={ToySourceFG.get_class_name(): {"toy_col": "/raw/toy_pointer_marker.db"}})
         assert "/raw/toy_pointer_marker.db" not in str(toy_context)
-        url = Options(group={ToyFormatFG.get_class_name(): "https://user:toy-url-secret@api.example/v1"})
+        url = Options(group={ToySourceFG.get_class_name(): "https://user:toy-url-secret@api.example/v1"})
         assert "toy-url-secret" not in str(url)
         assert "api.example" in str(url)
 
@@ -704,9 +704,9 @@ class TestOptionsWithCredentialValues:
 
 
 class TestOptionsClassKeyNormalization:
-    def test_format_group_class_key_normalizes_to_its_class_name_not_its_alias(self) -> None:
+    def test_source_group_class_key_normalizes_to_its_class_name_not_its_alias(self) -> None:
         aliased: Any = type(
-            "_ToyfmtAliasKeyFG", (ToyFormatBase,), {"data_access_name": classmethod(lambda cls: "toyfmt_k")}
+            "_ToyfmtAliasKeyFG", (ToySourceBase,), {"data_access_name": classmethod(lambda cls: "toyfmt_k")}
         )
 
         options = Options({aliased: {"x": 1}})
@@ -715,11 +715,11 @@ class TestOptionsClassKeyNormalization:
         assert "toyfmt_k" not in options.group
         del aliased
 
-    def test_the_abstract_format_group_base_class_is_a_valid_key(self) -> None:
-        key: Any = FormatFeatureGroup
+    def test_the_abstract_source_group_base_class_is_a_valid_key(self) -> None:
+        key: Any = SourceFeatureGroup
         options = Options({key: {"x": 1}})
 
-        assert "FormatFeatureGroup" in options.group
+        assert "SourceFeatureGroup" in options.group
 
     def test_legacy_reader_class_key_still_normalizes_to_data_access_name(self) -> None:
         reader: Any = type(

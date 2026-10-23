@@ -1,4 +1,4 @@
-"""Tests that file, database and document format group modules import cleanly under blocked pyarrow and that
+"""Tests that file, database and document source group modules import cleanly under blocked pyarrow and that
 CsvFG.load_neutral resolves a backend-neutral FileSource descriptor without pyarrow.
 """
 
@@ -389,7 +389,7 @@ try:
     from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
         PythonDictFramework,
     )
-    from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+    from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
     print("IMPORTED")
 except Exception as e:
     print("IMPORT_FAILED:" + type(e).__name__ + ":" + str(e))

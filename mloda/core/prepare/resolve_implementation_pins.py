@@ -7,7 +7,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations, serving_implementation
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
 from mloda.core.prepare.graph.graph import Graph
@@ -122,7 +122,7 @@ class ResolveImplementationPins:
         return assigned
 
     def _serving(self, group: type[FeatureGroup], framework: Framework) -> type[Implementation[Any]] | None:
-        stop_after = "load_neutral" if issubclass(group, FormatFeatureGroup) else None
+        stop_after = "load_neutral" if issubclass(group, SourceFeatureGroup) else None
         return serving_implementation(group, framework, self.accessible, stop_after=stop_after)
 
     def _allowed(self, uuid: UUID, impl: type[Implementation[Any]]) -> frozenset[Framework]:

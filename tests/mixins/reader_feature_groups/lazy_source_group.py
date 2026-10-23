@@ -1,4 +1,4 @@
-"""Class-attribute descriptor that imports a format group on first access, so test files collect without it."""
+"""Class-attribute descriptor that imports a source group on first access, so test files collect without it."""
 
 import importlib
 from typing import TYPE_CHECKING, Any, cast

@@ -13,7 +13,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, framework_rank_key
@@ -309,9 +309,9 @@ class ChooseComputeFrameworks:
         return result
 
     def _block_home(self, block: _Block) -> frozenset[Framework] | None:
-        """Frameworks that accept the connection the block's source is read from and can serve its format group."""
+        """Frameworks that accept the connection the block's source is read from and can serve its source group."""
         match = block.features[0].input_data_match
-        if match is None or not issubclass(block.fg, FormatFeatureGroup):
+        if match is None or not issubclass(block.fg, SourceFeatureGroup):
             return None
         conn = block.fg.match_connection(match[1])
         if conn is None:

@@ -222,13 +222,13 @@ def test_import_provider_base_classes() -> None:
     # Credential scrubbing
     assert callable(scrub_credentials)
     assert "scrub_credentials" in provider_module.__all__
-    # Format probe outcome: what FormatFeatureGroup.gated_probe returns
-    from mloda.core.abstract_plugins.components.input_data.reader_probe import FormatProbeOutcome as CoreOutcome
-    from mloda.provider import FormatProbeOutcome
+    # Source probe outcome: what SourceFeatureGroup.gated_probe returns
+    from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome as CoreOutcome
+    from mloda.provider import SourceProbeOutcome
 
-    assert FormatProbeOutcome is CoreOutcome
-    assert FormatProbeOutcome(None, 1).result == 1
-    assert "FormatProbeOutcome" in provider_module.__all__
+    assert SourceProbeOutcome is CoreOutcome
+    assert SourceProbeOutcome(None, 1).result == 1
+    assert "SourceProbeOutcome" in provider_module.__all__
 
 
 # =============================================================================

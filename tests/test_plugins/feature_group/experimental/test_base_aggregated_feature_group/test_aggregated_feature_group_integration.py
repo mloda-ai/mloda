@@ -21,7 +21,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from mloda.provider import DefaultOptionKeys
 
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import column_values
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import column_values
 from tests.test_plugins.integration_plugins.test_data_creator import ATestDataCreator
 
 

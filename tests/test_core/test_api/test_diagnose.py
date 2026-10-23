@@ -36,7 +36,7 @@ from mloda.core.prepare.resolution_types import (
 from mloda.provider import BaseInputData, ComputeFramework, DataCreator, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda, mlodaAPI
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_group
 
 
 # ---------------------------------------------------------------------------
@@ -345,8 +345,8 @@ class TestDiagnoseConfigurationError:
         assert diagnosis.message == str(caught)
 
 
-class TestDiagnoseFormatPointerError:
-    def test_an_unreachable_format_pointer_is_projected_not_raised(self, tmp_path: Path) -> None:
+class TestDiagnoseSourcePointerError:
+    def test_an_unreachable_source_pointer_is_projected_not_raised(self, tmp_path: Path) -> None:
         group = load_group("json_fg", "JsonFG")
         diagnosis = mloda.diagnose(
             [Feature("diagnose_fpg_x", Options({"JsonFG": str(tmp_path / "b.json")}))],

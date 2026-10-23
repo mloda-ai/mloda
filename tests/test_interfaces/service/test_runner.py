@@ -31,7 +31,7 @@ from mloda.provider import FeatureSet
 from mloda.user import PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.plugin_stubs import StubFeatureGroup
-from tests.test_interfaces.format_groups import FILE_FORMAT_GROUPS
+from tests.test_interfaces.source_groups import FILE_SOURCE_GROUPS
 
 # Running resolves real FeatureGroups and reads source files; a cold cache under xdist load can exceed 10s.
 pytestmark = pytest.mark.timeout(30)
@@ -184,7 +184,7 @@ class _Clock:
 
 
 def _base(*extra: type[FeatureGroup]) -> PluginCollector:
-    groups: set[type[FeatureGroup]] = {*FILE_FORMAT_GROUPS, RunnerProbeMcp5, RunnerTypesMcp5, RunnerDeniedMcp5}
+    groups: set[type[FeatureGroup]] = {*FILE_SOURCE_GROUPS, RunnerProbeMcp5, RunnerTypesMcp5, RunnerDeniedMcp5}
     return PluginCollector.enabled_feature_groups(groups | set(extra))
 
 

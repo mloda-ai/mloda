@@ -38,10 +38,10 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     open_claim_scope,
     pin_report_scope,
 )
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
-    FormatFeatureGroup,
-    FormatPointerError,
-    concrete_format_groups,
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
+    SourceFeatureGroup,
+    SourcePointerError,
+    concrete_source_groups,
 )
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.options import Options, reject_reserved_reader_key
@@ -159,7 +159,7 @@ def _pinned_path(feature: Feature, collection: DataAccessCollection | None) -> s
 
 
 def _pin_conflict(
-    feature: Feature, collection: DataAccessCollection | None, loaded: dict[str, type[FormatFeatureGroup]]
+    feature: Feature, collection: DataAccessCollection | None, loaded: dict[str, type[SourceFeatureGroup]]
 ) -> str | None:
     from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
 
@@ -187,48 +187,48 @@ def _pin_conflict(
     return None
 
 
-def validate_format_pointers(
+def validate_source_pointers(
     feature: Feature,
     accessible_plugins: FeatureGroupEnvironmentMapping,
     excluded: Mapping[type[FeatureGroup], str] | None,
     data_access_collection: DataAccessCollection | None,
 ) -> None:
-    """Raise FormatPointerError for an unreachable pointer or scope, or a pointer against a pin."""
+    """Raise SourcePointerError for an unreachable pointer or scope, or a pointer against a pin."""
     scope = feature.feature_group_scope
     keys = sorted(key for key in feature.options.keys() if isinstance(key, str))
     if not keys and scope is None:
         return
     excluded = excluded or {}
-    loaded = concrete_format_groups()
-    accessible_formats = [fg for fg in accessible_plugins if issubclass(fg, FormatFeatureGroup)]
+    loaded = concrete_source_groups()
+    accessible_sources = [fg for fg in accessible_plugins if issubclass(fg, SourceFeatureGroup)]
     for key in keys:
         group = loaded.get(key)
         if group is None:
             near = [name for name in loaded if name.casefold() == key.casefold()]
             if len(near) == 1:
-                raise FormatPointerError(f"options key {key} names no format group; did you mean {near[0]}?")
-        if group is not None and not any(key in fg.pointer_keys() for fg in accessible_formats):
+                raise SourcePointerError(f"options key {key} names no source group; did you mean {near[0]}?")
+        if group is not None and not any(key in fg.pointer_keys() for fg in accessible_sources):
             reason = excluded.get(group, _NOT_ACCESSIBLE)
-            raise FormatPointerError(f"options point at {key}, but {key} is not accessible in this run: {reason}.")
+            raise SourcePointerError(f"options point at {key}, but {key} is not accessible in this run: {reason}.")
     if scope is not None:
         scope_name = scope if isinstance(scope, str) else scope.__name__
         group = loaded.get(scope_name)
         if group is not None and not any(matches_feature_group_scope(fg, scope) for fg in accessible_plugins):
             reason = excluded.get(group, _NOT_ACCESSIBLE)
-            raise FormatPointerError(
+            raise SourcePointerError(
                 f"feature_group={scope_name}, but {scope_name} is not accessible in this run: {reason}."
             )
         for key in keys:
             if key in loaded and not any(
-                matches_feature_group_scope(fg, scope) and key in fg.pointer_keys() for fg in accessible_formats
+                matches_feature_group_scope(fg, scope) and key in fg.pointer_keys() for fg in accessible_sources
             ):
-                raise FormatPointerError(
+                raise SourcePointerError(
                     f"feature_group={scope_name} and an options pointer at {key} name different groups; "
                     "drop one of them."
                 )
     conflict = _pin_conflict(feature, data_access_collection, loaded)
     if conflict is not None:
-        raise FormatPointerError(conflict)
+        raise SourcePointerError(conflict)
 
 
 class IdentifyFeatureGroupClass:
@@ -313,7 +313,7 @@ class IdentifyFeatureGroupClass:
         # Pre-matching guard: a >1 pin fires regardless of whether any candidate matches (the old check
         # sat inside the filter loop, so it never ran when the name matched nothing).
         validate_single_framework_pin(feature)
-        validate_format_pointers(feature, accessible_plugins, excluded, data_access_collection)
+        validate_source_pointers(feature, accessible_plugins, excluded, data_access_collection)
         self = cls(data_access_collection)
         self._partial_records = partial_records
         self._excluded = excluded or {}

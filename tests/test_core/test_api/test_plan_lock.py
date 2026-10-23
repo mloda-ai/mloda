@@ -31,7 +31,7 @@ from collections.abc import Iterator
 from mloda.core.abstract_plugins.components import base_feature_group_version
 from mloda.core.abstract_plugins.components.code_closure import closure_parts, dependency_entry
 from mloda.user import Feature, Options, PluginCollector, mloda
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     neutral_csv_group,
     toy_dac,
 )
@@ -42,7 +42,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceBase
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 
@@ -53,10 +53,10 @@ class _MainLike:
 _MainLike.__module__ = "__main__"
 
 
-def _inert_group() -> type[ToyFormatBase]:
-    """A fresh format group with no claim routes; one per test, so a leaked implementation cannot clash."""
+def _inert_group() -> type[ToySourceBase]:
+    """A fresh source group with no claim routes; one per test, so a leaked implementation cannot clash."""
 
-    class _LockInertFG(ToyFormatBase):
+    class _LockInertFG(ToySourceBase):
         pass
 
     return _LockInertFG
@@ -365,10 +365,10 @@ _IMPL_MODULE = "lock_edit_impl_module"
 _IMPL_SRC = """\
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceBase
 
 
-class LockEditGroup(ToyFormatBase):
+class LockEditGroup(ToySourceBase):
     pass
 
 
@@ -376,7 +376,7 @@ class LockEditSubGroup(LockEditGroup):
     unused_value = {sub_value}
 
 
-class LockEditNeutralGroup(ToyFormatBase):
+class LockEditNeutralGroup(ToySourceBase):
     unused_value = {sub_value}
 
 

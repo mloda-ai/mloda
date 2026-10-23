@@ -16,16 +16,16 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.document_format_feature_group_test_mixin import (
-    DocumentFormatFeatureGroupTestMixin,
+from tests.mixins.reader_feature_groups.read_document_fg_test_mixin import (
+    ReadDocumentFGTestMixin,
 )
-from tests.mixins.reader_feature_groups.lazy_format_group import lazy_document_group, load_document_group
+from tests.mixins.reader_feature_groups.lazy_source_group import lazy_document_group, load_document_group
 
 FLOW_STYLE = "{b: two, a: 1}\n"
 CANONICAL = yaml.dump({"a": 1, "b": "two"})
 
 
-class TestYamlFG(DocumentFormatFeatureGroupTestMixin):
+class TestYamlFG(ReadDocumentFGTestMixin):
     feature_group_class = lazy_document_group("yaml_fg", "YamlFG")
     present_column = "YamlFG"
     missing_column = "docfmt_yaml_missing"

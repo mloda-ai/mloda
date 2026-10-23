@@ -11,7 +11,7 @@ from mloda.core.abstract_plugins.components.index.add_index_feature import creat
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.input_data.reader_probe import (
     ReaderProbeScope,
-    probe_format_group,
+    probe_source_group,
     reader_probe_scope,
 )
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
@@ -66,7 +66,7 @@ from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
@@ -630,10 +630,10 @@ class Engine:
         if (
             link is not None
             and feature.input_data_match is not None
-            and issubclass(feature_group_class, FormatFeatureGroup)
+            and issubclass(feature_group_class, SourceFeatureGroup)
         ):
             for column in index.index:
-                outcome = probe_format_group(
+                outcome = probe_source_group(
                     feature_group_class, lambda: None, self.data_access_collection, column, feature.options._fork()
                 )
                 if outcome.refused is not None:

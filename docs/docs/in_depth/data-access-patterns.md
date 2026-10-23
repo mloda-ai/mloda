@@ -1,28 +1,28 @@
-# Data Access Patterns: Format FeatureGroups and MatchData
+# Data Access Patterns: Source FeatureGroups and MatchData
 
 ## Overview
 
-mloda reads data through **format FeatureGroups** (files, documents, databases and custom sources). **MatchData** is a separate, narrow pattern for feature groups that need framework connection objects. `BaseInputData` is only the marker base of `DataCreator` and `ApiInputData`, the return type of `input_data()`; it carries no reader behavior.
+mloda reads data through **source FeatureGroups** (files, documents, databases and custom sources). **MatchData** is a separate, narrow pattern for feature groups that need framework connection objects. `BaseInputData` is only the marker base of `DataCreator` and `ApiInputData`, the return type of `input_data()`; it carries no reader behavior.
 
 For practical examples of data access methods, see [Data Access Overview](access-feature-data.md).
 
 ## Data Sources
 
-- **Format FeatureGroups**: one FeatureGroup per source format, claiming features through `CLAIM_ROUTES` instead of `input_data()`:
+- **Source FeatureGroups**: one FeatureGroup per source format, claiming features through `CLAIM_ROUTES` instead of `input_data()`:
     - `ReadFileFG` with `CsvFG`, `ParquetFG`, `JsonFG`, `FeatherFG`, `OrcFG` (see [access-feature-data](access-feature-data.md#global-scope-data-access))
     - `ReadDBFG` with `SqliteFG`
     - `DuckdbFG`: reads the tables and views of a DuckDB connection in the DataAccessCollection, only when the feature's `connection_handle` names it (`Feature("amount", connection=conn)` sets one). On DuckDB it hands over a lazy relation on your connection, so later DuckDB steps run as SQL; elsewhere it loads a `pa.Table`. It reads the `main` schema of the connection's current database; a `connection_handle` forwarded from a consumer counts too. A feature tied to a DuckDB connection whose table has a column of that name is read from the table, so if another group also serves that name, resolution reports both groups (leave `DuckdbFG` out of the plugin collector, or rename). Off DuckDB it reads through a separate cursor, which sees committed rows only. mloda never closes the connection.
-    - `ReadDocumentFG` with `TextFG`, `PyFG`, `MarkdownFG`, `YamlFG`, `JsonDocumentFG`; documents skip suffixes owned by file format groups by default
+    - `ReadDocumentFG` with `TextFG`, `PyFG`, `MarkdownFG`, `YamlFG`, `JsonDocumentFG`; documents skip suffixes owned by file source groups by default
 - **DataCreator**: For generating synthetic data (see [access-feature-data](access-feature-data.md#data-creator))
 - **ApiInputData**: For runtime data injection (see [access-feature-data](access-feature-data.md#apidata))
 
-## Writing a format FeatureGroup
+## Writing a source FeatureGroup
 
 Subclass the base that fits your source and write only what it asks for. The base owns the matching: claim routes, source discovery, pointers, `data_access_handle`, `column_to_file`, per-run caching, ambiguity and missing-column errors, and the extender hook around the load.
 
-A format group can also describe its data through `declared_attributes`, see [Declared Attributes and Input Requirements](feature-group-matching.md#declared-attributes-and-input-requirements).
+A source group can also describe its data through `declared_attributes`, see [Declared Attributes and Input Requirements](feature-group-matching.md#declared-attributes-and-input-requirements).
 
-- **FormatFeatureGroup** (any source): declare `CLAIM_ROUTES`, implement `find_sources` and `load_neutral`; optionally `columns`, `has_column`, `ambiguity_fix`, `describe_columns`, `count_rows`, and `match_connection` when the source is a connection in the DataAccessCollection (the planner then keeps the read on a framework that accepts it). `query_text` is reserved: a group whose routes do not require it declines, and aborts when pointed.
+- **SourceFeatureGroup** (any source): declare `CLAIM_ROUTES`, implement `find_sources` and `load_neutral`; optionally `columns`, `has_column`, `ambiguity_fix`, `describe_columns`, `count_rows`, and `match_connection` when the source is a connection in the DataAccessCollection (the planner then keeps the read on a framework that accepts it). `query_text` is reserved: a group whose routes do not require it declines, and aborts when pointed.
 - **ReadFileFG**: implement `suffixes()` and `column_names(path)`. It inherits file and folder discovery, the pinned-file rule, and a default `load_neutral` that hands a `FileSource` to the compute framework; the stock `FileSource` transformers read csv, parquet, json, feather and orc.
 - **ReadDocumentFG**: implement `suffixes()`; optionally `read_text` and `handover_suffixes`. It inherits the three names `<Group>`, `<Group>~source` and `<Group>~file_type`.
 - **ReadDBFG**: implement `is_valid_credentials`, `database_identity`, `connect`, `list_tables`, `table_columns` and `produce_rows`. `is_valid_credentials` must never raise. `database_identity` must not contain credential values. `login_key(credentials)` returns a credential-free hashable where equal keys mean the same login (default: a keyed digest of the credentials without `table_name`, with values that are not plain scalars compared by equality); two logins on one source are told apart by `data_access_handle`. Override `login_key` when credential fields that do not change grants (timeouts, application names) differ between handles. `data_access_identity` names the dataset, not the login. The table catalog is cached per run per login (`login_key`) and preset table; with a preset `table_name`, only that table's columns are read. `rechecked_filters(features)` gives the filters a read may push into its query, since the framework applies them again after the load. A subclass whose calculation uses the loaded rows beyond loading them (ranks, totals) overrides `rechecked_filters` to return `[]`. `SqliteFG` pushes exact numeric and text-equality shapes into a parameterized WHERE and leaves everything else to the post-read filter, so a run that succeeds today returns the same rows; it pushes only when each untyped column holds one storage class, and a typed filter column only when its type matches the declared affinity (INT64, DOUBLE, STRING). To check credentials against `PropertySpec`s, use `validate_property_values` and convert its error:
@@ -49,9 +49,9 @@ A format group can also describe its data through `declared_attributes`, see [De
 
 - **ReadDBFG query route**: opt in with `CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)` and implement `produce_query_rows(connection, query_text, features)`. A query-only group lists just `(ReadDBFG.QUERY_ROUTE,)` and stubs the table hooks. The source is a hash of the query text, so textually different queries are different sources. Without a pointer the route claims any leaf name for each matching credential in the DataAccessCollection, and it switches off the table route for that feature. A derived name such as `price__sum_aggr` goes to the group that computes it; `feature_group=<Group>` overrides that.
 
-A format group's `PROPERTY_MAPPING` is merged over the declarations of every class in its MRO, mixins included, even when the group declares none of its own: own keys win and base keys cannot be dropped, so `PROPERTY_MAPPING = None` on a format group raises `TypeError`. Class definition is checked: a `ClaimRoute` with a wrongly typed field, a file or document route whose `source_kind` is not `"file"` or `"folder"`, and `suffixes()` that does not return a non-empty tuple of non-empty strings all raise `TypeError`. A concrete group's `suffixes()` runs at class definition.
+A source group's `PROPERTY_MAPPING` is merged over the declarations of every class in its MRO, mixins included, even when the group declares none of its own: own keys win and base keys cannot be dropped, so `PROPERTY_MAPPING = None` on a source group raises `TypeError`. Class definition is checked: a `ClaimRoute` with a wrongly typed field, a file or document route whose `source_kind` is not `"file"` or `"folder"`, and `suffixes()` that does not return a non-empty tuple of non-empty strings all raise `TypeError`. A concrete group's `suffixes()` runs at class definition.
 
-A format group reports `match.source` as its `data_access_identity`; override it to publish a richer identity. Run the contract mixins in mloda's `tests/mixins/reader_feature_groups/` against your group; they pin the behavior every format group shares.
+A source group reports `match.source` as its `data_access_identity`; override it to publish a richer identity. Run the contract mixins in mloda's `tests/mixins/reader_feature_groups/` against your group; they pin the behavior every source group shares.
 
 A family of groups shares an abstract base, which declines; each concrete subclass matches itself through the base's path. Customize discovery through `CLAIM_ROUTES` and `find_sources`, which run behind the `INPUT_DATA_MATCH` gate. An override of `match_feature_group_criteria` calls `super()` and runs any extra I/O through `gated_probe` (see [Extender](../chapter1/extender.md)).
 
@@ -61,7 +61,7 @@ CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib 
 
 A database implementation receives `data.access` as a `DBTable` (or a `DBQuery` on the query route), both from `mloda.provider`. A subclass that changes parsing (for example a semicolon CSV overriding only `column_names`) must also override `load_neutral`, otherwise the inherited neutral form and the inherited implementations still parse the parent format.
 
-A per-framework fast path is an `Implementation[YourFG]` (from `mloda.provider`): set `feature_group` (a `FormatFeatureGroup` subclass) and `compute_framework`, and write a classmethod `calculate(group, data, features, framework)` that returns the data (`data` is the `SourceMatch`). At plan build mloda picks one per step over the governed set, walking the group MRO, then the framework MRO, most specific pair first; the serving subclass is passed as `group`. A class that overrides `load_neutral` cuts off implementations inherited from above it, and a subclass of an implementation replaces it. Two implementations of one exact pair where neither subclasses the other stop the environment build with `EnvironmentPreconditionError`. Without an implementation the group loads `load_neutral` and a transformer converts. An implementation must stay referenced: define it at module level, because an unreferenced class is garbage-collected and no longer found. Disable one with `PluginCollector.add_disabled_implementation_classes`. Calls made without an engine (`count_rows`) see every loaded implementation, not the governed set. `Implementation.version()` hashes the class like a FeatureGroup's. `PlanStep`, the plan lock and `HookContext.implementation` record which implementation ran.
+A per-framework fast path is an `Implementation[YourFG]` (from `mloda.provider`): set `feature_group` (a `SourceFeatureGroup` subclass) and `compute_framework`, and write a classmethod `calculate(group, data, features, framework)` that returns the data (`data` is the `SourceMatch`). At plan build mloda picks one per step over the governed set, walking the group MRO, then the framework MRO, most specific pair first; the serving subclass is passed as `group`. A class that overrides `load_neutral` cuts off implementations inherited from above it, and a subclass of an implementation replaces it. Two implementations of one exact pair where neither subclasses the other stop the environment build with `EnvironmentPreconditionError`. Without an implementation the group loads `load_neutral` and a transformer converts. An implementation must stay referenced: define it at module level, because an unreferenced class is garbage-collected and no longer found. Disable one with `PluginCollector.add_disabled_implementation_classes`. Calls made without an engine (`count_rows`) see every loaded implementation, not the governed set. `Implementation.version()` hashes the class like a FeatureGroup's. `PlanStep`, the plan lock and `HookContext.implementation` record which implementation ran.
 
 The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (`" 1 "`), `inf`/`infinity`, uppercase `NAN` (the float value, not the `NaN` null token), hex literals (`0x1f`), and a `true`/`1` mix (pyarrow reads `1`/`0` as bools too).
 
@@ -73,7 +73,7 @@ The stdlib reader does not yet cover pyarrow's full surface. Where they differ, 
 
 ### Pointing a feature at a source
 
-- `options={"CsvFG": path}` points the group at one file (or folder). The class object works as the key too (`options={CsvFG: path}`), and a `data_access_name()` override does not add an alias pointer: only class names point. A subclass also answers to its parent's name, so `Feature("x", options={"CsvFG": path})` reaches a `CsvFG` subclass. A pointer makes the other format groups skip the collection, and a pointer at a group that is not accessible in the run raises, naming the filter that dropped it.
+- `options={"CsvFG": path}` points the group at one file (or folder). The class object works as the key too (`options={CsvFG: path}`), and a `data_access_name()` override does not add an alias pointer: only class names point. A subclass also answers to its parent's name, so `Feature("x", options={"CsvFG": path})` reaches a `CsvFG` subclass. A pointer makes the other source groups skip the collection, and a pointer at a group that is not accessible in the run raises, naming the filter that dropped it.
 - `options={"SqliteFG": Credential(sqlite="/x.db")}` points a database group at one database. A plain-dict pointer works too: the matched options hold it as a `RegisteredCredential`, so `str(options)` masks its values. Prefer `Credential` for secrets: a pointer forwarded to a consumer prints raw there.
 - `Feature(name, options={"query_text": ..., "<Group>": Credential(...)})` runs a query on a database group that opts into `ReadDBFG.QUERY_ROUTE`; a group without the route declines when unpointed and aborts when pointed.
 - `Feature(..., feature_group=CsvFG)` scopes resolution to that group (and its subclasses) without choosing a source.
@@ -84,7 +84,7 @@ The matched pair lives on `Feature.input_data_match`, never in the options, and 
 
 ### Non-file sources such as HTTP
 
-Write a `FormatFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. A plain `FeatureGroup` is not a pointer target. A key that differs from a loaded format group's name only by case raises a `FormatPointerError`; a key naming a group that is not loaded is an unknown option key and is ignored. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
+Write a `SourceFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. A plain `FeatureGroup` is not a pointer target. A key that differs from a loaded source group's name only by case raises a `SourcePointerError`; a key naming a group that is not loaded is an unknown option key and is ignored. `ApiInputData` injects in-memory data passed through the API request and is not an HTTP client.
 
 ### Resolution of a pointed group vs feature-group resolution
 
@@ -92,7 +92,7 @@ Source selection runs inside [feature-group resolution](feature-group-matching.m
 
 ### Declining with an attributable reason
 
-A format group that owns a source but cannot serve the requested feature records why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom file format group owns its own suffix and lists its columns; a `ValueError` from `column_names` declines the file with a recorded reason, for example a required schema marker in the header:
+A source group that owns a source but cannot serve the requested feature records why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled `(input data)`. `record_match_rejection` is exported via `mloda.provider`. A custom file source group owns its own suffix and lists its columns; a `ValueError` from `column_names` declines the file with a recorded reason, for example a required schema marker in the header:
 
 ```python
 from typing import Any
@@ -122,7 +122,7 @@ The recorded decline renders as a near-miss line of the resolution failure:
   - SensorCsvFG (input data): SensorCsvFG matched /data/run1.sensorcsv but could not read its columns: its header lacks the #sensor-schema marker
 ```
 
-Rules for format group authors:
+Rules for source group authors:
 
 - Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature. Plain non-matches (wrong suffix, invalid credentials) stay silent.
 - Never raise to decline: a hook that raises anything but `OSError`, `ValueError` or `ImportError` from `column_names` (or an unmarked `NotImplementedError` where a base documents it) ends matching for that candidate. A raise marked with `escalate_match_abort` propagates. Record, then return a falsy value.
@@ -134,7 +134,7 @@ Rules for format group authors:
 
 `ReadFileFG` column validation and the `ReadDBFG` catalog check already record automatically; a custom group only needs this for its own decline points.
 
-A `feature_group=` scope is final: only the scoped group and its subclasses are candidates. A class-name pointer is final against other format groups and the DataAccessCollection. A pointed group can end its match in two ways:
+A `feature_group=` scope is final: only the scoped group and its subclasses are candidates. A class-name pointer is final against other source groups and the DataAccessCollection. A pointed group can end its match in two ways:
 
 - It aborts, for example on a `query_text` it cannot serve, a refusal at INPUT_DATA_MATCH, or a missing column. These aborts are deferred: they yield to a candidate that computes the feature from input features, or to a subclass of the pointed group that takes it over. The several-sources ambiguity abort is not deferred and always raises.
 - It declines, for example on a PROPERTY_MAPPING value or required-key failure, no source found, or a name the group does not declare. A plain FeatureGroup that claims the name by its own rules still serves it.
@@ -188,7 +188,7 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 ```
 
 ### Connection Handle
-- A connection lives only in the DataAccessCollection. A connection object under a feature option, including the group's class name, raises at planning and asks you to move it to the collection and select it with `connection_handle`. The option under a group's class name is only a format pointer.
+- A connection lives only in the DataAccessCollection. A connection object under a feature option, including the group's class name, raises at planning and asks you to move it to the collection and select it with `connection_handle`. The option under a group's class name is only a source pointer.
 - When `match_data_access` returns a connection of the collection, `global_scope_data_access` writes its handle to the `connection_handle` option, never the object under the class name. The handle is picklable, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs.
 - The handle forwards to input features, but an input feature whose own matcher selects another connection overrides the inherited one. A handle the feature sets itself still conflicts with its matcher.
 
@@ -212,7 +212,7 @@ class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
 ```
 ## Practical Examples
 
-### Scenario 1: Standard File Processing (Format FeatureGroup Only)
+### Scenario 1: Standard File Processing (Source FeatureGroup Only)
 
 **Use Case**: Reading CSV files with Pandas
 **Pattern**: Neither is needed; `CsvFG` claims the feature when a file has the column
@@ -255,7 +255,7 @@ class SyntheticDataFeature(FeatureGroup):
 ## Integration with Other Concepts
 
 ### Compute Frameworks
-- **Format FeatureGroups and `DataCreator`**: work with all compute frameworks
+- **Source FeatureGroups and `DataCreator`**: work with all compute frameworks
 - **MatchData**: Only works with stateful frameworks requiring connection objects
 
 For more information, see:
@@ -270,9 +270,9 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Best Practices
 
-### When to Use Format FeatureGroups or DataCreator Only
+### When to Use Source FeatureGroups or DataCreator Only
 - Working with stateless compute frameworks (Pandas, PyArrow, Polars)
-- Files, documents and databases (format FeatureGroups)
+- Files, documents and databases (source FeatureGroups)
 - Runtime data injection (`ApiInputData`) and synthetic data (`DataCreator`)
 - Most standard data processing scenarios
 
@@ -283,7 +283,7 @@ These patterns are fundamental to how feature groups access data. For more detai
 - When framework connection objects are required
 
 ### Design Considerations
-- **Format FeatureGroups**: Focus on robust source discovery, error handling, and performance
+- **Source FeatureGroups**: Focus on robust source discovery, error handling, and performance
 - **MatchData**: Focus on accurate connection matching and state management
 - **Integration**: Use MatchData only when framework connection objects are actually needed
 
@@ -297,6 +297,6 @@ These patterns are fundamental to how feature groups access data. For more detai
 
 ## Summary
 
-- **Format FeatureGroups** are the way mloda reads files, documents, databases and custom sources
+- **Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources
 - **MatchData** is a specialized pattern for connection object matching, only used by feature groups that require framework connection objects
 - They are not alternatives: they solve different problems in different contexts

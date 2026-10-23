@@ -1,6 +1,6 @@
-"""Consumer declaration requirements against format groups that declare, or lack, the required key.
+"""Consumer declaration requirements against source groups that declare, or lack, the required key.
 
-Format groups serve only their own columns, so they stay inert for other suites. Load order is logged so
+Source groups serve only their own columns, so they stay inert for other suites. Load order is logged so
 plan-time refusal can be proven (nothing loaded).
 """
 
@@ -28,8 +28,8 @@ from mloda.user import (
     resolve_feature,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-    ToyFormatBase,
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToySourceBase,
     toy_dac,
 )
 
@@ -47,7 +47,7 @@ LOAD_LOG: list[str] = []
 SHARED_LONELY_INPUT: list[Feature] = []
 
 
-class _DeclServingFormat(ToyFormatBase):
+class _DeclServingFormat(ToySourceBase):
     """Serves only the names in `served`; logs every load."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("declfmt", NamePolicy.CHECKED, True),)
@@ -150,7 +150,7 @@ class DeclDepthToMetresGlobal(_DeclConsumer):
 
 
 class DeclDepthToMetresScoped(_DeclConsumer):
-    """Requires scale of its depth input, addressed per feature through the format group's option key."""
+    """Requires scale of its depth input, addressed per feature through the source group's option key."""
 
     OUT = OUT_SCOPED
 
@@ -161,7 +161,7 @@ class DeclDepthToMetresScoped(_DeclConsumer):
 
 
 class DeclLonelyRequiringConsumer(_DeclConsumer):
-    """Requires scale of an input only the declaration-less lonely format group can provide."""
+    """Requires scale of an input only the declaration-less lonely source group can provide."""
 
     OUT = OUT_LONELY_REQUIRING
 
@@ -231,13 +231,13 @@ def _run(names: list[Feature | str], dac: DataAccessCollection | None, links: se
 class TestDeclarationRequirementsEndToEnd:
     """A consumer's Feature carries the requirement per input and resolution honours it."""
 
-    def test_global_format_group_supplies_the_depth(self) -> None:
+    def test_global_source_group_supplies_the_depth(self) -> None:
         result = _run([OUT_GLOBAL], DEPTH_DAC, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_GLOBAL].to_pylist() == [1]
         assert LOAD_LOG == [DeclScaledDepthFormat.__name__]
 
-    def test_scoped_format_group_supplies_the_depth(self) -> None:
+    def test_scoped_source_group_supplies_the_depth(self) -> None:
         result = _run([OUT_SCOPED], None, {DEPTH_FRAME_LINK})
 
         assert result[0][OUT_SCOPED].to_pylist() == [1]
@@ -328,12 +328,12 @@ DERIVED_FIRST_MAPPING: FeatureGroupEnvironmentMapping = {
 
 
 class TestWrittenPairIsPerCandidate:
-    """A format group's written pair does not satisfy a sibling candidate's declaration requirement."""
+    """A source group's written pair does not satisfy a sibling candidate's declaration requirement."""
 
     @pytest.mark.parametrize(
         "mapping", [FORMAT_FIRST_MAPPING, DERIVED_FIRST_MAPPING], ids=["format_first", "derived_first"]
     )
-    def test_format_group_written_by_one_candidate_does_not_satisfy_another(
+    def test_source_group_written_by_one_candidate_does_not_satisfy_another(
         self, mapping: FeatureGroupEnvironmentMapping
     ) -> None:
         requesting = Feature(DEPTH, required_declarations={"scale": None})
@@ -345,8 +345,8 @@ class TestWrittenPairIsPerCandidate:
         assert result.eliminations[DeclDerivedDepthFG].stage == "declarations"
 
 
-class TestNonOwnerFormatGroupIsEliminatedAtInputData:
-    """A sibling format group lacking the column is eliminated by its source, not by the declaration."""
+class TestNonOwnerSourceGroupIsEliminatedAtInputData:
+    """A sibling source group lacking the column is eliminated by its source, not by the declaration."""
 
     @pytest.mark.parametrize(
         ("options", "dac", "reason"),
@@ -391,7 +391,7 @@ class TestTopLevelRequestRequirement:
         assert "'scale'" in message
         assert LOAD_LOG == []
 
-    def test_met_requirement_resolves_through_the_declaring_format_group(self) -> None:
+    def test_met_requirement_resolves_through_the_declaring_source_group(self) -> None:
         request = Feature(DEPTH, required_declarations={"scale": None})
 
         result = _run([request], DEPTH_DAC)

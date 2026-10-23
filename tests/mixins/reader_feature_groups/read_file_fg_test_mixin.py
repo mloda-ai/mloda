@@ -1,6 +1,6 @@
 """Shared contract tests for ReadFileFG implementations (one file format per group).
 
-A concrete test class sets the FormatFeatureGroup attributes plus ``write_file``. Not collected on its own.
+A concrete test class sets the SourceFeatureGroup attributes plus ``write_file``. Not collected on its own.
 Every test-local subclass of the group is gated by an explicit plugin mapping.
 """
 
@@ -22,11 +22,11 @@ from mloda.core.abstract_plugins.components.match_rejection import MatchRejectio
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.prepare.identify_feature_group import FeatureResolutionError
-from mloda.provider import CHAIN_SEPARATOR, FormatFeatureGroup
+from mloda.provider import CHAIN_SEPARATOR, SourceFeatureGroup
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
-from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import FormatFeatureGroupTestMixin
+from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import SourceFeatureGroupTestMixin
 
 if TYPE_CHECKING:
     from mloda.provider import ReadFileFG
@@ -35,7 +35,7 @@ FOREIGN_SUFFIX = ".notmyformat"
 HANDLE_OPTION = "data_access_handle"
 
 
-class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
+class ReadFileFGTestMixin(SourceFeatureGroupTestMixin):
     """Contract of every ReadFileFG; adds file, folder, pin, handle, cache and failure checks."""
 
     feature_group_class: type[ReadFileFG]
@@ -696,7 +696,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         impl = None
         if loader_value is not None:
             impl = self.make_implementation(
-                cast(type[FormatFeatureGroup], sub),
+                cast(type[SourceFeatureGroup], sub),
                 PyArrowTable,
                 lambda g, m, f: pa.table({column: [loader_value]}),
             )
@@ -705,7 +705,7 @@ class FileFormatFeatureGroupTestMixin(FormatFeatureGroupTestMixin):
         result = mloda.run_all(
             [Feature(column, Options({sub_name: str(self.own_path)}))],
             compute_frameworks=[PyArrowTable],
-            plugin_collector=PluginCollector.enabled_feature_groups({cast(type[FormatFeatureGroup], sub)}),
+            plugin_collector=PluginCollector.enabled_feature_groups({cast(type[SourceFeatureGroup], sub)}),
         )
         values = result[0].column(column).to_pylist()
         del sub, result, gated, load_neutral, impl

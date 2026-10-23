@@ -1,4 +1,4 @@
-"""Contract classes for the five stock file format groups, plus a read-equals-pyarrow check per format."""
+"""Contract classes for the five stock file source groups, plus a read-equals-pyarrow check per format."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -18,7 +18,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_s
     FileSourcePyArrowTransformer,
 )
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.mixins.reader_feature_groups.file_format_feature_group_test_mixin import FileFormatFeatureGroupTestMixin
+from tests.mixins.reader_feature_groups.read_file_fg_test_mixin import ReadFileFGTestMixin
 from tests.mixins.reader_feature_groups.format_file_writers import (
     write_csv,
     write_feather,
@@ -26,7 +26,7 @@ from tests.mixins.reader_feature_groups.format_file_writers import (
     write_orc,
     write_parquet,
 )
-from tests.mixins.reader_feature_groups.lazy_format_group import lazy_group, load_group
+from tests.mixins.reader_feature_groups.lazy_source_group import lazy_group, load_group
 
 
 def _read_feather(source: Any, columns: list[str] | None = None) -> Any:
@@ -36,7 +36,7 @@ def _read_feather(source: Any, columns: list[str] | None = None) -> Any:
     return table.select(columns) if columns is not None else table
 
 
-class TestCsvFG(FileFormatFeatureGroupTestMixin):
+class TestCsvFG(ReadFileFGTestMixin):
     feature_group_class = lazy_group("csv_fg", "CsvFG")
     present_column = "impl_csv_present"
     missing_column = "impl_csv_missing"
@@ -45,7 +45,7 @@ class TestCsvFG(FileFormatFeatureGroupTestMixin):
         write_csv(path, columns)
 
 
-class TestParquetFG(FileFormatFeatureGroupTestMixin):
+class TestParquetFG(ReadFileFGTestMixin):
     feature_group_class = lazy_group("parquet_fg", "ParquetFG")
     present_column = "impl_parquet_present"
     missing_column = "impl_parquet_missing"
@@ -54,7 +54,7 @@ class TestParquetFG(FileFormatFeatureGroupTestMixin):
         write_parquet(path, columns)
 
 
-class TestJsonFG(FileFormatFeatureGroupTestMixin):
+class TestJsonFG(ReadFileFGTestMixin):
     feature_group_class = lazy_group("json_fg", "JsonFG")
     present_column = "impl_json_present"
     missing_column = "impl_json_missing"
@@ -63,7 +63,7 @@ class TestJsonFG(FileFormatFeatureGroupTestMixin):
         write_json(path, columns)
 
 
-class TestFeatherFG(FileFormatFeatureGroupTestMixin):
+class TestFeatherFG(ReadFileFGTestMixin):
     feature_group_class = lazy_group("feather_fg", "FeatherFG")
     present_column = "impl_feather_present"
     missing_column = "impl_feather_missing"
@@ -72,7 +72,7 @@ class TestFeatherFG(FileFormatFeatureGroupTestMixin):
         write_feather(path, columns)
 
 
-class TestOrcFG(FileFormatFeatureGroupTestMixin):
+class TestOrcFG(ReadFileFGTestMixin):
     feature_group_class = lazy_group("orc_fg", "OrcFG")
     present_column = "impl_orc_present"
     missing_column = "impl_orc_missing"
@@ -100,7 +100,7 @@ _DATA = {"col1": [1, 2, 3], "col2": [4, 5, 6]}
 _WANTED = ["col1", "col2"]
 
 
-class TestFormatGroupsReadLikePyArrow:
+class TestSourceGroupsReadLikePyArrow:
     """Each group's neutral form and its PyArrowTable loader hold what pyarrow reads from the same file."""
 
     @staticmethod

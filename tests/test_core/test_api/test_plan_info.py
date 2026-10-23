@@ -94,8 +94,8 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
     ToyWorkerPythonDict,
 )
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-    ToyFormatBase,
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToySourceBase,
     neutral_csv_group,
     toy_dac,
 )
@@ -132,7 +132,7 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas im
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
-from mloda_plugins.feature_group.input_data.db_formats.sqlite_fg import SqliteFG
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import ParquetFG
 
 # ---------------------------------------------------------------------------
@@ -1295,8 +1295,8 @@ class TestPlanStepFeatureSetOptions:
 # ---------------------------------------------------------------------------
 
 
-class PlanInfoTypeNameIdentityFormat(ToyFormatBase):
-    """Format group serving only its unique name whose identity is the type name of the match."""
+class PlanInfoTypeNameIdentityFormat(ToySourceBase):
+    """Source group serving only its unique name whose identity is the type name of the match."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("plan_info_type_name", NamePolicy.CHECKED, True),)
 
@@ -1518,7 +1518,7 @@ class TestPlanStepDataAccessIdentity:
         for step in result.plan:
             assert all(db not in str(step.feature_set_options) for db in dbs)
 
-    def test_a_format_group_identity_naming_no_source_is_flagged_as_fallback(self) -> None:
+    def test_a_source_group_identity_naming_no_source_is_flagged_as_fallback(self) -> None:
         pointer = {PlanInfoTypeNameIdentityFormat.__name__: {"plan_info_type_name_col": [1]}}
         explained = mloda.explain(
             [Feature("plan_info_type_name_col", options=pointer)],
@@ -2502,7 +2502,7 @@ class TestLeavesConnectionOnDuckdbSource:
     """A requested DuckdbFG column records its handle where its rows leave the connection."""
 
     def test_a_consumer_with_matching_implementations_stays_on_duckdb_ahead_of_list_order(self) -> None:
-        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+        from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
 
         duckdb = pytest.importorskip("duckdb")
         conn = duckdb.connect()
@@ -2524,7 +2524,7 @@ class TestLeavesConnectionOnDuckdbSource:
         assert steps[DuckdbFG].leaves_connection is None
 
     def test_with_two_connections_a_consumer_naming_no_handle_records_its_parents_handle(self) -> None:
-        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+        from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
 
         duckdb = pytest.importorskip("duckdb")
         mine, other = duckdb.connect(), duckdb.connect()
@@ -2545,7 +2545,7 @@ class TestLeavesConnectionOnDuckdbSource:
         assert steps[DuckSourceOpFG].leaves_connection == "mine"
 
     def test_two_handles_on_one_connection_record_none_when_no_rows_leave(self) -> None:
-        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+        from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
 
         duckdb = pytest.importorskip("duckdb")
         conn = duckdb.connect()
@@ -2565,7 +2565,7 @@ class TestLeavesConnectionOnDuckdbSource:
 
     @staticmethod
     def _duck_plan(pinned: str | None) -> list[PlanStep]:
-        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+        from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
 
         duckdb = pytest.importorskip("duckdb")
         conn = duckdb.connect()

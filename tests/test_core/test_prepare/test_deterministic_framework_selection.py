@@ -470,7 +470,7 @@ def test_a_sqlite_connection_under_a_group_class_name_raises_the_move_error(sqli
     _assert_move_error(raised, "MoveErrorRootFG", "SqliteFramework")
 
 
-def test_a_duckdb_connection_under_a_format_group_pointer_key_raises_the_move_error() -> None:
+def test_a_duckdb_connection_under_a_source_group_pointer_key_raises_the_move_error() -> None:
     duckdb = pytest.importorskip("duckdb")
     key = CsvFG.pointer_keys()[0]
     feature = Feature("move_error_csv_col", options={key: duckdb.connect()})

@@ -1,4 +1,4 @@
-"""ORC file format group: typed schema from the footer, row counts and a PyArrow read."""
+"""ORC file source group: typed schema from the footer, row counts and a PyArrow read."""
 
 from collections.abc import Collection
 from typing import Any

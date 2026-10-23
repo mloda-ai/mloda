@@ -17,7 +17,7 @@ from mloda.core.abstract_plugins.components.input_data.file_source import FileSo
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
-from mloda.provider import FormatFeatureGroup, ReadFileFG
+from mloda.provider import SourceFeatureGroup, ReadFileFG
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import (
@@ -28,13 +28,13 @@ from mloda.core.prepare.identify_feature_group import (
 from mloda.user import DataAccessCollection, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
 from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     FileLoadsIntoFrameworkMixin,
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.file_format_feature_group_test_mixin import FileFormatFeatureGroupTestMixin
+from tests.mixins.reader_feature_groups.read_file_fg_test_mixin import ReadFileFGTestMixin
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_file_format_group import (
     SAMPLE_SIZE,
@@ -45,7 +45,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_f
 )
 
 
-class TestToyFileFormatFeatureGroup(FileFormatFeatureGroupTestMixin):
+class TestToyFileSourceFeatureGroup(ReadFileFGTestMixin):
     feature_group_class = ToyFileFormatFG
     present_column = "toyfmt_filecol"
     missing_column = "toyfmt_filemissing"
@@ -84,10 +84,10 @@ class TestReadFileFGBase:
         )
         assert child.suffixes() == (".x",)
 
-    def test_is_an_abstract_format_group_exported_from_provider(self) -> None:
+    def test_is_an_abstract_source_group_exported_from_provider(self) -> None:
         assert provider.ReadFileFG is ReadFileFG
         assert "ReadFileFG" in provider.__all__
-        assert issubclass(ReadFileFG, FormatFeatureGroup)
+        assert issubclass(ReadFileFG, SourceFeatureGroup)
         assert inspect.isabstract(ReadFileFG)
         assert {"suffixes", "column_names"} <= set(ReadFileFG.__abstractmethods__)
         assert not {"find_sources", "load_neutral"} & set(ReadFileFG.__abstractmethods__)
@@ -226,7 +226,7 @@ class _FirstCandidateRefusingExtender(Extender):
 
 
 class TestPinnedFileOwnedBySomeFileGroup:
-    """A pin to a file whose suffix no file format group owns is named in the resolution failure, once."""
+    """A pin to a file whose suffix no file source group owns is named in the resolution failure, once."""
 
     UNOWNED_FRAGMENT = "has a suffix no registered reader owns"
 
@@ -493,7 +493,7 @@ def _csv_file(tmp_path: Path) -> str:
 
 
 class TestClassKeyNormalizationOnCsvFG:
-    """Groups B and E on the stock CsvFG: a format group class as an option key equals its class-name string."""
+    """Groups B and E on the stock CsvFG: a source group class as an option key equals its class-name string."""
 
     def test_options_class_key_equals_string_key(self, tmp_path: Path) -> None:
         path = _csv_file(tmp_path)
@@ -535,8 +535,8 @@ class TestClassKeyNormalizationOnCsvFG:
         assert options.get(CsvFG.__name__) == path
 
 
-class TestSecondCsvFormatGroupIsAmbiguous:
-    """Two format groups owning the same suffix on the same file are ambiguous; no reader-level pick exists."""
+class TestSecondCsvSourceGroupIsAmbiguous:
+    """Two source groups owning the same suffix on the same file are ambiguous; no reader-level pick exists."""
 
     def test_a_gated_second_csv_group_next_to_csvfg_gives_multiple_feature_groups(self, tmp_path: Path) -> None:
         marker = "sibling_sel_second_csv_marker"

@@ -15,7 +15,7 @@ from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collec
 from mloda.core.abstract_plugins.components.input_data.api.base_api_data import BaseApiData
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data import ApiInputData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.filter.global_filter import GlobalFilter
@@ -257,7 +257,7 @@ class ExecutionPlan:
         return handle, explicit
 
     def _source_handle(self, step: FeatureGroupStep) -> str | None:
-        """The collection handle whose connection the step's matched format group reads from, by identity."""
+        """The collection handle whose connection the step's matched source group reads from, by identity."""
         match = step.features.input_data_match
         if match is None or self.data_access_collection is None:
             return None
@@ -3672,7 +3672,7 @@ Available join types:
                 self.add_single_filters_to_feature_set(feature_group, feature_set)
 
                 input_data_match = feature_set.input_data_match
-                if issubclass(feature_group, FormatFeatureGroup) and input_data_match is not None:
+                if issubclass(feature_group, SourceFeatureGroup) and input_data_match is not None:
                     feature_set.implementation = feature_group.select_implementation(
                         cf, input_data_match[1], self.implementations
                     )

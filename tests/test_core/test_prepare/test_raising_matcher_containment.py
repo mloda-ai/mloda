@@ -30,9 +30,9 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_TOKEN,
-    ToyFormatFG,
+    ToySourceFG,
     toy_token_request,
 )
 
@@ -271,7 +271,7 @@ class TestRaisingMatcherContainment:
 _TOKEN_COLUMN = "toyfmt_tokmatch_col"  # nosec B105
 
 
-class TokenFindSourcesFG(ToyFormatFG):
+class TokenFindSourcesFG(ToySourceFG):
     """find_sources raises with the registered token in its message."""
 
     @classmethod
@@ -285,7 +285,7 @@ class TokenFindSourcesFG(ToyFormatFG):
         raise ValueError(f"username={TOY_TOKEN}")
 
 
-class TokenReasonFG(ToyFormatFG):
+class TokenReasonFG(ToySourceFG):
     """Cannot list columns; its unknown-columns reason carries the registered token."""
 
     @classmethod
@@ -311,7 +311,7 @@ class TestRegisteredTokenInResolutionErrors:
     """A registered collection token never reaches resolution error text, refusals, diagnose or logs."""
 
     @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
-    def test_resolution_error_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+    def test_resolution_error_masks_the_token(self, group: type[ToySourceFG], caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.DEBUG):
             with pytest.raises(ValueError) as excinfo:
                 mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
@@ -321,7 +321,7 @@ class TestRegisteredTokenInResolutionErrors:
         assert TOY_TOKEN not in caplog.text
 
     @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
-    def test_diagnose_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+    def test_diagnose_masks_the_token(self, group: type[ToySourceFG], caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.DEBUG):
             diagnosis = mloda.diagnose([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
 
@@ -332,7 +332,7 @@ class TestRegisteredTokenInResolutionErrors:
         assert TOY_TOKEN not in caplog.text
 
     @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
-    def test_resolve_feature_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+    def test_resolve_feature_masks_the_token(self, group: type[ToySourceFG], caplog: pytest.LogCaptureFixture) -> None:
         request = toy_token_request(group, _TOKEN_COLUMN)
         with caplog.at_level(logging.DEBUG):
             resolved = resolve_feature(

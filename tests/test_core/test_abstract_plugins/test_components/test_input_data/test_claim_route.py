@@ -1,12 +1,13 @@
 """ClaimRoute, NamePolicy and SourceMatch value objects, and their public exports."""
 
+import importlib
+import importlib.util
 from typing import Any
 
 import pytest
 
 import mloda.provider as provider
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 
 
 def test_claim_route_is_hashable_and_compares_by_value() -> None:
@@ -34,11 +35,20 @@ def test_provider_exports_are_the_core_objects() -> None:
     assert provider.ClaimRoute is ClaimRoute
     assert provider.NamePolicy is NamePolicy
     assert provider.SourceMatch is SourceMatch
-    assert provider.FormatFeatureGroup is FormatFeatureGroup
     assert provider.QUERY_OPTION == "query_text"
     assert provider.HANDLE_OPTION == "data_access_handle"
-    for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "FormatFeatureGroup", "QUERY_OPTION", "HANDLE_OPTION"):
+    for name in ("ClaimRoute", "NamePolicy", "SourceMatch", "SourceFeatureGroup", "QUERY_OPTION", "HANDLE_OPTION"):
         assert name in provider.__all__
+
+
+def test_source_feature_group_replaces_format_feature_group() -> None:
+    base = "mloda.core.abstract_plugins.components.input_data."
+    assert importlib.util.find_spec(base + "source_feature_group") is not None
+    assert importlib.util.find_spec(base + "format_feature_group") is None
+    module = importlib.import_module(base + "source_feature_group")
+    assert provider.SourceFeatureGroup is module.SourceFeatureGroup
+    assert not hasattr(provider, "FormatFeatureGroup")
+    assert "FormatFeatureGroup" not in provider.__all__
 
 
 @pytest.mark.parametrize(

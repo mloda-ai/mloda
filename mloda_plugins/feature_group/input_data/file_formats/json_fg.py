@@ -1,4 +1,4 @@
-"""JSON file format group: sampled and full column discovery with PyArrow, and a PyArrow read."""
+"""JSON file source group: sampled and full column discovery with PyArrow, and a PyArrow read."""
 
 import io
 from collections.abc import Collection

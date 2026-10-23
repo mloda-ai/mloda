@@ -1,7 +1,7 @@
 """Regression guards for the compute-framework-neutral file seam, then the format x framework matrix.
 
 Reading a CSV via ``run_all`` yields the requested columns on PyArrowTable, PandasDataFrame and PolarsDataFrame;
-the matrix classes below cover every stock format group per framework. No backend objects are built at import,
+the matrix classes below cover every stock source group per framework. No backend objects are built at import,
 class or parametrize time.
 """
 
@@ -34,7 +34,7 @@ from tests.mixins.reader_feature_groups.format_file_writers import (
     write_orc,
     write_parquet,
 )
-from tests.mixins.reader_feature_groups.lazy_format_group import lazy_group
+from tests.mixins.reader_feature_groups.lazy_source_group import lazy_group
 
 
 @pytest.fixture(autouse=True)

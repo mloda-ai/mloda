@@ -20,9 +20,9 @@ from mloda.user import DataAccessCollection, Feature, FilterType, GlobalFilter, 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.input_data.db_formats import duckdb_fg as duckdb_fg_module
-from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG, DuckdbTable
-from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import FormatFeatureGroupTestMixin
+from mloda_plugins.feature_group.input_data.db_sources import duckdb_fg as duckdb_fg_module
+from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG, DuckdbTable
+from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import SourceFeatureGroupTestMixin
 
 try:
     import duckdb
@@ -78,7 +78,7 @@ def opened() -> Iterator[list[Any]]:
         connection.close()
 
 
-class TestDuckdbFGContract(FormatFeatureGroupTestMixin):
+class TestDuckdbFGContract(SourceFeatureGroupTestMixin):
     feature_group_class = DuckdbFG
     present_column = "impl_duckdb_present"
     missing_column = "impl_duckdb_missing"

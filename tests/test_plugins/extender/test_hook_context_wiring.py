@@ -21,7 +21,7 @@ from mloda.provider import BaseInputData, ComputeFramework, DataCreator, Feature
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     neutral_csv_group,
     toy_dac,
 )
@@ -919,7 +919,7 @@ class TestAttachedFrameworkIsSealedDuringARealRun:
 
 
 class TestImplementationIdentityOnCalculateFeature:
-    """A format group step's calculate hook names its implementation and version; other steps leave both None."""
+    """A source group step's calculate hook names its implementation and version; other steps leave both None."""
 
     def _calculate_context(self, column: str, group: type, dac: Any) -> HookContext:
         extender = _ContextCapturingExtender(ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE)

@@ -8,7 +8,7 @@ class ApiInputData(BaseInputData):
     This class represents api input data, which was passed through the api.
 
     It injects in-memory data passed through the API and is NOT an HTTP client; an HTTP source is a
-    FormatFeatureGroup subclass with a pointed-only NamePolicy.OPEN claim route.
+    SourceFeatureGroup subclass with a pointed-only NamePolicy.OPEN claim route.
     """
 
     def matches(

@@ -9,12 +9,12 @@ from mloda.provider import ComputeFramework
 from mloda.user import Feature
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.domain import Domain
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatBase
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceBase
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
-from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
 
 
 def test_feature_equals() -> None:
@@ -292,15 +292,15 @@ def test_typed_helper_required_declarations_are_validated() -> None:
         Feature.double_of("subject_token", required_declarations={1: None})  # type: ignore[dict-item]
 
 
-class FeatureMatchReaderA(ToyFormatBase):
-    """Format group stub for input_data_match identity tests."""
+class FeatureMatchReaderA(ToySourceBase):
+    """Source group stub for input_data_match identity tests."""
 
 
-class FeatureMatchReaderB(ToyFormatBase):
-    """Second format group stub, same name and options but another source kind."""
+class FeatureMatchReaderB(ToySourceBase):
+    """Second source group stub, same name and options but another source kind."""
 
 
-def _matched(reader: type[ToyFormatBase], access: Any) -> Feature:
+def _matched(reader: type[ToySourceBase], access: Any) -> Feature:
     feature = Feature("feature_match_col", options={"opt": 1})
     feature.input_data_match = (reader, access)
     return feature
@@ -339,7 +339,7 @@ def test_similarity_hash_includes_the_full_pair() -> None:
     assert one.base_similarity_hash() != two.base_similarity_hash()
 
 
-class IdentityCountingReader4412(ToyFormatBase):
+class IdentityCountingReader4412(ToySourceBase):
     calls = 0
 
     @classmethod
@@ -348,7 +348,7 @@ class IdentityCountingReader4412(ToyFormatBase):
         return f"counted:{match.source}"
 
 
-class IdentityRaisingReader4412(ToyFormatBase):
+class IdentityRaisingReader4412(ToySourceBase):
     @classmethod
     def data_access_identity(cls, match: SourceMatch) -> str:
         raise RuntimeError("identity boom")

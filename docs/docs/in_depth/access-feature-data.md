@@ -10,7 +10,7 @@ This framework provides several structured mechanisms for features to access and
 
 These methods ensure efficient data management while maintaining flexibility and scalability. A typical scenario involves a complex feature relying on three input features. These input features, in turn, may depend on other input features or load data using ApiData.
 
-> **Advanced**: For a detailed explanation of the underlying data access patterns (format FeatureGroups and MatchData), see [Data Access Patterns](data-access-patterns.md).
+> **Advanced**: For a detailed explanation of the underlying data access patterns (source FeatureGroups and MatchData), see [Data Access Patterns](data-access-patterns.md).
 
 #### DataAccessCollection - global data access
 
@@ -80,7 +80,7 @@ Output
 1   Value2         3]
 ```
 
-#### Document format groups
+#### Document source groups
 
 For unstructured files, mloda ships one group per format: `TextFG` (`.text`/`.txt`/`.TXT`), `PyFG` (`.py`),
 `MarkdownFG` (`.md`), `YamlFG` (`.yaml`/`.yml`) and `JsonDocumentFG` (`.json`). Each answers three names:

@@ -78,7 +78,7 @@ def _isolate_forwarded_value(value: Any, memo: dict[int, Any], leaf: Callable[[A
 
 
 def _normalize_reader_class_keys(d: dict[str, Any]) -> dict[str, Any]:
-    """Format group class keys normalize to the class name, legacy reader class keys to
+    """Source group class keys normalize to the class name, legacy reader class keys to
     data_access_name(), so both documented key forms share one identity."""
     if not any(isinstance(k, type) for k in d):
         return d
@@ -96,7 +96,7 @@ def _normalize_class_key(k: Any) -> Any:
 
 
 def _is_reader_tuple(value: Any) -> bool:
-    """True for a (format group class, access) pair, the same class shape
+    """True for a (source group class, access) pair, the same class shape
     ``_normalize_reader_class_keys`` recognizes."""
     return (
         isinstance(value, tuple)
@@ -115,17 +115,17 @@ def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
     return {k: _str_option_value(v) for k, v in d.items()}
 
 
-def _display_option_value(key: Any, value: Any, format_group_names: Collection[str]) -> Any:
-    if key in format_group_names:
+def _display_option_value(key: Any, value: Any, source_group_names: Collection[str]) -> Any:
+    if key in source_group_names:
         return redact_option_value(value)
     if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
         return "***"
     return _str_option_value(_mask_secret_keys(value) if isinstance(value, (Mapping, list, tuple)) else value)
 
 
-def _display_option_dict(d: dict[str, Any], format_group_names: Collection[str]) -> dict[str, Any]:
-    """Display-only: redact format group pointers, credential-shaped keys and nested credential keys."""
-    return {k: _display_option_value(k, v, format_group_names) for k, v in d.items()}
+def _display_option_dict(d: dict[str, Any], source_group_names: Collection[str]) -> dict[str, Any]:
+    """Display-only: redact source group pointers, credential-shaped keys and nested credential keys."""
+    return {k: _display_option_value(k, v, source_group_names) for k, v in d.items()}
 
 
 def validate_forwarding_directives(
@@ -147,7 +147,7 @@ def reject_reserved_reader_key(options: "Options") -> None:
     if RESERVED_READER_OPTION_KEY in options.group or RESERVED_READER_OPTION_KEY in options.context:
         raise ValueError(
             f"Option key '{RESERVED_READER_OPTION_KEY}' is reserved for the engine's reader selection; "
-            "remove it, and point at a format group with its class-name key instead."
+            "remove it, and point at a source group with its class-name key instead."
         )
 
 
@@ -466,9 +466,9 @@ class Options:
         return self.rebuild(safe_deepcopy_dict(self.group), safe_deepcopy_dict(self.context))
 
     def __str__(self) -> str:
-        from mloda.core.abstract_plugins.components.input_data.format_feature_group import concrete_format_groups
+        from mloda.core.abstract_plugins.components.input_data.source_feature_group import concrete_source_groups
 
-        names = concrete_format_groups().keys()
+        names = concrete_source_groups().keys()
         parts = (
             f"Options(group={_display_option_dict(self.group, names)}, "
             f"context={_display_option_dict(self.context, names)}"

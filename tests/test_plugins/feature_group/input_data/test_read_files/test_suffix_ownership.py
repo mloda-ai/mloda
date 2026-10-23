@@ -12,7 +12,7 @@ from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.mixins.reader_feature_groups.format_file_writers import write_csv, write_json
-from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group, load_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group, load_group
 
 SUFFIX_COLUMN = "suffixown_id"
 DOCUMENT_NAME = "JsonDocumentFG"

@@ -26,7 +26,7 @@ from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.user import PluginCollector
 from mloda.user import mloda
-from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_group
 from tests.test_core.test_integration.test_core.test_runner_one_compute_framework import SumFeature  # noqa: F401
 
 DOUBLING_MARKER = "overwritten_csv_doubling_marker"

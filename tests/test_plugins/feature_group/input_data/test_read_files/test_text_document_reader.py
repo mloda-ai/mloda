@@ -14,13 +14,13 @@ from tests.mixins.compute_frameworks.framework_adapter_mixins import (
     PyArrowTableAdapter,
     PythonDictAdapter,
 )
-from tests.mixins.reader_feature_groups.document_format_feature_group_test_mixin import (
-    DocumentFormatFeatureGroupTestMixin,
+from tests.mixins.reader_feature_groups.read_document_fg_test_mixin import (
+    ReadDocumentFGTestMixin,
 )
-from tests.mixins.reader_feature_groups.lazy_format_group import lazy_document_group, load_document_group
+from tests.mixins.reader_feature_groups.lazy_source_group import lazy_document_group, load_document_group
 
 
-class TestTextFG(DocumentFormatFeatureGroupTestMixin):
+class TestTextFG(ReadDocumentFGTestMixin):
     feature_group_class = lazy_document_group("text_fg", "TextFG")
     present_column = "TextFG"
     missing_column = "docfmt_text_missing"
@@ -28,7 +28,7 @@ class TestTextFG(DocumentFormatFeatureGroupTestMixin):
     sample_text = "plain txt body\n"
 
 
-class TestPyFG(DocumentFormatFeatureGroupTestMixin):
+class TestPyFG(ReadDocumentFGTestMixin):
     feature_group_class = lazy_document_group("text_fg", "PyFG")
     present_column = "PyFG"
     missing_column = "docfmt_py_missing"

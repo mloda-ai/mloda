@@ -41,7 +41,7 @@ from mloda.core.prepare.accessible_plugins import (
 from mloda.core.prepare.resolution_types import ResolutionDiagnosis
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
 # Cold worker under xdist load: PluginLoader.all plus hashing the scoped shipped groups can exceed the default timeout.
 pytestmark = pytest.mark.timeout(30)
@@ -1377,7 +1377,7 @@ def test_resolve_feature_matching_scope_projects_no_candidates_and_error_keeps_c
 
 
 def _toy_pair() -> tuple[Any, Any]:
-    class _ImplConflictFG(ToyFormatFG):
+    class _ImplConflictFG(ToySourceFG):
         pass
 
     return _ImplConflictFG, PythonDictFramework

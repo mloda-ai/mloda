@@ -1,4 +1,4 @@
-"""Concrete column_names/describe_columns contract runs per pyarrow-backed format group, plus JSON sampling."""
+"""Concrete column_names/describe_columns contract runs per pyarrow-backed source group, plus JSON sampling."""
 
 import json
 import os
@@ -17,7 +17,7 @@ from tests.mixins.reader_feature_groups.column_discovery_contract_test_mixin imp
     ColumnDiscoveryContractTestMixin,
     match_of,
 )
-from tests.mixins.reader_feature_groups.lazy_format_group import lazy_group, load_group
+from tests.mixins.reader_feature_groups.lazy_source_group import lazy_group, load_group
 
 
 class TestFeatherColumnDiscoveryContract(ColumnDiscoveryContractTestMixin):

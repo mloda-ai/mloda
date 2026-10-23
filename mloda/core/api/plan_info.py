@@ -14,9 +14,9 @@ from mloda.core.abstract_plugins.components.error_utils import internal_invarian
 from mloda.core.abstract_plugins.components.input_data.base_input_data import (
     _is_fallback_identity,
 )
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import (
-    FormatFeatureGroup,
-    concrete_format_groups,
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
+    SourceFeatureGroup,
+    concrete_source_groups,
     implementation_path,
 )
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
@@ -74,7 +74,7 @@ class PlanStep:
     recorded no candidates for that side. APPEND/UNION sides carry only the index-bearing parent.
 
     ``feature_set_options`` is a compute step's group-only, deep-copied snapshot of ``FeatureSet.options``
-    (a mapping under a format group's name, a pointer, is redacted to its keys; other mappings have
+    (a mapping under a source group's name, a pointer, is redacted to its keys; other mappings have
     credential-shaped keys masked),
     and ``step_uuid`` its ``FeatureGroupStep.uuid`` (equal to ``HookContext.step_uuid`` on that step's hooks), the
     key ``RunResult.frames()`` pairs frames by; both are None for join/transform steps and, like ``join_token``,
@@ -101,11 +101,11 @@ class PlanStep:
     transform leaves (carried through same-handle steps), "<unnamed>" for an auto handle, else None.
 
     ``implementation``: the Implementation class serving a compute step, else None.
-    ``implementation_path``: its ``module:qualname``, "neutral" for a format group step without one, else None.
+    ``implementation_path``: its ``module:qualname``, "neutral" for a source group step without one, else None.
     ``implementation_specialized_from``: the winner's concrete Implementation ancestors that serve the step's pair, sorted by path.
     ``implementation_hash`` is the first-party code closure hash, never dependency versions ("unavailable" when
     hashing fails). ``feature_group_hash``: the group's code hash, set when an inherited implementation serves a
-    subclass group or a format group loads neutrally. ``implementation_version``, ``implementation_hash``,
+    subclass group or a source group loads neutrally. ``implementation_version``, ``implementation_hash``,
     ``feature_group_version``, ``feature_group_hash``: excluded from equality.
     """
 
@@ -196,20 +196,20 @@ class PlanStep:
         return self._data_access_identity_is_fallback
 
 
-def _snapshot_option(key: Any, value: Any, format_group_names: Iterable[str]) -> Any:
+def _snapshot_option(key: Any, value: Any, source_group_names: Iterable[str]) -> Any:
     if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
         return "***"
     if not isinstance(value, Mapping):
         copied = _safe_deepcopy(value, {})
         return _mask_secret_keys(copied) if isinstance(copied, (list, tuple)) else copied
-    if key in format_group_names:
+    if key in source_group_names:
         return redact_option_value(value)
     return _mask_secret_keys(_safe_deepcopy(value, {}))
 
 
 def snapshot_group(group: Mapping[Any, Any]) -> dict[Any, Any]:
     """Snapshot a group mapping with the plan-step redaction rule."""
-    names = concrete_format_groups().keys()
+    names = concrete_source_groups().keys()
     return {key: _snapshot_option(key, value, names) for key, value in group.items()}
 
 
@@ -237,7 +237,7 @@ def _canonical(value: Any, ancestors: frozenset[int] = frozenset()) -> Any:
 
 def match_digests(group: Mapping[Any, Any]) -> dict[Any, str]:
     """Per-process keyed digests of the group values whose snapshot hides part of the raw value."""
-    names = concrete_format_groups().keys()
+    names = concrete_source_groups().keys()
     return {
         key: hmac.new(_PROCESS_KEY, stable_text(_canonical(value)).encode(), hashlib.sha256).hexdigest()
         for key, value in group.items()
@@ -472,8 +472,8 @@ def build_plan_steps(
 
 def source_of(
     execution_plan: Iterable[TransformFrameworkStep | JoinStep | FeatureGroupStep], step: PlanStep
-) -> tuple[type[FormatFeatureGroup], SourceMatch, type["ComputeFramework"]]:
-    """The (format group, source match, compute framework) of a compute step of this plan; ValueError when it has none."""
+) -> tuple[type[SourceFeatureGroup], SourceMatch, type["ComputeFramework"]]:
+    """The (source group, source match, compute framework) of a compute step of this plan; ValueError when it has none."""
     name = step.feature_group_name or "unknown"
     if step.step_uuid is None:
         raise ValueError(f"Step of feature group {name} is not a compute step, so it has no source.")

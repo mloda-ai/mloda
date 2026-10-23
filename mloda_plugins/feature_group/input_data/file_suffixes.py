@@ -1,4 +1,4 @@
-"""Structured file suffix constants shared by the file and document format groups."""
+"""Structured file suffix constants shared by the file and document source groups."""
 
 CSV_SUFFIXES = (".csv", ".CSV")
 PARQUET_SUFFIXES = (".parquet", ".PARQUET", ".pqt", ".PQT")

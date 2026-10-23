@@ -16,7 +16,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort, is_match_abort
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
-from mloda.provider import FormatFeatureGroup, ReadDocumentFG, ReadFileFG
+from mloda.provider import SourceFeatureGroup, ReadDocumentFG, ReadFileFG
 from mloda.user import DataAccessCollection, DataType, Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
@@ -70,10 +70,10 @@ def _claims(group: type[Any], feature: Feature, dac: DataAccessCollection | None
 
 
 class TestReadDocumentFGBase:
-    def test_is_an_abstract_format_group_exported_from_provider_asking_only_for_suffixes(self) -> None:
+    def test_is_an_abstract_source_group_exported_from_provider_asking_only_for_suffixes(self) -> None:
         assert provider.ReadDocumentFG is ReadDocumentFG
         assert "ReadDocumentFG" in provider.__all__
-        assert issubclass(ReadDocumentFG, FormatFeatureGroup)
+        assert issubclass(ReadDocumentFG, SourceFeatureGroup)
         assert inspect.isabstract(ReadDocumentFG)
         assert set(ReadDocumentFG.__abstractmethods__) == {"suffixes"}
         assert not inspect.isabstract(ToyDocFG)
@@ -91,7 +91,7 @@ class TestReadDocumentFGBase:
     def test_the_docstring_points_third_party_groups_at_the_contract_mixins(self) -> None:
         doc = ReadDocumentFG.__doc__ or ""
         assert "tests/mixins/reader_feature_groups" in doc
-        assert "document_format_feature_group_test_mixin" in doc
+        assert "read_document_fg_test_mixin" in doc
 
     def test_the_abstract_base_never_claims_a_feature_named_after_it(self, tmp_path: Path) -> None:
         dac = DataAccessCollection(files={"toy": str(_write(tmp_path, "a.toydoc"))})
@@ -277,12 +277,12 @@ class TestSiblingsUnderASharedFileSourceBase:
         common = [
             base
             for base in ReadDocumentFG.__mro__
-            if base in ReadFileFG.__mro__ and base not in (object, FormatFeatureGroup)
+            if base in ReadFileFG.__mro__ and base not in (object, SourceFeatureGroup)
         ]
         assert common
         shared = common[0]
-        assert issubclass(shared, FormatFeatureGroup)
-        assert shared not in (FormatFeatureGroup, ReadFileFG, ReadDocumentFG)
+        assert issubclass(shared, SourceFeatureGroup)
+        assert shared not in (SourceFeatureGroup, ReadFileFG, ReadDocumentFG)
         assert inspect.isabstract(shared)
 
     def test_a_document_group_has_no_column_names_listing(self) -> None:

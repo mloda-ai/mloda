@@ -32,9 +32,9 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet, SourceMatch
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     TOY_TOKEN,
-    ToyFormatFG,
+    ToySourceFG,
     toy_token_request,
 )
 
@@ -596,7 +596,7 @@ class FrozenTokenError(Exception):
     detail: str
 
 
-class TokenValueErrorFG(ToyFormatFG):
+class TokenValueErrorFG(ToySourceFG):
     """Load raises a ValueError from a KeyError, token in the message."""
 
     @classmethod
@@ -604,7 +604,7 @@ class TokenValueErrorFG(ToyFormatFG):
         raise ValueError(f"username={TOY_TOKEN}") from KeyError("inner")
 
 
-class TokenOSErrorFG(ToyFormatFG):
+class TokenOSErrorFG(ToySourceFG):
     """Load raises an OSError whose strerror and filename carry the token."""
 
     @classmethod
@@ -612,7 +612,7 @@ class TokenOSErrorFG(ToyFormatFG):
         raise OSError(errno.ENOENT, f"cannot open {TOY_TOKEN}", f"/x/{TOY_TOKEN}")
 
 
-class TokenFrozenFG(ToyFormatFG):
+class TokenFrozenFG(ToySourceFG):
     """Load raises a frozen-dataclass exception carrying the token."""
 
     @classmethod
@@ -623,7 +623,7 @@ class TokenFrozenFG(ToyFormatFG):
 _TOKEN_GROUPS = [TokenValueErrorFG, TokenOSErrorFG, TokenFrozenFG]
 
 
-def _assert_token_gone(exc: BaseException, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+def _assert_token_gone(exc: BaseException, group: type[ToySourceFG], caplog: pytest.LogCaptureFixture) -> None:
     assert TOY_TOKEN not in str(exc)
     assert TOY_TOKEN not in repr(exc.args)
     assert TOY_TOKEN not in caplog.text
@@ -639,7 +639,7 @@ def _assert_token_gone(exc: BaseException, group: type[ToyFormatFG], caplog: pyt
 
 
 @pytest.mark.parametrize("group", _TOKEN_GROUPS)
-def test_sync_load_error_masks_registered_token(group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+def test_sync_load_error_masks_registered_token(group: type[ToySourceFG], caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(Exception) as excinfo:
             mloda.run_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
@@ -649,7 +649,7 @@ def test_sync_load_error_masks_registered_token(group: type[ToyFormatFG], caplog
 
 @pytest.mark.parametrize("group", _TOKEN_GROUPS)
 def test_threading_load_error_masks_registered_token(
-    group: type[ToyFormatFG], flight_server: Any, caplog: pytest.LogCaptureFixture
+    group: type[ToySourceFG], flight_server: Any, caplog: pytest.LogCaptureFixture
 ) -> None:
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(Exception) as excinfo:
@@ -691,7 +691,7 @@ def test_registered_token_scope_does_not_leak_after_a_failed_run() -> None:
     assert current_registered_secrets() == frozenset()
 
 
-class TokenIdentityFG(ToyFormatFG):
+class TokenIdentityFG(ToySourceFG):
     """data_access_identity raises with the registered token in its message."""
 
     @classmethod
@@ -728,7 +728,7 @@ def test_early_stream_close_finalizes_inside_the_redaction_scope(monkeypatch: py
         original(self, cancelled)
 
     monkeypatch.setattr(ExecutionOrchestrator, "_finalize", spy)
-    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToyFormatFG, _TOKEN_COLUMN))
+    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToySourceFG, _TOKEN_COLUMN))
     stream = session.stream_run()
     next(stream)
     stream.close()
@@ -758,7 +758,7 @@ def test_stream_start_enters_the_redaction_scope_once(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(request_module._CredentialRedaction, "__enter__", counting_enter)
     monkeypatch.setattr(request_module._CredentialRedaction, "__exit__", counting_exit)
-    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToyFormatFG, _TOKEN_COLUMN))
+    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToySourceFG, _TOKEN_COLUMN))
 
     stream = session.stream_run()
     stream.close()

@@ -18,8 +18,8 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
-    ToyFormatBase,
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+    ToySourceBase,
     toy_dac,
 )
 
@@ -36,7 +36,7 @@ class ProbeWrittenFw1001(ComputeFramework):
 
 
 class ProbeWrittenWriterFG1001(FeatureGroup):
-    """Writes the pair the way a format group does, then matches."""
+    """Writes the pair the way a source group does, then matches."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -122,7 +122,7 @@ class ProbeWrittenAborterFG1001(ProbeWrittenWriterFG1001):
         raise escalate_match_abort(RuntimeError("marked abort after the write"))
 
 
-class ProbeWrittenFormatFG1001(ToyFormatBase):
+class ProbeWrittenFormatFG1001(ToySourceBase):
     """Serves only its own column, so process-wide discovery cannot collide."""
 
     CLAIM_ROUTES: ClassVar[tuple[ClaimRoute, ...]] = (ClaimRoute("probe_written_1001", NamePolicy.CHECKED, True),)
@@ -172,7 +172,7 @@ def test_marked_abort_propagates_and_leaves_no_key_on_the_options() -> None:
     assert RESERVED_READER_OPTION_KEY not in options
 
 
-def test_format_group_write_moves_onto_the_outcome() -> None:
+def test_source_group_write_moves_onto_the_outcome() -> None:
     options = Options()
     access = toy_dac(probe_written_handle_1001={FORMAT_FEATURE: [1]})
 

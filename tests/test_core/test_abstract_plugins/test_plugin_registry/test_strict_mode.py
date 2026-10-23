@@ -32,7 +32,7 @@ from mloda.core.abstract_plugins.implementation import loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry, register_plugin
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins, RedefinitionConflictError
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import ToyFormatFG
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToySourceFG
 
 ENV_VAR = "MLODA_PLUGIN_REGISTRY_STRICT"
 
@@ -394,7 +394,7 @@ class TestWarnLabelsNameTheUnregisteredKinds:
     def test_unregistered_implementations_are_named_under_an_implementations_label(
         self, caplog: pytest.LogCaptureFixture, make_implementation: Any
     ) -> None:
-        class _WarnLabelGroup(ToyFormatFG):
+        class _WarnLabelGroup(ToySourceFG):
             pass
 
         implementation = make_implementation(_WarnLabelGroup, PythonDictFramework, name="WarnLabelImpl")

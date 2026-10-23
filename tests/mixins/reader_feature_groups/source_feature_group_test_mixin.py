@@ -1,4 +1,4 @@
-"""Shared contract tests for FormatFeatureGroup implementations.
+"""Shared contract tests for SourceFeatureGroup implementations.
 
 A concrete test class sets the class attributes and implements the two collection builders. Not collected on its
 own (no Test prefix).
@@ -21,7 +21,7 @@ from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass, resolve_or_raise
 from mloda.core.prepare.resolution_types import EvaluationResult
-from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, ComputeFramework, FormatFeatureGroup, NamePolicy
+from mloda.provider import CHAIN_SEPARATOR, COLUMN_SEPARATOR, ComputeFramework, SourceFeatureGroup, NamePolicy
 from mloda.steward import ReaderProbeScope, reader_probe_scope
 from mloda.user import Feature, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
@@ -89,10 +89,10 @@ def _spy(name: str, original: Any, touched: list[str]) -> Any:
     return classmethod(spy)
 
 
-class FormatFeatureGroupTestMixin:
-    """Contract of every format group; the concrete class supplies the hooks below."""
+class SourceFeatureGroupTestMixin:
+    """Contract of every source group; the concrete class supplies the hooks below."""
 
-    feature_group_class: type[FormatFeatureGroup]
+    feature_group_class: type[SourceFeatureGroup]
     present_column: str
     missing_column: str
     expected_source: str
@@ -388,7 +388,7 @@ class FormatFeatureGroupTestMixin:
 
     def test_a_subclass_takes_over_a_pointer_keyed_on_its_parent(self) -> None:
         sub = self._gated_subclass()
-        mapping: FeatureGroupEnvironmentMapping = {cast(type[FormatFeatureGroup], sub): {PyArrowTable}}
+        mapping: FeatureGroupEnvironmentMapping = {cast(type[SourceFeatureGroup], sub): {PyArrowTable}}
         feature = self._feature(self.present_column, {self.feature_group_class.__name__: self.own_pointer()})
         result = IdentifyFeatureGroupClass.evaluate(feature, mapping, None, None)
         assert sub in result.identified
@@ -400,7 +400,7 @@ class FormatFeatureGroupTestMixin:
         sub = self._gated_subclass()
         mapping: FeatureGroupEnvironmentMapping = {
             self.feature_group_class: {PyArrowTable},
-            cast(type[FormatFeatureGroup], sub): {PyArrowTable},
+            cast(type[SourceFeatureGroup], sub): {PyArrowTable},
         }
         feature = self._feature(self.present_column, {sub.__name__: self.own_pointer()})
         result = IdentifyFeatureGroupClass.evaluate(self._with_context(feature), mapping, None, self.own_dac())

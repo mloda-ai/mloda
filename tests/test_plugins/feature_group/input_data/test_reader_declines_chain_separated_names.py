@@ -18,7 +18,7 @@ from mloda.provider import (
 )
 from mloda.user import DataAccessCollection, Feature
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.mixins.reader_feature_groups.lazy_format_group import load_document_group
+from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
 
 
 class ChainDeclineChainedFG(FeatureChainParserMixin, FeatureGroup):

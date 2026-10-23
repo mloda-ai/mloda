@@ -1,4 +1,4 @@
-"""Shared column_names/describe_columns/count_rows contract for pyarrow-backed file format groups.
+"""Shared column_names/describe_columns/count_rows contract for pyarrow-backed file source groups.
 
 Without its pyarrow submodule a group raises ImportError naming mloda[pyarrow] from column_names,
 describe_columns, load_neutral and count_rows, and declines at match time with a rejection naming it.
@@ -32,7 +32,7 @@ def match_of(path: str | Path) -> SourceMatch:
 
 
 class ColumnDiscoveryContractTestMixin:
-    """Shared column_names/describe_columns/count_rows contract for one pyarrow-backed file format group."""
+    """Shared column_names/describe_columns/count_rows contract for one pyarrow-backed file source group."""
 
     group_cls: type[ReadFileFG]
     dependency_module: str

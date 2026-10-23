@@ -1,4 +1,4 @@
-"""Value objects a FormatFeatureGroup uses to declare what it claims, plus the match-time scope variable."""
+"""Value objects a SourceFeatureGroup uses to declare what it claims, plus the match-time scope variable."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -18,7 +18,7 @@ class NamePolicy(Enum):
 
 @dataclass(frozen=True)
 class ClaimRoute:
-    """One way a format group claims features; searched routes also fire when mloda searches on its own."""
+    """One way a source group claims features; searched routes also fire when mloda searches on its own."""
 
     source_kind: str
     names: NamePolicy
@@ -45,9 +45,9 @@ class SourceMatch:
 
 
 if TYPE_CHECKING:
-    from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+    from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 
-    DataAccessReader = type[FormatFeatureGroup]
+    DataAccessReader = type[SourceFeatureGroup]
 else:
     DataAccessReader = type
 

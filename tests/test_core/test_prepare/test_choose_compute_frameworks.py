@@ -23,7 +23,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureSet
@@ -181,7 +181,7 @@ class ChooserHomeFramework(ComputeFramework):
         return isinstance(conn, _HomeConn)
 
 
-class ChooserHomeFG(FormatFeatureGroup):
+class ChooserHomeFG(SourceFeatureGroup):
     @classmethod
     def find_sources(
         cls, route: Any, feature_name: str, options: Options, data_access_collection: DataAccessCollection | None

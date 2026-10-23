@@ -1,4 +1,4 @@
-"""FormatFeatureGroup loaders, neutral fallback and the describe_columns/count_rows tools."""
+"""SourceFeatureGroup loaders, neutral fallback and the describe_columns/count_rows tools."""
 
 import gc
 import importlib
@@ -24,7 +24,7 @@ from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.prepare.accessible_plugins import PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import resolve_or_raise
-from mloda.provider import FormatFeatureGroup
+from mloda.provider import SourceFeatureGroup
 from mloda.user import DataAccessCollection, Feature, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -40,9 +40,9 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation_impl import (
     ToyWorkerPythonDict,
 )
-from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
     ToyDeclaredFG,
-    ToyFormatFG,
+    ToySourceFG,
     column_values,
     neutral_csv_group,
     toy_dac,
@@ -333,14 +333,14 @@ class TestImplementationDefinition:
     def test_concrete_subclass_missing_an_attribute_raises(self, missing: str) -> None:
         attributes: dict[str, Any] = {"calculate": classmethod(lambda cls, *args: None)}
         if missing == "compute_framework":
-            attributes["feature_group"] = ToyFormatFG
+            attributes["feature_group"] = ToySourceFG
         if missing == "feature_group":
             attributes["compute_framework"] = PythonDictFramework
 
         with pytest.raises(TypeError, match="feature_group" if missing != "compute_framework" else "compute_framework"):
             type("_Missing", (Implementation,), attributes)
 
-    @pytest.mark.parametrize("kind", ["plain", "format", "operation"])
+    @pytest.mark.parametrize("kind", ["plain", "source", "operation"])
     def test_feature_group_must_be_a_format_or_operation_feature_group(
         self, kind: str, make_implementation: Any
     ) -> None:
@@ -356,7 +356,7 @@ class TestImplementationDefinition:
                         return None
 
             return
-        group = ToyFormatFG if kind == "format" else _toy_operation().OpToyFG
+        group = ToySourceFG if kind == "source" else _toy_operation().OpToyFG
         impl = make_implementation(group, PythonDictFramework, _sentinel)
         assert impl in loaded_implementations()
 
@@ -413,7 +413,7 @@ class TestImplementationDefinition:
         with pytest.raises(TypeError, match="compute_framework"):
 
             class _NotAFramework(Implementation[Any]):
-                feature_group = ToyFormatFG
+                feature_group = ToySourceFG
                 compute_framework = dict  # type: ignore[assignment]
 
                 @classmethod
@@ -424,7 +424,7 @@ class TestImplementationDefinition:
         class _IntermediateBase(Implementation[Any]):
             pass
 
-        sibling = make_implementation(ToyFormatFG, PythonDictFramework, _sentinel)
+        sibling = make_implementation(ToySourceFG, PythonDictFramework, _sentinel)
 
         class _HelperBase(Implementation[Any]):
             @classmethod
@@ -657,7 +657,7 @@ class TestImplementationPin:
             ("keys_no_group_of_chain", "OpToyChainPandas"),
             ("conflicts_with_compute_framework", "OpToyPyArrow"),
             ("too_many_names", "OpToyChainPandas"),
-            ("format_group_overrides_load_neutral", "FmtParentImpl"),
+            ("source_group_overrides_load_neutral", "FmtParentImpl"),
         ],
     )
     def test_a_bad_pin_raises_implementation_pin_error_naming_step_and_class(
@@ -679,7 +679,7 @@ class TestImplementationPin:
                 _run_pinned([_op_feature("OpToyChainPandas")])
             elif case == "conflicts_with_compute_framework":
                 _run_pinned([_op_feature("OpToyPyArrow", compute_framework="PandasDataFrame")])
-            elif case == "format_group_overrides_load_neutral":
+            elif case == "source_group_overrides_load_neutral":
                 feature_name = "toyfmt_ld"
                 parent = neutral_csv_group(tmp_path / "n.csv")
                 parent_impl = make_implementation(parent, PythonDictFramework, _sentinel, name="FmtParentImpl")
@@ -844,7 +844,7 @@ class TestTools:
         return group, requested.input_data_match[1]
 
     def test_describe_columns_defaults_to_columns_with_none_types(self) -> None:
-        fg, match = self._step_group_and_match(ToyFormatFG, "toyfmt_a")
+        fg, match = self._step_group_and_match(ToySourceFG, "toyfmt_a")
 
         assert fg.describe_columns(match) == {"toyfmt_a": None, "toyfmt_b": None}
 
@@ -855,9 +855,9 @@ class TestTools:
             fg.describe_columns(match)
 
     def test_count_rows_defaults_to_none(self) -> None:
-        fg, match = self._step_group_and_match(ToyFormatFG, "toyfmt_a")
+        fg, match = self._step_group_and_match(ToySourceFG, "toyfmt_a")
 
         assert fg.count_rows(match, PythonDictFramework) is None
 
     def test_match_connection_defaults_to_none(self) -> None:
-        assert FormatFeatureGroup.match_connection(_MATCH) is None
+        assert SourceFeatureGroup.match_connection(_MATCH) is None

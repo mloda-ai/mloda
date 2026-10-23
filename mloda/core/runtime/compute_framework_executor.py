@@ -16,6 +16,7 @@ from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep, resolve_join_source_cfw
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
+from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda.core.runtime.worker.thread_worker import thread_worker
 from mloda.core.runtime.worker.multiprocessing_worker import worker
@@ -345,7 +346,7 @@ class ComputeFrameworkExecutor:
 
         task = threading.Thread(
             target=thread_worker,
-            args=(step, self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
+            args=(step, self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, current_registered_secrets()),
             daemon=True,  # an abandoned step thread must not block interpreter exit
         )
 
@@ -367,7 +368,7 @@ class ComputeFrameworkExecutor:
             process, command_queue, result_queue = self.worker_manager.create_worker_process(
                 cfw_uuid,
                 worker,
-                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw),
+                (self.cfw_register, self.cfw_collection[cfw_uuid], from_cfw, current_registered_secrets()),
             )
         else:
             process, command_queue, result_queue = existing

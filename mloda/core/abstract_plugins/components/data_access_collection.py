@@ -3,13 +3,18 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.credential import Credential, RegisteredCredential
-from mloda.core.abstract_plugins.components.credential_scrub import redact_mapping, scrub_credentials
+from mloda.core.abstract_plugins.components.credential_scrub import (
+    _PLACEHOLDER,
+    _SECRET_KEY,
+    placeholder_mask,
+    redact_mapping,
+    scrub_credentials,
+)
 from mloda.core.abstract_plugins.components.hashable_dict import HashableDict
 
 CONNECTION_HANDLE_OPTION = "connection_handle"
 
 _MIN_REDACT_LENGTH = 8
-_PLACEHOLDER = "MLODAREDACTED"
 
 
 _KIND_TO_ATTR: dict[str, str] = {
@@ -356,50 +361,34 @@ class DataAccessCollection:
 
     def redact(self, text: str) -> str:
         """Exact-match every registered credential string value of 8+ chars, then ``scrub_credentials``."""
-        spans = self._merge_spans(self._literal_spans(text, self._credential_str_leaves()))
-        text = self._replace_spans_with_placeholder(text, spans)
+        text = placeholder_mask(text, self._credential_str_leaves())
         text = scrub_credentials(text)
         return text.replace(_PLACEHOLDER, "***")
 
-    @staticmethod
-    def _literal_spans(text: str, literals: set[str]) -> list[tuple[int, int]]:
-        spans: list[tuple[int, int]] = []
-        for literal in literals:
-            start = 0
-            while True:
-                index = text.find(literal, start)
-                if index == -1:
-                    break
-                spans.append((index, index + len(literal)))
-                start = index + 1
-        return spans
+    def secret_literals(self) -> frozenset[str]:
+        """The str leaves of 8+ chars that sit under a credential-shaped key."""
+        leaves: set[str] = set()
+        for value in self.credentials.values():
+            self._collect_secret_leaves(value, False, leaves, set())
+        return frozenset(leaves)
 
-    @staticmethod
-    def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
-        if not spans:
-            return []
-        ordered = sorted(spans)
-        merged = [ordered[0]]
-        for start, end in ordered[1:]:
-            last_start, last_end = merged[-1]
-            if start <= last_end:
-                merged[-1] = (last_start, max(last_end, end))
+    @classmethod
+    def _collect_secret_leaves(cls, value: Any, secret: bool, leaves: set[str], visited: set[int]) -> None:
+        if isinstance(value, Credential):
+            value = value.data
+        if isinstance(value, str):
+            if secret and len(value) >= _MIN_REDACT_LENGTH and value.strip():
+                leaves.add(value)
+            return
+        if isinstance(value, (Mapping, list, tuple, set, frozenset)) and id(value) not in visited:
+            visited.add(id(value))
+            if isinstance(value, Mapping):
+                for key, nested in value.items():
+                    keyed = isinstance(key, str) and _SECRET_KEY.fullmatch(key) is not None
+                    cls._collect_secret_leaves(nested, secret or keyed, leaves, visited)
             else:
-                merged.append((start, end))
-        return merged
-
-    @staticmethod
-    def _replace_spans_with_placeholder(text: str, spans: list[tuple[int, int]]) -> str:
-        if not spans:
-            return text
-        parts: list[str] = []
-        cursor = 0
-        for start, end in spans:
-            parts.append(text[cursor:start])
-            parts.append(_PLACEHOLDER)
-            cursor = end
-        parts.append(text[cursor:])
-        return "".join(parts)
+                for nested in value:
+                    cls._collect_secret_leaves(nested, secret, leaves, visited)
 
     def _credential_str_leaves(self) -> set[str]:
         leaves: set[str] = set()

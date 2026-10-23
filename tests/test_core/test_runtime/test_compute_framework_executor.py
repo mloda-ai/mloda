@@ -1104,7 +1104,7 @@ class TestThreadExecuteStep:
 
         # Verify thread was created with correct parameters
         mock_thread_class.assert_called_once_with(
-            target=mock_worker, args=(step, cfw_register, mock_cfw, None), daemon=True
+            target=mock_worker, args=(step, cfw_register, mock_cfw, None, frozenset()), daemon=True
         )
 
     @patch("mloda.core.runtime.compute_framework_executor.threading.Thread")
@@ -1248,7 +1248,36 @@ class TestMultiExecuteStep:
         executor.multi_execute_step(step)
 
         worker_manager.create_worker_process.assert_called_once_with(
-            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None)
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, frozenset())
+        )
+
+    @patch("mloda.core.runtime.compute_framework_executor.worker")
+    def test_passes_the_registered_secrets_to_the_worker_process(self, mock_worker: Any) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        cfw_register = Mock(spec=CfwManager)
+        worker_manager = Mock(spec=WorkerManager)
+        executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
+        step = Mock(spec=FeatureGroupStep)
+        step.tfs_ids = []
+        step.features = Mock()
+        step.features.any_uuid = uuid4()
+        step.children_if_root = []
+        step.compute_framework = Mock()
+        step.compute_framework.get_class_name.return_value = "TestCFW"
+        step.get_uuids.return_value = {uuid4()}
+        cfw_uuid = uuid4()
+        cfw_register.resolve_cfw_uuid_by_tfs_ids.return_value = cfw_uuid
+        mock_cfw = Mock(spec=ComputeFramework)
+        executor.cfw_collection[cfw_uuid] = mock_cfw
+        worker_manager.get_process_queues.return_value = None
+        worker_manager.create_worker_process.return_value = (Mock(), Mock(), Mock())
+
+        with registered_secrets_scope(frozenset({"a-registered-secret-value"})):
+            executor.multi_execute_step(step)
+
+        worker_manager.create_worker_process.assert_called_once_with(
+            cfw_uuid, mock_worker, (cfw_register, mock_cfw, None, frozenset({"a-registered-secret-value"}))
         )
 
     def test_uses_existing_worker_process_if_exists(self) -> None:
@@ -1420,7 +1449,7 @@ class TestMultiExecuteStep:
 
     @patch("mloda.core.runtime.compute_framework_executor.worker")
     def test_passes_cfw_register_cfw_and_from_cfw_to_the_worker(self, mock_worker: Any) -> None:
-        """create_worker_process receives the 3-tuple (cfw_register, cfw, from_cfw); no needs_tfs_connection flag."""
+        """create_worker_process receives (cfw_register, cfw, from_cfw, registered secrets); no needs_tfs_connection."""
         cfw_register = Mock(spec=CfwManager)
         worker_manager = Mock(spec=WorkerManager)
         executor = ComputeFrameworkExecutor(cfw_register, worker_manager)
@@ -1474,8 +1503,8 @@ class TestMultiExecuteStep:
         worker_manager.create_worker_process.assert_called_once()
         call_args = worker_manager.create_worker_process.call_args
         args_tuple = call_args.args[2]
-        assert len(args_tuple) == 3
-        assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid)
+        assert len(args_tuple) == 4
+        assert args_tuple == (cfw_register, mock_to_cfw_instance, from_cfw_uuid, frozenset())
 
 
 class _DropsFunctionExtenderFramework(PythonDictFramework):

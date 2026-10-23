@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from typing import Any, TYPE_CHECKING, cast
 from copy import deepcopy
 
 from mloda.core.abstract_plugins.components.credential import RegisteredCredential
-from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
+from mloda.core.abstract_plugins.components.credential_scrub import _SECRET_KEY, _mask_secret_keys, redact_option_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable, register_deep_node
 from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
@@ -115,9 +115,17 @@ def _str_option_dict(d: dict[str, Any]) -> dict[str, Any]:
     return {k: _str_option_value(v) for k, v in d.items()}
 
 
+def _display_option_value(key: Any, value: Any, format_group_names: Collection[str]) -> Any:
+    if key in format_group_names:
+        return redact_option_value(value)
+    if isinstance(key, str) and _SECRET_KEY.fullmatch(key):
+        return "***"
+    return _str_option_value(_mask_secret_keys(value) if isinstance(value, (Mapping, list, tuple)) else value)
+
+
 def _display_option_dict(d: dict[str, Any], format_group_names: Collection[str]) -> dict[str, Any]:
-    """Display-only: also redact a pointer under a format group name."""
-    return {k: redact_option_value(v) if k in format_group_names else _str_option_value(v) for k, v in d.items()}
+    """Display-only: redact format group pointers, credential-shaped keys and nested credential keys."""
+    return {k: _display_option_value(k, v, format_group_names) for k, v in d.items()}
 
 
 def validate_forwarding_directives(

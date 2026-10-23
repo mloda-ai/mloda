@@ -92,6 +92,30 @@ class TestBareStringRejected:
             mlodaAPI.run_all("abc")
 
 
+class _ReadOnlyArgsError(Exception):
+    """Redacting this fails: args is a property without a setter."""
+
+    @property
+    def args(self) -> tuple[Any, ...]:  # type: ignore[override]
+        return ("a-registered-secret-value",)
+
+
+class TestCredentialRedactionExit:
+    def test_the_scope_resets_even_when_redacting_the_exception_raises(self) -> None:
+        import contextvars
+
+        from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+        from mloda.core.api.request import _CredentialRedaction
+
+        def body() -> frozenset[str]:
+            with pytest.raises(Exception):
+                with _CredentialRedaction(frozenset({"a-registered-secret-value"})):
+                    raise _ReadOnlyArgsError()
+            return current_registered_secrets()
+
+        assert contextvars.copy_context().run(body) == frozenset()
+
+
 class TestSetupEngineRunnerReturnsRunner:
     def test_setup_engine_runner_returns_execution_orchestrator(self) -> None:
         """_setup_engine_runner should return an ExecutionOrchestrator instance (not None)."""

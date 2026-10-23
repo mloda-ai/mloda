@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any, Callable, Generator, cast
 from uuid import UUID
 
+from mloda.core.abstract_plugins.components.credential_scrub import redact_exception, registered_secrets_scope
 from mloda.core.abstract_plugins.components.input_data.api.api_input_data_collection import (
     ApiInputDataCollection,
 )
@@ -72,6 +73,24 @@ def _plan_origin(origin: PlanOrigin | None) -> Generator[None, None, None]:
         yield
     finally:
         _PLAN_ORIGIN.reset(token)
+
+
+class _CredentialRedaction:
+    """Mask secret literals in logs and in any exception escaping the block (a class: see registered_secrets_scope)."""
+
+    def __init__(self, literals: frozenset[str]) -> None:
+        self._literals = literals
+        self._scope = registered_secrets_scope(literals)
+
+    def __enter__(self) -> None:
+        self._scope.__enter__()
+
+    def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
+        try:
+            if exc is not None:
+                redact_exception(exc, self._literals)
+        finally:
+            self._scope.__exit__(exc_type, exc, tb)
 
 
 _PLAN_TIME_HOOKS = (ExtenderHook.FEATURE_GROUP_MATCHED, ExtenderHook.INPUT_DATA_MATCH)
@@ -230,7 +249,15 @@ class mlodaAPI:
         except ValueError as error:
             raise SetupConfigurationError(str(error)) from error
 
-        self.engine = self._create_engine()
+        with self._credential_redaction():
+            self.engine = self._create_engine()
+
+    def _secret_literals(self) -> frozenset[str]:
+        dac = getattr(self, "data_access_collection", None)
+        return frozenset() if dac is None else dac.secret_literals()
+
+    def _credential_redaction(self, literals: frozenset[str] | None = None) -> "_CredentialRedaction":
+        return _CredentialRedaction(self._secret_literals() if literals is None else literals)
 
     @staticmethod
     def _bind_feature_connections(
@@ -592,31 +619,36 @@ class mlodaAPI:
         Available after ``prepare()`` and unchanged by ``run()``. Steps are in dependency order,
         independent ones sorted by content.
         """
-        execution_plan = self._execution_plan()
-        engine = cast(Engine, self.engine)
-        return build_plan_steps(
-            execution_plan,
-            execution_plan.resolved_join_plan,
-            specialized_from=engine.specialized_from,
-            output_framework=engine.output_framework,
-            auto_handles=(() if engine.data_access_collection is None else engine.data_access_collection.auto_handles),
-        )
+        with self._credential_redaction():
+            execution_plan = self._execution_plan()
+            engine = cast(Engine, self.engine)
+            return build_plan_steps(
+                execution_plan,
+                execution_plan.resolved_join_plan,
+                specialized_from=engine.specialized_from,
+                output_framework=engine.output_framework,
+                auto_handles=(
+                    () if engine.data_access_collection is None else engine.data_access_collection.auto_handles
+                ),
+            )
 
     def describe_columns(self, step: PlanStep) -> dict[str, DataType | None]:
         """Read the step's source columns from this session, so the PlanStep stays credential-free.
 
         Opens the source outside a run (no input-data-load hooks).
         """
-        group, match, _ = source_of(self._execution_plan(), step)
-        return group.describe_columns(match)
+        with self._credential_redaction():
+            group, match, _ = source_of(self._execution_plan(), step)
+            return group.describe_columns(match)
 
     def count_rows(self, step: PlanStep) -> int | None:
         """Count the step's source rows from this session, so the PlanStep stays credential-free.
 
         Opens the source outside a run (no input-data-load hooks).
         """
-        group, match, compute_framework = source_of(self._execution_plan(), step)
-        return group.count_rows(match, compute_framework)
+        with self._credential_redaction():
+            group, match, compute_framework = source_of(self._execution_plan(), step)
+            return group.count_rows(match, compute_framework)
 
     def _execution_plan(self) -> ExecutionPlan:
         if self.engine is None:
@@ -684,10 +716,11 @@ class mlodaAPI:
         """
         run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout)
         plan = list(self._plan_snapshot())
-        runner = self._batch_run(
-            parallelization_modes, flight_server, api_data=api_data, artifacts=artifacts, run_context=run_context
-        )
-        items = self._plan_ordered_items(runner, plan)
+        with self._credential_redaction():
+            runner = self._batch_run(
+                parallelization_modes, flight_server, api_data=api_data, artifacts=artifacts, run_context=run_context
+            )
+            items = self._plan_ordered_items(runner, plan)
         return RunResult(
             [r for _, r in items],
             plan,
@@ -771,26 +804,39 @@ class mlodaAPI:
     ) -> Generator[Any, None, None]:
         """Deferred half of ``stream_run``: the priming yield separates run start from computation."""
         outcome = LifecycleOutcome("succeeded")
+        literals = self._secret_literals()
         try:
-            self.runner = None
-            self._start_run(run_context)
-            runner = self._setup_engine_runner(parallelization_modes, flight_server)
-            # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
-            self.runner = runner
+            with self._credential_redaction(literals):
+                self.runner = None
+                self._start_run(run_context)
+                runner = self._setup_engine_runner(parallelization_modes, flight_server)
+                # Assigned before any yield so get_result()/get_artifacts() work after an early exit.
+                self.runner = runner
             yield None
             try:
-                self._enter_runner_context(
-                    runner,
-                    parallelization_modes,
-                    api_data,
-                    artifacts=artifacts,
-                    run_context=run_context,
-                )
-                with contextlib.closing(runner.compute_stream()) as stream:
-                    for step_uuid, result in stream:
-                        yield (step_uuid, result)
+                with self._credential_redaction(literals):
+                    self._enter_runner_context(
+                        runner,
+                        parallelization_modes,
+                        api_data,
+                        artifacts=artifacts,
+                        run_context=run_context,
+                    )
+                stream = runner.compute_stream()
+                try:
+                    while True:
+                        # The scope never spans the yield, so it cannot leak into the caller between items.
+                        with self._credential_redaction(literals):
+                            item = next(stream, None)
+                        if item is None:
+                            break
+                        yield item
+                finally:
+                    with self._credential_redaction(literals):
+                        stream.close()
             finally:
-                self._exit_runner_context(runner)
+                with self._credential_redaction(literals):
+                    self._exit_runner_context(runner)
         except GeneratorExit:
             outcome = LifecycleOutcome("cancelled")
             raise

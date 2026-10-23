@@ -15,6 +15,7 @@ from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import TOY_TOKEN
 
 
 class TestNewConstructorShape:
@@ -875,3 +876,40 @@ class TestCopy:
         assert original._auto_handles == before_auto
         assert duplicate._auto_handles is not original._auto_handles
         assert len(duplicate._auto_handles) == len(before_auto) + 2
+
+
+class TestSecretLiterals:
+    """secret_literals() yields only 8+ char str leaves under credential-shaped keys."""
+
+    def test_only_credential_keyed_leaves_are_registered(self, tmp_path: Path) -> None:
+        dac = DataAccessCollection(
+            credentials={
+                "db": {
+                    "sqlite": str(tmp_path / "long_database_name.db"),
+                    "host": "db.internal.example",
+                    "user": "administrator",
+                },
+                "api": {"token": TOY_TOKEN, "password": "correct-horse-battery"},  # nosec B105
+            }
+        )
+
+        assert dac.secret_literals() == frozenset({TOY_TOKEN, "correct-horse-battery"})
+
+    def test_nested_and_credential_wrapped_secrets_are_found(self) -> None:
+        dac = DataAccessCollection(
+            credentials={
+                "a": {"cfg": {"api_key": "key-value-123456"}},
+                "b": {"items": [{"client_secret": "secret-value-9876"}]},  # nosec B105
+                "c": Credential({"token": "wrapped-token-abcdef"}),  # nosec B105
+            }
+        )
+
+        assert dac.secret_literals() == frozenset({"key-value-123456", "secret-value-9876", "wrapped-token-abcdef"})
+
+    def test_short_and_non_str_secret_values_are_skipped(self) -> None:
+        dac = DataAccessCollection(credentials={"a": {"token": "short", "password": 123456789012, "secret": "   "}})  # nosec B105
+
+        assert dac.secret_literals() == frozenset()
+
+    def test_no_credentials_gives_an_empty_set(self) -> None:
+        assert DataAccessCollection().secret_literals() == frozenset()

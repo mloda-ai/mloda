@@ -20,14 +20,23 @@ and because ``MlodaRunError`` does not yet exist.
 
 from __future__ import annotations
 
+import errno
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet, SourceMatch
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
+
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    TOY_TOKEN,
+    ToyFormatFG,
+    toy_token_request,
+)
 
 # Importing the framework registers it as a ComputeFramework subclass so
 # ``compute_frameworks=["PythonDictFramework"]`` resolves during ``run_all``.
@@ -570,3 +579,220 @@ def test_sync_row_leak_chained_scrubbed_in_logs(caplog: pytest.LogCaptureFixture
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert error_records
     assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+# --------------------------------------------------------------------------- #
+# Registered collection credentials: a bare token under a credential-shaped key
+# is masked in raised error text and logs, while type and chain survive.
+# --------------------------------------------------------------------------- #
+
+_TOKEN_COLUMN = "toyfmt_tok_col"  # nosec B105
+
+
+@dataclass(frozen=True)
+class FrozenTokenError(Exception):
+    """Frozen-dataclass exception whose only field carries the token."""
+
+    detail: str
+
+
+class TokenValueErrorFG(ToyFormatFG):
+    """Load raises a ValueError from a KeyError, token in the message."""
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        raise ValueError(f"username={TOY_TOKEN}") from KeyError("inner")
+
+
+class TokenOSErrorFG(ToyFormatFG):
+    """Load raises an OSError whose strerror and filename carry the token."""
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        raise OSError(errno.ENOENT, f"cannot open {TOY_TOKEN}", f"/x/{TOY_TOKEN}")
+
+
+class TokenFrozenFG(ToyFormatFG):
+    """Load raises a frozen-dataclass exception carrying the token."""
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        raise FrozenTokenError(f"seen {TOY_TOKEN}")
+
+
+_TOKEN_GROUPS = [TokenValueErrorFG, TokenOSErrorFG, TokenFrozenFG]
+
+
+def _assert_token_gone(exc: BaseException, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+    assert TOY_TOKEN not in str(exc)
+    assert TOY_TOKEN not in repr(exc.args)
+    assert TOY_TOKEN not in caplog.text
+    if group is TokenValueErrorFG:
+        assert type(exc) is ValueError
+        assert type(exc.__cause__) is KeyError
+    if group is TokenOSErrorFG:
+        assert type(exc) is FileNotFoundError
+        assert TOY_TOKEN not in str(exc.filename)
+        assert TOY_TOKEN not in str(exc.strerror)
+    if group is TokenFrozenFG:
+        assert type(exc) is FrozenTokenError
+
+
+@pytest.mark.parametrize("group", _TOKEN_GROUPS)
+def test_sync_load_error_masks_registered_token(group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
+
+    _assert_token_gone(excinfo.value, group, caplog)
+
+
+@pytest.mark.parametrize("group", _TOKEN_GROUPS)
+def test_threading_load_error_masks_registered_token(
+    group: type[ToyFormatFG], flight_server: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all(
+                [Feature(name=_TOKEN_COLUMN)],
+                parallelization_modes={ParallelizationMode.THREADING},
+                flight_server=flight_server,
+                **toy_token_request(group, _TOKEN_COLUMN),
+            )
+
+    _assert_token_gone(excinfo.value, group, caplog)
+
+
+def test_stream_all_load_error_masks_registered_token(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            list(mloda.stream_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN)))
+
+    _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
+
+
+def test_stream_run_load_error_masks_registered_token(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            session = mloda.prepare(
+                [Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN)
+            )
+            list(session.stream_run())
+
+    _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
+
+
+def test_registered_token_scope_does_not_leak_after_a_failed_run() -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+
+    with pytest.raises(ValueError):
+        mloda.run_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN))
+
+    assert current_registered_secrets() == frozenset()
+
+
+class TokenIdentityFG(ToyFormatFG):
+    """data_access_identity raises with the registered token in its message."""
+
+    @classmethod
+    def data_access_identity(cls, match: SourceMatch) -> str:
+        raise ValueError(f"username={TOY_TOKEN}")
+
+
+@pytest.mark.parametrize("entry", ["run_all", "explain", "resolved_plan"])
+def test_plan_building_error_masks_registered_token(entry: str, caplog: pytest.LogCaptureFixture) -> None:
+    request = toy_token_request(TokenIdentityFG, _TOKEN_COLUMN)
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            if entry == "run_all":
+                mloda.run_all([Feature(name=_TOKEN_COLUMN)], **request)
+            elif entry == "explain":
+                mloda.explain([Feature(name=_TOKEN_COLUMN)], **request)
+            else:
+                mloda.prepare([Feature(name=_TOKEN_COLUMN)], **request).resolved_plan()
+
+    assert TOY_TOKEN not in str(excinfo.value)
+    assert TOY_TOKEN not in repr(excinfo.value.args)
+    assert TOY_TOKEN not in caplog.text
+
+
+def test_early_stream_close_finalizes_inside_the_redaction_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+    from mloda.core.runtime.run import ExecutionOrchestrator
+
+    seen: list[frozenset[str]] = []
+    original = ExecutionOrchestrator._finalize
+
+    def spy(self: Any, cancelled: bool = False) -> None:
+        seen.append(current_registered_secrets())
+        original(self, cancelled)
+
+    monkeypatch.setattr(ExecutionOrchestrator, "_finalize", spy)
+    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToyFormatFG, _TOKEN_COLUMN))
+    stream = session.stream_run()
+    next(stream)
+    stream.close()
+
+    assert seen
+    assert all(TOY_TOKEN in literals for literals in seen)
+
+
+def test_stream_start_enters_the_redaction_scope_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mloda.core.api import request as request_module
+
+    depth = 0
+    deepest = 0
+    original_enter = request_module._CredentialRedaction.__enter__
+    original_exit = request_module._CredentialRedaction.__exit__
+
+    def counting_enter(self: Any) -> None:
+        nonlocal depth, deepest
+        depth += 1
+        deepest = max(deepest, depth)
+        original_enter(self)
+
+    def counting_exit(self: Any, *exc_info: Any) -> None:
+        nonlocal depth
+        depth -= 1
+        original_exit(self, *exc_info)
+
+    monkeypatch.setattr(request_module._CredentialRedaction, "__enter__", counting_enter)
+    monkeypatch.setattr(request_module._CredentialRedaction, "__exit__", counting_exit)
+    session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(ToyFormatFG, _TOKEN_COLUMN))
+
+    stream = session.stream_run()
+    stream.close()
+
+    assert deepest == 1
+
+
+class _RecordingExtender(Extender):
+    """Records the text of every exception the wrapped call raises, as an OTel span would."""
+
+    def __init__(self, hook: ExtenderHook) -> None:
+        self.hook = hook
+        self.seen: list[str] = []
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {self.hook}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception as exc:
+            self.seen.append(f"{exc} {exc.args!r} {exc.__cause__!r}")
+            raise
+
+
+@pytest.mark.parametrize("hook", [ExtenderHook.INPUT_DATA_LOAD, ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE])
+def test_extender_never_sees_the_registered_token(hook: ExtenderHook) -> None:
+    recorder = _RecordingExtender(hook)
+    with pytest.raises(ValueError):
+        mloda.run_all(
+            [Feature(name=_TOKEN_COLUMN)],
+            function_extender={recorder},
+            **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN),
+        )
+
+    assert recorder.seen
+    assert all(TOY_TOKEN not in text for text in recorder.seen)

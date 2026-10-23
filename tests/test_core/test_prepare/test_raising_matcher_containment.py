@@ -7,10 +7,13 @@ tests/test_core/test_api/test_sbdg_resolve_feature_broken_rule.py. Doubles are d
 """
 
 import gc
-from collections.abc import Callable
+import logging
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from functools import partial
 from typing import TypeVar
+
+import pytest
 
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -21,7 +24,17 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
+from mloda.provider import ClaimRoute, SourceMatch
 from mloda.steward import resolve_feature
+from mloda.user import mloda
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
+    PythonDictFramework,
+)
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    TOY_TOKEN,
+    ToyFormatFG,
+    toy_token_request,
+)
 
 
 RAISE_MESSAGE = "boom_845_matcher_exploded"
@@ -253,3 +266,90 @@ class TestRaisingMatcherContainment:
         assert BROKEN_CLASS_NAME in error
         assert RAISE_TYPE_NAME in error
         assert RAISE_MESSAGE in error
+
+
+_TOKEN_COLUMN = "toyfmt_tokmatch_col"  # nosec B105
+
+
+class TokenFindSourcesFG(ToyFormatFG):
+    """find_sources raises with the registered token in its message."""
+
+    @classmethod
+    def find_sources(
+        cls,
+        route: ClaimRoute,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None,
+    ) -> list[SourceMatch]:
+        raise ValueError(f"username={TOY_TOKEN}")
+
+
+class TokenReasonFG(ToyFormatFG):
+    """Cannot list columns; its unknown-columns reason carries the registered token."""
+
+    @classmethod
+    def columns(cls, match: SourceMatch) -> Collection[str] | None:
+        return None
+
+    @classmethod
+    def unknown_columns_reason(cls, match: SourceMatch) -> str | None:
+        return f"cannot open {TOY_TOKEN}"
+
+
+def _all_texts(error: BaseException) -> list[str]:
+    texts = [str(error), repr(error.args)]
+    for refusal in getattr(error, "refusals", ()):
+        texts.extend([str(refusal), repr(refusal.args)])
+    result = getattr(error, "result", None)
+    if result is not None:
+        texts.append(repr(result))
+    return texts
+
+
+class TestRegisteredTokenInResolutionErrors:
+    """A registered collection token never reaches resolution error text, refusals, diagnose or logs."""
+
+    @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
+    def test_resolution_error_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(ValueError) as excinfo:
+                mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
+
+        assert type(excinfo.value).__name__ == "FeatureResolutionError"
+        assert all(TOY_TOKEN not in text for text in _all_texts(excinfo.value))
+        assert TOY_TOKEN not in caplog.text
+
+    @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
+    def test_diagnose_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.DEBUG):
+            diagnosis = mloda.diagnose([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
+
+        assert diagnosis.complete is False
+        assert diagnosis.message is not None
+        assert TOY_TOKEN not in diagnosis.message
+        assert TOY_TOKEN not in repr(diagnosis)
+        assert TOY_TOKEN not in caplog.text
+
+    @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
+    def test_resolve_feature_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+        request = toy_token_request(group, _TOKEN_COLUMN)
+        with caplog.at_level(logging.DEBUG):
+            resolved = resolve_feature(
+                _TOKEN_COLUMN,
+                plugin_collector=request["plugin_collector"],
+                data_access_collection=request["data_access_collection"],
+            )
+
+        assert resolved.error is not None
+        assert TOY_TOKEN not in resolved.error
+        assert TOY_TOKEN not in repr(resolved)
+        assert TOY_TOKEN not in caplog.text
+
+    def test_find_sources_error_is_still_contained_as_a_non_match(self) -> None:
+        diagnosis = mloda.diagnose(
+            [Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenFindSourcesFG, _TOKEN_COLUMN)
+        )
+
+        assert diagnosis.complete is False
+        assert diagnosis.feature_name == _TOKEN_COLUMN

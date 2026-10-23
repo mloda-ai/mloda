@@ -649,6 +649,50 @@ class TestOptionsWithCredentialValues:
         assert "toy-url-secret" not in str(url)
         assert "api.example" in str(url)
 
+    @pytest.mark.parametrize("where", ["group", "context"])
+    def test_str_masks_a_credential_key_in_a_nested_mapping(self, where: str) -> None:
+        nested = {"cfg": {"password": "hunter2", "host": "h"}}  # nosec B105
+        options = Options(group=nested) if where == "group" else Options(context=nested)
+        text = str(options)
+        assert "hunter2" not in text
+        assert "'password': '***'" in text
+        assert "'host': 'h'" in text
+
+    @pytest.mark.parametrize("where", ["group", "context"])
+    def test_str_masks_a_top_level_credential_key(self, where: str) -> None:
+        options = Options(group={"api_key": "hunter2"}) if where == "group" else Options(context={"api_key": "hunter2"})
+        text = str(options)
+        assert "hunter2" not in text
+        assert "'api_key': '***'" in text
+
+    @pytest.mark.parametrize("where", ["group", "context"])
+    @pytest.mark.parametrize("container", [list, tuple])
+    def test_str_masks_a_credential_key_in_a_mapping_inside_a_sequence(
+        self, where: str, container: type[list[Any]] | type[tuple[Any, ...]]
+    ) -> None:
+        nested = {"sources": container([{"password": "hunter2", "host": "h"}])}  # nosec B105
+        options = Options(group=nested) if where == "group" else Options(context=nested)
+        text = str(options)
+        assert "hunter2" not in text
+        assert "'password': '***'" in text
+        assert "'host': 'h'" in text
+
+    def test_str_keeps_a_non_secret_top_level_key_readable(self) -> None:
+        assert "'region': 'eu'" in str(Options(group={"region": "eu"}))
+
+    def test_masking_is_display_only_the_raw_value_stays_in_stable_text(self) -> None:
+        from mloda.core.prepare.stable_text import stable_text
+
+        options = Options(group={"api_key": "hunter2", "cfg": {"password": "hunter2"}})  # nosec B105
+        assert "hunter2" in stable_text(options.group)
+        assert options.group["cfg"]["password"] == "hunter2"
+
+    def test_str_of_a_cyclic_nested_mapping_does_not_raise(self) -> None:
+        inner: dict[str, Any] = {"password": "hunter2"}  # nosec B105
+        inner["self"] = inner
+        text = str(Options(context={"cfg": inner}))
+        assert "hunter2" not in text
+
     def test_str_redacts_a_reader_tuple_dsn_string_in_base_input_data_context(self) -> None:
         """The reserved BaseInputData reader tuple also masks a DSN string second element."""
         options = Options(

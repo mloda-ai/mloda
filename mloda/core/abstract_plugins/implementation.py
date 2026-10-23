@@ -34,7 +34,7 @@ def _serves_groups(group: Any) -> bool:
 
 
 def _declared_group(cls: Any) -> type | None:
-    """The concrete G of the nearest Implementation[G] base, None when unparameterized or not a class."""
+    """The concrete G of the nearest Implementation[G] base, else None (a TypeVar is not resolved through a generic subclass)."""
     for klass in cls.__mro__:
         for alias in klass.__dict__.get("__orig_bases__", ()):
             if typing.get_origin(alias) is Implementation:

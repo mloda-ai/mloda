@@ -233,18 +233,39 @@ def build_plan_steps(
 
     lives_memo: dict[int, bool] = {}
 
+    home_memo: dict[int, str | None] = {}
+
+    def home(step: Any) -> str | None:
+        """The step's handle; an unnamed one runs on the connection its same-framework parents share."""
+        key = id(step)
+        if key not in home_memo:
+            home_memo[key] = step.connection_handle
+            if step.connection_handle is None and isinstance(step, FeatureGroupStep):
+                parents = [
+                    dep
+                    for dep in raw_steps
+                    if dep is not step
+                    and isinstance(dep, FeatureGroupStep | JoinStep)
+                    and dep.get_uuids() & step.required_uuids
+                    and (dep.destination_framework if isinstance(dep, JoinStep) else dep.compute_framework)
+                    is step.compute_framework
+                ]
+                handles = {home(dep) for dep in parents if lives_on(dep)}
+                if len(handles) == 1 and all(lives_on(dep) for dep in parents):
+                    home_memo[key] = handles.pop()
+        return home_memo[key]
+
     def lives_on(step: Any) -> bool:
         key = id(step)
         if key not in lives_memo:
             lives_memo[key] = False
-            lives_memo[key] = step.connection_handle is not None and (
+            lives_memo[key] = home(step) is not None and (
                 step.connection_explicit
-                or (isinstance(step, FeatureGroupStep) and step.source_connection_handle == step.connection_handle)
                 or any(
                     dep is not step
                     and isinstance(dep, FeatureGroupStep | JoinStep)
                     and dep.get_uuids() & step.required_uuids
-                    and dep.connection_handle == step.connection_handle
+                    and home(dep) == home(step)
                     and lives_on(dep)
                     for dep in raw_steps
                 )
@@ -294,7 +315,7 @@ def build_plan_steps(
                 and lives_on(step)
                 and result_cf.expected_data_framework() != step.compute_framework.expected_data_framework()
             ):
-                leaves_handle = step.connection_handle
+                leaves_handle = home(step)
             options = step.features.options
             snapshot = None if options is None else Options(group=snapshot_group(options.group))
             hash_options = snapshot
@@ -349,7 +370,7 @@ def build_plan_steps(
                 and isinstance(source, FeatureGroupStep | JoinStep)
                 and source.get_uuids() & step.required_uuids
                 and lives_on(source)
-                and source.connection_handle != step.connection_handle
+                and home(source) != step.connection_handle
             ]
             plan.append(
                 PlanStep(
@@ -360,7 +381,7 @@ def build_plan_steps(
                     source_feature_group=step.from_feature_group,
                     source_compute_framework=step.from_framework,
                     leaves_connection=leaves(
-                        min((h for source in sources if (h := source.connection_handle) is not None), default=None)
+                        min((h for source in sources if (h := home(source)) is not None), default=None)
                     )
                     if step.from_framework is not step.to_framework
                     else None,

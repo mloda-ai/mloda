@@ -19,7 +19,7 @@ _CATALOG_SQL = (
     "SELECT table_name, column_name FROM information_schema.columns "
     "WHERE table_schema = 'main' AND table_catalog = current_database() ORDER BY table_name, ordinal_position"
 )
-_FILE_SQL = "SELECT path FROM duckdb_databases() WHERE database_name = current_database()"
+_FILE_SQL = "SELECT path, current_database() FROM duckdb_databases() WHERE database_name = current_database()"
 
 
 @dataclass(frozen=True, eq=False)
@@ -32,27 +32,31 @@ class DuckdbTable:
     def __deepcopy__(self, memo: dict[int, Any]) -> "DuckdbTable":
         return self  # a plan copy shares the live connection
 
+    def __reduce__(self) -> Any:
+        raise TypeError("A DuckdbFG match holds a live DuckDB connection and cannot be sent to another process.")
 
-def _catalog(connection: Any) -> tuple[str, dict[str, list[str]]]:
-    """The database identity and the main-schema tables with their columns, read once per run."""
 
-    def read() -> tuple[str, dict[str, list[str]]]:
+def _catalog(connection: Any) -> tuple[str, dict[str, list[str]], str]:
+    """The database identity, its main-schema tables with their columns and its name, read once per run."""
+
+    def read() -> tuple[str, dict[str, list[str]], str]:
         cursor = connection.cursor()
         try:
             found: dict[str, list[str]] = {}
             for table, column in cursor.execute(_CATALOG_SQL).fetchall():
                 found.setdefault(table, []).append(column)
-            path = cursor.execute(_FILE_SQL).fetchone()[0]
+            path, database = cursor.execute(_FILE_SQL).fetchone()
         finally:
             cursor.close()
-        return path or "memory", found
+        return path or "memory", found, database
 
     return run_cached((DuckdbFG, "catalog", connection), read)
 
 
-def _select(table: str, features: Any) -> str:
+def _select(access: DuckdbTable, features: Any) -> str:
     names = ", ".join(quote_ident(name) for name in sorted(features.get_all_names()))
-    return f"select {names} from {quote_ident(table)}"  # nosec B608 - identifiers quoted
+    database = quote_ident(_catalog(access.connection)[2])
+    return f'select {names} from {database}."main".{quote_ident(access.table)}'  # nosec B608 - identifiers quoted
 
 
 class DuckdbFG(FormatFeatureGroup):
@@ -85,12 +89,15 @@ class DuckdbFG(FormatFeatureGroup):
             record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
             return []
         connection = connections[handle]
-        duckdb = require("duckdb", "reading DuckDB connections")
-        if not isinstance(connection, duckdb.DuckDBPyConnection):
+        # only a DuckDB connection object can need the import
+        duckdb = (
+            require("duckdb", "reading DuckDB connections") if type(connection).__module__.endswith("duckdb") else None
+        )
+        if duckdb is None or not isinstance(connection, duckdb.DuckDBPyConnection):
             reason = f"{HANDLE_KEY} '{handle}' is not a duckdb connection"
             record_match_rejection(name, reason, stage=INPUT_DATA_STAGE)
             return []
-        identity, tables = _catalog(connection)
+        identity, tables, _ = _catalog(connection)
         return [SourceMatch(f"{identity}::{table}", DuckdbTable(connection, table)) for table in tables]
 
     @classmethod
@@ -107,7 +114,7 @@ class DuckdbFG(FormatFeatureGroup):
         access = cast(DuckdbTable, match.access)
         cursor = access.connection.cursor()
         try:
-            return cursor.sql(_select(access.table, features)).to_arrow_table()
+            return cursor.sql(_select(access, features)).to_arrow_table()
         finally:
             cursor.close()
 
@@ -119,4 +126,4 @@ class DuckdbFGDuckDB(Implementation):
     @classmethod
     def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
         access = cast(DuckdbTable, match.access)
-        return DuckdbRelation(access.connection, access.connection.sql(_select(access.table, features)))
+        return DuckdbRelation(access.connection, access.connection.sql(_select(access, features)))

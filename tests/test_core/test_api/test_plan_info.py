@@ -2034,6 +2034,23 @@ class LeaveSqliteChain(FeatureGroup):
         return {"leave_chain_out"}
 
 
+class LeaveDictOverChain(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("leave_chain_out", options={"src_handle": options.get("src_handle")})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"leave_over_chain_out"}
+
+
 class LeaveMarkerRoot(FeatureGroup, MatchData):
     """Matches only the SQLite connection that holds the marker table."""
 
@@ -2282,6 +2299,24 @@ class TestLeavesConnection:
             check_plan_lock(variant("mine", None), lock)
 
 
+class TestLeavesConnectionOnImplicitConsumerTransform:
+    def test_a_transform_out_of_an_implicit_consumer_of_an_explicit_root_records_the_handle(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        try:
+            plan = requested_plan(
+                Feature("leave_over_chain_out", options={"src_handle": "mine"}),
+                {LeaveSqliteRoot, LeaveSqliteChain, LeaveDictOverChain},
+                [SqliteFramework, PythonDictFramework],
+                DataAccessCollection(connections={"mine": conn}),
+            )
+        finally:
+            conn.close()
+
+        transforms = [s for s in plan if s.step_kind == "transform"]
+        assert [s.source_feature_group for s in transforms] == [LeaveSqliteChain]
+        assert [s.leaves_connection for s in transforms] == ["mine"]
+
+
 class TestLeavesConnectionOnResult:
     """A requested step records the handle when its result leaves the connection's framework."""
 
@@ -2416,6 +2451,46 @@ class TestLeavesConnectionOnDuckdbSource:
         assert "reads in place" in (steps[DuckSourceOpFG].compute_framework_reason or "")
         assert steps[DuckSourceOpFG].leaves_connection == "mine"
         assert steps[DuckdbFG].leaves_connection is None
+
+    def test_with_two_connections_a_consumer_naming_no_handle_records_its_parents_handle(self) -> None:
+        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+
+        duckdb = pytest.importorskip("duckdb")
+        mine, other = duckdb.connect(), duckdb.connect()
+        try:
+            mine.execute("CREATE TABLE plan_duck (plan_duck_col INTEGER)")
+            plan = requested_plan(
+                Feature("plan_duck_col__duckop"),
+                {DuckdbFG, DuckSourceOpFG},
+                [PyArrowTable, DuckDBFramework],
+                DataAccessCollection(connections={"mine": mine, "other": other}),
+            )
+        finally:
+            mine.close()
+            other.close()
+        steps = {s.feature_group: s for s in plan if s.step_kind == "compute"}
+
+        assert steps[DuckSourceOpFG].compute_framework is DuckDBFramework
+        assert steps[DuckSourceOpFG].leaves_connection == "mine"
+
+    def test_two_handles_on_one_connection_record_none_when_no_rows_leave(self) -> None:
+        from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+
+        duckdb = pytest.importorskip("duckdb")
+        conn = duckdb.connect()
+        try:
+            conn.execute("CREATE TABLE plan_duck (plan_duck_col INTEGER)")
+            plan = mloda.explain(
+                [Feature("plan_duck_col", options={"connection_handle": "b"})],
+                compute_frameworks=[DuckDBFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups({DuckdbFG}),
+                data_access_collection=DataAccessCollection(connections={"a": conn, "b": conn}),
+                output_framework=DuckDBFramework,
+            )
+        finally:
+            conn.close()
+
+        assert [s.leaves_connection for s in _computes(plan)] == [None]
 
     @staticmethod
     def _duck_plan(pinned: str | None) -> list[PlanStep]:

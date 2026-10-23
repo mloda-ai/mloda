@@ -316,12 +316,13 @@ class ChooseComputeFrameworks:
         conn = block.fg.match_connection(match[1])
         if conn is None:
             return None
-        return frozenset(
+        home = frozenset(
             fw
             for fw in block.domain
             if fw._connection_matches(conn)
             and serving_implementation(block.fg, fw, self.implementations, stop_after="load_neutral")
         )
+        return home or None
 
     def _is_pinned(self, block: _Block) -> bool:
         return any(f.framework_pinned or f.uuid in self.pinned for f in block.features)

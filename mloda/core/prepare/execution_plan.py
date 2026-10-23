@@ -263,7 +263,10 @@ class ExecutionPlan:
         connection = match[0].match_connection(match[1])
         if connection is None:
             return None
-        return next((h for h, c in self.data_access_collection.connections.items() if c is connection), None)
+        connections = self.data_access_collection.connections
+        if step.connection_handle in connections and connections[step.connection_handle] is connection:
+            return step.connection_handle
+        return next((h for h, c in connections.items() if c is connection), None)
 
     def _stamp_connection_handles(self, steps: Sequence[Step]) -> None:
         """Set connection_handle on every feature group and join step from its features' options."""

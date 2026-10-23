@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pickle  # nosec B403
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
@@ -19,7 +20,8 @@ from mloda.user import DataAccessCollection, Feature, FilterType, GlobalFilter, 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
+from mloda_plugins.feature_group.input_data.db_formats import duckdb_fg as duckdb_fg_module
+from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG, DuckdbTable
 from tests.mixins.reader_feature_groups.format_feature_group_test_mixin import FormatFeatureGroupTestMixin
 
 try:
@@ -202,8 +204,46 @@ class TestDuckdbFGInPlace:
 
         assert result[0].to_arrow_table().to_pydict() == {"filter_id": [2], "filter_val": [20]}
 
+    @pytest.mark.parametrize("framework", [DuckDBFramework, PyArrowTable])
+    def test_a_temp_table_shadowing_the_source_table_does_not_change_the_rows_read(
+        self, opened: list[Any], framework: type[ComputeFramework]
+    ) -> None:
+        connection = _database(opened, {"shadow_col": [1, 2]})
+        connection.execute(f"CREATE TEMP TABLE {TABLE} (shadow_col INTEGER)")  # nosec B608
+        connection.execute(f"INSERT INTO {TABLE} VALUES (9)")  # nosec B608
+        dac = DataAccessCollection(connections={HANDLE: connection})
+
+        result = _run(dac, [_handle_feature("shadow_col")], framework, output=framework)
+
+        rows = result[0].to_arrow_table() if framework is DuckDBFramework else result[0]
+        assert rows.to_pydict() == {"shadow_col": [1, 2]}
+
+
+class TestDuckdbTablePickling:
+    def test_pickling_a_match_names_the_live_connection(self, opened: list[Any]) -> None:
+        table = DuckdbTable(_database(opened, {"pickle_col": [1]}), TABLE)
+
+        with pytest.raises(TypeError, match="live DuckDB connection"):
+            pickle.dumps(table)
+
 
 class TestDuckdbFGOptIn:
+    def test_a_non_duckdb_handle_needs_no_duckdb_import(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def no_duckdb(*args: Any, **kwargs: Any) -> Any:
+            raise ImportError("duckdb is not installed")
+
+        monkeypatch.setattr(duckdb_fg_module, "require", no_duckdb)
+        foreign = sqlite3.connect(":memory:")
+        try:
+            dac = DataAccessCollection(connections={"lite_handle": foreign})
+
+            result = _evaluate(_handle_feature("lite_col", "lite_handle"), dac)
+        finally:
+            foreign.close()
+
+        assert DuckdbFG not in result.identified
+        assert "is not a duckdb connection" in result.eliminations[DuckdbFG].reason
+
     def test_a_duckdb_connection_without_connection_handle_is_not_read(self, opened: list[Any]) -> None:
         connection = _database(opened, {"optin_col": [1]})
         dac = DataAccessCollection(connections={HANDLE: connection})

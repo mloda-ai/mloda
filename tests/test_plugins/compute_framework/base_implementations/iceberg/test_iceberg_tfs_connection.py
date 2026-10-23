@@ -6,6 +6,8 @@ the destination FG operates on a pa.Table and verifies that the catalog from
 the DataAccessCollection has been bound on the IcebergFramework instance by
 asserting it from inside calculate_feature via a per-test sentinel."""
 
+import contextlib
+import sqlite3
 from typing import Any
 from unittest.mock import Mock
 
@@ -24,12 +26,13 @@ except ImportError:
 
 from mloda.user import Feature, DataAccessCollection
 from mloda.provider import FeatureGroup, ComputeFramework, FeatureSet, MatchData
-from mloda.user import FeatureName, Options
+from mloda.user import FeatureName, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.compute_framework.base_implementations.tfs_connection_e2e_mixin import (
     TfsConnectionEndToEndMixin,
+    TfsRawValPyArrowSource,
 )
-
 
 _observed_catalogs: list[Any] = []
 
@@ -90,6 +93,25 @@ class TfsDoubledIcebergFG(FeatureGroup, MatchData):
         return {"tfs_doubled"}
 
 
+class TfsHandleDoubledIcebergFG(FeatureGroup):
+    """Doubles raw_val on Iceberg, forwarding its options (incl. connection_handle) to the input."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("raw_val", options=options)}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {IcebergFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data.append_column("tfs_handle_doubled", pc.multiply(data["raw_val"], 2))
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"tfs_handle_doubled"}
+
+
 @pytest.mark.skipif(pyiceberg is None or pa is None, reason="PyIceberg or PyArrow is not installed.")
 class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
     destination_framework_class = ConnectionRecordingIcebergFramework
@@ -100,6 +122,34 @@ class TestIcebergTfsConnectionE2E(TfsConnectionEndToEndMixin):
 
     def test_a_connection_on_the_feature_needs_no_data_access_collection(self, live_connection: Any) -> None:
         pytest.skip("Iceberg is read-only (no root conversion on a bound relation) and has no .connection on data")
+
+    def test_a_hop_into_iceberg_with_a_foreign_handle_runs_without_a_connection(self) -> None:
+        with contextlib.closing(sqlite3.connect(":memory:")) as foreign:
+            result = mloda.run_all(
+                [Feature("tfs_handle_doubled", Options(group={"connection_handle": "d"}))],
+                compute_frameworks=[PyArrowTable, IcebergFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {TfsRawValPyArrowSource, TfsHandleDoubledIcebergFG}
+                ),
+                data_access_collection=DataAccessCollection({"d": foreign}),
+            )
+
+        assert result[0].column("tfs_handle_doubled").to_pylist() == [2, 4, 6]
+
+    def test_a_hop_into_iceberg_with_two_catalogs_and_no_handle_is_ambiguous(self) -> None:
+        catalogs = {"c1": Mock(spec=Catalog), "c2": Mock(spec=Catalog)}
+        for catalog in catalogs.values():
+            catalog.load_table = Mock()
+
+        with pytest.raises(ValueError, match="Ambiguous resolve"):
+            mloda.run_all(
+                [Feature("tfs_handle_doubled")],
+                compute_frameworks=[PyArrowTable, IcebergFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups(
+                    {TfsRawValPyArrowSource, TfsHandleDoubledIcebergFG}
+                ),
+                data_access_collection=DataAccessCollection(catalogs),
+            )
 
     @pytest.fixture
     def live_connection(self) -> Any:

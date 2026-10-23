@@ -20,6 +20,8 @@ from mloda.user import DataAccessCollection, Feature, FilterType, GlobalFilter, 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation  # noqa: F401
 from mloda_plugins.feature_group.input_data.db_sources import duckdb_fg as duckdb_fg_module
 from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG, DuckdbTable
 from tests.mixins.reader_feature_groups.source_feature_group_test_mixin import SourceFeatureGroupTestMixin
@@ -217,6 +219,22 @@ class TestDuckdbFGInPlace:
 
         rows = result[0].to_arrow_table() if framework is DuckDBFramework else result[0]
         assert rows.to_pydict() == {"shadow_col": [1, 2]}
+
+    def test_a_table_read_on_duckdb_feeds_a_sum_aggregation_on_pyarrow(self, opened: list[Any]) -> None:
+        connection = _database(opened, {"hop_amount": [1, 2, 3]})
+
+        result = mloda.run_all(
+            [Feature("hop_amount__sum_aggr", connection=connection)],
+            compute_frameworks=[DuckDBFramework, PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({DuckdbFG, AggregatedFeatureGroup}),
+        )
+
+        compute = [step for step in result.plan if step.step_kind == "compute"]
+        assert [(step.feature_group, step.compute_framework) for step in compute] == [
+            (DuckdbFG, DuckDBFramework),
+            (AggregatedFeatureGroup, PyArrowTable),
+        ]
+        assert result[0].to_pydict() == {"hop_amount__sum_aggr": [6, 6, 6]}
 
 
 class TestDuckdbTablePickling:

@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 from uuid import UUID, uuid4
 
+from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.data_access_collection import resolve_connection_handle
 from mloda.core.abstract_plugins.components.error_utils import REPORT_URL, internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import safe_field
@@ -250,9 +251,10 @@ class ExecutionPlan:
     def _connection_for(
         self, framework: type[ComputeFramework], options: Any, hop: bool = False
     ) -> tuple[str | None, bool]:
-        """The DataAccessCollection handle and whether it was named; a hop into an ambiguous match raises."""
+        """The handle and whether named; a hop raises on ambiguity or on a named handle a REQUIRED target cannot use."""
         handle, explicit, reason = resolve_connection_handle(framework, self.data_access_collection, options)
-        if hop and handle is None and reason is not None:
+        needs = not explicit or framework.connection_requirement() is ConnectionRequirement.REQUIRED
+        if hop and handle is None and reason is not None and needs:
             raise ValueError(reason if explicit else f"Ambiguous resolve for kind 'connection': {reason}")
         return handle, explicit
 

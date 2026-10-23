@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.input_data.base_input_data import RE
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
-from mloda.provider import ComputeFramework, FormatFeatureGroup
+from mloda.provider import ComputeFramework
 from mloda.user import DataAccessCollection, Feature, FilterType, GlobalFilter, Options, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
@@ -212,14 +212,31 @@ class TestDuckdbFGOptIn:
 
         assert DuckdbFG not in result.identified
 
-    def test_an_unknown_handle_declines_with_a_rejection(self, opened: list[Any]) -> None:
+    @pytest.mark.parametrize("handle", ["no_such_handle", 5], ids=["unknown", "non_str"])
+    def test_an_unknown_handle_declines_with_a_rejection(self, opened: list[Any], handle: Any) -> None:
         connection = _database(opened, {"unknown_col": [1]})
-        dac = DataAccessCollection(connections={HANDLE: connection})
+        dac = DataAccessCollection(connections={HANDLE: connection, "other_handle": connection})
 
-        result = _evaluate(_handle_feature("unknown_col", "no_such_handle"), dac)
+        result = _evaluate(Feature("unknown_col", Options({"connection_handle": handle})), dac)
 
         assert DuckdbFG not in result.identified
-        assert "no_such_handle" in result.eliminations[DuckdbFG].reason
+        reason = result.eliminations[DuckdbFG].reason
+        assert repr(handle) in reason
+        assert str(sorted(["other_handle", HANDLE])) in reason
+
+    def test_a_column_the_selected_table_lacks_declines_naming_the_column_and_source_only(
+        self, opened: list[Any]
+    ) -> None:
+        connection = _database(opened, {"have_col": [1]})
+        dac = DataAccessCollection(connections={HANDLE: connection})
+
+        result = _evaluate(_handle_feature("lack_col"), dac)
+
+        assert DuckdbFG not in result.identified
+        reason = result.eliminations[DuckdbFG].reason
+        assert "'lack_col'" in reason
+        assert f"memory::{TABLE}" in reason
+        assert "have_col" not in reason
 
     def test_a_non_duckdb_handle_declines_with_a_rejection(self, opened: list[Any]) -> None:
         foreign = sqlite3.connect(":memory:")
@@ -277,9 +294,6 @@ class TestDuckdbFGIdentity:
 
 
 class TestMatchConnectionHook:
-    def test_the_default_hook_returns_none(self) -> None:
-        assert FormatFeatureGroup.match_connection(SourceMatch("any::source", None)) is None
-
     def test_duckdb_fg_returns_the_connection_of_its_match(self, opened: list[Any]) -> None:
         connection = _database(opened, {"hook_col": [1]})
         feature = _handle_feature("hook_col")

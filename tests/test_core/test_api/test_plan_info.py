@@ -2079,6 +2079,10 @@ def requested_plan(
     )
 
 
+def _computes(plan: list[PlanStep]) -> list[PlanStep]:
+    return [s for s in plan if s.step_kind == "compute"]
+
+
 def marker_plan(marker_first: bool) -> list[PlanStep]:
     marked = sqlite3.connect(":memory:")
     marked.execute("CREATE TABLE marker (x INTEGER)")
@@ -2298,28 +2302,24 @@ class TestLeavesConnectionOnResult:
         finally:
             conn.close()
 
-    @staticmethod
-    def _computes(plan: list[PlanStep]) -> list[PlanStep]:
-        return [s for s in plan if s.step_kind == "compute"]
-
     def test_a_requested_root_converted_to_the_result_framework_records_the_handle(self) -> None:
-        computes = self._computes(self._root_plan("mine"))
+        computes = _computes(self._root_plan("mine"))
 
         assert [s.result_framework for s in computes] == [PyArrowTable]
         assert [s.leaves_connection for s in computes] == ["mine"]
 
     def test_a_result_framework_equal_to_the_compute_framework_records_none(self) -> None:
-        computes = self._computes(self._root_plan("mine", output_framework=SqliteFramework))
+        computes = _computes(self._root_plan("mine", output_framework=SqliteFramework))
 
         assert [s.leaves_connection for s in computes] == [None]
 
     def test_an_output_framework_off_the_connection_records_the_handle(self) -> None:
-        computes = self._computes(self._root_plan("mine", output_framework=PythonDictFramework))
+        computes = _computes(self._root_plan("mine", output_framework=PythonDictFramework))
 
         assert [s.leaves_connection for s in computes] == ["mine"]
 
     def test_an_auto_handle_result_conversion_records_the_unnamed_token(self) -> None:
-        computes = self._computes(self._root_plan(None))
+        computes = _computes(self._root_plan(None))
 
         assert [s.leaves_connection for s in computes] == ["<unnamed>"]
 
@@ -2335,7 +2335,7 @@ class TestLeavesConnectionOnResult:
         finally:
             conn.close()
 
-        assert [s.leaves_connection for s in self._computes(plan)] == [None]
+        assert [s.leaves_connection for s in _computes(plan)] == [None]
 
     def test_an_implicit_consumer_of_an_explicit_root_lives_on_its_handle(self) -> None:
         conn = sqlite3.connect(":memory:")
@@ -2418,7 +2418,7 @@ class TestLeavesConnectionOnDuckdbSource:
         assert steps[DuckdbFG].leaves_connection is None
 
     @staticmethod
-    def _computes(pinned: str | None) -> list[PlanStep]:
+    def _duck_plan(pinned: str | None) -> list[PlanStep]:
         from mloda_plugins.feature_group.input_data.db_formats.duckdb_fg import DuckdbFG
 
         duckdb = pytest.importorskip("duckdb")
@@ -2433,16 +2433,16 @@ class TestLeavesConnectionOnDuckdbSource:
             )
         finally:
             conn.close()
-        return [s for s in plan if s.step_kind == "compute"]
+        return _computes(plan)
 
     def test_on_duckdb_the_final_conversion_records_the_handle(self) -> None:
-        computes = self._computes(None)
+        computes = self._duck_plan(None)
 
         assert [(s.compute_framework, s.result_framework) for s in computes] == [(DuckDBFramework, PyArrowTable)]
         assert [s.leaves_connection for s in computes] == ["mine"]
 
     def test_pinned_to_pyarrow_the_read_records_the_handle(self) -> None:
-        computes = self._computes("PyArrowTable")
+        computes = self._duck_plan("PyArrowTable")
 
         assert [s.compute_framework for s in computes] == [PyArrowTable]
         assert [s.leaves_connection for s in computes] == ["mine"]

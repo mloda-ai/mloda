@@ -1665,9 +1665,7 @@ Available join types:
                                 if uuid in ep.source_framework_uuids:
                                     # add the JoinStep token to the children_if_root of the source feature group
                                     if ep.uuid not in routed_joins:
-                                        inner_ep.add_value_to_children_if_root(ep.uuid)
-                                        if ep.source_owner_uuid is None:
-                                            ep.source_owner_uuid = uuid
+                                        inner_ep.add_join_token(ep.uuid)
 
                                     # add to upload as this source feature group gets accessed in mp by other process
                                     need_to_upload_collector.update(ep.source_framework_uuids)

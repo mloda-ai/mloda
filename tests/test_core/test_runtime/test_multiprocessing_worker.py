@@ -826,7 +826,7 @@ class TestCloseContextIsUsableFromAThreadStartedInClose:
 
 
 class TestExecuteCommandJoinStepWithoutSource:
-    def test_unregistered_join_token_without_owner_raises(self) -> None:
+    def test_unregistered_join_token_raises(self) -> None:
         cfw_register = Mock(spec=CfwManager)
         step = Mock(spec=JoinStep)
         step.uuid = uuid4()
@@ -834,8 +834,7 @@ class TestExecuteCommandJoinStepWithoutSource:
         step.destination_framework = Mock()
         step.destination_framework.get_class_name.return_value = "DestinationCFW"
         step.source_framework_uuids = {uuid4()}
-        step.source_owner_uuid = None
-        cfw_register.get_cfw_uuid.side_effect = lambda _cls, key: None if key == step.uuid else uuid4()
+        cfw_register.get_join_source_cfw_uuid.return_value = None
 
         with pytest.raises(ValueError, match="no frame lists the join token"):
             _execute_command(step, cfw_register, Mock(spec=ComputeFramework), None, None)

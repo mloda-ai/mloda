@@ -206,6 +206,9 @@ class ComputeFrameworkExecutor:
             )
 
             if resolved_uuid is not None:
+                # A reused frame never registers this step's children_if_root, so record its join tokens.
+                if step.join_tokens:
+                    self.cfw_register.add_join_tokens(resolved_uuid, step.join_tokens)
                 return resolved_uuid
 
             feature_uuid = step.features.any_uuid

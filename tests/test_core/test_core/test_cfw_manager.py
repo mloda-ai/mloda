@@ -638,10 +638,86 @@ class TestCfwManagerRelease:
         register.add_cfw_to_compute_frameworks(cfw_uuid, "SomeComputeFramework", {uuid4()})
         register.add_to_merge_relation(left_uuid, right_uuid, "SomeComputeFramework")
         register.add_uuid_flyway_datasets(cfw_uuid, {dataset_uuid})
+        register.add_join_tokens(cfw_uuid, {uuid4()})
 
         register.release()
 
         assert vars(register) == vars(CfwManager(modes))
+
+
+class TestCfwManagerJoinTokens:
+    """Join tokens a reused frame lists are kept apart from compute_frameworks."""
+
+    cls_name = "PythonDictFramework"
+
+    def test_reuse_registered_token_resolves_and_follows_the_merge_relation(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        frame, token, left = uuid4(), uuid4(), uuid4()
+        register.add_cfw_to_compute_frameworks(frame, self.cls_name, {uuid4()})
+        register.add_join_tokens(frame, {token})
+
+        assert register.get_join_source_cfw_uuid(self.cls_name, token) == frame
+
+        register.add_to_merge_relation(left, frame, self.cls_name)
+
+        assert register.get_join_source_cfw_uuid(self.cls_name, token) == left
+
+    def test_unregistered_token_resolves_to_none(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        register.add_cfw_to_compute_frameworks(uuid4(), self.cls_name, {uuid4()})
+
+        assert register.get_join_source_cfw_uuid(self.cls_name, uuid4()) is None
+
+    def test_add_join_tokens_does_not_change_get_cfw_uuid(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        broad, narrow, feature, token = uuid4(), uuid4(), uuid4(), uuid4()
+        register.add_cfw_to_compute_frameworks(broad, self.cls_name, {feature, uuid4()})
+        register.add_cfw_to_compute_frameworks(narrow, self.cls_name, {feature})
+
+        register.add_join_tokens(narrow, {token})
+
+        assert register.get_cfw_uuid(self.cls_name, token) is None
+        assert register.get_cfw_uuid_as_registered(self.cls_name, token) is None
+        assert register.get_unique_cfw_uuid(self.cls_name, {token}) is None
+        assert register.get_cfw_uuid(self.cls_name, feature) == narrow
+
+    def test_token_in_a_real_children_if_root_wins_over_a_reuse_registration(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        real, reused, token = uuid4(), uuid4(), uuid4()
+        register.add_cfw_to_compute_frameworks(real, self.cls_name, {token})
+        register.add_cfw_to_compute_frameworks(reused, self.cls_name, {uuid4()})
+        register.add_join_tokens(reused, {token})
+
+        assert register.get_join_source_cfw_uuid(self.cls_name, token) == real
+
+    def test_token_reuse_registered_on_two_distinct_frames_is_ambiguous(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        first, second, token = uuid4(), uuid4(), uuid4()
+        register.add_cfw_to_compute_frameworks(first, self.cls_name, {uuid4()})
+        register.add_cfw_to_compute_frameworks(second, self.cls_name, {uuid4()})
+        register.add_join_tokens(first, {token})
+        register.add_join_tokens(second, {token})
+
+        assert register.get_join_source_cfw_uuid(self.cls_name, token) is None
+
+    def test_two_frames_merged_into_one_leftmost_are_not_ambiguous(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        left, right, token = uuid4(), uuid4(), uuid4()
+        register.add_cfw_to_compute_frameworks(left, self.cls_name, {uuid4()})
+        register.add_cfw_to_compute_frameworks(right, self.cls_name, {uuid4()})
+        register.add_join_tokens(left, {token})
+        register.add_join_tokens(right, {token})
+        register.add_to_merge_relation(left, right, self.cls_name)
+
+        assert register.get_join_source_cfw_uuid(self.cls_name, token) == left
+
+    def test_class_name_filters_reuse_registrations(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        frame, token = uuid4(), uuid4()
+        register.add_cfw_to_compute_frameworks(frame, self.cls_name, {uuid4()})
+        register.add_join_tokens(frame, {token})
+
+        assert register.get_join_source_cfw_uuid("OtherFramework", token) is None
 
 
 class TestCfwManagerResolveByTfsIdsReadsJoinResult:

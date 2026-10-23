@@ -280,7 +280,7 @@ def test_link_joining_across_distinct_frameworks_with_the_shared_parent_swapped_
 
 def test_link_joining_a_shared_parent_twice_within_one_framework_must_not_raise() -> None:
     """The shared parent and both spokes all stay on PandasDataFrame: add_tfs reunites the two
-    joins through add_value_to_children_if_root bookkeeping, not uuid-slot rewriting, so the
+    joins through add_join_token bookkeeping, not uuid-slot rewriting, so the
     orphaned-join-source guard must not treat the shared parent as lost."""
     links = {
         Link.inner(JoinSpec(SameFrameworkSpokeD1, MLG_INDEX), JoinSpec(SameFrameworkSharedParent, MLG_INDEX)),

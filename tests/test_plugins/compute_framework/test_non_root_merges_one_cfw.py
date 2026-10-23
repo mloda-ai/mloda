@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 import pytest
 
@@ -14,6 +15,7 @@ from mloda.user import Options
 from mloda.user import ParallelizationMode
 from mloda.user import PluginCollector
 from mloda.user import mloda
+from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
 
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame  # noqa: F401
@@ -131,8 +133,13 @@ class TestNonRootMerge:
         assert session.engine is not None
         joins = [s for s in session.engine.execution_planner if isinstance(s, JoinStep)]
         assert joins
+        listed_tokens: set[UUID] = set()
+        for step in session.engine.execution_planner:
+            if isinstance(step, FeatureGroupStep):
+                listed_tokens |= step.join_tokens
         for join in joins:
-            assert join.source_owner_uuid in join.source_framework_uuids
+            assert join.uuid in listed_tokens
+            assert not hasattr(join, "source_owner_uuid")
 
         result = session.run(flight_server=flight_server)
 

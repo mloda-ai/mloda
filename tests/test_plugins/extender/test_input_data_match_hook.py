@@ -4,7 +4,9 @@ Each test candidate sits behind its own marker credential and only accepts it, s
 in other tests.
 """
 
+import inspect
 import logging
+from abc import abstractmethod
 from typing import Any, ClassVar, NamedTuple
 
 import pyarrow as pa
@@ -195,6 +197,14 @@ class ImdMatchOverrideFormat(_ImdFmtBase):
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
 
+class _ImdAbstractFmt(_ImdFmtBase):
+    """Abstract through one extra abstract hook."""
+
+    @classmethod
+    @abstractmethod
+    def extra_hook(cls) -> None: ...
+
+
 class ImdMatchComputingGroup(FeatureGroup):
     """Computing group (it has an input) for the column the pointed gate format serves."""
 
@@ -236,6 +246,7 @@ _ALL_FORMATS = (
     ImdMatchRefusedThenRaisingFormat,
     ImdMatchOverrideFormat,
     _ImdKeyFmt,
+    _ImdAbstractFmt,
 )
 
 _ENABLED_FMT = PluginCollector.enabled_feature_groups(
@@ -893,3 +904,36 @@ class TestFormatGroupHook:
         assert len(extender.contexts) == 2
         assert all(c.reader_class is ImdMatchOverrideFormat for c in contexts)
         assert all(c.feature_names == (_COL_A,) for c in contexts)
+
+    def test_gated_probe_returns_the_probe_value_in_the_outcome(self) -> None:
+        recorder = _ImdRecordingExtender()
+        calls: list[int] = []
+
+        def probe() -> str:
+            calls.append(1)
+            return "probed"
+
+        with reader_probe_scope(ReaderProbeScope(recorder, None, None, None, None)):
+            outcome = ImdMatchOverrideFormat.gated_probe(_COL_A, Options(), None, probe)
+
+        assert outcome.refused is None
+        assert outcome.result == "probed"
+        assert calls == [1]
+        assert recorder.for_reader(ImdMatchOverrideFormat)
+
+    def test_gated_probe_on_an_abstract_class_declines_without_probing_or_firing_the_hook(self) -> None:
+        recorder = _ImdRecordingExtender()
+        calls: list[int] = []
+
+        def probe() -> str:
+            calls.append(1)
+            return "probed"
+
+        with reader_probe_scope(ReaderProbeScope(recorder, None, None, None, None)):
+            outcome = _ImdAbstractFmt.gated_probe(_COL_A, Options(), None, probe)
+
+        assert inspect.isabstract(_ImdAbstractFmt)
+        assert outcome.refused is not None
+        assert "abstract" in outcome.refused
+        assert calls == []
+        assert recorder.for_reader(_ImdAbstractFmt) == []

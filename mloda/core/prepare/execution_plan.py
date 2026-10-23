@@ -511,6 +511,7 @@ class ExecutionPlan:
         fw_execution_plan: list[JoinStep | FeatureGroupStep] = []
         child_links = self.invert_link_trekker(link_trekker)
 
+        owning_steps = self._owning_steps(pre_execution_plan)
         decided: dict[UUID, dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]] = {}
         keys_by_link: dict[UUID, list[LinkFrameworkTrekker]] = defaultdict(list)
         for pex in pre_execution_plan:
@@ -520,7 +521,13 @@ class ExecutionPlan:
             if isinstance(pex, tuple):
                 if pex[0].uuid not in decided:
                     decided[pex[0].uuid] = self.decide_link_joins(
-                        pex[0], keys_by_link[pex[0].uuid], link_trekker, graph, pre_execution_plan, child_links
+                        pex[0],
+                        keys_by_link[pex[0].uuid],
+                        link_trekker,
+                        graph,
+                        pre_execution_plan,
+                        child_links,
+                        owning_steps,
                     )
                 fw_execution_plan.extend(self._build_decisions(decided[pex[0].uuid][pex], graph))
             else:
@@ -1619,9 +1626,12 @@ Available join types:
                     # We are updating the required uuids after the tfs is added as this makes sure, that the TFS can run in parallel before the join.
                     ep.required_uuids.update(self.joinstep_collection.get_required_join_uuids(ep))
                     # Earlier joins of the same link, unless a wait through another link's join already implies them.
-                    for token in sorted(ep.runs_after_joins):
-                        if not self._step_waits_for(ep.uuid, producer_of[token], steps_by_uuid, producer_of):
-                            ep.required_uuids.add(token)
+                    # Decided against the edges before this loop, so the result does not depend on token order.
+                    ep.required_uuids.update(
+                        token
+                        for token in sorted(ep.runs_after_joins)
+                        if not self._step_waits_for(ep.uuid, producer_of[token], steps_by_uuid, producer_of)
+                    )
                 else:
                     # We need to do two things:
                     # 1) source feature group of the join step needs to know of the link, so that the cfw can be used by the joinstep
@@ -1637,9 +1647,6 @@ Available join types:
                     for token in sorted(earlier | ep.runs_after_joins):
                         if not self._step_waits_for(
                             producer_of[token], ep.uuid, steps_by_uuid, producer_of, known_clear
-                        ) and (
-                            token in earlier
-                            or not self._step_waits_for(ep.uuid, producer_of[token], steps_by_uuid, producer_of)
                         ):
                             ep.required_uuids.add(token)
 
@@ -2410,7 +2417,7 @@ Available join types:
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
         child_links: dict[UUID, set[LinkFrameworkTrekker]] | None = None,
     ) -> list[JoinStep]:
-        """Decide and build one key."""
+        """Decide and build one key; orders only the parts of that single key."""
         decided = self.decide_link_joins(link_fw[0], [link_fw], link_trekker, graph, pre_execution_plan, child_links)
         return self._build_decisions(decided[link_fw], graph)
 
@@ -2436,28 +2443,33 @@ Available join types:
         graph: Graph,
         pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
         child_links: dict[UUID, set[LinkFrameworkTrekker]] | None = None,
+        owning_steps: Mapping[UUID, UUID] | None = None,
     ) -> dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]:
         """Phase 1: decide every part of each key of one link; writes nothing to the plan."""
         if child_links is None:
             child_links = self.invert_link_trekker(link_trekker)
         decided = {key: self._decide_key(key, link_trekker, graph, pre_execution_plan, child_links) for key in keys}
-        return self._order_link_joins(decided, pre_execution_plan)
+        return self._order_link_joins(decided, pre_execution_plan, owning_steps)
 
-    def _order_link_joins(
-        self,
-        decided: dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]],
-        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
-    ) -> dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]:
-        """Name each accepted decision's order, destination owner and the earlier joins of its link it runs after."""
-        accepted = [d for decisions in decided.values() for d in decisions if isinstance(d, JoinDecision)]
-        if len(accepted) < 2:
-            return decided
-        owning_step_of = {
+    @staticmethod
+    def _owning_steps(pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep]) -> dict[UUID, UUID]:
+        """Feature uuid to the uuid of the FeatureGroupStep owning it."""
+        return {
             feature_uuid: step.uuid
             for step in pre_execution_plan
             if isinstance(step, FeatureGroupStep)
             for feature_uuid in step.get_uuids()
         }
+
+    def _order_link_joins(
+        self,
+        decided: dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]],
+        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
+        owning_steps: Mapping[UUID, UUID] | None = None,
+    ) -> dict[LinkFrameworkTrekker, list[JoinDecision | DeclinedJoin]]:
+        """Name each accepted decision's order, destination owner and the earlier joins of its link it runs after."""
+        accepted = [d for decisions in decided.values() for d in decisions if isinstance(d, JoinDecision)]
+        owning_step_of = owning_steps if owning_steps is not None else self._owning_steps(pre_execution_plan)
         open_by_framework: dict[type[ComputeFramework], set[UUID]] = defaultdict(set)
         ordered: list[JoinDecision] = []
         replaced: dict[UUID, JoinDecision] = {}
@@ -2928,7 +2940,14 @@ Available join types:
             right_uuids = frozenset({sides.right_uuid})
             join_uuids_left, join_uuids_right = left_uuids, right_uuids
         else:
-            destination, source = decision.buckets or (frozenset(), frozenset())
+            if decision.buckets is None:
+                raise ValueError(
+                    internal_invariant_error(
+                        "A join decision without append sides must carry its destination and source buckets.",
+                        f"link={decision.link_fw[0]}, token={decision.token}",
+                    )
+                )
+            destination, source = decision.buckets
             resolved_left, resolved_right = (
                 (source, destination) if decision.buckets_inverted else (destination, source)
             )

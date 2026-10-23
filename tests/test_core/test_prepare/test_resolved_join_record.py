@@ -1346,13 +1346,18 @@ def _edge_view(plan: ExecutionPlan, graph: Graph) -> dict[str, tuple[str, ...]]:
             labels[step.uuid] = (
                 f"join:{step.link.left_feature_group.__name__}:"
                 f"{step.destination_framework.__name__}>{step.source_framework.__name__}"
+                f"{':carried' if step.carriers else ''}"
             )
     for step in plan:
-        if isinstance(step, TransformFrameworkStep):
-            assert step.link_id is not None
-            labels[step.uuid] = f"hop:{labels[step.link_id]}"
-        elif isinstance(step, FeatureGroupStep):
+        if isinstance(step, FeatureGroupStep):
             labels[step.uuid] = "step:" + ",".join(sorted(names[u] for u in step.get_uuids()))
+    for step in plan:
+        if isinstance(step, TransformFrameworkStep):
+            if step.link_id is not None:
+                labels[step.uuid] = f"hop:{labels[step.link_id]}"
+            else:
+                assert step.source_step_uuid is not None
+                labels[step.uuid] = f"hop:{labels[step.source_step_uuid]}>{step.to_feature_group.__name__}"
     assert len(set(labels.values())) == len(labels), f"edge labels must be unique: {sorted(labels.values())}"
 
     def label(uuid: UUID) -> str:
@@ -1507,6 +1512,120 @@ def test_a_join_of_another_link_between_the_keys_of_one_link_keeps_the_planned_e
     assert edges == _INTERLEAVED_EDGES
     assert _ARROW_TO_PANDAS not in edges[_PANDAS_TO_ARROW]
     assert _reachable(edges) == _reachable(_INTERLEAVED_EDGES)
+
+
+def _carrier_split_planned(carried_first: bool, after_carried: bool = False) -> Planned:
+    """A consumer reading the left side through a Pandas mid and a direct one: two same-framework joins, one frame.
+
+    The consumers are decided in uuid order, so their uuids are fixed to pin which join is planned first.
+    With after_carried the direct consumer also reads a step below the carried consumer.
+    """
+    planned = _planned()
+    link = _pair_link()
+    left = feature("resolved_join_split_left", PyArrowTable, link.left_index)
+    right = feature("resolved_join_split_right", PyArrowTable, link.right_index)
+    mid = feature("resolved_join_split_mid", PandasDataFrame)
+    carried = feature("resolved_join_split_carried", PyArrowTable)
+    direct = feature("resolved_join_split_direct", PyArrowTable)
+    carried.uuid, direct.uuid = (UUID(int=1), UUID(int=2)) if carried_first else (UUID(int=2), UUID(int=1))
+    _add_parents(planned, link, left, right)
+    planned.graph.add_node(mid.uuid, NodeProperties(mid, ResolvedJoinUnlinked))
+    planned.graph.adjacency_list[left.uuid].append(mid.uuid)
+    planned.graph.adjacency_list[mid.uuid] = []
+    planned.graph.parent_to_children_mapping[mid.uuid] = {left.uuid}
+    planned.queue.append((ResolvedJoinUnlinked, {mid}))
+    planned.queue.append((link, PyArrowTable, PyArrowTable))
+    _add_child(planned, carried, mid, left, right)
+    if after_carried:
+        after = feature("resolved_join_split_after", PyArrowTable)
+        planned.graph.add_node(after.uuid, NodeProperties(after, ResolvedJoinUnlinked))
+        planned.graph.adjacency_list[carried.uuid].append(after.uuid)
+        planned.graph.adjacency_list[after.uuid] = []
+        planned.graph.parent_to_children_mapping[after.uuid] = {carried.uuid}
+        planned.queue.append((ResolvedJoinUnlinked, {after}))
+        _add_child(planned, direct, after, left, right)
+        planned.graph.adjacency_list[after.uuid].append(direct.uuid)
+    else:
+        _add_child(planned, direct, left, right)
+    for consumer in (carried, direct):
+        trek(planned.link_trekker, link, (PyArrowTable, PyArrowTable), consumer.uuid)
+    return planned
+
+
+def _declared_by_own_framework(planned: Planned) -> DeclaredFrameworks:
+    return {uuid: frozenset({node.feature.get_compute_framework()}) for uuid, node in planned.graph.get_nodes().items()}
+
+
+_SPLIT_DIRECT = "join:ResolvedJoinPairLeft:PyArrowTable>PyArrowTable"
+_SPLIT_CARRIED = f"{_SPLIT_DIRECT}:carried"
+
+
+def _split(name: str) -> str:
+    return f"feature:resolved_join_split_{name}"
+
+
+_SPLIT_HOP_LEFT = f"hop:step:{_split('left')}>ResolvedJoinPairLeft"
+_SPLIT_HOP_MID = f"hop:step:{_split('mid')}>ResolvedJoinPairLeft"
+_SPLIT_HOP_UNLINKED = f"hop:step:{_split('left')}>ResolvedJoinUnlinked"
+_SPLIT_BASE_EDGES = {
+    f"step:{_split('left')}": _waits(),
+    f"step:{_split('right')}": _waits(),
+    f"step:{_split('mid')}": _waits(_split("left"), _SPLIT_HOP_UNLINKED),
+    _SPLIT_HOP_UNLINKED: _waits(_split("left")),
+    _SPLIT_HOP_LEFT: _waits(_split("left")),
+    _SPLIT_HOP_MID: _waits(_split("mid")),
+    f"step:{_split('carried')}": _waits(_split("left"), _split("mid"), _split("right"), _SPLIT_CARRIED),
+    f"step:{_split('direct')}": _waits(_split("left"), _split("right"), _SPLIT_DIRECT),
+}
+_SPLIT_DIRECT_WAITS = (_split("left"), _split("right"), _SPLIT_HOP_LEFT)
+_SPLIT_CARRIED_WAITS = (_split("left"), _split("mid"), _split("right"), _SPLIT_HOP_MID)
+# Each case pins which join is planned first and so waits for nothing of its link; the other waits for it.
+_SPLIT_EDGES = {
+    False: {
+        **_SPLIT_BASE_EDGES,
+        _SPLIT_DIRECT: _waits(*_SPLIT_DIRECT_WAITS),
+        _SPLIT_CARRIED: _waits(*_SPLIT_CARRIED_WAITS, _SPLIT_DIRECT),
+    },
+    True: {
+        **_SPLIT_BASE_EDGES,
+        _SPLIT_DIRECT: _waits(*_SPLIT_DIRECT_WAITS, _SPLIT_CARRIED),
+        _SPLIT_CARRIED: _waits(*_SPLIT_CARRIED_WAITS),
+    },
+}
+
+
+# The direct join also reaches the carried join through a step below the carried consumer.
+_SPLIT_CHAINED_EDGES = {
+    **_SPLIT_EDGES[True],
+    f"step:{_split('after')}": _waits(_split("carried")),
+    _SPLIT_HOP_LEFT: _waits(_split("after"), _split("left")),
+    _SPLIT_DIRECT: _waits(_split("after"), *_SPLIT_DIRECT_WAITS, _SPLIT_CARRIED),
+    f"step:{_split('direct')}": _waits(_split("after"), _split("left"), _split("right"), _SPLIT_DIRECT),
+}
+
+
+@pytest.mark.parametrize(
+    ("carried_first", "after_carried"),
+    [(False, False), (True, False), (True, True)],
+    ids=["direct_first", "carried_first", "carried_first_direct_reads_below_carried"],
+)
+def test_the_two_same_framework_joins_of_a_carrier_split_keep_their_planned_edges(
+    carried_first: bool, after_carried: bool
+) -> None:
+    """Two joins of one link into one frame stay ordered by a direct edge, as in the planner before ordering moved."""
+    expected = _SPLIT_CHAINED_EDGES if after_carried else _SPLIT_EDGES[carried_first]
+    planned = _carrier_split_planned(carried_first, after_carried)
+    planned.plan.create_execution_plan(
+        planned.queue, planned.graph, planned.link_trekker, _declared_by_own_framework(planned)
+    )
+
+    edges = _edge_view(planned.plan, planned.graph)
+    first, second = (_SPLIT_CARRIED, _SPLIT_DIRECT) if carried_first else (_SPLIT_DIRECT, _SPLIT_CARRIED)
+
+    assert [bool(step.carriers) for step in _join_steps(planned.plan)] == [carried_first, not carried_first]
+    assert edges == expected
+    assert first in edges[second]
+    assert _reachable(edges) == _reachable(expected)
 
 
 @pytest.mark.parametrize(

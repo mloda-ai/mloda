@@ -396,6 +396,14 @@ class FormatFeatureGroup(FeatureGroup):
         return False
 
     @classmethod
+    def _reject_abstract(cls, name: str, options: Options, data_access_collection: DataAccessCollection | None) -> str:
+        """Record the abstract-class rejection when pointed; returns its reason."""
+        reason = f"{cls.get_class_name()} is abstract; missing {sorted(cls.__abstractmethods__)}"
+        if cls.is_pointed(name, options, data_access_collection):
+            record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+        return reason
+
+    @classmethod
     def gated_probe(
         cls,
         feature_name: FeatureName | str,
@@ -405,6 +413,8 @@ class FormatFeatureGroup(FeatureGroup):
     ) -> FormatProbeOutcome:
         """Run probe inside the INPUT_DATA_MATCH hook; a refusal declines or aborts like core's own probe."""
         name = str(feature_name)
+        if inspect.isabstract(cls):
+            return FormatProbeOutcome(cls._reject_abstract(name, options, data_access_collection), None)
         pointed = cls.is_pointed(name, options, data_access_collection)
         known_owners = match_rejection_owners()
         outcome = probe_format_group(cls, probe, data_access_collection, cls.get_column_base_feature(name), options)
@@ -421,9 +431,7 @@ class FormatFeatureGroup(FeatureGroup):
     ) -> bool:
         name = str(feature_name)
         if inspect.isabstract(cls):
-            if cls.is_pointed(name, options, data_access_collection):
-                reason = f"{cls.get_class_name()} is abstract; missing {sorted(cls.__abstractmethods__)}"
-                record_match_rejection(cls.get_class_name(), reason, stage=INPUT_DATA_STAGE)
+            cls._reject_abstract(name, options, data_access_collection)
             return False
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)

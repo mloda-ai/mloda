@@ -20,7 +20,7 @@ def resolve_join_source_cfw(step: "JoinStep", cfw_register: CfwManager) -> UUID:
     if from_cfw_uuid is None:
         raise ValueError(
             internal_invariant_error(
-                "no frame lists the join token",
+                "no single frame lists the join token",
                 f"link {step.link.uuid}, join token {step.uuid}",
                 "Cross-framework joins find their source by the hop's link_id and routed joins by copy_readers.",
             )

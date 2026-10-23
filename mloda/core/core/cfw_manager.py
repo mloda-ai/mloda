@@ -175,10 +175,10 @@ class CfwManager:
             self.reused_join_tokens.setdefault(token, set()).add(cfw_uuid)
 
     def get_join_source_cfw_uuid(self, cf_class_name: str, token: UUID) -> UUID | None:
-        """Resolves a join token to its source frame, falling back to a single reused frame."""
-        resolved = self.get_cfw_uuid(cf_class_name, token)
-        if resolved is not None:
-            return resolved
+        """Resolves a join token: a frame listing it wins, else the single reused frame; raises if several."""
+        for cfw_uuid, (cls_name, children_if_root) in self.compute_frameworks.items():
+            if cls_name == cf_class_name and (cfw_uuid == token or token in children_if_root):
+                return self.get_cfw_uuid(cf_class_name, token)
         frames = {
             self.find_leftmost(cfw_uuid, cf_class_name)
             for cfw_uuid in self.reused_join_tokens.get(token, set())
@@ -186,6 +186,13 @@ class CfwManager:
         }
         if len(frames) == 1:
             return next(iter(frames))
+        if len(frames) > 1:
+            raise ValueError(
+                internal_invariant_error(
+                    "join token resolved to more than one distinct reused frame: ambiguous.",
+                    f"cf_class_name={cf_class_name}, token={token}, frames={frames}",
+                )
+            )
         return None
 
     def get_cfw_uuid_as_registered(self, cf_class_name: str, feature_uuid: UUID) -> UUID | None:

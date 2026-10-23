@@ -836,5 +836,5 @@ class TestExecuteCommandJoinStepWithoutSource:
         step.source_framework_uuids = {uuid4()}
         cfw_register.get_join_source_cfw_uuid.return_value = None
 
-        with pytest.raises(ValueError, match="no frame lists the join token"):
+        with pytest.raises(ValueError, match="no single frame lists the join token"):
             _execute_command(step, cfw_register, Mock(spec=ComputeFramework), None, None)

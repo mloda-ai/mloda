@@ -888,7 +888,7 @@ class TestPrepareTfsAndJoinStep:
         step.source_framework_uuids = {uuid4()}
         cfw_register.get_join_source_cfw_uuid.return_value = None
 
-        with pytest.raises(ValueError, match="no frame lists the join token"):
+        with pytest.raises(ValueError, match="no single frame lists the join token"):
             executor.prepare_tfs_and_joinstep(step)
 
     def test_returns_none_for_other_step_types(self) -> None:

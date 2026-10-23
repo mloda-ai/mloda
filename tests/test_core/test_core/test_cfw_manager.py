@@ -698,6 +698,21 @@ class TestCfwManagerJoinTokens:
         register.add_join_tokens(first, {token})
         register.add_join_tokens(second, {token})
 
+        with pytest.raises(ValueError, match="ambiguous") as excinfo:
+            register.get_join_source_cfw_uuid(self.cls_name, token)
+
+        assert str(first) in str(excinfo.value)
+        assert str(second) in str(excinfo.value)
+
+    def test_tie_among_real_frames_is_not_broken_by_the_reuse_table(self) -> None:
+        register = CfwManager({ParallelizationMode.SYNC})
+        tied_a, tied_b, reused, token = uuid4(), uuid4(), uuid4(), uuid4()
+        register.add_cfw_to_compute_frameworks(tied_a, self.cls_name, {token})
+        register.add_cfw_to_compute_frameworks(tied_b, self.cls_name, {token})
+        register.add_cfw_to_compute_frameworks(reused, self.cls_name, {uuid4()})
+        register.add_join_tokens(reused, {token})
+
+        assert register.get_cfw_uuid(self.cls_name, token) is None
         assert register.get_join_source_cfw_uuid(self.cls_name, token) is None
 
     def test_two_frames_merged_into_one_leftmost_are_not_ambiguous(self) -> None:

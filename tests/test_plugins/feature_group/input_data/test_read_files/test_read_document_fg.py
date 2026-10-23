@@ -262,8 +262,8 @@ class TestProviderHooks:
 
 
 class TestStockFormats:
-    def test_stock_formats_exports_every_document_group(self) -> None:
-        stock = importlib.import_module("mloda_plugins.feature_group.input_data.file_formats.stock_formats")
+    def test_stock_sources_exports_every_document_group(self) -> None:
+        stock = importlib.import_module("mloda_plugins.feature_group.input_data.stock_sources")
         for name in ("TextFG", "PyFG", "MarkdownFG", "YamlFG", "JsonDocumentFG"):
             assert name in stock.__all__
             assert getattr(stock, name).get_class_name() == name

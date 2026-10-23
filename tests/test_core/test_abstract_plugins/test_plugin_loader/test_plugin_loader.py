@@ -93,7 +93,6 @@ class TestPluginLoader:
         plugin_loader.load_group("feature_group/input_data/file_formats")
         assert "mloda_plugins.feature_group.input_data.file_formats.csv_fg" in plugin_loader.plugins
         assert "mloda_plugins.feature_group.input_data.file_formats.parquet_fg" in plugin_loader.plugins
-        assert "mloda_plugins.feature_group.input_data.file_formats.stock_formats" in plugin_loader.plugins
 
     def test_the_document_formats_group_holds_the_document_groups(self) -> None:
         plugin_loader = PluginLoader()

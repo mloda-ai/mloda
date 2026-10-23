@@ -38,8 +38,8 @@ from tests.mixins.reader_feature_groups.lazy_source_group import lazy_group
 
 
 @pytest.fixture(autouse=True)
-def _stock_formats_loaded() -> None:
-    importlib.import_module("mloda_plugins.feature_group.input_data.file_formats.stock_formats")
+def _stock_sources_loaded() -> None:
+    importlib.import_module("mloda_plugins.feature_group.input_data.stock_sources")
     importlib.import_module("mloda_plugins.compute_framework.base_implementations.pyarrow.table")
     importlib.import_module("mloda_plugins.compute_framework.base_implementations.pandas.dataframe")
 

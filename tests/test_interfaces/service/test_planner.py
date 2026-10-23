@@ -40,6 +40,7 @@ SECRET = "s3://user:pw@host/x"  # nosec B105
 DENIED = "PlannerDeniedMcp4"
 DOUBLE_SUFFIX = "__mcp4_double"
 DERIVED = "income" + DOUBLE_SUFFIX
+IN_SUFFIX = "_mcp4_in"
 CLOCK_START = 1_800_000_000.0
 KEY = b"k" * 32
 STEP_KEYS = {
@@ -142,10 +143,67 @@ class PlannerDeniedMcp4(StubFeatureGroup):
         return {"mcp4_salary": [1]}
 
 
+class PlannerInFeaturesMcp4(FeatureGroup):
+    """Consumes the in_features declared on a feature whose name ends with the suffix."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name).endswith(IN_SUFFIX)
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PythonDictFramework}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return set(options.get_in_features())
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(features.get_name_of_one_feature()): [1]}
+
+
 def _base() -> PluginCollector:
     return PluginCollector.enabled_feature_groups(
-        {*FILE_SOURCE_GROUPS, PlannerDoubleMcp4, PlannerDeniedMcp4, PlanRaiseMcp5, ApiInputDataFeature}
+        {
+            *FILE_SOURCE_GROUPS,
+            PlannerDoubleMcp4,
+            PlannerDeniedMcp4,
+            PlannerInFeaturesMcp4,
+            PlanRaiseMcp5,
+            ApiInputDataFeature,
+        }
     )
+
+
+def _write_sales_with_denied_column(tmp_path: Path) -> Path:
+    path = tmp_path / "sales.csv"
+    path.write_text("customer_id,income,mcp4_salary\n1,10,5\n2,20,6\n")
+    return path
+
+
+def _in_features_cases(column: str) -> list[tuple[dict[str, Any], str]]:
+    name = "out" + IN_SUFFIX
+    mid = "mid" + IN_SUFFIX
+    return [
+        ({"name": name, "in_features": ["income", column]}, "/features/0/in_features/1"),
+        ({"name": name, "options": {"in_features": column}}, "/features/0/options/in_features"),
+        ({"name": name, "group_options": {"in_features": [column]}}, "/features/0/group_options/in_features/0"),
+        ({"name": name, "context_options": {"in_features": [column]}}, "/features/0/context_options/in_features/0"),
+        ({"name": name, "options": {"in_features": {"name": column}}}, "/features/0/options/in_features/name"),
+        (
+            {"name": name, "options": {"in_features": {"name": mid, "in_features": column}}},
+            "/features/0/options/in_features/in_features",
+        ),
+        (
+            {"name": name, "options": {"in_features": {"name": mid, "options": {"in_features": [column]}}}},
+            "/features/0/options/in_features/options/in_features/0",
+        ),
+    ]
 
 
 def _write_sales(tmp_path: Path) -> Path:
@@ -367,6 +425,24 @@ class TestPolicy:
         error = _error(result, "policy_denied")
         assert error["alternatives"] == ["income"]
         assert denied_calls == []
+
+    @pytest.mark.parametrize(("feature", "pointer"), _in_features_cases("mcp4_salary"))
+    def test_denied_in_features_source_is_policy_denied(
+        self, tmp_path: Path, denied_calls: list[str], feature: dict[str, Any], pointer: str
+    ) -> None:
+        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+
+        result = _explain(tmp_path, {"features": [feature]}, sources=sources)
+
+        error = _error(result, "policy_denied")
+        assert _has_detail(error, path=pointer)
+        assert denied_calls == []
+
+    @pytest.mark.parametrize(("feature", "pointer"), _in_features_cases("income"))
+    def test_allowed_in_features_source_plans(self, tmp_path: Path, feature: dict[str, Any], pointer: str) -> None:
+        sources = {"sales": _source("sales", _write_sales_with_denied_column(tmp_path))}
+
+        _success(_explain(tmp_path, {"features": [feature]}, sources=sources))
 
     def test_allowed_request_never_calls_into_denied(self, tmp_path: Path, denied_calls: list[str]) -> None:
         _success(_explain(tmp_path, {"features": ["customer_id", DERIVED]}))

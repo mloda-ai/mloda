@@ -31,6 +31,7 @@ from mloda.interfaces.service.request import (
     build_request,
     _pointer,
     data_access_violations,
+    in_feature_sources,
     validate_request,
 )
 from mloda.interfaces.service.sources import READER_ERRORS, data_access_collection, source_columns
@@ -223,7 +224,7 @@ class Planner:
         if isinstance(parsed, list):
             return error_result("validation_failed", "A feature config is invalid.", problems_to_details(parsed))
         request_names = [_item_name(item) for item in request["features"]]
-        denied = self._denied(request_names, self._index_entries(request))
+        denied = self._denied(request_names, [*self._index_entries(request), *in_feature_sources(request)])
         if denied is not None:
             return denied
         sources = self._sources(parsed.restrict_sources)

@@ -6,7 +6,7 @@ The schema and the validator derive from the same constants so they accept exact
 import copy
 import difflib
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -321,24 +321,58 @@ def option_data_access_violations(options: Mapping[str, Any], path: str = "") ->
     return _scan_feature_config({"options": dict(options)}, path, data_access_option_keys())
 
 
+def _declared_in_features(config: Mapping[str, Any], path: str) -> Iterator[tuple[str, str | dict[str, Any]]]:
+    """Yield ``(pointer, source name or nested config)`` for every ``in_features`` declaration at any depth."""
+    for key, value in config.items():
+        key_path = path + _pointer(key)
+        if str(key) != str(DefaultOptionKeys.in_features):
+            if isinstance(value, dict):
+                yield from _declared_in_features(value, key_path)
+        elif isinstance(value, str):
+            yield key_path, value
+        elif isinstance(value, list):
+            for j, element in enumerate(value):
+                if isinstance(element, str):
+                    yield key_path + _pointer(j), element
+        elif isinstance(value, dict):
+            yield key_path, value
+            yield from _declared_in_features(value, key_path)
+
+
+def in_feature_sources(request: Any) -> list[tuple[str, str]]:
+    """Return ``(pointer, name)`` for every source name the request's feature configs declare in ``in_features``."""
+    features = request.get("features") if isinstance(request, dict) else None
+    if not isinstance(features, list):
+        return []
+    sources: list[tuple[str, str]] = []
+    for index, item in enumerate(features):
+        if not isinstance(item, dict):
+            continue
+        for pointer, declared in _declared_in_features(item, _pointer("features", index)):
+            if isinstance(declared, str):
+                sources.append((pointer, declared))
+            elif isinstance(declared.get("name"), str):
+                sources.append((pointer + _pointer("name"), declared["name"]))
+    return sources
+
+
 def _scan_feature_config(item: Mapping[str, Any], path: str, keys: frozenset[str]) -> list[Problem]:
     problems: list[Problem] = []
-    for container in _OPTION_CONTAINERS:
-        options = item.get(container)
-        if not isinstance(options, dict):
-            continue
-        for key, value in options.items():
-            key_path = path + _pointer(container, key)
-            if key in keys:
-                problems.append(
-                    Problem(
-                        path=key_path,
-                        problem="data_access_option",
-                        message=f"Option key '{key}' configures data access, which a request may not set.",
+    configs = [(path, item)] + [(p, d) for p, d in _declared_in_features(item, path) if isinstance(d, dict)]
+    for config_path, config in configs:
+        for container in _OPTION_CONTAINERS:
+            options = config.get(container)
+            if not isinstance(options, dict):
+                continue
+            for key in options:
+                if key in keys:
+                    problems.append(
+                        Problem(
+                            path=config_path + _pointer(container, key),
+                            problem="data_access_option",
+                            message=f"Option key '{key}' configures data access, which a request may not set.",
+                        )
                     )
-                )
-            elif str(key) == str(DefaultOptionKeys.in_features) and isinstance(value, dict):
-                problems.extend(_scan_feature_config(value, key_path, keys))
     return problems
 
 

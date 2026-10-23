@@ -1211,3 +1211,185 @@ def test_safe_value_text_scrubs_a_credential_str_and_keeps_the_type() -> None:
     assert "hunter2" not in text
     assert text.startswith("str ")
     assert safe_value_text("plain") == "str 'plain'"
+
+
+_LITERAL = "Zq81Lm5Vx0Rb7Ye3Hw29"  # nosec B105
+_OTHER_LITERAL = "Ab12Cd34Ef56Gh78Ij90"  # nosec B105
+
+
+class TestRegisteredSecretsScope:
+    """registered_secrets_scope adds exact literals to scrub_credentials for the current context only."""
+
+    def test_outside_any_scope_output_is_unchanged(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+
+        text = f"username={_LITERAL}"
+        assert current_registered_secrets() == frozenset()
+        assert scrub_credentials(text) == text
+
+    def test_inside_a_scope_the_literal_is_masked(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
+
+        with registered_secrets_scope(frozenset({_LITERAL})):
+            masked = scrub_credentials(f"username={_LITERAL} done")
+
+        assert _LITERAL not in masked
+        assert "***" in masked
+
+    def test_nested_scopes_union_and_reset_in_order(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import (
+            current_registered_secrets,
+            registered_secrets_scope,
+        )
+
+        with registered_secrets_scope(frozenset({_LITERAL})):
+            with registered_secrets_scope(frozenset({_OTHER_LITERAL})):
+                assert current_registered_secrets() == frozenset({_LITERAL, _OTHER_LITERAL})
+                masked = scrub_credentials(f"{_LITERAL} {_OTHER_LITERAL}")
+                assert _LITERAL not in masked
+                assert _OTHER_LITERAL not in masked
+            assert current_registered_secrets() == frozenset({_LITERAL})
+
+        assert current_registered_secrets() == frozenset()
+
+    def test_the_set_resets_after_an_exception(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import (
+            current_registered_secrets,
+            registered_secrets_scope,
+        )
+
+        with pytest.raises(RuntimeError):
+            with registered_secrets_scope(frozenset({_LITERAL})):
+                raise RuntimeError("inside")
+
+        assert current_registered_secrets() == frozenset()
+
+
+def test_mask_literals_masks_every_occurrence_and_merges_overlaps() -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import mask_literals
+
+    masked = mask_literals(f"a {_LITERAL} b {_LITERAL}", {_LITERAL})
+    assert _LITERAL not in masked
+    assert masked.startswith("a ")
+    assert mask_literals("nothing here", {_LITERAL}) == "nothing here"
+
+
+class TestRedactException:
+    """redact_exception rewrites registered literals in place, across the chain, keeping identity."""
+
+    def test_args_cause_and_context_are_rewritten_and_identity_kept(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        cause = KeyError(f"k {_LITERAL}")
+        context = LookupError(f"c {_LITERAL}")
+        exc = ValueError(f"u={_LITERAL}", 7)
+        exc.__cause__ = cause
+        exc.__context__ = context
+
+        result = redact_exception(exc, frozenset({_LITERAL}))
+
+        assert result is exc
+        assert exc.__cause__ is cause
+        assert exc.__context__ is context
+        assert exc.args[1] == 7
+        assert _LITERAL not in str(exc)
+        assert _LITERAL not in str(cause)
+        assert _LITERAL not in str(context)
+
+    def test_a_cycle_terminates(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        first = ValueError(_LITERAL)
+        second = ValueError(_LITERAL)
+        first.__cause__ = second
+        second.__context__ = first
+
+        redact_exception(first, frozenset({_LITERAL}))
+
+        assert _LITERAL not in str(first)
+        assert _LITERAL not in str(second)
+
+    def test_oserror_fields_and_notes_are_rewritten(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = OSError(2, f"bad {_LITERAL}", f"/x/{_LITERAL}")
+        exc.add_note(f"note {_LITERAL}")
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert exc.errno == 2
+        assert _LITERAL not in str(exc)
+        assert _LITERAL not in str(exc.strerror)
+        assert _LITERAL not in str(exc.filename)
+        assert all(_LITERAL not in note for note in exc.__notes__)
+
+    def test_a_frozen_dataclass_exception_is_rewritten(self) -> None:
+        from dataclasses import dataclass
+
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        @dataclass(frozen=True)
+        class FrozenError(Exception):
+            detail: str
+
+        exc = FrozenError(f"d {_LITERAL}")
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert type(exc) is FrozenError
+        assert _LITERAL not in str(exc)
+
+    def test_resolution_error_refusals_are_rewritten(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+        from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+
+        refusal = PermissionError(f"denied {_LITERAL}")
+        error = FeatureResolutionError(f"msg {_LITERAL}", "f", None, refusals=[refusal])  # type: ignore[arg-type]
+
+        redact_exception(error, frozenset({_LITERAL}))
+
+        assert _LITERAL not in str(error)
+        assert all(_LITERAL not in str(item) for item in error.refusals)
+        assert error.refusals[0] is refusal
+
+    def test_a_frozen_dataclass_exception_with_notes_is_rewritten(self) -> None:
+        from dataclasses import dataclass
+
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        @dataclass(frozen=True)
+        class FrozenNotedError(Exception):
+            detail: str
+
+        exc = FrozenNotedError(f"d {_LITERAL}")
+        object.__setattr__(exc, "__notes__", [f"note {_LITERAL}"])
+
+        redact_exception(exc, frozenset({_LITERAL}))
+
+        assert _LITERAL not in str(exc)
+        assert all(_LITERAL not in note for note in exc.__notes__)
+
+    @pytest.mark.parametrize("attributes", [{"exceptions": 3}, {"exceptions": ["a", "b"]}, {"refusals": None}])
+    def test_unrelated_exceptions_or_refusals_attributes_are_ignored(self, attributes: dict[str, Any]) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        class OddError(Exception):
+            pass
+
+        exc = OddError(f"u={_LITERAL}")
+        for name, value in attributes.items():
+            setattr(exc, name, value)
+
+        result = redact_exception(exc, frozenset({_LITERAL}))
+
+        assert result is exc
+        assert _LITERAL not in str(exc)
+
+    def test_no_literals_leaves_the_exception_untouched(self) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import redact_exception
+
+        exc = ValueError(f"keep {_LITERAL}")
+
+        redact_exception(exc, frozenset())
+
+        assert _LITERAL in str(exc)

@@ -1,7 +1,8 @@
 """Strip credentials from free text before it reaches core's failure logs or MlodaRunError."""
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from contextvars import ContextVar, Token
 from typing import Any
 
 _AZURE_CONTAINER_SCHEMES = frozenset({"abfs", "abfss", "wasb", "wasbs"})
@@ -146,8 +147,77 @@ def strip_uri_userinfo(text: str) -> str:
     return _USER_ONLY_PATTERN.sub(_drop_user_only, _drop_free_text_userinfo(text))
 
 
+_PLACEHOLDER = "MLODAREDACTED"
+_REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
+
+
+def _literal_spans(text: str, literals: Iterable[str]) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    for literal in literals:
+        start = 0
+        while True:
+            index = text.find(literal, start)
+            if index == -1:
+                break
+            spans.append((index, index + len(literal)))
+            start = index + 1
+    return spans
+
+
+def _merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def placeholder_mask(text: str, literals: Iterable[str]) -> str:
+    """Replace every occurrence of each literal with an inert placeholder."""
+    masked = ""
+    cursor = 0
+    for start, end in _merge_spans(_literal_spans(text, literals)):
+        masked += text[cursor:start] + _PLACEHOLDER
+        cursor = end
+    return masked + text[cursor:]
+
+
+def mask_literals(text: str, literals: Iterable[str]) -> str:
+    """Replace every occurrence of each literal with ``***``, merging overlaps."""
+    return placeholder_mask(text, literals).replace(_PLACEHOLDER, "***")
+
+
+class registered_secrets_scope:  # noqa: N801
+    """Add literals to the set ``scrub_credentials`` masks exactly, for this context only.
+
+    A class, not @contextmanager: that helper assigns ``__traceback__``, which a frozen-dataclass exception rejects.
+    """
+
+    def __init__(self, literals: frozenset[str]) -> None:
+        self._literals = literals
+        self._tokens: list[Token[frozenset[str]]] = []
+
+    def __enter__(self) -> None:
+        self._tokens.append(_REGISTERED_SECRETS.set(_REGISTERED_SECRETS.get() | self._literals))
+
+    def __exit__(self, *exc_info: object) -> None:
+        _REGISTERED_SECRETS.reset(self._tokens.pop())
+
+
+def current_registered_secrets() -> frozenset[str]:
+    return _REGISTERED_SECRETS.get()
+
+
 def scrub_credentials(text: str) -> str:
-    """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs."""
+    """Mask URI user info, bearer/Authorization tokens, key=value and quoted-key secrets, user/password@host DSNs.
+
+    Inside a ``registered_secrets_scope`` the registered literals are masked exactly first.
+    """
+    registered = _REGISTERED_SECRETS.get()
+    if registered:
+        text = placeholder_mask(text, registered)
     text = _drop_free_text_userinfo(text)
     text = _FREE_TEXT_URI_PATTERN.sub(_scrub_uri_match, text)
     text = _AUTHORIZATION_PATTERN.sub(lambda m: m["head"] + (f"{m['scheme']} ***" if m["scheme"] else "***"), text)
@@ -155,7 +225,42 @@ def scrub_credentials(text: str) -> str:
     text = _KEYWORD_PATTERN.sub(r"\g<keyword>\g<sep>***", text)
     text = _QUOTED_KEY_PATTERN.sub(r"\g<lead>\g<quote>\g<keyword>\g<quote>: \g<quote>***\g<quote>", text)
     text = _SLASH_DSN_PATTERN.sub(r"\g<user>/***@", text)
+    if registered:
+        text = text.replace(_PLACEHOLDER, "***")
     return text
+
+
+def _mask_item(item: Any, literals: frozenset[str]) -> Any:
+    return mask_literals(item, literals) if isinstance(item, str) else item
+
+
+def redact_exception(exc: BaseException, literals: frozenset[str]) -> BaseException:
+    """Mask literals in place across the exception, its chain, group members, notes and refusals."""
+    if not literals:
+        return exc
+    seen: set[int] = set()
+    pending: list[BaseException] = [exc]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        object.__setattr__(current, "args", tuple(_mask_item(arg, literals) for arg in current.args))
+        if isinstance(current, OSError):
+            for name in ("strerror", "filename", "filename2"):
+                object.__setattr__(current, name, _mask_item(getattr(current, name), literals))
+        notes = getattr(current, "__notes__", None)
+        if isinstance(notes, list):
+            object.__setattr__(current, "__notes__", [_mask_item(note, literals) for note in notes])
+        members: list[Any] = []
+        for name in ("exceptions", "refusals"):
+            value = getattr(current, name, None)
+            if isinstance(value, (tuple, list)):
+                members.extend(value)
+        pending.extend(
+            nested for nested in (current.__cause__, current.__context__, *members) if isinstance(nested, BaseException)
+        )
+    return exc
 
 
 def redact_mapping(mapping: Mapping[Any, Any]) -> dict[Any, str]:

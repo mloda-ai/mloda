@@ -26,6 +26,16 @@ def toy_dac(**sources: dict[str, list[Any]]) -> DataAccessCollection:
     return DataAccessCollection(credentials={handle: {TOY_KEY: cols} for handle, cols in sources.items()})
 
 
+TOY_TOKEN = "tkn_Zq81Lm5Vx0Rb7Ye3Hw29"  # nosec B105
+
+
+def toy_token_dac(**sources: dict[str, list[Any]]) -> DataAccessCollection:
+    """Like toy_dac, with a registered token string next to each toy source."""
+    return DataAccessCollection(
+        credentials={handle: {TOY_KEY: cols, "token": TOY_TOKEN} for handle, cols in sources.items()}
+    )
+
+
 def foreign_dac() -> DataAccessCollection:
     return DataAccessCollection(credentials={"toyfmt_foreign": {"unrelated_key": {"toyfmt_col": [1]}}})
 

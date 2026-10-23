@@ -1104,7 +1104,7 @@ class TestThreadExecuteStep:
 
         # Verify thread was created with correct parameters
         mock_thread_class.assert_called_once_with(
-            target=mock_worker, args=(step, cfw_register, mock_cfw, None), daemon=True
+            target=mock_worker, args=(step, cfw_register, mock_cfw, None, frozenset()), daemon=True
         )
 
     @patch("mloda.core.runtime.compute_framework_executor.threading.Thread")

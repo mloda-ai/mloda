@@ -20,14 +20,22 @@ and because ``MlodaRunError`` does not yet exist.
 
 from __future__ import annotations
 
+import errno
 import logging
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet, SourceMatch
 from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
+
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
+    TOY_TOKEN,
+    ToyFormatFG,
+    toy_token_dac,
+)
 
 # Importing the framework registers it as a ComputeFramework subclass so
 # ``compute_frameworks=["PythonDictFramework"]`` resolves during ``run_all``.
@@ -570,3 +578,119 @@ def test_sync_row_leak_chained_scrubbed_in_logs(caplog: pytest.LogCaptureFixture
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert error_records
     assert all(_ROW_LEAK_MARKER not in r.getMessage() for r in error_records)
+
+
+# --------------------------------------------------------------------------- #
+# Registered collection credentials: a bare token under a credential-shaped key
+# is masked in raised error text and logs, while type and chain survive.
+# --------------------------------------------------------------------------- #
+
+_TOKEN_COLUMN = "toyfmt_tok_col"
+
+
+@dataclass(frozen=True)
+class FrozenTokenError(Exception):
+    """Frozen-dataclass exception whose only field carries the token."""
+
+    detail: str
+
+
+class TokenValueErrorFG(ToyFormatFG):
+    """Load raises a ValueError from a KeyError, token in the message."""
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        raise ValueError(f"username={TOY_TOKEN}") from KeyError("inner")
+
+
+class TokenOSErrorFG(ToyFormatFG):
+    """Load raises an OSError whose strerror and filename carry the token."""
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        raise OSError(errno.ENOENT, f"cannot open {TOY_TOKEN}", f"/x/{TOY_TOKEN}")
+
+
+class TokenFrozenFG(ToyFormatFG):
+    """Load raises a frozen-dataclass exception carrying the token."""
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        raise FrozenTokenError(f"seen {TOY_TOKEN}")
+
+
+_TOKEN_GROUPS = [TokenValueErrorFG, TokenOSErrorFG, TokenFrozenFG]
+
+
+def _token_run_args(group: type[ToyFormatFG]) -> dict[str, Any]:
+    return {
+        "compute_frameworks": ["PythonDictFramework"],
+        "plugin_collector": PluginCollector.enabled_feature_groups({group}),
+        "data_access_collection": toy_token_dac(h1={_TOKEN_COLUMN: [1]}),
+    }
+
+
+def _assert_token_gone(exc: BaseException, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+    assert TOY_TOKEN not in str(exc)
+    assert TOY_TOKEN not in repr(exc.args)
+    assert TOY_TOKEN not in caplog.text
+    if group is TokenValueErrorFG:
+        assert type(exc) is ValueError
+        assert type(exc.__cause__) is KeyError
+    if group is TokenOSErrorFG:
+        assert type(exc) is FileNotFoundError
+        assert TOY_TOKEN not in str(exc.filename)
+        assert TOY_TOKEN not in str(exc.strerror)
+    if group is TokenFrozenFG:
+        assert type(exc) is FrozenTokenError
+
+
+@pytest.mark.parametrize("group", _TOKEN_GROUPS)
+def test_sync_load_error_masks_registered_token(group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all([Feature(name=_TOKEN_COLUMN)], **_token_run_args(group))
+
+    _assert_token_gone(excinfo.value, group, caplog)
+
+
+@pytest.mark.parametrize("group", _TOKEN_GROUPS)
+def test_threading_load_error_masks_registered_token(
+    group: type[ToyFormatFG], flight_server: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(Exception) as excinfo:
+            mloda.run_all(
+                [Feature(name=_TOKEN_COLUMN)],
+                parallelization_modes={ParallelizationMode.THREADING},
+                flight_server=flight_server,
+                **_token_run_args(group),
+            )
+
+    _assert_token_gone(excinfo.value, group, caplog)
+
+
+def test_stream_all_load_error_masks_registered_token(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            list(mloda.stream_all([Feature(name=_TOKEN_COLUMN)], **_token_run_args(TokenValueErrorFG)))
+
+    _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
+
+
+def test_stream_run_load_error_masks_registered_token(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(ValueError) as excinfo:
+            session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **_token_run_args(TokenValueErrorFG))
+            list(session.stream_run())
+
+    _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
+
+
+def test_registered_token_scope_does_not_leak_after_a_failed_run() -> None:
+    from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
+
+    with pytest.raises(ValueError):
+        mloda.run_all([Feature(name=_TOKEN_COLUMN)], **_token_run_args(TokenValueErrorFG))
+
+    assert current_registered_secrets() == frozenset()

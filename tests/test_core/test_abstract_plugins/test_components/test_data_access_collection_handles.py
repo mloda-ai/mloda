@@ -875,3 +875,40 @@ class TestCopy:
         assert original._auto_handles == before_auto
         assert duplicate._auto_handles is not original._auto_handles
         assert len(duplicate._auto_handles) == len(before_auto) + 2
+
+
+class TestSecretLiterals:
+    """secret_literals() yields only 8+ char str leaves under credential-shaped keys."""
+
+    def test_only_credential_keyed_leaves_are_registered(self, tmp_path: Path) -> None:
+        dac = DataAccessCollection(
+            credentials={
+                "db": {
+                    "sqlite": str(tmp_path / "long_database_name.db"),
+                    "host": "db.internal.example",
+                    "user": "administrator",
+                },
+                "api": {"token": "tkn_Zq81Lm5Vx0Rb7Ye3Hw29", "password": "correct-horse-battery"},
+            }
+        )
+
+        assert dac.secret_literals() == frozenset({"tkn_Zq81Lm5Vx0Rb7Ye3Hw29", "correct-horse-battery"})
+
+    def test_nested_and_credential_wrapped_secrets_are_found(self) -> None:
+        dac = DataAccessCollection(
+            credentials={
+                "a": {"cfg": {"api_key": "key-value-123456"}},
+                "b": {"items": [{"client_secret": "secret-value-9876"}]},
+                "c": Credential({"token": "wrapped-token-abcdef"}),
+            }
+        )
+
+        assert dac.secret_literals() == frozenset({"key-value-123456", "secret-value-9876", "wrapped-token-abcdef"})
+
+    def test_short_and_non_str_secret_values_are_skipped(self) -> None:
+        dac = DataAccessCollection(credentials={"a": {"token": "short", "password": 123456789012, "secret": "   "}})
+
+        assert dac.secret_literals() == frozenset()
+
+    def test_no_credentials_gives_an_empty_set(self) -> None:
+        assert DataAccessCollection().secret_literals() == frozenset()

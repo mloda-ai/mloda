@@ -187,7 +187,7 @@ def _collect_class_constants(root: Path) -> tuple[dict[tuple[str, str], str], di
 
 
 def _module_name(path: Path, base: Path) -> str:
-    """Dotted module name of ``path`` relative to ``base``; ``pkg/__init__.py`` maps to ``pkg``."""
+    """Dotted module name of ``path`` relative to ``base``."""
     parts = list(path.relative_to(base).with_suffix("").parts)
     if parts[-1] == "__init__":
         parts.pop()
@@ -401,9 +401,8 @@ def property_mapping_declared_union() -> frozenset[str]:
 
 def test_no_undeclared_static_option_reads() -> None:
     """No shipped feature_group plugin reads an Options key that nothing declares (outside the narrow allowlist)."""
-    # Vacuity floors, NOT targets: their only job is to prove the rglob loops really walked each tree
-    # instead of finding nothing. Each is about half the measured count (30 plugins, 18 core today) so that
-    # removing a read site stays a legitimate change; pinning the exact count made deleting reads fail here.
+    # Vacuity floors, NOT targets: they only prove the scan walked each tree. Each is about half the measured
+    # count so that removing a read site stays a legitimate change.
     floors = {SCAN_ROOT: 15, CORE_SCAN_ROOT: 9}
     violations: list[str] = []
     for root in SCAN_ROOTS:

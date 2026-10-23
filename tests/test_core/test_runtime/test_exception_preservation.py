@@ -585,7 +585,7 @@ def test_sync_row_leak_chained_scrubbed_in_logs(caplog: pytest.LogCaptureFixture
 # is masked in raised error text and logs, while type and chain survive.
 # --------------------------------------------------------------------------- #
 
-_TOKEN_COLUMN = "toyfmt_tok_col"
+_TOKEN_COLUMN = "toyfmt_tok_col"  # nosec B105
 
 
 @dataclass(frozen=True)

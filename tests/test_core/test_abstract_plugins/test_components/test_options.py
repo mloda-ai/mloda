@@ -651,7 +651,7 @@ class TestOptionsWithCredentialValues:
 
     @pytest.mark.parametrize("where", ["group", "context"])
     def test_str_masks_a_credential_key_in_a_nested_mapping(self, where: str) -> None:
-        nested = {"cfg": {"password": "hunter2", "host": "h"}}
+        nested = {"cfg": {"password": "hunter2", "host": "h"}}  # nosec B105
         options = Options(group=nested) if where == "group" else Options(context=nested)
         text = str(options)
         assert "hunter2" not in text
@@ -671,12 +671,12 @@ class TestOptionsWithCredentialValues:
     def test_masking_is_display_only_the_raw_value_stays_in_stable_text(self) -> None:
         from mloda.core.prepare.stable_text import stable_text
 
-        options = Options(group={"api_key": "hunter2", "cfg": {"password": "hunter2"}})
+        options = Options(group={"api_key": "hunter2", "cfg": {"password": "hunter2"}})  # nosec B105
         assert "hunter2" in stable_text(options.group)
         assert options.group["cfg"]["password"] == "hunter2"
 
     def test_str_of_a_cyclic_nested_mapping_does_not_raise(self) -> None:
-        inner: dict[str, Any] = {"password": "hunter2"}
+        inner: dict[str, Any] = {"password": "hunter2"}  # nosec B105
         inner["self"] = inner
         text = str(Options(context={"cfg": inner}))
         assert "hunter2" not in text

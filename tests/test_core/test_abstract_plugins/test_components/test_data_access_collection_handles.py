@@ -888,7 +888,7 @@ class TestSecretLiterals:
                     "host": "db.internal.example",
                     "user": "administrator",
                 },
-                "api": {"token": "tkn_Zq81Lm5Vx0Rb7Ye3Hw29", "password": "correct-horse-battery"},
+                "api": {"token": "tkn_Zq81Lm5Vx0Rb7Ye3Hw29", "password": "correct-horse-battery"},  # nosec B105
             }
         )
 
@@ -898,15 +898,15 @@ class TestSecretLiterals:
         dac = DataAccessCollection(
             credentials={
                 "a": {"cfg": {"api_key": "key-value-123456"}},
-                "b": {"items": [{"client_secret": "secret-value-9876"}]},
-                "c": Credential({"token": "wrapped-token-abcdef"}),
+                "b": {"items": [{"client_secret": "secret-value-9876"}]},  # nosec B105
+                "c": Credential({"token": "wrapped-token-abcdef"}),  # nosec B105
             }
         )
 
         assert dac.secret_literals() == frozenset({"key-value-123456", "secret-value-9876", "wrapped-token-abcdef"})
 
     def test_short_and_non_str_secret_values_are_skipped(self) -> None:
-        dac = DataAccessCollection(credentials={"a": {"token": "short", "password": 123456789012, "secret": "   "}})
+        dac = DataAccessCollection(credentials={"a": {"token": "short", "password": 123456789012, "secret": "   "}})  # nosec B105
 
         assert dac.secret_literals() == frozenset()
 

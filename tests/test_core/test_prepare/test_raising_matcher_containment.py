@@ -268,7 +268,7 @@ class TestRaisingMatcherContainment:
         assert RAISE_MESSAGE in error
 
 
-_TOKEN_COLUMN = "toyfmt_tokmatch_col"
+_TOKEN_COLUMN = "toyfmt_tokmatch_col"  # nosec B105
 
 
 class TokenFindSourcesFG(ToyFormatFG):

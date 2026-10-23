@@ -596,51 +596,57 @@ def test_scanner_flags_keyword_arg_key(tmp_path: Path) -> None:
     assert any("undeclared_x" in v for v in violations), violations
 
 
-def test_scanner_scopes_literal_allowlist_to_owner(tmp_path: Path) -> None:
-    """A literal-allowlisted key passes only in its owning file; the same read elsewhere is flagged."""
-    allow: dict[str, tuple[tuple[str, ...], str, str]] = {"scoped_key": (("owner.py",), "Owner", "engine-internal")}
-    (tmp_path / "owner.py").write_text("def f(options):\n    return options.get('scoped_key')\n")
-    (tmp_path / "other.py").write_text("def g(options):\n    return options.get('scoped_key')\n")
+@pytest.mark.parametrize(
+    ("owners", "files", "expected"),
+    [
+        pytest.param(("owner.py",), ("owner.py", "other.py"), ["other.py"], id="one_owner"),
+        pytest.param(("one.py", "two.py"), ("one.py", "two.py", "three.py"), ["three.py"], id="two_owners"),
+    ],
+)
+def test_scanner_scopes_literal_allowlist_to_owning_paths(
+    tmp_path: Path, owners: tuple[str, ...], files: tuple[str, ...], expected: list[str]
+) -> None:
+    """A literal-allowlisted key passes in every owning file and is flagged in any other file."""
+    allow: dict[str, tuple[tuple[str, ...], str, str]] = {"scoped_key": (owners, "Owner", "engine-internal")}
+    for name in files:
+        (tmp_path / name).write_text("def f(options):\n    return options.get('scoped_key')\n")
     violations = find_violations(tmp_path, frozenset(), frozenset(), allow, {})
-    assert any(v.startswith("other.py") for v in violations), violations
-    assert not any(v.startswith("owner.py") for v in violations), violations
+    assert sorted(v.split(":")[0] for v in violations) == expected, violations
 
 
-def test_scanner_allows_a_literal_key_in_every_owning_path(tmp_path: Path) -> None:
-    """A literal allowlist entry with two owning paths passes in both files and still flags a third."""
-    allow: dict[str, tuple[tuple[str, ...], str, str]] = {"shared_key": (("one.py", "two.py"), "Owner", "internal")}
-    for name in ("one.py", "two.py", "three.py"):
-        (tmp_path / name).write_text("def f(options):\n    return options.get('shared_key')\n")
-    violations = find_violations(tmp_path, frozenset(), frozenset(), allow, {})
-    assert [v.split(":")[0] for v in violations] == ["three.py"], violations
-
-
-def test_scanner_resolves_a_module_level_constant(tmp_path: Path) -> None:
-    """A module-level ``NAME = 'literal'`` resolves for a bare NAME read in the same file."""
-    (tmp_path / "mod.py").write_text("KEY = 'module_key'\n\n\ndef f(options):\n    return options.get(KEY)\n")
-    assert find_violations(tmp_path, frozenset({"module_key"}), frozenset(), {}, {}) == []
-    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {})
-    assert any("'module_key'" in v and "dynamic" not in v for v in violations), violations
-
-
-def test_scanner_resolves_a_constant_imported_by_module_path(tmp_path: Path) -> None:
-    """``from consts import KEY`` resolves through consts.py under the constant roots."""
-    (tmp_path / "consts.py").write_text("KEY = 'imported_key'\n")
-    (tmp_path / "user.py").write_text("from consts import KEY\n\n\ndef f(options):\n    return options.get(KEY)\n")
-    assert find_violations(tmp_path, frozenset({"imported_key"}), frozenset(), {}, {}, base=tmp_path) == []
+@pytest.mark.parametrize(
+    ("files", "key"),
+    [
+        pytest.param(
+            {"mod.py": "KEY = 'module_key'\n\n\ndef f(options):\n    return options.get(KEY)\n"},
+            "module_key",
+            id="module",
+        ),
+        pytest.param(
+            {
+                "consts.py": "KEY = 'imported_key'\n",
+                "user.py": "from consts import KEY\n\n\ndef f(options):\n    return options.get(KEY)\n",
+            },
+            "imported_key",
+            id="imported",
+        ),
+        pytest.param(
+            {
+                "consts.py": "KEY = 'aliased_key'\n",
+                "user.py": "from consts import KEY as OTHER\n\n\ndef f(options):\n    return options.get(OTHER)\n",
+            },
+            "aliased_key",
+            id="aliased",
+        ),
+    ],
+)
+def test_scanner_resolves_a_module_constant(tmp_path: Path, files: dict[str, str], key: str) -> None:
+    """A module-level constant resolves in-file, by module path, or through an aliased import."""
+    for name, text in files.items():
+        (tmp_path / name).write_text(text)
+    assert find_violations(tmp_path, frozenset({key}), frozenset(), {}, {}, base=tmp_path) == []
     violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {}, base=tmp_path)
-    assert any("'imported_key'" in v for v in violations), violations
-
-
-def test_scanner_resolves_an_aliased_import(tmp_path: Path) -> None:
-    """``from consts import KEY as OTHER`` resolves the alias to the constant's value."""
-    (tmp_path / "consts.py").write_text("KEY = 'aliased_key'\n")
-    (tmp_path / "user.py").write_text(
-        "from consts import KEY as OTHER\n\n\ndef f(options):\n    return options.get(OTHER)\n"
-    )
-    assert find_violations(tmp_path, frozenset({"aliased_key"}), frozenset(), {}, {}, base=tmp_path) == []
-    violations = find_violations(tmp_path, frozenset(), frozenset(), {}, {}, base=tmp_path)
-    assert any("'aliased_key'" in v for v in violations), violations
+    assert any(f"'{key}'" in v and "dynamic" not in v for v in violations), violations
 
 
 def test_scanner_keeps_an_import_from_an_unknown_module_dynamic(tmp_path: Path) -> None:

@@ -93,8 +93,8 @@ class PlanStep:
     ``join_keys`` is a join step's ``left=right`` index column pairs, as ``HookContext.join_keys``; None for
     APPEND/UNION and non-join steps.
 
-    ``leaves_connection``: the handle whose connection a compute step's root read or a transform leaves, "<unnamed>"
-    for an auto handle, else None.
+    ``leaves_connection``: the handle whose connection a compute step's root read, requested result conversion or a
+    transform leaves (carried through same-handle steps), "<unnamed>" for an auto handle, else None.
 
     ``implementation``: the Implementation class serving a compute step, else None.
     ``implementation_path``: its ``module:qualname``, "neutral" for a format group step without one, else None.
@@ -136,6 +136,12 @@ class PlanStep:
     _data_access_identity: str | None = field(default=None, compare=False)
     _data_access_identity_is_fallback: bool | None = field(default=None, compare=False)
     _neutral: bool = field(default=False, compare=False)
+    _hash_options: Options | None = field(default=None, compare=False)
+
+    @property
+    def content_options(self) -> Options | None:
+        """The options for hashing and ordering: an auto connection handle renders as "<unnamed>"."""
+        return self._hash_options if self._hash_options is not None else self.feature_set_options
 
     @property
     def implementation_path(self) -> str | None:
@@ -225,6 +231,25 @@ def build_plan_steps(
     def leaves(handle: str | None) -> str | None:
         return "<unnamed>" if handle in auto_handles else handle
 
+    lives_memo: dict[int, bool] = {}
+
+    def lives_on(step: Any) -> bool:
+        key = id(step)
+        if key not in lives_memo:
+            lives_memo[key] = False
+            lives_memo[key] = step.connection_handle is not None and (
+                step.connection_explicit
+                or any(
+                    dep is not step
+                    and isinstance(dep, FeatureGroupStep | JoinStep)
+                    and dep.get_uuids() & step.required_uuids
+                    and dep.connection_handle == step.connection_handle
+                    and lives_on(dep)
+                    for dep in raw_steps
+                )
+            )
+        return lives_memo[key]
+
     for step in raw_steps:
         if isinstance(step, FeatureGroupStep):
             feature_names = tuple(str(name) for name in step.features.get_all_names())
@@ -255,6 +280,19 @@ def build_plan_steps(
                 if named is not None and declared_here and not declared and step.connection_handle != named
                 else None
             )
+            result_cf = (output_framework or step.compute_framework.result_framework()) if requested else None
+            if (
+                leaves_handle is None
+                and result_cf is not None
+                and lives_on(step)
+                and result_cf.expected_data_framework() != step.compute_framework.expected_data_framework()
+            ):
+                leaves_handle = step.connection_handle
+            options = step.features.options
+            snapshot = None if options is None else Options(group=snapshot_group(options.group))
+            hash_options = snapshot
+            if snapshot is not None and snapshot.group.get("connection_handle") in auto_handles:
+                hash_options = Options(group={**snapshot.group, "connection_handle": "<unnamed>"})
             impl = step.features.implementation
             path = implementation_path(step.feature_group, impl, match)
             plan.append(
@@ -268,11 +306,7 @@ def build_plan_steps(
                     requested_feature_names=requested,
                     injected_feature_names=injected,
                     input_feature_names=input_feature_names,
-                    feature_set_options=(
-                        Options(group=snapshot_group(step.features.options.group))
-                        if step.features.options is not None
-                        else None
-                    ),
+                    feature_set_options=snapshot,
                     step_uuid=step.uuid,
                     input_feature_edges={
                         name: tuple(sorted(inputs))
@@ -281,9 +315,7 @@ def build_plan_steps(
                     specialized_from=tuple(sorted(replaced, key=_candidate_sort_key)),
                     compute_framework_reason="; ".join(sorted(reasons)) or None,
                     leaves_connection=leaves(leaves_handle),
-                    result_framework=(output_framework or step.compute_framework.result_framework())
-                    if requested
-                    else None,
+                    result_framework=result_cf,
                     implementation=impl,
                     implementation_version=None if impl is None else safe_field(lambda: as_str(impl.version()), None),
                     implementation_hash=None
@@ -299,6 +331,7 @@ def build_plan_steps(
                     _data_access_identity=identity,
                     _data_access_identity_is_fallback=is_fallback,
                     _neutral=path == "neutral",
+                    _hash_options=hash_options,
                 )
             )
         elif isinstance(step, TransformFrameworkStep):
@@ -308,7 +341,7 @@ def build_plan_steps(
                 if source is not step
                 and isinstance(source, FeatureGroupStep | JoinStep)
                 and source.get_uuids() & step.required_uuids
-                and source.connection_explicit
+                and lives_on(source)
                 and source.connection_handle != step.connection_handle
             ]
             plan.append(
@@ -414,7 +447,7 @@ def _content_key(record: PlanStep) -> tuple[str, ...]:
         ",".join(sorted(record.feature_names)),
         record.join_type or "",
         record.join_destination_side or "",
-        stable_text(record.feature_set_options),
+        stable_text(record.content_options),
         ",".join(record.input_feature_names),
         ",".join(_class_path(cf) for cf in record.declared_left_frameworks),
         ",".join(_class_path(cf) for cf in record.declared_right_frameworks),

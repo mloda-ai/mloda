@@ -74,6 +74,7 @@ import pytest
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
 from mloda.core.api.plan_info import _dependency_order, build_plan_steps
+from mloda.core.abstract_plugins.components.match_data.match_data import MatchData
 from mloda.core.api.plan_lock import _lock_text
 from mloda.core.prepare.resolved_join import ResolvedJoinPlan
 from mloda.provider import (
@@ -2012,6 +2013,86 @@ class LeaveSqliteConsumer(FeatureGroup):
         return {"leave_sql_out"}
 
 
+class LeaveSqliteChain(FeatureGroup):
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        handle = options.get("src_handle")
+        return {Feature("leave_src", options={"connection_handle": handle} if handle else {})}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {SqliteFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return data
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"leave_chain_out"}
+
+
+class LeaveMarkerRoot(FeatureGroup, MatchData):
+    """Matches only the SQLite connection that holds the marker table."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {SqliteFramework}
+
+    @classmethod
+    def match_data_access(
+        cls,
+        feature_name: str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+        framework_connection_object: Any | None = None,
+    ) -> Any:
+        if feature_name != "leave_marker_src" or data_access_collection is None:
+            return None
+        for conn in data_access_collection.connections.values():
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'marker'").fetchone():
+                return conn
+        return None
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"leave_marker_src": [1, 2, 3]}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"leave_marker_src"}
+
+
+def requested_plan(
+    feature: Feature,
+    groups: set[type[FeatureGroup]],
+    frameworks: list[type[ComputeFramework]],
+    dac: DataAccessCollection,
+) -> list[PlanStep]:
+    return mloda.explain(
+        [feature],
+        compute_frameworks=frameworks,
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        data_access_collection=dac,
+    )
+
+
+def marker_plan(marker_first: bool) -> list[PlanStep]:
+    marked = sqlite3.connect(":memory:")
+    marked.execute("CREATE TABLE marker (x INTEGER)")
+    plain = sqlite3.connect(":memory:")
+    try:
+        conns = [marked, plain] if marker_first else [plain, marked]
+        return requested_plan(
+            Feature("leave_marker_src"),
+            {LeaveMarkerRoot},
+            [SqliteFramework],
+            DataAccessCollection(connections=conns),
+        )
+    finally:
+        marked.close()
+        plain.close()
+
+
 def forwarded_handle_plan() -> list[PlanStep]:
     """A PythonDict root feeding a SQLite consumer that names the handle; the root never declares it."""
     conn = sqlite3.connect(":memory:")
@@ -2192,6 +2273,99 @@ class TestLeavesConnection:
             check_plan_lock(variant("other", "mine"), lock)
         with pytest.raises(PlanLockMismatchError):
             check_plan_lock(variant("mine", None), lock)
+
+
+class TestLeavesConnectionOnResult:
+    """A requested step records the handle when its result leaves the connection's framework."""
+
+    @staticmethod
+    def _root_plan(handle: str | None, output_framework: type[ComputeFramework] | None = None) -> list[PlanStep]:
+        conn = sqlite3.connect(":memory:")
+        try:
+            dac = DataAccessCollection(connections={handle: conn}) if handle else DataAccessCollection({conn})
+            chosen = handle or next(iter(dac.connections))
+            options = {"connection_handle": chosen} if handle or output_framework is None else {}
+            return mloda.explain(
+                [Feature("leave_src", options=options)],
+                compute_frameworks=[SqliteFramework, PythonDictFramework],
+                plugin_collector=PluginCollector.enabled_feature_groups({LeaveSqliteRoot}),
+                data_access_collection=dac,
+                output_framework=output_framework,
+            )
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _computes(plan: list[PlanStep]) -> list[PlanStep]:
+        return [s for s in plan if s.step_kind == "compute"]
+
+    def test_a_requested_root_converted_to_the_result_framework_records_the_handle(self) -> None:
+        computes = self._computes(self._root_plan("mine"))
+
+        assert [s.result_framework for s in computes] == [PyArrowTable]
+        assert [s.leaves_connection for s in computes] == ["mine"]
+
+    def test_a_result_framework_equal_to_the_compute_framework_records_none(self) -> None:
+        computes = self._computes(self._root_plan("mine", output_framework=SqliteFramework))
+
+        assert [s.leaves_connection for s in computes] == [None]
+
+    def test_an_output_framework_off_the_connection_records_the_handle(self) -> None:
+        computes = self._computes(self._root_plan("mine", output_framework=PythonDictFramework))
+
+        assert [s.leaves_connection for s in computes] == ["mine"]
+
+    def test_an_auto_handle_result_conversion_records_the_unnamed_token(self) -> None:
+        computes = self._computes(self._root_plan(None))
+
+        assert [s.leaves_connection for s in computes] == ["<unnamed>"]
+
+    def test_an_implicit_single_match_with_no_explicit_ancestor_records_none(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        try:
+            plan = requested_plan(
+                Feature("leave_src"),
+                {LeaveSqliteRoot},
+                [SqliteFramework, PythonDictFramework],
+                DataAccessCollection({conn}),
+            )
+        finally:
+            conn.close()
+
+        assert [s.leaves_connection for s in self._computes(plan)] == [None]
+
+    def test_an_implicit_consumer_of_an_explicit_root_lives_on_its_handle(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        try:
+            plan = requested_plan(
+                Feature("leave_chain_out", options={"src_handle": "mine"}),
+                {LeaveSqliteRoot, LeaveSqliteChain},
+                [SqliteFramework, PythonDictFramework],
+                DataAccessCollection(connections={"mine": conn}),
+            )
+        finally:
+            conn.close()
+
+        requested = [s for s in plan if s.step_kind == "compute" and s.requested_feature_names]
+        assert [s.feature_group for s in requested] == [LeaveSqliteChain]
+        assert [s.leaves_connection for s in requested] == ["mine"]
+
+
+class TestAutoHandleContentHash:
+    """An auto connection handle is collection-order noise: the content hash renders it as <unnamed>."""
+
+    def test_the_content_hash_and_step_order_ignore_the_collection_order(self) -> None:
+        first = marker_plan(marker_first=True)
+        second = marker_plan(marker_first=False)
+
+        assert plan_content_hash(first) == plan_content_hash(second)
+        assert [(s.step_kind, s.feature_names) for s in first] == [(s.step_kind, s.feature_names) for s in second]
+
+    def test_explain_keeps_the_real_handle_in_the_step_options(self) -> None:
+        plan = marker_plan(marker_first=True)
+
+        options = [s.feature_set_options for s in plan if s.step_kind == "compute"]
+        assert all(o is not None and "_auto_connection_" in str(o.get("connection_handle")) for o in options)
 
 
 class TestJoinStepMapping:

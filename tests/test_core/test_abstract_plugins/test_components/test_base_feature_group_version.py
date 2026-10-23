@@ -1339,12 +1339,12 @@ class VersionImplFG(ToyFormatBase):
     pass
 
 
-class Leaf(Implementation):
+class Leaf(Implementation[VersionImplFG]):
     feature_group = VersionImplFG
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, serving, match, features, framework):
+    def calculate(cls, serving, data, features, framework):
         return load()
 """
 

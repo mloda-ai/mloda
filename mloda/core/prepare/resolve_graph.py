@@ -29,7 +29,7 @@ class ResolveGraph:
         connection_dropped: Mapping[UUID, frozenset[type[ComputeFramework]]] | None = None,
         pin_frameworks: Mapping[UUID, frozenset[type[ComputeFramework]]] | None = None,
         pinned: set[UUID] | None = None,
-        implementations: Iterable[type[Implementation]] | None = None,
+        implementations: Iterable[type[Implementation[Any]]] | None = None,
         handle_of: Callable[[type[ComputeFramework], Any], tuple[str | None, bool]] | None = None,
         connection_reasons: Mapping[UUID, Mapping[type[ComputeFramework], str]] | None = None,
     ):

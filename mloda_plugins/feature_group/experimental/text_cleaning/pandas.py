@@ -25,12 +25,12 @@ except ImportError:
 
 from typing import Any
 
-from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
 
-class PandasTextCleaning(OperationImplementation[TextCleaningFeatureGroup]):
+class PandasTextCleaning(Implementation[TextCleaningFeatureGroup]):
     """Pandas implementation of the text cleaning operations."""
 
     feature_group = TextCleaningFeatureGroup

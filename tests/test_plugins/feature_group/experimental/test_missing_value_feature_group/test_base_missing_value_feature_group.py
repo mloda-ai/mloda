@@ -392,7 +392,7 @@ def _python_dict_data(columns: _Columns) -> dict[str, _Cells]:
     return {name: list(cells) for name, cells in columns.items()}
 
 
-_MAKE_DATA: dict[type[Implementation], Callable[[_Columns], Any]] = {
+_MAKE_DATA: dict[type[Implementation[Any]], Callable[[_Columns], Any]] = {
     PandasMissingValueImputation: _pandas_data,
     PyArrowMissingValueImputation: _pyarrow_data,
     PythonDictMissingValueImputation: _python_dict_data,
@@ -449,7 +449,7 @@ class TestImplementationsConformToTheReferenceContract:
     """Null and NaN are missing, statistics skip them, missing cells are filled, mode ties take the smallest."""
 
     @pytest.mark.parametrize("implementation", IMPLEMENTATIONS, ids=IMPL_IDS)
-    def test_declares_no_divergence(self, implementation: type[Implementation]) -> None:
+    def test_declares_no_divergence(self, implementation: type[Implementation[Any]]) -> None:
         assert dict(implementation.divergent) == {}
 
     @pytest.mark.parametrize("method", _ALL_METHODS)

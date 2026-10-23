@@ -347,7 +347,9 @@ class TestImplementationPolicyDenial:
     """Implementation is a plugin kind: the module allowlist denies it like a FeatureGroup."""
 
     @staticmethod
-    def _implementation(make: Callable[..., type[Implementation]], module: str, name: str) -> type[Implementation]:
+    def _implementation(
+        make: Callable[..., type[Implementation[Any]]], module: str, name: str
+    ) -> type[Implementation[Any]]:
         class _PolicyGroup(ToyFormatFG):
             pass
 
@@ -356,7 +358,7 @@ class TestImplementationPolicyDenial:
         return implementation
 
     def test_register_plugin_refuses_an_implementation_outside_the_allowlist(
-        self, make_implementation: Callable[..., type[Implementation]], isolated_plugin_registry: PluginRegistry
+        self, make_implementation: Callable[..., type[Implementation[Any]]], isolated_plugin_registry: PluginRegistry
     ) -> None:
         isolated_plugin_registry.set_policy(PluginPolicy(allowed_module_prefixes=("mloda", "mloda_plugins")))
         denied = self._implementation(make_implementation, "forged_vendor.impl", "DeniedPolicyImpl")
@@ -370,7 +372,7 @@ class TestImplementationPolicyDenial:
         assert register_plugin(allowed) == _key(allowed)
 
     def test_register_module_plugins_registers_allowed_and_skips_denied_implementations(
-        self, make_implementation: Callable[..., type[Implementation]], isolated_plugin_registry: PluginRegistry
+        self, make_implementation: Callable[..., type[Implementation[Any]]], isolated_plugin_registry: PluginRegistry
     ) -> None:
         isolated_plugin_registry.set_policy(PluginPolicy(denied_module_prefixes=("policy_denied_impl_mod",)))
         module = types.ModuleType("policy_denied_impl_mod")

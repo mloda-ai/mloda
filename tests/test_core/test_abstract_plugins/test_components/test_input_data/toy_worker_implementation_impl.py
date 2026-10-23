@@ -14,10 +14,10 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 )
 
 
-class ToyWorkerPythonDict(Implementation):
+class ToyWorkerPythonDict(Implementation[ToyWorkerFG]):
     feature_group = ToyWorkerFG
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
+    def calculate(cls, group: Any, data: SourceMatch, features: Any, framework: Any) -> Any:
         return {WORKER_COLUMN: list(WORKER_VALUES)}

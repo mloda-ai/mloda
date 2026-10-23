@@ -136,7 +136,7 @@ class TestFormatGroupsReadLikePyArrow:
         impl = group.select_implementation(PyArrowTable, match, loaded_implementations())
 
         assert impl is not None
-        result = impl.calculate(group, match, _Features(_WANTED), None)
+        result = impl.calculate(group, match, _Features(_WANTED), None)  # type: ignore[arg-type]
         whole_file = class_name in ("CsvFG", "JsonFG")
         assert result.to_pydict() == self._expected(reader, path, whole_file)
 

@@ -25,7 +25,7 @@ from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, OperationImplementation
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import FeatureSet
 from mloda.provider import OperationFeatureGroup, SubtypeDeclaration, property_spec
 from mloda.core.prepare import choose_compute_frameworks
@@ -136,7 +136,7 @@ class ChooserOpFG(OperationFeatureGroup):
         return None
 
 
-class ChooserOpPandas(OperationImplementation[ChooserOpFG]):
+class ChooserOpPandas(Implementation[ChooserOpFG]):
     feature_group = ChooserOpFG
     compute_framework = PandasDataFrame
     divergent = {"sum": SUM_DIFFERS}
@@ -148,7 +148,7 @@ class ChooserOpPandas(OperationImplementation[ChooserOpFG]):
         return data
 
 
-class ChooserOpPyArrow(OperationImplementation[ChooserOpFG]):
+class ChooserOpPyArrow(Implementation[ChooserOpFG]):
     feature_group = ChooserOpFG
     compute_framework = PyArrowTable
 
@@ -159,7 +159,7 @@ class ChooserOpPyArrow(OperationImplementation[ChooserOpFG]):
         return data
 
 
-OP_IMPLEMENTATIONS: list[type[Implementation]] = [ChooserOpPandas, ChooserOpPyArrow]
+OP_IMPLEMENTATIONS: list[type[Implementation[Any]]] = [ChooserOpPandas, ChooserOpPyArrow]
 
 
 class _HomeConn:
@@ -197,7 +197,7 @@ class ChooserHomeFG(FormatFeatureGroup):
         return match.access
 
 
-class ChooserHomeImpl(Implementation):
+class ChooserHomeImpl(Implementation[ChooserHomeFG]):
     feature_group = ChooserHomeFG
     compute_framework = ChooserHomeFramework
 
@@ -225,7 +225,7 @@ class _Net:
         self.features: list[Feature] = []
         self.occurrences: list[tuple[Link, UUID, UUID, UUID]] = []
         self.ties: list[tuple[UUID, UUID]] = []
-        self.implementations: list[type[Implementation]] | None = None
+        self.implementations: list[type[Implementation[Any]]] | None = None
 
     def add(
         self,
@@ -1355,7 +1355,7 @@ def test_an_empty_implementations_collection_reproduces_passing_none(
     positions: dict[type[ComputeFramework], int] | None,
 ) -> None:
     outcomes = []
-    for implementations in (None, list[type[Implementation]]()):
+    for implementations in (None, list[type[Implementation[Any]]]()):
         net = _Net()
         net.implementations = implementations
         pins: dict[int, type[ComputeFramework]] = {0: A, 10: D, 20: A, 29: D}

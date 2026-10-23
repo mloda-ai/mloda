@@ -19,8 +19,8 @@ class OperationFeatureGroup(FeatureGroup):
 
     @classmethod
     def select_implementation(
-        cls, compute_framework: type[ComputeFramework], implementations: Iterable[type["Implementation"]]
-    ) -> "type[Implementation] | None":
+        cls, compute_framework: type[ComputeFramework], implementations: Iterable[type["Implementation[Any]"]]
+    ) -> "type[Implementation[Any]] | None":
         """The implementation serving this group and framework: group MRO outer, framework MRO inner."""
         from mloda.core.abstract_plugins.implementation import serving_implementation
 
@@ -78,10 +78,4 @@ class OperationFeatureGroup(FeatureGroup):
             raise ValueError(f"{cls.__name__}.calculate_feature found no implementation on the feature set.")
         marker = features._load_marker
         framework = marker.framework if marker is not None else None
-        from mloda.core.abstract_plugins.implementation import OperationImplementation
-
-        if not issubclass(implementation, OperationImplementation):
-            raise TypeError(
-                f"{implementation.__name__} serves {cls.__name__}, so it must subclass OperationImplementation."
-            )
         return implementation.calculate(cls, data, features, framework)

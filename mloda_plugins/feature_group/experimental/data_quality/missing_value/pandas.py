@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
@@ -16,7 +16,7 @@ except ImportError:
     pd = None
 
 
-class PandasMissingValueImputation(OperationImplementation[MissingValueFeatureGroup]):
+class PandasMissingValueImputation(Implementation[MissingValueFeatureGroup]):
     feature_group = MissingValueFeatureGroup
     compute_framework = PandasDataFrame
 

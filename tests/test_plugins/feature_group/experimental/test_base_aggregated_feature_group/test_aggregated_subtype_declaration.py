@@ -128,7 +128,7 @@ _MULTI_COLUMNS: dict[str, list[float | None]] = {
     "c": [3.0, 5.0, 7.0, None, 9.0],
 }
 
-_DIVERGENT_DECLARATIONS: dict[type[Implementation], dict[str, str]] = {
+_DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
     PandasAggregation: {
         "sum": "skips NaN in sum",
         "avg": "skips NaN in avg",
@@ -192,7 +192,7 @@ def _polars_result(aggregation_type: str, columns: dict[str, list[float | None]]
     return list(frame.select(expression.alias("result")).collect()["result"].to_list())
 
 
-_RESULT_OF: dict[type[Implementation], Callable[[str, dict[str, list[float | None]]], list[Any]]] = {
+_RESULT_OF: dict[type[Implementation[Any]], Callable[[str, dict[str, list[float | None]]], list[Any]]] = {
     PandasAggregation: _pandas_result,
     PyArrowAggregation: _pyarrow_result,
     PolarsLazyAggregation: _polars_result,
@@ -205,7 +205,7 @@ class TestImplementationsConformToTheReferenceContract:
     @pytest.mark.parametrize("aggregation_type", sorted(AGGREGATION_UNIVERSE))
     @pytest.mark.parametrize("implementation", list(_RESULT_OF), ids=lambda impl: impl.__name__)
     def test_result_differs_from_the_reference_exactly_when_declared(
-        self, implementation: type[Implementation], aggregation_type: str
+        self, implementation: type[Implementation[Any]], aggregation_type: str
     ) -> None:
         assert dict(implementation.divergent) == _DIVERGENT_DECLARATIONS[implementation]
         shapes = {"single": _SINGLE_COLUMN, "multi": _MULTI_COLUMNS}

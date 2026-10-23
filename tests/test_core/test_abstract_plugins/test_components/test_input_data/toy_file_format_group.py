@@ -80,22 +80,22 @@ class ToyFileFormatFG(ReadFileFG):
         return [n for n in names if n]
 
 
-class ToyFilePyArrowTable(Implementation):
+class ToyFilePyArrowTable(Implementation[ToyFileFormatFG]):
     feature_group = ToyFileFormatFG
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> pa.Table:
-        return pa.table(read_toy_file(match.access, tuple(sorted(features.get_all_names()))))
+    def calculate(cls, group: Any, data: SourceMatch, features: Any, framework: Any) -> pa.Table:
+        return pa.table(read_toy_file(data.access, tuple(sorted(features.get_all_names()))))
 
 
-class ToyFilePythonDict(Implementation):
+class ToyFilePythonDict(Implementation[ToyFileFormatFG]):
     feature_group = ToyFileFormatFG
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> dict[str, list[Any]]:
-        return read_toy_file(match.access, tuple(sorted(features.get_all_names())))
+    def calculate(cls, group: Any, data: SourceMatch, features: Any, framework: Any) -> dict[str, list[Any]]:
+        return read_toy_file(data.access, tuple(sorted(features.get_all_names())))
 
 
 def toy_file_dac(path: str | Path, handle: str = "toyfmt_handle") -> DataAccessCollection:

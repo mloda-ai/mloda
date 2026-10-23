@@ -17,7 +17,6 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.implementation import (
     Implementation,
-    OperationImplementation,
     loaded_implementations,
 )
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -129,7 +128,9 @@ class TestImplementation:
     def test_subclass_of_an_implementation_replaces_it(self, tmp_path: Path, make_implementation: Any) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
         parent_impl = make_implementation(group, PythonDictFramework, lambda g, m, f: [{"toyfmt_ld": 1}])
-        child_impl: type[Implementation] = make_implementation(group, PythonDictFramework, _sentinel, base=parent_impl)
+        child_impl: type[Implementation[Any]] = make_implementation(
+            group, PythonDictFramework, _sentinel, base=parent_impl
+        )
 
         assert group.select_implementation(PythonDictFramework, _MATCH, [parent_impl, child_impl]) is child_impl
         assert group.select_implementation(PythonDictFramework, _MATCH, [child_impl, parent_impl]) is child_impl
@@ -156,7 +157,7 @@ class TestImplementation:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_implementation: Any
     ) -> None:
         group = neutral_csv_group(tmp_path / "n.csv")
-        impl: type[Implementation] = make_implementation(group, PythonDictFramework, _sentinel)
+        impl: type[Implementation[Any]] = make_implementation(group, PythonDictFramework, _sentinel)
         assert group.select_implementation(PythonDictFramework, _MATCH, [impl]) is impl
         monkeypatch.setattr(PythonDictFramework, "is_available", staticmethod(lambda: False))
 
@@ -201,12 +202,12 @@ class TestImplementationReceivesFramework:
         group = neutral_csv_group(tmp_path / "n.csv")
         seen: list[tuple[Any, Any]] = []
 
-        class _FrameworkImpl(Implementation):
+        class _FrameworkImpl(Implementation[Any]):
             feature_group = group
             compute_framework = PythonDictFramework
 
             @classmethod
-            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+            def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
                 seen.append((framework, ComputeFramework.current()))
                 return SENTINEL
 
@@ -252,12 +253,12 @@ class TestImplementationSeesDacConnection:
         conn = duckdb.connect()
         seen: list[Any] = []
 
-        class _DuckImpl(Implementation):
+        class _DuckImpl(Implementation[Any]):
             feature_group = group
             compute_framework = DuckDBFramework
 
             @classmethod
-            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+            def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
                 seen.append(framework.framework_connection_object)
                 conn = framework.framework_connection_object or framework.fallback_connection_object
                 return DuckdbRelation.from_dict(conn or duckdb.connect(), {"toyfmt_ld": [1, 2]})
@@ -286,12 +287,12 @@ class TestCalculateFeatureWithoutMarker:
         group = neutral_csv_group(tmp_path / "n.csv")
         frameworks: list[Any] = []
 
-        class _NoneImpl(Implementation):
+        class _NoneImpl(Implementation[Any]):
             feature_group = group
             compute_framework = PythonDictFramework
 
             @classmethod
-            def calculate(cls, group: Any, match: Any, features: Any, framework: Any) -> Any:
+            def calculate(cls, group: Any, data: Any, features: Any, framework: Any) -> Any:
                 frameworks.append(framework)
                 return SENTINEL
 
@@ -318,7 +319,7 @@ class TestImplementationDefinition:
     def test_a_rejected_subclass_is_not_a_loaded_implementation_before_it_is_collected(self, gc_disabled: None) -> None:
         with pytest.raises(TypeError, match="feature_group"):
 
-            class _RejectedImpl(Implementation):
+            class _RejectedImpl(Implementation[Any]):
                 compute_framework = PythonDictFramework
 
                 @classmethod
@@ -346,7 +347,7 @@ class TestImplementationDefinition:
         if kind == "plain":
             with pytest.raises(TypeError, match="feature_group"):
 
-                class _PlainGroup(Implementation):
+                class _PlainGroup(Implementation[Any]):
                     feature_group = FeatureGroup
                     compute_framework = PythonDictFramework
 
@@ -359,40 +360,9 @@ class TestImplementationDefinition:
         impl = make_implementation(group, PythonDictFramework, _sentinel)
         assert impl in loaded_implementations()
 
-    def test_a_plain_implementation_naming_an_operation_group_raises(self, gc_disabled: None) -> None:
-        with pytest.raises(TypeError, match="OperationImplementation"):
-
-            class _PlainOpImpl(Implementation):
-                feature_group = OpToyBareFG
-                compute_framework = PythonDictFramework
-
-                @classmethod
-                def calculate(cls, *args: Any) -> Any:
-                    return None
-
-        assert all(impl.__name__ != "_PlainOpImpl" for impl in loaded_implementations())
-
-    def test_an_operation_implementation_naming_an_operation_group_is_accepted(self) -> None:
-        class _OpGroup(OpToyBareFG):
-            pass
-
-        class _TypedImpl(OperationImplementation[OpToyBareFG]):
-            feature_group = _OpGroup
-            compute_framework = PythonDictFramework
-
-            @classmethod
-            def calculate(
-                cls, group: type[OpToyBareFG], data: Any, features: FeatureSet, framework: ComputeFramework | None
-            ) -> Any:
-                return None
-
-        assert _TypedImpl in loaded_implementations()
-        del _TypedImpl, _OpGroup
-        gc.collect()
-
-    def test_the_operation_implementation_base_is_not_a_loaded_implementation(self) -> None:
-        assert OperationImplementation not in loaded_implementations()
-        assert getattr(OperationImplementation.calculate, "__isabstractmethod__", False)
+    def test_the_implementation_base_is_not_a_loaded_implementation(self) -> None:
+        assert Implementation not in loaded_implementations()
+        assert getattr(Implementation.calculate, "__isabstractmethod__", False)
 
     def test_calculate_feature_passes_group_data_features_framework(self) -> None:
         class _OpGroup(OpToyBareFG):
@@ -400,7 +370,7 @@ class TestImplementationDefinition:
 
         seen: list[tuple[Any, ...]] = []
 
-        class _RecordingImpl(OperationImplementation[OpToyBareFG]):
+        class _RecordingImpl(Implementation[OpToyBareFG]):
             feature_group = _OpGroup
             compute_framework = PythonDictFramework
 
@@ -420,24 +390,12 @@ class TestImplementationDefinition:
         del _RecordingImpl, _OpGroup
         gc.collect()
 
-    @pytest.mark.parametrize("implementation", [object, Implementation])
-    def test_calculate_feature_rejects_a_non_operation_implementation(self, implementation: type) -> None:
-        class _OpGroup(OpToyBareFG):
-            pass
-
-        features = FeatureSet([Feature("optoy_bare_value")])
-        features.implementation = implementation
-        with pytest.raises(TypeError, match="OperationImplementation"):
-            _OpGroup.calculate_feature(object(), features)
-        del _OpGroup
-        gc.collect()
-
     def test_the_typed_signature_is_enforced_by_mypy(self) -> None:
         class _OpGroup(OpToyFG):
             pass
 
         # mypy --strict (warn_unused_ignores) fails the gate if this wrong override stops being flagged.
-        class _WrongArity(OperationImplementation[OpToyFG]):
+        class _WrongArity(Implementation[OpToyFG]):
             feature_group = _OpGroup
             compute_framework = PythonDictFramework
 
@@ -447,14 +405,14 @@ class TestImplementationDefinition:
             ) -> Any:
                 return None
 
-        assert issubclass(_WrongArity, OperationImplementation)
+        assert issubclass(_WrongArity, Implementation)
         del _WrongArity, _OpGroup
         gc.collect()
 
     def test_compute_framework_must_be_a_compute_framework(self) -> None:
         with pytest.raises(TypeError, match="compute_framework"):
 
-            class _NotAFramework(Implementation):
+            class _NotAFramework(Implementation[Any]):
                 feature_group = ToyFormatFG
                 compute_framework = dict  # type: ignore[assignment]
 
@@ -463,12 +421,12 @@ class TestImplementationDefinition:
                     return None
 
     def test_subclass_leaving_calculate_abstract_is_not_validated(self, make_implementation: Any) -> None:
-        class _IntermediateBase(Implementation):
+        class _IntermediateBase(Implementation[Any]):
             pass
 
         sibling = make_implementation(ToyFormatFG, PythonDictFramework, _sentinel)
 
-        class _HelperBase(Implementation):
+        class _HelperBase(Implementation[Any]):
             @classmethod
             def calculate(cls, *args: Any) -> Any:
                 return None
@@ -530,7 +488,7 @@ def _run_operation(
     )
 
 
-class TestOperationImplementation:
+class TestOperationGroupImplementation:
     def test_unpinned_run_with_two_frameworks_resolves_to_one_group(self) -> None:
         toy = _toy_operation()
 

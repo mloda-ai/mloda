@@ -420,8 +420,8 @@ class ReadDBFG(FormatFeatureGroup):
         cls,
         compute_framework: type[ComputeFramework],
         match: SourceMatch,
-        implementations: Iterable[type["Implementation"]],
-    ) -> "type[Implementation] | None":
+        implementations: Iterable[type["Implementation[Any]"]],
+    ) -> "type[Implementation[Any]] | None":
         """No implementation for a query match: it loads through the neutral path."""
         if isinstance(match.access, DBQuery):
             return None

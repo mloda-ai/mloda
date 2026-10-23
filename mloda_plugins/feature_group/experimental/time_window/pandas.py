@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, raise_null_reference_time
@@ -19,7 +19,7 @@ except ImportError:
     pd = None
 
 
-class PandasTimeWindow(OperationImplementation[TimeWindowFeatureGroup]):
+class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
     feature_group = TimeWindowFeatureGroup
     compute_framework = PandasDataFrame
     divergent = {

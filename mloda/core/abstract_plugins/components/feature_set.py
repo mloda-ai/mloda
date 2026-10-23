@@ -59,7 +59,7 @@ class FeatureSet:
         self.declared_input_features_resolved: bool = False
         self.declared_input_feature_edges: dict[str, tuple[str, ...]] | None = None
         self.specialized_from: tuple[str, ...] = ()
-        self.implementation: type[Implementation] | None = None
+        self.implementation: type[Implementation[Any]] | None = None
         self.option_split_hint: tuple[str, frozenset[Any]] | None = None
         # Columns a Link reads from this step's data, stamped by the planner.
         self.link_index_columns: frozenset[str] = frozenset()

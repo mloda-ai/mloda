@@ -4,7 +4,7 @@ from collections.abc import Collection
 from typing import Any
 
 from mloda.core.optional_dependency import require
-from mloda.provider import ComputeFramework, Implementation, ReadFileFG, SourceMatch
+from mloda.provider import ComputeFramework, FeatureSet, Implementation, ReadFileFG, SourceMatch
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
@@ -47,10 +47,12 @@ class ParquetFG(ReadFileFG):
         return num_rows
 
 
-class ParquetPyArrowTable(Implementation):
+class ParquetPyArrowTable(Implementation[ParquetFG]):
     feature_group = ParquetFG
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
-        return _read(group, match, features)
+    def calculate(
+        cls, group: type[ParquetFG], data: SourceMatch, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return _read(group, data, features)

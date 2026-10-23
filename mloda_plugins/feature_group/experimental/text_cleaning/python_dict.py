@@ -8,7 +8,7 @@ import string
 import unicodedata
 from typing import Any
 
-from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
@@ -25,7 +25,7 @@ except ImportError:
     nltk_available = False
 
 
-class PythonDictTextCleaning(OperationImplementation[TextCleaningFeatureGroup]):
+class PythonDictTextCleaning(Implementation[TextCleaningFeatureGroup]):
     """PythonDict text cleaning."""
 
     feature_group = TextCleaningFeatureGroup

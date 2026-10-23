@@ -265,8 +265,8 @@ class FormatFeatureGroup(FeatureGroup):
         cls,
         compute_framework: type[ComputeFramework],
         match: SourceMatch,
-        implementations: Iterable[type["Implementation"]],
-    ) -> "type[Implementation] | None":
+        implementations: Iterable[type["Implementation[Any]"]],
+    ) -> "type[Implementation[Any]] | None":
         """The implementation serving this group and framework: group MRO outer, framework MRO inner."""
         if not compute_framework.is_available():
             return None

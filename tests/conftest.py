@@ -8,10 +8,10 @@ import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
 from mloda.core.abstract_plugins.components import utils
-from mloda.provider import MatchRejection, OperationFeatureGroup, collect_match_rejections
+from mloda.provider import MatchRejection, collect_match_rejections
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.abstract_plugins.implementation import Implementation, OperationImplementation, loaded_implementations
+from mloda.core.abstract_plugins.implementation import Implementation, loaded_implementations
 from mloda.core.abstract_plugins.plugin_registry.plugin_registry import PluginRegistry
 from mloda.core.prepare import accessible_plugins
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
@@ -200,29 +200,24 @@ if os.getenv(CHECK_SKIP_COUNT_ENV_VAR) == "1":
 
 
 @pytest.fixture
-def make_implementation() -> Iterator[Callable[..., type[Implementation]]]:
-    """make(group, framework, fn=None, base=Implementation (OperationImplementation for an operation group), name=None); teardown asserts every class is collected."""
-    created: list[weakref.ref[type[Implementation]]] = []
+def make_implementation() -> Iterator[Callable[..., type[Implementation[Any]]]]:
+    """make(group, framework, fn=None, base=Implementation, name=None); teardown asserts every class is collected."""
+    created: list[weakref.ref[type[Implementation[Any]]]] = []
 
     def make(
         group: Any,
         framework: Any,
         fn: Callable[[Any, Any, Any], Any] | None = None,
-        base: type[Implementation] | None = None,
+        base: type[Implementation[Any]] = Implementation,
         name: str | None = None,
-    ) -> type[Implementation]:
-        if base is None:
-            base = Implementation
-            if isinstance(group, type) and issubclass(group, OperationFeatureGroup):
-                base = OperationImplementation
-
+    ) -> type[Implementation[Any]]:
         class _Impl(base):  # type: ignore[misc, valid-type]
             feature_group = group
             compute_framework = framework
 
             @classmethod
-            def calculate(cls, serving: Any, match: Any, features: Any, framework: Any) -> Any:
-                return None if fn is None else fn(serving, match, features)
+            def calculate(cls, serving: Any, data: Any, features: Any, framework: Any) -> Any:
+                return None if fn is None else fn(serving, data, features)
 
         if name is not None:
             _Impl.__name__ = name

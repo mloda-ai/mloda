@@ -75,7 +75,7 @@ class TestForgedImplementationIsGoverned:
     """An Implementation on (CsvFG, PythonDictFramework), a pair with no stock implementation, is governed."""
 
     @staticmethod
-    def _forge(make: Callable[..., type[Implementation]], calls: list[int]) -> type[Implementation]:
+    def _forge(make: Callable[..., type[Implementation[Any]]], calls: list[int]) -> type[Implementation[Any]]:
         def forge(group: Any, match: Any, features: Any) -> Any:
             calls.append(1)
             return {GOV_COLUMN: ["FORGED"]}
@@ -97,7 +97,7 @@ class TestForgedImplementationIsGoverned:
     def test_strict_mode_with_an_allowlist_policy_serves_the_real_values(
         self,
         tmp_path: Path,
-        make_implementation: Callable[..., type[Implementation]],
+        make_implementation: Callable[..., type[Implementation[Any]]],
         isolated_plugin_registry: PluginRegistry,
     ) -> None:
         isolated_plugin_registry.set_policy(ALLOWLIST)
@@ -112,7 +112,7 @@ class TestForgedImplementationIsGoverned:
         assert calls == []
 
     def test_a_collector_disabled_implementation_is_not_used(
-        self, tmp_path: Path, make_implementation: Callable[..., type[Implementation]]
+        self, tmp_path: Path, make_implementation: Callable[..., type[Implementation[Any]]]
     ) -> None:
         calls: list[int] = []
         collector = PluginCollector()
@@ -122,7 +122,10 @@ class TestForgedImplementationIsGoverned:
         assert calls == []
 
     def test_warn_mode_uses_it_and_warns_once_naming_the_class(
-        self, tmp_path: Path, make_implementation: Callable[..., type[Implementation]], caplog: pytest.LogCaptureFixture
+        self,
+        tmp_path: Path,
+        make_implementation: Callable[..., type[Implementation[Any]]],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         caplog.set_level(logging.WARNING)
         forged = self._forge(make_implementation, [])

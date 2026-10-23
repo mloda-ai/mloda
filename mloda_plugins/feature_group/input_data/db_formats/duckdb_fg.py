@@ -8,7 +8,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import INPUT_DATA_STAGE, record_match_rejection
 from mloda.core.optional_dependency import require
-from mloda.provider import FormatFeatureGroup, Implementation, PropertySpec
+from mloda.provider import ComputeFramework, FeatureSet, FormatFeatureGroup, Implementation, PropertySpec
 from mloda.user import DataAccessCollection, Options
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
@@ -119,11 +119,13 @@ class DuckdbFG(FormatFeatureGroup):
             cursor.close()
 
 
-class DuckdbFGDuckDB(Implementation):
+class DuckdbFGDuckDB(Implementation[DuckdbFG]):
     feature_group = DuckdbFG
     compute_framework = DuckDBFramework
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
-        access = cast(DuckdbTable, match.access)
+    def calculate(
+        cls, group: type[DuckdbFG], data: SourceMatch, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        access = cast(DuckdbTable, data.access)
         return DuckdbRelation(access.connection, access.connection.sql(_select(access, features)))

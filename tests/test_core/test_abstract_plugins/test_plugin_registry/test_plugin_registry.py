@@ -46,7 +46,7 @@ class _RegistryTestImplGroup(ToyFormatFG):
     pass
 
 
-class _RegistryTestImplementation(Implementation):
+class _RegistryTestImplementation(Implementation[_RegistryTestImplGroup]):
     feature_group = _RegistryTestImplGroup
     compute_framework = PythonDictFramework
 

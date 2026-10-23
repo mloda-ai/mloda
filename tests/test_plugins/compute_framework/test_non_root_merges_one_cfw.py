@@ -98,7 +98,7 @@ class Call2GroupedNonRootJoinTestFeature(FeatureGroup):
     [
         ({ParallelizationMode.SYNC}),
         ({ParallelizationMode.THREADING}),
-        # ({ParallelizationMode.MULTIPROCESSING}),
+        ({ParallelizationMode.MULTIPROCESSING}),
     ],
 )
 class TestNonRootMerge:

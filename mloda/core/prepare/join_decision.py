@@ -43,7 +43,10 @@ class JoinDecision:
     carriers: frozenset[UUID]
     shared_source: bool
     shared_destination: bool
-    carried_left: bool | None
-    bound_buckets: tuple[frozenset[UUID], frozenset[UUID]] | None
+    buckets: tuple[frozenset[UUID], frozenset[UUID]] | None  # (destination, source) parents; None for APPEND/UNION
     append_sides: AppendOrUnionSides | None
     fanned_out: bool
+    token: UUID
+    order: int = 0  # index among the accepted decisions of one link
+    destination_owner: frozenset[UUID] = frozenset()  # owning steps of the destination uuids
+    runs_after: frozenset[UUID] = frozenset()  # tokens of earlier joins of this link that must finish first

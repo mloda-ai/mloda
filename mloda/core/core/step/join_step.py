@@ -41,6 +41,7 @@ class JoinStep(Step):
     split_consumers: frozenset[UUID] | None = None  # set only for parts of a carrier-frame split
     # Consumers of every join feeding the same frame; the merged frame is kept until all of them ran.
     keep_alive: frozenset[UUID] = frozenset()
+    runs_after_joins: frozenset[UUID] = frozenset()  # tokens of earlier joins of the same link this join waits for
 
     def __init__(
         self,

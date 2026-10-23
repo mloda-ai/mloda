@@ -1201,6 +1201,12 @@ DECIDE_SHAPES = [
         (PyArrowTable, PandasDataFrame),
         id="right",
     ),
+    pytest.param(
+        Link.inner,
+        {"trekked": (PandasDataFrame, PyArrowTable)},
+        (PyArrowTable, PandasDataFrame),
+        id="case_override_inverted",
+    ),
 ]
 
 
@@ -1238,7 +1244,19 @@ def test_deciding_a_key_reports_what_planning_builds_and_writes_nothing(
     assert decision.carriers == step.carriers
     assert decision.shared_source == step.shared_source
     assert decision.shared_destination == step.shared_destination
+    assert not hasattr(decision, "carried_left")
+    assert not hasattr(decision, "bound_buckets")
+    assert isinstance(decision.buckets, tuple)
+    assert len(decision.buckets) == 2
+    assert all(isinstance(bucket, frozenset) for bucket in decision.buckets)
     assert _plan_state(pending.plan) == before
+
+    # Uuids and tokens differ between plans, so the decision is built in its own plan.
+    [own_step] = pending.plan._build_decisions([decision], pending.graph)
+    own_record = pending.plan.planned_records[-1]
+    assert decision.token == own_record.token == own_step.uuid
+    assert decision.buckets[0] == own_record.destination_uuids
+    assert decision.buckets[1] == own_record.source_uuids
 
 
 def test_deciding_a_declined_orientation_returns_a_declined_join_and_records_nothing() -> None:
@@ -1268,7 +1286,9 @@ def test_deciding_a_flipped_key_declines_with_the_orientation_it_attempted() -> 
     assert pending.plan.declined_orientations == []
 
 
-def _polymorphic_sides_on_two_frameworks() -> tuple[Planned, Link, DeclaredFrameworks]:
+def _polymorphic_sides_on_two_frameworks(
+    between_keys: Callable[[Planned], None] | None = None,
+) -> tuple[Planned, Link, DeclaredFrameworks]:
     """Both link sides have a PyArrow and a Pandas member, so the link carries two trekker keys."""
     planned = _planned()
     link = _pair_link()
@@ -1289,6 +1309,8 @@ def _polymorphic_sides_on_two_frameworks() -> tuple[Planned, Link, DeclaredFrame
     planned.queue.append((link.left_feature_group, {left_arrow, left_pandas}))
     planned.queue.append((link.right_feature_group, {right_arrow, right_pandas}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
+    if between_keys is not None:
+        between_keys(planned)
     planned.queue.append((link, PandasDataFrame, PyArrowTable))
     _add_child(planned, child_arrow, left_arrow, right_pandas)
     _add_child(planned, child_pandas, left_pandas, right_arrow)
@@ -1302,6 +1324,57 @@ def _polymorphic_sides_on_two_frameworks() -> tuple[Planned, Link, DeclaredFrame
         right_pandas.uuid: frozenset({PandasDataFrame}),
     }
     return planned, link, declared
+
+
+def _link_two_between_the_keys_of_a_polymorphic_link() -> tuple[Planned, Link, Link, DeclaredFrameworks]:
+    """A second link on the same two frameworks whose key is queued between the first link's two keys."""
+    other = _other_link()
+
+    def queue_other_link(planned: Planned) -> None:
+        _branch(planned, other, "resolved_join_interleaved_other", child_cfw=PyArrowTable)
+
+    planned, link, declared = _polymorphic_sides_on_two_frameworks(queue_other_link)
+    return planned, link, other, declared
+
+
+def _edge_view(plan: ExecutionPlan, graph: Graph) -> dict[str, tuple[str, ...]]:
+    """Every step's waited-on tokens under stable labels: feature names, joins by link side and orientation."""
+    names = {uuid: f"feature:{node.feature.name}" for uuid, node in graph.get_nodes().items()}
+    labels: dict[UUID, str] = {}
+    for step in plan:
+        if isinstance(step, JoinStep):
+            labels[step.uuid] = (
+                f"join:{step.link.left_feature_group.__name__}:"
+                f"{step.destination_framework.__name__}>{step.source_framework.__name__}"
+            )
+    for step in plan:
+        if isinstance(step, TransformFrameworkStep):
+            assert step.link_id is not None
+            labels[step.uuid] = f"hop:{labels[step.link_id]}"
+        elif isinstance(step, FeatureGroupStep):
+            labels[step.uuid] = "step:" + ",".join(sorted(names[u] for u in step.get_uuids()))
+    assert len(set(labels.values())) == len(labels), f"edge labels must be unique: {sorted(labels.values())}"
+
+    def label(uuid: UUID) -> str:
+        return labels[uuid] if uuid in labels else names[uuid]
+
+    return {labels[step.uuid]: tuple(sorted(label(u) for u in step.get_wait_uuids())) for step in plan}
+
+
+def _reachable(edges: dict[str, tuple[str, ...]]) -> dict[str, frozenset[str]]:
+    """Each step's transitive waits, so a redundant direct edge does not change the answer."""
+
+    def closure(start: str) -> frozenset[str]:
+        seen: set[str] = set()
+        stack = [start]
+        while stack:
+            for waited in edges.get(stack.pop(), ()):
+                if waited not in seen:
+                    seen.add(waited)
+                    stack.append(waited)
+        return frozenset(seen)
+
+    return {step: closure(step) for step in edges}
 
 
 def test_deciding_both_keys_of_a_link_together_equals_deciding_each_alone() -> None:
@@ -1321,6 +1394,9 @@ def test_deciding_both_keys_of_a_link_together_equals_deciding_each_alone() -> N
         alone = decide([key])[key]
         assert [_decision_view(d) for d in together[key]] == [_decision_view(d) for d in alone]
         assert len(alone) == 1
+        assert alone[0].order == 0
+        assert alone[0].runs_after == frozenset()
+    assert together[keys[1]][0].runs_after
 
 
 def test_a_link_with_two_trekker_keys_still_plans_one_record_per_key() -> None:
@@ -1344,6 +1420,93 @@ def test_a_link_with_two_trekker_keys_still_plans_one_record_per_key() -> None:
     ]
     assert len(records) == 2
     assert [(r.destination_framework, r.source_framework) for r in records] == pairs
+
+    joins = [decision for decision in decisions if isinstance(decision, JoinDecision)]
+    step_uuids = {step.uuid for step in pending.pre_execution_plan if isinstance(step, FeatureGroupStep)}
+    assert [decision.order for decision in joins] == [0, 1]
+    assert joins[0].runs_after == frozenset()
+    assert joins[1].runs_after == frozenset({joins[0].token})
+    for decision in joins:
+        assert isinstance(decision.destination_owner, frozenset)
+        assert decision.destination_owner
+        assert decision.destination_owner <= step_uuids
+
+    fresh_joins = [step for step in _join_steps(fresh.plan) if step.link.uuid == fresh_link.uuid]
+    assert len(fresh_joins) == 2
+    first, second = fresh_joins
+    assert [record.token for record in records] == [first.uuid, second.uuid]
+    assert first.runs_after_joins == frozenset()
+    assert second.runs_after_joins == frozenset({first.uuid})
+    assert fresh.plan.joinstep_collection.get_required_join_uuids(second) == set()
+    assert first.uuid in second.required_uuids
+
+
+_ARROW_TO_PANDAS = "join:ResolvedJoinPairLeft:PyArrowTable>PandasDataFrame"
+_PANDAS_TO_ARROW = "join:ResolvedJoinPairLeft:PandasDataFrame>PyArrowTable"
+_OTHER_ARROW_TO_PANDAS = "join:ResolvedJoinOtherLeft:PyArrowTable>PandasDataFrame"
+
+
+def _waits(*labels: str) -> tuple[str, ...]:
+    return tuple(sorted(labels))
+
+
+def _poly(name: str) -> str:
+    return f"feature:resolved_join_poly_{name}"
+
+
+_POLY_EDGES = {
+    f"step:{_poly('left_arrow')}": _waits(),
+    f"step:{_poly('left_pandas')}": _waits(),
+    f"step:{_poly('right_arrow')}": _waits(),
+    f"step:{_poly('right_pandas')}": _waits(),
+    f"hop:{_ARROW_TO_PANDAS}": _waits(_poly("left_arrow"), _poly("right_pandas")),
+    f"hop:{_PANDAS_TO_ARROW}": _waits(_poly("left_pandas"), _poly("right_arrow")),
+    _ARROW_TO_PANDAS: _waits(_poly("left_arrow"), _poly("right_pandas"), f"hop:{_ARROW_TO_PANDAS}"),
+    _PANDAS_TO_ARROW: _waits(_poly("left_pandas"), _poly("right_arrow"), f"hop:{_PANDAS_TO_ARROW}", _ARROW_TO_PANDAS),
+    f"step:{_poly('child_arrow')}": _waits(_poly("left_arrow"), _poly("right_pandas"), _ARROW_TO_PANDAS),
+    f"step:{_poly('child_pandas')}": _waits(_poly("left_pandas"), _poly("right_arrow"), _PANDAS_TO_ARROW),
+}
+
+
+def test_the_two_joins_of_a_polymorphic_link_keep_their_planned_edges() -> None:
+    planned, _, declared = _polymorphic_sides_on_two_frameworks()
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared)
+
+    assert _edge_view(planned.plan, planned.graph) == _POLY_EDGES
+
+
+def _other(name: str) -> str:
+    return f"feature:resolved_join_interleaved_other_{name}"
+
+
+_INTERLEAVED_EDGES = {
+    **_POLY_EDGES,
+    f"step:{_other('left')}": _waits(),
+    f"step:{_other('right')}": _waits(),
+    f"hop:{_OTHER_ARROW_TO_PANDAS}": _waits(_other("left"), _other("right")),
+    _OTHER_ARROW_TO_PANDAS: _waits(_other("left"), _other("right"), f"hop:{_OTHER_ARROW_TO_PANDAS}", _ARROW_TO_PANDAS),
+    f"step:{_other('child')}": _waits(_other("left"), _other("right"), _OTHER_ARROW_TO_PANDAS),
+    _PANDAS_TO_ARROW: _waits(
+        _poly("left_pandas"), _poly("right_arrow"), f"hop:{_PANDAS_TO_ARROW}", _OTHER_ARROW_TO_PANDAS
+    ),
+}
+
+
+def test_a_join_of_another_link_between_the_keys_of_one_link_keeps_the_planned_edges() -> None:
+    """Build order is link one's first join, the other link's join, link one's second join."""
+    planned, _, _, declared = _link_two_between_the_keys_of_a_polymorphic_link()
+    planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker, declared)
+
+    edges = _edge_view(planned.plan, planned.graph)
+
+    assert [step.link.left_feature_group.__name__ for step in _join_steps(planned.plan)] == [
+        "ResolvedJoinPairLeft",
+        "ResolvedJoinOtherLeft",
+        "ResolvedJoinPairLeft",
+    ]
+    assert edges == _INTERLEAVED_EDGES
+    assert _ARROW_TO_PANDAS not in edges[_PANDAS_TO_ARROW]
+    assert _reachable(edges) == _reachable(_INTERLEAVED_EDGES)
 
 
 @pytest.mark.parametrize(

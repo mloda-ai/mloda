@@ -564,3 +564,48 @@ class TestNameConverterAgreement:
 
         with pytest.raises(ValueError):
             _raw_group(converter).match_feature_group_criteria(name, options)
+
+
+class TestHandParsedBindings:
+    """validate_hand_parsed_bindings checks caller-supplied bindings against forwarded and declared options."""
+
+    def test_forwarded_contradicting_binding_raises(self) -> None:
+        child_options = _inherited_child_options({OPERATION_KEY: "max"})
+
+        with pytest.raises(ValueError, match="forward_group_exclude"):
+            _NameMismatchChainedGroup.validate_hand_parsed_bindings(
+                STRING_FEATURE_NAME, {OPERATION_KEY: "sum"}, child_options
+            )
+
+    def test_declared_contradicting_binding_raises(self) -> None:
+        options = Options(group={OPERATION_KEY: "max"})
+
+        with pytest.raises(ValueError, match=OPERATION_KEY):
+            _NameMismatchChainedGroup.validate_hand_parsed_bindings(
+                STRING_FEATURE_NAME, {OPERATION_KEY: "sum"}, options
+            )
+
+    def test_agreeing_values_pass(self) -> None:
+        for options in (Options(group={OPERATION_KEY: "sum"}), _inherited_child_options({OPERATION_KEY: "sum"})):
+            _NameMismatchChainedGroup.validate_hand_parsed_bindings(
+                STRING_FEATURE_NAME, {OPERATION_KEY: "sum"}, options
+            )
+
+    def test_typed_declared_value_agrees_with_string_binding(self) -> None:
+        options = Options(group={RAW_KEY: 5})
+
+        _raw_group(int).validate_hand_parsed_bindings("sales__raw_5_rawcv", {RAW_KEY: "5"}, options)
+
+    def test_env_var_downgrades_to_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setenv("MLODA_ALLOW_FORWARDED_NAME_MISMATCH", "1")
+        child_options = _inherited_child_options({OPERATION_KEY: "max"})
+
+        with caplog.at_level(logging.WARNING):
+            _NameMismatchChainedGroup.validate_hand_parsed_bindings(
+                STRING_FEATURE_NAME, {OPERATION_KEY: "sum"}, child_options
+            )
+
+        records = [r for r in caplog.records if r.levelno == logging.WARNING and OPERATION_KEY in r.getMessage()]
+        assert len(records) == 1

@@ -58,7 +58,7 @@ import logging
 import os
 from copy import copy
 from numbers import Number
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, ClassVar, cast
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -466,6 +466,18 @@ class FeatureChainParserMixin:
 
         key, value = rejection
         return cls._guard_rejection_reason(key, value, property_mapping[key])
+
+    @classmethod
+    def validate_hand_parsed_bindings(
+        cls, feature_name: str | FeatureName, bindings: Mapping[str, Any], options: Options
+    ) -> None:
+        """Abort when a forwarded or declared option contradicts bindings parsed from the name by hand.
+
+        MLODA_ALLOW_FORWARDED_NAME_MISMATCH downgrades it; in_features is not checked.
+        """
+        resolution = NameResolution.miss()
+        cls._validate_forwarded_name_mismatch(feature_name, dict(bindings), options, resolution)
+        cls._validate_name_agreement(feature_name, dict(bindings), None, options, resolution)
 
     @classmethod
     def _validate_forwarded_name_mismatch(

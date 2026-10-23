@@ -126,10 +126,10 @@ class PlanStep:
     compute_framework_reason: str | None = None
     result_framework: type["ComputeFramework"] | None = None
     join_keys: tuple[str, ...] | None = None
-    implementation: type["Implementation"] | None = None
+    implementation: type["Implementation[Any]"] | None = None
     implementation_version: str | None = field(default=None, compare=False)
     implementation_hash: str | None = field(default=None, compare=False)
-    implementation_specialized_from: tuple[type["Implementation"], ...] = ()
+    implementation_specialized_from: tuple[type["Implementation[Any]"], ...] = ()
     feature_group_version: str | None = field(default=None, compare=False)
     feature_group_hash: str | None = field(default=None, compare=False)
     leaves_connection: str | None = None
@@ -443,8 +443,8 @@ def source_of(
 
 
 def _replaced_implementations(
-    impl: "type[Implementation] | None", step: FeatureGroupStep
-) -> tuple[type["Implementation"], ...]:
+    impl: "type[Implementation[Any]] | None", step: FeatureGroupStep
+) -> tuple[type["Implementation[Any]"], ...]:
     """The concrete Implementation bases of impl that serve the step's group and framework."""
     from mloda.core.abstract_plugins.implementation import Implementation, _is_concrete
 

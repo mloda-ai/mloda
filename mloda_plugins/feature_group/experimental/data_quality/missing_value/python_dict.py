@@ -8,13 +8,13 @@ import statistics
 from collections import Counter
 from typing import Any
 
-from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PythonDictMissingValueImputation(OperationImplementation[MissingValueFeatureGroup]):
+class PythonDictMissingValueImputation(Implementation[MissingValueFeatureGroup]):
     """PythonDict missing value imputation."""
 
     feature_group = MissingValueFeatureGroup

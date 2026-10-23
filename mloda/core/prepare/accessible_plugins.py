@@ -444,7 +444,9 @@ class PreFilterPlugins:
             raise EnvironmentPreconditionError("No feature groups are loaded. Did you call PluginLoader.all()?")
         return accessible_feature_groups
 
-    def _set_implementations(self, plugin_collector: PluginCollector | None = None) -> frozenset[type[Implementation]]:
+    def _set_implementations(
+        self, plugin_collector: PluginCollector | None = None
+    ) -> frozenset[type[Implementation[Any]]]:
         allow_redefinition = plugin_collector.allow_redefinition if plugin_collector is not None else False
         strict_mode = plugin_collector.strict_mode if plugin_collector is not None else strict_mode_from_env()
 
@@ -471,8 +473,8 @@ class PreFilterPlugins:
         return frozenset(implementations)
 
     @staticmethod
-    def _raise_on_conflicting_implementations(implementations: set[type[Implementation]]) -> None:
-        by_pair: dict[tuple[type[Any], type[Any]], list[type[Implementation]]] = {}
+    def _raise_on_conflicting_implementations(implementations: set[type[Implementation[Any]]]) -> None:
+        by_pair: dict[tuple[type[Any], type[Any]], list[type[Implementation[Any]]]] = {}
         for impl in implementations:
             by_pair.setdefault((impl.feature_group, impl.compute_framework), []).append(impl)
         for members in by_pair.values():

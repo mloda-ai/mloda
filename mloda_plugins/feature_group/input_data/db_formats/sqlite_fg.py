@@ -10,7 +10,7 @@ from typing import Any, ClassVar, cast
 from mloda.core.abstract_plugins.components.mask.null_or_nan import split_null_or_nan
 from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.optional_dependency import require
-from mloda.provider import DBTable, Implementation, ReadDBFG, SourceMatch
+from mloda.provider import ComputeFramework, DBTable, FeatureSet, Implementation, ReadDBFG, SourceMatch
 from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -228,10 +228,12 @@ def _load_dict(group: type[SqliteFG], match: SourceMatch, features: Any) -> dict
     return {name: [row[index] for row in rows] for index, name in enumerate(column_names)}
 
 
-class SqlitePythonDict(Implementation):
+class SqlitePythonDict(Implementation[SqliteFG]):
     feature_group = SqliteFG
     compute_framework = PythonDictFramework
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
-        return _load_dict(group, match, features)
+    def calculate(
+        cls, group: type[SqliteFG], data: SourceMatch, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return _load_dict(group, data, features)

@@ -9,7 +9,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.implementation import OperationImplementation
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.provider import (
     BaseInputData,
     ComputeFramework,
@@ -73,7 +73,7 @@ class OpToyBareFG(_NamedFeatureGroup):
     FEATURE = OPTOY_BARE_FEATURE
 
 
-class OpToyPandas(OperationImplementation[OpToyFG]):
+class OpToyPandas(Implementation[OpToyFG]):
     feature_group = OpToyFG
     compute_framework = PandasDataFrame
     divergent = {"sum": "skips NaN in sum"}
@@ -91,7 +91,7 @@ class OpToyPandas(OperationImplementation[OpToyFG]):
         return pd.DataFrame({OPTOY_FEATURE: [PANDAS_MARK], OPTOY_CHILD_FEATURE: [PANDAS_MARK]})
 
 
-class OpToyPyArrow(OperationImplementation[OpToyFG]):
+class OpToyPyArrow(Implementation[OpToyFG]):
     feature_group = OpToyFG
     compute_framework = PyArrowTable
     supported = frozenset({"sum"})
@@ -142,7 +142,7 @@ class OpToyChainFG(OperationFeatureGroup):
         return {Feature(str(feature_name)[: -len(OPTOY_CHAIN_SUFFIX)])}
 
 
-class OpToyChainPandas(OperationImplementation[OpToyChainFG]):
+class OpToyChainPandas(Implementation[OpToyChainFG]):
     feature_group = OpToyChainFG
     compute_framework = PandasDataFrame
 
@@ -156,7 +156,7 @@ class OpToyChainPandas(OperationImplementation[OpToyChainFG]):
         return data
 
 
-class OpToyChainPyArrow(OperationImplementation[OpToyChainFG]):
+class OpToyChainPyArrow(Implementation[OpToyChainFG]):
     feature_group = OpToyChainFG
     compute_framework = PyArrowTable
 

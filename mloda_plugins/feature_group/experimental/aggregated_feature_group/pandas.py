@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 
-class PandasAggregation(OperationImplementation[AggregatedFeatureGroup]):
+class PandasAggregation(Implementation[AggregatedFeatureGroup]):
     feature_group = AggregatedFeatureGroup
     compute_framework = PandasDataFrame
     divergent = {

@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from collections.abc import Collection
+from typing import Any
 from uuid import UUID
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -21,7 +22,7 @@ def _qualified(cls: type) -> str:
 class ResolveImplementationPins:
     """Resolves pins on requested features over their transitive inputs; never mutates a Feature."""
 
-    def __init__(self, graph: Graph, accessible: Collection[type[Implementation]]) -> None:
+    def __init__(self, graph: Graph, accessible: Collection[type[Implementation[Any]]]) -> None:
         self.graph = graph
         self.accessible = list(accessible)
         self.loaded = loaded_implementations()
@@ -31,8 +32,8 @@ class ResolveImplementationPins:
 
     def resolve(self) -> tuple[dict[UUID, frozenset[Framework]], set[UUID]]:
         """The allowed frameworks per pinned step uuid, and the pinned uuids."""
-        pinned_class: dict[UUID, type[Implementation]] = {}
-        seen: list[tuple[UUID, type[Implementation], str]] = []
+        pinned_class: dict[UUID, type[Implementation[Any]]] = {}
+        seen: list[tuple[UUID, type[Implementation[Any]], str]] = []
         for uuid, node in self.graph.nodes.items():
             pin = node.feature.implementation_pin
             if pin is None:
@@ -69,7 +70,7 @@ class ResolveImplementationPins:
     def _ancestors(self, uuid: UUID) -> set[UUID]:
         return self._chain(uuid) - {uuid}
 
-    def _lookup(self, name: str, request: str) -> type[Implementation]:
+    def _lookup(self, name: str, request: str) -> type[Implementation[Any]]:
         matches = [c for c in self.loaded if name in (c.__name__, _qualified(c))]
         if not matches:
             raise ImplementationPinError(
@@ -88,14 +89,14 @@ class ResolveImplementationPins:
             )
         return impl
 
-    def _assign(self, uuid: UUID, pin: tuple[str, ...]) -> list[tuple[UUID, type[Implementation]]]:
+    def _assign(self, uuid: UUID, pin: tuple[str, ...]) -> list[tuple[UUID, type[Implementation[Any]]]]:
         request = str(self.graph.nodes[uuid].feature.name)
         chain = self._chain(uuid)
-        names_by_group: dict[type, list[type[Implementation]]] = defaultdict(list)
+        names_by_group: dict[type, list[type[Implementation[Any]]]] = defaultdict(list)
         for name in pin:
             impl = self._lookup(name, request)
             names_by_group[impl.feature_group].append(impl)
-        assigned: list[tuple[UUID, type[Implementation]]] = []
+        assigned: list[tuple[UUID, type[Implementation[Any]]]] = []
         for group, impls in names_by_group.items():
             steps = [s for s in chain if issubclass(self.graph.nodes[s].feature_group_class, group)]
             if not steps:
@@ -120,11 +121,11 @@ class ResolveImplementationPins:
             assigned.extend(zip(ordered, impls))
         return assigned
 
-    def _serving(self, group: type[FeatureGroup], framework: Framework) -> type[Implementation] | None:
+    def _serving(self, group: type[FeatureGroup], framework: Framework) -> type[Implementation[Any]] | None:
         stop_after = "load_neutral" if issubclass(group, FormatFeatureGroup) else None
         return serving_implementation(group, framework, self.accessible, stop_after=stop_after)
 
-    def _allowed(self, uuid: UUID, impl: type[Implementation]) -> frozenset[Framework]:
+    def _allowed(self, uuid: UUID, impl: type[Implementation[Any]]) -> frozenset[Framework]:
         node = self.graph.nodes[uuid]
         feature = node.feature
         group = node.feature_group_class

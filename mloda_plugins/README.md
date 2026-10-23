@@ -34,7 +34,7 @@ Function Extenders enable:
 - Custom extensions for specific use cases
 
 ### Implementations
-An Implementation serves one (format Feature Group, Compute Framework) pair with its own `calculate`, for example loading a CSV file into a PyArrow table.
+An Implementation serves one (format or operation Feature Group, Compute Framework) pair with its own `calculate`, for example loading a CSV file into a PyArrow table.
 
 ## Plugin Development
 When developing new plugins for mloda, consider the following steps:

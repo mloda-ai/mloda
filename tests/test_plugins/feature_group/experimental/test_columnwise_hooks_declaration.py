@@ -32,7 +32,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
     FeatureChainParserMixin,
     missing_columnwise_hooks,
 )
-from mloda.core.abstract_plugins.implementation import OperationImplementation
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.provider import FeatureSet
 from mloda.user import Feature
@@ -320,7 +320,7 @@ def test_divergent_keys_are_subtypes_of_the_group(name: str, impl: type[Any]) ->
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)
 def test_implementation_serves_its_group(name: str, impl: type[Any]) -> None:
     group = OPERATION_FAMILIES[name][0]
-    assert impl.__bases__ == (OperationImplementation,)
+    assert impl.__bases__ == (Implementation,)
     assert impl.feature_group is group
     assert not inspect.isabstract(impl)
     for hook in _ABSENT_OLD_HOOKS:

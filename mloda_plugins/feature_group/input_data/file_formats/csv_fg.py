@@ -5,7 +5,7 @@ from collections.abc import Collection
 from typing import Any
 
 from mloda.core.abstract_plugins.implementation import loaded_implementations
-from mloda.provider import ComputeFramework, Implementation, ReadFileFG, SourceMatch, is_match_abort
+from mloda.provider import ComputeFramework, FeatureSet, Implementation, is_match_abort, ReadFileFG, SourceMatch
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
 )
@@ -59,10 +59,12 @@ class CsvFG(ReadFileFG):
 _read = pyarrow_file_loader("csv")
 
 
-class CsvPyArrowTable(Implementation):
+class CsvPyArrowTable(Implementation[CsvFG]):
     feature_group = CsvFG
     compute_framework = PyArrowTable
 
     @classmethod
-    def calculate(cls, group: Any, match: SourceMatch, features: Any, framework: Any) -> Any:
-        return _read(group, match, features)
+    def calculate(
+        cls, group: type[CsvFG], data: SourceMatch, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return _read(group, data, features)

@@ -1339,7 +1339,7 @@ class VersionImplFG(ToyFormatBase):
     pass
 
 
-class Leaf(Implementation):
+class Leaf(Implementation[VersionImplFG]):
     feature_group = VersionImplFG
     compute_framework = PythonDictFramework
 

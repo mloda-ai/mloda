@@ -30,7 +30,7 @@ class ZeroRowResultTypeTestMixin:
     """Family-agnostic hooks, a calculate helper and the typed-result assertion."""
 
     # Read by the family tests and by tests/test_plugins/test_mixin_consumer_coverage.py.
-    feature_group_class: ClassVar[type[FeatureGroup] | type[Implementation]]
+    feature_group_class: ClassVar[type[FeatureGroup] | type[Implementation[Any]]]
     untyped_column_types: ClassVar[tuple[Any, ...]]
 
     @abstractmethod

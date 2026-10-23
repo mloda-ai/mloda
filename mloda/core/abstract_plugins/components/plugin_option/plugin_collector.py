@@ -1,5 +1,5 @@
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
@@ -42,7 +42,7 @@ class PluginCollector:
     def __init__(self) -> None:
         self.disabled_feature_group_classes: set[type[FeatureGroup]] = set()
         self.enabled_feature_group_classes: set[type[FeatureGroup]] = set()
-        self.disabled_implementation_classes: "set[type[Implementation]]" = set()
+        self.disabled_implementation_classes: "set[type[Implementation[Any]]]" = set()
         self.allow_redefinition: bool = False
         self.strict_mode: str = strict_mode_from_env()
         self.registry: "PluginRegistry | None" = None
@@ -69,10 +69,10 @@ class PluginCollector:
     def add_enabled_feature_group_classes(self, feature_group_cls: set[type[FeatureGroup]]) -> None:
         self.enabled_feature_group_classes.update(feature_group_cls)
 
-    def add_disabled_implementation_classes(self, implementation_cls: "set[type[Implementation]]") -> None:
+    def add_disabled_implementation_classes(self, implementation_cls: "set[type[Implementation[Any]]]") -> None:
         self.disabled_implementation_classes.update(implementation_cls)
 
-    def applicable_implementation_class(self, implementation_cls: "type[Implementation]") -> bool:
+    def applicable_implementation_class(self, implementation_cls: "type[Implementation[Any]]") -> bool:
         return implementation_cls not in self.disabled_implementation_classes
 
     def applicable_feature_group_class(self, feature_group_cls: type[FeatureGroup]) -> bool:

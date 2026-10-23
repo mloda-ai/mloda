@@ -20,7 +20,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
-G = TypeVar("G", bound=OperationFeatureGroup)
+G = TypeVar("G", bound=FeatureGroup)
 
 
 def _is_concrete(cls: Any) -> bool:
@@ -32,20 +32,14 @@ def _serves_groups(group: Any) -> bool:
     return isinstance(group, type) and issubclass(group, (FormatFeatureGroup, OperationFeatureGroup))
 
 
-def _serves_operation(group: Any) -> bool:
-    return isinstance(group, type) and issubclass(group, OperationFeatureGroup)
-
-
 def _names_a_pair(cls: Any) -> bool:
     group = getattr(cls, "feature_group", None)
     framework = getattr(cls, "compute_framework", None)
-    if not (_serves_groups(group) and isinstance(framework, type) and issubclass(framework, ComputeFramework)):
-        return False
-    return not _serves_operation(group) or issubclass(cls, OperationImplementation)
+    return _serves_groups(group) and isinstance(framework, type) and issubclass(framework, ComputeFramework)
 
 
-class Implementation(ABC):
-    """Names its pair with feature_group and compute_framework; a loader subclasses this, an operation group's implementation OperationImplementation."""
+class Implementation(ABC, Generic[G]):
+    """Names its pair with feature_group and compute_framework and computes it in calculate."""
 
     feature_group: ClassVar[type[FeatureGroup]]
     compute_framework: ClassVar[type[ComputeFramework]]
@@ -64,8 +58,6 @@ class Implementation(ABC):
             )
         if not (isinstance(framework, type) and issubclass(framework, ComputeFramework)):
             raise TypeError(f"{cls.__name__} must set compute_framework to a ComputeFramework subclass.")
-        if _serves_operation(group) and not issubclass(cls, OperationImplementation):
-            raise TypeError(f"{cls.__name__} serves an operation group, so it must subclass OperationImplementation.")
 
     @classmethod
     def version(cls) -> str:
@@ -99,27 +91,18 @@ class Implementation(ABC):
 
     @classmethod
     @abstractmethod
-    def calculate(cls, *args: Any, **kwargs: Any) -> Any:
-        """Load the source: the loader shape (group, match, features, framework); operation groups use OperationImplementation."""
-
-
-class OperationImplementation(Implementation, Generic[G]):
-    """An Implementation of operation group G, called as calculate(group, data, features, framework)."""
-
-    @classmethod
-    @abstractmethod
     def calculate(cls, group: type[G], data: Any, features: FeatureSet, framework: ComputeFramework | None) -> Any:
-        """Compute the operation on data for the features."""
+        """Compute the features; data is the input frame for an operation group, the SourceMatch for a format group."""
 
 
 def serving_implementation(
     group: type[FeatureGroup],
     compute_framework: type[ComputeFramework],
-    implementations: Iterable[type[Implementation]],
+    implementations: Iterable[type[Implementation[Any]]],
     stop_after: str | None = None,
-) -> type[Implementation] | None:
+) -> type[Implementation[Any]] | None:
     """The most derived implementation for group and framework (group MRO outer, framework MRO inner)."""
-    by_pair: dict[tuple[type, type], list[type[Implementation]]] = {}
+    by_pair: dict[tuple[type, type], list[type[Implementation[Any]]]] = {}
     for impl in implementations:
         by_pair.setdefault((impl.feature_group, impl.compute_framework), []).append(impl)
     for klass in group.__mro__:
@@ -132,18 +115,18 @@ def serving_implementation(
     return None
 
 
-def loaded_implementations() -> list[type[Implementation]]:
+def loaded_implementations() -> list[type[Implementation[Any]]]:
     """Concrete loaded Implementation classes naming a valid pair (a rejected subclass lingers until collected)."""
     return [impl for impl in get_all_subclasses(Implementation) if _is_concrete(impl) and _names_a_pair(impl)]
 
 
-_ACCESSIBLE: ContextVar[frozenset[type[Implementation]] | None] = ContextVar(
+_ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVar(
     "mloda_accessible_implementations", default=None
 )
 
 
 @contextmanager
-def accessible_implementations(implementations: Iterable[type[Implementation]]) -> Iterator[None]:
+def accessible_implementations(implementations: Iterable[type[Implementation[Any]]]) -> Iterator[None]:
     """Make the run's accessible implementations current for capability checks inside the block."""
     token = _ACCESSIBLE.set(frozenset(implementations))
     try:
@@ -152,7 +135,7 @@ def accessible_implementations(implementations: Iterable[type[Implementation]]) 
         _ACCESSIBLE.reset(token)
 
 
-def current_implementations() -> Iterable[type[Implementation]]:
+def current_implementations() -> Iterable[type[Implementation[Any]]]:
     """The accessible implementations of the run being planned, else every loaded one."""
     accessible = _ACCESSIBLE.get()
     return loaded_implementations() if accessible is None else accessible

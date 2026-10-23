@@ -434,7 +434,7 @@ _NAN = float("nan")
 _DAY = datetime.timedelta(days=1)
 _START = datetime.datetime(2024, 1, 1)
 
-_DIVERGENT_DECLARATIONS: dict[type[Implementation], dict[str, str]] = {
+_DIVERGENT_DECLARATIONS: dict[type[Implementation[Any]], dict[str, str]] = {
     PandasTimeWindow: {
         "sum": "skips NaN in sum and gives 0 for a multi-column row with no value",
         "avg": "skips NaN in avg",
@@ -532,7 +532,7 @@ def _pyarrow_window(window_function: str, columns: dict[str, list[float | None]]
     return list(result.to_pylist())
 
 
-_WINDOW_RESULT_OF: dict[type[Implementation], Callable[[str, dict[str, list[float | None]], int], list[Any]]] = {
+_WINDOW_RESULT_OF: dict[type[Implementation[Any]], Callable[[str, dict[str, list[float | None]], int], list[Any]]] = {
     PandasTimeWindow: _pandas_window,
     PyArrowTimeWindow: _pyarrow_window,
 }
@@ -544,7 +544,7 @@ class TestImplementationsConformToTheReferenceContract:
     @pytest.mark.parametrize("window_function", sorted(WINDOW_UNIVERSE))
     @pytest.mark.parametrize("implementation", list(_WINDOW_RESULT_OF), ids=lambda impl: impl.__name__)
     def test_result_differs_from_the_reference_exactly_when_declared(
-        self, implementation: type[Implementation], window_function: str
+        self, implementation: type[Implementation[Any]], window_function: str
     ) -> None:
         assert dict(implementation.divergent) == _DIVERGENT_DECLARATIONS[implementation]
         equal = same_on_pandas if implementation is PandasTimeWindow else same

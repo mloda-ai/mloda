@@ -194,16 +194,18 @@ def test_the_compute_reason_is_recorded_and_a_changed_reason_fails_check(tmp_pat
         check_plan_lock([_compute_step(compute_framework_reason="default order")], lock)
 
 
-def _impl_path(impl: type[Implementation]) -> str:
+def _impl_path(impl: type[Implementation[Any]]) -> str:
     return f"{impl.__module__}:{impl.__qualname__}"
 
 
-def _impl_step(impl: type[Implementation], implementation_hash: str | None = "h1", **overrides: object) -> PlanStep:
+def _impl_step(
+    impl: type[Implementation[Any]], implementation_hash: str | None = "h1", **overrides: object
+) -> PlanStep:
     return _compute_step(implementation=impl, implementation_hash=implementation_hash, **overrides)
 
 
 def test_the_implementation_fields_are_recorded_and_each_change_fails_check(
-    tmp_path: Path, make_implementation: Callable[..., type[Implementation]]
+    tmp_path: Path, make_implementation: Callable[..., type[Implementation[Any]]]
 ) -> None:
     group = _inert_group()
     first = make_implementation(group, PythonDictFramework, name="LockImplB")
@@ -247,7 +249,7 @@ def _explain_compute_step(group: type[FeatureGroup]) -> PlanStep:
     return compute[0]
 
 
-def _dependency_free_hash(impl: type[Implementation]) -> str:
+def _dependency_free_hash(impl: type[Implementation[Any]]) -> str:
     parts = closure_parts(impl, include_dependencies=False)
     return hashlib.sha256("\n".join(sorted(parts)).encode("utf-8")).hexdigest()
 
@@ -382,7 +384,7 @@ def helper() -> int:
     return {value}
 
 
-class LockEditImpl(Implementation):
+class LockEditImpl(Implementation[LockEditGroup]):
     feature_group = LockEditGroup
     compute_framework = PythonDictFramework
 
@@ -394,7 +396,7 @@ class LockEditImpl(Implementation):
 
 def _load_impl(
     directory: Path, value: int, monkeypatch: pytest.MonkeyPatch, sub_value: int | None = None
-) -> type[Implementation]:
+) -> type[Implementation[Any]]:
     """Load LockEditImpl from a file in directory under one fixed module name, so only the body differs."""
     directory.mkdir(parents=True, exist_ok=True)
     source = directory / f"{_IMPL_MODULE}.py"
@@ -406,7 +408,7 @@ def _load_impl(
     module = importlib.util.module_from_spec(spec)
     monkeypatch.setitem(sys.modules, _IMPL_MODULE, module)
     spec.loader.exec_module(module)
-    return cast("type[Implementation]", module.LockEditImpl)
+    return cast("type[Implementation[Any]]", module.LockEditImpl)
 
 
 @pytest.mark.parametrize("neutral", [False, True])
@@ -466,10 +468,10 @@ def test_an_edited_implementation_body_fails_check_while_the_class_path_is_uncha
 
 @pytest.mark.parametrize("where", ["implementation", "implementation_specialized_from"])
 def test_write_refuses_a_main_module_implementation_and_writes_nothing(
-    tmp_path: Path, where: str, make_implementation: Callable[..., type[Implementation]]
+    tmp_path: Path, where: str, make_implementation: Callable[..., type[Implementation[Any]]]
 ) -> None:
     lock = tmp_path / "plan.lock"
-    main_impl = cast("type[Implementation]", _MainLike)
+    main_impl = cast("type[Implementation[Any]]", _MainLike)
     impl = make_implementation(_inert_group(), PythonDictFramework, name="LockMainImpl")
     step = (
         _impl_step(main_impl)
@@ -484,7 +486,7 @@ def test_write_refuses_a_main_module_implementation_and_writes_nothing(
 
 
 def test_write_refuses_an_unavailable_implementation_hash_naming_the_class(
-    tmp_path: Path, make_implementation: Callable[..., type[Implementation]]
+    tmp_path: Path, make_implementation: Callable[..., type[Implementation[Any]]]
 ) -> None:
     lock = tmp_path / "plan.lock"
     impl = make_implementation(_inert_group(), PythonDictFramework, name="LockUnhashableImpl")
@@ -497,7 +499,7 @@ def test_write_refuses_an_unavailable_implementation_hash_naming_the_class(
 
 
 def test_plan_hashes_change_with_the_implementation_fields(
-    make_implementation: Callable[..., type[Implementation]],
+    make_implementation: Callable[..., type[Implementation[Any]]],
 ) -> None:
     group = _inert_group()
     first = make_implementation(group, PythonDictFramework, name="LockHashImplA")

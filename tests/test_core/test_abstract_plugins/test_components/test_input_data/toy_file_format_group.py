@@ -80,7 +80,7 @@ class ToyFileFormatFG(ReadFileFG):
         return [n for n in names if n]
 
 
-class ToyFilePyArrowTable(Implementation):
+class ToyFilePyArrowTable(Implementation[ToyFileFormatFG]):
     feature_group = ToyFileFormatFG
     compute_framework = PyArrowTable
 
@@ -89,7 +89,7 @@ class ToyFilePyArrowTable(Implementation):
         return pa.table(read_toy_file(match.access, tuple(sorted(features.get_all_names()))))
 
 
-class ToyFilePythonDict(Implementation):
+class ToyFilePythonDict(Implementation[ToyFileFormatFG]):
     feature_group = ToyFileFormatFG
     compute_framework = PythonDictFramework
 

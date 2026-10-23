@@ -29,7 +29,7 @@ from mloda.core.abstract_plugins.components.base_feature_group_version import (
 )
 from mloda.core.version import get_mloda_version
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework as ComputeFramework
-from mloda.core.abstract_plugins.implementation import Implementation, OperationImplementation
+from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 from mloda.core.abstract_plugins.hook_context import OutputSchema as OutputSchema
@@ -188,7 +188,6 @@ __all__ = [
     "FormatFeatureGroup",
     "Implementation",
     "ImplementationPinError",
-    "OperationImplementation",
     "OperationFeatureGroup",
     "HANDLE_OPTION",
     "QUERY_OPTION",

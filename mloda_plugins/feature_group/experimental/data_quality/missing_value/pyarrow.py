@@ -7,13 +7,13 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from mloda.provider import ComputeFramework, FeatureSet, OperationImplementation
+from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
-class PyArrowMissingValueImputation(OperationImplementation[MissingValueFeatureGroup]):
+class PyArrowMissingValueImputation(Implementation[MissingValueFeatureGroup]):
     feature_group = MissingValueFeatureGroup
     compute_framework = PyArrowTable
 

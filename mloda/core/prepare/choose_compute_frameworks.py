@@ -211,7 +211,7 @@ class ChooseComputeFrameworks:
         dropped: Mapping[UUID, frozenset[Framework]] | None = None,
         pin_frameworks: Mapping[UUID, frozenset[Framework]] | None = None,
         pinned: set[UUID] | None = None,
-        implementations: Iterable[type[Implementation]] | None = None,
+        implementations: Iterable[type[Implementation[Any]]] | None = None,
         handle_of: Callable[[Framework, Any], tuple[str | None, bool]] | None = None,
         dropped_reasons: Mapping[UUID, Mapping[Framework, str]] | None = None,
     ) -> None:

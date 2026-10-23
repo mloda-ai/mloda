@@ -14,7 +14,7 @@ from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_w
 )
 
 
-class ToyWorkerPythonDict(Implementation):
+class ToyWorkerPythonDict(Implementation[ToyWorkerFG]):
     feature_group = ToyWorkerFG
     compute_framework = PythonDictFramework
 

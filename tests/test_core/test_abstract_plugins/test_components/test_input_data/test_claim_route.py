@@ -74,8 +74,9 @@ def test_provider_exports_implementation() -> None:
     assert "Implementation" in provider.__all__
 
 
-def test_provider_exports_operation_implementation() -> None:
-    from mloda.core.abstract_plugins.implementation import OperationImplementation
+def test_operation_implementation_is_removed() -> None:
+    from mloda.core.abstract_plugins import implementation
 
-    assert provider.OperationImplementation is OperationImplementation
-    assert "OperationImplementation" in provider.__all__
+    assert not hasattr(provider, "OperationImplementation")
+    assert "OperationImplementation" not in provider.__all__
+    assert not hasattr(implementation, "OperationImplementation")

@@ -88,7 +88,6 @@ from mloda.provider import (
     Implementation,
     NamePolicy,
     OperationFeatureGroup,
-    OperationImplementation,
     SourceMatch,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_worker_implementation import ToyWorkerFG
@@ -1006,7 +1005,7 @@ class TestPlanStepImplementation:
     def test_a_non_str_version_degrades_to_none_like_the_hook_context(
         self, tmp_path: Path, make_implementation: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        class _IntVersion(Implementation):
+        class _IntVersion(Implementation[Any]):
             @classmethod
             def version(cls) -> Any:
                 return 7
@@ -2405,7 +2404,7 @@ class DuckSourceOpFG(OperationFeatureGroup):
         return {Feature("plan_duck_col", options={"connection_handle": "mine"})}
 
 
-class DuckSourceOpDuckDB(OperationImplementation[DuckSourceOpFG]):
+class DuckSourceOpDuckDB(Implementation[DuckSourceOpFG]):
     feature_group = DuckSourceOpFG
     compute_framework = DuckDBFramework
 
@@ -2416,7 +2415,7 @@ class DuckSourceOpDuckDB(OperationImplementation[DuckSourceOpFG]):
         return data
 
 
-class DuckSourceOpPyArrow(OperationImplementation[DuckSourceOpFG]):
+class DuckSourceOpPyArrow(Implementation[DuckSourceOpFG]):
     feature_group = DuckSourceOpFG
     compute_framework = PyArrowTable
 

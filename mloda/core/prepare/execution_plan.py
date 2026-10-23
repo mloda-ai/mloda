@@ -138,7 +138,7 @@ class ExecutionPlan:
         api_input_data_collection: ApiInputDataCollection | None = None,
         resolved_input_feature_names: dict[UUID, frozenset[str] | None] | None = None,
         specialized_from: dict[UUID, tuple[str, ...]] | None = None,
-        implementations: Collection[type[Implementation]] | None = None,
+        implementations: Collection[type[Implementation[Any]]] | None = None,
         data_access_collection: Any = None,
     ) -> None:
         self.implementations = () if implementations is None else implementations

@@ -148,7 +148,7 @@ def _(mo):
                 return next(csv.reader(f), [])
     ```
 
-    Its neutral form is a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. An `Implementation` class for a compute framework, whose `calculate(group, match, features, framework)` returns the data, replaces that for the framework.
+    Its neutral form is a lightweight `FileSource` descriptor; the target compute framework materializes it into its native table type. An `Implementation` class for a compute framework, whose `calculate(group, data, features, framework)` returns the data, replaces that for the framework.
 
     As you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion.
     """)
@@ -164,7 +164,7 @@ def _(PyArrowTable):
 
     from pyarrow import csv as pyarrow_csv
 
-    from mloda.provider import FeatureSet, Implementation, SourceMatch
+    from mloda.provider import ComputeFramework, FeatureSet, Implementation, SourceMatch
     from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
     class CsvFG2(CsvFG):
@@ -183,13 +183,15 @@ def _(PyArrowTable):
                     if column.null_count == column.length:
                         raise ValueError(f"Column '{column_name}' contains only null values.")
 
-    class CsvFG2PyArrowTable(Implementation):
+    class CsvFG2PyArrowTable(Implementation[CsvFG2]):
         feature_group = CsvFG2
         compute_framework = PyArrowTable
 
         @classmethod
-        def calculate(cls, group: Any, match: SourceMatch, features: FeatureSet, framework: Any) -> Any:
-            result = pyarrow_csv.read_csv(match.access, parse_options=group._parse_options)
+        def calculate(
+            cls, group: type[CsvFG2], data: SourceMatch, features: FeatureSet, framework: ComputeFramework | None
+        ) -> Any:
+            result = pyarrow_csv.read_csv(data.access, parse_options=group._parse_options)
             print("We used CsvFG2 to load the data.")
             return result.select(list(features.get_all_names()))
 

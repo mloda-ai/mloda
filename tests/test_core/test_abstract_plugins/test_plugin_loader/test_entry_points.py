@@ -456,7 +456,7 @@ class TestLoadEntryPointsDiscovery:
                 pass
 
 
-            class EpImplementation(Implementation):
+            class EpImplementation(Implementation[EpImplGroup]):
                 feature_group = EpImplGroup
                 compute_framework = PythonDictFramework
 

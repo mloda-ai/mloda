@@ -64,7 +64,7 @@ def write_sqlite(path: Path, tables: dict[str, dict[str, list[Any]]]) -> None:
             ]
             connection.execute(f"CREATE TABLE {quoted_table} ({', '.join(f'{q} {t}' for q, t in zip(quoted, types))})")
             placeholders = ", ".join("?" for _ in names)
-            insert = f"INSERT INTO {quoted_table} VALUES ({placeholders})"  # nosec B608 - quoted names, bound values
+            insert = f"INSERT INTO {quoted_table} VALUES ({placeholders})"  # nosec B608  # quoted names, bound values
             connection.executemany(insert, list(zip(*(columns[name] for name in names))))
         connection.commit()
     finally:

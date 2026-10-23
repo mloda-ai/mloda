@@ -215,7 +215,7 @@ class TestComposedDropAndWarnPattern:
         assert restored._sink is None, "an unpicklable sink must be dropped on the restored copy"
         assert warnings == ["TypeError"], "the drop must be warned about exactly once"
 
-        pickle.dumps(original)  # nosec B301 -- pickling the same original a second time
+        pickle.dumps(original)  # nosec B301  # pickling the same original a second time
         assert warnings == ["TypeError"], "the original's guard already fired; no repeat warning"
 
         restored._warnings = warnings

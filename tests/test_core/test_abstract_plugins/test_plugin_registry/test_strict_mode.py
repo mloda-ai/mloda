@@ -97,7 +97,8 @@ def _exec_fg_in_main(class_name: str, body: str, cell_label: str) -> type[Featur
     src = textwrap.dedent(body)
     filename = f"<{cell_label}>"
     linecache.cache[filename] = (len(src), None, src.splitlines(keepends=True), filename)
-    exec(compile(src, filename, "exec"), main_mod.__dict__)  # nosec B102
+    code = compile(src, filename, "exec")
+    exec(code, main_mod.__dict__)  # nosec B102
     return cast(type[FeatureGroup], main_mod.__dict__[class_name])
 
 

@@ -75,34 +75,8 @@ def test_earlier_joins_sharing_destination_skips_joins_of_the_same_link() -> Non
     assert coll.earlier_joins_sharing_destination(earlier) == set()
 
 
-def test_earlier_joins_sharing_destination_orders_joins_of_different_links_by_insertion() -> None:
-    coll = JoinStepCollection()
-    shared = uuid4()
-    earlier = _step(_link(), {shared})
-    later = _step(_link(), {shared, uuid4()})
-    coll.add(earlier)
-    coll.add(later)
-
-    assert coll.earlier_joins_sharing_destination(later) == {earlier.uuid}
-    assert coll.earlier_joins_sharing_destination(earlier) == set()
-
-
 def test_a_join_step_runs_after_no_join_by_default() -> None:
     assert _step(_link(), {uuid4()}).runs_after_joins == frozenset()
-
-
-def test_add_leaves_a_same_link_token_out_of_a_cross_framework_join_and_keeps_another_links() -> None:
-    coll = JoinStepCollection()
-    link = _link()
-    first = _fw_step_of(link, _PA, _PD)
-    foreign = _fw_step_of(_link(), _PA, _PA)
-    second = _fw_step_of(link, _PA, _PD)
-    third = _fw_step_of(_link(), _PA, _PD)
-    for step in (first, foreign, second, third):
-        coll.add(step)
-
-    assert coll.get_required_join_uuids(second) == {foreign.uuid}
-    assert coll.get_required_join_uuids(third) == {second.uuid}
 
 
 def test_earlier_joins_sharing_destination_returns_another_links_join() -> None:
@@ -110,10 +84,11 @@ def test_earlier_joins_sharing_destination_returns_another_links_join() -> None:
     shared = uuid4()
     earlier = _step(_link(), {shared})
     coll.add(earlier)
-    later = _step(_link(), {shared})
+    later = _step(_link(), {shared, uuid4()})
     coll.add(later)
 
     assert coll.earlier_joins_sharing_destination(later) == {earlier.uuid}
+    assert coll.earlier_joins_sharing_destination(earlier) == set()
 
 
 def test_earlier_joins_sharing_destination_ignores_disjoint_destinations() -> None:
@@ -125,14 +100,13 @@ def test_earlier_joins_sharing_destination_ignores_disjoint_destinations() -> No
     assert coll.earlier_joins_sharing_destination(later) == set()
 
 
-def _fw_step_of(link: Link, destination: type[ComputeFramework], source: type[ComputeFramework]) -> JoinStep:
-    return JoinStep(link, destination, source, set(), set(), set())
-
-
 def _fw_step(
-    destination: type[ComputeFramework], source: type[ComputeFramework], destination_uuids: set[UUID] | None = None
+    destination: type[ComputeFramework],
+    source: type[ComputeFramework],
+    destination_uuids: set[UUID] | None = None,
+    link: Link | None = None,
 ) -> JoinStep:
-    return JoinStep(_link(), destination, source, set(), destination_uuids or set(), set())
+    return JoinStep(_link() if link is None else link, destination, source, set(), destination_uuids or set(), set())
 
 
 def _add_three(
@@ -286,6 +260,20 @@ def test_a_cross_join_waits_on_what_was_open_and_later_joins_reach_the_rest_thro
 
     assert coll.get_required_join_uuids(c) == {a.uuid, s.uuid}
     assert coll.get_required_join_uuids(d) == {c.uuid, a.uuid}
+
+
+def test_add_leaves_a_same_link_token_out_of_a_cross_framework_join_and_keeps_another_links() -> None:
+    coll = JoinStepCollection()
+    link = _link()
+    first = _fw_step(_PA, _PD, link=link)
+    foreign = _fw_step(_PA, _PA)
+    second = _fw_step(_PA, _PD, link=link)
+    third = _fw_step(_PA, _PD)
+    for step in (first, foreign, second, third):
+        coll.add(step)
+
+    assert coll.get_required_join_uuids(second) == {foreign.uuid}
+    assert coll.get_required_join_uuids(third) == {second.uuid}
 
 
 def test_a_same_framework_join_after_a_cross_join_stays_open_for_the_next_cross_join() -> None:

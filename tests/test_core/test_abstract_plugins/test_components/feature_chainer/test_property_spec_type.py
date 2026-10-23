@@ -182,6 +182,12 @@ class TestFlagAndCallableShapeRules:
         with pytest.raises(ValueError, match="(?i)callable"):
             _spec("x", match_guard="not callable")
 
+    def test_non_callable_name_converter_raises_on_direct_construction(self) -> None:
+        """``name_converter`` must be callable."""
+        not_callable: Any = 5
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\).*name_converter must be callable"):
+            PropertySpec("d", name_converter=not_callable)
+
     def test_element_validator_without_strict_raises(self) -> None:
         """An ``element_validator`` is never enforced without ``strict_validation=True``."""
         with pytest.raises(ValueError, match="(?i)strict"):

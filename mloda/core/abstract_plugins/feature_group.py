@@ -257,8 +257,8 @@ class FeatureGroup(ABC):
 
     @final
     @classmethod
-    def name_bindings(cls, feature_name: FeatureName | str) -> dict[str, str]:
-        """Option values the feature name binds (captured text); empty without prefix patterns."""
+    def name_bindings(cls, feature_name: FeatureName | str) -> dict[str, Any]:
+        """Option values the feature name binds (after any name_converter); empty without prefix patterns."""
         patterns = FeatureChainParser.prefix_patterns_of(cls)
         if not patterns:
             return {}
@@ -273,7 +273,7 @@ class FeatureGroup(ABC):
     @final
     @classmethod
     def options_with_defaults(
-        cls, options: Options, bindings: dict[str, str] | None = None, *, fill_bindings: bool = True
+        cls, options: Options, bindings: dict[str, Any] | None = None, *, fill_bindings: bool = True
     ) -> Options:
         """Return an Options with every absent PROPERTY_MAPPING key that declares a concrete default
         materialized from its spec (context or group per the spec); present values are never overridden.

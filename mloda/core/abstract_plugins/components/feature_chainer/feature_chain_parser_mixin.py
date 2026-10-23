@@ -57,6 +57,7 @@ import inspect
 import logging
 import os
 from copy import copy
+from numbers import Number
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar, cast
 
@@ -337,8 +338,8 @@ class FeatureChainParserMixin:
             return False
 
         if result and resolution.owned:
-            cls._validate_forwarded_name_mismatch(feature_name, bindings, options)
-            cls._validate_name_agreement(feature_name, bindings, name_sources, options)
+            cls._validate_forwarded_name_mismatch(feature_name, bindings, options, resolution)
+            cls._validate_name_agreement(feature_name, bindings, name_sources, options, resolution)
 
         if not cls._validate_match_guards(result, effective_options, property_mapping):
             return False
@@ -425,7 +426,9 @@ class FeatureChainParserMixin:
 
         try:
             if name_matched:
-                FeatureChainParser.validate_name_bindings(resolution.bindings, property_mapping)
+                FeatureChainParser.validate_name_bindings(
+                    resolution.bindings, property_mapping, resolution.rejected_bindings
+                )
                 # The name relates the feature group to the feature, so the values of the present
                 # options (name-derived bindings included) are judged here; the name-path presence
                 # reason follows below. Judging the effective options keeps the diagnostic in step with the match.
@@ -468,8 +471,9 @@ class FeatureChainParserMixin:
     def _validate_forwarded_name_mismatch(
         cls,
         feature_name: str | FeatureName,
-        bindings: dict[str, str],
+        bindings: dict[str, Any],
         options: Options,
+        resolution: NameResolution,
     ) -> None:
         """Reject a value forwarded via either the group or the context path that contradicts a
         name-derived binding.
@@ -490,8 +494,10 @@ class FeatureChainParserMixin:
             # A singleton collection equals its sole element, exactly as _unpack_property_value treats it
             # everywhere else; only a differing or multi-value forward is a real mismatch.
             unpacked = FeatureChainParser._unpack_property_value(inherited_value)
-            if len(unpacked) == 1 and str(unpacked[0]) == name_value:
+            raw = resolution.value_for(prop_key)
+            if cls._agrees_with_binding(unpacked, name_value, raw):
                 continue
+            encoded = name_value if raw is None else raw
             if prop_key in options.inherited_group_keys:
                 remedy = (
                     f"Carve the key out with forward_group_exclude={{'{prop_key}'}} on the child in the "
@@ -509,7 +515,7 @@ class FeatureChainParserMixin:
                 )
             message = (
                 f"Feature '{feature_name}': option '{prop_key}' was forwarded from a consumer with value "
-                f"'{inherited_value}', but the feature name parses to '{name_value}'. The name-parsed value "
+                f"'{inherited_value}', but the feature name parses to '{encoded}'. The name-parsed value "
                 f"takes precedence, so the forwarded value would be silently ignored. {remedy} Set "
                 f"MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1 to downgrade this error to a warning."
             )
@@ -517,6 +523,32 @@ class FeatureChainParserMixin:
                 continue
             # Marked: user misconfiguration; containing it would let a rival group win with the value ignored (#845).
             raise escalate_match_abort(ValueError(message))
+
+    @staticmethod
+    def _agrees_with_binding(declared: list[Any], bound: Any, raw: str | None) -> bool:
+        """Declared items agree with the bound value's items, or a lone item equals the raw captured text."""
+        bound_items = FeatureChainParser._unpack_property_value(bound)
+        if len(declared) == 1 and raw is not None and str(declared[0]) == raw:
+            return True
+        if len(declared) != len(bound_items):
+            return False
+        for declared_item, bound_item in zip(declared, bound_items):
+            if not FeatureChainParserMixin._element_agrees(declared_item, bound_item):
+                return False
+        return True
+
+    @staticmethod
+    def _element_agrees(declared: Any, bound: Any) -> bool:
+        """Two items agree when equal as text or numerically equal."""
+        if str(declared) == str(bound):
+            return True
+        numeric = (
+            isinstance(declared, Number)
+            and isinstance(bound, Number)
+            and not isinstance(declared, bool)
+            and not isinstance(bound, bool)
+        )
+        return numeric and bool(declared == bound)
 
     @classmethod
     def _name_mismatch_downgraded(cls, message: str) -> bool:
@@ -530,9 +562,10 @@ class FeatureChainParserMixin:
     def _validate_name_agreement(
         cls,
         feature_name: str | FeatureName,
-        bindings: dict[str, str],
+        bindings: dict[str, Any],
         name_sources: list[str] | None,
         options: Options,
+        resolution: NameResolution,
     ) -> None:
         """Abort when a declared option or in_features contradicts what the name binds."""
         inherited_keys = options.inherited_group_keys | options.inherited_context_keys
@@ -542,11 +575,13 @@ class FeatureChainParserMixin:
             if declared is None or key in inherited_keys or not options.is_own(key):
                 continue
             unpacked = FeatureChainParser._unpack_property_value(declared)
-            if len(unpacked) == 1 and str(unpacked[0]) == name_value:
+            raw = resolution.value_for(key)
+            if cls._agrees_with_binding(unpacked, name_value, raw):
                 continue
+            encoded = name_value if raw is None else raw
             message = (
                 f"Feature '{feature_name}': option '{key}' is {safe_value_text(declared)}, but the feature name encodes "
-                f"'{name_value}'. The name is authoritative: remove the option or change it to match. {env_hint}"
+                f"'{encoded}'. The name is authoritative: remove the option or change it to match. {env_hint}"
             )
             if cls._name_mismatch_downgraded(message):
                 continue

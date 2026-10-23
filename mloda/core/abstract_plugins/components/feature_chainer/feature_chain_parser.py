@@ -360,8 +360,17 @@ class FeatureChainParser:
             cls._collect_option_value(options, property_name, property_mapping)
 
     @classmethod
-    def validate_name_bindings(cls, bindings: Mapping[str, str], property_mapping: dict[str, PropertySpec]) -> None:
+    def validate_name_bindings(
+        cls,
+        bindings: Mapping[str, Any],
+        property_mapping: dict[str, PropertySpec],
+        rejected_bindings: Mapping[str, str] | None = None,
+    ) -> None:
         """Validate each name-bound value like an option value; raises PropertyValueRejection on the first invalid."""
+        if rejected_bindings:
+            key, text = next(iter(rejected_bindings.items()))
+            # Contained: a rejected name conversion is this candidate's own verdict, recorded as its reason.
+            raise PropertyValueRejection(f"Property value {safe_value_text(text)} failed name conversion for '{key}'")
         for key, value in bindings.items():
             spec = cls._require_spec(cls.__name__, key, property_mapping[key])
             cls._process_found_property_value(value, cls.extract_property_values(spec), key, spec)
@@ -570,7 +579,7 @@ class FeatureChainParser:
             resolution = cls.resolve_name(feature_name, prefix_patterns, property_mapping, pattern=pattern)
             if resolution.owned:
                 if property_mapping is not None:
-                    cls.validate_name_bindings(resolution.bindings, property_mapping)
+                    cls.validate_name_bindings(resolution.bindings, property_mapping, resolution.rejected_bindings)
                     effective_options = cls._merge_bindings(options, dict(resolution.bindings), property_mapping)
                     cls._validate_present_option_values(effective_options, property_mapping)
                     if not cls._check_name_path_required_presence(
@@ -610,7 +619,7 @@ class FeatureChainParser:
         return patterns
 
     @classmethod
-    def bind_name_captures(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any]) -> dict[str, str]:
+    def bind_name_captures(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any]) -> dict[str, Any]:
         """Turn parse facts into PROPERTY_MAPPING bindings by name; documented and deterministic.
 
         Named captures bind EXCLUSIVELY by name: a capture whose name is a mapping key binds to that
@@ -620,7 +629,52 @@ class FeatureChainParser:
         it (transitional compatibility for unmigrated positional patterns; retired by #772 /
         mloda-registry#327). The fallback binds only a value already accepted, so it never fails strict
         validation.
+
+        A key's ``name_converter`` converts a named capture; a raising converter leaves the key unbound.
         """
+        raw = cls._raw_name_bindings(parsed, property_mapping)
+        return cls._convert_name_bindings(parsed, raw, property_mapping)[0]
+
+    @classmethod
+    def _convert_name_bindings(
+        cls, parsed: ParsedFeatureName, raw: dict[str, str], property_mapping: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """Apply each key's name_converter to its named capture; returns (bindings, rejected key -> text)."""
+        if not parsed.named_captures:
+            return dict(raw), {}
+        bindings: dict[str, Any] = {}
+        rejected: dict[str, str] = {}
+        for key, text in raw.items():
+            spec = property_mapping.get(key)
+            converter = spec.name_converter if isinstance(spec, PropertySpec) else None
+            if converter is None:
+                bindings[key] = text
+                continue
+            try:
+                converted = converter(text)
+                if converted is None:
+                    rejected[key] = text
+                    continue
+                bindings[key] = converted
+            except Exception as exc:
+                if is_match_abort(exc):
+                    raise
+                logger.debug(
+                    "name_converter for '%s' %s for value %s; treating value as rejected.",
+                    key,
+                    contained_raise_reason(exc),
+                    safe_value_text(text),
+                )
+                if contained_raise_log_level(exc) != logging.DEBUG:
+                    logger.warning(
+                        "name_converter for '%s' raised %s; treating value as rejected.", key, type(exc).__name__
+                    )
+                rejected[key] = text
+        return bindings, rejected
+
+    @classmethod
+    def _raw_name_bindings(cls, parsed: ParsedFeatureName, property_mapping: dict[str, Any]) -> dict[str, str]:
+        """The bindings as captured text, before any name_converter."""
         if not parsed.matched:
             return {}
 
@@ -655,7 +709,7 @@ class FeatureChainParser:
         """
         if not parsed.matched:
             return False
-        if property_mapping and cls.bind_name_captures(parsed, property_mapping):
+        if property_mapping and cls._raw_name_bindings(parsed, property_mapping):
             return True
         if not parsed.positional_captures:
             # Captureless pattern: zero declared groups. It identifies the group as a recognition
@@ -679,16 +733,19 @@ class FeatureChainParser:
         if not parsed.matched:
             return NameResolution.miss()
         sources = tuple(parsed.source_feature.split(in_feature_separator)) if parsed.source_feature else ()
+        raw = cls._raw_name_bindings(parsed, property_mapping or {})
+        bindings, rejected = cls._convert_name_bindings(parsed, raw, property_mapping or {})
         return NameResolution(
             parsed=parsed,
             owned=cls._name_identifies_group(parsed, property_mapping),
-            bindings=cls.bind_name_captures(parsed, property_mapping or {}),
+            bindings=bindings,
             sources=sources,
+            rejected_bindings=rejected,
         )
 
     @classmethod
     def _merge_bindings(
-        cls, options: Options, bindings: dict[str, str], property_mapping: dict[str, Any] | None
+        cls, options: Options, bindings: dict[str, Any], property_mapping: dict[str, Any] | None
     ) -> Options:
         """Merge name-derived bindings into options; a present option wins, nothing to merge is identity.
 

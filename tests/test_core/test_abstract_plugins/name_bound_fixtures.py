@@ -6,7 +6,7 @@ Classes are created per call with a caller-chosen prefix (unique per call site) 
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -23,21 +23,27 @@ def make_name_bound_fg(
     seen: dict[str, Any] | None = None,
     input_column: str | None = None,
     bound_context: bool = True,
+    converters: dict[str, Callable[[str], Any]] | None = None,
+    capture: str = "[a-z]",
 ) -> type[FeatureGroup]:
     """Pattern group binding ``bound_keys`` from ``<name>__<tag>_<x>_<y>``; records option tuples in ``seen``.
 
     ``defaults`` maps key to its declared default (None declares none). Without ``input_column`` the
-    group returns ``data`` unchanged; with it, each feature gets that input column.
+    group returns ``data`` unchanged; with it, each feature gets that input column. ``converters`` maps
+    key to its ``name_converter``; ``capture`` is the regex class of each captured segment.
     """
-    pattern = rf".*__{tag}_" + "_".join(rf"(?P<{key}>[a-z])" for key in bound_keys) + "$"
+    pattern = rf".*__{tag}_" + "_".join(rf"(?P<{key}>{capture})" for key in bound_keys) + "$"
     keys = (*bound_keys, *unbound_keys)
     mapping = {}
     for key in keys:
         context = bound_context if key in bound_keys else True
+        extra: dict[str, Any] = {}
+        if converters is not None and key in converters:
+            extra["name_converter"] = converters[key]
         if defaults is None:
-            mapping[key] = PropertySpec("Declared key.", context=context)
+            mapping[key] = PropertySpec("Declared key.", context=context, **extra)
         else:
-            mapping[key] = PropertySpec("Declared key.", context=context, default=defaults[key])
+            mapping[key] = PropertySpec("Declared key.", context=context, default=defaults[key], **extra)
 
     def calculate_feature(cls: Any, data: Any, features: FeatureSet) -> Any:
         if seen is not None:

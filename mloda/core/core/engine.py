@@ -63,7 +63,7 @@ from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightS
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
-from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
+from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.input_data.format_feature_group import FormatFeatureGroup
@@ -140,9 +140,7 @@ class Engine:
         self._property_mapping_keys_cache: dict[type[FeatureGroup], frozenset[str]] = {}
         # Intake materialization memo: the strong source reference keeps its id stable, so features
         # sharing one pre-default Options share one effective Options.
-        self._intake_options_memo: dict[
-            tuple[type[FeatureGroup], int, tuple[tuple[str, str], ...]], tuple[Options, Options]
-        ] = {}
+        self._intake_options_memo: dict[tuple[type[FeatureGroup], int, Any], tuple[Options, Options]] = {}
         # Declared (pre-default) options per surviving feature uuid, for default-equivalent merge warnings.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
@@ -871,7 +869,7 @@ class Engine:
         # via the duplicate path below; name-bound values fill too (into context); identity no-op otherwise.
         declared_options = feature.options
         bindings = feature_group_class.name_bindings(feature.name)
-        memo_key = (feature_group_class, id(declared_options), tuple(sorted(bindings.items())))
+        memo_key = (feature_group_class, id(declared_options), _deep_hashable(bindings))
         entry = self._intake_options_memo.get(memo_key)
         if entry is None:
             entry = (

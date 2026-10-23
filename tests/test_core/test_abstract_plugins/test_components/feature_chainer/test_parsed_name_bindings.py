@@ -164,6 +164,28 @@ class ForwardedSecondaryGroup(FeatureChainParserMixin):
     }
 
 
+KEY_K = "k_pnb770"
+
+
+def _converted_group(converter: Any, tag: str, capture: str = r"\d+", **spec_overrides: Any) -> Any:
+    """Throwaway group binding KEY_K from ``<src>__<tag>_<capture>`` through ``converter``."""
+    spec = PropertySpec("Converted key", context=True, name_converter=converter, **spec_overrides)
+    namespace = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": rf".*__{tag}_(?P<{KEY_K}>{capture})$",
+        "PROPERTY_MAPPING": {KEY_K: spec},
+    }
+    return type(f"Converted{tag.title()}Pnb770Group", (FeatureChainParserMixin,), namespace)
+
+
+def _raising_converter(text: str) -> Any:
+    raise RuntimeError(f"cannot convert {text}")
+
+
+def _none_converter(text: str) -> Any:
+    return None
+
+
 FORWARDED_FEATURE_NAME = "sales__pca_auto_fwd_pnb770"
 
 
@@ -378,6 +400,29 @@ class TestBindNameCaptures:
 
         assert FeatureChainParser.bind_name_captures(parsed, NamedCaptureGroup.PROPERTY_MAPPING) == {}
 
+    def test_name_converter_applies_to_a_named_capture(self) -> None:
+        group = _converted_group(int, "bindconv")
+        parsed = FeatureChainParser.parse_name("f0__bindconv_5", [group.PREFIX_PATTERN])
+
+        bindings = FeatureChainParser.bind_name_captures(parsed, group.PROPERTY_MAPPING)
+
+        assert bindings == {KEY_K: 5}
+        assert isinstance(bindings[KEY_K], int)
+
+    def test_name_converter_does_not_apply_to_the_legacy_positional_fallback(self) -> None:
+        group: Any = type(
+            "PositionalConvPnb770Group",
+            (FeatureChainParserMixin,),
+            {
+                "__module__": __name__,
+                "PREFIX_PATTERN": r".*__(pca|tsne)_posconv_pnb770$",
+                "PROPERTY_MAPPING": {ALGORITHM_KEY: _algorithm_spec(name_converter=str.upper)},
+            },
+        )
+        parsed = FeatureChainParser.parse_name("f0__pca_posconv_pnb770", [group.PREFIX_PATTERN])
+
+        assert FeatureChainParser.bind_name_captures(parsed, group.PROPERTY_MAPPING) == {ALGORITHM_KEY: "pca"}
+
 
 CAPTURELESS_PATTERN = r".*__cleaned_text$"
 
@@ -501,6 +546,38 @@ class TestNameResolution:
 
     def test_mixin_facade_miss(self) -> None:
         assert NamedCaptureGroup.resolve_feature_name("unrelated_pnb770") == parsed_feature_name.NameResolution.miss()
+
+    def test_converter_binds_the_converted_value_and_value_for_stays_text(self) -> None:
+        resolution = _resolve("f0__resconv_7", _converted_group(int, "resconv"))
+
+        assert resolution.owned is True
+        assert dict(resolution.bindings) == {KEY_K: 7}
+        assert resolution.value_for(KEY_K) == "7"
+        assert dict(resolution.rejected_bindings) == {}
+
+    def test_converter_runs_once_per_resolve(self) -> None:
+        calls: list[str] = []
+
+        def counting(text: str) -> int:
+            calls.append(text)
+            return int(text)
+
+        _resolve("f0__oncecv_7", _converted_group(counting, "oncecv"))
+
+        assert calls == ["7"]
+
+    @pytest.mark.parametrize(
+        ("converter", "tag", "text"),
+        [(_raising_converter, "raisecv", "abc"), (int, "intcv", "x1"), (_none_converter, "nonecv", "abc")],
+        ids=["raising_converter", "int_on_non_numeric_text", "none_returning_converter"],
+    )
+    def test_failing_converter_is_recorded_and_the_name_stays_owned(self, converter: Any, tag: str, text: str) -> None:
+        resolution = _resolve(f"f0__{tag}_{text}", _converted_group(converter, tag, capture=r"\w+"))
+
+        assert resolution.owned is True
+        assert KEY_K not in resolution.bindings
+        assert dict(resolution.rejected_bindings) == {KEY_K: text}
+        assert resolution.value_for(KEY_K) == text
 
 
 class TestDefinitionTimeAmbiguity:
@@ -696,6 +773,14 @@ class TestBoundValuesAreVisible:
 
         assert result is True
 
+    @pytest.mark.parametrize(("name", "expected"), [("f0__evcv_2", True), ("f0__evcv_1", False)])
+    def test_element_validator_sees_the_converted_value(self, name: str, expected: bool) -> None:
+        group = _converted_group(
+            int, "evcv", strict_validation=True, element_validator=lambda v: isinstance(v, int) and v > 1
+        )
+
+        assert group.match_feature_group_criteria(name, Options()) is expected
+
     def test_rejection_reason_reports_the_bound_value(self) -> None:
         """The diagnostic replay must not disagree with the match decision."""
         reason = StrictNamedGroup._strict_validation_rejection_reason("f0__bogus_strict_pnb770", Options())
@@ -726,6 +811,27 @@ class TestBoundValuesAreVisible:
         assert "bogus" in reason
         assert ALGORITHM_KEY in reason
 
+    def test_strict_int_allowed_values_accept_a_converted_bound_value(self) -> None:
+        group = _converted_group(int, "strictcv", allowed_values=(1, 2, 3), strict_validation=True)
+
+        assert group.match_feature_group_criteria("f0__strictcv_2", Options()) is True
+        assert group.match_feature_group_criteria("f0__strictcv_9", Options()) is False
+
+    def test_match_guard_sees_the_converted_value(self) -> None:
+        group = _converted_group(int, "guardcv", match_guard=lambda value: isinstance(value, int) and value > 1)
+
+        assert group.match_feature_group_criteria("f0__guardcv_2", Options()) is True
+        assert group.match_feature_group_criteria("f0__guardcv_1", Options()) is False
+
+    def test_raising_converter_is_a_non_match_and_the_diagnostic_reports_it(self) -> None:
+        group = _converted_group(_raising_converter, "rejcv", capture=r"\w+")
+
+        assert group.match_feature_group_criteria("f0__rejcv_abc", Options()) is False
+        reason = group._strict_validation_rejection_reason("f0__rejcv_abc", Options())
+        assert reason is not None
+        assert KEY_K in reason
+        assert "abc" in reason
+
     def test_valid_named_value_with_the_same_valid_option_still_matches(self) -> None:
         options = Options(context={ALGORITHM_KEY: "pca"})
 
@@ -755,6 +861,18 @@ class TestValidateNameBindings:
             FeatureChainParser.validate_name_bindings(
                 {ALGORITHM_KEY: "pca", SIZE_KEY: "abc"}, NamedCaptureGroup.PROPERTY_MAPPING
             )
+
+    def test_rejected_conversion_raises_value_rejection(self) -> None:
+        group = _converted_group(_raising_converter, "valcv", capture=r"\w+")
+        resolution = _resolve("f0__valcv_abc", group)
+
+        with pytest.raises(PropertyValueRejection) as exc_info:
+            FeatureChainParser.validate_name_bindings(
+                resolution.bindings, group.PROPERTY_MAPPING, resolution.rejected_bindings
+            )
+
+        assert KEY_K in str(exc_info.value)
+        assert "abc" in str(exc_info.value)
 
 
 class TestForwardedMismatchOverBindings:

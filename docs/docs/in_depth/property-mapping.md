@@ -41,6 +41,7 @@ PROPERTY_MAPPING = {
 | `required_when` | `Callable \| None` | `None` | `(Options) -> bool`: the key is required only when it returns truthy. |
 | `allow_explicit_none` | `bool` | `False` | Opt-in so an explicit `None` is honored (not treated as absent) and flows through validation. |
 | `deferred_binding` | `bool` | `False` | Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See [Required presence on the string-named path](#required-presence-on-the-string-named-path). |
+| `name_converter` | `Callable[[str], Any] \| None` | `None` | Converts the captured text of a named capture bound to this key (e.g. `int`), before validation. Never applied to explicit options or the legacy positional fallback. |
 
 **`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
 same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the
@@ -72,7 +73,7 @@ does not understand can be absorbed silently.
 | Moment | Mechanism | Checks | Receives | On failure |
 | --- | --- | --- | --- | --- |
 | Author time | `mypy --strict` | The field exists and its declared type fits: `strict_validaton=True` (typo), `strict_validation=1`, `allowed_values=5` | The constructor call | mypy error at the spec literal. Without mypy: an unknown field is a `TypeError`; a wrong type falls through to the row below |
-| Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation` is a real bool; the validators are callable; `element_validator` implies strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules; `expected` is a non-empty str and needs a `match_guard` | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
+| Construction (`PropertySpec(...)`) | `__post_init__` | `allowed_values` is not a str/bytes and is a Mapping or an iterable; `strict_validation` is a real bool; the validators and `name_converter` are callable; `element_validator` implies strict; strict has a non-empty value space or an `element_validator`; a strict, non-`None` `default` is accepted by the key's own rules; `expected` is a non-empty str and needs a `match_guard` | The spec being built | `ValueError` at import, prefixed `PropertySpec('<explanation>')` |
 | Class definition (`FeatureGroup.__init_subclass__`) | Mapping and spec type | The mapping is `None` or a Mapping (a format group's must be a Mapping, mixins included); every spec IS a `PropertySpec` | The mapping, then every value in it | `TypeError` naming the class for a non-mapping; `ValueError` naming the class and the key for a bad spec |
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
@@ -342,7 +343,7 @@ with a concrete declared default is filled from its spec (into context or group 
 A present value is never overridden, even a falsy `0`/`False`/`""`. `NO_DEFAULT` and
 `default=None` fill nothing. A strict default is already validated at construction, so the
 materialized value is not re-checked. A key the feature name binds never receives a declared default;
-`FeatureGroup.name_bindings(name)` returns those bound values (the captured text, a `str`).
+`FeatureGroup.name_bindings(name)` returns those bound values (the captured text, or its `name_converter` output).
 
 The framework applies this at two sites. At feature **intake**
 (`Engine.add_feature_to_collection`) a feature's options are rebound through
@@ -448,6 +449,17 @@ name is authoritative for every value it encodes. Every named capture group `(?P
 owned name that is a PROPERTY_MAPPING key binds to that key and is validated like an option, even
 when the option is also present; an unsupported value is a recorded match-time rejection. This
 covers a secondary capture and an `element_validator`-only spec (one with no `allowed_values`).
+
+A key may declare `name_converter` (e.g. `int`): the captured text is converted, then validated
+(`allowed_values`, `element_validator`), seen by `match_guard` / `required_when`, and filled into
+`feature.options` as the converted value. A name agrees with a declared or forwarded value when it is
+numerically equal, equal as text, or equal to the raw captured text. Agreement means no contradiction,
+not the same type: an explicit option is never rewritten, so a declared `5.0` stays `5.0`. A name-only
+request and an agreeing explicit option merge only for context keys. A raising converter, or one returning
+`None`, is a rejected value (a recorded non-match). The converter must be pure, deterministic and cheap
+(it runs on every resolution). The positional fallback, `NameResolution.value_for` and
+`_resolve_operation` stay text. `element_validator` / `allowed_values` are not reused because a validator
+returns a verdict, not a value.
 
 A pattern with only positional groups falls back to the legacy rule: the first capture binds only
 to the single key whose `allowed_values` already contain it. A positional pattern whose keys share
@@ -664,6 +676,7 @@ if it really is a whole-value check.
 | Invariant | Test |
 | --- | --- |
 | `PropertySpec` construction: defaults, immutability, `allowed_values` normalization, flag and callable rules, strict needs a value space | `tests/.../feature_chainer/test_property_spec_type.py` |
+| `name_converter` applies to named captures, runs before validation, and a raising one is a rejected value | `tests/.../feature_chainer/test_parsed_name_bindings.py` |
 | Unknown or mistyped field caught by mypy at author time | `tests/.../feature_chainer/test_property_spec_author_time.py` |
 | `PROPERTY_MAPPING` accepts nothing but `PropertySpec`, and the pipeline behaves as before | `tests/.../feature_chainer/test_property_spec_hard_break.py` |
 | The constructor IS the schema (no key set left to curate) | `tests/.../feature_chainer/test_property_mapping_spec_schema.py` |

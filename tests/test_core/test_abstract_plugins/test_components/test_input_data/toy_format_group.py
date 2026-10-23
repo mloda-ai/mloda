@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.provider import ClaimRoute, FormatFeatureGroup, NamePolicy, SourceMatch
+from mloda.user import PluginCollector
 
 TOY_KEY = "toyfmt_columns"
 TOY_HANDLE_OPTION = "data_access_handle"
@@ -34,6 +35,15 @@ def toy_token_dac(**sources: dict[str, list[Any]]) -> DataAccessCollection:
     return DataAccessCollection(
         credentials={handle: {TOY_KEY: cols, "token": TOY_TOKEN} for handle, cols in sources.items()}
     )
+
+
+def toy_token_request(group: type[ToyFormatFG], column: str) -> dict[str, Any]:
+    """Keyword arguments that run or plan `column` through only `group` over a token-bearing toy source."""
+    return {
+        "compute_frameworks": ["PythonDictFramework"],
+        "plugin_collector": PluginCollector.enabled_feature_groups({group}),
+        "data_access_collection": toy_token_dac(h1={column: [1]}),
+    }
 
 
 def foreign_dac() -> DataAccessCollection:

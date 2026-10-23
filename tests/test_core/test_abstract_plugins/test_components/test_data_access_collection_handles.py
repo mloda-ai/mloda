@@ -15,6 +15,7 @@ from mloda.core.prepare.identify_feature_group import resolve_or_raise
 from mloda.user import Feature
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.mixins.reader_feature_groups.lazy_format_group import load_group
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import TOY_TOKEN
 
 
 class TestNewConstructorShape:
@@ -888,11 +889,11 @@ class TestSecretLiterals:
                     "host": "db.internal.example",
                     "user": "administrator",
                 },
-                "api": {"token": "tkn_Zq81Lm5Vx0Rb7Ye3Hw29", "password": "correct-horse-battery"},  # nosec B105
+                "api": {"token": TOY_TOKEN, "password": "correct-horse-battery"},  # nosec B105
             }
         )
 
-        assert dac.secret_literals() == frozenset({"tkn_Zq81Lm5Vx0Rb7Ye3Hw29", "correct-horse-battery"})
+        assert dac.secret_literals() == frozenset({TOY_TOKEN, "correct-horse-battery"})
 
     def test_nested_and_credential_wrapped_secrets_are_found(self) -> None:
         dac = DataAccessCollection(

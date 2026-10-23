@@ -34,7 +34,7 @@ from mloda.user import Feature, ParallelizationMode, PluginCollector, mloda
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     TOY_TOKEN,
     ToyFormatFG,
-    toy_token_dac,
+    toy_token_request,
 )
 
 # Importing the framework registers it as a ComputeFramework subclass so
@@ -622,14 +622,6 @@ class TokenFrozenFG(ToyFormatFG):
 _TOKEN_GROUPS = [TokenValueErrorFG, TokenOSErrorFG, TokenFrozenFG]
 
 
-def _token_run_args(group: type[ToyFormatFG]) -> dict[str, Any]:
-    return {
-        "compute_frameworks": ["PythonDictFramework"],
-        "plugin_collector": PluginCollector.enabled_feature_groups({group}),
-        "data_access_collection": toy_token_dac(h1={_TOKEN_COLUMN: [1]}),
-    }
-
-
 def _assert_token_gone(exc: BaseException, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
     assert TOY_TOKEN not in str(exc)
     assert TOY_TOKEN not in repr(exc.args)
@@ -649,7 +641,7 @@ def _assert_token_gone(exc: BaseException, group: type[ToyFormatFG], caplog: pyt
 def test_sync_load_error_masks_registered_token(group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(Exception) as excinfo:
-            mloda.run_all([Feature(name=_TOKEN_COLUMN)], **_token_run_args(group))
+            mloda.run_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
 
     _assert_token_gone(excinfo.value, group, caplog)
 
@@ -664,7 +656,7 @@ def test_threading_load_error_masks_registered_token(
                 [Feature(name=_TOKEN_COLUMN)],
                 parallelization_modes={ParallelizationMode.THREADING},
                 flight_server=flight_server,
-                **_token_run_args(group),
+                **toy_token_request(group, _TOKEN_COLUMN),
             )
 
     _assert_token_gone(excinfo.value, group, caplog)
@@ -673,7 +665,7 @@ def test_threading_load_error_masks_registered_token(
 def test_stream_all_load_error_masks_registered_token(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(ValueError) as excinfo:
-            list(mloda.stream_all([Feature(name=_TOKEN_COLUMN)], **_token_run_args(TokenValueErrorFG)))
+            list(mloda.stream_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN)))
 
     _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
 
@@ -681,7 +673,9 @@ def test_stream_all_load_error_masks_registered_token(caplog: pytest.LogCaptureF
 def test_stream_run_load_error_masks_registered_token(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.DEBUG):
         with pytest.raises(ValueError) as excinfo:
-            session = mloda.prepare([Feature(name=_TOKEN_COLUMN)], **_token_run_args(TokenValueErrorFG))
+            session = mloda.prepare(
+                [Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN)
+            )
             list(session.stream_run())
 
     _assert_token_gone(excinfo.value, TokenValueErrorFG, caplog)
@@ -691,6 +685,6 @@ def test_registered_token_scope_does_not_leak_after_a_failed_run() -> None:
     from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 
     with pytest.raises(ValueError):
-        mloda.run_all([Feature(name=_TOKEN_COLUMN)], **_token_run_args(TokenValueErrorFG))
+        mloda.run_all([Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenValueErrorFG, _TOKEN_COLUMN))
 
     assert current_registered_secrets() == frozenset()

@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, TypeVar
+from typing import TypeVar
 
 import pytest
 
@@ -26,14 +26,14 @@ from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.prepare.resolution_failure_renderer import render_resolution_failure
 from mloda.provider import ClaimRoute, SourceMatch
 from mloda.steward import resolve_feature
-from mloda.user import PluginCollector, mloda
+from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (  # noqa: F401
     PythonDictFramework,
 )
 from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_format_group import (
     TOY_TOKEN,
     ToyFormatFG,
-    toy_token_dac,
+    toy_token_request,
 )
 
 
@@ -297,14 +297,6 @@ class TokenReasonFG(ToyFormatFG):
         return f"cannot open {TOY_TOKEN}"
 
 
-def _token_request(group: type[ToyFormatFG]) -> dict[str, Any]:
-    return {
-        "compute_frameworks": ["PythonDictFramework"],
-        "plugin_collector": PluginCollector.enabled_feature_groups({group}),
-        "data_access_collection": toy_token_dac(h1={_TOKEN_COLUMN: [1]}),
-    }
-
-
 def _all_texts(error: BaseException) -> list[str]:
     texts = [str(error), repr(error.args)]
     for refusal in getattr(error, "refusals", ()):
@@ -322,7 +314,7 @@ class TestRegisteredTokenInResolutionErrors:
     def test_resolution_error_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.DEBUG):
             with pytest.raises(ValueError) as excinfo:
-                mloda.prepare([Feature(name=_TOKEN_COLUMN)], **_token_request(group))
+                mloda.prepare([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
 
         assert type(excinfo.value).__name__ == "FeatureResolutionError"
         assert all(TOY_TOKEN not in text for text in _all_texts(excinfo.value))
@@ -331,7 +323,7 @@ class TestRegisteredTokenInResolutionErrors:
     @pytest.mark.parametrize("group", [TokenFindSourcesFG, TokenReasonFG])
     def test_diagnose_masks_the_token(self, group: type[ToyFormatFG], caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.DEBUG):
-            diagnosis = mloda.diagnose([Feature(name=_TOKEN_COLUMN)], **_token_request(group))
+            diagnosis = mloda.diagnose([Feature(name=_TOKEN_COLUMN)], **toy_token_request(group, _TOKEN_COLUMN))
 
         assert diagnosis.complete is False
         assert diagnosis.message is not None
@@ -340,7 +332,9 @@ class TestRegisteredTokenInResolutionErrors:
         assert TOY_TOKEN not in caplog.text
 
     def test_find_sources_error_is_still_contained_as_a_non_match(self) -> None:
-        diagnosis = mloda.diagnose([Feature(name=_TOKEN_COLUMN)], **_token_request(TokenFindSourcesFG))
+        diagnosis = mloda.diagnose(
+            [Feature(name=_TOKEN_COLUMN)], **toy_token_request(TokenFindSourcesFG, _TOKEN_COLUMN)
+        )
 
         assert diagnosis.complete is False
         assert diagnosis.feature_name == _TOKEN_COLUMN
